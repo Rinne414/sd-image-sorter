@@ -90,6 +90,9 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 *The first run will automatically set up a virtual environment and install dependencies.*
 
+> [!TIP]
+> **No Python installed?** Use the [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) branch — it auto-downloads Python for you!
+
 ---
 
 ## 📖 Complete Tutorial (Playback Teaching Guide)
@@ -512,6 +515,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 3. **访问界面**: 使用浏览器打开 `http://localhost:8000`
 
 *首次启动将自动创建虚拟环境并补全依赖包。*
+
+> [!TIP]
+> **没有安装 Python?** 使用 [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) 分支 — 自动下载 Python!
 
 ---
 
