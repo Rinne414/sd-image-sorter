@@ -9,6 +9,7 @@
         content="Powerful image management tool for Stable Diffusion users - tag, filter, and sort your AI-generated images">
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/censor-v2.css">
+    <link rel="stylesheet" href="/static/css/new-views.css">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap"
         rel="stylesheet">
@@ -38,6 +39,14 @@
                 <button class="nav-tab" data-view="censor">
                     <span class="tab-icon">🔳</span>
                     <span class="tab-text">Censored Edit</span>
+                </button>
+                <button class="nav-tab" data-view="similar">
+                    <span class="tab-icon">🔍</span>
+                    <span class="tab-text">Similar</span>
+                </button>
+                <button class="nav-tab" data-view="promptlab">
+                    <span class="tab-icon">🧪</span>
+                    <span class="tab-text">Prompt Lab</span>
                 </button>
             </div>
             <div class="nav-actions">
@@ -351,21 +360,56 @@
                             </div>
                         </div>
 
-                        <!-- Gallery Preview Bar -->
+                        <!-- Gallery Preview Bar (Minimap) -->
                         <div class="gallery-preview-bar" id="gallery-preview-bar">
+                            <div class="minimap-header">
+                                <span class="minimap-label">Minimap</span>
+                                <span class="minimap-position" id="minimap-position">0/0</span>
+                            </div>
                             <div class="preview-scroll" id="preview-scroll">
                                 <!-- Thumbnails will be inserted here by JS -->
                             </div>
+                            <div class="minimap-legend">
+                                <span class="legend-item legend-current">Current</span>
+                                <span class="legend-item legend-processed">Sorted</span>
+                                <span class="legend-item legend-pending">Pending</span>
+                            </div>
                         </div>
 
-                        <!-- Progress Bar -->
-                        <div class="sort-progress">
+                        <!-- Enhanced Progress Bar -->
+                        <div class="sort-progress-enhanced">
+                            <div class="progress-stats-row">
+                                <div class="progress-stat">
+                                    <span class="progress-stat-value" id="sort-sorted-count">0</span>
+                                    <span class="progress-stat-label">Sorted</span>
+                                </div>
+                                <div class="progress-stat">
+                                    <span class="progress-stat-value" id="sort-skipped-count">0</span>
+                                    <span class="progress-stat-label">Skipped</span>
+                                </div>
+                                <div class="progress-stat progress-stat-main">
+                                    <span class="progress-stat-value" id="sort-percent">0%</span>
+                                    <span class="progress-stat-label">Progress</span>
+                                </div>
+                                <div class="progress-stat">
+                                    <span class="progress-stat-value" id="sort-remaining-count">0</span>
+                                    <span class="progress-stat-label">Remaining</span>
+                                </div>
+                                <div class="progress-stat">
+                                    <span class="progress-stat-value" id="sort-speed">0/s</span>
+                                    <span class="progress-stat-label">Speed</span>
+                                </div>
+                            </div>
+                            <div class="progress-bar-segmented">
+                                <div class="progress-fill-sorted" id="sort-progress-sorted"></div>
+                                <div class="progress-fill-skipped" id="sort-progress-skipped"></div>
+                            </div>
                             <div class="progress-bar">
                                 <div class="progress-fill" id="sort-progress-fill"></div>
                             </div>
                             <div class="progress-info">
                                 <span id="sort-progress-text">0 / 0</span>
-                                <span class="progress-hint">SPACE to skip • Z to undo</span>
+                                <span class="progress-hint">SPACE to skip • Z to undo • ESC to exit</span>
                             </div>
                         </div>
 
@@ -626,6 +670,131 @@
                     </div>
                 </div>
             </section>
+
+            <!-- ========== Similar Images View ========== -->
+            <section id="view-similar" class="view">
+                <div class="similar-container">
+                    <!-- Header with stats -->
+                    <div class="similar-header">
+                        <h3>Similar Images</h3>
+                        <div id="similar-stats">
+                            <div class="stat-card">
+                                <span class="stat-number">-</span>
+                                <span class="stat-label">Loading...</span>
+                            </div>
+                        </div>
+                        <div class="similar-embed-row">
+                            <button class="btn btn-primary" id="btn-similar-embed">Generate Embeddings</button>
+                            <div class="similar-embed-progress" id="similar-embed-progress">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="similar-embed-fill" style="width: 0%"></div>
+                                </div>
+                                <span class="progress-text" id="similar-embed-text">0/0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tabs -->
+                    <div class="similar-tabs">
+                        <button class="similar-tab active" data-target="panel-similar-search">Search</button>
+                        <button class="similar-tab" data-target="panel-similar-duplicates">Duplicates</button>
+                    </div>
+
+                    <!-- Body -->
+                    <div class="similar-body">
+                        <!-- Search Panel -->
+                        <div class="similar-panel" id="panel-similar-search">
+                            <div class="similar-search-controls">
+                                <input type="number" id="similar-search-id" class="input" placeholder="Image ID">
+                                <button class="btn btn-primary" id="btn-similar-search">Search by ID</button>
+                                <button class="btn btn-secondary" id="btn-similar-upload">Upload Image</button>
+                                <input type="file" id="similar-upload-input" accept="image/*" style="display: none;">
+                            </div>
+                            <div id="similar-results">
+                                <div class="empty-state">Enter an image ID or upload an image to find similar images.</div>
+                            </div>
+                        </div>
+
+                        <!-- Duplicates Panel -->
+                        <div class="similar-panel" id="panel-similar-duplicates" style="display: none;">
+                            <div class="dup-threshold-row">
+                                <label>Similarity Threshold:</label>
+                                <input type="range" id="similar-dup-threshold" min="0.80" max="0.99" step="0.01" value="0.95">
+                                <span id="similar-dup-threshold-value">95%</span>
+                                <button class="btn btn-primary" id="btn-similar-duplicates">Find Duplicates</button>
+                            </div>
+                            <div id="similar-duplicates">
+                                <div class="empty-state">Click "Find Duplicates" to scan for duplicate images.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========== Prompt Lab View ========== -->
+            <section id="view-promptlab" class="view">
+                <div class="promptlab-container">
+                    <!-- Left: Category Browser -->
+                    <div class="promptlab-browser">
+                        <div class="promptlab-browser-header">
+                            <h4>Tag Categories</h4>
+                            <input type="text" class="input" id="promptlab-cat-search" placeholder="Search tags...">
+                        </div>
+                        <div class="promptlab-browser-body" id="promptlab-categories">
+                            <div class="empty-state">Loading categories...</div>
+                        </div>
+                        <!-- Tag set selector -->
+                        <div class="tagset-selector">
+                            <label>Tag Set:</label>
+                            <select class="input" id="promptlab-tagset-select">
+                                <option value="">-- Select Tag Set --</option>
+                            </select>
+                            <button class="btn btn-sm btn-secondary" id="btn-promptlab-apply-tagset">Apply</button>
+                        </div>
+                    </div>
+
+                    <!-- Center: Slot Builder -->
+                    <div class="promptlab-builder">
+                        <div class="promptlab-builder-header">
+                            <h4>Prompt Slots</h4>
+                            <div class="promptlab-builder-actions">
+                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-randomize" title="Randomize unlocked slots">🎲 Randomize</button>
+                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ Clear</button>
+                            </div>
+                        </div>
+                        <div class="promptlab-slots-container" id="promptlab-slots">
+                            <div class="empty-state">Loading slots...</div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Output Panel -->
+                    <div class="promptlab-output-panel">
+                        <div class="promptlab-output-header">
+                            <h4>Generated Prompt</h4>
+                            <div class="promptlab-gen-buttons">
+                                <button class="btn btn-primary" id="btn-promptlab-generate">Generate</button>
+                                <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy to clipboard">📋 Copy</button>
+                                <button class="btn btn-secondary" id="btn-promptlab-validate" title="Check for issues">✅ Validate</button>
+                            </div>
+                        </div>
+                        <div class="promptlab-output-body">
+                            <textarea id="promptlab-output" placeholder="Click Generate or Randomize to create a prompt..."></textarea>
+                            <div id="promptlab-warnings"></div>
+                        </div>
+                        <!-- Presets -->
+                        <div class="promptlab-presets-section">
+                            <div class="promptlab-presets-header">
+                                <h5>Presets</h5>
+                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 Save</button>
+                            </div>
+                            <div id="promptlab-presets">
+                                <div class="preset-empty">No presets saved yet.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
 
         <!-- Image Preview Modal -->
@@ -1146,6 +1315,9 @@
     <script src="/static/js/manual-sort.js"></script>
     <script src="/static/js/audio.js"></script>
     <script src="/static/js/censor-edit.js"></script>
+    <script src="/static/js/similar.js"></script>
+    <script src="/static/js/prompt-lab.js"></script>
+    <script src="/static/js/virtual-gallery.js"></script>
 </body>
 
 </html>

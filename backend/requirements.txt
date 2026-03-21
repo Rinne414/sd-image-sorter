@@ -6,4 +6,6 @@ numpy>=1.24.0
 huggingface-hub>=0.20.0
 aiofiles>=23.0.0
 python-multipart>=0.0.6
-ultralytics>=8.0.0
+ultralytics>=8.4.0
+fastembed>=0.4.0
+nudenet>=3.0.0

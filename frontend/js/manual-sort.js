@@ -13,7 +13,12 @@ const ManualSortState = {
     combo: 0,
     lastActionTime: 0,
     history: [],
-    images: []  // For gallery preview
+    images: [],  // For gallery preview
+    // Enhanced tracking
+    sortedCount: 0,
+    skippedCount: 0,
+    startTime: null,
+    actionTimestamps: []  // For speed calculation
 };
 
 // Key mappings
@@ -23,7 +28,8 @@ const KEY_MAP = {
     's': 's', 'S': 's', 'ArrowDown': 's',
     'd': 'd', 'D': 'd', 'ArrowRight': 'd',
     ' ': 'skip',
-    'z': 'undo', 'Z': 'undo'
+    'z': 'undo', 'Z': 'undo',
+    'Escape': 'exit'
 };
 
 const DIRECTION_MAP = {
@@ -177,6 +183,10 @@ async function startSorting() {
         ManualSortState.combo = 0;
         ManualSortState.history = [];
         ManualSortState.images = imagesResult.images || [];
+        ManualSortState.sortedCount = 0;
+        ManualSortState.skippedCount = 0;
+        ManualSortState.startTime = Date.now();
+        ManualSortState.actionTimestamps = [];
 
         // Update folder names in UI
         updateFolderNames();
@@ -265,6 +275,44 @@ function updateProgress() {
     $('#sort-progress-fill').style.width = percent + '%';
     $('#sort-progress-text').textContent = `${ManualSortState.index} / ${ManualSortState.total}`;
 
+    // Enhanced progress stats
+    const percentEl = $('#sort-percent');
+    if (percentEl) percentEl.textContent = Math.round(percent) + '%';
+
+    const sortedEl = $('#sort-sorted-count');
+    if (sortedEl) sortedEl.textContent = ManualSortState.sortedCount;
+
+    const skippedEl = $('#sort-skipped-count');
+    if (skippedEl) skippedEl.textContent = ManualSortState.skippedCount;
+
+    const remainingEl = $('#sort-remaining-count');
+    if (remainingEl) remainingEl.textContent = Math.max(0, ManualSortState.total - ManualSortState.index);
+
+    // Speed calculation (actions per second, rolling 10-second window)
+    const speedEl = $('#sort-speed');
+    if (speedEl) {
+        const now = Date.now();
+        const recentActions = ManualSortState.actionTimestamps.filter(t => now - t < 10000);
+        const speed = recentActions.length > 1
+            ? (recentActions.length / ((now - recentActions[0]) / 1000)).toFixed(1)
+            : '0.0';
+        speedEl.textContent = speed + '/s';
+    }
+
+    // Segmented progress bar
+    const sortedFill = $('#sort-progress-sorted');
+    const skippedFill = $('#sort-progress-skipped');
+    if (sortedFill && skippedFill && ManualSortState.total > 0) {
+        const sortedPct = (ManualSortState.sortedCount / ManualSortState.total) * 100;
+        const skippedPct = (ManualSortState.skippedCount / ManualSortState.total) * 100;
+        sortedFill.style.width = sortedPct + '%';
+        skippedFill.style.width = skippedPct + '%';
+    }
+
+    // Minimap position
+    const minimapPos = $('#minimap-position');
+    if (minimapPos) minimapPos.textContent = `${ManualSortState.index + 1}/${ManualSortState.total}`;
+
     // Also update gallery preview
     updateGalleryPreview();
 }
@@ -325,6 +373,8 @@ function handleSortKeypress(e) {
         undoLastAction();
     } else if (action === 'skip') {
         performSkip();
+    } else if (action === 'exit') {
+        exitSorting();
     } else {
         performMove(action);
     }
@@ -354,6 +404,13 @@ async function performMove(folderKey) {
 
     // Update combo
     updateCombo();
+
+    // Track stats
+    ManualSortState.sortedCount++;
+    ManualSortState.actionTimestamps.push(Date.now());
+    // Keep only last 30 seconds of timestamps
+    const cutoff = Date.now() - 30000;
+    ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
 
     // Wait for animation
     await sleep(300);
@@ -389,6 +446,12 @@ async function performSkip() {
     // Reset combo
     ManualSortState.combo = 0;
     updateComboDisplay();
+
+    // Track skip stats
+    ManualSortState.skippedCount++;
+    ManualSortState.actionTimestamps.push(Date.now());
+    const cutoff = Date.now() - 30000;
+    ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
 
     await sleep(300);
 
@@ -528,7 +591,18 @@ function finishSorting() {
     // Play finish sound
     window.AudioManager?.play('finish');
 
-    showToast(`Sorting complete! Processed ${ManualSortState.total} images`, 'success');
+    // Calculate session stats
+    const elapsed = ManualSortState.startTime
+        ? Math.round((Date.now() - ManualSortState.startTime) / 1000)
+        : 0;
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+
+    showToast(
+        `Sorting complete! ${ManualSortState.sortedCount} sorted, ${ManualSortState.skippedCount} skipped in ${timeStr}`,
+        'success'
+    );
 
     // Return to setup
     $('#sort-interface').style.display = 'none';

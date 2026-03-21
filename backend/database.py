@@ -144,7 +144,7 @@ def init_db():
     """Initialize the database schema."""
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         # Images table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS images (
@@ -165,15 +165,17 @@ def init_db():
                 tagged_at DATETIME
             )
         """)
-        
-        # Schema Migration: Add checkpoint and loras columns if they don't exist
+
+        # Schema Migration: Add columns if they don't exist
         cursor.execute("PRAGMA table_info(images)")
         columns = [row[1] for row in cursor.fetchall()]
         if 'checkpoint' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN checkpoint TEXT")
         if 'loras' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN loras TEXT")
-        
+        if 'embedding' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN embedding BLOB")
+
         # Tags table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tags (
@@ -184,13 +186,93 @@ def init_db():
                 FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
             )
         """)
-        
+
+        # === Tag categorization tables ===
+
+        # Tag category mapping (built-in + user-customizable)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tag TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                subcategory TEXT,
+                is_user_defined INTEGER DEFAULT 0
+            )
+        """)
+
+        # Tag sets (tags that should appear together, e.g. "school uniform" set)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_sets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT,
+                category TEXT NOT NULL
+            )
+        """)
+
+        # Members of tag sets
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_set_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                set_id INTEGER NOT NULL,
+                tag TEXT NOT NULL,
+                weight REAL DEFAULT 1.0,
+                is_required INTEGER DEFAULT 1,
+                FOREIGN KEY (set_id) REFERENCES tag_sets(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Tag exclusion rules
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_exclusions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_name TEXT NOT NULL,
+                description TEXT
+            )
+        """)
+
+        # Conditions that trigger an exclusion rule
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_exclusion_conditions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exclusion_id INTEGER NOT NULL,
+                condition_tag TEXT NOT NULL,
+                condition_type TEXT DEFAULT 'present',
+                FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Tags or categories excluded when rule is triggered
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tag_exclusion_targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                exclusion_id INTEGER NOT NULL,
+                excluded_tag TEXT,
+                excluded_category TEXT,
+                FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
+            )
+        """)
+
+        # Prompt generation presets (saved configurations)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS prompt_presets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                config_json TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Create indexes for fast searching
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id ON tags(image_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_generator ON images(generator)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)")
-        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_tag ON tag_categories(tag)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_embedding ON images(embedding IS NOT NULL) WHERE embedding IS NOT NULL")
+
         conn.commit()
 
 

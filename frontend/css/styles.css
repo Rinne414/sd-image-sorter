@@ -1,6 +1,30 @@
 /* ========================================
    SD Image Sorter - Stylesheet
    Cyberpunk / Neon aesthetic with glassmorphism
+
+   TABLE OF CONTENTS:
+   ------------------
+   1. CSS Variables .................. :root
+   2. Reset & Base .................. *, html, body
+   3. Navigation .................... .nav-bar, .nav-tabs
+   4. Buttons ....................... .btn, .btn-primary, etc.
+   5. Inputs ........................ input, select, textarea
+   6. Main Content .................. main, .view
+   7. Gallery View .................. .gallery-grid, .gallery-item
+   8. Auto-Separate View ............ .autosep-*
+   9. Manual Sort View .............. .sort-*, .folder-*
+  10. Modals ........................ .modal, .modal-content
+  11. Toast Notifications ........... .toast
+  12. Responsive .................... @media queries
+  13. Filter UI ..................... .filter-sidebar, .filter-modal
+  14. Gallery Preview Bar ........... .gallery-preview-bar
+  15. Censor Edit View .............. .censor-workspace-v2
+  16. Tags Library .................. .tags-library-*
+  17. Misc Components ............... .kbd, .range-row, etc.
+
+   SEPARATE FILES:
+   - censor-v2.css ........... Censor editor overlay styles
+   - new-views.css ........... Prompt Lab, Similar Images, Enhanced Manual Sort
    ======================================== */
 
 /* ===== CSS Variables ===== */

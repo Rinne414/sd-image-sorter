@@ -312,6 +312,10 @@ function switchView(viewName) {
     // View-specific initialization
     if (viewName === 'gallery') {
         loadImages();
+    } else if (viewName === 'similar') {
+        if (typeof window.initSimilar === 'function') window.initSimilar();
+    } else if (viewName === 'promptlab') {
+        if (typeof window.initPromptLab === 'function') window.initPromptLab();
     }
 }
 

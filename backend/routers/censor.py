@@ -1,6 +1,12 @@
 """
 Censor endpoints for SD Image Sorter.
 Handles NSFW detection, censoring preview and save operations.
+
+Supports multiple detection backends:
+- Legacy YOLOv8 ONNX (wenaka model)
+- YOLO26 (Ultralytics latest, with segmentation)
+- NudeNet v3 (NSFW-specific body part detection)
+- SAM3 mask refinement (pixel-precise segmentation)
 """
 import os
 import base64
@@ -20,8 +26,22 @@ router = APIRouter(prefix="/api/censor", tags=["censor"])
 # Pydantic models for this router
 class CensorDetectRequest(BaseModel):
     image_id: int
-    model_path: str
+    model_path: str = ""
+    model_type: str = "legacy"  # "legacy", "yolo26", "nudenet", "both"
     confidence_threshold: float = 0.5
+    yolo26_model: str = "yolo26n-seg"  # yolo26n-seg, yolo26s-seg, etc.
+    exposed_only: bool = True  # NudeNet: only detect exposed parts
+
+
+class MaskRefineRequest(BaseModel):
+    image_id: int
+    box: List[int]  # [x1, y1, x2, y2]
+    text_prompt: Optional[str] = None  # SAM3 text guidance
+
+
+class TextSegmentRequest(BaseModel):
+    image_id: int
+    text_prompt: str  # e.g. "exposed breasts", "person's face"
 
 
 class CensorApplyRequest(BaseModel):
@@ -62,51 +82,122 @@ _censor_detector = None
 async def censor_detect(request: CensorDetectRequest):
     """
     Run detection on an image to find regions to censor.
-    Returns list of detected regions with class names and confidence.
+
+    Supports multiple detection backends:
+    - "legacy": Original YOLOv8 ONNX model (requires model_path)
+    - "yolo26": YOLO26 segmentation model (auto-downloads weights)
+    - "nudenet": NudeNet v3 body part detection
+    - "both": Run both YOLO26 + NudeNet, merge results
     """
     global _censor_detector
-    
-    from censor import CensorDetector
-    from utils.path_validation import validate_file_path, ALLOWED_MODEL_EXTENSIONS
-    
+
     image = db.get_image_by_id(request.image_id)
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    
+
     if not os.path.exists(image["path"]):
         raise HTTPException(status_code=404, detail="Image file not found on disk")
-    
-    is_valid, error = validate_file_path(request.model_path, ALLOWED_MODEL_EXTENSIONS)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error or f"Invalid model path: {request.model_path}")
-    
+
     try:
-        if _censor_detector is None or _censor_detector.model_path != request.model_path or _censor_detector.session is None:
-            if _censor_detector is not None and _censor_detector.session is None:
-                print("Censor detector exists but session is None, re-loading...")
-            
-            print(f"Loading censor model: {request.model_path}")
-            _censor_detector = CensorDetector(request.model_path)
-            _censor_detector.load()
-            print("Model loaded successfully")
-        
-        print(f"Running detection on: {image['path']}")
-        detections = _censor_detector.detect(image["path"], request.confidence_threshold)
-        print(f"Found {len(detections)} detections")
-        
+        model_type = request.model_type
+
+        if model_type == "yolo26":
+            from yolo26_detector import get_yolo26_detector
+            detector = get_yolo26_detector(request.yolo26_model)
+            detections = detector.detect(
+                image["path"],
+                conf_threshold=request.confidence_threshold,
+            )
+
+        elif model_type == "nudenet":
+            from nudenet_detector import get_nudenet_detector
+            detector = get_nudenet_detector()
+            detections = detector.detect(
+                image["path"],
+                conf_threshold=request.confidence_threshold,
+                exposed_only=request.exposed_only,
+            )
+
+        elif model_type == "both":
+            # Run both YOLO26 and NudeNet, merge results
+            all_detections = []
+
+            try:
+                from yolo26_detector import get_yolo26_detector
+                yolo_det = get_yolo26_detector(request.yolo26_model)
+                yolo_results = yolo_det.detect(
+                    image["path"],
+                    conf_threshold=request.confidence_threshold,
+                )
+                for d in yolo_results:
+                    d["source"] = "yolo26"
+                all_detections.extend(yolo_results)
+            except Exception as e:
+                print(f"YOLO26 detection failed: {e}")
+
+            try:
+                from nudenet_detector import get_nudenet_detector
+                nn_det = get_nudenet_detector()
+                nn_results = nn_det.detect(
+                    image["path"],
+                    conf_threshold=request.confidence_threshold,
+                    exposed_only=request.exposed_only,
+                )
+                for d in nn_results:
+                    d["source"] = "nudenet"
+                all_detections.extend(nn_results)
+            except Exception as e:
+                print(f"NudeNet detection failed: {e}")
+
+            detections = all_detections
+
+        else:
+            # Legacy YOLOv8 ONNX detector
+            from censor import CensorDetector
+            from utils.path_validation import validate_file_path, ALLOWED_MODEL_EXTENSIONS
+
+            if not request.model_path:
+                raise HTTPException(
+                    status_code=400,
+                    detail="model_path is required for legacy detection mode"
+                )
+
+            is_valid, error = validate_file_path(request.model_path, ALLOWED_MODEL_EXTENSIONS)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error or f"Invalid model path: {request.model_path}")
+
+            if _censor_detector is None or _censor_detector.model_path != request.model_path or _censor_detector.session is None:
+                print(f"Loading censor model: {request.model_path}")
+                _censor_detector = CensorDetector(request.model_path)
+                _censor_detector.load()
+                print("Model loaded successfully")
+
+            detections = _censor_detector.detect(image["path"], request.confidence_threshold)
+
+        # Strip numpy masks from response (not JSON serializable)
+        clean_detections = []
+        for d in detections:
+            clean = {k: v for k, v in d.items() if k != "mask"}
+            clean_detections.append(clean)
+
+        print(f"Found {len(clean_detections)} detections via {model_type}")
+
         return {
             "status": "ok",
             "image_id": request.image_id,
-            "detections": detections
+            "model_type": model_type,
+            "detections": clean_detections,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         error_trace = traceback.format_exc()
         print(f"Detection error:\n{error_trace}")
-        
+
         msg = str(e)
         if "Protobuf" in msg:
-            msg = "Model format error. If using a .pt file, ensure 'ultralytics' is installed. If using .onnx, the file may be corrupted."
-            
+            msg = "Model format error. If using a .pt file, ensure 'ultralytics' is installed."
+
         raise HTTPException(status_code=500, detail=f"Detection failed: {msg}")
 
 
@@ -325,11 +416,192 @@ async def censor_save_data(request: CensorSaveDataRequest):
             else:
                 png_kwargs = {k: v for k, v in save_kwargs.items() if k in ['pnginfo', 'dpi']}
                 image.save(output_path, format='PNG', **png_kwargs)
-        
+
         return {
             "status": "ok",
             "output_path": output_path,
             "filename": output_filename
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Save failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Save data failed: {str(e)}")
+
+
+@router.post("/refine-mask")
+async def refine_mask(request: MaskRefineRequest):
+    """
+    Refine a bounding box into a pixel-precise segmentation mask using SAM3.
+
+    Takes a detection bounding box and returns a refined binary mask
+    that follows the actual contours of the detected region.
+    Falls back gracefully if SAM3 is unavailable.
+    """
+    from sam3_refiner import get_sam3_refiner, SAM3Refiner
+
+    if not SAM3Refiner.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="SAM3 is not available. Install from: "
+                   "git clone https://github.com/facebookresearch/sam3.git && pip install -e ."
+        )
+
+    image_data = db.get_image_by_id(request.image_id)
+    if not image_data:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not os.path.exists(image_data["path"]):
+        raise HTTPException(status_code=404, detail="Image file not found on disk")
+
+    try:
+        image = Image.open(image_data["path"]).convert("RGB")
+        refiner = get_sam3_refiner()
+        mask = refiner.refine_box(
+            image,
+            request.box,
+            text_prompt=request.text_prompt,
+        )
+
+        if mask is None:
+            return {
+                "status": "fallback",
+                "message": "SAM3 could not refine this box. Using bounding box.",
+                "mask": None,
+                "box": request.box,
+            }
+
+        # Encode mask as base64 PNG for transport
+        mask_image = Image.fromarray(mask * 255, mode="L")
+        buffer = BytesIO()
+        mask_image.save(buffer, format="PNG")
+        buffer.seek(0)
+        mask_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        return {
+            "status": "ok",
+            "mask": f"data:image/png;base64,{mask_b64}",
+            "box": request.box,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Mask refinement failed: {str(e)}")
+
+
+@router.post("/segment-text")
+async def segment_text(request: TextSegmentRequest):
+    """
+    Segment objects by text description using SAM3's open-vocabulary feature.
+
+    Allows users to describe what they want to censor in natural language,
+    e.g. "exposed breasts", "person's face", "tattoo on arm".
+    """
+    from sam3_refiner import get_sam3_refiner, SAM3Refiner
+
+    if not SAM3Refiner.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="SAM3 is not available. Install from: "
+                   "git clone https://github.com/facebookresearch/sam3.git && pip install -e ."
+        )
+
+    image_data = db.get_image_by_id(request.image_id)
+    if not image_data:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    if not os.path.exists(image_data["path"]):
+        raise HTTPException(status_code=404, detail="Image file not found on disk")
+
+    try:
+        image = Image.open(image_data["path"]).convert("RGB")
+        refiner = get_sam3_refiner()
+        mask = refiner.segment_by_text(image, request.text_prompt)
+
+        if mask is None:
+            return {
+                "status": "no_match",
+                "message": f"No regions matched text prompt: '{request.text_prompt}'",
+                "mask": None,
+            }
+
+        # Encode mask as base64 PNG
+        mask_image = Image.fromarray(mask * 255, mode="L")
+        buffer = BytesIO()
+        mask_image.save(buffer, format="PNG")
+        buffer.seek(0)
+        mask_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        return {
+            "status": "ok",
+            "mask": f"data:image/png;base64,{mask_b64}",
+            "text_prompt": request.text_prompt,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Text segmentation failed: {str(e)}")
+
+
+@router.get("/models")
+async def list_models():
+    """
+    List available detection backends and their status.
+
+    Returns which detection models are installed and ready to use,
+    helping the frontend show appropriate options.
+    """
+    models = []
+
+    # Legacy YOLOv8 ONNX
+    models.append({
+        "id": "legacy",
+        "name": "YOLOv8 ONNX (Legacy)",
+        "description": "Original wenaka segmentation model. Requires .onnx model file.",
+        "available": True,
+        "requires_model_path": True,
+    })
+
+    # YOLO26
+    try:
+        from ultralytics import YOLO
+        yolo26_available = True
+    except ImportError:
+        yolo26_available = False
+
+    models.append({
+        "id": "yolo26",
+        "name": "YOLO26 Segmentation",
+        "description": "Latest Ultralytics YOLO with dual-head architecture. Auto-downloads weights.",
+        "available": yolo26_available,
+        "requires_model_path": False,
+        "variants": ["yolo26n-seg", "yolo26s-seg", "yolo26m-seg", "yolo26l-seg", "yolo26x-seg"],
+    })
+
+    # NudeNet
+    try:
+        from nudenet import NudeDetector
+        nudenet_available = True
+    except ImportError:
+        nudenet_available = False
+
+    models.append({
+        "id": "nudenet",
+        "name": "NudeNet v3",
+        "description": "ONNX-based 20-class body part detection. Optimized for NSFW content.",
+        "available": nudenet_available,
+        "requires_model_path": False,
+    })
+
+    # SAM3
+    try:
+        from sam3_refiner import SAM3Refiner
+        sam3_available = SAM3Refiner.is_available()
+    except Exception:
+        sam3_available = False
+
+    models.append({
+        "id": "sam3",
+        "name": "SAM 3 (Segment Anything with Concepts)",
+        "description": "Pixel-precise mask refinement with text-guided segmentation. Requires GPU.",
+        "available": sam3_available,
+        "requires_model_path": False,
+    })
+
+    return {
+        "status": "ok",
+        "models": models,
+    }
