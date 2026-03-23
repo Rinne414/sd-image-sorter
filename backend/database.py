@@ -9,6 +9,9 @@ from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), "images.db")
+FAVORITES_COLLECTION_SLUG = "favorites"
+FAVORITES_COLLECTION_NAME = "Favorites"
+FAVORITES_FOLDER_PATH = os.path.join(os.path.dirname(__file__), "favorites")
 
 
 def normalize_prompt_token(token: str) -> str:
@@ -105,7 +108,8 @@ def extract_lora_names(loras_json: str, prompt: str) -> set:
                     normalized = normalize_lora_name(lora_name)
                     if normalized and len(normalized) > 2:
                         loras.add(normalized)
-        except:
+        except (json.JSONDecodeError, TypeError) as e:
+            # Invalid JSON format, skip
             pass
     
     # Extract from prompt (format: <lora:name:weight>)
@@ -123,6 +127,7 @@ def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -175,6 +180,40 @@ def init_db():
             cursor.execute("ALTER TABLE images ADD COLUMN loras TEXT")
         if 'embedding' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN embedding BLOB")
+
+        # Collections table (Favorites MVP uses a built-in collection)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS collections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                folder_path TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Snapshot entries for collection items
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS collection_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                collection_id INTEGER NOT NULL,
+                source_image_id INTEGER NOT NULL,
+                copied_path TEXT NOT NULL,
+                prompt TEXT,
+                negative_prompt TEXT,
+                checkpoint TEXT,
+                loras TEXT,
+                metadata_json TEXT,
+                created_at DATETIME,
+                width INTEGER,
+                height INTEGER,
+                file_size INTEGER,
+                added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(collection_id, source_image_id),
+                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+                FOREIGN KEY (source_image_id) REFERENCES images(id) ON DELETE CASCADE
+            )
+        """)
 
         # Tags table
         cursor.execute("""
@@ -263,6 +302,19 @@ def init_db():
             )
         """)
 
+        # Artist predictions (LSNet-style artist identification)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS artist_predictions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_id INTEGER NOT NULL UNIQUE,
+                artist TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                top_predictions TEXT,
+                identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+            )
+        """)
+
         # Create indexes for fast searching
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id ON tags(image_id)")
@@ -272,6 +324,19 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_embedding ON images(embedding IS NOT NULL) WHERE embedding IS NOT NULL")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_artist ON artist_predictions(artist)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_image_id ON artist_predictions(image_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_source_image_id ON collection_items(source_image_id)")
+
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO collections (slug, name, folder_path)
+            VALUES (?, ?, ?)
+            """,
+            (FAVORITES_COLLECTION_SLUG, FAVORITES_COLLECTION_NAME, FAVORITES_FOLDER_PATH)
+        )
 
         conn.commit()
 
@@ -340,7 +405,9 @@ def get_images(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,  # Multi-prompt filter (AND logic)
-    aspect_ratio: Optional[str] = None  # 'square', 'landscape', 'portrait'
+    aspect_ratio: Optional[str] = None,  # 'square', 'landscape', 'portrait'
+    artist: Optional[str] = None,  # Artist filter
+    image_ids: Optional[List[int]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -350,26 +417,39 @@ def get_images(
     - checkpoints: Filter by checkpoint names (OR logic)
     - loras: Filter by lora names (AND logic - image must have ALL loras)
     - search_query: Search in prompt text
+    - artist: Filter by artist name (from artist_predictions table)
     - sort_by: Sorting method (newest, oldest, name_asc, name_desc, generator, prompt_length, tag_count, rating, character_count, random, file_size)
     - min_width, max_width, min_height, max_height: Dimension filters
     - aspect_ratio: Filter by aspect ratio ('square', 'landscape', 'portrait')
     """
+    if image_ids is not None and len(image_ids) == 0:
+        return []
+
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         # Base query - add subqueries for tag-based sorting
+        # Use lightweight SELECT by default (exclude heavy columns: prompt, negative_prompt, metadata_json)
+        # These columns are only needed for post-filtering
+        needs_post_filter = bool(prompt_terms) or bool(loras)
+        select_lightweight = """i.id, i.filename, i.generator, i.width, i.height,
+                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
+        select_full = "i.*"
+
+        select_cols = select_full if needs_post_filter else select_lightweight
+
         if sort_by == "tag_count":
-            query = """SELECT DISTINCT i.*, 
-                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count 
+            query = f"""SELECT DISTINCT {select_cols},
+                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
                        FROM images i"""
         elif sort_by == "character_count":
-            query = """SELECT DISTINCT i.*, 
-                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count 
+            query = f"""SELECT DISTINCT {select_cols},
+                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count
                        FROM images i"""
         elif sort_by == "rating":
             # Priority: explicit > questionable > sensitive > general > unrated
-            query = """SELECT DISTINCT i.*, 
-                       CASE 
+            query = f"""SELECT DISTINCT {select_cols},
+                       CASE
                            WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'explicit') THEN 1
                            WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'questionable') THEN 2
                            WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'sensitive') THEN 3
@@ -378,8 +458,8 @@ def get_images(
                        END as rating_order
                        FROM images i"""
         else:
-            query = "SELECT DISTINCT i.* FROM images i"
-        
+            query = f"SELECT DISTINCT {select_cols} FROM images i"
+
         conditions = []
         params = []
         
@@ -390,6 +470,11 @@ def get_images(
                 query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag LIKE ?"
                 params.append(f"%{tag}%")
         
+        if image_ids is not None:
+            placeholders = ",".join("?" * len(image_ids))
+            conditions.append(f"i.id IN ({placeholders})")
+            params.extend(image_ids)
+
         # Filter by generators
         if generators:
             placeholders = ",".join("?" * len(generators))
@@ -471,6 +556,12 @@ def get_images(
                 conditions.append("CAST(i.width AS FLOAT) / i.height > 1.1")
             elif aspect_ratio == 'portrait':
                 conditions.append("CAST(i.width AS FLOAT) / i.height < 0.9")
+
+        # Artist filter - join with artist_predictions table
+        if artist:
+            query += " INNER JOIN artist_predictions ap ON i.id = ap.image_id"
+            conditions.append("ap.artist = ?")
+            params.append(artist)
         
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -491,11 +582,7 @@ def get_images(
             "file_size_asc": "i.file_size ASC"
         }
         order_clause = sort_options.get(sort_by, "i.created_at DESC")
-        
-        # For exact matching filters, we fetch more than needed and post-filter
-        # This ensures exact token/LORA matching consistency with library counting
-        needs_post_filter = bool(prompt_terms) or bool(loras)
-        
+
         if needs_post_filter:
             # Fetch all candidates without limit (we'll apply limit after post-filtering)
             query += f" ORDER BY {order_clause}"
@@ -603,6 +690,169 @@ def update_image_path(image_id: int, new_path: str):
             "UPDATE images SET path = ?, filename = ? WHERE id = ?",
             (new_path, new_filename, image_id)
         )
+
+
+def update_image_metadata(
+    image_id: int,
+    generator: str,
+    prompt: Optional[str],
+    negative_prompt: Optional[str],
+    metadata_json: Optional[str],
+    width: Optional[int],
+    height: Optional[int],
+    file_size: Optional[int],
+    checkpoint: Optional[str],
+    loras: Optional[List[str]],
+):
+    """Update parsed metadata fields for an existing image without replacing the row."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE images
+            SET generator = ?,
+                prompt = ?,
+                negative_prompt = ?,
+                metadata_json = ?,
+                width = ?,
+                height = ?,
+                file_size = ?,
+                checkpoint = ?,
+                loras = ?,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                generator,
+                prompt,
+                negative_prompt,
+                metadata_json,
+                width,
+                height,
+                file_size,
+                checkpoint,
+                json.dumps(loras) if loras else None,
+                image_id,
+            )
+        )
+
+
+def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
+    """Get a collection by slug."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM collections WHERE slug = ?", (slug,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_collection_item(collection_id: int, source_image_id: int) -> Optional[Dict[str, Any]]:
+    """Get a collection item by collection and source image IDs."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM collection_items WHERE collection_id = ? AND source_image_id = ?",
+            (collection_id, source_image_id)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def add_collection_item(
+    collection_id: int,
+    source_image_id: int,
+    copied_path: str,
+    prompt: Optional[str],
+    negative_prompt: Optional[str],
+    checkpoint: Optional[str],
+    loras: Optional[str],
+    metadata_json: Optional[str],
+    created_at: Optional[datetime],
+    width: Optional[int],
+    height: Optional[int],
+    file_size: Optional[int],
+) -> int:
+    """Insert or replace a collection snapshot item."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO collection_items (
+                collection_id, source_image_id, copied_path, prompt, negative_prompt,
+                checkpoint, loras, metadata_json, created_at, width, height, file_size
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(collection_id, source_image_id) DO UPDATE SET
+                copied_path = excluded.copied_path,
+                prompt = excluded.prompt,
+                negative_prompt = excluded.negative_prompt,
+                checkpoint = excluded.checkpoint,
+                loras = excluded.loras,
+                metadata_json = excluded.metadata_json,
+                created_at = excluded.created_at,
+                width = excluded.width,
+                height = excluded.height,
+                file_size = excluded.file_size,
+                added_at = CURRENT_TIMESTAMP
+            """,
+            (
+                collection_id,
+                source_image_id,
+                copied_path,
+                prompt,
+                negative_prompt,
+                checkpoint,
+                loras,
+                metadata_json,
+                created_at,
+                width,
+                height,
+                file_size,
+            )
+        )
+        return cursor.lastrowid
+
+
+def remove_collection_item(collection_id: int, source_image_id: int):
+    """Remove a collection item without deleting the copied file."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM collection_items WHERE collection_id = ? AND source_image_id = ?",
+            (collection_id, source_image_id)
+        )
+
+
+def get_favorite_source_ids() -> List[int]:
+    """Get all source image IDs currently in Favorites."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT ci.source_image_id
+            FROM collection_items ci
+            INNER JOIN collections c ON c.id = ci.collection_id
+            WHERE c.slug = ?
+            """,
+            (FAVORITES_COLLECTION_SLUG,)
+        )
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_favorites_count() -> int:
+    """Get Favorites item count."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM collection_items ci
+            INNER JOIN collections c ON c.id = ci.collection_id
+            WHERE c.slug = ?
+            """,
+            (FAVORITES_COLLECTION_SLUG,)
+        )
+        return cursor.fetchone()[0]
 
 
 def delete_image(image_id: int):

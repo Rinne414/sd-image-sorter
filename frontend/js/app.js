@@ -5,9 +5,83 @@
 
 const API_BASE = '';  // Same origin
 
+// Utility: Debounce function
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+}
+
+// Utility: Escape HTML to prevent XSS (pure string replacement for performance)
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Utility: Throttle function
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// ============== Request Manager (Cancellation Support) ==============
+
+const RequestManager = {
+    pendingRequests: new Map(),
+    requestId: 0,
+
+    createAbortController(key) {
+        // Cancel any existing request with the same key
+        this.cancel(key);
+
+        const controller = new AbortController();
+        this.pendingRequests.set(key, controller);
+        return controller;
+    },
+
+    cancel(key) {
+        const controller = this.pendingRequests.get(key);
+        if (controller) {
+            controller.abort();
+            this.pendingRequests.delete(key);
+        }
+    },
+
+    cancelAll() {
+        this.pendingRequests.forEach((controller, key) => {
+            controller.abort();
+        });
+        this.pendingRequests.clear();
+    },
+
+    complete(key) {
+        this.pendingRequests.delete(key);
+    },
+
+    isAbortedError(error) {
+        return error.name === 'AbortError';
+    }
+};
+
+const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
+
 // App State
 const AppState = {
     currentView: 'gallery',
+    viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
     filters: {
         generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
@@ -16,6 +90,8 @@ const AppState = {
         checkpoints: [],
         loras: [],
         prompts: [],  // Multi-prompt filter
+        artist: null,  // Artist filter
+        favoritesOnly: false,
         search: '',
         sortBy: 'newest'
     },
@@ -44,32 +120,88 @@ const AppState = {
 // ============== API Functions ==============
 
 const API = {
-    async get(endpoint) {
-        const response = await fetch(`${API_BASE}${endpoint}`);
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        return response.json();
+    async get(endpoint, options = {}) {
+        const { signal, requestKey } = options;
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, { signal });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `API Error: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                throw { name: 'AbortError', cancelled: true };
+            }
+            if (error.name === 'SyntaxError') {
+                throw new Error('Invalid JSON response from server');
+            }
+            throw error;
+        }
     },
 
-    async post(endpoint, data = {}) {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        return response.json();
+    // Cancellable GET request - use for filter operations
+    async getCancellable(endpoint, requestKey) {
+        const controller = RequestManager.createAbortController(requestKey);
+        try {
+            const result = await this.get(endpoint, { signal: controller.signal, requestKey });
+            RequestManager.complete(requestKey);
+            return result;
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                return null; // Request was cancelled
+            }
+            throw error;
+        }
     },
 
-    async delete(endpoint) {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            method: 'DELETE'
-        });
-        if (!response.ok) throw new Error(`API Error: ${response.status}`);
-        return response.json();
+    async post(endpoint, data = {}, options = {}) {
+        const { signal } = options;
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+                signal
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `API Error: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                throw { name: 'AbortError', cancelled: true };
+            }
+            if (error.name === 'SyntaxError') {
+                throw new Error('Invalid JSON response from server');
+            }
+            throw error;
+        }
+    },
+
+    async delete(endpoint, options = {}) {
+        const { signal } = options;
+        try {
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: 'DELETE',
+                signal
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `API Error: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            if (error.name === 'SyntaxError') {
+                throw new Error('Invalid JSON response from server');
+            }
+            throw error;
+        }
     },
 
     // Images - no limit by default (0 = all)
-    async getImages(filters = {}) {
+    async getImages(filters = {}, options = {}) {
         const params = new URLSearchParams();
         if (filters.generators?.length) params.set('generators', filters.generators.join(','));
 
@@ -83,9 +215,11 @@ const API = {
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
+        if (filters.artist) params.set('artist', filters.artist);  // Artist filter
+        if (filters.favoritesOnly) params.set('favorites_only', 'true');
         if (filters.search) params.set('search', filters.search);
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
-        params.set('limit', filters.limit || 0);  // 0 = no limit
+        params.set('limit', filters.limit ?? 500);  // Default 500 images, 0 means unlimited
         if (filters.offset) params.set('offset', filters.offset);
 
         // Dimension filters
@@ -95,7 +229,7 @@ const API = {
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
 
-        return this.get(`/api/images?${params}`);
+        return this.get(`/api/images?${params}`, options);
     },
 
     async getAnalytics() {
@@ -110,12 +244,29 @@ const API = {
         return this.get(`/api/images/${id}`);
     },
 
+    async reparseImage(id) {
+        return this.post(`/api/images/${id}/reparse`);
+    },
+
+    async getFavoritesSummary() {
+        return this.get('/api/favorites');
+    },
+
+    async addToFavorites(id) {
+        return this.post(`/api/favorites/${id}`);
+    },
+
+    async removeFromFavorites(id) {
+        return this.delete(`/api/favorites/${id}`);
+    },
+
     getImageUrl(id) {
         return `${API_BASE}/api/image-file/${id}`;
     },
 
-    getThumbnailUrl(id) {
-        return `${API_BASE}/api/image-thumbnail/${id}`;
+    getThumbnailUrl(id, size = null) {
+        const actualSize = size || (AppState.viewMode === 'large' ? 512 : AppState.viewMode === 'waterfall' ? 384 : 256);
+        return `${API_BASE}/api/image-thumbnail/${id}?size=${actualSize}`;
     },
 
     // Tags & Generators
@@ -236,10 +387,7 @@ const API = {
         });
     },
 
-    // Prompts Library
-    async getPromptsLibrary(limit = 2000) {
-        return this.get(`/api/prompts/library?limit=${limit}`);
-    }
+    // Prompts Library — removed duplicate, kept single definition above
 };
 
 // ============== UI Utilities ==============
@@ -253,15 +401,25 @@ function $$(selector) {
 }
 
 function showToast(message, type = 'info') {
-    const container = $('#toast-container');
+    let container = $('#toast-container');
+
+    // Create container if it doesn't exist
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
 
-    const icons = { success: '✓', error: '✕', info: 'ℹ' };
+    const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
     toast.innerHTML = `
-        <span class="toast-icon">${icons[type]}</span>
-        <span class="toast-message">${message}</span>
+        <span class="toast-icon">${icons[type] || 'ℹ'}</span>
+        <span class="toast-message"></span>
     `;
+    toast.querySelector('.toast-message').textContent = message;
 
     container.appendChild(toast);
 
@@ -273,11 +431,107 @@ function showToast(message, type = 'info') {
 }
 
 function showModal(modalId) {
-    $(`#${modalId}`).classList.add('visible');
+    const modal = $(`#${modalId}`);
+    if (modal) {
+        modal.classList.add('visible');
+    }
 }
 
 function hideModal(modalId) {
-    $(`#${modalId}`).classList.remove('visible');
+    const modal = $(`#${modalId}`);
+    if (modal) {
+        modal.classList.remove('visible');
+    }
+}
+
+// Custom input modal (replaces native prompt())
+let inputModalResolve = null;
+
+function showInputModal(title, message, defaultValue = '') {
+    return new Promise((resolve) => {
+        // Resolve previous if still pending
+        if (inputModalResolve) {
+            inputModalResolve(null);
+        }
+        inputModalResolve = resolve;
+
+        // Set modal content
+        const titleEl = $('#input-modal-title');
+        const messageEl = $('#input-modal-message');
+        const inputEl = $('#input-modal-field');
+
+        if (titleEl) titleEl.textContent = title || 'Enter Value';
+        if (messageEl) messageEl.textContent = message || '';
+        if (inputEl) {
+            inputEl.value = defaultValue;
+            inputEl.placeholder = '';
+        }
+
+        // Show modal
+        showModal('input-modal');
+
+        // Focus input after modal is visible
+        setTimeout(() => {
+            inputEl?.focus();
+            inputEl?.select();
+        }, 100);
+    });
+}
+
+function initInputModal() {
+    const inputField = $('#input-modal-field');
+    const okBtn = $('#btn-input-ok');
+    const cancelBtn = $('#btn-input-cancel');
+    const backdrop = $('#input-modal .modal-backdrop');
+
+    const handleOk = () => {
+        const value = inputField?.value || '';
+        hideModal('input-modal');
+        if (inputModalResolve) {
+            inputModalResolve(value);
+            inputModalResolve = null;
+        }
+    };
+
+    const handleCancel = () => {
+        hideModal('input-modal');
+        if (inputModalResolve) {
+            inputModalResolve(null);
+            inputModalResolve = null;
+        }
+    };
+
+    okBtn?.addEventListener('click', handleOk);
+    cancelBtn?.addEventListener('click', handleCancel);
+    backdrop?.addEventListener('click', handleCancel);
+
+    // Handle Enter key in input field
+    inputField?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleOk();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancel();
+        }
+    });
+}
+
+// Global Loading Overlay
+function showGlobalLoading(message = 'Loading...') {
+    const overlay = $('#global-loading');
+    const msgEl = $('#global-loading-msg');
+    if (overlay) {
+        if (msgEl) msgEl.textContent = message;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideGlobalLoading() {
+    const overlay = $('#global-loading');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
 }
 
 function formatSize(bytes) {
@@ -288,7 +542,48 @@ function formatSize(bytes) {
 
 // ============== View Navigation ==============
 
+function setGalleryViewMode(mode) {
+    const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
+    AppState.viewMode = nextMode;
+    localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
+
+    $$('.view-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.size === nextMode);
+    });
+
+    const grid = $('#gallery-grid');
+    if (grid) {
+        grid.classList.toggle('large', nextMode === 'large');
+        grid.classList.toggle('waterfall', nextMode === 'waterfall');
+    }
+
+    if (window.VirtualGallery && typeof window.VirtualGallery.setViewMode === 'function') {
+        window.VirtualGallery.setViewMode(nextMode);
+    } else if (window.Gallery) {
+        Gallery.render();
+    }
+}
+
 function switchView(viewName) {
+    const previousView = AppState.currentView;
+
+    // Cleanup previous view
+    if (previousView === 'gallery' && viewName !== 'gallery') {
+        if (window.Gallery && typeof window.Gallery.destroy === 'function') {
+            window.Gallery.destroy();
+        }
+        if (window.VirtualGallery && typeof window.VirtualGallery.destroy === 'function') {
+            window.VirtualGallery.destroy();
+        }
+    }
+
+    // Cleanup censor view listeners when leaving
+    if (previousView === 'censor' && viewName !== 'censor') {
+        if (typeof window.cleanupCensorView === 'function') {
+            window.cleanupCensorView();
+        }
+    }
+
     AppState.currentView = viewName;
 
     // Update nav tabs
@@ -303,19 +598,34 @@ function switchView(viewName) {
 
     // Hide selection FAB when not in Gallery view
     if (viewName !== 'gallery') {
-        $('#selection-actions').style.display = 'none';
+        const selActions = $('#selection-actions');
+        if (selActions) selActions.style.display = 'none';
     } else if (AppState.selectedIds && AppState.selectedIds.size > 0) {
         // Show FAB if we have selections and are returning to gallery
-        $('#selection-actions').style.display = 'flex';
+        const selActions = $('#selection-actions');
+        if (selActions) selActions.style.display = 'flex';
     }
 
     // View-specific initialization
     if (viewName === 'gallery') {
-        loadImages();
+        if (window.VirtualGallery && !window.VirtualGallery.initialized && typeof window.VirtualGallery.init === 'function') {
+            window.VirtualGallery.init();
+        }
+        setGalleryViewMode(AppState.viewMode);
+        // Re-render existing images immediately, only reload from API if needed
+        if (AppState.images.length > 0 && window.Gallery) {
+            Gallery.setImages(AppState.images);
+        } else {
+            loadImages();
+        }
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
     } else if (viewName === 'promptlab') {
         if (typeof window.initPromptLab === 'function') window.initPromptLab();
+    } else if (viewName === 'artist') {
+        if (window.ArtistIdent && typeof window.ArtistIdent.init === 'function') {
+            window.ArtistIdent.init();
+        }
     }
 }
 
@@ -372,12 +682,10 @@ function initEventListeners() {
         hideModal('filter-modal');  // In case it's open
     });
 
-    // View size buttons
+    // View mode buttons
     $$('.view-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            $$('.view-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            $('#gallery-grid').classList.toggle('large', btn.dataset.size === 'large');
+            setGalleryViewMode(btn.dataset.size);
         });
     });
 
@@ -455,6 +763,31 @@ function initEventListeners() {
     // Export selected
     $('#btn-export-selected').addEventListener('click', showExportModal);
 
+    $('#btn-toggle-favorites-filter')?.addEventListener('click', () => {
+        AppState.filters.favoritesOnly = !AppState.filters.favoritesOnly;
+        updateFilterSummary();
+        loadImages();
+    });
+
+    $('#btn-add-favorites')?.addEventListener('click', async () => {
+        if (AppState.selectedIds.size === 0) {
+            showToast('Please select images first', 'error');
+            return;
+        }
+
+        const results = await Promise.allSettled(Array.from(AppState.selectedIds).map(id => API.addToFavorites(id)));
+        const successCount = results.filter(result => result.status === 'fulfilled').length;
+        const failureCount = results.length - successCount;
+
+        if (successCount > 0) {
+            showToast(`Added ${successCount} image(s) to Favorites`, 'success');
+            await loadImages();
+        }
+        if (failureCount > 0) {
+            showToast(`${failureCount} image(s) failed to add to Favorites`, 'error');
+        }
+    });
+
     // Clear selection
     $('#btn-clear-selection').addEventListener('click', () => {
         AppState.selectedIds.clear();
@@ -516,9 +849,11 @@ function initEventListeners() {
     $('#btn-close-filter-modal').addEventListener('click', () => hideModal('filter-modal'));
     $('#btn-apply-modal-filters').addEventListener('click', applyModalFilters);
     $('#btn-reset-filters').addEventListener('click', resetAllFilters);
+    $('#btn-clear-artist')?.addEventListener('click', clearArtistFilter);
 
-    // Modal tag search
-    $('#modal-tag-search').addEventListener('input', (e) => searchModalTags(e.target.value));
+    // Modal tag search (debounced)
+    const debouncedTagSearch = debounce((value) => searchModalTags(value), 300);
+    $('#modal-tag-search')?.addEventListener('input', (e) => debouncedTagSearch(e.target.value));
 
     // Tag input Enter key - add comma-separated tags
     $('#modal-tag-search').addEventListener('keydown', (e) => {
@@ -541,19 +876,17 @@ function initEventListeners() {
 
     // Prompt input Enter key - add comma-separated prompts
     const promptSearchEl = $('#modal-prompt-search');
-    console.log('Prompt search element:', promptSearchEl);
     if (promptSearchEl) {
-        // Autocomplete suggestions on input
+        // Autocomplete suggestions on input (debounced)
+        const debouncedPromptSearch = debounce((value) => searchModalPrompts(value), 300);
         promptSearchEl.addEventListener('input', (e) => {
-            searchModalPrompts(e.target.value);
+            debouncedPromptSearch(e.target.value);
         });
 
         promptSearchEl.addEventListener('keydown', (e) => {
-            console.log('Prompt keydown:', e.key);
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const input = e.target.value.trim();
-                console.log('Prompt Enter pressed, input:', input);
                 if (input) {
                     const prompts = input.split(',').map(p => p.trim()).filter(p => p.length > 0);
                     prompts.forEach(prompt => {
@@ -561,7 +894,6 @@ function initEventListeners() {
                             AppState.filters.prompts.push(prompt);
                         }
                     });
-                    console.log('Prompts after adding:', AppState.filters.prompts);
                     renderModalActivePrompts();
                     e.target.value = '';
                     $('#modal-prompt-suggestions').innerHTML = '';
@@ -617,18 +949,23 @@ function initEventListeners() {
                 throw new Error('Invalid format: expected { images: [...] }');
             }
 
-            // Ask user about overwrite preference
-            const overwrite = confirm(
-                `Found ${data.images.length} images in file.\n\n` +
-                'Do you want to OVERWRITE existing tags?\n\n' +
-                'Click OK to overwrite, Cancel to skip already-tagged images.'
+            // Ask user about overwrite preference using custom modal
+            showConfirm(
+                'Import Tags',
+                `Found ${data.images.length} images in file.\n\nOverwrite existing tags? (Cancel = skip already-tagged images)`,
+                async () => {
+                    // Overwrite = true
+                    const result = await API.importTags(data.images, true);
+                    showToast(`Imported tags for ${result.imported} images (${result.skipped} skipped)`, 'success');
+                    loadImages();
+                },
+                async () => {
+                    // Overwrite = false (skip already-tagged)
+                    const result = await API.importTags(data.images, false);
+                    showToast(`Imported tags for ${result.imported} images (${result.skipped} skipped)`, 'success');
+                    loadImages();
+                }
             );
-
-            const result = await API.importTags(data.images, overwrite);
-            showToast(`Imported tags for ${result.imported} images (${result.skipped} skipped)`, 'success');
-
-            // Refresh the gallery to show new tags
-            loadImages();
         } catch (err) {
             showToast('Failed to import tags: ' + err.message, 'error');
         }
@@ -674,13 +1011,6 @@ function filterModalList(listId, query) {
     });
 }
 
-function debounce(func, wait) {
-    let timeout;
-    return function (...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
 
 // ============== Scanning ==============
 
@@ -708,7 +1038,6 @@ async function startScan() {
 async function pollScanProgress(retryCount = 0) {
     try {
         const progress = await API.getScanProgress();
-        console.log('Scan progress:', progress);
 
         const percent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
         $('#scan-progress-fill').style.width = percent + '%';
@@ -719,6 +1048,7 @@ async function pollScanProgress(retryCount = 0) {
             hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
+            promptsLibraryCache = null; // Invalidate cache after scan
             loadImages();
             loadStats();
         } else if (progress.status === 'running' || progress.status === 'idle') {
@@ -797,6 +1127,7 @@ async function pollTagProgress() {
             hideModal('tag-modal');
             $('#tag-progress-container').style.display = 'none';
             $('#btn-start-tag').disabled = false;
+            promptsLibraryCache = null; // Invalidate cache after tagging
             loadImages();
         } else if (progress.status === 'running') {
             setTimeout(pollTagProgress, 500);
@@ -858,22 +1189,48 @@ async function loadStats() {
 
 // ============== Image Loading ==============
 
+const IMAGE_LOAD_KEY = 'images-load';
+
 async function loadImages() {
-    if (AppState.isLoading) return;
+    // Cancel any pending image load request
+    RequestManager.cancel(IMAGE_LOAD_KEY);
 
     AppState.isLoading = true;
     $('#gallery-loading').style.display = 'flex';
     $('#image-count').textContent = 'Loading...';
 
     try {
-        const result = await API.getImages(AppState.filters);
+        const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
+        const result = await API.getImages(AppState.filters, { signal: controller.signal });
+        RequestManager.complete(IMAGE_LOAD_KEY);
+
+        // Check if request was cancelled
+        if (result === null) return;
+
         AppState.images = result.images;
         $('#image-count').textContent = `${result.count} images`;
+
+        // Clean stale selections: remove IDs that no longer exist in the current image set
+        if (AppState.selectedIds && AppState.selectedIds.size > 0) {
+            const validIds = new Set(result.images.map(img => img.id));
+            const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
+            if (staleIds.length > 0) {
+                staleIds.forEach(id => AppState.selectedIds.delete(id));
+                if (typeof updateSelectionUI === 'function') updateSelectionUI();
+            }
+        }
+
+        // Invalidate tags cache when images change (tags may have changed)
+        tagsLibraryCache = null;
 
         if (window.Gallery) {
             Gallery.setImages(AppState.images);
         }
     } catch (error) {
+        // Don't show error if request was cancelled
+        if (error.name === 'AbortError' || error.cancelled) {
+            return;
+        }
         showToast('Error loading images: ' + error.message, 'error');
     } finally {
         AppState.isLoading = false;
@@ -1031,8 +1388,8 @@ function renderLibraryTags(tags) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     content.innerHTML = tags.map(t => `
-        <div class="library-tag" data-tag="${t.tag}" title="Click to add as filter">
-            <span class="tag-name">${t.tag}</span>
+        <div class="library-tag" data-tag="${escapeHtml(t.tag)}" title="Click to add as filter">
+            <span class="tag-name">${escapeHtml(t.tag)}</span>
             <span class="tag-count">${t.count}</span>
         </div>
     `).join('');
@@ -1055,8 +1412,8 @@ function renderLibraryPrompts(prompts) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     content.innerHTML = prompts.map(p => `
-        <div class="library-tag" data-prompt="${p.prompt}" title="Click to add as filter">
-            <span class="tag-name">${p.prompt}</span>
+        <div class="library-tag" data-prompt="${escapeHtml(p.prompt)}" title="Click to add as filter">
+            <span class="tag-name">${escapeHtml(p.prompt)}</span>
             <span class="tag-count">${p.count}</span>
         </div>
     `).join('');
@@ -1066,7 +1423,6 @@ function renderLibraryPrompts(prompts) {
             const prompt = el.dataset.prompt;
             if (!AppState.filters.prompts.includes(prompt)) {
                 AppState.filters.prompts.push(prompt);
-                console.log('Added prompt to filters:', prompt, 'Current prompts:', AppState.filters.prompts);
                 updateFilterSummary();
                 hideModal('tags-library-modal');
                 loadImages();
@@ -1090,148 +1446,10 @@ function filterLibraryContent() {
 
 // ============== Modal Tag/Prompt Autocomplete ==============
 
-// Debounced tag/prompt search for autocomplete
-const debouncedTagSearch = debounce(async (query) => {
-    const suggestionsDiv = $('#modal-tag-suggestions');
-    if (!query || query.length < 2) {
-        suggestionsDiv.innerHTML = '';
-        suggestionsDiv.classList.remove('visible');
-        return;
-    }
+// searchModalTags and searchModalPrompts are defined in the Filter Modal section below
+// (single definition, using direct API.getTags() / cached API.getPromptsLibrary())
 
-    try {
-        const tags = await API.getTagsLibrary('frequency', 1000);
-        const filtered = tags.filter(t =>
-            t.tag.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 15);
-
-        if (filtered.length === 0) {
-            suggestionsDiv.innerHTML = '';
-            suggestionsDiv.classList.remove('visible');
-            return;
-        }
-
-        suggestionsDiv.innerHTML = filtered.map(t => `
-            <div class="suggestion-item" data-tag="${t.tag}">
-                <span class="suggestion-name">${t.tag}</span>
-                <span class="suggestion-count">${t.count}</span>
-            </div>
-        `).join('');
-
-        suggestionsDiv.classList.add('visible');
-
-        // Add click handlers
-        suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const tag = item.dataset.tag;
-                if (!AppState.filters.tags.includes(tag)) {
-                    AppState.filters.tags.push(tag);
-                    renderModalActiveTags();
-                }
-                $('#modal-tag-search').value = '';
-                suggestionsDiv.innerHTML = '';
-                suggestionsDiv.classList.remove('visible');
-            });
-        });
-    } catch (e) {
-        console.error('Error fetching tag suggestions:', e);
-    }
-}, 250);
-
-function searchModalTags(query) {
-    debouncedTagSearch(query);
-}
-
-const debouncedPromptSearch = debounce(async (query) => {
-    const suggestionsDiv = $('#modal-prompt-suggestions');
-    if (!query || query.length < 2) {
-        suggestionsDiv.innerHTML = '';
-        suggestionsDiv.classList.remove('visible');
-        return;
-    }
-
-    try {
-        const prompts = await API.getPromptsLibrary(1000);
-        const filtered = prompts.filter(p =>
-            p.prompt.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 15);
-
-        if (filtered.length === 0) {
-            suggestionsDiv.innerHTML = '';
-            suggestionsDiv.classList.remove('visible');
-            return;
-        }
-
-        suggestionsDiv.innerHTML = filtered.map(p => `
-            <div class="suggestion-item" data-prompt="${p.prompt}">
-                <span class="suggestion-name">${p.prompt}</span>
-                <span class="suggestion-count">${p.count}</span>
-            </div>
-        `).join('');
-
-        suggestionsDiv.classList.add('visible');
-
-        // Add click handlers
-        suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const prompt = item.dataset.prompt;
-                if (!AppState.filters.prompts.includes(prompt)) {
-                    AppState.filters.prompts.push(prompt);
-                    renderModalActivePrompts();
-                }
-                $('#modal-prompt-search').value = '';
-                suggestionsDiv.innerHTML = '';
-                suggestionsDiv.classList.remove('visible');
-            });
-        });
-    } catch (e) {
-        console.error('Error fetching prompt suggestions:', e);
-    }
-}, 250);
-
-function searchModalPrompts(query) {
-    debouncedPromptSearch(query);
-}
-
-function renderModalActiveTags() {
-    const container = $('#modal-active-tags');
-    if (!container) return;
-
-    container.innerHTML = AppState.filters.tags.map(tag => `
-        <span class="active-tag" data-tag="${tag}">
-            ${tag}
-            <span class="remove-tag">×</span>
-        </span>
-    `).join('');
-
-    container.querySelectorAll('.active-tag').forEach(el => {
-        el.querySelector('.remove-tag').addEventListener('click', () => {
-            const tag = el.dataset.tag;
-            AppState.filters.tags = AppState.filters.tags.filter(t => t !== tag);
-            renderModalActiveTags();
-        });
-    });
-}
-
-function renderModalActivePrompts() {
-    const container = $('#modal-active-prompts');
-    if (!container) return;
-
-    container.innerHTML = AppState.filters.prompts.map(prompt => `
-        <span class="active-tag" data-prompt="${prompt}">
-            ${prompt}
-            <span class="remove-tag">×</span>
-        </span>
-    `).join('');
-
-    container.querySelectorAll('.active-tag').forEach(el => {
-        el.querySelector('.remove-tag').addEventListener('click', () => {
-            const prompt = el.dataset.prompt;
-            AppState.filters.prompts = AppState.filters.prompts.filter(p => p !== prompt);
-            renderModalActivePrompts();
-        });
-    });
-}
+// renderModalActiveTags and renderModalActivePrompts are defined in the Filter Modal section below
 
 function updateSelectionUI() {
     const fab = $('#selection-actions');
@@ -1245,9 +1463,17 @@ function updateSelectionUI() {
     }
 }
 
-function showConfirm(title, message, onOk) {
+// AbortController for confirm modal to prevent listener accumulation
+let _confirmAbort = null;
+
+function showConfirm(title, message, onOk, onCancel) {
     $('#confirm-title').textContent = title;
     $('#confirm-message').textContent = message;
+
+    // Abort previous confirm listeners
+    if (_confirmAbort) _confirmAbort.abort();
+    _confirmAbort = new AbortController();
+    const signal = _confirmAbort.signal;
 
     const okBtn = $('#btn-confirm-ok');
     // Remove old listeners by cloning
@@ -1256,8 +1482,19 @@ function showConfirm(title, message, onOk) {
 
     newOkBtn.addEventListener('click', () => {
         hideModal('confirm-modal');
-        onOk();
-    });
+        if (onOk) onOk();
+    }, { signal });
+
+    // Handle cancel callback if provided
+    const cancelBtn = $('#btn-confirm-cancel');
+    if (cancelBtn) {
+        const newCancelBtn = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+        newCancelBtn.addEventListener('click', () => {
+            hideModal('confirm-modal');
+            if (onCancel) onCancel();
+        }, { signal });
+    }
 
     showModal('confirm-modal');
 }
@@ -1284,16 +1521,16 @@ async function showAnalytics() {
 
         $('#analytics-checkpoints').innerHTML = data.checkpoints.length ?
             data.checkpoints.map(c => `
-                <div class="analytics-item clickable" data-type="checkpoint" data-value="${c.checkpoint}">
-                    <span class="item-name">${c.checkpoint}</span>
+                <div class="analytics-item clickable" data-type="checkpoint" data-value="${escapeHtml(c.checkpoint)}">
+                    <span class="item-name">${escapeHtml(c.checkpoint)}</span>
                     <span class="item-count">${c.count}</span>
                 </div>
             `).join('') : '<p>No checkpoints found</p>';
 
         $('#analytics-loras').innerHTML = data.loras.length ?
             data.loras.map(l => `
-                <div class="analytics-item clickable" data-type="lora" data-value="${l.lora}">
-                    <span class="item-name">${l.lora}</span>
+                <div class="analytics-item clickable" data-type="lora" data-value="${escapeHtml(l.lora)}">
+                    <span class="item-name">${escapeHtml(l.lora)}</span>
                     <span class="item-count">${l.count}</span>
                 </div>
             `).join('') : '<p>No Loras found</p>';
@@ -1343,8 +1580,13 @@ function addTagToUI(tag) {
     const container = $('#active-tags');
     const tagEl = document.createElement('span');
     tagEl.className = 'active-tag';
-    tagEl.innerHTML = `${tag} <span class="remove-tag" data-tag="${tag}">×</span>`;
-    tagEl.querySelector('.remove-tag').addEventListener('click', () => removeTagFilter(tag));
+    tagEl.appendChild(document.createTextNode(`${tag} `));
+    const removeEl = document.createElement('span');
+    removeEl.className = 'remove-tag';
+    removeEl.dataset.tag = tag;
+    removeEl.textContent = '×';
+    removeEl.addEventListener('click', () => removeTagFilter(tag));
+    tagEl.appendChild(removeEl);
     container.appendChild(tagEl);
 }
 
@@ -1361,15 +1603,13 @@ async function showExportModal() {
     showModal('export-modal');
 
     try {
-        const prompts = [];
         const ids = Array.from(AppState.selectedIds);
 
-        for (const id of ids) {
-            const result = await API.getImage(id);
-            if (result.image.prompt) {
-                prompts.push(result.image.prompt);
-            }
-        }
+        // Fetch all images in parallel for better performance
+        const results = await Promise.all(ids.map(id => API.getImage(id)));
+        const prompts = results
+            .filter(r => r.image.prompt)
+            .map(r => r.image.prompt);
 
         textArea.value = prompts.join('\n\n');
     } catch (e) {
@@ -1391,12 +1631,13 @@ async function showExportTagsModal() {
         const allTags = new Set();
         const ids = Array.from(AppState.selectedIds);
 
-        for (const id of ids) {
-            const result = await API.getImage(id);
+        // Fetch all images in parallel for better performance
+        const results = await Promise.all(ids.map(id => API.getImage(id)));
+        results.forEach(result => {
             if (result.tags) {
                 result.tags.forEach(t => allTags.add(t.tag));
             }
-        }
+        });
 
         // Sort alphabetically and join
         const sortedTags = Array.from(allTags).sort();
@@ -1490,9 +1731,12 @@ function clearFilters() {
     AppState.filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
     AppState.filters.tags = [];
     AppState.filters.search = '';
-    $('#tag-search').value = '';
-    $('#prompt-search').value = '';
-    $('#active-tags').innerHTML = '';
+    const tagSearch = $('#tag-search');
+    if (tagSearch) tagSearch.value = '';
+    const promptSearch = $('#prompt-search');
+    if (promptSearch) promptSearch.value = '';
+    const activeTags = $('#active-tags');
+    if (activeTags) activeTags.innerHTML = '';
     loadImages();
 }
 
@@ -1504,15 +1748,21 @@ async function searchTags(e) {
     }
 
     try {
-        const result = await API.getTags();
+        // Use cached tags to avoid repeated API calls on every keystroke
+        const now = Date.now();
+        if (!tagsLibraryCache || (now - tagsLibraryCacheTime) > TAGS_CACHE_TTL) {
+            tagsLibraryCache = await API.getTags();
+            tagsLibraryCacheTime = now;
+        }
+        const result = tagsLibraryCache;
         const filtered = result.tags
             .filter(t => t.tag.toLowerCase().includes(query.toLowerCase()))
             .slice(0, 10);
 
         const suggestionsEl = $('#tag-suggestions');
         suggestionsEl.innerHTML = filtered.map(t => `
-            <div class="tag-suggestion" data-tag="${t.tag}">
-                ${t.tag} <span style="color: var(--text-muted)">(${t.count})</span>
+            <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
+                ${escapeHtml(t.tag)} <span style="color: var(--text-muted)">(${t.count})</span>
             </div>
         `).join('');
 
@@ -1527,7 +1777,7 @@ async function searchTags(e) {
             });
         });
     } catch (error) {
-        console.error('Failed to search tags:', error);
+        // Tag search failed silently - non-critical autocomplete
     }
 }
 
@@ -1545,15 +1795,22 @@ function removeTagFilter(tag) {
 
 function renderActiveTagFilters() {
     const container = $('#active-tags');
-    container.innerHTML = AppState.filters.tags.map(tag => `
-        <span class="active-tag">
-            ${tag}
-            <span class="remove-tag" data-tag="${tag}">✕</span>
-        </span>
-    `).join('');
+    if (!container) return;
+    container.innerHTML = '';
 
-    container.querySelectorAll('.remove-tag').forEach(el => {
-        el.addEventListener('click', () => removeTagFilter(el.dataset.tag));
+    AppState.filters.tags.forEach(tag => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'active-tag';
+        tagEl.appendChild(document.createTextNode(`${tag} `));
+
+        const removeEl = document.createElement('span');
+        removeEl.className = 'remove-tag';
+        removeEl.dataset.tag = tag;
+        removeEl.textContent = '✕';
+        removeEl.addEventListener('click', () => removeTagFilter(tag));
+
+        tagEl.appendChild(removeEl);
+        container.appendChild(tagEl);
     });
 }
 
@@ -1567,7 +1824,9 @@ async function openFilterModal() {
     $$('#modal-rating-filters input').forEach(cb => {
         cb.checked = AppState.filters.ratings.includes(cb.value);
     });
-    $('#modal-prompt-search').value = AppState.filters.search || '';
+    // Don't prefill prompt search bar with AppState.filters.search —
+    // the prompt search is for adding prompt filters, not for text search
+    $('#modal-prompt-search').value = '';
 
     // Show active tags and prompts
     renderModalActiveTags();
@@ -1581,24 +1840,31 @@ async function openFilterModal() {
 
 function renderModalActiveTags() {
     const container = $('#modal-active-tags');
-    container.innerHTML = AppState.filters.tags.map(tag => `
-        <span class="active-tag">${tag} <span class="remove-modal-tag" data-tag="${tag}">×</span></span>
-    `).join('');
+    if (!container) return;
+    container.innerHTML = '';
 
-    container.querySelectorAll('.remove-modal-tag').forEach(el => {
-        el.addEventListener('click', () => {
-            const tag = el.dataset.tag;
+    AppState.filters.tags.forEach(tag => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'active-tag';
+        tagEl.appendChild(document.createTextNode(`${tag} `));
+
+        const removeEl = document.createElement('span');
+        removeEl.className = 'remove-modal-tag';
+        removeEl.dataset.tag = tag;
+        removeEl.textContent = '×';
+        removeEl.addEventListener('click', () => {
             AppState.filters.tags = AppState.filters.tags.filter(t => t !== tag);
             renderModalActiveTags();
         });
+
+        tagEl.appendChild(removeEl);
+        container.appendChild(tagEl);
     });
 }
 
 function renderModalActivePrompts() {
-    // Try to find or create a prompts display area in the modal
     let container = document.getElementById('modal-active-prompts');
     if (!container) {
-        // Create container after prompt search input if it doesn't exist
         const promptSearch = document.getElementById('modal-prompt-search');
         if (promptSearch) {
             container = document.createElement('div');
@@ -1611,30 +1877,38 @@ function renderModalActivePrompts() {
         }
     }
 
-    container.innerHTML = AppState.filters.prompts.map(prompt => `
-        <span class="active-tag">${prompt} <span class="remove-modal-prompt" data-prompt="${prompt}">×</span></span>
-    `).join('');
+    container.innerHTML = '';
+    AppState.filters.prompts.forEach(prompt => {
+        const promptEl = document.createElement('span');
+        promptEl.className = 'active-tag';
+        promptEl.appendChild(document.createTextNode(`${prompt} `));
 
-    container.querySelectorAll('.remove-modal-prompt').forEach(el => {
-        el.addEventListener('click', () => {
-            const prompt = el.dataset.prompt;
+        const removeEl = document.createElement('span');
+        removeEl.className = 'remove-modal-prompt';
+        removeEl.dataset.prompt = prompt;
+        removeEl.textContent = '×';
+        removeEl.addEventListener('click', () => {
             AppState.filters.prompts = AppState.filters.prompts.filter(p => p !== prompt);
             renderModalActivePrompts();
         });
+
+        promptEl.appendChild(removeEl);
+        container.appendChild(promptEl);
     });
 }
 
 async function loadModalFilterLists() {
     try {
-        const data = await API.getStats();
+        // Use cached analytics data if available, otherwise fetch from API
+        const data = AppState.analytics || await API.getStats();
 
         // Render checkpoints
         const cpList = $('#modal-checkpoint-list');
         cpList.innerHTML = (data.checkpoints || []).map(cp => `
             <label class="checkbox-label">
-                <input type="checkbox" value="${cp.checkpoint}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
+                <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
                 <span class="checkbox-custom"></span>
-                <span class="checkbox-text">${cp.checkpoint}</span>
+                <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
                 <span class="checkbox-count">${cp.count}</span>
             </label>
         `).join('');
@@ -1643,9 +1917,9 @@ async function loadModalFilterLists() {
         const loraList = $('#modal-lora-list');
         loraList.innerHTML = (data.loras || []).map(l => `
             <label class="checkbox-label">
-                <input type="checkbox" value="${l.lora}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
+                <input type="checkbox" value="${escapeHtml(l.lora)}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
                 <span class="checkbox-custom"></span>
-                <span class="checkbox-text">${l.lora}</span>
+                <span class="checkbox-text">${escapeHtml(l.lora)}</span>
                 <span class="checkbox-count">${l.count}</span>
             </label>
         `).join('');
@@ -1654,27 +1928,33 @@ async function loadModalFilterLists() {
     }
 }
 
-async function searchModalTags(query) {
+// searchModalTags - debounced wrapper for tag autocomplete in filter modal
+const _debouncedTagSearch = debounce(async (query) => {
     const suggestionsEl = $('#modal-tag-suggestions');
-    if (query.length < 2) {
+    if (!query || query.length < 2) {
         suggestionsEl.innerHTML = '';
         suggestionsEl.classList.remove('visible');
         return;
     }
 
     try {
-        const result = await API.getTags();
+        // Use cached tags to avoid repeated API calls on every keystroke
+        const now = Date.now();
+        if (!tagsLibraryCache || (now - tagsLibraryCacheTime) > TAGS_CACHE_TTL) {
+            tagsLibraryCache = await API.getTags();
+            tagsLibraryCacheTime = now;
+        }
+        const result = tagsLibraryCache;
         const filtered = result.tags
             .filter(t => t.tag.toLowerCase().includes(query.toLowerCase()))
             .slice(0, 8);
 
         suggestionsEl.innerHTML = filtered.map(t => `
-            <div class="tag-suggestion" data-tag="${t.tag}">
-                ${t.tag} <span style="color: var(--text-muted)">(${t.count})</span>
+            <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
+                ${escapeHtml(t.tag)} <span style="color: var(--text-muted)">(${t.count})</span>
             </div>
         `).join('');
 
-        // Show/hide based on results
         if (filtered.length > 0) {
             suggestionsEl.classList.add('visible');
         } else {
@@ -1693,18 +1973,27 @@ async function searchModalTags(query) {
             });
         });
     } catch (e) {
-        console.error('Failed to search tags:', e);
+        // Tag search failed silently - non-critical autocomplete
     }
+}, 250);
+
+function searchModalTags(query) {
+    _debouncedTagSearch(query);
 }
 
 // Cache for prompts library to avoid repeated API calls
 let promptsLibraryCache = null;
+// Cache for tags to avoid repeated API calls on every keystroke
+let tagsLibraryCache = null;
+let tagsLibraryCacheTime = 0;
+const TAGS_CACHE_TTL = 30000; // 30 seconds
 
-async function searchModalPrompts(query) {
+// searchModalPrompts - debounced wrapper for prompt autocomplete in filter modal
+const _debouncedPromptSearch = debounce(async (query) => {
     const suggestionsEl = $('#modal-prompt-suggestions');
     if (!suggestionsEl) return;
 
-    if (query.length < 2) {
+    if (!query || query.length < 2) {
         suggestionsEl.innerHTML = '';
         suggestionsEl.classList.remove('visible');
         return;
@@ -1722,12 +2011,11 @@ async function searchModalPrompts(query) {
             .slice(0, 10);
 
         suggestionsEl.innerHTML = filtered.map(p => `
-            <div class="tag-suggestion" data-prompt="${p.prompt}">
-                ${p.prompt} <span style="color: var(--text-muted)">(${p.count})</span>
+            <div class="tag-suggestion" data-prompt="${escapeHtml(p.prompt)}">
+                ${escapeHtml(p.prompt)} <span style="color: var(--text-muted)">(${p.count})</span>
             </div>
         `).join('');
 
-        // Show/hide based on results
         if (filtered.length > 0) {
             suggestionsEl.classList.add('visible');
         } else {
@@ -1747,8 +2035,12 @@ async function searchModalPrompts(query) {
             });
         });
     } catch (e) {
-        console.error('Failed to search prompts:', e);
+        // Prompt search failed silently - non-critical autocomplete
     }
+}, 250);
+
+function searchModalPrompts(query) {
+    _debouncedPromptSearch(query);
 }
 
 function applyModalFilters() {
@@ -1798,8 +2090,23 @@ function applyModalFilters() {
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
     hideModal('filter-modal');
+    syncGenTabsWithFilters();
     loadImages();
     showToast('Filters applied', 'success');
+}
+
+// Sync generator tab active state with current filter state
+function syncGenTabsWithFilters() {
+    const gens = AppState.filters.generators;
+    $$('.gen-tab').forEach(t => {
+        if (gens.length === 5) {
+            t.classList.toggle('active', t.dataset.gen === 'all');
+        } else if (gens.length === 1) {
+            t.classList.toggle('active', t.dataset.gen === gens[0]);
+        } else {
+            t.classList.remove('active');
+        }
+    });
 }
 
 function resetAllFilters() {
@@ -1810,6 +2117,8 @@ function resetAllFilters() {
         checkpoints: [],
         loras: [],
         prompts: [],
+        artist: null,  // Clear artist filter
+        favoritesOnly: false,
         search: '',
         sortBy: 'newest',
         limit: 0,
@@ -1836,14 +2145,47 @@ function resetAllFilters() {
     $('#filter-max-height').value = '';
     $$('input[name="aspect-ratio"]').forEach(r => r.checked = r.value === '');
 
+    // Hide artist filter row
+    const artistRow = $('#artist-filter-row');
+    if (artistRow) artistRow.style.display = 'none';
+
     // Update all filter summaries
     updateFilterSummary();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
     hideModal('filter-modal');
+    syncGenTabsWithFilters();
     loadImages();
     showToast('Filters cleared', 'success');
+}
+
+function initMissingFilterMarkup() {
+    const generatorSection = document.getElementById('modal-generator-filters');
+    if (generatorSection && !document.getElementById('modal-rating-filters')) {
+        const ratingSection = document.createElement('div');
+        ratingSection.className = 'filter-section';
+        ratingSection.innerHTML = `
+            <h4>Ratings</h4>
+            <div class="filter-options" id="modal-rating-filters">
+                <label class="checkbox-label"><input type="checkbox" value="general" checked><span class="checkbox-custom"></span><span class="checkbox-text">General</span></label>
+                <label class="checkbox-label"><input type="checkbox" value="sensitive" checked><span class="checkbox-custom"></span><span class="checkbox-text">Sensitive</span></label>
+                <label class="checkbox-label"><input type="checkbox" value="questionable" checked><span class="checkbox-custom"></span><span class="checkbox-text">Questionable</span></label>
+                <label class="checkbox-label"><input type="checkbox" value="explicit" checked><span class="checkbox-custom"></span><span class="checkbox-text">Explicit</span></label>
+            </div>
+        `;
+        generatorSection.parentElement.insertBefore(ratingSection, generatorSection.nextElementSibling);
+    }
+}
+
+// Clear only the artist filter
+function clearArtistFilter() {
+    AppState.filters.artist = null;
+    const artistRow = $('#artist-filter-row');
+    if (artistRow) artistRow.style.display = 'none';
+    updateFilterSummary();
+    loadImages();
+    showToast('Artist filter cleared', 'info');
 }
 
 function updateFilterSummary() {
@@ -1885,12 +2227,35 @@ function updateFilterSummary() {
             (!f.prompts || f.prompts.length === 0) ? 'None' :
                 f.prompts.length > 2 ? `${f.prompts.length} prompts` : f.prompts.join(', ');
     }
+
+    const favoritesSummary = $('#summary-favorites');
+    if (favoritesSummary) {
+        favoritesSummary.textContent = f.favoritesOnly ? 'Only favorites' : 'All images';
+    }
+    $('#btn-toggle-favorites-filter')?.classList.toggle('active', !!f.favoritesOnly);
+
+    // Artist filter
+    const artistRow = $('#artist-filter-row');
+    const artistSummary = $('#summary-artist');
+    if (artistRow && artistSummary) {
+        if (f.artist) {
+            artistRow.style.display = 'flex';
+            // Format artist name (replace underscores with spaces, capitalize)
+            const formattedArtist = f.artist.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            artistSummary.textContent = formattedArtist;
+        } else {
+            artistRow.style.display = 'none';
+        }
+    }
 }
 
 // ============== Initialization ==============
 
 document.addEventListener('DOMContentLoaded', () => {
+    initMissingFilterMarkup();
     initEventListeners();
+    initInputModal();
+    setGalleryViewMode(AppState.viewMode);
     switchView('gallery');
     loadStats();
     updateFilterSummary();
@@ -1909,6 +2274,9 @@ window.App = {
     showToast,
     showModal,
     hideModal,
+    showInputModal,
+    showGlobalLoading,
+    hideGlobalLoading,
     formatSize,
     loadImages,
     loadStats,

@@ -4,6 +4,15 @@
  * Replaces the default Gallery.render() with a virtualized version.
  */
 
+// Shared generator color map (DRY — also used in gallery.js)
+const GENERATOR_COLORS = {
+    comfyui: '#22c55e',
+    nai: '#f97316',
+    webui: '#3b82f6',
+    forge: '#8b5cf6',
+    unknown: '#64748b'
+};
+
 const VirtualGallery = {
     // Configuration
     BUFFER_ROWS: 3,       // Extra rows above/below viewport
@@ -13,7 +22,6 @@ const VirtualGallery = {
     // State
     containerEl: null,
     scrollEl: null,
-    sentinelEl: null,
     itemHeight: 0,
     columns: 0,
     totalRows: 0,
@@ -21,10 +29,15 @@ const VirtualGallery = {
     visibleEnd: 0,
     renderedItems: new Map(), // row index -> DOM element
     images: [],
+    viewMode: 'grid',
     isLargeGrid: false,
     resizeObserver: null,
     scrollRAF: null,
+    resizeDebounceTimer: null,
     initialized: false,
+    _scrollHandler: null,
+    _origSetImages: null,
+    _origRender: null,
 
     /**
      * Initialize virtual gallery, replacing the default render.
@@ -38,22 +51,24 @@ const VirtualGallery = {
         this.containerEl = grid;
         this.scrollEl = grid.parentElement; // The scrollable container
 
-        // Create sentinel for total height
-        this.sentinelEl = document.createElement('div');
-        this.sentinelEl.className = 'virtual-gallery-sentinel';
-        this.sentinelEl.style.cssText = 'width: 100%; pointer-events: none;';
-
-        // Observe container resize to recalculate columns
+        // Observe container resize to recalculate columns (debounced)
         this.resizeObserver = new ResizeObserver(() => {
-            this.recalculate();
+            clearTimeout(this.resizeDebounceTimer);
+            this.resizeDebounceTimer = setTimeout(() => {
+                this.recalculate();
+            }, 100);
         });
         this.resizeObserver.observe(this.containerEl);
 
-        // Bind scroll handler
-        this.scrollEl.addEventListener('scroll', () => this.onScroll(), { passive: true });
+        // Bind scroll handler (store reference for cleanup)
+        this._scrollHandler = () => this.onScroll();
+        this.scrollEl.addEventListener('scroll', this._scrollHandler, { passive: true });
+
+        // Save original Gallery methods before overriding
+        this._origSetImages = Gallery.setImages.bind(Gallery);
+        this._origRender = Gallery.render.bind(Gallery);
 
         // Override Gallery.render with virtual version
-        const originalSetImages = Gallery.setImages.bind(Gallery);
         Gallery.setImages = (images) => {
             Gallery.images = images;
             this.setImages(images);
@@ -72,9 +87,22 @@ const VirtualGallery = {
      */
     setImages(images) {
         this.images = images || [];
+
+        for (const [, rowEl] of this.renderedItems) {
+            rowEl.remove();
+        }
         this.renderedItems.clear();
+
+        if (this.scrollEl) {
+            this.scrollEl.scrollTop = 0;
+        }
+
+        if (this.viewMode === 'waterfall') {
+            this.renderWaterfall();
+            return;
+        }
+
         this.recalculate();
-        this.renderVisible();
     },
 
     /**
@@ -96,11 +124,12 @@ const VirtualGallery = {
         // Total rows
         this.totalRows = Math.ceil(this.images.length / this.columns);
 
-        // Update sentinel height to maintain scroll range
+        // Calculate total content height
         const totalHeight = this.totalRows * (this.itemHeight + this.ROW_GAP) - this.ROW_GAP;
-        this.sentinelEl.style.height = Math.max(0, totalHeight) + 'px';
 
         // Set container to relative for absolute positioned rows
+        // Clear any lingering grid properties first
+        this.containerEl.style.gridTemplateColumns = '';
         this.containerEl.style.position = 'relative';
         this.containerEl.style.display = 'block';
         this.containerEl.style.minHeight = Math.max(0, totalHeight) + 'px';
@@ -124,17 +153,22 @@ const VirtualGallery = {
      * Calculate and render only visible rows.
      */
     renderVisible() {
-        if (!this.containerEl || this.images.length === 0) {
+        if (!this.containerEl || !this.scrollEl) return;
+
+        if (this.images.length === 0) {
+            // Clear any virtual rows
             this.containerEl.innerHTML = '';
-            if (this.images.length === 0) {
-                this.containerEl.style.display = 'grid';
-                this.containerEl.innerHTML = `
-                    <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary);">
-                        <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
-                        <p>No images found. Click "Scan Folder" to add images.</p>
-                    </div>
-                `;
-            }
+            this.renderedItems.clear();
+            this.containerEl.style.display = 'grid';
+            this.containerEl.style.position = '';
+            this.containerEl.style.minHeight = '';
+            this.containerEl.style.gridTemplateColumns = '';
+            this.containerEl.innerHTML = `
+                <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary);">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
+                    <p>No images found. Click "Scan Folder" to add images.</p>
+                </div>
+            `;
             return;
         }
 
@@ -187,13 +221,6 @@ const VirtualGallery = {
         const topOffset = rowIndex * rowHeight;
 
         const { API, AppState } = window.App || {};
-        const genColors = {
-            comfyui: '#22c55e',
-            nai: '#f97316',
-            webui: '#3b82f6',
-            forge: '#8b5cf6',
-            unknown: '#64748b'
-        };
 
         const rowEl = document.createElement('div');
         rowEl.className = 'virtual-row';
@@ -211,69 +238,9 @@ const VirtualGallery = {
 
         for (let i = startIdx; i < endIdx; i++) {
             const image = this.images[i];
-            const item = document.createElement('div');
-            item.className = 'gallery-item';
-
-            if (AppState && AppState.selectedIds.has(image.id)) {
-                item.classList.add('selected');
-            }
-
-            item.dataset.id = image.id;
-            item.draggable = true;
-            item.style.cssText = `
-                position: relative;
-                aspect-ratio: 1;
-                border-radius: 12px;
-                overflow: hidden;
-                background: var(--bg-card);
-                cursor: pointer;
-            `;
-
-            const thumbnailUrl = API ? API.getThumbnailUrl(image.id) : `/api/image-thumbnail/${image.id}`;
-            item.innerHTML = `
-                <img src="${thumbnailUrl}" alt="${image.filename}" loading="lazy"
-                     style="width:100%;height:100%;object-fit:cover;">
-                <div class="gallery-item-overlay">
-                    <span class="gallery-item-generator" style="background: ${genColors[image.generator] || genColors.unknown}">
-                        ${image.generator}
-                    </span>
-                </div>
-            `;
-
-            // Click handler
-            item.addEventListener('click', () => {
-                if (AppState && AppState.selectionMode) {
-                    Gallery.toggleSelection(image.id);
-                } else {
-                    Gallery.openPreview(image.id);
-                }
-            });
-
-            // Drag support
-            item.addEventListener('dragstart', (e) => {
-                const imgUrl = API ? API.getImageUrl(image.id) : `/api/image-file/${image.id}`;
-                const absoluteUrl = new URL(imgUrl, window.location.origin).href;
-
-                e.dataTransfer.setData('text/uri-list', absoluteUrl);
-                e.dataTransfer.setData('text/plain', absoluteUrl);
-
-                const mimeType = image.filename.toLowerCase().endsWith('.png') ? 'image/png' :
-                    image.filename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-                e.dataTransfer.setData('DownloadURL', `${mimeType}:${image.filename}:${absoluteUrl}`);
-
-                const img = item.querySelector('img');
-                if (img && img.src) {
-                    e.dataTransfer.setDragImage(img, 50, 50);
-                }
-
-                item.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'copyMove';
-            });
-
-            item.addEventListener('dragend', () => {
-                item.classList.remove('dragging');
-            });
-
+            const item = Gallery.createGalleryItem(image, i, false);
+            item.querySelector('img')?.setAttribute('src', API ? API.getThumbnailUrl(image.id, this.isLargeGrid ? 512 : 256) : `/api/image-thumbnail/${image.id}`);
+            item.querySelector('img')?.removeAttribute('data-src');
             rowEl.appendChild(item);
         }
 
@@ -283,14 +250,38 @@ const VirtualGallery = {
     /**
      * Toggle large grid mode.
      */
-    setLargeGrid(isLarge) {
-        this.isLargeGrid = isLarge;
-        this.ITEM_MIN_WIDTH = isLarge ? 300 : 200;
+    setViewMode(mode) {
+        this.viewMode = mode || 'grid';
+        this.isLargeGrid = this.viewMode === 'large';
+        this.ITEM_MIN_WIDTH = this.isLargeGrid ? 300 : 200;
+        if (this.viewMode === 'waterfall') {
+            this.renderWaterfall();
+            return;
+        }
         this.recalculate();
     },
 
+    renderWaterfall() {
+        if (!this.containerEl) return;
+        for (const [, rowEl] of this.renderedItems) {
+            rowEl.remove();
+        }
+        this.renderedItems.clear();
+        this.containerEl.innerHTML = '';
+        this.containerEl.style.position = '';
+        this.containerEl.style.display = 'block';
+        this.containerEl.style.minHeight = '';
+        this.containerEl.style.gridTemplateColumns = '';
+
+        const fragment = document.createDocumentFragment();
+        this.images.forEach((image, index) => {
+            fragment.appendChild(Gallery.createGalleryItem(image, index, true));
+        });
+        this.containerEl.appendChild(fragment);
+    },
+
     /**
-     * Clean up observers and listeners.
+     * Clean up observers, listeners, and restore original Gallery methods.
      */
     destroy() {
         if (this.resizeObserver) {
@@ -301,7 +292,29 @@ const VirtualGallery = {
             cancelAnimationFrame(this.scrollRAF);
             this.scrollRAF = null;
         }
+        if (this.resizeDebounceTimer) {
+            clearTimeout(this.resizeDebounceTimer);
+            this.resizeDebounceTimer = null;
+        }
+        // Remove scroll listener to prevent duplicate bindings on re-init
+        if (this._scrollHandler && this.scrollEl) {
+            this.scrollEl.removeEventListener('scroll', this._scrollHandler);
+            this._scrollHandler = null;
+        }
+        // Remove all rendered DOM elements
+        for (const [, rowEl] of this.renderedItems) {
+            rowEl.remove();
+        }
         this.renderedItems.clear();
+        // Restore original Gallery methods to prevent closure nesting on re-init
+        if (this._origSetImages) {
+            Gallery.setImages = this._origSetImages;
+            this._origSetImages = null;
+        }
+        if (this._origRender) {
+            Gallery.render = this._origRender;
+            this._origRender = null;
+        }
         this.initialized = false;
     }
 };
@@ -315,3 +328,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.VirtualGallery = VirtualGallery;
+// Export shared color map for gallery.js
+window.GENERATOR_COLORS = GENERATOR_COLORS;

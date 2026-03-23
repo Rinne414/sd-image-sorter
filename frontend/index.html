@@ -48,6 +48,10 @@
                     <span class="tab-icon">🧪</span>
                     <span class="tab-text">Prompt Lab</span>
                 </button>
+                <button class="nav-tab" data-view="artist">
+                    <span class="tab-icon">🎨</span>
+                    <span class="tab-text">Artist ID</span>
+                </button>
             </div>
             <div class="nav-actions">
                 <button id="btn-clear-db" class="btn btn-ghost danger">
@@ -102,8 +106,18 @@
                             <span class="summary-label">Prompt:</span>
                             <span class="summary-value" id="summary-prompt">-</span>
                         </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Favorites:</span>
+                            <span class="summary-value" id="summary-favorites">All images</span>
+                        </div>
+                        <div class="summary-row" id="artist-filter-row" style="display: none;">
+                            <span class="summary-label">Artist:</span>
+                            <span class="summary-value" id="summary-artist">-</span>
+                            <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter">✕</button>
+                        </div>
                     </div>
 
+                    <button id="btn-toggle-favorites-filter" class="btn btn-ghost full-width">Show Favorites Only</button>
                     <button id="btn-clear-filters" class="btn btn-ghost full-width">Clear All Filters</button>
 
                     <div class="divider-h"></div>
@@ -152,11 +166,14 @@
                                 <option value="random">🎲 Random</option>
                             </select>
                             <div class="divider-v"></div>
-                            <button class="view-btn active" data-size="medium">
+                            <button class="view-btn" data-size="grid" title="Grid view">
                                 <span>◼◼</span>
                             </button>
-                            <button class="view-btn" data-size="large">
+                            <button class="view-btn" data-size="large" title="Large view">
                                 <span>◼</span>
+                            </button>
+                            <button class="view-btn" data-size="waterfall" title="Waterfall view">
+                                <span>▥</span>
                             </button>
                         </div>
 
@@ -538,6 +555,14 @@
                                 <span class="collapse-arrow">▼</span>
                             </div>
                             <div class="section-content" id="section-detection" style="padding-top: 8px;">
+                                <div class="prop-group-v2" style="margin-bottom: 8px;">
+                                    <label>Detection Model</label>
+                                    <select id="censor-model-type" class="toolbar-select" style="width: 100%; padding: 6px 8px;">
+                                        <option value="legacy">Legacy YOLO (Default)</option>
+                                        <option value="nudenet">NudeNet v3</option>
+                                        <option value="both">Both (NudeNet + Legacy)</option>
+                                    </select>
+                                </div>
                                 <div class="sidebar-action-row-v2">
                                     <button class="btn-side-v2" id="btn-open-detect-modal"
                                         title="Configure detection settings">
@@ -738,7 +763,7 @@
                     <div class="promptlab-browser">
                         <div class="promptlab-browser-header">
                             <h4>Tag Categories</h4>
-                            <input type="text" class="input" id="promptlab-cat-search" placeholder="Search tags...">
+                            <input type="text" class="input" id="promptlab-search" placeholder="Search tags...">
                         </div>
                         <div class="promptlab-browser-body" id="promptlab-categories">
                             <div class="empty-state">Loading categories...</div>
@@ -746,7 +771,7 @@
                         <!-- Tag set selector -->
                         <div class="tagset-selector">
                             <label>Tag Set:</label>
-                            <select class="input" id="promptlab-tagset-select">
+                            <select class="input" id="promptlab-set-select">
                                 <option value="">-- Select Tag Set --</option>
                             </select>
                             <button class="btn btn-sm btn-secondary" id="btn-promptlab-apply-tagset">Apply</button>
@@ -758,7 +783,7 @@
                         <div class="promptlab-builder-header">
                             <h4>Prompt Slots</h4>
                             <div class="promptlab-builder-actions">
-                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-randomize" title="Randomize unlocked slots">🎲 Randomize</button>
+                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 Randomize</button>
                                 <button class="btn btn-sm btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ Clear</button>
                             </div>
                         </div>
@@ -795,28 +820,200 @@
                 </div>
             </section>
 
+            <!-- Artist Identification View -->
+            <section id="view-artist" class="view">
+                <div class="artist-container">
+                    <!-- Stats Header -->
+                    <div class="artist-stats" id="artist-stats">
+                        <div class="stat-card">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Total Images</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Identified</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Undefined</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-number">0</span>
+                            <span class="stat-label">Artists Found</span>
+                        </div>
+                    </div>
+
+                    <!-- Main Content -->
+                    <div class="artist-main">
+                        <!-- Left Panel: Controls -->
+                        <div class="artist-controls">
+                            <div class="control-section">
+                                <h3>🎨 Model Settings</h3>
+                                <div class="form-group">
+                                    <label>Model Source</label>
+                                    <select id="artist-model-source" class="input-field">
+                                        <option value="huggingface">HuggingFace (Default)</option>
+                                        <option value="modelscope">ModelScope (China)</option>
+                                        <option value="local">Local Model</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="artist-local-model-group" style="display: none;">
+                                    <label>Local Model Path</label>
+                                    <input type="text" id="artist-model-path" class="input-field"
+                                        placeholder="path/to/model.onnx">
+                                </div>
+                                <div class="form-group">
+                                    <label>Confidence Threshold: <span id="artist-threshold-value">0.35</span></label>
+                                    <input type="range" id="artist-threshold" class="slider" min="0.1" max="0.9"
+                                        step="0.05" value="0.35">
+                                    <small class="helper-text">Below this = "undefined"</small>
+                                </div>
+                            </div>
+
+                            <div class="control-section">
+                                <h3>🔍 Identification</h3>
+                                <button class="btn btn-primary btn-block" id="btn-identify-all">
+                                    <span>🎨</span> Identify All Images
+                                </button>
+                                <button class="btn btn-secondary btn-block" id="btn-identify-selected">
+                                    <span>🎯</span> Identify Selected
+                                </button>
+                                <div class="progress-container" id="artist-progress-container" style="display: none;">
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" id="artist-progress-fill"></div>
+                                    </div>
+                                    <span class="progress-text" id="artist-progress-text">Starting...</span>
+                                </div>
+                            </div>
+
+                            <div class="control-section">
+                                <h3>📊 Actions</h3>
+                                <button class="btn btn-ghost btn-block" id="btn-refresh-artist-stats">
+                                    <span>🔄</span> Refresh Stats
+                                </button>
+                                <button class="btn btn-ghost danger btn-block" id="btn-clear-artist-data">
+                                    <span>🗑️</span> Clear All Predictions
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Center Panel: Results -->
+                        <div class="artist-results">
+                            <div class="results-header">
+                                <h3>🏆 Top Artists</h3>
+                                <div class="view-toggle">
+                                    <button class="toggle-btn active" data-view="grid">Grid</button>
+                                    <button class="toggle-btn" data-view="list">List</button>
+                                </div>
+                            </div>
+                            <div class="artist-grid" id="artist-results-grid">
+                                <div class="empty-state">
+                                    <div class="empty-icon">🎨</div>
+                                    <p>No artists identified yet.</p>
+                                    <p class="empty-hint">Click "Identify All Images" to start.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Artist Details -->
+                        <div class="artist-details">
+                            <h3>📋 Artist Details</h3>
+                            <div class="artist-detail-content" id="artist-detail-content">
+                                <p class="detail-placeholder">Select an artist to view their images.</p>
+                            </div>
+                            <div class="artist-images-preview" id="artist-images-preview">
+                                <!-- Preview images will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
 
         <!-- Image Preview Modal -->
         <div class="modal" id="image-modal">
             <div class="modal-backdrop"></div>
-            <div class="modal-content">
+            <div class="modal-content modal-image-workspace">
                 <button class="modal-close" id="modal-close">✕</button>
-                <div class="modal-image-container">
-                    <img id="modal-image" src="" alt="Preview">
+                <div class="modal-image-column">
+                    <div class="modal-image-toolbar">
+                        <button class="btn btn-ghost btn-small" id="modal-prev-image">← Prev</button>
+                        <button class="btn btn-primary btn-small" id="modal-favorite-toggle">★ Favorite</button>
+                        <button class="btn btn-ghost btn-small" id="modal-next-image">Next →</button>
+                    </div>
+                    <div class="modal-image-container">
+                        <img id="modal-image" src="" alt="Preview">
+                    </div>
                 </div>
-                <div class="modal-info">
+                <div class="modal-info modal-info-workspace">
+                    <div class="modal-sticky-actions">
+                        <button class="btn btn-secondary btn-small" id="btn-copy-prompt">Copy Prompt</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-negative">Copy Negative</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-tags">Copy Tags</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-params">Copy Params</button>
+                        <button class="btn btn-primary btn-small" id="btn-copy-all">Copy All</button>
+                        <button class="btn btn-ghost btn-small" id="btn-reparse-metadata">Reparse</button>
+                    </div>
                     <h3 id="modal-filename">filename.png</h3>
                     <div class="modal-meta">
                         <span class="meta-item"><strong>Generator:</strong> <span id="modal-generator">-</span></span>
                         <span class="meta-item"><strong>Size:</strong> <span id="modal-size">-</span></span>
+                        <span class="meta-item" id="modal-checkpoint-item" style="display:none"><strong>Checkpoint:</strong> <span id="modal-checkpoint">-</span></span>
+                        <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
                     </div>
+
+                    <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
+
+                    <div class="modal-key-params" id="modal-key-params" style="display:none">
+                        <span class="key-param" id="kp-steps" style="display:none"><strong>Steps:</strong> <span></span></span>
+                        <span class="key-param" id="kp-sampler" style="display:none"><strong>Sampler:</strong> <span></span></span>
+                        <span class="key-param" id="kp-scheduler" style="display:none"><strong>Scheduler:</strong> <span></span></span>
+                        <span class="key-param" id="kp-cfg" style="display:none"><strong>CFG:</strong> <span></span></span>
+                        <span class="key-param" id="kp-seed" style="display:none"><strong>Seed:</strong> <span></span></span>
+                        <span class="key-param" id="kp-denoise" style="display:none"><strong>Denoise:</strong> <span></span></span>
+                    </div>
+
+                    <div class="modal-section" id="modal-loras-section" style="display:none">
+                        <h4>LoRAs</h4>
+                        <div id="modal-loras-list" class="lora-pills"></div>
+                    </div>
+
                     <div class="modal-prompt">
                         <h4>Prompt</h4>
                         <p id="modal-prompt-text">-</p>
                     </div>
+
+                    <div class="modal-section" id="modal-negative-section" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-negative-text">Negative Prompt <span class="collapse-icon">▼</span></h4>
+                        <p id="modal-negative-text" class="modal-negative-text">-</p>
+                    </div>
+
+                    <div class="modal-section" id="modal-characters-section" style="display:none">
+                        <h4>Character Prompts</h4>
+                        <div id="modal-characters-list"></div>
+                    </div>
+
+                    <div class="modal-section" id="modal-params-section" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-params-grid">Generation Parameters <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-params-grid" class="params-grid"></div>
+                    </div>
+
+                    <div class="modal-section" id="modal-img2img-section" style="display:none">
+                        <h4>img2img Details</h4>
+                        <div id="modal-img2img-info" class="params-grid"></div>
+                    </div>
+
+                    <div class="modal-section" id="modal-nodes-section" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-nodes-list">Prompt Nodes <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-nodes-list"></div>
+                    </div>
+
                     <div class="modal-tags">
-                        <h4>Tags</h4>
+                        <div class="modal-tags-header">
+                            <h4>Tags</h4>
+                            <button class="btn btn-ghost btn-small" id="btn-toggle-all-tags">Show More</button>
+                        </div>
                         <div id="modal-tags-list" class="tags-list"></div>
                     </div>
                 </div>
@@ -991,11 +1188,28 @@
             </div>
         </div>
 
+        <!-- Input Modal (Replaces native prompt()) -->
+        <div class="modal" id="input-modal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-small">
+                <h3 id="input-modal-title">Enter Value</h3>
+                <p id="input-modal-message" class="modal-description"></p>
+                <div class="form-group">
+                    <input type="text" id="input-modal-field" class="input-field" placeholder="">
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-input-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-input-ok">OK</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Selection FAB -->
         <div id="selection-actions" class="selection-fab" style="display: none;">
             <span id="selection-count">0 items selected</span>
             <div class="fab-buttons">
                 <button id="btn-select-all" class="btn btn-secondary"><span>✓✓</span> Select All</button>
+                <button id="btn-add-favorites" class="btn btn-primary"><span>★</span> Add to Favorites</button>
                 <button id="btn-export-selected" class="btn btn-primary"><span>📤</span> Export Prompts</button>
                 <button id="btn-export-tags-selected" class="btn btn-secondary"><span>🏷️</span> Export Tags</button>
                 <button id="btn-batch-export-tags" class="btn btn-secondary"><span>📝</span> Export Tags to
@@ -1301,6 +1515,14 @@
 
         <!-- Toast Container -->
         <div class="toast-container" id="toast-container"></div>
+
+        <!-- Global Loading Overlay -->
+        <div class="global-loading-overlay" id="global-loading" style="display: none;">
+            <div class="global-loading-content">
+                <div class="spinner-large"></div>
+                <span id="global-loading-msg">Loading...</span>
+            </div>
+        </div>
     </div>
 
     <!-- Audio Elements (will be managed by JS) -->
@@ -1317,6 +1539,7 @@
     <script src="/static/js/censor-edit.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
+    <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
 </body>
 

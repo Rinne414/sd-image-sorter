@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import database as db
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity
+from routers import images, tags, sorting, censor, prompts, similarity, artists, favorites
 
 
 # Lazy import tagger to avoid loading model at startup
@@ -99,6 +99,8 @@ app.include_router(sorting.router)
 app.include_router(censor.router)
 app.include_router(prompts.router)
 app.include_router(similarity.router)
+app.include_router(artists.router)
+app.include_router(favorites.router)
 
 
 @app.get("/")

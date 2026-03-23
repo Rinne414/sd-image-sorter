@@ -18,6 +18,9 @@ from PIL.PngImagePlugin import PngInfo
 import os
 
 
+PARSED_METADATA_VERSION = 3
+
+
 class MetadataParser:
     """Parse metadata from SD-generated images to detect source and extract prompts."""
 
@@ -100,7 +103,7 @@ class MetadataParser:
                 "negative_prompt": str or None,
                 "checkpoint": str or None,
                 "loras": list of str,
-                "metadata": dict,  # Full raw metadata
+                "metadata": dict,  # Full raw metadata (includes _parsed key)
                 "width": int,
                 "height": int,
                 "file_size": int
@@ -150,13 +153,23 @@ class MetadataParser:
 
                 result["metadata"] = self._serialize_metadata(metadata)
 
-                # Detect generator and extract prompts, checkpoint, loras
-                generator, prompt, neg_prompt, checkpoint, loras = self._detect_and_parse(metadata)
-                result["generator"] = generator
-                result["prompt"] = prompt
-                result["negative_prompt"] = neg_prompt
-                result["checkpoint"] = checkpoint
-                result["loras"] = loras
+                # Detect generator and extract prompts, checkpoint, loras + extras
+                parsed = self._detect_and_parse(metadata)
+                result["generator"] = parsed["generator"]
+                result["prompt"] = parsed["prompt"]
+                result["negative_prompt"] = parsed["negative_prompt"]
+                result["checkpoint"] = parsed["checkpoint"]
+                result["loras"] = parsed["loras"]
+
+                # Store structured parsed data in metadata for frontend access
+                result["metadata"]["_parsed"] = {
+                    "version": PARSED_METADATA_VERSION,
+                    "generation_params": parsed.get("generation_params"),
+                    "is_img2img": parsed.get("is_img2img", False),
+                    "img2img_info": parsed.get("img2img_info"),
+                    "character_prompts": parsed.get("character_prompts"),
+                    "prompt_nodes": parsed.get("prompt_nodes"),
+                }
 
         except Exception as e:
             print(f"Error parsing {image_path}: {e}")
@@ -182,39 +195,84 @@ class MetadataParser:
                     result[key] = str(value)
         return result
 
-    def _detect_and_parse(self, metadata: dict) -> Tuple[str, Optional[str], Optional[str], Optional[str], List[str]]:
-        """
-        Detect generator type and extract prompts, checkpoint, and loras.
-        Returns: (generator, prompt, negative_prompt, checkpoint, loras)
+    def _flatten_text_value(self, value: Any) -> Optional[str]:
+        """Flatten nested metadata values to a readable text string."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            text = value.strip()
+            return text or None
+        if isinstance(value, (list, tuple)):
+            parts = []
+            for item in value:
+                part = self._flatten_text_value(item)
+                if part:
+                    parts.append(part)
+            if not parts:
+                return None
+            return "\n".join(parts)
+        if isinstance(value, dict):
+            for key in ("base_caption", "caption", "text", "prompt", "value", "content", "description"):
+                nested = self._flatten_text_value(value.get(key))
+                if nested:
+                    return nested
+            for nested in value.values():
+                flattened = self._flatten_text_value(nested)
+                if flattened:
+                    return flattened
+        return None
 
-        Priority order:
-        1. WebUI/Forge 'parameters' text (most reliable format when present)
-        2. NovelAI EXIF UserComment (V4+ WebP/JPEG)
-        3. NovelAI 'Comment' PNG chunk
-        4. ComfyUI 'prompt' JSON workflow
-        5. ComfyUI 'workflow' key (fallback)
-        6. Other EXIF fields
-        7. Software tag detection
+    def _detect_and_parse(self, metadata: dict) -> Dict[str, Any]:
         """
+        Detect generator type and extract prompts, checkpoint, loras, and extended info.
+        Returns a dict with keys: generator, prompt, negative_prompt, checkpoint, loras,
+        generation_params, is_img2img, img2img_info, character_prompts, prompt_nodes.
+        """
+        base = {
+            "generator": "unknown",
+            "prompt": None,
+            "negative_prompt": None,
+            "checkpoint": None,
+            "loras": [],
+            "generation_params": None,
+            "is_img2img": False,
+            "img2img_info": None,
+            "character_prompts": None,
+            "prompt_nodes": None,
+        }
+
         # === Check for WebUI/Forge 'parameters' text chunk first ===
-        # This is the most reliable format. Even ComfyUI images sometimes have
-        # 'parameters' text alongside 'workflow' JSON - prefer the text format.
         if "parameters" in metadata:
             params = metadata["parameters"]
             if isinstance(params, str) and ("Steps:" in params and "Sampler:" in params):
-                prompt, neg, cp, lr = self._parse_webui_parameters(params)
+                prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
                 generator = "webui"
                 if "forge" in params.lower() or "Forge" in params:
                     generator = "forge"
-                return (generator, prompt, neg, cp, lr)
+                base.update({
+                    "generator": generator, "prompt": prompt, "negative_prompt": neg,
+                    "checkpoint": cp, "loras": lr, "generation_params": gen_params,
+                })
+                # img2img detection for WebUI/Forge
+                if gen_params:
+                    ds = gen_params.get("denoising_strength")
+                    if ds is not None:
+                        base["is_img2img"] = True
+                        source = "img2img"
+                        if gen_params.get("mask_hash"):
+                            source = "inpaint"
+                        elif gen_params.get("hires_upscaler"):
+                            source = "hires fix"
+                            base["is_img2img"] = False  # hires fix isn't true img2img
+                        base["img2img_info"] = {"denoising_strength": ds, "source": source}
+                return base
 
         # === Check for NovelAI EXIF UserComment (V4+ format) ===
-        # NAI V4+ stores metadata in EXIF UserComment as JSON with
-        # Description (prompt) and Comment (JSON with prompt/uc/settings)
         if "UserComment" in metadata:
-            nai_result = self._parse_nai_usercomment(metadata["UserComment"], metadata)
+            nai_result = self._parse_nai_usercomment_extended(metadata["UserComment"], metadata)
             if nai_result:
-                return nai_result
+                base.update(nai_result)
+                return base
 
         # === Check for NovelAI 'Comment' PNG text chunk ===
         if "Comment" in metadata:
@@ -222,10 +280,46 @@ class MetadataParser:
                 comment = metadata["Comment"]
                 if isinstance(comment, str):
                     comment_data = json.loads(comment)
-                    if isinstance(comment_data, dict) and ("prompt" in comment_data or "uc" in comment_data):
-                        prompt = comment_data.get("prompt", "")
-                        neg = comment_data.get("uc", "")
-                        return ("nai", prompt, neg, None, [])
+                    if isinstance(comment_data, dict) and (
+                        "prompt" in comment_data
+                        or "uc" in comment_data
+                        or "v4_prompt" in comment_data
+                        or "v4_negative_prompt" in comment_data
+                    ):
+                        prompt = self._flatten_text_value(comment_data.get("prompt"))
+                        neg = self._flatten_text_value(comment_data.get("uc"))
+
+                        v4_prompt = comment_data.get("v4_prompt")
+                        if not prompt and isinstance(v4_prompt, dict):
+                            prompt = self._flatten_text_value(
+                                v4_prompt.get("prompt")
+                                or v4_prompt.get("caption")
+                                or v4_prompt
+                            )
+
+                        v4_negative = comment_data.get("v4_negative_prompt")
+                        if not neg:
+                            neg = self._flatten_text_value(
+                                v4_negative.get("prompt") if isinstance(v4_negative, dict) else v4_negative
+                            )
+                            if not neg and isinstance(v4_negative, dict):
+                                neg = self._flatten_text_value(v4_negative.get("caption") or v4_negative)
+
+                        base.update({"generator": "nai", "prompt": prompt, "negative_prompt": neg})
+                        # Extract NAI generation params
+                        base["generation_params"] = self._extract_nai_gen_params(comment_data)
+                        # Extract character prompts if present
+                        char_prompts = self._extract_nai_character_prompts(comment_data)
+                        if char_prompts:
+                            base["character_prompts"] = char_prompts
+                        # NAI img2img detection
+                        if comment_data.get("strength") is not None and comment_data.get("strength", 1.0) < 1.0:
+                            base["is_img2img"] = True
+                            base["img2img_info"] = {
+                                "denoising_strength": comment_data["strength"],
+                                "source": "img2img",
+                            }
+                        return base
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
@@ -234,17 +328,20 @@ class MetadataParser:
             desc = metadata["Description"]
             software = str(metadata.get("Software", "")).lower()
             if "novelai" in software:
-                # NAI image with Description as prompt
                 neg = None
-                # Try to get negative from Comment
                 if "Comment" in metadata:
                     try:
                         comment_data = json.loads(metadata["Comment"])
                         if isinstance(comment_data, dict):
                             neg = comment_data.get("uc", None)
+                            base["generation_params"] = self._extract_nai_gen_params(comment_data)
+                            char_prompts = self._extract_nai_character_prompts(comment_data)
+                            if char_prompts:
+                                base["character_prompts"] = char_prompts
                     except (json.JSONDecodeError, TypeError, ValueError):
                         pass
-                return ("nai", str(desc), neg, None, [])
+                base.update({"generator": "nai", "prompt": str(desc), "negative_prompt": neg})
+                return base
 
         # === Check for ComfyUI 'prompt' key with JSON workflow ===
         if "prompt" in metadata:
@@ -253,14 +350,21 @@ class MetadataParser:
                 if isinstance(prompt_data, str):
                     prompt_data = json.loads(prompt_data)
                 if isinstance(prompt_data, dict):
-                    # Verify this looks like ComfyUI prompt data (has node dicts with class_type)
                     has_nodes = any(
                         isinstance(v, dict) and "class_type" in v
                         for v in prompt_data.values()
                     )
                     if has_nodes:
-                        pos, neg, cp, lr = self._extract_comfyui_data(prompt_data)
-                        return ("comfyui", pos, neg, cp, lr)
+                        pos, neg, cp, lr, gen_params, prompt_nodes, img2img = self._extract_comfyui_data_extended(prompt_data)
+                        base.update({
+                            "generator": "comfyui", "prompt": pos, "negative_prompt": neg,
+                            "checkpoint": cp, "loras": lr, "generation_params": gen_params,
+                            "prompt_nodes": prompt_nodes,
+                        })
+                        if img2img:
+                            base["is_img2img"] = True
+                            base["img2img_info"] = img2img
+                        return base
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
@@ -270,62 +374,80 @@ class MetadataParser:
                 workflow = metadata["workflow"]
                 if isinstance(workflow, str):
                     workflow = json.loads(workflow)
-                # Try to extract from prompt data if available
                 prompt_raw = metadata.get("prompt", {})
                 if isinstance(prompt_raw, str):
                     try:
                         prompt_raw = json.loads(prompt_raw)
                     except (json.JSONDecodeError, TypeError, ValueError):
                         prompt_raw = {}
-                pos, neg, cp, lr = self._extract_comfyui_data(prompt_raw)
-                # If prompt data extraction failed, try extracting from workflow nodes
+                pos, neg, cp, lr, gen_params, prompt_nodes, img2img = self._extract_comfyui_data_extended(prompt_raw)
                 if not pos and isinstance(workflow, dict):
                     pos, neg = self._extract_from_workflow(workflow)
-                return ("comfyui", pos, neg, cp, lr)
+                base.update({
+                    "generator": "comfyui", "prompt": pos, "negative_prompt": neg,
+                    "checkpoint": cp, "loras": lr, "generation_params": gen_params,
+                    "prompt_nodes": prompt_nodes,
+                })
+                if img2img:
+                    base["is_img2img"] = True
+                    base["img2img_info"] = img2img
+                return base
             except Exception:
-                return ("comfyui", None, None, None, [])
+                base["generator"] = "comfyui"
+                return base
 
         # === Check for A1111 format in other EXIF fields ===
         for key in ["Parameters", "UserComment", "ImageDescription"]:
             if key in metadata:
                 params = str(metadata[key])
-                # Remove common EXIF prefix for UserComment if present
                 if params.startswith("UNICODE") or params.startswith("ASCII"):
                     params = params[7:].strip("\0 ")
 
                 if "Steps:" in params and "Sampler:" in params:
-                    prompt, neg, cp, lr = self._parse_webui_parameters(params)
+                    prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
                     generator = "forge" if "forge" in params.lower() else "webui"
-                    return (generator, prompt, neg, cp, lr)
+                    base.update({
+                        "generator": generator, "prompt": prompt, "negative_prompt": neg,
+                        "checkpoint": cp, "loras": lr, "generation_params": gen_params,
+                    })
+                    if gen_params and gen_params.get("denoising_strength") is not None:
+                        base["is_img2img"] = True
+                        base["img2img_info"] = {
+                            "denoising_strength": gen_params["denoising_strength"],
+                            "source": "img2img",
+                        }
+                    return base
 
         # === Check Software tag for generator identification ===
         if "Software" in metadata:
             software = str(metadata["Software"]).lower()
             if "novelai" in software:
-                # Try to extract prompt from any available field
                 prompt = metadata.get("Description", metadata.get("ImageDescription", None))
                 if prompt:
                     prompt = str(prompt)
-                return ("nai", prompt, None, None, [])
+                base.update({"generator": "nai", "prompt": prompt})
+                return base
             if "comfyui" in software:
-                return ("comfyui", None, None, None, [])
+                base["generator"] = "comfyui"
+                return base
 
-        return ("unknown", None, None, None, [])
+        return base
 
     def _parse_nai_usercomment(self, usercomment: Any, metadata: dict) -> Optional[Tuple[str, Optional[str], Optional[str], Optional[str], List[str]]]:
-        """
-        Parse NovelAI V4+ EXIF UserComment.
+        """Legacy wrapper — delegates to extended version for backward compat."""
+        result = self._parse_nai_usercomment_extended(usercomment, metadata)
+        if result:
+            return ("nai", result.get("prompt"), result.get("negative_prompt"), None, [])
+        return None
 
-        NAI V4+ stores metadata in EXIF UserComment as:
-        "ASCII\0\0\0{JSON}" where JSON has:
-        - Description: the prompt text
-        - Comment: JSON string with {prompt, uc, steps, ...}
-        - Software: "NovelAI"
+    def _parse_nai_usercomment_extended(self, usercomment: Any, metadata: dict) -> Optional[Dict[str, Any]]:
+        """
+        Parse NovelAI V4+ EXIF UserComment and return extended dict.
+        Extracts prompt, negative, generation params, character prompts, img2img info.
         """
         try:
             text = None
             if isinstance(usercomment, bytes):
-                # Remove EXIF UserComment encoding prefix
                 if usercomment.startswith(b'ASCII\x00\x00\x00'):
                     text = usercomment[8:].decode('utf-8', errors='replace')
                 elif usercomment.startswith(b'UNICODE\x00'):
@@ -334,14 +456,12 @@ class MetadataParser:
                     text = usercomment.decode('utf-8', errors='replace')
             elif isinstance(usercomment, str):
                 text = usercomment
-                # Remove prefix if present
                 if text.startswith("ASCII") or text.startswith("UNICODE"):
                     text = text[7:].strip("\0 ")
 
             if not text:
                 return None
 
-            # Find JSON start
             json_start = text.find('{')
             if json_start < 0:
                 return None
@@ -350,51 +470,167 @@ class MetadataParser:
             if not isinstance(data, dict):
                 return None
 
-            # Check if this looks like NAI data
             software = data.get("Software", str(metadata.get("Software", "")))
             is_nai = "novelai" in str(software).lower()
             has_nai_keys = "Description" in data or "Source" in data or "Generation time" in data
 
             if not is_nai and not has_nai_keys:
-                # Not NAI format, might be WebUI in UserComment
                 return None
 
-            prompt = data.get("Description", None)
-            neg_prompt = None
+            result = {
+                "generator": "nai",
+                "prompt": self._flatten_text_value(data.get("Description", None)),
+                "negative_prompt": None,
+                "generation_params": None,
+                "character_prompts": None,
+                "is_img2img": False,
+                "img2img_info": None,
+            }
 
-            # Parse Comment field which contains detailed generation settings
             comment = data.get("Comment", "")
             if isinstance(comment, str) and comment:
                 try:
                     comment_data = json.loads(comment)
                     if isinstance(comment_data, dict):
-                        # V4+ Comment has prompt/uc keys
-                        if "prompt" in comment_data and not prompt:
-                            prompt = comment_data["prompt"]
-                        neg_prompt = comment_data.get("uc", None)
-                        # V4 also has v4_prompt and v4_negative_prompt
-                        if not prompt and "v4_prompt" in comment_data:
+                        if "prompt" in comment_data and not result["prompt"]:
+                            result["prompt"] = self._flatten_text_value(comment_data["prompt"])
+                        result["negative_prompt"] = self._flatten_text_value(comment_data.get("uc", None))
+
+                        # V4 prompt structure
+                        if "v4_prompt" in comment_data:
                             v4_prompt = comment_data["v4_prompt"]
                             if isinstance(v4_prompt, dict):
-                                prompt = v4_prompt.get("prompt", None)
-                            elif isinstance(v4_prompt, str):
-                                prompt = v4_prompt
-                        if not neg_prompt and "v4_negative_prompt" in comment_data:
+                                if not result["prompt"]:
+                                    result["prompt"] = self._flatten_text_value(
+                                        v4_prompt.get("prompt")
+                                        or v4_prompt.get("caption")
+                                        or v4_prompt
+                                    )
+                                # Extract character prompts
+                                char_prompts = self._extract_nai_character_prompts(comment_data)
+                                if char_prompts:
+                                    result["character_prompts"] = char_prompts
+
+                        if "v4_negative_prompt" in comment_data:
                             v4_neg = comment_data["v4_negative_prompt"]
-                            if isinstance(v4_neg, dict):
-                                neg_prompt = v4_neg.get("prompt", None)
-                            elif isinstance(v4_neg, str):
-                                neg_prompt = v4_neg
+                            if not result["negative_prompt"]:
+                                result["negative_prompt"] = self._flatten_text_value(
+                                    v4_neg.get("prompt") if isinstance(v4_neg, dict) else v4_neg
+                                )
+                                if not result["negative_prompt"] and isinstance(v4_neg, dict):
+                                    result["negative_prompt"] = self._flatten_text_value(v4_neg.get("caption") or v4_neg)
+
+                        # Generation params
+                        result["generation_params"] = self._extract_nai_gen_params(comment_data)
+
+                        # img2img detection
+                        strength = comment_data.get("strength")
+                        noise = comment_data.get("noise")
+                        if strength is not None and float(strength) < 1.0:
+                            result["is_img2img"] = True
+                            result["img2img_info"] = {
+                                "denoising_strength": float(strength),
+                                "noise": float(noise) if noise is not None else None,
+                                "source": "img2img",
+                            }
                 except (json.JSONDecodeError, TypeError, ValueError):
                     pass
 
-            if prompt or neg_prompt:
-                return ("nai", prompt, neg_prompt, None, [])
+            if result["prompt"] or result["negative_prompt"]:
+                return result
 
         except Exception:
             pass
 
         return None
+
+    def _extract_nai_gen_params(self, comment_data: dict) -> Optional[Dict[str, Any]]:
+        """Extract structured generation parameters from NAI Comment JSON."""
+        if not isinstance(comment_data, dict):
+            return None
+
+        params = {}
+        key_map = {
+            "steps": "steps",
+            "sampler": "sampler",
+            "seed": "seed",
+            "strength": "strength",
+            "noise": "noise",
+            "scale": "cfg_scale",
+            "cfg_rescale": "cfg_rescale",
+            "sm": "sm",
+            "sm_dyn": "sm_dyn",
+            "dynamic_thresholding": "dynamic_thresholding",
+            "noise_schedule": "noise_schedule",
+            "legacy_v3_extend": "legacy_v3_extend",
+            "uncond_scale": "uncond_scale",
+            "skip_cfg_above_sigma": "skip_cfg_above_sigma",
+            "ucPreset": "uc_preset",
+            "qualityToggle": "quality_toggle",
+            "params_version": "params_version",
+            "use_coords": "use_coords",
+            "use_order": "use_order",
+        }
+
+        for src_key, dst_key in key_map.items():
+            if src_key in comment_data:
+                val = comment_data[src_key]
+                params[dst_key] = val
+
+        # Extract resolution from request_type or width/height
+        if "width" in comment_data and "height" in comment_data:
+            params["size"] = f"{comment_data['width']}x{comment_data['height']}"
+
+        # Keep legacy helpers available for callers that expect them
+        if "qualityToggle" in comment_data and "quality_toggle" not in params:
+            params["quality_toggle"] = comment_data["qualityToggle"]
+        if "ucPreset" in comment_data and "uc_preset" not in params:
+            params["uc_preset"] = comment_data["ucPreset"]
+        if "params_version" in comment_data and "params_version" not in params:
+            params["params_version"] = comment_data["params_version"]
+        if "use_coords" in comment_data and "use_coords" not in params:
+            params["use_coords"] = comment_data["use_coords"]
+        if "use_order" in comment_data and "use_order" not in params:
+            params["use_order"] = comment_data["use_order"]
+
+        return params if params else None
+
+    def _extract_nai_character_prompts(self, comment_data: dict) -> Optional[List[Dict[str, Any]]]:
+        """Extract NAI V4 character prompts from Comment JSON."""
+        if not isinstance(comment_data, dict):
+            return None
+
+        v4_prompt = comment_data.get("v4_prompt")
+        if not isinstance(v4_prompt, dict):
+            return None
+
+        char_prompts_raw = v4_prompt.get("character_prompts")
+        if not isinstance(char_prompts_raw, list) or len(char_prompts_raw) == 0:
+            return None
+
+        characters = []
+        for i, char in enumerate(char_prompts_raw):
+            if not isinstance(char, dict):
+                continue
+            prompt_val = char.get("prompt", "")
+            negative_val = char.get("ucPrompt", char.get("uc", ""))
+            if isinstance(prompt_val, dict):
+                prompt_val = self._flatten_text_value(prompt_val) or ""
+            if isinstance(negative_val, dict):
+                negative_val = self._flatten_text_value(negative_val) or ""
+
+            char_data = {
+                "index": i,
+                "prompt": prompt_val,
+                "negative_prompt": negative_val,
+            }
+            # Position data if available
+            center = char.get("center")
+            if isinstance(center, dict):
+                char_data["center"] = {"x": center.get("x", 0.5), "y": center.get("y", 0.5)}
+            characters.append(char_data)
+
+        return characters if characters else None
 
     def _extract_comfyui_data(self, prompt_data: Any) -> Tuple[Optional[str], Optional[str], Optional[str], List[str]]:
         """
@@ -447,6 +683,186 @@ class MetadataParser:
 
         return (positive_text, negative_text, checkpoint, loras)
 
+    def _extract_comfyui_data_extended(self, prompt_data: Any) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict], Optional[List], Optional[Dict]]:
+        """
+        Extended ComfyUI extraction: returns (pos, neg, checkpoint, loras, gen_params, prompt_nodes, img2img_info).
+        """
+        if not isinstance(prompt_data, dict):
+            try:
+                prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
+            except Exception:
+                return (None, None, None, [], None, None, None)
+
+        if not prompt_data:
+            return (None, None, None, [], None, None, None)
+
+        checkpoint = None
+        loras = []
+        gen_params = {}
+        prompt_nodes = []
+        img2img_info = None
+
+        # Build lookup
+        nodes = {}
+        for node_id, node in prompt_data.items():
+            if isinstance(node, dict):
+                nodes[str(node_id)] = node
+
+        # Extract checkpoint, loras, and generation params from nodes
+        has_load_image = False
+        for node_id, node in nodes.items():
+            class_type = node.get("class_type", "")
+            inputs = node.get("inputs", {})
+
+            # Checkpoint
+            if any(ct in class_type for ct in ["CheckpointLoader", "CheckPointLoader", "UNETLoader", "DiffusionModelLoader"]):
+                cp = inputs.get("ckpt_name", inputs.get("unet_name", inputs.get("model_name", "")))
+                if cp and isinstance(cp, str):
+                    checkpoint = cp
+
+            # LoRAs
+            if any(ct in class_type for ct in ["LoraLoader", "LoRALoader"]):
+                lr = inputs.get("lora_name", "")
+                if lr and isinstance(lr, str):
+                    loras.append(lr)
+
+            # KSampler params
+            if any(st in class_type for st in ["KSampler", "SamplerCustom"]):
+                if "seed" in inputs:
+                    seed_val = inputs["seed"]
+                    if isinstance(seed_val, (int, float)):
+                        gen_params["seed"] = int(seed_val)
+                if "steps" in inputs:
+                    steps_val = inputs["steps"]
+                    if isinstance(steps_val, (int, float)):
+                        gen_params["steps"] = int(steps_val)
+                if "cfg" in inputs:
+                    cfg_val = inputs["cfg"]
+                    if isinstance(cfg_val, (int, float)):
+                        gen_params["cfg_scale"] = float(cfg_val)
+                if "sampler_name" in inputs:
+                    gen_params["sampler"] = inputs["sampler_name"]
+                if "sampler" in inputs and "sampler" not in gen_params:
+                    gen_params["sampler"] = inputs["sampler"]
+                if "scheduler" in inputs:
+                    gen_params["scheduler"] = inputs["scheduler"]
+                if "denoise" in inputs:
+                    denoise_val = inputs["denoise"]
+                    if isinstance(denoise_val, (int, float)):
+                        gen_params["denoising_strength"] = float(denoise_val)
+                if "noise_seed" in inputs and isinstance(inputs["noise_seed"], (int, float)):
+                    gen_params["noise_seed"] = int(inputs["noise_seed"])
+                if "add_noise" in inputs:
+                    gen_params["add_noise"] = inputs["add_noise"]
+                if "start_at_step" in inputs and isinstance(inputs["start_at_step"], (int, float)):
+                    gen_params["start_at_step"] = int(inputs["start_at_step"])
+                if "end_at_step" in inputs and isinstance(inputs["end_at_step"], (int, float)):
+                    gen_params["end_at_step"] = int(inputs["end_at_step"])
+                if "return_with_leftover_noise" in inputs:
+                    gen_params["return_with_leftover_noise"] = inputs["return_with_leftover_noise"]
+
+            if class_type in ("EmptyLatentImage", "EmptySD3LatentImage", "EmptyHunyuanLatentVideo"):
+                width = inputs.get("width")
+                height = inputs.get("height")
+                if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+                    gen_params["size"] = f"{int(width)}x{int(height)}"
+
+            # img2img detection: LoadImage node presence
+            if class_type in ("LoadImage", "LoadImageMask"):
+                has_load_image = True
+
+        # Determine img2img
+        denoise = gen_params.get("denoising_strength")
+        if has_load_image and denoise is not None and denoise < 1.0:
+            img2img_info = {
+                "denoising_strength": denoise,
+                "source": "img2img",
+            }
+        elif denoise is not None and denoise < 1.0 and not has_load_image:
+            # Likely hires fix or latent upscale — still record it
+            img2img_info = {
+                "denoising_strength": denoise,
+                "source": "latent upscale",
+            }
+
+        # Trace prompts via KSampler graph
+        positive_text, negative_text = self._trace_sampler_prompts(nodes)
+
+        # Build prompt_nodes list (multi-node breakdown)
+        prompt_nodes = self._collect_prompt_nodes(nodes)
+        if not prompt_nodes:
+            prompt_nodes = self._collect_text_from_nodes_as_nodes(nodes)
+
+        # Fallback
+        if not positive_text:
+            positive_text, negative_text = self._collect_text_from_nodes(nodes)
+
+        return (positive_text, negative_text, checkpoint, loras,
+                gen_params if gen_params else None,
+                prompt_nodes if prompt_nodes else None,
+                img2img_info)
+
+    def _collect_prompt_nodes(self, nodes: Dict[str, dict]) -> List[Dict[str, Any]]:
+        """Collect all text-bearing nodes for multi-node prompt breakdown."""
+        result = []
+        seen_texts = set()
+
+        for node_id, node in nodes.items():
+            class_type = node.get("class_type", "")
+            inputs = node.get("inputs", {})
+
+            # Only collect from text encoder nodes
+            if not any(ct in class_type for ct in ["CLIPTextEncode", "NewBieCLIPTextEncode", "TextEncode", "PromptBuilder", "PromptComposer"]):
+                continue
+
+            text = inputs.get("text", inputs.get("prompt", inputs.get("user_prompt", "")))
+            source_node_id = node_id
+            source_class_type = class_type
+            source_key = "text" if "text" in inputs else ("prompt" if "prompt" in inputs else "user_prompt")
+
+            if isinstance(text, (list, tuple)):
+                traced_info = self._trace_to_text_with_source(text, nodes, set())
+                traced_texts = [item["text"] for item in traced_info if item.get("text")]
+                text = "\n".join(traced_texts) if traced_texts else None
+                if traced_info:
+                    source_node_id = traced_info[0]["source_node_id"]
+                    source_class_type = traced_info[0]["source_class_type"]
+                    source_key = traced_info[0]["source_key"]
+
+            if isinstance(text, str) and text.strip() and len(text.strip()) > 3:
+                # Deduplicate
+                if text.strip() not in seen_texts:
+                    seen_texts.add(text.strip())
+                    role = "negative" if self._looks_like_negative_prompt(text) else "positive"
+                    result.append({
+                        "node_id": node_id,
+                        "class_type": class_type,
+                        "text": text.strip(),
+                        "role": role,
+                        "resolved_from": source_node_id,
+                        "source_class_type": source_class_type,
+                        "source_key": source_key,
+                    })
+                    extra_source_id = source_node_id if source_node_id in nodes else node_id
+                    if role == "positive" and extra_source_id in nodes:
+                        source_node = nodes[extra_source_id]
+                        source_inputs = source_node.get("inputs", {})
+                        for extra_key in ["text_b", "text_c", "prompt_b", "prompt_c", "string_b", "string_c"]:
+                            extra_text = source_inputs.get(extra_key)
+                            if isinstance(extra_text, str) and extra_text.strip() and extra_text.strip() not in seen_texts:
+                                seen_texts.add(extra_text.strip())
+                                result.append({
+                                    "node_id": extra_source_id,
+                                    "class_type": source_node.get("class_type", source_class_type),
+                                    "text": extra_text.strip(),
+                                    "role": role,
+                                    "resolved_from": extra_source_id,
+                                    "source_class_type": source_node.get("class_type", source_class_type),
+                                    "source_key": extra_key,
+                                })
+
+        return result
+
     def _trace_sampler_prompts(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
         """
         Trace KSampler positive/negative inputs back through the node graph
@@ -492,20 +908,27 @@ class MetadataParser:
         Handles node connections (lists like [node_id, output_index])
         and direct string values.
         """
-        if depth > 20:  # Prevent infinite recursion
+        traced = self._trace_to_text_with_source(ref, nodes, visited, depth)
+        return [item["text"] for item in traced if item.get("text")]
+
+    def _trace_to_text_with_source(self, ref: Any, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[Dict[str, Any]]:
+        """Trace text and keep source node metadata."""
+        if depth > 20:
             return []
 
-        # Direct string value
         if isinstance(ref, str):
-            # Could be a text value or a node reference
             if ref in nodes:
-                return self._extract_text_from_node(ref, nodes, visited, depth)
-            return [ref] if ref.strip() else []
+                return self._extract_text_from_node_with_source(ref, nodes, visited, depth)
+            return [{
+                "text": ref,
+                "source_node_id": None,
+                "source_class_type": "literal",
+                "source_key": "literal",
+            }] if ref.strip() else []
 
-        # Node connection reference: [node_id, output_index]
         if isinstance(ref, list) and len(ref) >= 2:
             target_id = str(ref[0])
-            return self._extract_text_from_node(target_id, nodes, visited, depth)
+            return self._extract_text_from_node_with_source(target_id, nodes, visited, depth)
 
         return []
 
@@ -661,6 +1084,36 @@ class MetadataParser:
 
         return texts
 
+    def _extract_text_from_node_with_source(self, node_id: str, nodes: Dict[str, dict], visited: Set[str], depth: int = 0) -> List[Dict[str, Any]]:
+        """Extract text plus source metadata from a node."""
+        if node_id in visited:
+            return []
+
+        node = nodes.get(node_id)
+        if not node:
+            return []
+
+        class_type = node.get("class_type", "")
+        inputs = node.get("inputs", {})
+
+        for key in ["text_0", "text", "prompt", "user_prompt", "string", "value", "result"]:
+            value = inputs.get(key)
+            if isinstance(value, str) and value.strip():
+                return [{
+                    "text": value,
+                    "source_node_id": node_id,
+                    "source_class_type": class_type,
+                    "source_key": key,
+                }]
+            if isinstance(value, (list, tuple)):
+                nested_visited = set(visited)
+                nested_visited.add(node_id)
+                traced = self._trace_to_text_with_source(value, nodes, nested_visited, depth + 1)
+                if traced:
+                    return traced
+
+        return []
+
     def _collect_text_from_nodes(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
         """
         Fallback: collect text from all text-bearing nodes.
@@ -733,6 +1186,11 @@ class MetadataParser:
         # If 3+ negative quality indicators, likely a negative prompt
         return matches >= 3
 
+    def _collect_text_from_nodes_as_nodes(self, nodes: Dict[str, dict]) -> Optional[List[Dict[str, Any]]]:
+        """Collect text-bearing nodes in a frontend-friendly structure."""
+        prompt_nodes = self._collect_prompt_nodes(nodes)
+        return prompt_nodes if prompt_nodes else None
+
     def _extract_from_workflow(self, workflow: dict) -> Tuple[Optional[str], Optional[str]]:
         """
         Extract prompts from ComfyUI workflow format (nodes with widgets_values).
@@ -767,15 +1225,16 @@ class MetadataParser:
         neg = "\n".join(negative_candidates) if negative_candidates else None
         return (pos, neg)
 
-    def _parse_webui_parameters(self, params: str) -> Tuple[Optional[str], Optional[str], Optional[str], List[str]]:
-        """Parse WebUI/Forge parameters format including checkpoint and loras."""
+    def _parse_webui_parameters(self, params: str) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict[str, Any]]]:
+        """Parse WebUI/Forge parameters format including checkpoint, loras, and generation params."""
         if not params:
-            return (None, None, None, [])
+            return (None, None, None, [], None)
 
         prompt = None
         negative = None
         checkpoint = None
         loras = []
+        gen_params = {}
 
         # Extract Lora from prompt: <lora:name:weight>
         lora_matches = re.findall(r"<lora:([^:]+):[^>]+>", params)
@@ -820,7 +1279,60 @@ class MetadataParser:
                 neg_lines[0] = neg_lines[0].replace("Negative prompt:", "").strip()
                 negative = "\n".join(neg_lines).strip()
 
-        return (prompt, negative, checkpoint, loras)
+        # Extract structured generation parameters from the "Steps: X, Sampler: Y, ..." line
+        if param_start >= 0:
+            params_line = "\n".join(lines[param_start:])
+            gen_params = self._parse_gen_params_line(params_line)
+
+        return (prompt, negative, checkpoint, loras, gen_params if gen_params else None)
+
+    def _parse_gen_params_line(self, params_line: str) -> Dict[str, Any]:
+        """Parse the 'Steps: 20, Sampler: Euler a, CFG scale: 7, ...' line into a dict."""
+        result = {}
+        # Split by comma, but handle values that might contain commas in quotes
+        pairs = re.split(r',\s*(?=[A-Z][a-z]*[\s_]*[A-Za-z]*:)', params_line)
+
+        for pair in pairs:
+            match = re.match(r'^\s*([^:]+):\s*(.+)$', pair.strip())
+            if not match:
+                continue
+            key = match.group(1).strip()
+            value = match.group(2).strip()
+
+            # Normalize key names
+            key_lower = key.lower().replace(" ", "_")
+
+            # Type cast known fields
+            try:
+                if key_lower in ("steps", "clip_skip", "ensd", "hires_steps", "mask_blur"):
+                    result[key_lower] = int(value)
+                elif key_lower in ("cfg_scale", "denoising_strength", "hires_upscale"):
+                    result[key_lower] = float(value)
+                elif key_lower == "seed":
+                    result["seed"] = int(value)
+                elif key_lower == "size":
+                    result["size"] = value
+                elif key_lower == "model":
+                    result["model"] = value
+                elif key_lower == "model_hash":
+                    result["model_hash"] = value
+                elif key_lower == "sampler":
+                    result["sampler"] = value
+                elif key_lower == "schedule_type":
+                    result["schedule_type"] = value
+                elif key_lower in ("hires_upscaler",):
+                    result["hires_upscaler"] = value
+                elif key_lower == "mask_hash":
+                    result["mask_hash"] = value
+                elif key_lower == "init_image_hash":
+                    result["init_image_hash"] = value
+                else:
+                    # Store other params as-is
+                    result[key_lower] = value
+            except (ValueError, TypeError):
+                result[key_lower] = value
+
+        return result
 
     def _extract_exif(self, img: Image.Image) -> dict:
         """Extract top-level EXIF data from image."""

@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 import json
 
-from database import add_image, update_image_path, get_images, add_tags
+from database import add_image, update_image_path, get_images, add_tags, update_image_metadata
 from metadata_parser import parse_image
 
 
@@ -146,19 +146,19 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
 def copy_image(image_path: str, destination_folder: str) -> str:
     """
     Copy an image to a new folder.
-    
+
     Args:
         image_path: Path of the image to copy
         destination_folder: Target folder path
-    
+
     Returns:
         Path of the copied image
     """
     os.makedirs(destination_folder, exist_ok=True)
-    
+
     filename = os.path.basename(image_path)
     new_path = os.path.join(destination_folder, filename)
-    
+
     # Handle filename conflicts
     if os.path.exists(new_path):
         base, ext = os.path.splitext(filename)
@@ -167,9 +167,34 @@ def copy_image(image_path: str, destination_folder: str) -> str:
             new_filename = f"{base}_{counter}{ext}"
             new_path = os.path.join(destination_folder, new_filename)
             counter += 1
-    
+
     shutil.copy2(image_path, new_path)
     return new_path
+
+
+def reparse_image_metadata(image_id: int, image_path: str) -> Dict[str, Any]:
+    """Re-parse a single image and update its stored metadata fields."""
+    metadata = parse_image(image_path)
+
+    try:
+        metadata_json = json.dumps(metadata["metadata"])
+    except (TypeError, ValueError):
+        metadata_json = "{}"
+
+    update_image_metadata(
+        image_id=image_id,
+        generator=metadata["generator"],
+        prompt=metadata["prompt"],
+        negative_prompt=metadata["negative_prompt"],
+        metadata_json=metadata_json,
+        width=metadata["width"],
+        height=metadata["height"],
+        file_size=metadata["file_size"],
+        checkpoint=metadata["checkpoint"],
+        loras=metadata["loras"],
+    )
+
+    return metadata
 
 
 def batch_move(
