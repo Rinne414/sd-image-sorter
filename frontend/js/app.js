@@ -1040,6 +1040,21 @@ function initEventListeners() {
         $('#btn-export-tags').innerHTML = '📤 Export Prompts Instead';
     });
 
+    // --- Alt export button in modal ---
+    const exportTagsAlt = $('#btn-export-tags-alt');
+    if (exportTagsAlt) {
+        exportTagsAlt.addEventListener('click', () => {
+            const btn = exportTagsAlt;
+            if (btn.textContent.includes('Tags')) {
+                showExportTagsModal();
+                btn.innerHTML = '📤 Export Prompts Instead';
+            } else {
+                showExportModal();
+                btn.innerHTML = '🏷️ Export Tags Instead';
+            }
+        });
+    }
+
     // --- Unified Filter Modal ---
     $('#btn-open-filters').addEventListener('click', openFilterModal);
     $('#btn-close-filter-modal').addEventListener('click', () => hideModal('filter-modal'));
@@ -1890,9 +1905,10 @@ async function loadImages(appendMode = false) {
         AppState.isLoading = false;
         $('#gallery-loading').style.display = 'none';
 
+        // Show/hide "Load More" button based on pagination state
         const loadMoreContainer = $('#gallery-load-more');
         if (loadMoreContainer) {
-            loadMoreContainer.style.display = 'none';
+            loadMoreContainer.style.display = AppState.pagination.hasMore ? 'flex' : 'none';
         }
     }
 }
@@ -1912,13 +1928,12 @@ function _onGalleryScroll() {
         if (AppState.currentView !== 'gallery') return;
         if (AppState.isLoading || !AppState.pagination.hasMore) return;
 
-        // Use the gallery grid's actual bottom position instead of document scrollHeight
-        // This is reliable even in flex layouts where scrollHeight can be inaccurate
+        // Use the gallery grid's actual bottom position for reliable detection
+        // getBoundingClientRect is always correct regardless of flex/grid layout
         const grid = document.getElementById('gallery-grid');
         if (!grid) return;
         const gridBottom = grid.getBoundingClientRect().bottom;
-        const windowH = window.innerHeight;
-        if (gridBottom <= windowH + 600) {
+        if (gridBottom <= window.innerHeight + 800) {
             loadMoreImages();
         }
     });
@@ -3221,6 +3236,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Censor Edit module so addToCensorQueue is available from Gallery
     // Note: do NOT init here - initCensorEdit is called when user switches to censor view
     // to prevent mousemove/keydown listeners being attached while another view is active
+
+    // Load More button — visible fallback for infinite scroll
+    const loadMoreBtn = document.getElementById('load-more-btn');
+    if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', () => loadMoreImages());
+    }
 
     // Setup event listeners for buttons that previously had inline onclick
     const returnToGalleryBtn = document.getElementById('return-to-gallery-btn');
