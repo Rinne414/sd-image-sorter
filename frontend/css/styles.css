@@ -509,13 +509,6 @@ body::before {
     }
 
     /* ===== Gallery View ===== */
-    #view-gallery {
-        display: none;
-    }
-
-    #view-gallery.active {
-        display: flex;
-    }
 
     .filter-sidebar {
         position: fixed;
@@ -849,8 +842,9 @@ body::before {
 
     .gallery-grid.waterfall {
         display: block;
-        column-width: 280px;
+        columns: 280px;
         column-gap: 16px;
+        column-fill: balance;
     }
 
     /* Virtual Scrolling - absolute positioned items */
@@ -863,8 +857,8 @@ body::before {
         position: absolute;
     }
 
-    /* Waterfall virtual scroll items */
-    .gallery-grid .waterfall-item {
+    /* Waterfall virtual scroll items — only in virtual-scroll mode */
+    .gallery-grid.virtual-scroll .waterfall-item {
         position: absolute;
     }
 
@@ -885,17 +879,19 @@ body::before {
 
     .gallery-grid.waterfall .gallery-item {
         break-inside: avoid;
-        display: inline-block;
+        display: block;
         width: 100%;
         margin-bottom: 16px;
         aspect-ratio: auto;
+        position: relative;
     }
 
     .gallery-grid.waterfall .gallery-item img {
+        width: 100%;
         height: auto;
-        min-height: 180px;
-        max-height: 600px;
-        object-fit: contain;
+        display: block;
+        object-fit: cover;
+        border-radius: var(--radius-xl);
     }
 
     .gallery-item img {

@@ -735,7 +735,9 @@ function setGalleryViewMode(mode) {
     localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
 
     $$('.view-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.size === nextMode);
+        const isActive = btn.dataset.size === nextMode;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', String(isActive));
     });
 
     const grid = $('#gallery-grid');
@@ -1901,7 +1903,7 @@ function loadMoreImages() {
     loadImages(true);
 }
 
-// Simple scroll-based infinite scroll — no IntersectionObserver sentinel needed
+// Scroll-based infinite scroll — uses gallery grid bottom position for reliable detection
 let _scrollLoadTimer = null;
 function _onGalleryScroll() {
     if (_scrollLoadTimer) return;
@@ -1910,11 +1912,13 @@ function _onGalleryScroll() {
         if (AppState.currentView !== 'gallery') return;
         if (AppState.isLoading || !AppState.pagination.hasMore) return;
 
-        // Load more when user scrolls within 600px of bottom
-        const scrollY = window.scrollY || window.pageYOffset;
+        // Use the gallery grid's actual bottom position instead of document scrollHeight
+        // This is reliable even in flex layouts where scrollHeight can be inaccurate
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return;
+        const gridBottom = grid.getBoundingClientRect().bottom;
         const windowH = window.innerHeight;
-        const docH = document.documentElement.scrollHeight;
-        if (scrollY + windowH >= docH - 600) {
+        if (gridBottom <= windowH + 600) {
             loadMoreImages();
         }
     });
