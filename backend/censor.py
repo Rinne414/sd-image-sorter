@@ -6,53 +6,66 @@ Requires a YOLOv8 ONNX model trained to detect body parts.
 Recommended model: https://civitai.com/models/1736285
 """
 
+import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter, ImageDraw
 from typing import List, Dict, Tuple, Optional
-import onnxruntime as ort
+
+from config import (
+    CENSOR_DEFAULT_CLASSES,
+    CENSOR_CONFIDENCE_THRESHOLD,
+    CENSOR_IOU_THRESHOLD,
+    YOLO_INPUT_SIZE,
+    CENSOR_DEFAULT_BLOCK_SIZE,
+    CENSOR_DEFAULT_BLUR_RADIUS,
+)
+
+logger = logging.getLogger(__name__)
+
+# Lazy import: onnxruntime is loaded on first use (see CensorDetector.load)
+ort = None
+
+
+def _ensure_ort():
+    """Lazily import onnxruntime."""
+    global ort
+    if ort is None:
+        import onnxruntime as ort_module  # type: ignore
+        ort = ort_module
 
 
 class CensorDetector:
     """YOLOv8 ONNX detector for sensitive body parts."""
-    
-    # Class names matching the Wenaka YOLO model (wenaka_yolov8s-seg.pt)
-    # Reference: https://github.com/Wenaka2004/auto-censor
-    # Class IDs: 0=anus, 1=cum, 2=dick, 3=breasts, 4=pussy
-    DEFAULT_CLASSES = [
-        "anus",     # 0
-        "cum",      # 1
-        "dick",     # 2
-        "breasts",  # 3
-        "pussy",    # 4
-    ]
-    
-    def __init__(self, model_path: str = None, classes: List[str] = None):
+
+    def __init__(self, model_path: Optional[str] = None, classes: Optional[List[str]] = None):
         self.model_path = model_path
         self.session = None
-        self.classes = classes or self.DEFAULT_CLASSES
-        self.input_size = (640, 640)  # Standard YOLOv8 input size
+        self.classes = classes or CENSOR_DEFAULT_CLASSES
+        self.input_size = YOLO_INPUT_SIZE
         
-    def load(self, model_path: str = None):
+    def load(self, model_path: Optional[str] = None):
         """Load the ONNX model, converting from .pt if necessary."""
+        _ensure_ort()
+
         if model_path:
             self.model_path = model_path
-            
+
         if not self.model_path or not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model file not found: {self.model_path}")
-        
+
         # Handle .pt files by auto-converting to ONNX
         if self.model_path.lower().endswith('.pt') or self.model_path.lower().endswith('.pth'):
             try:
-                print(f"Detected PyTorch model: {self.model_path}")
-                
+                logger.info("Detected PyTorch model: %s", self.model_path)
+
                 # Check if already converted (cache)
                 base_path = os.path.splitext(self.model_path)[0] + ".onnx"
                 if os.path.exists(base_path):
-                    print(f"Found cached ONNX model: {base_path}")
+                    logger.info("Found cached ONNX model: %s", base_path)
                     self.model_path = base_path
                 else:
-                    print("Attempting to convert to ONNX using ultralytics...")
+                    logger.info("Attempting to convert to ONNX using ultralytics...")
                     try:
                         from ultralytics import YOLO
                     except ImportError:
@@ -73,12 +86,12 @@ class CensorDetector:
                     
                     if exported_path and isinstance(exported_path, str):
                         self.model_path = exported_path
-                        print(f"Model converted successfully: {self.model_path}")
+                        logger.info("Model converted successfully: %s", self.model_path)
                     else:
                         # Fallback if export returns something else or fails silently
                         if os.path.exists(base_path):
                             self.model_path = base_path
-                            print(f"Using exported ONNX model: {self.model_path}")
+                            logger.info("Using exported ONNX model: %s", self.model_path)
                         else:
                             raise RuntimeError("Export failed or returned invalid path")
                         
@@ -86,7 +99,7 @@ class CensorDetector:
                 # Already handled above with better message
                 raise e
             except Exception as e:
-                print(f"Error converting .pt model: {e}")
+                logger.error("Error converting .pt model: %s", e)
                 raise RuntimeError(
                     f"Failed to convert PyTorch model to ONNX.\n\n"
                     f"Error: {str(e)}\n\n"
@@ -99,7 +112,7 @@ class CensorDetector:
         try:
             # Create ONNX Runtime session
             # Note: We assign to a temp variable first to ensure full success before setting self.session
-            print(f"Initializing ONNX session for: {self.model_path}")
+            logger.info("Initializing ONNX session for: %s", self.model_path)
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
             session = ort.InferenceSession(self.model_path, providers=providers)
             
@@ -114,11 +127,11 @@ class CensorDetector:
                     self.input_size = (w, h)
             
             self.session = session
-            print(f"Censor detector loaded: {os.path.basename(self.model_path)}")
-            print(f"Input size: {self.input_size}, Classes: {len(self.classes)}")
+            logger.info("Censor detector loaded: %s", os.path.basename(self.model_path))
+            logger.info("Input size: %s, Classes: %d", self.input_size, len(self.classes))
             
         except Exception as e:
-            print(f"Error loading ONNX model: {str(e)}")
+            logger.error("Error loading ONNX model: %s", e)
             self.session = None  # Ensure it's None on failure
             
             # Provide helpful error message
@@ -173,8 +186,8 @@ class CensorDetector:
         original_size: Tuple[int, int],
         scale_info: Tuple[float, float],
         pad_info: Tuple[int, int],
-        conf_threshold: float = 0.60,
-        iou_threshold: float = 0.45
+        conf_threshold: float = CENSOR_CONFIDENCE_THRESHOLD,
+        iou_threshold: float = CENSOR_IOU_THRESHOLD
     ) -> List[Dict]:
         """Postprocess YOLOv8 outputs to detection boxes."""
         predictions = np.squeeze(outputs).T
@@ -278,32 +291,32 @@ class CensorDetector:
         
         return keep
     
-    def detect(self, image_path: str, conf_threshold: float = 0.6) -> List[Dict]:
+    def detect(self, image_path: str, conf_threshold: float = CENSOR_CONFIDENCE_THRESHOLD) -> List[Dict]:
         """Run detection on an image file."""
         if self.session is None:
             raise RuntimeError("Model not loaded. Call load() first.")
-        
+
         # Load and preprocess image
         image = Image.open(image_path).convert('RGB')
         original_size = image.size
-        
+
         img_array, scale_info, pad_info = self.preprocess(image)
-        
+
         # Run inference
         outputs = self.session.run(None, {self.input_name: img_array})
-        
+
         # Postprocess
         detections = self.postprocess(
-            outputs[0], 
+            outputs[0],
             original_size,
-            scale_info, 
+            scale_info,
             pad_info,
             conf_threshold
         )
-        
+
         return detections
-    
-    def detect_from_image(self, image: Image.Image, conf_threshold: float = 0.6) -> List[Dict]:
+
+    def detect_from_image(self, image: Image.Image, conf_threshold: float = CENSOR_CONFIDENCE_THRESHOLD) -> List[Dict]:
         """Run detection on a PIL Image."""
         if self.session is None:
             raise RuntimeError("Model not loaded. Call load() first.")
@@ -326,40 +339,40 @@ class CensorDetector:
 
 class Censor:
     """Image censoring utilities."""
-    
+
     @staticmethod
     def apply_mosaic(
-        image: Image.Image, 
-        regions: List[Tuple[int, int, int, int]], 
-        block_size: int = 16
+        image: Image.Image,
+        regions: List[Tuple[int, int, int, int]],
+        block_size: int = CENSOR_DEFAULT_BLOCK_SIZE
     ) -> Image.Image:
         """Apply mosaic/pixelation to regions."""
         result = image.copy()
-        
+
         for x1, y1, x2, y2 in regions:
             # Ensure valid coordinates
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(image.width, x2), min(image.height, y2)
-            
+
             if x2 <= x1 or y2 <= y1:
                 continue
-            
+
             # Extract region
             region = result.crop((x1, y1, x2, y2))
-            
+
             # Pixelate: resize down then up
             w, h = region.size
             small_w = max(1, w // block_size)
             small_h = max(1, h // block_size)
-            
+
             small = region.resize((small_w, small_h), Image.Resampling.NEAREST)
             pixelated = small.resize((w, h), Image.Resampling.NEAREST)
-            
+
             # Paste back
             result.paste(pixelated, (x1, y1))
-        
+
         return result
-    
+
     @staticmethod
     def apply_bar(
         image: Image.Image,
@@ -369,39 +382,39 @@ class Censor:
         """Apply solid color bar to regions."""
         result = image.copy()
         draw = ImageDraw.Draw(result)
-        
+
         for x1, y1, x2, y2 in regions:
             draw.rectangle([x1, y1, x2, y2], fill=color)
-        
+
         return result
-    
+
     @staticmethod
     def apply_blur(
         image: Image.Image,
         regions: List[Tuple[int, int, int, int]],
-        blur_radius: int = 20
+        blur_radius: int = CENSOR_DEFAULT_BLUR_RADIUS
     ) -> Image.Image:
         """Apply gaussian blur to regions."""
         result = image.copy()
-        
+
         for x1, y1, x2, y2 in regions:
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(image.width, x2), min(image.height, y2)
-            
+
             if x2 <= x1 or y2 <= y1:
                 continue
-            
+
             region = result.crop((x1, y1, x2, y2))
             blurred = region.filter(ImageFilter.GaussianBlur(radius=blur_radius))
             result.paste(blurred, (x1, y1))
-        
+
         return result
     
     @staticmethod
     def apply_sticker(
         image: Image.Image,
         regions: List[Tuple[int, int, int, int]],
-        sticker_path: str = None,
+        sticker_path: Optional[str] = None,
         sticker_emoji: str = "⭐"
     ) -> Image.Image:
         """Apply sticker overlay to regions."""
@@ -463,7 +476,7 @@ class Censor:
 _detector: Optional[CensorDetector] = None
 
 
-def get_detector(model_path: str = None) -> CensorDetector:
+def get_detector(model_path: Optional[str] = None) -> CensorDetector:
     """Get or create the global detector instance."""
     global _detector
     

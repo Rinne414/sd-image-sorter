@@ -1,7 +1,7 @@
 """
 SAM 3 (Segment Anything with Concepts) mask refinement for censoring.
 
-Takes bounding boxes from YOLO26 / NudeNet and produces pixel-precise
+Takes bounding boxes from NudeNet / legacy YOLO and produces pixel-precise
 segmentation masks using Meta's SAM 3 model.
 
 SAM 3 features:
@@ -14,7 +14,14 @@ Requires:
 - PyTorch 2.7+
 - CUDA 12.6+
 - git clone https://github.com/facebookresearch/sam3.git && pip install -e .
-- HuggingFace access for model checkpoints (gated)
+
+Model download options:
+- HuggingFace (default): Gated model, requires HuggingFace authentication.
+    https://huggingface.co/facebook/sam3
+- ModelScope (alternative): Chinese mirror of HuggingFace, no authentication
+    required. Useful when HuggingFace access is restricted or auth fails.
+    https://modelscope.cn/models/facebook/sam3/files
+    Install: pip install modelscope
 
 NOTE: SAM3 requires significant GPU resources. Falls back gracefully
 to bounding-box censoring if SAM3 is unavailable.
@@ -39,8 +46,8 @@ def _check_sam3_available() -> bool:
     global _sam3_available
     if _sam3_available is None:
         try:
-            from sam3.build_sam import build_sam3_image_model
-            from sam3.sam3_processor import Sam3Processor
+            from sam3.build_sam import build_sam3_image_model  # type: ignore
+            from sam3.sam3_processor import Sam3Processor  # type: ignore
             _sam3_available = True
         except ImportError:
             _sam3_available = False
@@ -48,8 +55,20 @@ def _check_sam3_available() -> bool:
     return _sam3_available
 
 
-def _load_sam3(checkpoint_path: Optional[str] = None):
-    """Load SAM3 model and processor (singleton, thread-safe)."""
+def _load_sam3(
+    checkpoint_path: Optional[str] = None,
+    source: str = "huggingface",
+):
+    """Load SAM3 model and processor (singleton, thread-safe).
+
+    Args:
+        checkpoint_path: Path to a local checkpoint file. If provided and
+            exists, used directly (ignores ``source``).
+        source: Download source when no local checkpoint is available.
+            "huggingface" (default) – download from HuggingFace (gated, auth
+            required).
+            "modelscope" – download from ModelScope Chinese mirror (no auth).
+    """
     global _sam3_model, _sam3_processor
     if _sam3_model is None:
         with _sam3_lock:
@@ -62,8 +81,8 @@ def _load_sam3(checkpoint_path: Optional[str] = None):
                         "Requires Python 3.12+, PyTorch 2.7+, CUDA 12.6+"
                     )
 
-                from sam3.build_sam import build_sam3_image_model
-                from sam3.sam3_processor import Sam3Processor
+                from sam3.build_sam import build_sam3_image_model  # type: ignore
+                from sam3.sam3_processor import Sam3Processor  # type: ignore
                 import torch
 
                 print("[SAM3] Loading model...")
@@ -71,9 +90,24 @@ def _load_sam3(checkpoint_path: Optional[str] = None):
                 # Use default checkpoint or user-provided
                 if checkpoint_path and os.path.exists(checkpoint_path):
                     model = build_sam3_image_model(checkpoint=checkpoint_path)
+                elif source == "modelscope":
+                    model = _load_from_modelscope()
                 else:
-                    # Will download from HuggingFace if access is granted
-                    model = build_sam3_image_model()
+                    # Default: HuggingFace with ModelScope fallback
+                    try:
+                        model = build_sam3_image_model()
+                    except Exception as hf_err:
+                        hf_msg = str(hf_err).lower()
+                        if "auth" in hf_msg or "token" in hf_msg or "403" in hf_msg or "401" in hf_msg:
+                            print(
+                                "[SAM3] HuggingFace authentication failed. "
+                                "Trying ModelScope as fallback...\n"
+                                "  Tip: You can set source='modelscope' directly, "
+                                "or visit https://modelscope.cn/models/facebook/sam3/files"
+                            )
+                            model = _load_from_modelscope()
+                        else:
+                            raise
 
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 model = model.to(device)
@@ -86,16 +120,60 @@ def _load_sam3(checkpoint_path: Optional[str] = None):
     return _sam3_model, _sam3_processor
 
 
+def _load_from_modelscope():
+    """Download SAM3 checkpoint from ModelScope and build the model.
+
+    ModelScope (https://modelscope.cn) is a Chinese mirror of HuggingFace
+    that does not require authentication for public models.
+
+    Requires: pip install modelscope
+    """
+    try:
+        from modelscope import snapshot_download  # type: ignore
+    except ImportError:
+        raise RuntimeError(
+            "ModelScope SDK not installed. Install with:\n"
+            "  pip install modelscope\n"
+            "Then retry with source='modelscope'."
+        )
+
+    from sam3.build_sam import build_sam3_image_model  # type: ignore
+
+    print("[SAM3] Downloading model from ModelScope (facebook/sam3)...")
+    model_dir = snapshot_download('facebook/sam3')
+    print(f"[SAM3] Model downloaded to: {model_dir}")
+
+    # Look for the checkpoint file in the downloaded directory
+    checkpoint_file = None
+    for fname in os.listdir(model_dir):
+        if fname.endswith(('.pt', '.pth', '.bin', '.safetensors')):
+            checkpoint_file = os.path.join(model_dir, fname)
+            break
+
+    if checkpoint_file:
+        model = build_sam3_image_model(checkpoint=checkpoint_file)
+    else:
+        # Fall back to letting build_sam3_image_model find it
+        model = build_sam3_image_model(checkpoint=model_dir)
+
+    return model
+
+
 class SAM3Refiner:
     """
     SAM3 mask refinement for precise censoring.
 
-    Takes bounding boxes (from YOLO26/NudeNet) and refines them
+    Takes bounding boxes (from NudeNet/legacy YOLO) and refines them
     into pixel-precise segmentation masks using SAM3.
     """
 
-    def __init__(self, checkpoint_path: Optional[str] = None):
+    def __init__(
+        self,
+        checkpoint_path: Optional[str] = None,
+        source: str = "huggingface",
+    ):
         self.checkpoint_path = checkpoint_path
+        self.source = source
         self._model = None
         self._processor = None
 
@@ -106,7 +184,9 @@ class SAM3Refiner:
 
     def load(self):
         """Load SAM3 model."""
-        self._model, self._processor = _load_sam3(self.checkpoint_path)
+        self._model, self._processor = _load_sam3(
+            self.checkpoint_path, source=self.source
+        )
 
     @property
     def processor(self):
@@ -248,9 +328,17 @@ _sam3_refiner = None
 
 def get_sam3_refiner(
     checkpoint_path: Optional[str] = None,
+    source: str = "huggingface",
 ) -> SAM3Refiner:
-    """Get singleton SAM3 refiner."""
+    """Get singleton SAM3 refiner.
+
+    Args:
+        checkpoint_path: Path to a local checkpoint file.
+        source: Download source – "huggingface" (default) or "modelscope".
+    """
     global _sam3_refiner
     if _sam3_refiner is None:
-        _sam3_refiner = SAM3Refiner(checkpoint_path=checkpoint_path)
+        _sam3_refiner = SAM3Refiner(
+            checkpoint_path=checkpoint_path, source=source
+        )
     return _sam3_refiner

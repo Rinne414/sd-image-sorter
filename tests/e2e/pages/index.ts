@@ -1,0 +1,6 @@
+export { GalleryPage } from './GalleryPage'
+export { AutoSeparatePage } from './AutoSeparatePage'
+export { ManualSortPage } from './ManualSortPage'
+export { CensorEditorPage } from './CensorEditorPage'
+export { SimilarityPage } from './SimilarityPage'
+export { PromptLabPage } from './PromptLabPage'

@@ -10,7 +10,7 @@
 
 A powerful image management tool for Stable Diffusion users. Automatically extract metadata, tag images with AI, filter, sort, and organize your AI-generated artwork with a premium glassmorphism UI.
 
-![Version](https://img.shields.io/badge/version-1.2.0-purple)
+![Version](https://img.shields.io/badge/version-2.0.0-purple)
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -61,10 +61,31 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Undo Support**: Instantly revert sorting actions
 
 ### 🔳 Censor Edit (V2)
+- **Multi-Model Detection**: Choose between Legacy YOLO, NudeNet v3, or both
 - **AI Detection**: YOLOv8-based detection of sensitive areas (requires model)
 - **Multiple Styles**: Mosaic, blur, black bar, or white bar
 - **Precision Tools**: Manual brush, eraser, and clone stamp for detail work
 - **Batch Processing**: Queue-based workflow with batch save and rename
+
+### 🔍 Similar Images (NEW)
+- **Visual Search**: Find similar images by visual content using CLIP embeddings
+- **Duplicate Detection**: Identify near-duplicate images in your library
+- **Upload Search**: Upload any image to find similar ones in your collection
+- **Adjustable Threshold**: Fine-tune similarity sensitivity
+
+### 🧪 Prompt Lab (NEW)
+- **Smart Generation**: Generate random prompts with intelligent tag selection
+- **Exclusion Rules**: Automatic prevention of conflicting tags (e.g., "from_behind" excludes "looking_at_viewer")
+- **Tag Sets**: Pre-built outfit combinations (School Uniform, Swimsuit, etc.)
+- **Category Browser**: Explore your library's tags by category
+- **Negative Prompt**: Auto-generate quality-focused negative prompts
+
+### 🎨 Artist Identification (NEW)
+- **LSNet-style Classification**: Identify the artist/style of your images
+- **Confidence Threshold**: Images below threshold labeled as "undefined"
+- **Batch Processing**: Identify all images with progress tracking
+- **Artist Filtering**: Filter gallery by identified artist
+- **Statistics**: View top artists and their image counts
 
 ---
 
@@ -72,6 +93,8 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 ### Prerequisites
 - **Python 3.9+**
+- **RAM**: 4GB minimum, 8GB+ recommended (AI models need memory)
+- **Disk Space**: ~2GB for dependencies + models
 - **Windows** (Recommended) or Linux/Mac
 
 ### Installation & Run
@@ -281,6 +304,70 @@ Navigate to the **Censor Edit** tab:
 3. Click **💾 Save All Processed** for batch save
 4. Choose output folder and naming convention
 
+### 🔹 Step 9: Similar Images (NEW)
+
+Navigate to the **Similar** tab to find visually similar images:
+
+#### Generate Embeddings (First Time)
+1. Click **Generate Embeddings** to create visual fingerprints for all images
+2. Wait for the background process to complete (progress shown in UI)
+3. This uses CLIP AI model - first run downloads ~200MB
+
+#### Find Similar Images
+1. **By Image ID**: Enter an image ID from your gallery
+2. **By Upload**: Drag & drop any image to find similar ones
+3. Adjust the **Similarity Threshold** (default: 0.5)
+4. Results show visually similar images from your library
+
+#### Find Duplicates
+1. Click the **Duplicates** sub-tab
+2. Set threshold (default: 0.95 for near-duplicates)
+3. Click **Find Duplicates** to scan your library
+4. Review pairs with similarity scores
+
+### 🔹 Step 10: Prompt Lab (NEW)
+
+Navigate to the **Prompt Lab** tab to generate random prompts:
+
+#### Browse Your Tags
+1. The **Category Browser** shows tags from your library
+2. Categories: quality, meta, character, body, outfit, pose, expression, etc.
+3. Use the search box to filter tags
+
+#### Generate Random Prompts
+1. Click **🎲 Randomize** to generate a new random prompt
+2. The system intelligently picks tags respecting exclusion rules
+3. View generated positive and negative prompts
+
+#### Use Tag Sets
+1. Select a **Tag Set** from the dropdown (e.g., "School Uniform", "Swimsuit")
+2. Click **Apply** to add the outfit tags
+3. Tag sets ensure coherent outfit combinations
+
+#### Slot Builder
+- Each category has a **slot** showing the selected tag
+- **Lock** 🔒 a slot to keep it during randomization
+- **Weight** adjusts selection probability
+- **Clear** removes the selection
+
+### 🔹 Step 11: Artist Identification (NEW)
+
+Navigate to the **Artist ID** tab to identify artists/styles in your images:
+
+#### Configure Settings
+1. Select **Model Source**: HuggingFace (default), ModelScope (China mirror), or Local
+2. Set **Confidence Threshold**: Images below this will be labeled "undefined"
+
+#### Identify Artists
+1. Click **Identify All Images** to analyze your entire library
+2. Or select images in Gallery, then click **Identify Selected**
+3. Watch the progress bar during batch processing
+
+#### Explore Results
+1. Browse identified artists in the results grid
+2. Click an artist card to see their image count
+3. Use **View in Gallery** to filter by that artist
+
 ---
 
 ## ⌨️ Complete Keyboard Shortcuts
@@ -344,6 +431,19 @@ The backend provides a REST API for programmatic access:
 | `/api/scan` | POST | Scan a folder for images |
 | `/api/tag` | POST | Run AI tagging on images |
 | `/api/move` | POST | Move images to folder |
+| `/api/similarity/stats` | GET | Get embedding statistics |
+| `/api/similarity/embed` | POST | Generate embeddings for all images |
+| `/api/similarity/search/{id}` | GET | Find similar images by ID |
+| `/api/similarity/duplicates` | GET | Find near-duplicate image pairs |
+| `/api/prompts/generate` | POST | Generate a random prompt |
+| `/api/prompts/rules` | GET | List tag exclusion rules |
+| `/api/prompts/tag-sets` | GET | List available tag sets |
+| `/api/censor/detect` | POST | Run AI detection on an image |
+| `/api/censor/models` | GET | List available detection models |
+| `/api/artists/identify` | POST | Identify artist for single image |
+| `/api/artists/identify-batch` | POST | Batch identify artists |
+| `/api/artists/stats` | GET | Get identification statistics |
+| `/api/artists/list` | GET | List known artists |
 
 ### Filter Parameters
 When querying `/api/images`:
@@ -389,29 +489,49 @@ When querying `/api/images`:
 ```
 sd-image-sorter/
 ├── backend/
-│   ├── main.py           # FastAPI application entry
-│   ├── database.py       # SQLite database operations
-│   ├── image_manager.py  # Image metadata handling
-│   ├── tagger.py         # WD14 AI tagging
-│   ├── censor.py         # Censor detection logic
-│   ├── routers/          # API route modules
-│   │   ├── images.py     # Image CRUD endpoints
-│   │   ├── tags.py       # Tag management
-│   │   ├── sorting.py    # Sorting operations
-│   │   └── censor.py     # Censor edit endpoints
+│   ├── main.py               # FastAPI application entry
+│   ├── database.py           # SQLite database operations
+│   ├── image_manager.py      # Image metadata handling
+│   ├── metadata_parser.py    # SD metadata extraction
+│   ├── tagger.py             # WD14 AI tagging
+│   ├── censor.py             # Censor detection (ONNX)
+│   ├── nudenet_detector.py   # NudeNet v3 detector
+│   ├── sam3_refiner.py       # SAM3 mask refinement
+│   ├── similarity.py         # CLIP embedding search
+│   ├── prompt_generator.py   # Random prompt generator
+│   ├── artist_identifier.py  # LSNet artist identification
+│   ├── tag_rules.py          # Tag categorization rules
+│   ├── routers/              # API route modules
+│   │   ├── images.py         # Image CRUD endpoints
+│   │   ├── tags.py           # Tag management
+│   │   ├── sorting.py        # Sorting operations
+│   │   ├── censor.py         # Censor edit endpoints
+│   │   ├── similarity.py     # Similarity search endpoints
+│   │   ├── prompts.py        # Prompt generation endpoints
+│   │   └── artists.py        # Artist identification endpoints
 │   └── utils/
 │       └── path_validation.py  # Security utilities
 ├── frontend/
-│   ├── index.html        # Main HTML template
+│   ├── index.html            # Main HTML template
 │   ├── css/
-│   │   └── style.css     # Glassmorphism styling
+│   │   ├── styles.css        # Glassmorphism styling
+│   │   ├── censor-v2.css     # Censor editor styles
+│   │   └── new-views.css     # Similar/Prompt Lab styles
 │   └── js/
-│       ├── app.js        # Main application logic
-│       ├── gallery.js    # Gallery interactions
-│       └── censor-edit.js # Censor editor
-├── models/               # Downloaded AI models
-├── run.bat               # Windows launcher
-└── README.md             # This file
+│       ├── app.js            # Main application logic
+│       ├── gallery.js        # Gallery interactions
+│       ├── virtual-gallery.js # Virtual scrolling
+│       ├── autosep.js        # Auto-separate tab
+│       ├── manual-sort.js    # WASD manual sorting
+│       ├── censor-edit.js    # Censor editor
+│       ├── similar.js        # Similar images tab
+│       ├── prompt-lab.js     # Prompt lab tab
+│       ├── artist-ident.js   # Artist identification tab
+│       └── audio.js          # Sound effects
+├── models/                   # Downloaded AI models
+├── run.bat                   # Windows launcher
+├── run.sh                    # Linux/Mac launcher
+└── README.md                 # This file
 ```
 
 ---
@@ -487,10 +607,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **撤销机制**: 实时撤销误操作，排序流程更安全
 
 ### 🔳 隐私打码 (Censor Edit V2)
+- **多模型支持**: 可选 Legacy YOLO、NudeNet v3 或两者并用
 - **智能识别**: 依托 YOLOv8 自动锁定敏感区域（需自备模型）
 - **多样化处理**: 提供马赛克、模糊、纯色遮盖等多种打码方式
 - **精细修补**: 内置画笔、橡皮擦及仿制图章，满足手动精度需求
 - **批量导出**: 队列化工作流，支持批量重命名与保存
+
+### 🔍 相似图片 (NEW)
+- **视觉搜索**: 使用 CLIP 嵌入向量查找视觉相似的图片
+- **重复检测**: 识别图库中的近似重复图片
+- **上传搜索**: 上传任意图片查找相似图片
+- **可调阈值**: 微调相似度敏感度
+
+### 🧪 提示词工坊 (NEW)
+- **智能生成**: 生成随机提示词，自动遵守排除规则
+- **排除规则**: 自动防止冲突标签（如 "from_behind" 排除 "looking_at_viewer"）
+- **标签套装**: 预设服装组合（校服、泳装等）
+- **分类浏览**: 按类别浏览图库标签
+- **负向提示词**: 自动生成质量优化的负向提示词
+
+### 🎨 画师识别 (NEW)
+- **LSNet 风格分类**: 识别图片的画师/风格
+- **置信度阈值**: 低于阈值的图片标记为 "undefined"
+- **批量处理**: 带进度追踪的批量识别
+- **画师过滤**: 按识别出的画师过滤图库
+- **统计数据**: 查看热门画师及其图片数量
 
 ---
 
@@ -498,6 +639,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 环境要求
 - **Python 3.9+**
+- **内存**: 最低 4GB，推荐 8GB+（AI 模型需要内存）
+- **磁盘空间**: 约 2GB（依赖 + 模型）
 - **Windows** (推荐) 或 Linux/Mac
 
 ### 安装与运行
@@ -555,6 +698,26 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 3. 点击 **🎯 Detect Current** 自动识别敏感点
 4. 使用工具栏进行精修后，点击 **💾 Save All Processed** 批量保存
 
+### 🔹 第6步：相似图片搜索 (NEW)
+1. 切换至 **Similar** 标签页
+2. 首次使用需点击 **Generate Embeddings** 生成视觉特征（首次约需下载 200MB 模型）
+3. 输入图片 ID 或上传图片搜索相似内容
+4. 切换至 **Duplicates** 子标签可查找重复图片
+
+### 🔹 第7步：提示词工坊 (NEW)
+1. 切换至 **Prompt Lab** 标签页
+2. 左侧浏览分类标签库
+3. 点击 **🎲 Randomize** 生成随机提示词
+4. 选择 **Tag Set** 套用预设服装组合
+5. 生成的提示词可直接复制使用
+
+### 🔹 第8步：画师识别 (NEW)
+1. 切换至 **Artist ID** 标签页
+2. 设置置信度阈值（默认 0.35，低于此值标记为 "undefined"）
+3. 点击 **Identify All Images** 批量识别
+4. 浏览识别出的画师列表
+5. 点击画师卡片查看详情
+
 ---
 
 ## ⌨️ 快捷键指南
@@ -605,7 +768,7 @@ This project wouldn't be possible without these amazing contributors and their i
 | **[Antigravity](https://github.com/peter119lee)** & **Claude Opus 4.5 (Thinking)** | 💻 Core development & AI-assisted coding |
 | **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 Auto-censor concept inspiration |
 | **Wenaka2004** | 🎯 [YOLO detection model](https://civitai.com/models/1736285?modelVersionId=1965032) |
-| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**, **DraconicDragon**, **heathcliff01** | 🔮 LSNet inspiration *(feature coming soon!)* |
+| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**, **DraconicDragon**, **heathcliff01** | 🎨 LSNet artist identification inspiration |
 | **[SmilingWolf](https://huggingface.co/SmilingWolf/wd-eva02-large-tagger-v3)** | 🏷️ WD14 Tagger models |
 | **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | 📖 Prompt reader concept inspiration |
 

@@ -7,6 +7,8 @@
     <title>SD Image Sorter</title>
     <meta name="description"
         content="Powerful image management tool for Stable Diffusion users - tag, filter, and sort your AI-generated images">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/censor-v2.css">
     <link rel="stylesheet" href="/static/css/new-views.css">
@@ -16,68 +18,146 @@
 </head>
 
 <body>
-    <div id="app">
+    <!-- Skip Link for Keyboard Users -->
+    <a href="#main-content" class="skip-link" aria-label="Skip to main content">
+        Skip to main content
+    </a>
+
+    <!-- Screen Reader Live Region for Announcements -->
+    <div id="a11y-live-region" aria-live="polite" aria-atomic="true" class="sr-only" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;"></div>
+
+    <div id="app" role="application" aria-label="SD Image Sorter - Image Management Tool">
         <!-- Navigation -->
-        <nav class="nav-bar">
+        <nav class="nav-bar" role="navigation" aria-label="Main navigation">
             <div class="nav-brand">
-                <span class="brand-icon">🎨</span>
+                <span class="brand-icon" aria-hidden="true">🎨</span>
                 <span class="brand-text">SD Image Sorter</span>
             </div>
-            <div class="nav-tabs">
-                <button class="nav-tab active" data-view="gallery">
-                    <span class="tab-icon">🖼️</span>
+            <!-- Mobile Menu Toggle Button -->
+            <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
+                <span class="hamburger-line" aria-hidden="true"></span>
+                <span class="hamburger-line" aria-hidden="true"></span>
+                <span class="hamburger-line" aria-hidden="true"></span>
+            </button>
+
+            <div class="nav-tabs" role="tablist" aria-label="Application views">
+                <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
+                    <span class="tab-step" aria-hidden="true">1</span>
+                    <span class="tab-icon" aria-hidden="true">🖼️</span>
                     <span class="tab-text">Gallery</span>
                 </button>
-                <button class="nav-tab" data-view="autosep">
-                    <span class="tab-icon">📁</span>
+                <button class="nav-tab" data-view="autosep" role="tab" aria-selected="false" aria-controls="view-autosep">
+                    <span class="tab-step" aria-hidden="true">2</span>
+                    <span class="tab-icon" aria-hidden="true">📁</span>
                     <span class="tab-text">Auto-Separate</span>
                 </button>
-                <button class="nav-tab" data-view="manual">
-                    <span class="tab-icon">🎮</span>
+                <button class="nav-tab" data-view="manual" role="tab" aria-selected="false" aria-controls="view-manual">
+                    <span class="tab-step" aria-hidden="true">3</span>
+                    <span class="tab-icon" aria-hidden="true">🎮</span>
                     <span class="tab-text">Manual Sort</span>
                 </button>
-                <button class="nav-tab" data-view="censor">
-                    <span class="tab-icon">🔳</span>
+                <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
+                    <span class="tab-step" aria-hidden="true">4</span>
+                    <span class="tab-icon" aria-hidden="true">🔳</span>
                     <span class="tab-text">Censored Edit</span>
                 </button>
-                <button class="nav-tab" data-view="similar">
-                    <span class="tab-icon">🔍</span>
+                <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
+                    <span class="tab-icon" aria-hidden="true">🔍</span>
                     <span class="tab-text">Similar</span>
                 </button>
-                <button class="nav-tab" data-view="promptlab">
-                    <span class="tab-icon">🧪</span>
+                <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
+                    <span class="tab-icon" aria-hidden="true">🧪</span>
                     <span class="tab-text">Prompt Lab</span>
                 </button>
-                <button class="nav-tab" data-view="artist">
-                    <span class="tab-icon">🎨</span>
+                <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
+                    <span class="tab-icon" aria-hidden="true">🎨</span>
                     <span class="tab-text">Artist ID</span>
+                    <span class="tab-badge tab-badge-experimental">Experimental</span>
                 </button>
             </div>
+
+            <!-- Mobile Navigation Menu (Overlay) -->
+            <div class="mobile-nav-overlay" id="mobile-nav-overlay" role="dialog" aria-modal="true" aria-labelledby="mobile-nav-title-text">
+                <div class="mobile-nav-menu">
+                    <div class="mobile-nav-header">
+                        <span class="mobile-nav-title" id="mobile-nav-title-text">Navigation</span>
+                        <button class="mobile-nav-close" id="mobile-nav-close" aria-label="Close navigation menu">
+                            <span aria-hidden="true">✕</span>
+                        </button>
+                    </div>
+                    <div class="mobile-nav-tabs" role="navigation" aria-label="Mobile navigation">
+                        <button class="mobile-nav-item active" data-view="gallery" aria-label="Gallery view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🖼️</span>
+                            <span class="mobile-nav-text">Gallery</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="autosep" aria-label="Auto-Separate view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
+                            <span class="mobile-nav-text">Auto-Separate</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="manual" aria-label="Manual Sort view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🎮</span>
+                            <span class="mobile-nav-text">Manual Sort</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
+                            <span class="mobile-nav-text">Censored Edit</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🔍</span>
+                            <span class="mobile-nav-text">Similar</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
+                            <span class="mobile-nav-text">Prompt Lab</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="artist" aria-label="Artist ID view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🎨</span>
+                            <span class="mobile-nav-text">Artist ID</span>
+                            <span class="tab-badge tab-badge-experimental">Experimental</span>
+                        </button>
+                    </div>
+                    <div class="mobile-nav-actions">
+                        <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Scan folder for images">
+                            <span aria-hidden="true">📂</span> Scan Folder
+                        </button>
+                        <button class="btn btn-secondary full-width" id="mobile-btn-tag" aria-label="Tag images with AI">
+                            <span>🏷️</span> Tag Images
+                        </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-tags-library">
+                            <span>📚</span> Library
+                        </button>
+                    </div>
+                </div>
+            </div>
             <div class="nav-actions">
-                <button id="btn-clear-db" class="btn btn-ghost danger">
-                    <span>🗑️</span> Clear Gallery
+                <button id="btn-clear-db" class="btn btn-ghost danger" aria-label="Clear gallery database">
+                    <span aria-hidden="true">🗑️</span> Clear Gallery
                 </button>
-                <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts">
-                    <span>📚</span> Library
+                <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library">
+                    <span aria-hidden="true">📚</span> Library
                 </button>
-                <button id="btn-scan" class="btn btn-primary">
-                    <span>📂</span> Scan Folder
+                <button id="btn-help" class="btn-help" title="Show onboarding tour" aria-label="Show help and onboarding tour">
+                    <span aria-hidden="true">❓</span> Help
                 </button>
-                <button id="btn-tag" class="btn btn-secondary">
-                    <span>🏷️</span> Tag Images
+                <button id="btn-scan" class="btn btn-primary" aria-label="Scan folder for images">
+                    <span aria-hidden="true">📂</span> Scan Folder
+                </button>
+                <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI">
+                    <span aria-hidden="true">🏷️</span> Tag Images
                 </button>
             </div>
         </nav>
 
         <!-- Main Content Area -->
-        <main class="main-content">
+        <main id="main-content" class="main-content" role="main" tabindex="-1">
             <!-- Gallery View -->
-            <section id="view-gallery" class="view active">
-                <aside class="filter-sidebar compact">
+            <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
+                <aside class="filter-sidebar compact" aria-label="Image filters">
                     <div class="filter-header">
-                        <h3 class="sidebar-title">Filters</h3>
-                        <button id="btn-open-filters" class="btn btn-primary btn-small"><span>🔍</span> Edit
-                            Filters</button>
+                        <h3 class="sidebar-title" id="filter-sidebar-title">Filters</h3>
+                        <button id="btn-open-filters" class="btn btn-primary btn-small" aria-label="Open filter editor">
+                            <span aria-hidden="true">🔍</span> Edit Filters
+                        </button>
                     </div>
 
                     <!-- Active Filter Summary -->
@@ -106,83 +186,173 @@
                             <span class="summary-label">Prompt:</span>
                             <span class="summary-value" id="summary-prompt">-</span>
                         </div>
-                        <div class="summary-row">
-                            <span class="summary-label">Favorites:</span>
-                            <span class="summary-value" id="summary-favorites">All images</span>
-                        </div>
                         <div class="summary-row" id="artist-filter-row" style="display: none;">
                             <span class="summary-label">Artist:</span>
                             <span class="summary-value" id="summary-artist">-</span>
-                            <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter">✕</button>
+                            <button class="btn-clear-filter" id="btn-clear-artist" title="Clear artist filter" aria-label="Clear artist filter">
+                                <span aria-hidden="true">✕</span>
+                            </button>
                         </div>
                     </div>
 
-                    <button id="btn-toggle-favorites-filter" class="btn btn-ghost full-width">Show Favorites Only</button>
-                    <button id="btn-clear-filters" class="btn btn-ghost full-width">Clear All Filters</button>
+                    <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters">Clear All Filters</button>
 
-                    <div class="divider-h"></div>
+                    <div class="divider-h" aria-hidden="true"></div>
 
-                    <button id="btn-toggle-select" class="btn btn-primary btn-large full-width">
-                        <span>✔</span> Select Images
+                    <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
+                        <span aria-hidden="true">✔</span> Select Images
                     </button>
                 </aside>
+
+                <!-- Mobile Filter Toggle Button -->
+                <button class="mobile-filter-toggle" id="mobile-filter-toggle" aria-label="Toggle filter sidebar" aria-expanded="false">
+                    <span aria-hidden="true">🔍</span>
+                    <span class="filter-badge" id="mobile-filter-badge" style="display: none;" aria-hidden="true">!</span>
+                </button>
 
                 <div class="gallery-container">
                     <div class="gallery-header">
                         <div class="gallery-header-left">
-                            <span class="image-count" id="image-count">0 images</span>
-                            <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image">
-                                <span>🎲</span> Random
+                            <!-- Mobile Filter Toggle (shown in header on mobile) -->
+                            <button class="mobile-filter-header-btn" id="mobile-filter-header-btn" aria-label="Open filters">
+                                <span aria-hidden="true">🔍</span> Filters
                             </button>
-                            <div class="divider-v"></div>
-                            <div class="generator-tabs" id="generator-tabs">
-                                <button class="gen-tab active" data-gen="all">All <span class="gen-count"
-                                        id="count-all">0</span></button>
-                                <button class="gen-tab" data-gen="nai">NovelAI <span class="gen-count"
-                                        id="count-nai">0</span></button>
-                                <button class="gen-tab" data-gen="comfyui">ComfyUI <span class="gen-count"
-                                        id="count-comfyui">0</span></button>
-                                <button class="gen-tab" data-gen="forge">Forge <span class="gen-count"
-                                        id="count-forge">0</span></button>
-                                <button class="gen-tab" data-gen="webui">WebUI <span class="gen-count"
-                                        id="count-webui">0</span></button>
-                                <button class="gen-tab" data-gen="unknown">Unknown <span class="gen-count"
-                                        id="count-unknown">0</span></button>
+                            <span class="image-count" id="image-count" aria-live="polite">0 images</span>
+                            <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image" aria-label="Show random image">
+                                <span aria-hidden="true">🎲</span> Random
+                            </button>
+                            <div class="divider-v" aria-hidden="true"></div>
+                            <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
+                                <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true">All <span class="gen-count" id="count-all">0</span></button>
+                                <button class="gen-tab" data-gen="nai" role="tab" aria-selected="false">NovelAI <span class="gen-count" id="count-nai">0</span></button>
+                                <button class="gen-tab" data-gen="comfyui" role="tab" aria-selected="false">ComfyUI <span class="gen-count" id="count-comfyui">0</span></button>
+                                <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
+                                <button class="gen-tab" data-gen="webui" role="tab" aria-selected="false">WebUI <span class="gen-count" id="count-webui">0</span></button>
+                                <button class="gen-tab" data-gen="unknown" role="tab" aria-selected="false">Unknown <span class="gen-count" id="count-unknown">0</span></button>
                             </div>
                         </div>
                         <div class="view-options">
-                            <select id="gallery-sort" class="sort-dropdown" title="Sort images">
-                                <option value="newest">📅 Newest</option>
-                                <option value="oldest">📅 Oldest</option>
-                                <option value="name_asc">🔤 Name (A→Z)</option>
-                                <option value="name_desc">🔤 Name (Z→A)</option>
-                                <option value="generator">🛠️ Generator</option>
-                                <option value="prompt_length">📝 Prompt Length</option>
-                                <option value="tag_count">🏷️ Most Tags</option>
-                                <option value="rating">⚠️ Rating (NSFW↑)</option>
-                                <option value="character_count">👤 Characters</option>
-                                <option value="file_size">💾 Largest File</option>
-                                <option value="file_size_asc">💾 Smallest File</option>
-                                <option value="random">🎲 Random</option>
+                            <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images">
+                                <option value="newest">Newest</option>
+                                <option value="oldest">Oldest</option>
+                                <option value="name_asc">Name (A-Z)</option>
+                                <option value="name_desc">Name (Z-A)</option>
+                                <option value="generator">Generator</option>
+                                <option value="prompt_length">Prompt Length</option>
+                                <option value="tag_count">Most Tags</option>
+                                <option value="rating">Rating (NSFW first)</option>
+                                <option value="character_count">Characters</option>
+                                <option value="file_size">Largest File</option>
+                                <option value="file_size_asc">Smallest File</option>
+                                <option value="random">Random</option>
                             </select>
-                            <div class="divider-v"></div>
-                            <button class="view-btn" data-size="grid" title="Grid view">
+                            <div class="divider-v" aria-hidden="true"></div>
+                            <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true">
                                 <span>◼◼</span>
                             </button>
-                            <button class="view-btn" data-size="large" title="Large view">
-                                <span>◼</span>
+                            <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false">
+                                <span aria-hidden="true">◼</span>
                             </button>
-                            <button class="view-btn" data-size="waterfall" title="Waterfall view">
-                                <span>▥</span>
+                            <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false">
+                                <span aria-hidden="true">▥</span>
                             </button>
                         </div>
 
                     </div>
-                    <div class="gallery-grid" id="gallery-grid">
-                        <!-- Images will be inserted here -->
+                    <div class="gallery-grid" id="gallery-grid" role="grid" aria-label="Image gallery" aria-describedby="gallery-loading">
+                        <!-- Initial skeleton content - will be replaced when app loads -->
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-gallery-item skeleton-item" aria-hidden="true">
+                            <div class="skeleton-image"></div>
+                            <div class="skeleton-overlay">
+                                <div class="skeleton-badge skeleton"></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="gallery-loading" id="gallery-loading">
-                        <div class="spinner"></div>
+                    <div id="gallery-empty-state" style="display:none" role="status">
+                        <div class="empty-state-card">
+                            <span class="empty-icon">🖼️</span>
+                            <h3>No Images Loaded</h3>
+                            <p>Scan a folder to start managing your AI-generated images</p>
+                            <div class="empty-actions">
+                                <button class="btn btn-primary" id="empty-state-scan-btn">
+                                    <span aria-hidden="true">📂</span> Scan Folder
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gallery-load-more" id="gallery-load-more" style="display:none">
+                        <button class="btn btn-secondary" id="load-more-btn" aria-label="Load more images">
+                            Load More Images
+                        </button>
+                    </div>
+                    <div class="gallery-loading" id="gallery-loading" role="status" aria-live="polite" aria-label="Loading status">
+                        <div class="spinner" aria-hidden="true"></div>
                         <span>Loading images...</span>
                     </div>
                 </div>
@@ -235,6 +405,10 @@
                                 <span class="stat-number">0</span>
                                 <span class="stat-label">images will be moved</span>
                             </div>
+                            <div class="autosep-preview-list" id="autosep-preview-list">
+                                <div class="autosep-preview-empty">Click "Preview Results" to review matching images before moving them.</div>
+                            </div>
+                            <div class="autosep-preview-hint">Preview shows the first few matches only.</div>
                             <button class="btn btn-secondary" id="btn-preview-autosep">Preview Results</button>
                         </div>
 
@@ -247,6 +421,16 @@
 
             <!-- Manual Sort View -->
             <section id="view-manual" class="view">
+                <!-- Mobile Warning for Manual Sort -->
+                <div class="mobile-warning" id="manual-sort-mobile-warning">
+                    <div class="mobile-warning-content">
+                        <span class="mobile-warning-icon">⚠️</span>
+                        <h3>Keyboard Required</h3>
+                        <p>Manual Sort mode uses WASD keys for quick sorting. Please use a device with a keyboard for the best experience.</p>
+                        <button class="btn btn-secondary" id="return-to-gallery-btn">Return to Gallery</button>
+                    </div>
+                </div>
+
                 <div class="manual-sort-container">
                     <!-- Setup Panel (shown initially) -->
                     <div class="sort-setup" id="sort-setup">
@@ -257,7 +441,7 @@
                             <div class="folder-slot" data-key="w">
                                 <div class="folder-key">W</div>
                                 <div class="folder-arrow">↑</div>
-                                <input type="text" class="folder-path-input" placeholder="D:\sorted\favorites"
+                                <input type="text" class="folder-path-input" placeholder="D:\sorted\top"
                                     data-key="w">
                                 <button class="btn btn-small btn-secondary browse-folder">📁</button>
                             </div>
@@ -322,6 +506,13 @@
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 Start Sorting
                         </button>
+
+                        <!-- Resume banner shown when a saved session is detected -->
+                        <div id="sort-resume-banner" style="display:none; align-items:center; gap:12px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
+                            <span>Unfinished session detected: <strong class="resume-count"></strong></span>
+                            <button class="btn btn-primary" id="btn-resume-sorting">Resume</button>
+                            <button class="btn btn-secondary" id="btn-discard-session">Discard</button>
+                        </div>
                     </div>
 
                     <!-- Sorting Interface (shown during sorting) -->
@@ -330,7 +521,7 @@
                         <div class="sort-folder sort-folder-top" data-key="w">
                             <div class="folder-indicator">
                                 <span class="key-hint">W</span>
-                                <span class="folder-name" id="folder-name-w">Favorites</span>
+                                <span class="folder-name" id="folder-name-w">Top</span>
                             </div>
                         </div>
 
@@ -428,6 +619,33 @@
                                 <span id="sort-progress-text">0 / 0</span>
                                 <span class="progress-hint">SPACE to skip • Z to undo • ESC to exit</span>
                             </div>
+                        </div>
+
+                        <!-- Keyboard Legend -->
+                        <div class="wasd-legend" style="
+                            position: absolute;
+                            bottom: 70px;
+                            right: 16px;
+                            background: var(--glass-bg, rgba(15,15,30,0.75));
+                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
+                            backdrop-filter: blur(12px);
+                            -webkit-backdrop-filter: blur(12px);
+                            border-radius: 10px;
+                            padding: 10px 14px;
+                            font-size: 12px;
+                            color: rgba(255,255,255,0.75);
+                            line-height: 1.8;
+                            pointer-events: none;
+                            z-index: 10;
+                            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                        ">
+                            <div style="font-weight:600; margin-bottom:4px; color:rgba(168,85,247,0.9); letter-spacing:0.05em;">⌨ 鍵盤操作</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">W</kbd> 上方資料夾</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">A</kbd> 左方資料夾</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">S</kbd> 下方資料夾</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">D</kbd> 右方資料夾</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">Z</kbd> 復原上一步</div>
+                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">Space</kbd> 略過</div>
                         </div>
 
                         <!-- Exit Button -->
@@ -774,7 +992,7 @@
                             <select class="input" id="promptlab-set-select">
                                 <option value="">-- Select Tag Set --</option>
                             </select>
-                            <button class="btn btn-sm btn-secondary" id="btn-promptlab-apply-tagset">Apply</button>
+                            <button class="btn btn-small btn-secondary" id="btn-promptlab-apply-tagset">Apply</button>
                         </div>
                     </div>
 
@@ -783,8 +1001,8 @@
                         <div class="promptlab-builder-header">
                             <h4>Prompt Slots</h4>
                             <div class="promptlab-builder-actions">
-                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 Randomize</button>
-                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ Clear</button>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 Randomize</button>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ Clear</button>
                             </div>
                         </div>
                         <div class="promptlab-slots-container" id="promptlab-slots">
@@ -797,6 +1015,7 @@
                         <div class="promptlab-output-header">
                             <h4>Generated Prompt</h4>
                             <div class="promptlab-gen-buttons">
+                                <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 Use in Gallery</button>
                                 <button class="btn btn-primary" id="btn-promptlab-generate">Generate</button>
                                 <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy to clipboard">📋 Copy</button>
                                 <button class="btn btn-secondary" id="btn-promptlab-validate" title="Check for issues">✅ Validate</button>
@@ -810,7 +1029,7 @@
                         <div class="promptlab-presets-section">
                             <div class="promptlab-presets-header">
                                 <h5>Presets</h5>
-                                <button class="btn btn-sm btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 Save</button>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 Save</button>
                             </div>
                             <div id="promptlab-presets">
                                 <div class="preset-empty">No presets saved yet.</div>
@@ -823,6 +1042,7 @@
             <!-- Artist Identification View -->
             <section id="view-artist" class="view">
                 <div class="artist-container">
+                    <div class="artist-results-header-note">Experimental feature — model availability and result quality may vary.</div>
                     <!-- Stats Header -->
                     <div class="artist-stats" id="artist-stats">
                         <div class="stat-card">
@@ -932,28 +1152,34 @@
         </main>
 
         <!-- Image Preview Modal -->
-        <div class="modal" id="image-modal">
-            <div class="modal-backdrop"></div>
+        <div class="modal" id="image-modal" role="dialog" aria-modal="true" aria-labelledby="modal-filename">
+            <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-image-workspace">
-                <button class="modal-close" id="modal-close">✕</button>
+                <button class="modal-close" id="modal-close" aria-label="Close image preview">
+                    <span aria-hidden="true">✕</span>
+                </button>
                 <div class="modal-image-column">
                     <div class="modal-image-toolbar">
-                        <button class="btn btn-ghost btn-small" id="modal-prev-image">← Prev</button>
-                        <button class="btn btn-primary btn-small" id="modal-favorite-toggle">★ Favorite</button>
-                        <button class="btn btn-ghost btn-small" id="modal-next-image">Next →</button>
+                        <button class="btn btn-ghost btn-small" id="modal-prev-image" aria-label="Previous image">
+                            <span aria-hidden="true">←</span> Prev
+                        </button>
+                        <button class="btn btn-ghost btn-small" id="modal-next-image" aria-label="Next image">
+                            Next <span aria-hidden="true">→</span>
+                        </button>
                     </div>
                     <div class="modal-image-container">
-                        <img id="modal-image" src="" alt="Preview">
+                        <img id="modal-image" src="" alt="Image preview">
                     </div>
                 </div>
                 <div class="modal-info modal-info-workspace">
                     <div class="modal-sticky-actions">
-                        <button class="btn btn-secondary btn-small" id="btn-copy-prompt">Copy Prompt</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-negative">Copy Negative</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-tags">Copy Tags</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-params">Copy Params</button>
-                        <button class="btn btn-primary btn-small" id="btn-copy-all">Copy All</button>
-                        <button class="btn btn-ghost btn-small" id="btn-reparse-metadata">Reparse</button>
+                        <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format">View as SD</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-prompt" aria-label="Copy prompt to clipboard">Copy Prompt</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-negative" aria-label="Copy negative prompt to clipboard">Copy Negative</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-tags" aria-label="Copy tags to clipboard">Copy Tags</button>
+                        <button class="btn btn-secondary btn-small" id="btn-copy-params" aria-label="Copy parameters to clipboard">Copy Params</button>
+                        <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all metadata to clipboard">Copy All</button>
+                        <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Reparse image metadata">Reparse</button>
                     </div>
                     <h3 id="modal-filename">filename.png</h3>
                     <div class="modal-meta">
@@ -1021,45 +1247,44 @@
         </div>
 
         <!-- Scan Modal -->
-        <div class="modal" id="scan-modal">
-            <div class="modal-backdrop"></div>
+        <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
-                <h3>Scan Folder</h3>
+                <h3 id="scan-modal-title">Scan Folder</h3>
                 <div class="form-group">
-                    <label>Folder Path</label>
-                    <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs">
+                    <label for="scan-folder-path" id="scan-folder-path-label">Folder Path</label>
+                    <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="scan-recursive" checked>
-                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-custom" aria-hidden="true"></span>
                         <span class="checkbox-text">Include subfolders</span>
                     </label>
                 </div>
-                <div class="progress-container" id="scan-progress-container" style="display: none;">
+                <div class="progress-container" id="scan-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Scan progress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="scan-progress-fill"></div>
                     </div>
                     <span class="progress-text" id="scan-progress-text">Starting...</span>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-scan">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-scan">Start Scan</button>
+                    <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start scanning folder">Start Scan</button>
                 </div>
             </div>
         </div>
 
         <!-- Tag Modal -->
-        <div class="modal" id="tag-modal">
-            <div class="modal-backdrop"></div>
+        <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-medium">
-                <h3>Tag Images with WD14</h3>
-                <p class="modal-description">Uses WD14 tagger to automatically tag your images with anime/illustration
-                    tags.</p>
+                <h3 id="tag-modal-title">Tag Images with WD14</h3>
+                <p class="modal-description">Uses WD14 tagger to automatically tag your images with anime/illustration tags.</p>
 
                 <div class="form-group">
-                    <label>Model</label>
-                    <select id="tag-model-select" class="input-field">
+                    <label for="tag-model-select" id="tag-model-select-label">Model</label>
+                    <select id="tag-model-select" class="input-field" aria-describedby="tag-model-select-label">
                         <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3 (Best Quality)</option>
                         <option value="wd-swinv2-tagger-v3">wd-swinv2-tagger-v3</option>
                         <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
@@ -1209,7 +1434,6 @@
             <span id="selection-count">0 items selected</span>
             <div class="fab-buttons">
                 <button id="btn-select-all" class="btn btn-secondary"><span>✓✓</span> Select All</button>
-                <button id="btn-add-favorites" class="btn btn-primary"><span>★</span> Add to Favorites</button>
                 <button id="btn-export-selected" class="btn btn-primary"><span>📤</span> Export Prompts</button>
                 <button id="btn-export-tags-selected" class="btn btn-secondary"><span>🏷️</span> Export Tags</button>
                 <button id="btn-batch-export-tags" class="btn btn-secondary"><span>📝</span> Export Tags to
@@ -1263,45 +1487,37 @@
 
 
         <!-- Unified Filter Modal -->
-        <div class="modal" id="filter-modal">
-            <div class="modal-backdrop"></div>
+        <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large">
-                <button class="modal-close" id="btn-close-filter-modal">✕</button>
-                <h3>🔍 Filter Images</h3>
+                <button class="modal-close" id="btn-close-filter-modal" aria-label="Close filter modal">
+                    <span aria-hidden="true">✕</span>
+                </button>
+                <h3 id="filter-modal-title">Filter Images</h3>
 
                 <div class="filter-modal-grid">
                     <!-- Left Column: Quick Filters -->
                     <div class="filter-column">
                         <div class="filter-section">
-                            <h4>Generators</h4>
-                            <div class="filter-options" id="modal-generator-filters">
-                                <label class="checkbox-label"><input type="checkbox" value="comfyui" checked><span
-                                        class="checkbox-custom"></span><span
-                                        class="checkbox-text">ComfyUI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="nai" checked><span
-                                        class="checkbox-custom"></span><span
-                                        class="checkbox-text">NovelAI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="webui" checked><span
-                                        class="checkbox-custom"></span><span class="checkbox-text">WebUI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="forge" checked><span
-                                        class="checkbox-custom"></span><span class="checkbox-text">Forge</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span
-                                        class="checkbox-custom"></span><span
-                                        class="checkbox-text">Unknown</span></label>
+                            <h4 id="generator-filters-heading">Generators</h4>
+                            <div class="filter-options" id="modal-generator-filters" role="group" aria-labelledby="generator-filters-heading">
+                                <label class="checkbox-label"><input type="checkbox" value="comfyui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">ComfyUI</span></label>
+                                <label class="checkbox-label"><input type="checkbox" value="nai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">NovelAI</span></label>
+                                <label class="checkbox-label"><input type="checkbox" value="webui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">WebUI</span></label>
+                                <label class="checkbox-label"><input type="checkbox" value="forge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Forge</span></label>
+                                <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Unknown</span></label>
                             </div>
                         </div>
 
-                        <button class="btn btn-ghost" id="btn-open-library-from-filter"
-                            style="margin-top: 10px; width: 100%;">
-                            📚 Browse Library
+                        <button class="btn btn-ghost" id="btn-open-library-from-filter" style="margin-top: 10px; width: 100%;" aria-label="Open tags and prompts library">
+                            <span aria-hidden="true">📚</span> Browse Library
                         </button>
 
                         <div class="filter-section">
-                            <h4>Dimensions & Aspect</h4>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                                <input type="number" id="filter-min-width" class="input-field input-small"
-                                    placeholder="W min" min="0" step="64" style="width: 65px;">
-                                <span style="color: var(--text-muted);">–</span>
+                            <h4 id="dimensions-heading">Dimensions & Aspect</h4>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;" role="group" aria-labelledby="dimensions-heading">
+                                <input type="number" id="filter-min-width" class="input-field input-small" placeholder="W min" min="0" step="64" style="width: 65px;" aria-label="Minimum width">
+                                <span style="color: var(--text-muted);" aria-hidden="true">–</span>
                                 <input type="number" id="filter-max-width" class="input-field input-small"
                                     placeholder="W max" min="0" step="64" style="width: 65px;">
                                 <span style="margin: 0 4px; color: var(--text-muted);">×</span>
@@ -1531,6 +1747,18 @@
     <audio id="sound-combo" preload="auto"></audio>
     <audio id="sound-undo" preload="auto"></audio>
 
+    <script src="/static/js/logger.js"></script>
+    <!-- Non-conflicting utility modules (define NEW functions not in app.js) -->
+    <script src="/static/js/modules/utils/dom.js"></script>
+    <script src="/static/js/modules/utils/a11y.js"></script>
+    <script src="/static/js/modules/utils/errors.js"></script>
+    <script src="/static/js/modules/utils/filters.js"></script>
+    <!-- Component modules (non-conflicting with app.js) -->
+    <script src="/static/js/modules/components/skeleton.js"></script>
+    <script src="/static/js/modules/components/onboarding.js"></script>
+    <script src="/static/js/modules/components/keyboard-shortcuts.js"></script>
+    <script src="/static/js/modules/components/virtual-list.js"></script>
+    <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/autosep.js"></script>
@@ -1541,6 +1769,7 @@
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
+    <!-- Help button is handled by keyboard-shortcuts.js -->
 </body>
 
 </html>

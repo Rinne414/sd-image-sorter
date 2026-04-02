@@ -4,10 +4,27 @@ Supports automatic model download from HuggingFace and local model loading.
 """
 import os
 import json
+import logging
+import threading
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import onnxruntime as ort  # type: ignore
 from PIL import Image
 from pathlib import Path
+
+from config import (
+    TAGGER_MODELS as MODELS,
+    DEFAULT_TAGGER_MODEL as DEFAULT_MODEL,
+    TAGGER_GENERAL_THRESHOLD,
+    TAGGER_CHARACTER_THRESHOLD,
+    TAGGER_USE_GPU,
+    RATING_CATEGORIES as RATINGS,
+    get_wd14_model_dir,
+)
+
+logger = logging.getLogger(__name__)
 
 # Will be imported lazily
 ort = None
@@ -18,115 +35,56 @@ def _ensure_imports():
     """Lazily import heavy dependencies."""
     global ort, hf_hub
     if ort is None:
-        import onnxruntime as ort_module
+        import onnxruntime as ort_module  # type: ignore
         ort = ort_module
     if hf_hub is None:
         import huggingface_hub as hf_module
         hf_hub = hf_module
 
 
-# Model configurations - eva02-large is the best quality model
-MODELS = {
-    "wd-eva02-large-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-eva02-large-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
-    },
-    "wd-swinv2-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
-    },
-    "wd-convnext-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-convnext-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
-    },
-    "wd-vit-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-vit-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
-    },
-    "wd-vit-large-tagger-v3": {
-        "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
-        "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
-    }
-}
-
-# Default to eva02-large for best quality
-DEFAULT_MODEL = "wd-eva02-large-tagger-v3"
-
-# Rating categories
-RATINGS = ["general", "sensitive", "questionable", "explicit"]
-
-
 class WD14Tagger:
     """WD14 Tagger for anime-style image tagging using ONNX."""
-    
+
     def __init__(
         self,
         model_name: str = DEFAULT_MODEL,
         model_path: Optional[str] = None,
         tags_path: Optional[str] = None,
         model_dir: Optional[str] = None,
-        threshold: float = 0.35,
-        character_threshold: float = 0.85,
-        use_gpu: bool = True
+        threshold: float = TAGGER_GENERAL_THRESHOLD,
+        character_threshold: float = TAGGER_CHARACTER_THRESHOLD,
+        use_gpu: bool = TAGGER_USE_GPU
     ):
         """
         Initialize the tagger.
-        
+
         Args:
             model_name: One of the supported model names (for auto-download)
             model_path: Direct path to .onnx file (overrides model_name)
             tags_path: Direct path to selected_tags.csv (required if model_path is set)
-            model_dir: Directory to store/load models. If None, uses cache dir.
+            model_dir: Directory to store/load models. If None, uses config default.
             threshold: Confidence threshold for general tags
             character_threshold: Confidence threshold for character tags
             use_gpu: Whether to use GPU acceleration (CUDA) if available
         """
         _ensure_imports()
-        
+
         self.model_name = model_name
         self.model_path = model_path
         self.tags_path = tags_path
-        self.model_dir = model_dir or self._get_default_model_dir()
+        self.model_dir = model_dir or get_wd14_model_dir()
         self.threshold = threshold
         self.character_threshold = character_threshold
         self.use_gpu = use_gpu
-        
-        self.session = None
-        self.tags = []
-        self.general_tags = []
-        self.character_tags = []
-        self.rating_tags = []
-        self.rating_indices = {}  # Map rating name to index
-        
+
+        self.session: Optional["ort.InferenceSession"] = None
+        self.tags: List[str] = []
+        self.general_tags: List[Tuple[int, str]] = []
+        self.character_tags: List[Tuple[int, str]] = []
+        self.rating_tags: List[Tuple[int, str]] = []
+        self.rating_indices: Dict[str, int] = {}  # Map rating name to index
+
         self._loaded = False
-    
-    def _get_default_model_dir(self) -> str:
-        """Get default model directory - prefers project folder over user cache."""
-        # Priority 1: Project folder (same drive as code)
-        project_model_dir = os.path.join(os.path.dirname(__file__), "..", "models", "wd14-tagger")
-        project_model_dir = os.path.abspath(project_model_dir)
-        
-        # Check if it exists OR create it (prefer local storage)
-        if os.path.exists(project_model_dir):
-            return project_model_dir
-        
-        # Create project folder for local storage
-        try:
-            os.makedirs(project_model_dir, exist_ok=True)
-            print(f"Created model directory: {project_model_dir}")
-            return project_model_dir
-        except Exception as e:
-            print(f"Could not create project model dir: {e}")
-        
-        # Fallback: User cache (C: drive)
-        cache_dir = os.path.expanduser("~/.cache/wd14-tagger")
-        os.makedirs(cache_dir, exist_ok=True)
-        return cache_dir
     
     def _validate_model_file(self, model_path: str) -> bool:
         """
@@ -140,11 +98,11 @@ class WD14Tagger:
         try:
             file_size = os.path.getsize(model_path)
             if file_size < 1024 * 1024:  # Less than 1MB is suspicious
-                print(f"Warning: Model file {model_path} is suspiciously small ({file_size} bytes)")
+                logger.warning(f"Model file {model_path} is suspiciously small ({file_size} bytes)")
                 return False
-        except:
+        except OSError:
             return False
-        
+
         # Try to read the file header to verify it's a valid ONNX file
         try:
             with open(model_path, 'rb') as f:
@@ -153,7 +111,7 @@ class WD14Tagger:
                 if len(header) < 4:
                     return False
         except Exception as e:
-            print(f"Error reading model file header: {e}")
+            logger.error(f"Error reading model file header: {e}")
             return False
         
         return True
@@ -194,35 +152,37 @@ class WD14Tagger:
         if not os.path.exists(model_path):
             needs_download = True
         elif not self._validate_model_file(model_path):
-            print(f"Model file {model_path} appears corrupted. Re-downloading...")
+            logger.warning(f"Model file {model_path} appears corrupted. Re-downloading...")
             needs_download = True
             # Delete corrupted file
             try:
                 os.remove(model_path)
             except Exception as e:
-                print(f"Warning: Could not delete corrupted model file: {e}")
-        
+                logger.warning(f"Could not delete corrupted model file: {e}")
+
         # Download if needed
         if needs_download:
-            print(f"Downloading model {self.model_name}...")
+            logger.info(f"Downloading model {self.model_name}...")
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            
+
             try:
+                assert hf_hub is not None
                 model_path = hf_hub.hf_hub_download(
                     repo_id=repo_id,
                     filename=config["model_file"],
                     local_dir=os.path.join(self.model_dir, self.model_name)
                 )
-                
+
                 # Validate after download
                 if not self._validate_model_file(model_path):
                     raise ValueError(f"Downloaded model file is invalid. Please check your internet connection and try again.")
             except Exception as e:
-                print(f"Error downloading model: {e}")
+                logger.error(f"Error downloading model: {e}")
                 raise
-        
+
         if not os.path.exists(tags_path):
-            print(f"Downloading tags file...")
+            logger.info("Downloading tags file...")
+            assert hf_hub is not None
             tags_path = hf_hub.hf_hub_download(
                 repo_id=repo_id,
                 filename=config["tags_file"],
@@ -269,82 +229,83 @@ class WD14Tagger:
         """Load the model and tags."""
         if self._loaded:
             return
-        
+
         model_path, tags_path = self._get_model_paths()
-        
+
         # Load ONNX model with error handling
-        print(f"Loading model from {model_path}...")
-        
+        logger.info(f"Loading model from {model_path}...")
+
         # Choose providers based on use_gpu setting
         if self.use_gpu:
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
         else:
             providers = ['CPUExecutionProvider']
-        
+
         available_providers = ort.get_available_providers()
         providers = [p for p in providers if p in available_providers]
-        print(f"Using providers: {providers} (GPU {'enabled' if self.use_gpu else 'disabled'})")
-        
+        logger.info(f"Using providers: {providers} (GPU {'enabled' if self.use_gpu else 'disabled'})")
+
         # Create session options to prevent CPU overload / BSOD
         # This fixes CLOCK_WATCHDOG_TIMEOUT crashes
         sess_options = ort.SessionOptions()
-        
+
         # Limit threads to prevent CPU overload (use half of available cores, min 1)
         import multiprocessing
         num_threads = max(1, multiprocessing.cpu_count() // 2)
         sess_options.intra_op_num_threads = num_threads
         sess_options.inter_op_num_threads = 1  # Sequential graph execution
-        
+
         # Disable thread spinning to reduce CPU usage (prevents BSOD)
         sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
-        
+
         # Use sequential execution mode (safer for CPU)
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-        
+
         # Optimize for inference
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        
-        print(f"ONNX session using {num_threads} threads (spinning disabled)")
-        
+
+        logger.debug(f"ONNX session using {num_threads} threads (spinning disabled)")
+
         try:
             self.session = ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
         except Exception as e:
             error_msg = str(e)
             if "INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg:
                 # Model file is corrupted
-                print(f"ERROR: Model file is corrupted: {model_path}")
-                print(f"Attempting to delete and re-download...")
-                
+                logger.error(f"Model file is corrupted: {model_path}")
+                logger.info("Attempting to delete and re-download...")
+
                 # Try to delete corrupted file
                 try:
                     os.remove(model_path)
-                    print(f"Deleted corrupted model file.")
+                    logger.info("Deleted corrupted model file.")
                 except Exception as del_error:
-                    print(f"Could not delete corrupted file: {del_error}")
-                
+                    logger.warning(f"Could not delete corrupted file: {del_error}")
+
                 # Try to re-download
-                print("Re-downloading model...")
+                logger.info("Re-downloading model...")
                 model_path, tags_path = self._download_model()
-                
+
                 # Try loading again
                 try:
                     self.session = ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
-                    print("Successfully loaded model after re-download!")
+                    logger.info("Successfully loaded model after re-download!")
                 except Exception as e2:
                     raise RuntimeError(f"Failed to load model even after re-download. Error: {e2}")
             else:
                 # Some other ONNX error
                 raise RuntimeError(f"Failed to load ONNX model: {error_msg}")
-        
+
         # Load tags
         self._load_tags(tags_path)
-        
+
         self._loaded = True
-        print(f"Model loaded. Using providers: {self.session.get_providers()}")
+        logger.info(f"Model loaded. Using providers: {self.session.get_providers()}")
     
     def _preprocess(self, image: Image.Image) -> np.ndarray:
         """Preprocess image for inference."""
         # Get input size from model
+        assert self.session is not None
         input_shape = self.session.get_inputs()[0].shape
         size = input_shape[2] if len(input_shape) == 4 else 448
         
@@ -354,7 +315,7 @@ class WD14Tagger:
         # Resize keeping aspect ratio
         old_size = image.size
         ratio = float(size) / max(old_size)
-        new_size = tuple([int(x * ratio) for x in old_size])
+        new_size = (int(old_size[0] * ratio), int(old_size[1] * ratio))
         image = image.resize(new_size, Image.Resampling.LANCZOS)
         
         # Pad to square
@@ -395,13 +356,14 @@ class WD14Tagger:
         image.close()  # Free memory immediately
         
         # Run inference
+        assert self.session is not None
         input_name = self.session.get_inputs()[0].name
         output = self.session.run(None, {input_name: input_data})[0]
         
         # Process output
         probs = output[0]
         
-        result = {
+        result: Dict[str, Any] = {
             "general_tags": [],
             "character_tags": [],
             "rating": "unknown",
@@ -454,7 +416,7 @@ class WD14Tagger:
             try:
                 results.append(self.tag(path))
             except Exception as e:
-                print(f"Error tagging {path}: {e}")
+                logger.error(f"Error tagging {path}: {e}")
                 results.append({
                     "general_tags": [],
                     "character_tags": [],
@@ -472,6 +434,7 @@ class WD14Tagger:
 # Singleton instance
 _tagger = None
 _current_settings = {}
+_tagger_lock = threading.Lock()
 
 def get_tagger(
     model_name: str = DEFAULT_MODEL,
@@ -484,31 +447,32 @@ def get_tagger(
 ) -> WD14Tagger:
     """Get or create the tagger instance."""
     global _tagger, _current_settings
-    
-    new_settings = {
-        "model_name": model_name,
-        "model_path": model_path,
-        "tags_path": tags_path,
-        "use_gpu": use_gpu
-    }
-    
-    # Reload if settings changed or forced
-    if force_reload or _tagger is None or new_settings != _current_settings:
-        _tagger = WD14Tagger(
-            model_name=model_name,
-            model_path=model_path,
-            tags_path=tags_path,
-            threshold=threshold,
-            character_threshold=character_threshold,
-            use_gpu=use_gpu
-        )
-        _current_settings = new_settings
-    else:
-        # Just update thresholds
-        _tagger.threshold = threshold
-        _tagger.character_threshold = character_threshold
-    
-    return _tagger
+
+    with _tagger_lock:
+        new_settings = {
+            "model_name": model_name,
+            "model_path": model_path,
+            "tags_path": tags_path,
+            "use_gpu": use_gpu
+        }
+
+        # Reload if settings changed or forced
+        if force_reload or _tagger is None or new_settings != _current_settings:
+            _tagger = WD14Tagger(
+                model_name=model_name,
+                model_path=model_path,
+                tags_path=tags_path,
+                threshold=threshold,
+                character_threshold=character_threshold,
+                use_gpu=use_gpu
+            )
+            _current_settings = new_settings
+        else:
+            # Just update thresholds
+            _tagger.threshold = threshold
+            _tagger.character_threshold = character_threshold
+
+        return _tagger
 
 
 def get_available_models() -> List[str]:

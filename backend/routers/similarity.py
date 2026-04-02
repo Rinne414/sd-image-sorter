@@ -2,117 +2,204 @@
 Similarity search router.
 
 Endpoints for image embedding, similarity search, and duplicate detection.
+
+Refactored to use Service Layer pattern with dependency injection.
 """
-import threading
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Query, BackgroundTasks
 
-import database as db
-from similarity import get_similarity_index
+from services.similarity_service import SimilarityService
 
 
 router = APIRouter(prefix="/api/similarity", tags=["similarity"])
 
+# Service instance - will be set via dependency injection
+_similarity_service: Optional[SimilarityService] = None
 
-@router.post("/embed")
+
+def get_similarity_service() -> SimilarityService:
+    """Dependency injection for SimilarityService."""
+    global _similarity_service
+    if _similarity_service is None:
+        _similarity_service = SimilarityService()
+    return _similarity_service
+
+
+def set_similarity_service(service: SimilarityService) -> None:
+    """Set the similarity service instance."""
+    global _similarity_service
+    _similarity_service = service
+
+
+@router.post(
+    "/embed",
+    summary="Start image embedding",
+    description="""
+Start generating CLIP embeddings for images (runs in background).
+
+Embeddings are used for similarity search and duplicate detection.
+If `image_ids` is provided, only those images are embedded.
+Otherwise, all images without embeddings are processed.
+
+Poll `/api/similarity/progress` to track embedding status.
+    """,
+    responses={
+        200: {
+            "description": "Embedding started",
+            "content": {
+                "application/json": {
+                    "example": {"status": "started", "message": "Embedding started in background"}
+                }
+            }
+        }
+    }
+)
 async def embed_images(
     background_tasks: BackgroundTasks,
     image_ids: Optional[list] = None,
+    service: SimilarityService = Depends(get_similarity_service),
 ):
-    """
-    Start embedding images (background task).
-
-    If image_ids is provided, only embed those images.
-    Otherwise, embed all images without embeddings.
-    """
-    index = get_similarity_index(db)
-    progress = index.get_progress()
-    if progress["running"]:
-        return {
-            "status": "already_running",
-            "progress": progress,
-        }
-
-    # Run in background thread
-    def _run_embed():
-        index.embed_batch(image_ids)
-
-    thread = threading.Thread(target=_run_embed, daemon=True)
-    thread.start()
-
-    return {"status": "started", "message": "Embedding started in background"}
+    """Start embedding images in the background."""
+    return service.embed_images(background_tasks, image_ids)
 
 
 @router.get("/progress")
-async def get_embed_progress():
+async def get_embed_progress(
+    service: SimilarityService = Depends(get_similarity_service),
+):
     """Get current embedding progress."""
-    index = get_similarity_index(db)
-    return index.get_progress()
+    return service.get_embed_progress()
 
 
-@router.get("/search/{image_id}")
+@router.get(
+    "/search/{image_id}",
+    summary="Find similar images",
+    description="""
+Find images similar to a specific image using CLIP embeddings.
+
+Returns images ranked by cosine similarity score. Higher scores indicate
+greater visual/semantic similarity.
+
+**Threshold recommendations:**
+- `0.95+`: Near-duplicates
+- `0.80-0.95`: Very similar images
+- `0.60-0.80`: Somewhat similar
+- `0.50-0.60`: Loosely related
+    """,
+    responses={
+        200: {
+            "description": "Similar images found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "query_image_id": 1,
+                        "results": [
+                            {"image_id": 42, "similarity": 0.95, "filename": "similar_image.png"}
+                        ],
+                        "count": 1
+                    }
+                }
+            }
+        }
+    }
+)
 async def search_similar(
     image_id: int,
-    limit: int = Query(20, ge=1, le=100),
-    threshold: float = Query(0.5, ge=0.0, le=1.0),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum results (1-100)"),
+    threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold (0.0-1.0)"),
+    service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to a given image ID."""
-    index = get_similarity_index(db)
-    results = index.search_by_id(image_id, limit=limit, threshold=threshold)
-    return {
-        "query_image_id": image_id,
-        "results": results,
-        "count": len(results),
+    return service.search_similar(image_id, limit, threshold)
+
+
+@router.post(
+    "/search-upload",
+    summary="Find similar images by upload",
+    description="""
+Find images similar to an uploaded image file.
+
+Generates a CLIP embedding for the uploaded image on-the-fly
+and searches the database for similar images.
+    """,
+    responses={
+        200: {
+            "description": "Similar images found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "results": [
+                            {"image_id": 42, "similarity": 0.89, "filename": "similar_image.png"}
+                        ],
+                        "count": 1
+                    }
+                }
+            }
+        },
+        400: {"description": "Empty file uploaded"}
     }
-
-
-@router.post("/search-upload")
+)
 async def search_by_upload(
-    file: UploadFile = File(...),
-    limit: int = Query(20, ge=1, le=100),
-    threshold: float = Query(0.5, ge=0.0, le=1.0),
+    file: UploadFile = File(..., description="Image file to search for similar images"),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum results (1-100)"),
+    threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold"),
+    service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to an uploaded image."""
-    image_data = await file.read()
-    if not image_data:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    return await service.search_by_upload(file, limit, threshold)
 
-    index = get_similarity_index(db)
-    results = index.search_by_upload(image_data, limit=limit, threshold=threshold)
-    return {
-        "results": results,
-        "count": len(results),
+
+@router.get(
+    "/duplicates",
+    summary="Find duplicate images",
+    description="""
+Find near-duplicate image pairs in the database.
+
+Compares all embedded images against each other and returns pairs
+with similarity above the threshold. Useful for identifying
+duplicate or near-duplicate images.
+
+**Recommended thresholds:**
+- `0.98`: Exact or near-exact duplicates
+- `0.95`: Very similar (minor edits, crops)
+- `0.90`: Similar (same scene, different shot)
+    """,
+    responses={
+        200: {
+            "description": "Duplicate pairs found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "duplicates": [
+                            {
+                                "image_id_1": 1,
+                                "image_id_2": 2,
+                                "similarity": 0.98,
+                                "filename_1": "image_001.png",
+                                "filename_2": "image_002.png"
+                            }
+                        ],
+                        "count": 1,
+                        "threshold": 0.95
+                    }
+                }
+            }
+        }
     }
-
-
-@router.get("/duplicates")
+)
 async def find_duplicates(
-    threshold: float = Query(0.95, ge=0.5, le=1.0),
-    limit: int = Query(100, ge=1, le=1000),
+    threshold: float = Query(default=0.95, ge=0.5, le=1.0, description="Similarity threshold (0.5-1.0)"),
+    limit: int = Query(default=100, ge=1, le=1000, description="Maximum pairs to return (1-1000)"),
+    service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find near-duplicate image pairs above similarity threshold."""
-    index = get_similarity_index(db)
-    results = index.find_duplicates(threshold=threshold, limit=limit)
-    return {
-        "duplicates": results,
-        "count": len(results),
-        "threshold": threshold,
-    }
+    return service.find_duplicates(threshold, limit)
 
 
 @router.get("/stats")
-async def embedding_stats():
+async def embedding_stats(
+    service: SimilarityService = Depends(get_similarity_service),
+):
     """Get statistics about embeddings."""
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM images")
-        total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM images WHERE embedding IS NOT NULL")
-        embedded = cursor.fetchone()[0]
-    return {
-        "total_images": total,
-        "embedded_images": embedded,
-        "pending": total - embedded,
-        "coverage": round(embedded / total * 100, 1) if total > 0 else 0,
-    }
+    return service.get_stats()

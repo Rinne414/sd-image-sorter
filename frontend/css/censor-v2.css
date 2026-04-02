@@ -1,5 +1,7 @@
 /* ===== Censor Edit V2 Styles (Premium & Stabilized) ===== */
 
+/* Note: CSS custom properties are defined in styles.css */
+
 #view-censor .censor-workspace-v2 {
     display: flex !important;
     width: 100% !important;
@@ -46,7 +48,7 @@
     display: flex !important;
     flex-direction: column !important;
     background: rgba(15, 15, 25, 0.65) !important;
-    backdrop-filter: blur(20px) !important;
+    backdrop-filter: var(--glass-blur-xl) !important;
     border-right: 1px solid rgba(168, 85, 247, 0.15) !important;
     padding: 16px !important;
     height: calc(100vh - 60px) !important;
@@ -130,14 +132,14 @@
     left: 50%;
     transform: translateX(-50%);
     background: rgba(20, 15, 35, 0.6);
-    backdrop-filter: blur(12px);
+    backdrop-filter: var(--glass-blur);
     padding: 6px 8px;
     border-radius: 100px;
     display: flex;
     gap: 4px;
     align-items: center;
     border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-float);
     z-index: 50;
     transition: all 0.2s ease;
 }
@@ -195,7 +197,7 @@
     aspect-ratio: 1;
     width: 100%;
     object-fit: cover;
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     border: 2px solid rgba(255, 255, 255, 0.05);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -288,14 +290,14 @@
     gap: 4px;
     padding: 8px 16px;
     background: rgba(20, 15, 35, 0.85);
-    backdrop-filter: blur(16px);
+    backdrop-filter: var(--glass-blur-lg);
     border: 1px solid rgba(168, 85, 247, 0.2);
-    border-radius: 50px;
+    border-radius: var(--radius-full);
     flex-shrink: 0 !important;
     margin: 12px auto;
     position: relative;
     z-index: 50;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    box-shadow: var(--shadow-float), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 /* Toolbar divider */
@@ -357,7 +359,7 @@
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     color: #94a3b8;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -402,7 +404,7 @@
     margin-top: 12px;
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(124, 58, 237, 0.1));
     border: 1px solid rgba(168, 85, 247, 0.3);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     color: #e9d5ff;
     font-weight: 600;
     cursor: pointer;
@@ -500,7 +502,7 @@
     align-items: center;
     padding: 12px 24px;
     background: rgba(15, 10, 25, 0.7);
-    backdrop-filter: blur(20px);
+    backdrop-filter: var(--glass-blur-xl);
     border-top: 1px solid rgba(168, 85, 247, 0.15);
     gap: 20px;
     z-index: 40;
@@ -657,7 +659,7 @@
 .property-section {
     margin-bottom: 16px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     border: 1px solid rgba(255, 255, 255, 0.05);
     overflow: hidden;
 }
@@ -739,7 +741,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #fff;
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 13px;
     transition: all 0.2s;
 }
@@ -877,7 +879,7 @@
     padding: 12px 16px;
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(124, 58, 237, 0.15));
     border: 1px solid rgba(168, 85, 247, 0.3);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     color: #e9d5ff;
     font-weight: 600;
     font-size: 13px;
@@ -937,7 +939,7 @@
     border: none;
     background: rgba(255, 255, 255, 0.05);
     color: rgba(255, 255, 255, 0.6);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 16px;
     display: flex;
@@ -1071,7 +1073,7 @@
     padding: 12px 16px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
     color: #cbd5e1;
     font-size: 13px;
     font-weight: 500;
@@ -1122,4 +1124,255 @@
 
 .btn-icon {
     font-size: 16px;
+}
+
+/* ===== Censor Editor Responsive Styles ===== */
+
+/* Medium screens (max-width: 1024px) */
+@media (max-width: 1024px) {
+    #view-censor .censor-sidebar-v2 {
+        width: 240px !important;
+        min-width: 240px !important;
+    }
+
+    #view-censor .censor-sidebar-v2.right {
+        width: 260px !important;
+        min-width: 260px !important;
+    }
+
+    .censor-toolbar-v2 {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .tool-btn-v2 {
+        padding: 8px 12px;
+    }
+}
+
+/* Tablets (max-width: 768px) */
+@media (max-width: 768px) {
+    /* Hide right sidebar by default on mobile */
+    #view-censor .censor-workspace-v2 {
+        flex-direction: column !important;
+    }
+
+    #view-censor .censor-sidebar-v2.left {
+        width: 100% !important;
+        min-width: 100% !important;
+        height: auto !important;
+        max-height: 180px !important;
+        border-right: none !important;
+        border-bottom: 1px solid rgba(168, 85, 247, 0.15) !important;
+    }
+
+    #view-censor .censor-sidebar-v2.right {
+        display: none !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        height: auto !important;
+        max-height: 50vh !important;
+        border-left: none !important;
+        border-top: 1px solid rgba(168, 85, 247, 0.15) !important;
+        z-index: 100 !important;
+        box-shadow: 0 -5px 30px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    #view-censor .censor-sidebar-v2.right.mobile-visible {
+        display: flex !important;
+    }
+
+    /* Queue grid smaller on mobile */
+    .censor-queue-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+    }
+
+    /* Toolbar adjustments */
+    .censor-toolbar-v2 {
+        flex-wrap: wrap;
+        padding: 8px;
+        gap: 4px;
+    }
+
+    .tool-btn-v2 {
+        padding: 8px 10px;
+        flex: 0 0 auto;
+    }
+
+    .tool-btn-v2 .tool-label {
+        font-size: 11px;
+    }
+
+    .tool-btn-v2 kbd {
+        display: none;
+    }
+
+    .toolbar-divider {
+        display: none;
+    }
+
+    /* Canvas wrapper takes remaining space */
+    .censor-canvas-wrapper-v2 {
+        margin: 10px !important;
+        flex: 1 !important;
+    }
+
+    /* Footer bar adjustments */
+    .censor-footer-bars {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .censor-status-bar {
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+    }
+
+    .status-item {
+        display: none;
+    }
+
+    .status-filename {
+        flex: 1;
+        text-align: center;
+    }
+
+    /* Properties sections collapsible */
+    .property-section {
+        margin-bottom: 8px;
+    }
+
+    .section-content {
+        padding: 8px !important;
+    }
+
+    /* Add toggle button for right sidebar */
+    .censor-sidebar-toggle {
+        display: flex;
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent-primary), #7c3aed);
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        z-index: 101;
+        box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+
+    .censor-sidebar-toggle:hover {
+        transform: scale(1.1);
+    }
+}
+
+/* Small phones (max-width: 480px) */
+@media (max-width: 480px) {
+    #view-censor .censor-sidebar-v2.left {
+        max-height: 140px !important;
+    }
+
+    .censor-queue-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+    }
+
+    .queue-thumb-v2 {
+        border-radius: 8px;
+    }
+
+    .censor-toolbar-v2 {
+        gap: 2px;
+        padding: 6px;
+    }
+
+    .tool-btn-v2 {
+        padding: 6px 8px;
+    }
+
+    .tool-btn-v2 .tool-icon-v2 {
+        font-size: 14px;
+    }
+
+    .tool-btn-v2 .tool-label {
+        font-size: 10px;
+    }
+
+    .toolbar-select {
+        padding: 4px 6px;
+        font-size: 11px;
+    }
+
+    /* Sidebar header smaller */
+    .sidebar-header-v2 {
+        padding: 8px 12px;
+    }
+
+    .sidebar-title-v2 {
+        font-size: 12px;
+    }
+
+    .sidebar-subtitle {
+        font-size: 10px;
+    }
+
+    /* Properties panel */
+    .properties-header {
+        padding: 8px 12px;
+    }
+
+    .properties-title {
+        font-size: 12px;
+    }
+
+    .prop-group-v2 label {
+        font-size: 11px;
+    }
+
+    .prop-group-v2 input[type="range"] {
+        height: 6px;
+    }
+}
+
+/* Landscape phones */
+@media (max-width: 896px) and (orientation: landscape) {
+    #view-censor .censor-sidebar-v2.left {
+        max-height: 120px !important;
+    }
+
+    #view-censor .censor-sidebar-v2.right.mobile-visible {
+        max-height: 40vh !important;
+    }
+
+    .censor-queue-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+}
+
+/* Touch devices */
+@media (hover: none) and (pointer: coarse) {
+    .tool-btn-v2 {
+        min-height: 44px;
+    }
+
+    .btn-side-v2 {
+        min-height: 44px;
+    }
+
+    .queue-thumb-v2 {
+        min-width: 44px;
+        min-height: 44px;
+    }
 }

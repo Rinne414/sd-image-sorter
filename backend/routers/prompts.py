@@ -7,7 +7,7 @@ and intelligent random prompt generation.
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import database as db
 from tag_rules import categorize_tag, categorize_tags_batch
@@ -34,10 +34,10 @@ class TagSetMember(BaseModel):
 
 
 class TagSetCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1)
     description: str = ""
-    category: str = "outfit"
-    tags: List[TagSetMember]
+    category: str = Field("outfit", min_length=1)
+    tags: List[TagSetMember] = Field(..., min_length=1)
 
 
 class TagSetResponse(BaseModel):
@@ -49,8 +49,8 @@ class TagSetResponse(BaseModel):
 
 
 class ExclusionCondition(BaseModel):
-    tag: str
-    type: str = "present"
+    tag: str = Field(..., min_length=1)
+    type: str = Field("present", pattern="^(present|missing)$")
 
 
 class ExclusionTarget(BaseModel):
@@ -59,10 +59,10 @@ class ExclusionTarget(BaseModel):
 
 
 class ExclusionRuleCreate(BaseModel):
-    rule_name: str
+    rule_name: str = Field(..., min_length=1)
     description: str = ""
-    conditions: List[ExclusionCondition]
-    targets: List[ExclusionTarget]
+    conditions: List[ExclusionCondition] = Field(..., min_length=1)
+    targets: List[ExclusionTarget] = Field(..., min_length=1)
 
 
 class ExclusionRuleResponse(BaseModel):
@@ -83,37 +83,82 @@ class GenerateConfig(BaseModel):
     style: Optional[str] = None
     artist: Optional[str] = None
     body: Optional[str] = None
-    quality_preset: str = "high"
-    count_tag: str = "1girl"
+    quality_preset: str = Field("high", pattern="^(high|medium|low)$")
+    count_tag: str = Field("1girl", min_length=1)
     nsfw: bool = False
     include_negative: bool = True
-    seed: Optional[int] = None
+    seed: Optional[int] = Field(default=None, ge=0)
 
 
 class ValidateRequest(BaseModel):
-    tags: List[str]
+    tags: List[str] = Field(..., min_length=1)
 
 
 class PresetSave(BaseModel):
     name: str
-    config: GenerateConfig
+    config: dict
+
+    @field_validator('config')
+    @classmethod
+    def validate_config_size(cls, v):
+        import json
+        if len(json.dumps(v)) > 65536:
+            raise ValueError('Config too large')
+        return v
 
 
 # ============================================================
 # Tag Category Endpoints
 # ============================================================
 
-@router.get("/categories")
+@router.get(
+    "/categories",
+    summary="List tag categories",
+    description="""
+Get all available tag categories with their associated tags.
+
+Categories are used in the Prompt Lab for organizing tags by type:
+- `character`: Character tags (1girl, 1boy, solo, etc.)
+- `outfit`: Clothing and outfit tags
+- `pose`: Body pose tags
+- `expression`: Facial expression tags
+- `background`: Background and setting tags
+- `style`: Art style tags
+- `angle`: Camera angle tags
+- `body`: Body feature tags
+    """,
+    responses={
+        200: {
+            "description": "Tag categories",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "categories": {
+                            "character": ["1girl", "1boy", "solo"],
+                            "outfit": ["dress", "school_uniform", "swimsuit"],
+                            "pose": ["standing", "sitting", "lying"]
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
 async def list_categories():
-    """List all tag categories with counts."""
+    """
+    List all tag categories with tag arrays for Prompt Lab.
+
+    Returns tags organized by category for use in prompt generation.
+
+    Returns:
+        Dict with 'categories' mapping category names to tag arrays
+    """
     gen = get_generator(db)
     pool = gen.get_tag_pool()
     result = {}
     for category, tags in pool.items():
-        result[category] = {
-            "count": len(tags),
-            "top_tags": [t["tag"] for t in sorted(tags, key=lambda x: x["count"], reverse=True)[:10]],
-        }
+        ordered_tags = sorted(tags, key=lambda x: x["count"], reverse=True)
+        result[category] = [t["tag"] for t in ordered_tags]
     return {"categories": result}
 
 
@@ -171,13 +216,23 @@ async def list_tag_sets():
     return {
         "sets": [
             {
+                "id": idx + 1,
                 "name": s["name"],
                 "category": s["category"],
                 "description": s.get("description", ""),
                 "tag_count": len(s["tags"]),
+                "members": [
+                    {
+                        "tag": member["tag"] if isinstance(member, dict) else member,
+                        "category": s["category"],
+                        "weight": member.get("weight", 1.0) if isinstance(member, dict) else 1.0,
+                        "required": member.get("required", True) if isinstance(member, dict) else True,
+                    }
+                    for member in s["tags"]
+                ],
                 "tags": s["tags"],
             }
-            for s in all_sets
+            for idx, s in enumerate(all_sets)
         ],
         "total": len(all_sets),
     }
@@ -233,10 +288,17 @@ async def list_exclusion_rules():
     return {
         "rules": [
             {
+                "id": r.get("id"),
                 "name": r["name"],
                 "description": r.get("description", ""),
-                "conditions": r.get("conditions", []),
-                "targets": r.get("targets", []),
+                "conditions": [
+                    {"tag": c.get("tag", c.get("condition_tag", "")), "type": c.get("type", c.get("condition_type", "present"))}
+                    for c in r.get("conditions", [])
+                ],
+                "targets": [
+                    {"tag": t.get("tag", t.get("excluded_tag", "")), "category": t.get("category", t.get("excluded_category", ""))}
+                    for t in r.get("targets", [])
+                ],
             }
             for r in all_rules
         ],
@@ -291,11 +353,69 @@ async def delete_exclusion_rule(name: str):
 # Prompt Generation Endpoints
 # ============================================================
 
-@router.post("/generate")
+@router.post(
+    "/generate",
+    summary="Generate random prompt",
+    description="""
+Generate a random prompt based on provided configuration.
+
+The generator randomly selects tags from each specified category
+while respecting exclusion rules (e.g., no swimsuit with school uniform).
+
+Set a `seed` for reproducible prompt generation.
+    """,
+    responses={
+        200: {
+            "description": "Generated prompt",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "prompt": "1girl, solo, masterpiece, best quality, dress, standing, smile",
+                        "negative_prompt": "lowres, bad anatomy, bad hands",
+                        "seed": 12345,
+                        "config": {}
+                    }
+                }
+            }
+        }
+    }
+)
 async def generate_prompt(config: GenerateConfig):
-    """Generate a random prompt based on configuration."""
+    """
+    Generate a random prompt based on configuration.
+
+    Randomly selects tags from each specified category and combines
+    them into a complete prompt. Applies exclusion rules to prevent
+    conflicting tags.
+
+    Args:
+        config: GenerateConfig with:
+            - character: Character tag (e.g., "1girl")
+            - outfit: Outfit category or specific tag
+            - pose: Pose category or specific tag
+            - expression: Expression category or specific tag
+            - angle: Camera angle
+            - background: Background type
+            - style: Art style
+            - artist: Artist style to emulate
+            - body: Body features
+            - quality_preset: "high", "medium", or "low"
+            - count_tag: Character count tag (e.g., "1girl", "2girls")
+            - nsfw: Include NSFW tags
+            - include_negative: Generate negative prompt
+            - seed: Random seed for reproducibility
+
+    Returns:
+        Dict containing:
+        - prompt: Generated positive prompt
+        - negative_prompt: Generated negative prompt (if enabled)
+        - seed: Seed used for generation
+        - config: Effective configuration used
+    """
     gen = get_generator(db)
     result = gen.generate(config.model_dump())
+    # Normalize response — backend returns positive_prompt, expose as both keys
+    result.setdefault('prompt', result.get('positive_prompt', ''))
     return result
 
 
@@ -340,7 +460,7 @@ async def save_preset(data: PresetSave):
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO prompt_presets (name, config_json) VALUES (?, ?)",
-            (data.name, json.dumps(data.config.model_dump())),
+            (data.name, json.dumps(data.config)),
         )
         return {"id": cursor.lastrowid, "name": data.name, "saved": True}
 

@@ -53,7 +53,11 @@ const CensorState = {
 let boundHandlers = {
     mousemove: null,
     mouseup: null,
-    keydown: null
+    keydown: null,
+    panMousemove: null,
+    panMouseup: null,
+    spaceKeydown: null,
+    spaceKeyup: null
 };
 
 function cleanupGlobalListeners() {
@@ -69,13 +73,31 @@ function cleanupGlobalListeners() {
         document.removeEventListener('keydown', boundHandlers.keydown);
         boundHandlers.keydown = null;
     }
+    if (boundHandlers.panMousemove) {
+        window.removeEventListener('mousemove', boundHandlers.panMousemove);
+        boundHandlers.panMousemove = null;
+    }
+    if (boundHandlers.panMouseup) {
+        window.removeEventListener('mouseup', boundHandlers.panMouseup);
+        boundHandlers.panMouseup = null;
+    }
+    if (boundHandlers.spaceKeydown) {
+        document.removeEventListener('keydown', boundHandlers.spaceKeydown);
+        boundHandlers.spaceKeydown = null;
+    }
+    if (boundHandlers.spaceKeyup) {
+        document.removeEventListener('keyup', boundHandlers.spaceKeyup);
+        boundHandlers.spaceKeyup = null;
+    }
 }
 
 // ============== Init ==============
 
+// Guard flag to prevent duplicate event binding
+let censorEventsInitialized = false;
+
 function initCensorEdit() {
-    const { $, $$ } = window.App;
-    console.log('Initializing Censor Edit UI...');
+    const { $, $$ } = window.App || { $: (s) => document.querySelector(s), $$: (s) => document.querySelectorAll(s) };
 
     // Load saved settings (use optional chaining for elements that may not exist)
     const modelPathEl = $('#censor-model-path');
@@ -83,10 +105,14 @@ function initCensorEdit() {
     if (CensorState.modelPath && modelPathEl) modelPathEl.value = CensorState.modelPath;
     if (CensorState.outputFolder && outputFolderEl) outputFolderEl.value = CensorState.outputFolder;
 
-    bindEvents();
-    initDragAndDrop();
-    initZoomControls();
-    initPanControls();
+    // Only bind events once to prevent duplicate listeners
+    if (!censorEventsInitialized) {
+        bindEvents();
+        initDragAndDrop();
+        initZoomControls();
+        initPanControls();
+        censorEventsInitialized = true;
+    }
 }
 
 function bindEvents() {
@@ -95,14 +121,7 @@ function bindEvents() {
     // Clean up any existing global listeners first to prevent accumulation
     cleanupGlobalListeners();
 
-    // Sidebar: Queue Actions
-    $('#btn-clear-queue')?.addEventListener('click', () => {
-        if (confirm('Clear all images from queue?')) {
-            CensorState.queue = [];
-            renderQueue();
-            clearCanvas();
-        }
-    });
+    // Sidebar: Queue Actions — handled by consolidated clearQueueHandler below
 
     $('#btn-run-auto-censor')?.addEventListener('click', runAutoCensorBatch);
     $('#btn-batch-rename')?.addEventListener('click', () => {
@@ -147,7 +166,7 @@ function bindEvents() {
     $('#censor-style')?.addEventListener('change', (e) => CensorState.style = e.target.value);
 
     $('#censor-block-size')?.addEventListener('input', (e) => {
-        CensorState.blockSize = parseInt(e.target.value);
+        CensorState.blockSize = parseInt(e.target.value, 10) || 16;
         $('#censor-block-size-value').textContent = CensorState.blockSize;
     });
 
@@ -254,12 +273,12 @@ function bindEvents() {
     });
 
     $('#pen-opacity')?.addEventListener('input', (e) => {
-        CensorState.penOpacity = parseInt(e.target.value) / 100;
+        CensorState.penOpacity = (parseInt(e.target.value, 10) || 100) / 100;
         $('#pen-opacity-value').textContent = e.target.value + '%';
     });
 
     $('#tool-size')?.addEventListener('input', (e) => {
-        CensorState.brushSize = parseInt(e.target.value);
+        CensorState.brushSize = parseInt(e.target.value, 10) || 50;
         $('#tool-size-value').textContent = e.target.value;
     });
 
@@ -281,8 +300,12 @@ function bindEvents() {
     $('#btn-rename-single')?.addEventListener('click', promptSingleRename);
 
     // Browse model path button (opens prompt since browser can't access filesystem directly)
-    $('#btn-browse-model')?.addEventListener('click', () => {
-        const path = prompt('Enter the full path to your YOLO model (.pt or .onnx):', CensorState.modelPath);
+    $('#btn-browse-model')?.addEventListener('click', async () => {
+        const path = await window.App.showInputModal(
+            'YOLO Model Path',
+            'Enter the full path to your YOLO model (.pt or .onnx)',
+            CensorState.modelPath
+        );
         if (path !== null) {
             CensorState.modelPath = path;
             $('#censor-model-path').value = path;
@@ -396,11 +419,22 @@ function renderQueue() {
             img = document.createElement('img');
             img.className = 'queue-thumb-v2';
             img.draggable = true;
+            img.setAttribute('role', 'button');
+            img.setAttribute('tabindex', '0');
+            img.setAttribute('aria-selected', 'false');
+            img.setAttribute('aria-pressed', 'false');
             img.dataset.id = itemIdStr;
 
             // Click to load with multi-select support
+            const syncSelectedState = () => {
+                const isSelected = CensorState.selectedItems.has(item.id);
+                img.classList.toggle('selected', isSelected);
+                img.setAttribute('aria-selected', String(isSelected));
+                img.setAttribute('aria-pressed', String(isSelected));
+            };
+
             img.addEventListener('click', (e) => {
-                const clickedIndex = parseInt(img.dataset.index);
+                const clickedIndex = parseInt(img.dataset.index, 10);
                 const clickedId = item.id;
 
                 if (e.ctrlKey || e.metaKey) {
@@ -432,6 +466,8 @@ function renderQueue() {
                 updateQueueSelection();
             });
 
+            syncSelectedState();
+
             // DnD Events
             img.addEventListener('dragstart', handleDragStart);
             img.addEventListener('dragend', handleDragEnd);
@@ -459,8 +495,12 @@ function renderQueue() {
         // Update classes
         const isActive = item.id === CensorState.activeId;
         const isProcessed = item.isProcessed;
+        const isSelected = CensorState.selectedItems.has(item.id);
         img.classList.toggle('active', isActive);
         img.classList.toggle('processed', isProcessed);
+        img.classList.toggle('selected', isSelected);
+        img.setAttribute('aria-selected', String(isSelected));
+        img.setAttribute('aria-pressed', String(isSelected));
     });
 }
 
@@ -471,9 +511,12 @@ function initDragAndDrop() {
 function updateQueueSelection() {
     // Update visual selection state on all queue thumbnails
     document.querySelectorAll('.queue-thumb-v2').forEach(img => {
-        const itemId = parseInt(img.dataset.id);
-        const isSelected = CensorState.selectedItems.has(itemId);
+        // IDs can be string or number — normalize to string for comparison
+        const itemIdStr = img.dataset.id;
+        const isSelected = [...CensorState.selectedItems].some(id => id.toString() === itemIdStr);
         img.classList.toggle('selected', isSelected);
+        img.setAttribute('aria-selected', String(isSelected));
+        img.setAttribute('aria-pressed', String(isSelected));
     });
 
     // Update selection count indicator if it exists
@@ -488,7 +531,7 @@ function updateQueueSelection() {
 let draggedItemIndex = null;
 
 function handleDragStart(e) {
-    draggedItemIndex = parseInt(this.dataset.index);
+    draggedItemIndex = parseInt(this.dataset.index, 10);
     e.dataTransfer.effectAllowed = 'move';
     // Use the ID as the data to ensure we identify the right item even if index changes
     e.dataTransfer.setData('text/plain', this.dataset.id);
@@ -518,22 +561,25 @@ function handleDrop(e) {
     const targetItem = e.target.closest('.queue-thumb-v2');
     if (!targetItem) return false;
 
-    const targetIndex = parseInt(targetItem.dataset.index);
+    const targetIndex = parseInt(targetItem.dataset.index, 10);
     const draggedId = e.dataTransfer.getData('text/plain');
 
     // Check if we're moving multiple selected items
-    if (CensorState.selectedItems.size > 1 && CensorState.selectedItems.has(parseInt(draggedId))) {
+    if (CensorState.selectedItems.size > 1 && CensorState.selectedItems.has(parseInt(draggedId, 10))) {
         // Move all selected items as a group
         const selectedIds = [...CensorState.selectedItems];
         const selectedItems = CensorState.queue.filter(item => selectedIds.includes(item.id));
 
+        // Find the target item's ID for stable positioning after removal
+        const targetId = CensorState.queue[targetIndex]?.id;
+
         // Remove selected items from queue
         CensorState.queue = CensorState.queue.filter(item => !selectedIds.includes(item.id));
 
-        // Find adjusted target index
-        let adjustedTarget = targetIndex;
-        if (adjustedTarget > CensorState.queue.length) {
-            adjustedTarget = CensorState.queue.length;
+        // Find adjusted target index using the target item's ID (stable reference)
+        let adjustedTarget = CensorState.queue.findIndex(item => item.id === targetId);
+        if (adjustedTarget === -1) {
+            adjustedTarget = CensorState.queue.length; // Target was in selection, append to end
         }
 
         // Insert selected items at target position
@@ -640,11 +686,14 @@ async function loadCanvasImage(id) {
         });
 
     } catch (error) {
-        console.error('Failed to load image:', error);
+        Logger.error('Failed to load image:', error);
         showLoading(false);
         CensorState.isLoadingImage = false; // Release lock on error
-        window.App.showToast('Error: ' + error.message, 'error');
+        window.App.showToast(formatUserError(error, "Operation failed"), "error");
     }
+
+    // Safety fallback: release lock after timeout in case RAF never fires
+    setTimeout(() => { CensorState.isLoadingImage = false; }, 2000);
 }
 
 function fitCanvasToContainer(canvas, imgW, imgH) {
@@ -701,9 +750,17 @@ function saveCurrentCanvasToState() {
 }
 
 function clearCanvas() {
-    const canvas = document.getElementById('censor-canvas');
+    // Clear the ACTIVE canvas, not always the default one
+    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Also clear the buffer canvas
+    const bufferId = CensorState.activeCanvasId === 'censor-canvas' ? 'censor-canvas-buffer' : 'censor-canvas';
+    const bufferCanvas = document.getElementById(bufferId);
+    if (bufferCanvas) {
+        const bufCtx = bufferCanvas.getContext('2d');
+        bufCtx.clearRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+    }
     document.getElementById('censor-no-image').style.display = 'flex';
     document.getElementById('censor-filename').textContent = '-';
 }
@@ -712,6 +769,8 @@ function clearCanvas() {
 
 function onCanvasMouseDown(e) {
     if (!CensorState.activeId) return;
+    // Don't start drawing if space is held (pan mode)
+    if (spacePressed) return;
     CensorState.isDrawing = true;
 
     const { x, y } = getCanvasCoordinates(e);
@@ -921,30 +980,22 @@ async function runAutoCensorBatch() {
 
 async function runDetectionForImage(item, silent = false) {
     try {
-        const res = await fetch('/api/censor/detect', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                image_id: item.id,
-                model_path: CensorState.modelPath,
-                confidence_threshold: CensorState.confidence
-            })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail);
+        const modelTypeEl = document.getElementById('censor-model-type');
+        const modelType = modelTypeEl ? modelTypeEl.value : 'legacy';
 
-        // Log detection info and limit to top 50 highest confidence detections
-        console.log('Total detections:', data.detections.length);
-        if (data.detections.length > 0) {
-            console.log('Sample detection classes:', data.detections.slice(0, 5).map(d => d.class));
-        }
+        const data = await window.App.API.post('/api/censor/detect', {
+            image_id: item.id,
+            model_path: CensorState.modelPath,
+            model_type: modelType,
+            confidence_threshold: CensorState.confidence
+        });
+
         // Sort by confidence and take top 50 to avoid processing thousands
         const sortedDetections = data.detections.sort((a, b) => b.confidence - a.confidence).slice(0, 50);
-        // Filter by target classes if needed, otherwise use all sorted detections  
+        // Filter by target classes if needed, otherwise use all sorted detections
         let regions = sortedDetections.filter(d => CensorState.targetClasses.includes(d.class));
         // If no matches, check for class_id based filtering or use all
         if (regions.length === 0 && sortedDetections.length > 0) {
-            console.log('No class name matches, using all top detections');
             regions = sortedDetections;
         }
         item.regions = regions;
@@ -958,8 +1009,6 @@ async function runDetectionForImage(item, silent = false) {
         ctx.drawImage(img, 0, 0);
 
         // Apply regions
-        console.log(`Applying ${regions.length} regions to image with style: ${CensorState.style}`);
-
         ctx.save();
         regions.forEach(r => {
             const [x1, y1, x2, y2] = r.box;
@@ -1017,8 +1066,8 @@ async function runDetectionForImage(item, silent = false) {
         }
 
     } catch (e) {
-        console.error(e);
-        if (!silent) window.App.showToast('Detection error: ' + e.message, 'error');
+        Logger.error(e);
+        if (!silent) window.App.showToast(formatUserError(e, "Detection failed"), "error");
     }
 }
 
@@ -1027,7 +1076,7 @@ async function runDetectionForImage(item, silent = false) {
 function updateRenamePreview() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
-    const start = parseInt(document.getElementById('rename-start')?.value) || 1;
+    const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
     const previewContainer = document.querySelector('.rename-preview');
 
     if (!previewContainer) return;
@@ -1063,8 +1112,8 @@ function updateRenamePreview() {
 
 async function applyBatchRename() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
-    const base = document.getElementById('rename-base').value || 'Image';
-    const start = parseInt(document.getElementById('rename-start').value) || 1;
+    const base = document.getElementById('rename-base')?.value || 'Image';
+    const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
     // Note: Output folder is configured in Save Options modal, not here
 
     CensorState.queue.forEach((item, i) => {
@@ -1168,21 +1217,17 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
             const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
             const finalFilename = `${baseName}.${formatOption}`;
 
-            await fetch('/api/censor/save-data', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_data: dataUrl,
-                    filename: finalFilename,
-                    output_folder: folder,
-                    metadata_option: metadataOption,
-                    output_format: formatOption,
-                    original_image_id: item.id  // Pass original image ID for metadata copying
-                })
+            await window.App.API.post('/api/censor/save-data', {
+                image_data: dataUrl,
+                filename: finalFilename,
+                output_folder: folder,
+                metadata_option: metadataOption,
+                output_format: formatOption,
+                original_image_id: item.id  // Pass original image ID for metadata copying
             });
             count++;
         } catch (e) {
-            console.error(e);
+            Logger.error(e);
         }
     }
 
@@ -1205,7 +1250,7 @@ async function stripMetadataViaCanvas(url) {
     return canvas.toDataURL('image/png');
 }
 
-function promptSingleRename() {
+async function promptSingleRename() {
     if (!CensorState.activeId) {
         window.App.showToast('No image selected', 'error');
         return;
@@ -1215,9 +1260,13 @@ function promptSingleRename() {
     if (!item) return;
 
     const currentName = item.outputFilename || item.filename || 'image.png';
-    const newName = prompt('Enter new filename:', currentName);
+    const newName = await window.App.showInputModal(
+        'Rename File',
+        'Enter the new filename:',
+        currentName
+    );
 
-    if (newName && newName !== currentName) {
+    if (newName !== null && newName !== currentName) {
         // Ensure it has an extension
         let finalName = newName;
         if (!/\.\w+$/.test(finalName)) {
@@ -1306,8 +1355,10 @@ function pushUndo() {
 
 
 function undo() {
-    if (CensorState.undoStack.length === 0) return;
-    const prev = CensorState.undoStack.pop();
+    // Keep at least 1 item in the stack (the initial/base state)
+    if (CensorState.undoStack.length <= 1) return;
+    CensorState.undoStack.pop(); // Discard current state
+    const prev = CensorState.undoStack[CensorState.undoStack.length - 1]; // Peek at previous
     const img = new Image();
     img.onload = () => {
         const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
@@ -1321,6 +1372,10 @@ function undo() {
 
 function handleKeydown(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    // Only handle keys when censor view is active
+    const censorView = document.getElementById('view-censor');
+    if (!censorView || !censorView.classList.contains('active')) return;
 
     const key = e.key.toLowerCase();
     const code = e.code;
@@ -1419,7 +1474,7 @@ async function loadImage(src) {
         img.crossOrigin = 'anonymous';
         img.onload = () => resolve(img);
         img.onerror = (e) => {
-            console.error('Image load error:', src, e);
+            Logger.error('Image load error:', src, e);
             reject(new Error('Failed to load image'));
         };
         img.src = src;
@@ -1536,7 +1591,7 @@ async function runDetectionForAll() {
             await runDetectionForImage(item, true);
             count++;
         } catch (e) {
-            console.error('Detection error for', item.id, e);
+            Logger.error('Detection error for', item.id, e);
         }
     }
 
@@ -1608,23 +1663,25 @@ function initPanControls() {
     const wrapper = document.querySelector('.censor-canvas-wrapper-v2');
     if (!wrapper) return;
 
-    // Space key to enable pan mode
-    document.addEventListener('keydown', (e) => {
+    // Space key to enable pan mode - store for cleanup
+    boundHandlers.spaceKeydown = (e) => {
         if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
             spacePressed = true;
             wrapper.style.cursor = 'grab';
             e.preventDefault();
         }
-    });
+    };
+    document.addEventListener('keydown', boundHandlers.spaceKeydown);
 
-    document.addEventListener('keyup', (e) => {
+    boundHandlers.spaceKeyup = (e) => {
         if (e.code === 'Space') {
             spacePressed = false;
             if (!isPanning) {
                 wrapper.style.cursor = '';
             }
         }
-    });
+    };
+    document.addEventListener('keyup', boundHandlers.spaceKeyup);
 
     // Middle mouse button or space+left click for panning
     wrapper.addEventListener('mousedown', (e) => {
@@ -1639,22 +1696,31 @@ function initPanControls() {
         }
     });
 
-    window.addEventListener('mousemove', (e) => {
+    boundHandlers.panMousemove = (e) => {
         if (isPanning) {
             CensorState.pan.x = e.clientX - panStart.x;
             CensorState.pan.y = e.clientY - panStart.y;
             applyZoom();
         }
-    });
+    };
+    window.addEventListener('mousemove', boundHandlers.panMousemove);
 
-    window.addEventListener('mouseup', (e) => {
+    boundHandlers.panMouseup = (e) => {
         if (isPanning) {
             isPanning = false;
             wrapper.style.cursor = spacePressed ? 'grab' : '';
         }
-    });
+    };
+    window.addEventListener('mouseup', boundHandlers.panMouseup);
 }
 
 
+// Cleanup function that also resets init flag so events can be re-bound if view is re-entered
+function cleanupCensorViewFull() {
+    cleanupGlobalListeners();
+    censorEventsInitialized = false;
+}
+
 // Export
 window.initCensorEdit = initCensorEdit;
+window.cleanupCensorView = cleanupCensorViewFull;

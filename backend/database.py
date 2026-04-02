@@ -1,30 +1,77 @@
 """
 SQLite database for storing image metadata and tags.
+
+This module provides direct function-based database access for backward compatibility.
+For new code, consider using the repository pattern from db_repos:
+
+    from db_repos import ImageRepository, TagRepository, CollectionRepository
+    from db_repos import ImageFilters
+
+    # Example usage:
+    image_repo = ImageRepository()
+    images = image_repo.find_all(filters=ImageFilters(tags=["portrait"]), limit=50)
+    image = image_repo.find_by_id(123)
+
+    # Dependency injection with FastAPI:
+    def get_image_repo() -> ImageRepository:
+        return ImageRepository()
+
+See backend/db_repos/repositories/ for the repository implementations.
 """
 import sqlite3
 import os
 import json
+import re
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
+import time
+import threading
 
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), "images.db")
-FAVORITES_COLLECTION_SLUG = "favorites"
-FAVORITES_COLLECTION_NAME = "Favorites"
-FAVORITES_FOLDER_PATH = os.path.join(os.path.dirname(__file__), "favorites")
+from config import (
+    DATABASE_PATH,
+    FAVORITES_COLLECTION_SLUG,
+    FAVORITES_COLLECTION_NAME,
+    FAVORITES_FOLDER_PATH,
+)
+
+
+
+# ============== Tags Cache ==============
+_tags_cache_lock = threading.Lock()
+_tags_cache_data = None
+_tags_cache_timestamp = 0
+_TAGS_CACHE_TTL = 60  # seconds
+
+def _invalidate_tags_cache():
+    """Clear the tags cache when tags are modified."""
+    global _tags_cache_data, _tags_cache_timestamp
+    with _tags_cache_lock:
+        _tags_cache_data = None
+        _tags_cache_timestamp = 0
 
 
 def normalize_prompt_token(token: str) -> str:
     """Normalize a prompt token for consistent matching.
-    
+
     Rules:
     1. Convert to lowercase
     2. Replace underscores with spaces
     3. Strip whitespace
-    
+
     Example: "Best_quality" = "best quality" = "BeStQualITY" -> "best quality"
     """
     return token.lower().replace('_', ' ').strip()
+
+
+def escape_like_pattern(value: str) -> str:
+    """Escape SQL LIKE wildcard characters to prevent pattern injection.
+
+    Escapes % and _ characters so they are treated as literals in LIKE patterns.
+
+    Example: "test_file" -> "test\\_file" (matches literal "test_file", not "testXfile")
+    """
+    return value.replace('%', r'\%').replace('_', r'\_')
 
 
 def normalize_lora_name(lora_name: str) -> str:
@@ -56,9 +103,6 @@ def normalize_lora_name(lora_name: str) -> str:
     
     return lora_name.lower().strip()
 
-
-
-import re
 
 def extract_prompt_tokens(prompt: str) -> set:
     """Extract normalized tokens from a prompt string.
@@ -124,10 +168,15 @@ def extract_lora_names(loras_json: str, prompt: str) -> set:
     return loras
 
 def get_connection() -> sqlite3.Connection:
-    """Get a database connection with row factory."""
+    """Get a database connection with row factory and performance optimizations."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Performance optimizations
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
     return conn
 
 
@@ -145,7 +194,7 @@ def get_db():
         conn.close()
 
 
-def init_db():
+def init_db() -> None:
     """Initialize the database schema."""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -324,11 +373,33 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_embedding ON images(embedding IS NOT NULL) WHERE embedding IS NOT NULL")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_created_at ON images(created_at DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_artist ON artist_predictions(artist)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_image_id ON artist_predictions(image_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_source_image_id ON collection_items(source_image_id)")
+
+        # Performance-critical indexes for common queries
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_checkpoint ON images(checkpoint) WHERE checkpoint IS NOT NULL")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_tagged_at ON images(tagged_at) WHERE tagged_at IS NULL")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag_image ON tags(tag, image_id)")
+        # Optimized index for rating and tag_count queries (covers common correlated subqueries)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id_tag ON tags(image_id, tag)")
+
+        # Junction table for normalized lora names (for efficient lora filtering)
+        # This avoids LIKE queries on the loras column which requires full table scans
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS image_loras (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                image_id INTEGER NOT NULL,
+                lora_name TEXT NOT NULL,
+                FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+                UNIQUE(image_id, lora_name)
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_image_loras_lora_name ON image_loras(lora_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_image_loras_image_id ON image_loras(image_id)")
 
         cursor.execute(
             """
@@ -337,6 +408,21 @@ def init_db():
             """,
             (FAVORITES_COLLECTION_SLUG, FAVORITES_COLLECTION_NAME, FAVORITES_FOLDER_PATH)
         )
+
+        # Migrate existing loras to junction table (if not already done)
+        cursor.execute("SELECT COUNT(*) FROM image_loras")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("SELECT id, loras, prompt FROM images WHERE loras IS NOT NULL OR prompt LIKE '%<lora:%'")
+            for row in cursor.fetchall():
+                image_id = row[0]
+                loras_json = row[1] or ''
+                prompt = row[2] or ''
+                lora_names = extract_lora_names(loras_json, prompt)
+                for lora_name in lora_names:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
+                        (image_id, lora_name)
+                    )
 
         conn.commit()
 
@@ -365,29 +451,509 @@ def add_image(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (path, filename, generator, prompt, negative_prompt, metadata_json,
               width, height, file_size, checkpoint, json.dumps(loras) if loras else None, created_at))
-        return cursor.lastrowid
+        image_id = cursor.lastrowid
+        
+        # Populate image_loras junction table for efficient filtering
+        if loras or (prompt and '<lora:' in prompt):
+            lora_names = extract_lora_names(
+                json.dumps(loras) if loras else '',
+                prompt or ''
+            )
+            for lora_name in lora_names:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
+                    (image_id, lora_name)
+                )
+        
+        return image_id
 
 
-def add_tags(image_id: int, tags: List[Dict[str, Any]]):
-    """Add tags for an image. Each tag dict should have 'tag' and optionally 'confidence'."""
+def add_tags(image_id: int, tags: List[Dict[str, Any]]) -> None:
+    """Add tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
+
+    Uses executemany for batch insert performance.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         # Clear existing tags
         cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
-        # Add new tags
-        for tag_data in tags:
-            tag = tag_data.get("tag", "")
-            confidence = tag_data.get("confidence", 1.0)
-            if tag:
-                cursor.execute(
-                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                    (image_id, tag, confidence)
-                )
+        # Batch insert new tags (N+1 fix: use executemany instead of loop)
+        tag_values = [
+            (image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
+            for tag_data in tags
+            if tag_data.get("tag")
+        ]
+        if tag_values:
+            cursor.executemany(
+                "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                tag_values
+            )
         # Update tagged timestamp
         cursor.execute(
             "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
             (image_id,)
         )
+
+
+def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
+    """Add tags for multiple images in a single transaction.
+    
+    More efficient than calling add_tags() repeatedly for batch tagging operations.
+    Uses a single database connection and commits once at the end.
+    
+    Args:
+        image_tags_list: List of dicts, each with:
+            - image_id: int
+            - tags: List[Dict] with 'tag' and 'confidence' keys
+    """
+    if not image_tags_list:
+        return
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        for item in image_tags_list:
+            image_id = item["image_id"]
+            tags = item["tags"]
+            
+            # Clear existing tags
+            cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+            
+            # Batch insert new tags
+            tag_values = [
+                (image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
+                for tag_data in tags
+                if tag_data.get("tag")
+            ]
+            if tag_values:
+                cursor.executemany(
+                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                    tag_values
+                )
+            
+            # Update tagged timestamp
+            cursor.execute(
+                "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (image_id,)
+            )
+        
+        # Single commit at the end (automatic with context manager)
+
+
+# =============================================================================
+# Query Building Helpers for get_images()
+# =============================================================================
+
+VALID_SORT_OPTIONS = {
+    "newest", "oldest", "name_asc", "name_desc", "generator",
+    "prompt_length", "tag_count", "rating", "character_count",
+    "random", "file_size", "file_size_asc",
+}
+
+
+def _build_base_query(sort_by: str, select_cols: str) -> str:
+    """Build the base SELECT query with optional subqueries for tag-based sorting.
+
+    Args:
+        sort_by: Sorting method identifier
+        select_cols: Column selection string
+
+    Returns:
+        Base SQL query string
+    """
+    if sort_by not in VALID_SORT_OPTIONS:
+        sort_by = "newest"
+
+    if sort_by == "tag_count":
+        return f"""SELECT DISTINCT {select_cols},
+                   (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
+                   FROM images i"""
+    elif sort_by == "character_count":
+        return f"""SELECT DISTINCT {select_cols},
+                   (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count
+                   FROM images i"""
+    elif sort_by == "rating":
+        # Priority: explicit > questionable > sensitive > general > unrated
+        return f"""SELECT DISTINCT {select_cols},
+                   CASE
+                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'explicit') THEN 1
+                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'questionable') THEN 2
+                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'sensitive') THEN 3
+                       WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'general') THEN 4
+                       ELSE 5
+                   END as rating_order
+                   FROM images i"""
+    else:
+        return f"SELECT DISTINCT {select_cols} FROM images i"
+
+
+def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any]) -> tuple:
+    """Apply tag filtering with JOINs (AND logic).
+
+    Args:
+        query: Current query string
+        tags: List of tags to filter by
+        params: Current parameter list
+
+    Returns:
+        Tuple of (modified query, modified params)
+    """
+    if not tags:
+        return query, params
+
+    for i, tag in enumerate(tags):
+        alias = f"t{i}"
+        query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
+        params.append(tag)
+
+
+    return query, params
+
+
+def _apply_generator_filter(conditions: List[str], params: List[Any],
+                            generators: Optional[List[str]]) -> tuple:
+    """Apply generator filtering (OR logic).
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        generators: List of generators to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not generators:
+        return conditions, params
+
+    placeholders = ",".join("?" * len(generators))
+    conditions.append(f"i.generator IN ({placeholders})")
+    params.extend(generators)
+
+    return conditions, params
+
+
+def _apply_rating_filter(conditions: List[str], params: List[Any],
+                         ratings: Optional[List[str]]) -> tuple:
+    """Apply rating filtering (OR logic with untagged fallback).
+
+    When all 4 ratings are selected, don't filter at all (show everything).
+    When some ratings are selected, show images with those rating tags OR untagged images.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        ratings: List of ratings to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not ratings:
+        return conditions, params
+
+    all_ratings = {'general', 'sensitive', 'questionable', 'explicit'}
+    selected_ratings = set(ratings)
+
+    # Only apply filter if not all ratings are selected
+    if selected_ratings == all_ratings:
+        return conditions, params
+
+    rating_placeholders = ",".join("?" * len(ratings))
+    # Image has one of the selected ratings OR image has no tags at all (untagged)
+    conditions.append(f"""(
+        EXISTS (SELECT 1 FROM tags rt WHERE rt.image_id = i.id AND rt.tag IN ({rating_placeholders}))
+        OR i.tagged_at IS NULL
+    )""")
+    params.extend(ratings)
+
+    return conditions, params
+
+
+def _apply_checkpoint_filter(conditions: List[str], params: List[Any],
+                             checkpoints: Optional[List[str]]) -> tuple:
+    """Apply checkpoint filtering (OR logic).
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        checkpoints: List of checkpoints to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not checkpoints:
+        return conditions, params
+
+    placeholders = ",".join("?" * len(checkpoints))
+    conditions.append(f"i.checkpoint IN ({placeholders})")
+    params.extend(checkpoints)
+
+    return conditions, params
+
+
+def _apply_lora_filter(conditions: List[str], params: List[Any],
+                       loras: Optional[List[str]]) -> tuple:
+    """Apply LoRA filtering (OR logic - image has ANY of the selected loras).
+
+    Matches on lora name in loras column, metadata_json, or prompt.
+    Uses same normalization as library: strip weight notation and lowercase.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        loras: List of loras to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not loras:
+        return conditions, params
+
+    lora_conditions = []
+    for lora in loras:
+        # Strip weight notation (name:0.8 -> name) and lowercase
+        lora_normalized = normalize_lora_name(lora)
+        # Match lora name in loras column, metadata_json, or prompt
+        lora_conditions.append("(LOWER(i.loras) LIKE ? ESCAPE '\\' OR LOWER(i.metadata_json) LIKE ? ESCAPE '\\' OR LOWER(i.prompt) LIKE ? ESCAPE '\\')")
+        params.append(f"%{escape_like_pattern(lora_normalized)}%")
+        params.append(f"%{escape_like_pattern(lora_normalized)}%")
+        params.append(f"%{escape_like_pattern(lora_normalized)}%")
+
+    conditions.append(f"({' OR '.join(lora_conditions)})")
+
+    return conditions, params
+
+
+def _apply_search_filter(conditions: List[str], params: List[Any],
+                         search_query: Optional[str]) -> tuple:
+    """Apply prompt search filtering with normalization.
+
+    Normalizes: lowercase and replace underscore with space.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        search_query: Search term to look for
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not search_query:
+        return conditions, params
+
+    normalized_search = normalize_prompt_token(search_query)
+    conditions.append("(REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\' OR LOWER(i.filename) LIKE ? ESCAPE '\\')")
+    params.extend([f"%{escape_like_pattern(normalized_search)}%", f"%{escape_like_pattern(search_query.lower())}%"])
+
+    return conditions, params
+
+
+def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
+                               prompt_terms: Optional[List[str]]) -> tuple:
+    """Apply multi-prompt filter (AND logic - prompt must contain ALL terms).
+
+    Uses substring matching (LIKE %term%) with normalization.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        prompt_terms: List of prompt terms to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if not prompt_terms:
+        return conditions, params
+
+    for term in prompt_terms:
+        normalized_term = normalize_prompt_token(term)
+        conditions.append("REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\'")
+        params.append(f"%{escape_like_pattern(normalized_term)}%")
+
+    return conditions, params
+
+
+def _apply_dimension_filters(conditions: List[str], params: List[Any],
+                             min_width: Optional[int], max_width: Optional[int],
+                             min_height: Optional[int], max_height: Optional[int],
+                             aspect_ratio: Optional[str]) -> tuple:
+    """Apply dimension and aspect ratio filters.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        min_width, max_width: Width range constraints
+        min_height, max_height: Height range constraints
+        aspect_ratio: One of 'square', 'landscape', 'portrait'
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if min_width:
+        conditions.append("i.width >= ?")
+        params.append(min_width)
+    if max_width:
+        conditions.append("i.width <= ?")
+        params.append(max_width)
+    if min_height:
+        conditions.append("i.height >= ?")
+        params.append(min_height)
+    if max_height:
+        conditions.append("i.height <= ?")
+        params.append(max_height)
+
+    # Aspect ratio filter
+    if aspect_ratio:
+        if aspect_ratio == 'square':
+            conditions.append("i.height > 0 AND ABS(CAST(i.width AS FLOAT) / i.height - 1.0) < 0.1")
+        elif aspect_ratio == 'landscape':
+            conditions.append("i.height > 0 AND CAST(i.width AS FLOAT) / i.height > 1.1")
+        elif aspect_ratio == 'portrait':
+            conditions.append("i.height > 0 AND CAST(i.width AS FLOAT) / i.height < 0.9")
+
+    return conditions, params
+
+
+def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
+                         artist: Optional[str]) -> tuple:
+    """Apply artist filter by joining with artist_predictions table.
+
+    Args:
+        query: Current query string
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        artist: Artist name to filter by
+
+    Returns:
+        Tuple of (modified query, modified conditions, modified params)
+    """
+    if not artist:
+        return query, conditions, params
+
+    query += " INNER JOIN artist_predictions ap ON i.id = ap.image_id"
+    conditions.append("ap.artist = ?")
+    params.append(artist)
+
+    return query, conditions, params
+
+
+def _apply_image_ids_filter(conditions: List[str], params: List[Any],
+                            image_ids: Optional[List[int]]) -> tuple:
+    """Filter by specific image IDs.
+
+    Args:
+        conditions: Current WHERE conditions list
+        params: Current parameter list
+        image_ids: List of image IDs to filter by
+
+    Returns:
+        Tuple of (modified conditions, modified params)
+    """
+    if image_ids is None:
+        return conditions, params
+
+    placeholders = ",".join("?" * len(image_ids))
+    conditions.append(f"i.id IN ({placeholders})")
+    params.extend(image_ids)
+
+    return conditions, params
+
+def _get_order_clause(sort_by: str) -> str:
+    """Get the ORDER BY clause for a given sort method.
+
+    Args:
+        sort_by: Sorting method identifier
+
+    Returns:
+        SQL ORDER BY clause string
+    """
+    sort_options = {
+        "newest": "i.created_at DESC, i.id DESC",
+        "oldest": "i.created_at ASC, i.id ASC",
+        "name_asc": "i.filename ASC, i.id ASC",
+        "name_desc": "i.filename DESC, i.id DESC",
+        "generator": "i.generator ASC, i.created_at DESC, i.id DESC",
+        "prompt_length": "LENGTH(COALESCE(i.prompt, '')) DESC, i.id DESC",
+        "tag_count": "tag_count DESC, i.id DESC",
+        "rating": "rating_order ASC, i.id ASC",
+        "character_count": "char_count DESC, i.id DESC",
+        "random": "RANDOM()",
+        "file_size": "i.file_size DESC, i.id DESC",
+        "file_size_asc": "i.file_size ASC, i.id ASC",
+    }
+    return sort_options.get(sort_by, "i.created_at DESC, i.id DESC")
+
+
+def _supports_cursor_sort(sort_by: str) -> bool:
+    """Return True when cursor pagination is safe for the requested sort."""
+    return sort_by in {"newest", "oldest"}
+
+
+def _fetch_post_filtered_page(
+    conn,
+    base_query: str,
+    base_params: List[Any],
+    order_clause: str,
+    prompt_terms: Optional[List[str]],
+    loras: Optional[List[str]],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Fetch enough rows for a post-filtered page without fixed heuristic truncation."""
+    cursor = conn.cursor()
+    fetch_size = max(limit * 2, 50)
+    offset = 0
+    collected: List[Dict[str, Any]] = []
+
+    while True:
+        query = f"{base_query} ORDER BY {order_clause} LIMIT ? OFFSET ?"
+        params = list(base_params) + [fetch_size, offset]
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        if not rows:
+            break
+
+        batch = _post_filter_results([dict(row) for row in rows], prompt_terms, loras, 0, 0)
+        collected.extend(batch)
+        if limit and len(collected) > limit:
+            break
+
+        if len(rows) < fetch_size:
+            break
+        offset += fetch_size
+
+    return collected
+
+
+def _post_filter_results(results: List[Dict[str, Any]],
+                         prompt_terms: Optional[List[str]],
+                         loras: Optional[List[str]],
+                         offset: int,
+                         limit: int) -> List[Dict[str, Any]]:
+    """Apply in-memory post-filtering for exact matching."""
+    if not prompt_terms and not loras:
+        return results[offset:offset + limit] if limit else results[offset:]
+
+    filtered_results = []
+    normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
+    normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
+    early_stop_count = offset + limit if limit else None
+
+    for img in results:
+        if normalized_prompt_terms:
+            image_tokens = extract_prompt_tokens(img.get('prompt', ''))
+            if not all(term in image_tokens for term in normalized_prompt_terms):
+                continue
+
+        if normalized_loras:
+            image_loras = extract_lora_names(img.get('loras', ''), img.get('prompt', ''))
+            if not any(lora in image_loras for lora in normalized_loras):
+                continue
+
+        filtered_results.append(img)
+
+        if early_stop_count and len(filtered_results) >= early_stop_count:
+            break
+
+    return filtered_results[offset:offset + limit] if limit else filtered_results[offset:]
 
 
 def get_images(
@@ -411,16 +977,27 @@ def get_images(
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
-    - generators: Filter by generator type (OR logic)
-    - tags: Filter by tags (AND logic - image must have ALL tags)
-    - ratings: Filter by rating tags (OR logic - image must have ANY rating OR be untagged)
-    - checkpoints: Filter by checkpoint names (OR logic)
-    - loras: Filter by lora names (AND logic - image must have ALL loras)
-    - search_query: Search in prompt text
-    - artist: Filter by artist name (from artist_predictions table)
-    - sort_by: Sorting method (newest, oldest, name_asc, name_desc, generator, prompt_length, tag_count, rating, character_count, random, file_size)
-    - min_width, max_width, min_height, max_height: Dimension filters
-    - aspect_ratio: Filter by aspect ratio ('square', 'landscape', 'portrait')
+    
+    .. deprecated::
+        Use get_images_paginated() for better performance with large datasets.
+        OFFSET pagination becomes slow for large offsets as SQLite must scan
+        all preceding rows. Cursor-based pagination in get_images_paginated()
+        uses indexed lookups for constant-time page fetching.
+    
+    Args:
+        generators: Filter by generator type (OR logic)
+        tags: Filter by tags (AND logic - image must have ALL tags)
+        ratings: Filter by rating tags (OR logic - image must have ANY rating OR be untagged)
+        checkpoints: Filter by checkpoint names (OR logic)
+        loras: Filter by lora names (AND logic - image must have ALL loras)
+        search_query: Search in prompt text
+        artist: Filter by artist name (from artist_predictions table)
+        sort_by: Sorting method (newest, oldest, name_asc, name_desc, generator, prompt_length, tag_count, rating, character_count, random, file_size)
+        min_width, max_width, min_height, max_height: Dimension filters
+        aspect_ratio: Filter by aspect ratio ('square', 'landscape', 'portrait')
+    
+    Returns:
+        List of image dictionaries matching the filters.
     """
     if image_ids is not None and len(image_ids) == 0:
         return []
@@ -428,27 +1005,211 @@ def get_images(
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # Base query - add subqueries for tag-based sorting
-        # Use lightweight SELECT by default (exclude heavy columns: prompt, negative_prompt, metadata_json)
-        # These columns are only needed for post-filtering
+        # Determine if post-filtering is needed (for exact matching)
         needs_post_filter = bool(prompt_terms) or bool(loras)
-        select_lightweight = """i.id, i.filename, i.generator, i.width, i.height,
+        # Include prompt fields when searching or post-filtering
+        needs_prompt_fields = bool(search_query) or needs_post_filter
+        select_lightweight = """i.id, i.filename, i.path, i.generator, i.width, i.height,
+                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
+        select_with_prompt = """i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, i.width, i.height,
                        i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
         select_full = "i.*"
+        if needs_post_filter:
+            select_cols = select_full
+        elif needs_prompt_fields:
+            select_cols = select_with_prompt
+        else:
+            select_cols = select_lightweight
 
-        select_cols = select_full if needs_post_filter else select_lightweight
+        # Build base query with sorting subqueries
+        query = _build_base_query(sort_by, select_cols)
 
+        # Initialize conditions and params
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        # Apply tag filter (JOIN)
+        query, params = _apply_tag_filter(query, tags, params)
+
+        # Apply image IDs filter
+        conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Apply generator filter
+        conditions, params = _apply_generator_filter(conditions, params, generators)
+
+        # Apply rating filter
+        conditions, params = _apply_rating_filter(conditions, params, ratings)
+
+        # Apply checkpoint filter
+        conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
+
+        # Apply lora filter (SQL-level)
+        conditions, params = _apply_lora_filter(conditions, params, loras)
+
+        # Apply search filter
+        conditions, params = _apply_search_filter(conditions, params, search_query)
+
+        # Apply prompt terms filter
+        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+
+        # Apply dimension filters
+        conditions, params = _apply_dimension_filters(
+            conditions, params,
+            min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        # Apply artist filter (JOIN)
+        query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+        # Build WHERE clause
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        # Get order clause and append to query
+        order_clause = _get_order_clause(sort_by)
+
+        if needs_post_filter:
+            results = _fetch_post_filtered_page(conn, query, params, order_clause, prompt_terms, loras, limit)
+        else:
+            query += f" ORDER BY {order_clause} LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            results = [dict(row) for row in rows]
+
+        return results
+
+
+def get_filtered_image_count(
+    generators: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    ratings: Optional[List[str]] = None,
+    checkpoints: Optional[List[str]] = None,
+    loras: Optional[List[str]] = None,
+    search_query: Optional[str] = None,
+    min_width: Optional[int] = None,
+    max_width: Optional[int] = None,
+    min_height: Optional[int] = None,
+    max_height: Optional[int] = None,
+    prompt_terms: Optional[List[str]] = None,
+    aspect_ratio: Optional[str] = None,
+    artist: Optional[str] = None,
+    image_ids: Optional[List[int]] = None,
+) -> int:
+    """Get count of images matching filters without loading image data.
+
+    Memory-efficient: Only returns a count, doesn't load any image rows.
+    For filters requiring post-filtering (prompt_terms, loras), this returns
+    an approximate count based on SQL-level filtering.
+
+    Args:
+        Same filters as get_images()
+
+    Returns:
+        Number of matching images
+    """
+    if image_ids is not None and len(image_ids) == 0:
+        return 0
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Build count query
+        query = "SELECT COUNT(DISTINCT i.id) FROM images i"
+
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        # Apply tag filter (JOIN)
+        if tags:
+            for i, tag in enumerate(tags):
+                alias = f"t{i}"
+                query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag = ?"
+                params.append(tag)
+
+
+        # Apply image IDs filter
+        conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Apply generator filter
+        conditions, params = _apply_generator_filter(conditions, params, generators)
+
+        # Apply rating filter
+        conditions, params = _apply_rating_filter(conditions, params, ratings)
+
+        # Apply checkpoint filter
+        conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
+
+        # Apply lora filter (SQL-level)
+        conditions, params = _apply_lora_filter(conditions, params, loras)
+
+        # Apply search filter
+        conditions, params = _apply_search_filter(conditions, params, search_query)
+
+        # Apply prompt terms filter
+        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+
+        # Apply dimension filters
+        conditions, params = _apply_dimension_filters(
+            conditions, params,
+            min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        # Apply artist filter (JOIN)
+        query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+        # Build WHERE clause
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        cursor.execute(query, params)
+        return cursor.fetchone()[0]
+
+
+def get_filtered_image_ids(
+    generators: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    ratings: Optional[List[str]] = None,
+    checkpoints: Optional[List[str]] = None,
+    loras: Optional[List[str]] = None,
+    search_query: Optional[str] = None,
+    sort_by: str = "newest",
+    min_width: Optional[int] = None,
+    max_width: Optional[int] = None,
+    min_height: Optional[int] = None,
+    max_height: Optional[int] = None,
+    prompt_terms: Optional[List[str]] = None,
+    aspect_ratio: Optional[str] = None,
+    artist: Optional[str] = None,
+    image_ids: Optional[List[int]] = None,
+) -> List[int]:
+    """Get list of image IDs matching filters without loading full image data.
+
+    Memory-efficient: Returns only IDs, not full image dictionaries.
+    Used by sort session to minimize memory footprint.
+
+    Args:
+        Same filters as get_images()
+
+    Returns:
+        List of image IDs matching the filters
+    """
+    if image_ids is not None and len(image_ids) == 0:
+        return []
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Determine if post-filtering is needed
+        needs_post_filter = bool(prompt_terms) or bool(loras)
+
+        # Build base query selecting only IDs
         if sort_by == "tag_count":
-            query = f"""SELECT DISTINCT {select_cols},
+            query = """SELECT DISTINCT i.id,
                        (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
                        FROM images i"""
-        elif sort_by == "character_count":
-            query = f"""SELECT DISTINCT {select_cols},
-                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count
-                       FROM images i"""
         elif sort_by == "rating":
-            # Priority: explicit > questionable > sensitive > general > unrated
-            query = f"""SELECT DISTINCT {select_cols},
+            query = """SELECT DISTINCT i.id,
                        CASE
                            WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'explicit') THEN 1
                            WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'questionable') THEN 2
@@ -458,170 +1219,330 @@ def get_images(
                        END as rating_order
                        FROM images i"""
         else:
-            query = f"SELECT DISTINCT {select_cols} FROM images i"
+            query = "SELECT DISTINCT i.id FROM images i"
 
-        conditions = []
-        params = []
-        
-        # Join with tags if filtering by tags (AND logic)
-        if tags:
-            for i, tag in enumerate(tags):
-                alias = f"t{i}"
-                query += f" INNER JOIN tags {alias} ON i.id = {alias}.image_id AND {alias}.tag LIKE ?"
-                params.append(f"%{tag}%")
-        
-        if image_ids is not None:
-            placeholders = ",".join("?" * len(image_ids))
-            conditions.append(f"i.id IN ({placeholders})")
-            params.extend(image_ids)
+        conditions: List[str] = []
+        params: List[Any] = []
 
-        # Filter by generators
-        if generators:
-            placeholders = ",".join("?" * len(generators))
-            conditions.append(f"i.generator IN ({placeholders})")
-            params.extend(generators)
-        
-        # Filter by ratings (OR logic)
-        # When all 4 ratings are selected, don't filter at all (show everything)
-        # When some ratings are selected, show images with those rating tags OR untagged images
-        all_ratings = {'general', 'sensitive', 'questionable', 'explicit'}
-        if ratings:
-            selected_ratings = set(ratings)
-            # Only apply filter if not all ratings are selected
-            if selected_ratings != all_ratings:
-                rating_placeholders = ",".join("?" * len(ratings))
-                # Image has one of the selected ratings OR image has no tags at all (untagged)
-                conditions.append(f"""(
-                    EXISTS (SELECT 1 FROM tags rt WHERE rt.image_id = i.id AND rt.tag IN ({rating_placeholders}))
-                    OR i.tagged_at IS NULL
-                )""")
-                params.extend(ratings)
-        
-        # Filter by checkpoints (OR logic)
-        if checkpoints:
-            placeholders = ",".join("?" * len(checkpoints))
-            conditions.append(f"i.checkpoint IN ({placeholders})")
-            params.extend(checkpoints)
-            
-        # Filter by loras (OR logic - image has ANY of the selected loras)
-        # Match on lora name in loras column, metadata_json, or prompt
-        # Use same normalization as library: strip weight notation and lowercase
-        if loras:
-            lora_conditions = []
-            for lora in loras:
-                # Strip weight notation (name:0.8 -> name) and lowercase
-                lora_normalized = normalize_lora_name(lora)
-                # Match lora name in loras column, metadata_json, or prompt
-                lora_conditions.append("(LOWER(i.loras) LIKE ? OR LOWER(i.metadata_json) LIKE ? OR LOWER(i.prompt) LIKE ?)")
-                params.append(f"%{lora_normalized}%")
-                params.append(f"%{lora_normalized}%")
-                params.append(f"%{lora_normalized}%")
-            conditions.append(f"({' OR '.join(lora_conditions)})")
-        
-        # Search in prompt (full-text single term) - with normalization
-        # Normalize: lowercase and replace underscore with space
-        if search_query:
-            normalized_search = normalize_prompt_token(search_query)
-            conditions.append("(REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? OR LOWER(i.filename) LIKE ?)")
-            params.extend([f"%{normalized_search}%", f"%{search_query.lower()}%"])
-        
-        # Multi-prompt filter (AND logic - prompt must contain ALL terms)
-        # Uses substring matching (LIKE %term%) with normalization
-        # Library counting will use the same logic for consistency
-        if prompt_terms:
-            for term in prompt_terms:
-                normalized_term = normalize_prompt_token(term)
-                conditions.append("REPLACE(LOWER(i.prompt), '_', ' ') LIKE ?")
-                params.append(f"%{normalized_term}%")
-        
-        # Dimension filters
-        if min_width:
-            conditions.append("i.width >= ?")
-            params.append(min_width)
-        if max_width:
-            conditions.append("i.width <= ?")
-            params.append(max_width)
-        if min_height:
-            conditions.append("i.height >= ?")
-            params.append(min_height)
-        if max_height:
-            conditions.append("i.height <= ?")
-            params.append(max_height)
-        
-        # Aspect ratio filter
-        if aspect_ratio:
-            if aspect_ratio == 'square':
-                conditions.append("ABS(CAST(i.width AS FLOAT) / i.height - 1.0) < 0.1")
-            elif aspect_ratio == 'landscape':
-                conditions.append("CAST(i.width AS FLOAT) / i.height > 1.1")
-            elif aspect_ratio == 'portrait':
-                conditions.append("CAST(i.width AS FLOAT) / i.height < 0.9")
+        # Apply tag filter (JOIN)
+        query, params = _apply_tag_filter(query, tags, params)
 
-        # Artist filter - join with artist_predictions table
-        if artist:
-            query += " INNER JOIN artist_predictions ap ON i.id = ap.image_id"
-            conditions.append("ap.artist = ?")
-            params.append(artist)
-        
+        # Apply image IDs filter
+        conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Apply generator filter
+        conditions, params = _apply_generator_filter(conditions, params, generators)
+
+        # Apply rating filter
+        conditions, params = _apply_rating_filter(conditions, params, ratings)
+
+        # Apply checkpoint filter
+        conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
+
+        # Apply lora filter (SQL-level)
+        conditions, params = _apply_lora_filter(conditions, params, loras)
+
+        # Apply search filter
+        conditions, params = _apply_search_filter(conditions, params, search_query)
+
+        # Apply prompt terms filter
+        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+
+        # Apply dimension filters
+        conditions, params = _apply_dimension_filters(
+            conditions, params,
+            min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        # Apply artist filter (JOIN)
+        query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+        # Build WHERE clause
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
+
+        # Get order clause
+        order_clause = _get_order_clause(sort_by)
+        query += f" ORDER BY {order_clause}"
+
+        cursor.execute(query, params)
         
-        # Sorting
-        sort_options = {
-            "newest": "i.created_at DESC",
-            "oldest": "i.created_at ASC",
-            "name_asc": "i.filename ASC",
-            "name_desc": "i.filename DESC",
-            "generator": "i.generator ASC, i.created_at DESC",
-            "prompt_length": "LENGTH(COALESCE(i.prompt, '')) DESC",
-            "tag_count": "tag_count DESC",
-            "rating": "rating_order ASC",
-            "character_count": "char_count DESC",
-            "random": "RANDOM()",
-            "file_size": "i.file_size DESC",
-            "file_size_asc": "i.file_size ASC"
-        }
-        order_clause = sort_options.get(sort_by, "i.created_at DESC")
+        # Memory optimization: Use generator to avoid loading all rows at once
+        # For very large datasets, fetch in batches instead of all at once
+        ids = []
+        batch_fetch_size = 5000  # Fetch in chunks to limit memory usage
+        while True:
+            rows = cursor.fetchmany(batch_fetch_size)
+            if not rows:
+                break
+            ids.extend(row[0] for row in rows)
+
+        # Post-filtering for exact matching if needed
+        if needs_post_filter and ids:
+            filtered_ids = []
+            batch_size = 500
+
+            for i in range(0, len(ids), batch_size):
+                batch_ids = ids[i:i + batch_size]
+                placeholders = ",".join("?" * len(batch_ids))
+                cursor.execute(
+                    f"SELECT id, prompt, loras FROM images WHERE id IN ({placeholders})",
+                    batch_ids
+                )
+                batch_data = {row[0]: {'prompt': row[1], 'loras': row[2]} for row in cursor.fetchall()}
+
+                for img_id in batch_ids:
+                    if img_id not in batch_data:
+                        continue
+
+                    img = batch_data[img_id]
+
+                    # Check prompt tokens (AND logic)
+                    if prompt_terms:
+                        normalized_prompt_terms = [normalize_prompt_token(t) for t in prompt_terms]
+                        image_tokens = extract_prompt_tokens(img.get('prompt', '') or '')
+                        if not all(term in image_tokens for term in normalized_prompt_terms):
+                            continue
+
+                    # Check LORAs (OR logic)
+                    if loras:
+                        normalized_loras = [normalize_lora_name(l) for l in loras]
+                        image_loras = extract_lora_names(img.get('loras', '') or '', img.get('prompt', '') or '')
+                        if not any(lora in image_loras for lora in normalized_loras):
+                            continue
+
+                    filtered_ids.append(img_id)
+
+            return filtered_ids
+
+        return ids
+
+
+def get_images_paginated(
+    generators: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    ratings: Optional[List[str]] = None,
+    checkpoints: Optional[List[str]] = None,
+    loras: Optional[List[str]] = None,
+    search_query: Optional[str] = None,
+    sort_by: str = "newest",
+    limit: int = 100,
+    cursor_id: Optional[int] = None,
+    min_width: Optional[int] = None,
+    max_width: Optional[int] = None,
+    min_height: Optional[int] = None,
+    max_height: Optional[int] = None,
+    prompt_terms: Optional[List[str]] = None,
+    aspect_ratio: Optional[str] = None,
+    artist: Optional[str] = None,
+    skip_count: bool = False,  # Option to skip expensive COUNT query
+) -> Dict[str, Any]:
+    """
+    Get images with cursor-based pagination for efficient handling of large datasets.
+
+    Uses image ID as the cursor, which works with the primary key index for fast lookups.
+    The cursor represents the last image ID from the previous page.
+
+    Args:
+        generators: Filter by generator type (OR logic)
+        tags: Filter by tags (AND logic - image must have ALL tags)
+        ratings: Filter by rating tags (OR logic)
+        checkpoints: Filter by checkpoint names (OR logic)
+        loras: Filter by lora names (OR logic)
+        search_query: Search in prompt text
+        sort_by: Sorting method
+        limit: Number of images to return (default 100)
+        cursor_id: Last image ID from previous page (None for first page)
+        min_width, max_width, min_height, max_height: Dimension filters
+        prompt_terms: Multi-prompt filter (AND logic)
+        aspect_ratio: Filter by aspect ratio
+        artist: Filter by artist name
+        skip_count: Skip expensive COUNT query (default False for backward compatibility)
+
+    Returns:
+        Dictionary with:
+        - images: List of image objects
+        - next_cursor: ID to use as cursor for next page (None if no more)
+        - has_more: Boolean indicating if more pages exist
+        - total: Total count matching filters (-1 if skip_count=True)
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Determine if post-filtering is needed
+        needs_post_filter = bool(prompt_terms) or bool(loras)
+        select_lightweight = """i.id, i.filename, i.path, i.generator, i.width, i.height,
+                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
+        select_full = "i.*"
+        select_cols = select_full if needs_post_filter else select_lightweight
+
+        # Build base query with sorting subqueries
+        query = _build_base_query(sort_by, select_cols)
+
+        # Initialize conditions and params
+        conditions: List[str] = []
+        params: List[Any] = []
+
+        # Apply tag filter (JOIN)
+        query, params = _apply_tag_filter(query, tags, params)
+
+        # Apply generator filter
+        conditions, params = _apply_generator_filter(conditions, params, generators)
+
+        # Apply rating filter
+        conditions, params = _apply_rating_filter(conditions, params, ratings)
+
+        # Apply checkpoint filter
+        conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
+
+        # Apply lora filter (SQL-level)
+        conditions, params = _apply_lora_filter(conditions, params, loras)
+
+        # Apply search filter
+        conditions, params = _apply_search_filter(conditions, params, search_query)
+
+        # Apply prompt terms filter
+        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+
+        # Apply dimension filters
+        conditions, params = _apply_dimension_filters(
+            conditions, params,
+            min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        # Apply artist filter (JOIN)
+        query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+        # Apply cursor condition for pagination
+        # Note: Random sort cannot use cursor pagination effectively (each page is truly random)
+        # For random sort, we ignore the cursor and return fresh random results
+        if cursor_id is not None and sort_by != "random":
+            if not _supports_cursor_sort(sort_by):
+                raise ValueError(f"Cursor pagination does not support sort_by={sort_by}")
+            if sort_by == "newest":
+                conditions.append("(i.created_at < (SELECT created_at FROM images WHERE id = ?) OR (i.created_at = (SELECT created_at FROM images WHERE id = ?) AND i.id < ?))")
+                params.extend([cursor_id, cursor_id, cursor_id])
+            else:
+                conditions.append("(i.created_at > (SELECT created_at FROM images WHERE id = ?) OR (i.created_at = (SELECT created_at FROM images WHERE id = ?) AND i.id > ?))")
+                params.extend([cursor_id, cursor_id, cursor_id])
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        # Get order clause and append to query
+        order_clause = _get_order_clause(sort_by)
 
         if needs_post_filter:
-            # Fetch all candidates without limit (we'll apply limit after post-filtering)
-            query += f" ORDER BY {order_clause}"
+            # For post-filtering, fetch more items to ensure we get enough after filtering
+            # We fetch limit * 3 to account for filtering
+            fetch_limit = limit * 3 + 1
+            query += f" ORDER BY {order_clause} LIMIT ?"
+            params.append(fetch_limit)
         else:
-            query += f" ORDER BY {order_clause} LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
-        
+            # Fetch one extra to check if there are more pages
+            query += f" ORDER BY {order_clause} LIMIT ?"
+            params.append(limit + 1)
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
         results = [dict(row) for row in rows]
-        
-        # Post-filter for exact matching if needed
-        if needs_post_filter:
-            filtered_results = []
-            
-            # Normalize filter terms
-            normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
-            normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
-            
-            for img in results:
-                # Check prompt tokens (AND logic - must have ALL terms)
-                if normalized_prompt_terms:
-                    image_tokens = extract_prompt_tokens(img.get('prompt', ''))
-                    if not all(term in image_tokens for term in normalized_prompt_terms):
-                        continue
-                
-                # Check LORAs (OR logic - must have ANY of the loras)
-                if normalized_loras:
-                    image_loras = extract_lora_names(img.get('loras', ''), img.get('prompt', ''))
-                    if not any(lora in image_loras for lora in normalized_loras):
-                        continue
-                
-                filtered_results.append(img)
-            
-            # Apply offset and limit after post-filtering
-            results = filtered_results[offset:offset + limit] if limit else filtered_results[offset:]
-        
-        return results
 
+        # Apply post-filtering for exact matching if needed
+        if needs_post_filter:
+            results = _post_filter_results(results, prompt_terms, loras, 0, limit + 1)
+
+        # Check if there are more results
+        has_more = len(results) > limit
+        if has_more:
+            results = results[:limit]  # Remove the extra item
+
+        # Get total count for the filter combination
+        # Performance optimization: skip expensive COUNT query when not needed
+        # Cursor pagination doesn't need total count for navigation
+        if skip_count:
+            total_count = -1  # Indicate count was skipped
+        else:
+            total_count = _get_filtered_count(
+                conn, generators, tags, ratings, checkpoints, loras,
+                search_query, prompt_terms, artist, min_width, max_width,
+                min_height, max_height, aspect_ratio
+            )
+
+        # Determine next cursor (last item's ID)
+        # For random sort, cursor is None since pagination doesn't work with random
+        next_cursor = None
+        if has_more and results and sort_by != "random":
+            next_cursor = str(results[-1]["id"])
+
+        return {
+            "images": results,
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "total": total_count
+        }
+
+
+def _get_filtered_count(
+    conn,
+    generators: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    ratings: Optional[List[str]] = None,
+    checkpoints: Optional[List[str]] = None,
+    loras: Optional[List[str]] = None,
+    search_query: Optional[str] = None,
+    prompt_terms: Optional[List[str]] = None,
+    artist: Optional[str] = None,
+    min_width: Optional[int] = None,
+    max_width: Optional[int] = None,
+    min_height: Optional[int] = None,
+    max_height: Optional[int] = None,
+    aspect_ratio: Optional[str] = None,
+) -> int:
+    """Get total count for filtered images.
+
+    Uses simplified query for performance on large datasets.
+    """
+    cursor = conn.cursor()
+
+    query = "SELECT COUNT(DISTINCT i.id) FROM images i"
+    conditions: List[str] = []
+    params: List[Any] = []
+
+    # Apply tag filter (JOIN)
+    query, params = _apply_tag_filter(query, tags, params)
+
+    # Apply generator filter
+    conditions, params = _apply_generator_filter(conditions, params, generators)
+
+    # Apply rating filter
+    conditions, params = _apply_rating_filter(conditions, params, ratings)
+
+    # Apply checkpoint filter
+    conditions, params = _apply_checkpoint_filter(conditions, params, checkpoints)
+
+    # Apply lora filter (SQL-level)
+    conditions, params = _apply_lora_filter(conditions, params, loras)
+
+    # Apply search filter
+    conditions, params = _apply_search_filter(conditions, params, search_query)
+
+    # Apply prompt terms filter
+    conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+
+    # Apply dimension filters
+    conditions, params = _apply_dimension_filters(
+        conditions, params,
+        min_width, max_width, min_height, max_height, aspect_ratio
+    )
+
+    # Apply artist filter (JOIN)
+    query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    cursor.execute(query, params)
+    result = cursor.fetchone()
+    return result[0] if result else 0
 
 
 def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
@@ -631,6 +1552,28 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
         cursor.execute("SELECT * FROM images WHERE id = ?", (image_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    """Get multiple images by IDs in a single query (avoids N+1).
+
+    Args:
+        image_ids: List of image IDs to fetch
+
+    Returns:
+        Dictionary mapping image_id -> image data
+    """
+    if not image_ids:
+        return {}
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" * len(image_ids))
+        cursor.execute(
+            f"SELECT * FROM images WHERE id IN ({placeholders})",
+            image_ids
+        )
+        return {row['id']: dict(row) for row in cursor.fetchall()}
 
 
 def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
@@ -645,7 +1588,21 @@ def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
 
 
 def get_all_tags() -> List[Dict[str, Any]]:
-    """Get all unique tags with their counts."""
+    """Get all unique tags with their counts.
+    
+    Uses in-memory caching with TTL to reduce database load.
+    Cache is invalidated after 60 seconds or when tags are modified.
+    """
+    global _tags_cache_data, _tags_cache_timestamp
+    
+    current_time = time.time()
+    
+    # Check cache
+    with _tags_cache_lock:
+        if _tags_cache_data is not None and (current_time - _tags_cache_timestamp) < _TAGS_CACHE_TTL:
+            return _tags_cache_data
+    
+    # Fetch from database
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -654,7 +1611,14 @@ def get_all_tags() -> List[Dict[str, Any]]:
             GROUP BY tag 
             ORDER BY count DESC
         """)
-        return [dict(row) for row in cursor.fetchall()]
+        result = [dict(row) for row in cursor.fetchall()]
+    
+    # Update cache
+    with _tags_cache_lock:
+        _tags_cache_data = result
+        _tags_cache_timestamp = current_time
+    
+    return result
 
 
 def get_all_generators() -> List[Dict[str, Any]]:
@@ -681,14 +1645,39 @@ def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+def get_all_image_ids() -> List[int]:
+    """Return all image IDs (lightweight — no row data loaded).
+
+    Used by the tagging pipeline to avoid loading all image rows into
+    memory at once. Callers fetch full rows in small batches.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM images ORDER BY id")
+        return [row[0] for row in cursor.fetchall()]
+
+
+def get_untagged_image_ids() -> List[int]:
+    """Return IDs of images that have not been tagged yet.
+
+    Lightweight counterpart to get_untagged_images(); callers fetch
+    full rows in small batches to avoid OOM on large libraries.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL ORDER BY id")
+        return [row[0] for row in cursor.fetchall()]
+
+
 def update_image_path(image_id: int, new_path: str):
     """Update the path of an image (after moving)."""
     with get_db() as conn:
         cursor = conn.cursor()
-        new_filename = os.path.basename(new_path)
+        normalized_path = os.path.abspath(new_path)
+        new_filename = os.path.basename(normalized_path)
         cursor.execute(
             "UPDATE images SET path = ?, filename = ? WHERE id = ?",
-            (new_path, new_filename, image_id)
+            (normalized_path, new_filename, image_id)
         )
 
 
@@ -870,5 +1859,5 @@ def get_image_count() -> int:
         return cursor.fetchone()[0]
 
 
-# Initialize database on module import
-init_db()
+# NOTE: init_db() is called by the lifespan handler in main.py.
+# Do not call it at module import time to avoid side effects.

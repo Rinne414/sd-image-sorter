@@ -43,7 +43,10 @@ const VirtualGallery = {
      * Initialize virtual gallery, replacing the default render.
      */
     init() {
-        if (this.initialized) return;
+        // Clean up before reinitializing to prevent memory leaks
+        if (this.initialized) {
+            this.destroy();
+        }
 
         const grid = document.getElementById('gallery-grid');
         if (!grid) return;

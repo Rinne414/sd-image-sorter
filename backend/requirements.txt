@@ -1,4 +1,5 @@
 fastapi>=0.109.0
+starlette<1.0  # Required for compatibility with FastAPI routers
 uvicorn[standard]>=0.27.0
 onnxruntime>=1.17.0
 Pillow>=10.0.0
@@ -9,3 +10,10 @@ python-multipart>=0.0.6
 ultralytics>=8.4.0
 fastembed>=0.4.0
 nudenet>=3.0.0
+transformers>=4.36.0
+torch>=2.0.0
+slowapi>=0.1.9
+
+# Testing dependencies
+pytest>=8.0.0
+pytest-cov>=4.1.0

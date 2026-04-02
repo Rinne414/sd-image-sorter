@@ -4,6 +4,11 @@
  * and weighted random generation.
  */
 
+// escapeHtml fallback — main definition is in app.js
+if (typeof escapeHtml === 'undefined') {
+    var escapeHtml = (value) => String(value ?? '');
+}
+
 const PromptLab = {
     categories: {},
     tagSets: [],
@@ -25,6 +30,36 @@ const PromptLab = {
         this.renderSlotBuilder();
         this.renderPresetList();
         this.bindEvents();
+        this.showFirstUseGuide();
+    },
+
+    showFirstUseGuide() {
+        if (localStorage.getItem('promptlab-guide-seen')) return;
+
+        const view = document.getElementById('view-promptlab');
+        if (!view) return;
+
+        const overlay = window.App.createGuideOverlay({
+            id: 'promptlab-first-use-guide',
+            storageKey: 'promptlab-guide-seen',
+            title: '🧪 Prompt Lab Guide',
+            description: 'Generate random prompts with intelligent tag selection.',
+            steps: [
+                { title: 'Randomize', text: 'Generate a random prompt with smart tag selection' },
+                { title: 'Tag Sets', text: 'Apply pre-built outfit combinations' },
+                { title: 'Lock Slots', text: 'Keep specific tags during randomization' },
+                { title: 'Exclusions', text: 'Auto-prevent conflicting tags' },
+            ],
+            maxWidth: '520px',
+        });
+
+        view.style.position = 'relative';
+        view.appendChild(overlay);
+
+        overlay.querySelector('[data-guide-close]')?.addEventListener('click', () => {
+            overlay.remove();
+            localStorage.setItem('promptlab-guide-seen', 'true');
+        });
     },
 
     // ============== Data Loading ==============
@@ -65,6 +100,49 @@ const PromptLab = {
         }
     },
 
+    _escapeValue(value) {
+        return escapeHtml(value);
+    },
+
+    _safeDataValue(value) {
+        return encodeURIComponent(String(value ?? ''));
+    },
+
+    _decodeDataValue(value) {
+        try {
+            return decodeURIComponent(String(value ?? ''));
+        } catch (e) {
+            return String(value ?? '');
+        }
+    },
+
+    _buildTagChip(tag, category, selectedTags) {
+        const safeTag = this._escapeValue(tag);
+        const safeCategory = this._escapeValue(category);
+        const encodedTag = this._safeDataValue(tag);
+        const encodedCategory = this._safeDataValue(category);
+        const selectedClass = selectedTags.includes(tag) ? 'selected' : '';
+        return `
+            <span class="cat-tag ${selectedClass}"
+                  data-tag="${encodedTag}" data-cat="${encodedCategory}"
+                  title="Click to add to ${safeCategory} slot">
+                ${safeTag}
+            </span>
+        `;
+    },
+
+    _buildSlotTag(tag, category) {
+        const safeTag = this._escapeValue(tag);
+        const encodedTag = this._safeDataValue(tag);
+        const encodedCategory = this._safeDataValue(category);
+        return `
+            <span class="slot-tag" data-tag="${encodedTag}" data-cat="${encodedCategory}">
+                ${safeTag}
+                <span class="slot-tag-remove" data-tag="${encodedTag}" data-cat="${encodedCategory}">×</span>
+            </span>
+        `;
+    },
+
     // ============== Rendering ==============
 
     renderCategoryBrowser() {
@@ -77,27 +155,23 @@ const PromptLab = {
             return;
         }
 
-        const html = categoryNames.map(cat => {
+        const html = categoryNames.map((cat) => {
             const tags = this.categories[cat] || [];
             const selectedTags = this.slots[cat] || [];
-            const isExpanded = container.querySelector(`[data-cat="${cat}"]`)?.classList.contains('expanded');
+            const encodedCategory = this._safeDataValue(cat);
+            const safeCategory = this._escapeValue(cat);
+            const isExpanded = container.querySelector(`[data-cat="${encodedCategory}"]`)?.classList.contains('expanded');
 
             return `
-                <div class="cat-group ${isExpanded ? 'expanded' : ''}" data-cat="${cat}">
-                    <div class="cat-header" data-cat="${cat}">
+                <div class="cat-group ${isExpanded ? 'expanded' : ''}" data-cat="${encodedCategory}">
+                    <div class="cat-header" data-cat="${encodedCategory}">
                         <span class="cat-arrow">${isExpanded ? '▼' : '▶'}</span>
-                        <span class="cat-name">${cat}</span>
+                        <span class="cat-name">${safeCategory}</span>
                         <span class="cat-count">${tags.length}</span>
                         ${selectedTags.length > 0 ? `<span class="cat-selected">${selectedTags.length} selected</span>` : ''}
                     </div>
                     <div class="cat-tags" style="display: ${isExpanded ? 'flex' : 'none'};">
-                        ${tags.map(tag => `
-                            <span class="cat-tag ${selectedTags.includes(tag) ? 'selected' : ''}"
-                                  data-tag="${tag}" data-cat="${cat}"
-                                  title="Click to add to ${cat} slot">
-                                ${tag}
-                            </span>
-                        `).join('')}
+                        ${tags.map((tag) => this._buildTagChip(tag, cat, selectedTags)).join('')}
                     </div>
                 </div>
             `;
@@ -105,8 +179,7 @@ const PromptLab = {
 
         container.innerHTML = html;
 
-        // Bind category toggle
-        container.querySelectorAll('.cat-header').forEach(header => {
+        container.querySelectorAll('.cat-header').forEach((header) => {
             header.addEventListener('click', () => {
                 const group = header.parentElement;
                 const tagsDiv = group.querySelector('.cat-tags');
@@ -118,11 +191,10 @@ const PromptLab = {
             });
         });
 
-        // Bind tag click
-        container.querySelectorAll('.cat-tag').forEach(tagEl => {
+        container.querySelectorAll('.cat-tag').forEach((tagEl) => {
             tagEl.addEventListener('click', () => {
-                const tag = tagEl.dataset.tag;
-                const cat = tagEl.dataset.cat;
+                const tag = this._decodeDataValue(tagEl.dataset.tag);
+                const cat = this._decodeDataValue(tagEl.dataset.cat);
                 this.toggleTagInSlot(cat, tag);
             });
         });
@@ -138,42 +210,37 @@ const PromptLab = {
             return;
         }
 
-        // Only show categories that have selections or are commonly used
-        const activeCategories = categoryNames.filter(cat => {
+        const activeCategories = categoryNames.filter((cat) => {
             const selected = this.slots[cat] || [];
             return selected.length > 0;
         });
 
-        // Always show core categories even if empty
         const coreCats = ['character', 'outfit', 'pose', 'expression', 'body', 'background', 'style', 'quality'];
         const displayCats = [...new Set([...coreCats.filter(c => categoryNames.includes(c)), ...activeCategories])];
 
-        const html = displayCats.map(cat => {
+        const html = displayCats.map((cat) => {
             const selected = this.slots[cat] || [];
             const isLocked = this.locked[cat] || false;
             const weight = this.weights[cat] ?? 50;
             const hasConflict = this.checkConflicts(cat);
+            const safeCategory = this._escapeValue(cat);
+            const encodedCategory = this._safeDataValue(cat);
 
             return `
-                <div class="slot-row ${hasConflict ? 'has-conflict' : ''}" data-slot="${cat}">
+                <div class="slot-row ${hasConflict ? 'has-conflict' : ''}" data-slot="${encodedCategory}">
                     <div class="slot-header">
-                        <button class="slot-lock ${isLocked ? 'locked' : ''}" data-cat="${cat}" title="${isLocked ? 'Unlock' : 'Lock'} (survives randomize)">
+                        <button class="slot-lock ${isLocked ? 'locked' : ''}" data-cat="${encodedCategory}" title="${isLocked ? 'Unlock' : 'Lock'} (survives randomize)">
                             ${isLocked ? '🔒' : '🔓'}
                         </button>
-                        <span class="slot-name">${cat}</span>
+                        <span class="slot-name">${safeCategory}</span>
                         ${hasConflict ? '<span class="conflict-icon" title="Exclusion rule conflict">⚠️</span>' : ''}
                     </div>
                     <div class="slot-tags">
-                        ${selected.length > 0 ? selected.map(tag => `
-                            <span class="slot-tag" data-tag="${tag}" data-cat="${cat}">
-                                ${tag}
-                                <span class="slot-tag-remove" data-tag="${tag}" data-cat="${cat}">×</span>
-                            </span>
-                        `).join('') : '<span class="slot-empty">Click tags from browser to add</span>'}
+                        ${selected.length > 0 ? selected.map((tag) => this._buildSlotTag(tag, cat)).join('') : '<span class="slot-empty">Click tags from browser to add</span>'}
                     </div>
                     <div class="slot-weight">
                         <input type="range" min="0" max="100" value="${weight}"
-                               class="slot-weight-slider" data-cat="${cat}" title="Weight: ${weight}%">
+                               class="slot-weight-slider" data-cat="${encodedCategory}" title="Weight: ${weight}%">
                         <span class="slot-weight-value">${weight}%</span>
                     </div>
                 </div>
@@ -182,29 +249,29 @@ const PromptLab = {
 
         container.innerHTML = html;
 
-        // Bind remove buttons
-        container.querySelectorAll('.slot-tag-remove').forEach(btn => {
+        container.querySelectorAll('.slot-tag-remove').forEach((btn) => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.removeTagFromSlot(btn.dataset.cat, btn.dataset.tag);
+                this.removeTagFromSlot(
+                    this._decodeDataValue(btn.dataset.cat),
+                    this._decodeDataValue(btn.dataset.tag),
+                );
             });
         });
 
-        // Bind lock buttons
-        container.querySelectorAll('.slot-lock').forEach(btn => {
+        container.querySelectorAll('.slot-lock').forEach((btn) => {
             btn.addEventListener('click', () => {
-                const cat = btn.dataset.cat;
+                const cat = this._decodeDataValue(btn.dataset.cat);
                 this.locked[cat] = !this.locked[cat];
                 this.renderSlotBuilder();
             });
         });
 
-        // Bind weight sliders
-        container.querySelectorAll('.slot-weight-slider').forEach(slider => {
+        container.querySelectorAll('.slot-weight-slider').forEach((slider) => {
             slider.addEventListener('input', () => {
-                const cat = slider.dataset.cat;
-                this.weights[cat] = parseInt(slider.value);
-                slider.nextElementSibling.textContent = slider.value + '%';
+                const cat = this._decodeDataValue(slider.dataset.cat);
+                this.weights[cat] = parseInt(slider.value, 10) || 0;
+                slider.nextElementSibling.textContent = `${slider.value}%`;
             });
         });
     },
@@ -218,9 +285,9 @@ const PromptLab = {
             return;
         }
 
-        container.innerHTML = this.presets.map(preset => `
+        container.innerHTML = this.presets.map((preset) => `
             <div class="preset-item" data-id="${preset.id}">
-                <span class="preset-name">${preset.name}</span>
+                <span class="preset-name">${this._escapeValue(preset.name)}</span>
                 <div class="preset-actions">
                     <button class="btn-preset-load" data-id="${preset.id}" title="Load preset">📂</button>
                     <button class="btn-preset-delete" data-id="${preset.id}" title="Delete preset">🗑️</button>
@@ -228,11 +295,11 @@ const PromptLab = {
             </div>
         `).join('');
 
-        container.querySelectorAll('.btn-preset-load').forEach(btn => {
+        container.querySelectorAll('.btn-preset-load').forEach((btn) => {
             btn.addEventListener('click', () => this.loadPreset(btn.dataset.id));
         });
 
-        container.querySelectorAll('.btn-preset-delete').forEach(btn => {
+        container.querySelectorAll('.btn-preset-delete').forEach((btn) => {
             btn.addEventListener('click', () => this.deletePreset(btn.dataset.id));
         });
     },
@@ -243,18 +310,23 @@ const PromptLab = {
 
         outputEl.value = this.generatedPrompt;
 
-        // Update conflict warnings
         const warningsEl = document.getElementById('promptlab-warnings');
-        if (warningsEl) {
-            const conflicts = this.getAllConflicts();
-            if (conflicts.length > 0) {
-                warningsEl.innerHTML = conflicts.map(c =>
-                    `<div class="warning-item">⚠️ ${c}</div>`
-                ).join('');
-                warningsEl.style.display = 'block';
-            } else {
-                warningsEl.style.display = 'none';
-            }
+        if (!warningsEl) return;
+
+        const conflicts = this.getAllConflicts();
+        if (conflicts.length > 0) {
+            const fragment = document.createDocumentFragment();
+            conflicts.forEach((conflict) => {
+                const item = document.createElement('div');
+                item.className = 'warning-item';
+                item.textContent = `⚠️ ${conflict}`;
+                fragment.appendChild(item);
+            });
+            warningsEl.replaceChildren(fragment);
+            warningsEl.style.display = 'block';
+        } else {
+            warningsEl.replaceChildren();
+            warningsEl.style.display = 'none';
         }
     },
 
@@ -291,15 +363,27 @@ const PromptLab = {
         if (selected.length === 0) return false;
 
         for (const rule of this.exclusionRules) {
-            const conditionMet = rule.conditions?.some(cond => {
-                const catTags = this.slots[cond.category] || [];
-                return catTags.some(t => t.includes(cond.pattern));
+            // Backend shape: { conditions: [{tag, type}], targets: [{tag, category}] }
+            // checkConflicts only used for UI highlight — treat as best-effort
+            const conditionMet = rule.conditions?.some((cond) => {
+                const condTag = String(cond.tag || cond.pattern || '');
+                // Check if any currently selected tag in any slot includes the condition tag
+                return Object.values(this.slots).some(slotTags =>
+                    slotTags.some(t => condTag && t.includes(condTag))
+                );
             });
 
             if (conditionMet) {
-                const hasExcluded = rule.excludes?.some(exc => {
+                const hasExcluded = rule.targets?.some((target) => {
+                    const targetCat = target.category || '';
+                    const targetTag = String(target.tag || target.pattern || '');
+                    if (!targetCat || targetCat === category) {
+                        return selected.some(t => targetTag && t.includes(targetTag));
+                    }
+                    return false;
+                }) || rule.excludes?.some((exc) => {
                     if (exc.category === category) {
-                        return selected.some(t => t.includes(exc.pattern));
+                        return selected.some(t => exc.pattern && t.includes(exc.pattern));
                     }
                     return false;
                 });
@@ -313,17 +397,22 @@ const PromptLab = {
         const conflicts = [];
 
         for (const rule of this.exclusionRules) {
-            const conditionMet = rule.conditions?.some(cond => {
-                const catTags = this.slots[cond.category] || [];
-                return catTags.some(t => t.includes(cond.pattern));
+            const conditionMet = rule.conditions?.some((cond) => {
+                const condTag = String(cond.tag || cond.pattern || '');
+                return condTag && Object.values(this.slots).some(slotTags =>
+                    slotTags.some(t => t.includes(condTag))
+                );
             });
 
             if (conditionMet) {
                 const excludedTags = [];
-                for (const exc of (rule.excludes || [])) {
-                    const catTags = this.slots[exc.category] || [];
-                    const found = catTags.filter(t => t.includes(exc.pattern));
-                    excludedTags.push(...found.map(t => `${t} (${exc.category})`));
+                const targets = rule.targets || rule.excludes || [];
+                for (const target of targets) {
+                    const targetCat = target.category || '';
+                    const targetTag = String(target.tag || target.pattern || '');
+                    const catTags = targetCat ? (this.slots[targetCat] || []) : Object.values(this.slots).flat();
+                    const found = targetTag ? catTags.filter(t => t.includes(targetTag)) : [];
+                    excludedTags.push(...found.map(t => `${t}${targetCat ? ` (${targetCat})` : ''}`));
                 }
 
                 if (excludedTags.length > 0) {
@@ -341,7 +430,6 @@ const PromptLab = {
         const { showToast } = window.App;
 
         try {
-            // Build config from slots
             const config = {
                 categories: {},
                 tag_sets: [],
@@ -351,7 +439,7 @@ const PromptLab = {
             for (const [cat, tags] of Object.entries(this.slots)) {
                 if (tags.length > 0) {
                     config.categories[cat] = {
-                        tags: tags,
+                        tags,
                         weight: (this.weights[cat] ?? 50) / 100,
                         locked: this.locked[cat] || false,
                     };
@@ -359,19 +447,18 @@ const PromptLab = {
             }
 
             const result = await window.App.API.post('/api/prompts/generate', config);
-            this.generatedPrompt = result.prompt || '';
+            this.generatedPrompt = result.positive_prompt || result.prompt || '';
             this.renderOutput();
 
             if (result.warnings?.length > 0) {
                 showToast(`Generated with ${result.warnings.length} warning(s)`, 'info');
             }
         } catch (e) {
-            showToast('Generation failed: ' + e.message, 'error');
+            showToast(formatUserError(e, "Generation failed"), "error");
         }
     },
 
     async randomize() {
-        // Randomize non-locked slots
         for (const cat of Object.keys(this.categories)) {
             if (this.locked[cat]) continue;
 
@@ -384,7 +471,6 @@ const PromptLab = {
                 continue;
             }
 
-            // Pick 1-3 random tags
             const count = Math.min(tags.length, Math.floor(Math.random() * 3) + 1);
             const shuffled = [...tags].sort(() => Math.random() - 0.5);
             this.slots[cat] = shuffled.slice(0, count);
@@ -408,14 +494,18 @@ const PromptLab = {
                 showToast('No conflicts detected', 'success');
             }
         } catch (e) {
-            showToast('Validation failed: ' + e.message, 'error');
+            showToast(formatUserError(e, "Validation failed"), "error");
         }
     },
 
     // ============== Presets ==============
 
     async savePreset() {
-        const name = prompt('Enter preset name:');
+        const name = await window.App.showInputModal(
+            'Save Preset',
+            'Enter a name for this preset:',
+            ''
+        );
         if (!name) return;
 
         try {
@@ -431,7 +521,7 @@ const PromptLab = {
             this.renderPresetList();
             window.App.showToast(`Preset "${name}" saved`, 'success');
         } catch (e) {
-            window.App.showToast('Failed to save preset: ' + e.message, 'error');
+            window.App.showToast(formatUserError(e, "Failed to save preset"), "error");
         }
     },
 
@@ -453,16 +543,22 @@ const PromptLab = {
     },
 
     async deletePreset(id) {
-        if (!confirm('Delete this preset?')) return;
+        const { showConfirm, API, showToast } = window.App;
 
-        try {
-            await window.App.API.delete(`/api/prompts/presets/${id}`);
-            await this.loadPresets();
-            this.renderPresetList();
-            window.App.showToast('Preset deleted', 'info');
-        } catch (e) {
-            window.App.showToast('Failed to delete preset', 'error');
-        }
+        showConfirm(
+            'Delete Preset',
+            'Delete this preset? This cannot be undone.',
+            async () => {
+                try {
+                    await API.delete(`/api/prompts/presets/${id}`);
+                    await this.loadPresets();
+                    this.renderPresetList();
+                    showToast('Preset deleted', 'info');
+                } catch (e) {
+                    showToast('Failed to delete preset', 'error');
+                }
+            }
+        );
     },
 
     // ============== Tag Sets ==============
@@ -471,12 +567,15 @@ const PromptLab = {
         const set = this.tagSets.find(s => String(s.id) === String(setId));
         if (!set) return;
 
-        // Apply all tags from the set into their respective category slots
-        for (const member of (set.members || [])) {
-            const cat = member.category || 'style';
+        // Backend shape: { id, name, category, tags: [{tag, weight, required}] }
+        const members = set.members || set.tags || [];
+        for (const member of members) {
+            const cat = member.category || set.category || 'style';
+            const tag = member.tag;
+            if (!tag) continue;
             if (!this.slots[cat]) this.slots[cat] = [];
-            if (!this.slots[cat].includes(member.tag)) {
-                this.slots[cat] = [...this.slots[cat], member.tag];
+            if (!this.slots[cat].includes(tag)) {
+                this.slots[cat] = [...this.slots[cat], tag];
             }
         }
 
@@ -487,18 +586,15 @@ const PromptLab = {
 
     // ============== Copy ==============
 
+    usePromptInGallery() {
+        if (!this.generatedPrompt) return;
+        window.App.applyPromptFilter(this.generatedPrompt);
+    },
+
     copyPrompt() {
         const output = document.getElementById('promptlab-output');
         if (!output?.value) return;
-
-        navigator.clipboard.writeText(output.value).then(() => {
-            window.App.showToast('Prompt copied to clipboard', 'success');
-        }).catch(() => {
-            // Fallback
-            output.select();
-            document.execCommand('copy');
-            window.App.showToast('Prompt copied', 'success');
-        });
+        copyTextToClipboard(output.value, 'Prompt copied to clipboard');
     },
 
     clearAll() {
@@ -515,6 +611,7 @@ const PromptLab = {
 
     bindEvents() {
         const btnGenerate = document.getElementById('btn-promptlab-generate');
+        const btnUseGallery = document.getElementById('btn-promptlab-use-gallery');
         const btnRandom = document.getElementById('btn-promptlab-random');
         const btnValidate = document.getElementById('btn-promptlab-validate');
         const btnCopy = document.getElementById('btn-promptlab-copy');
@@ -522,13 +619,13 @@ const PromptLab = {
         const btnSavePreset = document.getElementById('btn-promptlab-save-preset');
 
         btnGenerate?.addEventListener('click', () => this.generate());
+        btnUseGallery?.addEventListener('click', () => this.usePromptInGallery());
         btnRandom?.addEventListener('click', () => this.randomize());
         btnValidate?.addEventListener('click', () => this.validate());
         btnCopy?.addEventListener('click', () => this.copyPrompt());
         btnClear?.addEventListener('click', () => this.clearAll());
         btnSavePreset?.addEventListener('click', () => this.savePreset());
 
-        // Tag set selector
         const setSelector = document.getElementById('promptlab-set-select');
         setSelector?.addEventListener('change', (e) => {
             if (e.target.value) {
@@ -537,24 +634,31 @@ const PromptLab = {
             }
         });
 
-        // Category search
+        const btnApplyTagSet = document.getElementById('btn-promptlab-apply-tagset');
+        btnApplyTagSet?.addEventListener('click', () => {
+            const currentSetSelector = document.getElementById('promptlab-set-select');
+            if (currentSetSelector?.value) {
+                this.applyTagSet(currentSetSelector.value);
+                currentSetSelector.value = '';
+            }
+        });
+
         const searchInput = document.getElementById('promptlab-search');
         searchInput?.addEventListener('input', (e) => {
             const query = e.target.value.toLowerCase();
-            document.querySelectorAll('#promptlab-categories .cat-group').forEach(group => {
-                const catName = group.dataset.cat.toLowerCase();
+            document.querySelectorAll('#promptlab-categories .cat-group').forEach((group) => {
+                const catName = this._decodeDataValue(group.dataset.cat).toLowerCase();
                 const tags = group.querySelectorAll('.cat-tag');
                 let hasMatch = catName.includes(query);
 
-                tags.forEach(tag => {
-                    const matches = tag.dataset.tag.toLowerCase().includes(query);
+                tags.forEach((tag) => {
+                    const matches = this._decodeDataValue(tag.dataset.tag).toLowerCase().includes(query);
                     tag.style.display = query && !matches ? 'none' : '';
                     if (matches) hasMatch = true;
                 });
 
                 group.style.display = hasMatch || !query ? '' : 'none';
 
-                // Auto-expand matching groups
                 if (query && hasMatch) {
                     const tagsDiv = group.querySelector('.cat-tags');
                     if (tagsDiv) tagsDiv.style.display = 'flex';

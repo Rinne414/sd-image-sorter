@@ -14,15 +14,15 @@ function debounce(func, wait) {
     };
 }
 
-// Utility: Escape HTML to prevent XSS (pure string replacement for performance)
+// HTML escape utility
 function escapeHtml(str) {
-    if (!str) return '';
+    if (str == null) return '';
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/'/g, '&#039;');
 }
 
 // Utility: Throttle function
@@ -44,9 +44,7 @@ const RequestManager = {
     requestId: 0,
 
     createAbortController(key) {
-        // Cancel any existing request with the same key
         this.cancel(key);
-
         const controller = new AbortController();
         this.pendingRequests.set(key, controller);
         return controller;
@@ -61,9 +59,7 @@ const RequestManager = {
     },
 
     cancelAll() {
-        this.pendingRequests.forEach((controller, key) => {
-            controller.abort();
-        });
+        this.pendingRequests.forEach((controller) => controller.abort());
         this.pendingRequests.clear();
     },
 
@@ -77,13 +73,29 @@ const RequestManager = {
 };
 
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
+const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
+
+// Load saved filter state from localStorage
+function loadSavedFilterState() {
+    try {
+        const saved = localStorage.getItem(FILTER_STATE_KEY);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+    } catch (e) {
+        Logger.warn('Failed to load saved filter state:', e);
+    }
+    return null;
+}
+
+const savedFilters = loadSavedFilterState();
 
 // App State
 const AppState = {
     currentView: 'gallery',
     viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
-    filters: {
+    filters: savedFilters || {
         generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
         tags: [],
@@ -91,12 +103,19 @@ const AppState = {
         loras: [],
         prompts: [],  // Multi-prompt filter
         artist: null,  // Artist filter
-        favoritesOnly: false,
         search: '',
         sortBy: 'newest'
     },
     selectedImage: null,
     isLoading: false,
+
+    // Pagination state
+    pagination: {
+        cursor: null,
+        hasMore: true,
+        total: 0,
+        pageSize: 100
+    },
 
     // Multi-select state
     selectionMode: false,
@@ -119,6 +138,34 @@ const AppState = {
 
 // ============== API Functions ==============
 
+/**
+ * Format error messages for user-friendly display
+ * @param {number} status - HTTP status code
+ * @param {object} errorData - Error response data
+ * @returns {string} User-friendly error message
+ */
+function formatApiError(status, errorData = {}) {
+    // Use error detail if provided
+    if (errorData.detail) return errorData.detail;
+    if (errorData.error) return errorData.error;
+
+    // Default messages based on status code
+    const statusMessages = {
+        400: 'Invalid request. Please check your input and try again.',
+        401: 'Authentication required. Please refresh the page.',
+        403: 'Access denied. You do not have permission for this action.',
+        404: 'The requested resource was not found.',
+        409: 'This operation conflicts with an existing one. Please wait and try again.',
+        422: 'Invalid data provided. Please check your input.',
+        429: 'Too many requests. Please wait a moment and try again.',
+        500: 'Server error. Please try again later or check the logs.',
+        502: 'Server is temporarily unavailable. Please try again.',
+        503: 'Service unavailable. The server may be starting up.',
+    };
+
+    return statusMessages[status] || `Request failed (${status}). Please try again.`;
+}
+
 const API = {
     async get(endpoint, options = {}) {
         const { signal, requestKey } = options;
@@ -126,7 +173,8 @@ const API = {
             const response = await fetch(`${API_BASE}${endpoint}`, { signal });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `API Error: ${response.status}`);
+                const message = formatApiError(response.status, errorData);
+                throw new Error(message);
             }
             return response.json();
         } catch (error) {
@@ -134,7 +182,7 @@ const API = {
                 throw { name: 'AbortError', cancelled: true };
             }
             if (error.name === 'SyntaxError') {
-                throw new Error('Invalid JSON response from server');
+                throw new Error('Server returned invalid data. Please try again.');
             }
             throw error;
         }
@@ -166,7 +214,8 @@ const API = {
             });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `API Error: ${response.status}`);
+                const message = formatApiError(response.status, errorData);
+                throw new Error(message);
             }
             return response.json();
         } catch (error) {
@@ -174,7 +223,7 @@ const API = {
                 throw { name: 'AbortError', cancelled: true };
             }
             if (error.name === 'SyntaxError') {
-                throw new Error('Invalid JSON response from server');
+                throw new Error('Server returned invalid data. Please try again.');
             }
             throw error;
         }
@@ -200,7 +249,7 @@ const API = {
         }
     },
 
-    // Images - no limit by default (0 = all)
+    // Images with cursor-based pagination
     async getImages(filters = {}, options = {}) {
         const params = new URLSearchParams();
         if (filters.generators?.length) params.set('generators', filters.generators.join(','));
@@ -216,11 +265,9 @@ const API = {
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
         if (filters.artist) params.set('artist', filters.artist);  // Artist filter
-        if (filters.favoritesOnly) params.set('favorites_only', 'true');
         if (filters.search) params.set('search', filters.search);
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
-        params.set('limit', filters.limit ?? 500);  // Default 500 images, 0 means unlimited
-        if (filters.offset) params.set('offset', filters.offset);
+        params.set('limit', filters.limit ?? 999999);  // Load all images at once
 
         // Dimension filters
         if (filters.minWidth) params.set('min_width', filters.minWidth);
@@ -246,18 +293,6 @@ const API = {
 
     async reparseImage(id) {
         return this.post(`/api/images/${id}/reparse`);
-    },
-
-    async getFavoritesSummary() {
-        return this.get('/api/favorites');
-    },
-
-    async addToFavorites(id) {
-        return this.post(`/api/favorites/${id}`);
-    },
-
-    async removeFromFavorites(id) {
-        return this.delete(`/api/favorites/${id}`);
     },
 
     getImageUrl(id) {
@@ -379,7 +414,7 @@ const API = {
 
     // Batch Tag Export
     async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '') {
-        return this.post('/api/export-tags-batch', {
+        return this.post('/api/tags/export-batch', {
             image_ids: imageIds,
             output_folder: outputFolder,
             blacklist: blacklist,
@@ -408,20 +443,30 @@ function showToast(message, type = 'info') {
         container = document.createElement('div');
         container.id = 'toast-container';
         container.className = 'toast-container';
+        container.setAttribute('role', 'status');
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-label', 'Notifications');
         document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
+    toast.setAttribute('role', 'alert');
 
     const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
     toast.innerHTML = `
-        <span class="toast-icon">${icons[type] || 'ℹ'}</span>
+        <span class="toast-icon" aria-hidden="true">${icons[type] || 'ℹ'}</span>
         <span class="toast-message"></span>
     `;
     toast.querySelector('.toast-message').textContent = message;
 
     container.appendChild(toast);
+
+    // Announce to screen readers using A11y module
+    if (window.A11y && typeof window.A11y.announce === 'function') {
+        const priority = type === 'error' ? 'assertive' : 'polite';
+        window.A11y.announce(message, priority);
+    }
 
     setTimeout(() => {
         toast.style.opacity = '0';
@@ -430,10 +475,142 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+function createGuideOverlay({ id, title, description, steps = [], note = '', maxWidth = '520px', storageKey, closeLabel = 'Got it!' }) {
+    const overlay = document.createElement('div');
+    overlay.id = id;
+    overlay.className = 'first-use-overlay';
+
+    const stepsHtml = steps.length > 0
+        ? `<ol class="guide-steps">${steps.map(step => `<li><strong>${escapeHtml(step.title)}</strong><span>${escapeHtml(step.text)}</span></li>`).join('')}</ol>`
+        : '';
+
+    const noteHtml = note ? `<p class="guide-note">${escapeHtml(note)}</p>` : '';
+
+    overlay.innerHTML = `
+        <div class="guide-backdrop"></div>
+        <div class="guide-card" style="--guide-max-width: ${maxWidth};">
+            <h3>${escapeHtml(title)}</h3>
+            <p class="guide-description">${escapeHtml(description)}</p>
+            ${stepsHtml}
+            ${noteHtml}
+            <button class="btn btn-primary guide-close-btn" data-guide-close="${escapeHtml(id)}">${escapeHtml(closeLabel)}</button>
+        </div>
+    `;
+
+    overlay.dataset.storageKey = storageKey || '';
+    return overlay;
+}
+
+function copyTextToClipboard(text, successMessage = 'Copied to clipboard') {
+    const value = String(text ?? '');
+    if (!value) return Promise.resolve(false);
+
+    const fallbackCopy = () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', 'true');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        return copied;
+    };
+
+    if (navigator.clipboard?.writeText) {
+        return navigator.clipboard.writeText(value)
+            .then(() => {
+                showToast(successMessage, 'success');
+                return true;
+            })
+            .catch(() => {
+                const copied = fallbackCopy();
+                if (copied) showToast(successMessage, 'success');
+                return copied;
+            });
+    }
+
+    const copied = fallbackCopy();
+    if (copied) showToast(successMessage, 'success');
+    return Promise.resolve(copied);
+}
+
+// Focus trap for accessibility
+let _lastFocusedElement = null;
+let _focusTrapHandler = null;
+
+function trapFocus(modal) {
+    const focusableElements = modal.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusableElements[0];
+    const lastFocusable = focusableElements[focusableElements.length - 1];
+
+    // Remove existing trap if any
+    if (_focusTrapHandler) {
+        document.removeEventListener('keydown', _focusTrapHandler);
+    }
+
+    _focusTrapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+
+        if (e.shiftKey) {
+            if (document.activeElement === firstFocusable) {
+                e.preventDefault();
+                lastFocusable.focus();
+            }
+        } else {
+            if (document.activeElement === lastFocusable) {
+                e.preventDefault();
+                firstFocusable.focus();
+            }
+        }
+    };
+
+    document.addEventListener('keydown', _focusTrapHandler);
+}
+
+function releaseFocus() {
+    if (_focusTrapHandler) {
+        document.removeEventListener('keydown', _focusTrapHandler);
+        _focusTrapHandler = null;
+    }
+    if (_lastFocusedElement) {
+        _lastFocusedElement.focus();
+        _lastFocusedElement = null;
+    }
+}
+
 function showModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
+        // Store the element that had focus before opening modal
+        _lastFocusedElement = document.activeElement;
         modal.classList.add('visible');
+
+        // Set up focus trap
+        trapFocus(modal);
+
+        // Add escape key handler to close modal
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                hideModal(modalId);
+                document.removeEventListener('keydown', escapeHandler);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+
+        // Store escape handler for cleanup
+        modal._escapeHandler = escapeHandler;
+
+        // Focus the close button for accessibility
+        const closeBtn = modal.querySelector('.modal-close');
+        if (closeBtn) {
+            setTimeout(() => closeBtn.focus(), 100);
+        }
     }
 }
 
@@ -441,6 +618,15 @@ function hideModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
         modal.classList.remove('visible');
+
+        // Remove escape key handler
+        if (modal._escapeHandler) {
+            document.removeEventListener('keydown', modal._escapeHandler);
+            modal._escapeHandler = null;
+        }
+
+        // Release focus trap and restore focus
+        releaseFocus();
     }
 }
 
@@ -564,6 +750,29 @@ function setGalleryViewMode(mode) {
     }
 }
 
+function openGalleryPreview(imageId) {
+    switchView('gallery');
+    requestAnimationFrame(() => {
+        if (window.Gallery && typeof window.Gallery.openPreview === 'function') {
+            window.Gallery.openPreview(imageId);
+        }
+    });
+}
+
+function applyPromptFilter(prompt) {
+    const value = String(prompt ?? '').trim();
+    if (!value) return false;
+
+    if (!AppState.filters.prompts.includes(value)) {
+        AppState.filters.prompts = [...AppState.filters.prompts, value];
+    }
+
+    updateFilterSummary();
+    switchView('gallery');
+    loadImages();
+    return true;
+}
+
 function switchView(viewName) {
     const previousView = AppState.currentView;
 
@@ -588,7 +797,14 @@ function switchView(viewName) {
 
     // Update nav tabs
     $$('.nav-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.view === viewName);
+        const isActive = tab.dataset.view === viewName;
+        tab.classList.toggle('active', isActive);
+        tab.setAttribute('aria-selected', String(isActive));
+    });
+
+    // Update mobile nav items
+    $$('.mobile-nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.view === viewName);
     });
 
     // Update views
@@ -626,6 +842,8 @@ function switchView(viewName) {
         if (window.ArtistIdent && typeof window.ArtistIdent.init === 'function') {
             window.ArtistIdent.init();
         }
+    } else if (viewName === 'censor') {
+        if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
     }
 }
 
@@ -653,6 +871,13 @@ function initEventListeners() {
     // Scan modal
     $('#btn-cancel-scan').addEventListener('click', () => hideModal('scan-modal'));
     $('#btn-start-scan').addEventListener('click', startScan);
+    // UI-02: Inline validation for scan folder path
+    const scanFolderPathInput = $('#scan-folder-path');
+    if (scanFolderPathInput) {
+        const debouncedValidation = debounce(validateScanFolderPath, 300);
+        scanFolderPathInput.addEventListener('input', debouncedValidation);
+        scanFolderPathInput.addEventListener('blur', validateScanFolderPath);
+    }
 
     // Tag modal
     $('#btn-cancel-tag').addEventListener('click', () => hideModal('tag-modal'));
@@ -738,7 +963,7 @@ function initEventListeners() {
                     loadImages();
                     loadStats();
                 } catch (e) {
-                    showToast('Error clearing gallery: ' + e.message, 'error');
+                    showToast(formatUserError(e, "Failed to clear gallery"), "error");
                 }
             }
         );
@@ -762,31 +987,6 @@ function initEventListeners() {
 
     // Export selected
     $('#btn-export-selected').addEventListener('click', showExportModal);
-
-    $('#btn-toggle-favorites-filter')?.addEventListener('click', () => {
-        AppState.filters.favoritesOnly = !AppState.filters.favoritesOnly;
-        updateFilterSummary();
-        loadImages();
-    });
-
-    $('#btn-add-favorites')?.addEventListener('click', async () => {
-        if (AppState.selectedIds.size === 0) {
-            showToast('Please select images first', 'error');
-            return;
-        }
-
-        const results = await Promise.allSettled(Array.from(AppState.selectedIds).map(id => API.addToFavorites(id)));
-        const successCount = results.filter(result => result.status === 'fulfilled').length;
-        const failureCount = results.length - successCount;
-
-        if (successCount > 0) {
-            showToast(`Added ${successCount} image(s) to Favorites`, 'success');
-            await loadImages();
-        }
-        if (failureCount > 0) {
-            showToast(`${failureCount} image(s) failed to add to Favorites`, 'error');
-        }
-    });
 
     // Clear selection
     $('#btn-clear-selection').addEventListener('click', () => {
@@ -817,12 +1017,10 @@ function initEventListeners() {
     });
 
     // --- Export Modal ---
-    $('#btn-close-export').addEventListener('click', () => hideModal('export-modal'));
-    $('#btn-copy-export').addEventListener('click', () => {
-        const text = $('#export-text').value;
-        navigator.clipboard.writeText(text).then(() => {
-            showToast('Copied to clipboard!', 'success');
-        }).catch(() => {
+    $('#btn-close-export')?.addEventListener('click', () => hideModal('export-modal'));
+    $('#btn-copy-export')?.addEventListener('click', () => {
+        const text = $('#export-text')?.value || '';
+        copyTextToClipboard(text, 'Copied to clipboard!').catch(() => {
             showToast('Failed to copy', 'error');
         });
     });
@@ -862,11 +1060,10 @@ function initEventListeners() {
             const input = e.target.value.trim();
             if (input) {
                 const tags = input.split(',').map(t => t.trim()).filter(t => t.length > 0);
-                tags.forEach(tag => {
-                    if (!AppState.filters.tags.includes(tag)) {
-                        AppState.filters.tags.push(tag);
-                    }
-                });
+                const newTags = tags.filter(tag => !AppState.filters.tags.includes(tag));
+                if (newTags.length > 0) {
+                    AppState.filters.tags = [...AppState.filters.tags, ...newTags];
+                }
                 renderModalActiveTags();
                 e.target.value = '';
                 $('#modal-tag-suggestions').innerHTML = '';
@@ -889,11 +1086,10 @@ function initEventListeners() {
                 const input = e.target.value.trim();
                 if (input) {
                     const prompts = input.split(',').map(p => p.trim()).filter(p => p.length > 0);
-                    prompts.forEach(prompt => {
-                        if (!AppState.filters.prompts.includes(prompt)) {
-                            AppState.filters.prompts.push(prompt);
-                        }
-                    });
+                    const newPrompts = prompts.filter(prompt => !AppState.filters.prompts.includes(prompt));
+                    if (newPrompts.length > 0) {
+                        AppState.filters.prompts = [...AppState.filters.prompts, ...newPrompts];
+                    }
                     renderModalActivePrompts();
                     e.target.value = '';
                     $('#modal-prompt-suggestions').innerHTML = '';
@@ -967,7 +1163,7 @@ function initEventListeners() {
                 }
             );
         } catch (err) {
-            showToast('Failed to import tags: ' + err.message, 'error');
+            showToast(formatUserError(err, "Failed to import tags"), "error");
         }
         e.target.value = ''; // Reset file input
     });
@@ -975,13 +1171,263 @@ function initEventListeners() {
     // --- Censored Edit ---
     $('#btn-send-to-censor')?.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (AppState.selectedIds.size > 0 && typeof window.App.addToCensorQueue === 'function') {
-            window.App.addToCensorQueue(Array.from(AppState.selectedIds));
-        } else {
-            switchView('censor');
-            if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
+        if (AppState.selectedIds.size > 0) {
+            if (typeof window.App.addToCensorQueue !== 'function' && typeof window.initCensorEdit === 'function') {
+                window.initCensorEdit();
+            }
+            if (typeof window.App.addToCensorQueue === 'function') {
+                window.App.addToCensorQueue(Array.from(AppState.selectedIds));
+                return;
+            }
+        }
+        switchView('censor');
+        if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
+    });
+
+    // --- Mobile Navigation ---
+    initMobileNavigation();
+}
+
+// ============== Mobile Navigation ==============
+
+function initMobileNavigation() {
+    const mobileMenuToggle = $('#mobile-menu-toggle');
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+    const mobileNavClose = $('#mobile-nav-close');
+    const mobileNavItems = $$('.mobile-nav-item');
+
+    // Toggle mobile menu
+    mobileMenuToggle?.addEventListener('click', () => {
+        toggleMobileMenu();
+    });
+
+    // Close mobile menu
+    mobileNavClose?.addEventListener('click', () => {
+        closeMobileMenu();
+    });
+
+    // Close menu when clicking overlay
+    mobileNavOverlay?.addEventListener('click', (e) => {
+        if (e.target === mobileNavOverlay) {
+            closeMobileMenu();
         }
     });
+
+    // Mobile nav item clicks
+    mobileNavItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const viewName = item.dataset.view;
+            if (viewName) {
+                // Update active state
+                mobileNavItems.forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+
+                // Switch view and close menu
+                switchView(viewName);
+                closeMobileMenu();
+            }
+        });
+    });
+
+    // Mobile action buttons
+    $('#mobile-btn-scan')?.addEventListener('click', () => {
+        closeMobileMenu();
+        showModal('scan-modal');
+    });
+
+    $('#mobile-btn-tag')?.addEventListener('click', () => {
+        closeMobileMenu();
+        showModal('tag-modal');
+    });
+
+    $('#mobile-btn-tags-library')?.addEventListener('click', () => {
+        closeMobileMenu();
+        openTagsLibrary();
+    });
+
+    // Mobile filter toggle (fixed button)
+    const mobileFilterToggle = $('#mobile-filter-toggle');
+    mobileFilterToggle?.addEventListener('click', () => {
+        toggleMobileFilterSidebar();
+    });
+
+    // Mobile filter header button
+    const mobileFilterHeaderBtn = $('#mobile-filter-header-btn');
+    mobileFilterHeaderBtn?.addEventListener('click', () => {
+        toggleMobileFilterSidebar();
+    });
+
+    // Close mobile menu on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (mobileNavOverlay?.classList.contains('visible')) {
+                closeMobileMenu();
+            }
+            // Also close mobile filter sidebar
+            const filterSidebar = $('.filter-sidebar');
+            if (filterSidebar?.classList.contains('mobile-visible')) {
+                filterSidebar.classList.remove('mobile-visible');
+            }
+        }
+    });
+
+    // Handle resize - close mobile menu if window gets larger
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (window.innerWidth > 768) {
+                closeMobileMenu();
+                const filterSidebar = $('.filter-sidebar');
+                if (filterSidebar) {
+                    filterSidebar.classList.remove('mobile-visible');
+                }
+            }
+        }, 150);
+    });
+}
+
+function toggleMobileMenu() {
+    const mobileMenuToggle = $('#mobile-menu-toggle');
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+
+    const isOpen = mobileNavOverlay?.classList.contains('visible');
+
+    if (isOpen) {
+        closeMobileMenu();
+    } else {
+        openMobileMenu();
+    }
+}
+
+function openMobileMenu() {
+    const mobileMenuToggle = $('#mobile-menu-toggle');
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+
+    mobileMenuToggle?.classList.add('active');
+    mobileMenuToggle?.setAttribute('aria-expanded', 'true');
+    mobileNavOverlay?.classList.add('visible');
+
+    // Prevent body scroll when menu is open
+    document.body.style.overflow = 'hidden';
+
+    // Sync active state with current view
+    const currentView = AppState.currentView;
+    $$('.mobile-nav-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.view === currentView);
+    });
+}
+
+function closeMobileMenu() {
+    const mobileMenuToggle = $('#mobile-menu-toggle');
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+
+    mobileMenuToggle?.classList.remove('active');
+    mobileMenuToggle?.setAttribute('aria-expanded', 'false');
+    mobileNavOverlay?.classList.remove('visible');
+
+    // Restore body scroll
+    document.body.style.overflow = '';
+}
+
+function toggleMobileFilterSidebar() {
+    const filterSidebar = $('.filter-sidebar');
+
+    if (filterSidebar) {
+        filterSidebar.classList.toggle('mobile-visible');
+
+        const mobileFilterToggle = $('#mobile-filter-toggle');
+        if (mobileFilterToggle) {
+            mobileFilterToggle.setAttribute('aria-expanded', String(filterSidebar.classList.contains('mobile-visible')));
+        }
+
+        // If showing, add a close button dynamically
+        if (filterSidebar.classList.contains('mobile-visible')) {
+            // Add overlay for closing
+            if (!$('.filter-sidebar-overlay')) {
+                const overlay = document.createElement('div');
+                overlay.className = 'filter-sidebar-overlay';
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.7);
+                    z-index: 999;
+                `;
+                overlay.addEventListener('click', () => {
+                    filterSidebar.classList.remove('mobile-visible');
+                    overlay.remove();
+                });
+                document.body.appendChild(overlay);
+            }
+
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        } else {
+            // Remove overlay if exists
+            const overlay = $('.filter-sidebar-overlay');
+            if (overlay) overlay.remove();
+
+            // Restore body scroll
+            document.body.style.overflow = '';
+        }
+    }
+}
+
+// Function to update mobile filter badge
+function updateMobileFilterBadge() {
+    const badge = $('#mobile-filter-badge');
+    if (!badge) return;
+
+    // Count active filters
+    let filterCount = 0;
+
+    // Check generators (if not all selected)
+    const allGenerators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+    if (AppState.filters.generators.length !== allGenerators.length) {
+        filterCount++;
+    }
+
+    // Check ratings (if not all selected)
+    const allRatings = ['general', 'sensitive', 'questionable', 'explicit'];
+    if (AppState.filters.ratings.length !== allRatings.length) {
+        filterCount++;
+    }
+
+    // Tags
+    if (AppState.filters.tags && AppState.filters.tags.length > 0) {
+        filterCount++;
+    }
+
+    // Checkpoints
+    if (AppState.filters.checkpoints && AppState.filters.checkpoints.length > 0) {
+        filterCount++;
+    }
+
+    // Loras
+    if (AppState.filters.loras && AppState.filters.loras.length > 0) {
+        filterCount++;
+    }
+
+    // Prompts
+    if (AppState.filters.prompts && AppState.filters.prompts.length > 0) {
+        filterCount++;
+    }
+
+    // Artist
+    if (AppState.filters.artist) {
+        filterCount++;
+    }
+
+    // Show/hide badge
+    if (filterCount > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = filterCount;
+    } else {
+        badge.style.display = 'none';
+    }
 }
 
 function filterCollapsibleList(type, query) {
@@ -1014,24 +1460,94 @@ function filterModalList(listId, query) {
 
 // ============== Scanning ==============
 
+// UI-02: Validate scan folder path with inline feedback
+function validateScanFolderPath() {
+    const input = $('#scan-folder-path');
+    const value = input.value.trim();
+    const feedbackEl = $('#scan-folder-feedback');
+
+    // Clear previous state
+    input.classList.remove('input-valid', 'input-invalid');
+    if (feedbackEl) feedbackEl.remove();
+
+    if (!value) {
+        return; // Empty is neutral state
+    }
+
+    // Create feedback element if needed
+    const feedback = document.createElement('small');
+    feedback.id = 'scan-folder-feedback';
+    feedback.className = 'validation-feedback';
+    input.parentNode.appendChild(feedback);
+
+    // Basic path validation — exclude `:` so Windows drive letters (C:\) are allowed
+    const invalidChars = /[<>"|?*]/;
+    if (invalidChars.test(value)) {
+        input.classList.add('input-invalid');
+        feedback.className = 'validation-feedback error';
+        feedback.textContent = 'Path contains invalid characters';
+        return false;
+    }
+
+    // Show checking state
+    input.classList.add('input-checking');
+    feedback.className = 'validation-feedback checking';
+    feedback.textContent = 'Checking path...';
+
+    // Use API to validate (server-side)
+    API.post('/api/validate-path', { path: value })
+        .then(result => {
+            input.classList.remove('input-checking');
+            if (result.valid) {
+                input.classList.add('input-valid');
+                feedback.className = 'validation-feedback success';
+                feedback.textContent = 'Folder found';
+            } else {
+                input.classList.add('input-invalid');
+                feedback.className = 'validation-feedback error';
+                feedback.textContent = result.error || 'Invalid path';
+            }
+        })
+        .catch(() => {
+            input.classList.remove('input-checking');
+            // If validation endpoint doesn't exist, just clear checking state
+            feedback.textContent = '';
+        });
+
+    return true;
+}
+
 async function startScan() {
-    const folderPath = $('#scan-folder-path').value.trim();
+    const folderPath = $('#scan-folder-path')?.value?.trim() || '';
     if (!folderPath) {
         showToast('Please enter a folder path', 'error');
         return;
     }
 
-    const recursive = $('#scan-recursive').checked;
+    const recursive = $('#scan-recursive')?.checked ?? true;
 
     try {
         await API.startScan(folderPath, recursive);
 
-        $('#scan-progress-container').style.display = 'block';
-        $('#btn-start-scan').disabled = true;
+        const progressContainer = $('#scan-progress-container');
+        const startBtn = $('#btn-start-scan');
+        if (progressContainer) progressContainer.style.display = 'block';
+        if (startBtn) startBtn.disabled = true;
 
         pollScanProgress();
     } catch (error) {
-        showToast('Failed to start scan: ' + error.message, 'error');
+        // UI-02: Show inline validation feedback on error
+        const input = $('#scan-folder-path');
+        const feedbackEl = $('#scan-folder-feedback');
+        if (input) {
+            input.classList.remove('input-valid', 'input-checking');
+            input.classList.add('input-invalid');
+        }
+        if (feedbackEl) {
+            feedbackEl.className = 'validation-feedback error';
+            feedbackEl.textContent = error.message;
+        }
+        showToast(formatUserError(error, "Failed to start scan"), "error");
     }
 }
 
@@ -1056,7 +1572,7 @@ async function pollScanProgress(retryCount = 0) {
             setTimeout(() => pollScanProgress(0), 500);
         }
     } catch (error) {
-        console.error('Poll error:', error);
+        Logger.error('Poll error:', error);
         if (retryCount < 3) {
             setTimeout(() => pollScanProgress(retryCount + 1), 1000);
         } else {
@@ -1069,9 +1585,9 @@ async function pollScanProgress(retryCount = 0) {
 // ============== Tagging ==============
 
 async function startTagging() {
-    const threshold = parseFloat($('#tag-threshold').value);
-    const characterThreshold = parseFloat($('#tag-character-threshold').value);
-    const modelSelect = $('#tag-model-select').value;
+    const threshold = parseFloat($('#tag-threshold')?.value) || 0.35;
+    const characterThreshold = parseFloat($('#tag-character-threshold')?.value) || 0.85;
+    const modelSelect = $('#tag-model-select')?.value || 'wd-eva02-large-tagger-v3';
 
     const options = {
         threshold,
@@ -1080,8 +1596,8 @@ async function startTagging() {
 
     // Handle custom model
     if (modelSelect === 'custom') {
-        const modelPath = $('#tag-model-path').value.trim();
-        const tagsPath = $('#tag-tags-path').value.trim();
+        const modelPath = $('#tag-model-path')?.value?.trim() || '';
+        const tagsPath = $('#tag-tags-path')?.value?.trim() || '';
 
         if (!modelPath) {
             showToast('Please enter a model path', 'error');
@@ -1105,22 +1621,88 @@ async function startTagging() {
     try {
         await API.startTagging(options);
 
+        // UI-03: Reset timing state when starting new tagging
+        _tagStartTime = null;
+        _tagProgressHistory = [];
+
         $('#tag-progress-container').style.display = 'block';
         $('#btn-start-tag').disabled = true;
 
         pollTagProgress();
     } catch (error) {
-        showToast('Failed to start tagging: ' + error.message, 'error');
+        showToast(formatUserError(error, "Failed to start tagging"), "error");
     }
 }
+
+// UI-03: Track tagging progress timing for ETA estimation
+let _tagStartTime = null;
+let _tagProgressHistory = [];
 
 async function pollTagProgress() {
     try {
         const progress = await API.getTagProgress();
 
-        const percent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+        // UI-03: Improved progress display with ETA
+        const current = progress.current || 0;
+        const total = progress.total || 0;
+        const percent = total > 0 ? (current / total) * 100 : 0;
+
         $('#tag-progress-fill').style.width = percent + '%';
-        $('#tag-progress-text').textContent = progress.message;
+
+        // Build progress text with ETA
+        let progressText = progress.message;
+        if (total > 0 && current > 0) {
+            // Initialize start time on first progress
+            if (!_tagStartTime) {
+                _tagStartTime = Date.now();
+                _tagProgressHistory = [];
+            }
+
+            // Track progress for ETA calculation
+            _tagProgressHistory.push({ time: Date.now(), current, total });
+
+            // Keep only last 10 data points for smoother ETA
+            if (_tagProgressHistory.length > 10) {
+                _tagProgressHistory.shift();
+            }
+
+            // Calculate ETA if we have enough data points
+            if (_tagProgressHistory.length >= 3) {
+                const first = _tagProgressHistory[0];
+                const last = _tagProgressHistory[_tagProgressHistory.length - 1];
+                const elapsedMs = last.time - first.time;
+                const processedInWindow = last.current - first.current;
+                const remaining = total - current;
+
+                if (processedInWindow > 0 && elapsedMs > 0) {
+                    const rate = processedInWindow / (elapsedMs / 1000); // items per second
+                    if (rate > 0) {
+                        const etaSeconds = remaining / rate;
+                        const etaMinutes = Math.floor(etaSeconds / 60);
+                        const etaSecs = Math.floor(etaSeconds % 60);
+
+                        // Format ETA string
+                        let etaStr = '';
+                        if (etaMinutes > 0) {
+                            etaStr = `${etaMinutes}m ${etaSecs}s`;
+                        } else {
+                            etaStr = `${etaSecs}s`;
+                        }
+
+                        // Update progress text with ETA
+                        progressText = `${current}/${total} (~${etaStr} remaining)`;
+                    } else {
+                        progressText = `${current}/${total}`;
+                    }
+                } else {
+                    progressText = `${current}/${total}`;
+                }
+            } else {
+                progressText = `${current}/${total}`;
+            }
+        }
+
+        $('#tag-progress-text').textContent = progressText;
 
         if (progress.status === 'done') {
             showToast(progress.message, 'success');
@@ -1128,6 +1710,9 @@ async function pollTagProgress() {
             $('#tag-progress-container').style.display = 'none';
             $('#btn-start-tag').disabled = false;
             promptsLibraryCache = null; // Invalidate cache after tagging
+            // Reset timing state
+            _tagStartTime = null;
+            _tagProgressHistory = [];
             loadImages();
         } else if (progress.status === 'running') {
             setTimeout(pollTagProgress, 500);
@@ -1135,9 +1720,15 @@ async function pollTagProgress() {
             showToast(progress.message, 'error');
             $('#tag-progress-container').style.display = 'none';
             $('#btn-start-tag').disabled = false;
+            // Reset timing state
+            _tagStartTime = null;
+            _tagProgressHistory = [];
         }
     } catch (error) {
         showToast('Error checking tag progress', 'error');
+        // Reset timing state on error
+        _tagStartTime = null;
+        _tagProgressHistory = [];
     }
 }
 
@@ -1183,7 +1774,7 @@ async function loadStats() {
         updateModelSelectionSummaries();
 
     } catch (error) {
-        console.error('Failed to load stats:', error);
+        Logger.error('Failed to load stats:', error);
     }
 }
 
@@ -1191,26 +1782,64 @@ async function loadStats() {
 
 const IMAGE_LOAD_KEY = 'images-load';
 
+// Generate skeleton items for loading state
+function generateSkeletonItems(count = 20) {
+    const fragment = document.createDocumentFragment();
+
+    // Use SkeletonGallery if available for better integration
+    if (window.Skeleton && window.SkeletonGallery) {
+        for (let i = 0; i < count; i++) {
+            fragment.appendChild(window.Skeleton.galleryItem());
+        }
+        return fragment;
+    }
+
+    // Fallback implementation
+    for (let i = 0; i < count; i++) {
+        const item = document.createElement('div');
+        item.className = 'gallery-item skeleton-item';
+        item.innerHTML = `
+            <div class="skeleton-image"></div>
+            <div class="skeleton-overlay">
+                <div class="skeleton-badge skeleton"></div>
+            </div>
+        `;
+        fragment.appendChild(item);
+    }
+    return fragment;
+}
+
 async function loadImages() {
     // Cancel any pending image load request
     RequestManager.cancel(IMAGE_LOAD_KEY);
 
+    const galleryGrid = $('#gallery-grid');
+
+    if (galleryGrid) {
+        galleryGrid.innerHTML = '';
+        galleryGrid.appendChild(generateSkeletonItems(20));
+    }
+
     AppState.isLoading = true;
-    $('#gallery-loading').style.display = 'flex';
-    $('#image-count').textContent = 'Loading...';
+    const galleryLoading = $('#gallery-loading');
+    if (galleryLoading) galleryLoading.style.display = 'flex';
+    const imageCount = $('#image-count');
+    if (imageCount) imageCount.textContent = 'Loading...';
 
     try {
         const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
         const result = await API.getImages(AppState.filters, { signal: controller.signal });
         RequestManager.complete(IMAGE_LOAD_KEY);
 
-        // Check if request was cancelled
         if (result === null) return;
 
         AppState.images = result.images;
-        $('#image-count').textContent = `${result.count} images`;
 
-        // Clean stale selections: remove IDs that no longer exist in the current image set
+        if (imageCount) {
+            imageCount.textContent = `${result.total || result.images.length} images`;
+        }
+
+        // Clean stale selections
         if (AppState.selectedIds && AppState.selectedIds.size > 0) {
             const validIds = new Set(result.images.map(img => img.id));
             const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
@@ -1220,21 +1849,29 @@ async function loadImages() {
             }
         }
 
-        // Invalidate tags cache when images change (tags may have changed)
         tagsLibraryCache = null;
 
         if (window.Gallery) {
             Gallery.setImages(AppState.images);
         }
+
+        const emptyState = $('#gallery-empty-state');
+        if (emptyState) {
+            emptyState.style.display = AppState.images.length === 0 ? 'flex' : 'none';
+        }
     } catch (error) {
-        // Don't show error if request was cancelled
         if (error.name === 'AbortError' || error.cancelled) {
             return;
         }
-        showToast('Error loading images: ' + error.message, 'error');
+        showToast(formatUserError(error, "Failed to load images"), "error");
     } finally {
         AppState.isLoading = false;
         $('#gallery-loading').style.display = 'none';
+
+        const loadMoreContainer = $('#gallery-load-more');
+        if (loadMoreContainer) {
+            loadMoreContainer.style.display = 'none';
+        }
     }
 }
 
@@ -1270,13 +1907,14 @@ function renderModelSelectList() {
     list.innerHTML = filtered.map(item => {
         const value = type === 'checkpoint' ? item.checkpoint : item.lora;
         const isSelected = tempSelected.has(value);
+        const safeValue = escapeHtml(value);
 
         return `
-            <div class="model-select-item ${isSelected ? 'selected' : ''}" data-value="${value}">
+            <div class="model-select-item ${isSelected ? 'selected' : ''}" data-value="${safeValue}">
                 <div class="checkbox-custom" style="background: ${isSelected ? 'var(--accent-primary)' : 'transparent'}; border-color: ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}">
                     ${isSelected ? '✓' : ''}
                 </div>
-                <div class="item-text" title="${value}">${value}</div>
+                <div class="item-text" title="${safeValue}">${safeValue}</div>
                 <div class="item-count">${item.count}</div>
             </div>
         `;
@@ -1380,13 +2018,17 @@ async function loadLibraryContent() {
         }
     } catch (error) {
         content.innerHTML = '<p style="color: var(--accent-danger);">Failed to load library</p>';
-        console.error('Library load error:', error);
+        Logger.error('Library load error:', error);
     }
 }
 
 function renderLibraryTags(tags) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
+    if (!tags || tags.length === 0) {
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">No tags found. Scan a folder and run Tag Images first.</p>';
+        return;
+    }
     content.innerHTML = tags.map(t => `
         <div class="library-tag" data-tag="${escapeHtml(t.tag)}" title="Click to add as filter">
             <span class="tag-name">${escapeHtml(t.tag)}</span>
@@ -1398,7 +2040,7 @@ function renderLibraryTags(tags) {
         el.addEventListener('click', () => {
             const tag = el.dataset.tag;
             if (!AppState.filters.tags.includes(tag)) {
-                AppState.filters.tags.push(tag);
+                AppState.filters.tags = [...AppState.filters.tags, tag];
                 updateFilterSummary();
                 hideModal('tags-library-modal');
                 loadImages();
@@ -1411,6 +2053,10 @@ function renderLibraryTags(tags) {
 function renderLibraryPrompts(prompts) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
+    if (!prompts || prompts.length === 0) {
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">No prompts found. Scan a folder with images first.</p>';
+        return;
+    }
     content.innerHTML = prompts.map(p => `
         <div class="library-tag" data-prompt="${escapeHtml(p.prompt)}" title="Click to add as filter">
             <span class="tag-name">${escapeHtml(p.prompt)}</span>
@@ -1422,7 +2068,7 @@ function renderLibraryPrompts(prompts) {
         el.addEventListener('click', () => {
             const prompt = el.dataset.prompt;
             if (!AppState.filters.prompts.includes(prompt)) {
-                AppState.filters.prompts.push(prompt);
+                AppState.filters.prompts = [...AppState.filters.prompts, prompt];
                 updateFilterSummary();
                 hideModal('tags-library-modal');
                 loadImages();
@@ -1476,11 +2122,7 @@ function showConfirm(title, message, onOk, onCancel) {
     const signal = _confirmAbort.signal;
 
     const okBtn = $('#btn-confirm-ok');
-    // Remove old listeners by cloning
-    const newOkBtn = okBtn.cloneNode(true);
-    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
-
-    newOkBtn.addEventListener('click', () => {
+    okBtn.addEventListener('click', () => {
         hideModal('confirm-modal');
         if (onOk) onOk();
     }, { signal });
@@ -1488,9 +2130,7 @@ function showConfirm(title, message, onOk, onCancel) {
     // Handle cancel callback if provided
     const cancelBtn = $('#btn-confirm-cancel');
     if (cancelBtn) {
-        const newCancelBtn = cancelBtn.cloneNode(true);
-        cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
-        newCancelBtn.addEventListener('click', () => {
+        cancelBtn.addEventListener('click', () => {
             hideModal('confirm-modal');
             if (onCancel) onCancel();
         }, { signal });
@@ -1537,8 +2177,8 @@ async function showAnalytics() {
 
         $('#analytics-tags').innerHTML = data.top_tags.length ?
             data.top_tags.map(t => `
-                <div class="analytics-item clickable" data-type="tag" data-value="${t.tag}">
-                    <span class="item-name">${t.tag}</span>
+                <div class="analytics-item clickable" data-type="tag" data-value="${escapeHtml(t.tag)}">
+                    <span class="item-name">${escapeHtml(t.tag)}</span>
                     <span class="item-count">${t.count}</span>
                 </div>
             `).join('') : '<p>No tags found</p>';
@@ -1554,7 +2194,7 @@ async function showAnalytics() {
 
         showModal('analytics-modal');
     } catch (e) {
-        showToast('Error loading analytics: ' + e.message, 'error');
+        showToast(formatUserError(e, "Failed to load analytics"), "error");
     }
 }
 
@@ -1567,7 +2207,7 @@ function applyAnalyticsFilter(type, value) {
         updateModelSelectionSummaries();
     } else if (type === 'tag') {
         if (!AppState.filters.tags.includes(value)) {
-            AppState.filters.tags.push(value);
+            AppState.filters.tags = [...AppState.filters.tags, value];
             addTagToUI(value);
         }
     }
@@ -1660,23 +2300,27 @@ function showBatchExportModal() {
 }
 
 async function executeBatchExport() {
-    const outputFolder = $('#batch-export-folder').value.trim();
+    const outputFolder = $('#batch-export-folder')?.value?.trim() || '';
     if (!outputFolder) {
         showToast('Please enter an output folder', 'error');
         return;
     }
 
-    const prefix = $('#batch-export-prefix').value;
-    const blacklistText = $('#batch-export-blacklist').value;
+    const prefix = $('#batch-export-prefix')?.value || '';
+    const blacklistText = $('#batch-export-blacklist')?.value || '';
     const blacklist = blacklistText ? blacklistText.split(',').map(t => t.trim()).filter(t => t) : [];
 
     const imageIds = Array.from(AppState.selectedIds);
 
     // Show progress
-    $('#batch-export-progress').style.display = 'block';
-    $('#batch-export-progress-fill').style.width = '0%';
-    $('#batch-export-progress-text').textContent = 'Exporting...';
-    $('#btn-start-batch-export').disabled = true;
+    const progressEl = $('#batch-export-progress');
+    const progressFill = $('#batch-export-progress-fill');
+    const progressText = $('#batch-export-progress-text');
+    const startBtn = $('#btn-start-batch-export');
+    if (progressEl) progressEl.style.display = 'block';
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressText) progressText.textContent = 'Exporting...';
+    if (startBtn) startBtn.disabled = true;
 
     try {
         const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix);
@@ -1690,7 +2334,7 @@ async function executeBatchExport() {
             showToast('Export failed: ' + (result.errors?.join(', ') || 'Unknown error'), 'error');
         }
     } catch (e) {
-        showToast('Export failed: ' + e.message, 'error');
+        showToast(formatUserError(e, "Export failed"), "error");
     } finally {
         $('#batch-export-progress').style.display = 'none';
         $('#btn-start-batch-export').disabled = false;
@@ -1783,7 +2427,7 @@ async function searchTags(e) {
 
 function addTagFilter(tag) {
     if (!AppState.filters.tags.includes(tag)) {
-        AppState.filters.tags.push(tag);
+        AppState.filters.tags = [...AppState.filters.tags, tag];
         renderActiveTagFilters();
     }
 }
@@ -1817,6 +2461,11 @@ function renderActiveTagFilters() {
 // ============== Unified Filter Modal ==============
 
 async function openFilterModal() {
+    // Show skeleton while loading
+    if (window.SkeletonFilterModal) {
+        window.SkeletonFilterModal.show('filter-modal');
+    }
+
     // Sync modal state with current AppState
     $$('#modal-generator-filters input').forEach(cb => {
         cb.checked = AppState.filters.generators.includes(cb.value);
@@ -1834,6 +2483,11 @@ async function openFilterModal() {
 
     // Load checkpoints and loras into modal lists
     await loadModalFilterLists();
+
+    // Hide skeleton after loading
+    if (window.SkeletonFilterModal) {
+        window.SkeletonFilterModal.hide('filter-modal');
+    }
 
     showModal('filter-modal');
 }
@@ -1898,33 +2552,54 @@ function renderModalActivePrompts() {
 }
 
 async function loadModalFilterLists() {
+    const cpList = $('#modal-checkpoint-list');
+    const loraList = $('#modal-lora-list');
+
+    // Show skeleton while loading
+    if (window.Skeleton) {
+        const skeletonHTML = `
+            <div class="skeleton skeleton-filter-option"></div>
+            <div class="skeleton skeleton-filter-option"></div>
+            <div class="skeleton skeleton-filter-option"></div>
+            <div class="skeleton skeleton-filter-option"></div>
+            <div class="skeleton skeleton-filter-option"></div>
+        `;
+        if (cpList) cpList.innerHTML = skeletonHTML;
+        if (loraList) loraList.innerHTML = skeletonHTML;
+    }
+
     try {
         // Use cached analytics data if available, otherwise fetch from API
         const data = AppState.analytics || await API.getStats();
 
         // Render checkpoints
-        const cpList = $('#modal-checkpoint-list');
-        cpList.innerHTML = (data.checkpoints || []).map(cp => `
-            <label class="checkbox-label">
-                <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
-                <span class="checkbox-count">${cp.count}</span>
-            </label>
-        `).join('');
+        if (cpList) {
+            cpList.innerHTML = (data.checkpoints || []).map(cp => `
+                <label class="checkbox-label">
+                    <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
+                    <span class="checkbox-count">${cp.count}</span>
+                </label>
+            `).join('');
+        }
 
         // Render loras
-        const loraList = $('#modal-lora-list');
-        loraList.innerHTML = (data.loras || []).map(l => `
-            <label class="checkbox-label">
-                <input type="checkbox" value="${escapeHtml(l.lora)}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-text">${escapeHtml(l.lora)}</span>
-                <span class="checkbox-count">${l.count}</span>
-            </label>
-        `).join('');
+        if (loraList) {
+            loraList.innerHTML = (data.loras || []).map(l => `
+                <label class="checkbox-label">
+                    <input type="checkbox" value="${escapeHtml(l.lora)}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-text">${escapeHtml(l.lora)}</span>
+                    <span class="checkbox-count">${l.count}</span>
+                </label>
+            `).join('');
+        }
     } catch (e) {
-        console.error('Failed to load filter lists:', e);
+        Logger.error('Failed to load filter lists:', e);
+        // Show error state in lists
+        if (cpList) cpList.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">Failed to load checkpoints</div>';
+        if (loraList) loraList.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">Failed to load loras</div>';
     }
 }
 
@@ -1964,7 +2639,7 @@ const _debouncedTagSearch = debounce(async (query) => {
         suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
             el.addEventListener('click', () => {
                 if (!AppState.filters.tags.includes(el.dataset.tag)) {
-                    AppState.filters.tags.push(el.dataset.tag);
+                    AppState.filters.tags = [...AppState.filters.tags, el.dataset.tag];
                     renderModalActiveTags();
                 }
                 $('#modal-tag-search').value = '';
@@ -1983,6 +2658,8 @@ function searchModalTags(query) {
 
 // Cache for prompts library to avoid repeated API calls
 let promptsLibraryCache = null;
+let promptsLibraryCacheTime = 0;
+const PROMPTS_CACHE_TTL = 30000; // 30 seconds
 // Cache for tags to avoid repeated API calls on every keystroke
 let tagsLibraryCache = null;
 let tagsLibraryCacheTime = 0;
@@ -2000,10 +2677,12 @@ const _debouncedPromptSearch = debounce(async (query) => {
     }
 
     try {
-        // Cache the prompts library for better performance
-        if (!promptsLibraryCache) {
+        // Cache the prompts library for better performance (with TTL)
+        const now = Date.now();
+        if (!promptsLibraryCache || (now - promptsLibraryCacheTime) > PROMPTS_CACHE_TTL) {
             const result = await API.getPromptsLibrary(5000);
             promptsLibraryCache = result.prompts || [];
+            promptsLibraryCacheTime = now;
         }
 
         const filtered = promptsLibraryCache
@@ -2026,7 +2705,7 @@ const _debouncedPromptSearch = debounce(async (query) => {
             el.addEventListener('click', () => {
                 const prompt = el.dataset.prompt;
                 if (!AppState.filters.prompts.includes(prompt)) {
-                    AppState.filters.prompts.push(prompt);
+                    AppState.filters.prompts = [...AppState.filters.prompts, prompt];
                     renderModalActivePrompts();
                 }
                 $('#modal-prompt-search').value = '';
@@ -2067,13 +2746,14 @@ function applyModalFilters() {
     // Prompts: don't use search bar - prompts array is built via Enter key
     // Clear search bar since prompts are in the array now
     AppState.filters.search = '';
-    $('#modal-prompt-search').value = '';
+    const promptSearch = $('#modal-prompt-search');
+    if (promptSearch) promptSearch.value = '';
 
     // Get dimension filters
-    const minWidth = parseInt($('#filter-min-width').value) || null;
-    const maxWidth = parseInt($('#filter-max-width').value) || null;
-    const minHeight = parseInt($('#filter-min-height').value) || null;
-    const maxHeight = parseInt($('#filter-max-height').value) || null;
+    const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
+    const maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
+    const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
+    const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
     AppState.filters.minWidth = minWidth;
     AppState.filters.maxWidth = maxWidth;
     AppState.filters.minHeight = minHeight;
@@ -2087,6 +2767,7 @@ function applyModalFilters() {
     updateFilterSummary();
     // Also update Auto-Separate and Manual Sort summaries if their functions exist
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
+    if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
     hideModal('filter-modal');
@@ -2118,7 +2799,6 @@ function resetAllFilters() {
         loras: [],
         prompts: [],
         artist: null,  // Clear artist filter
-        favoritesOnly: false,
         search: '',
         sortBy: 'newest',
         limit: 0,
@@ -2134,15 +2814,20 @@ function resetAllFilters() {
     $$('#modal-rating-filters input').forEach(cb => cb.checked = true);
     $$('#modal-checkpoint-list input').forEach(cb => cb.checked = false);
     $$('#modal-lora-list input').forEach(cb => cb.checked = false);
-    $('#modal-prompt-search').value = '';
+    const modalPromptSearch = $('#modal-prompt-search');
+    if (modalPromptSearch) modalPromptSearch.value = '';
     renderModalActiveTags();
     renderModalActivePrompts();
 
     // Reset dimension filters
-    $('#filter-min-width').value = '';
-    $('#filter-max-width').value = '';
-    $('#filter-min-height').value = '';
-    $('#filter-max-height').value = '';
+    const filterMinWidth = $('#filter-min-width');
+    const filterMaxWidth = $('#filter-max-width');
+    const filterMinHeight = $('#filter-min-height');
+    const filterMaxHeight = $('#filter-max-height');
+    if (filterMinWidth) filterMinWidth.value = '';
+    if (filterMaxWidth) filterMaxWidth.value = '';
+    if (filterMinHeight) filterMinHeight.value = '';
+    if (filterMaxHeight) filterMaxHeight.value = '';
     $$('input[name="aspect-ratio"]').forEach(r => r.checked = r.value === '');
 
     // Hide artist filter row
@@ -2152,6 +2837,7 @@ function resetAllFilters() {
     // Update all filter summaries
     updateFilterSummary();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
+    if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
     hideModal('filter-modal');
@@ -2159,6 +2845,136 @@ function resetAllFilters() {
     loadImages();
     showToast('Filters cleared', 'success');
 }
+
+// ============== Filter Presets ==============
+
+const FILTER_PRESETS_KEY = 'sd-image-sorter-filter-presets';
+
+function getFilterPresets() {
+    try {
+        const saved = localStorage.getItem(FILTER_PRESETS_KEY);
+        return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveFilterPreset(name) {
+    if (!name || !name.trim()) {
+        showToast('Please enter a preset name', 'error');
+        return false;
+    }
+
+    const presets = getFilterPresets();
+    presets[name.trim()] = {
+        generators: AppState.filters.generators,
+        ratings: AppState.filters.ratings,
+        tags: AppState.filters.tags,
+        checkpoints: AppState.filters.checkpoints,
+        loras: AppState.filters.loras,
+        prompts: AppState.filters.prompts,
+        artist: AppState.filters.artist,
+        minWidth: AppState.filters.minWidth,
+        maxWidth: AppState.filters.maxWidth,
+        minHeight: AppState.filters.minHeight,
+        maxHeight: AppState.filters.maxHeight,
+        aspectRatio: AppState.filters.aspectRatio
+    };
+
+    try {
+        localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
+        showToast(`Preset "${name}" saved`, 'success');
+        return true;
+    } catch (e) {
+        showToast('Failed to save preset', 'error');
+        return false;
+    }
+}
+
+function loadFilterPreset(name) {
+    const presets = getFilterPresets();
+    const preset = presets[name];
+
+    if (!preset) {
+        showToast(`Preset "${name}" not found`, 'error');
+        return false;
+    }
+
+    // Apply preset to filters
+    AppState.filters = {
+        ...AppState.filters,
+        ...preset
+    };
+
+    updateFilterSummary();
+    syncGenTabsWithFilters();
+
+    // Update modal checkboxes to match
+    $$('#modal-generator-filters input').forEach(cb => {
+        cb.checked = AppState.filters.generators.includes(cb.value);
+    });
+    $$('#modal-rating-filters input').forEach(cb => {
+        cb.checked = AppState.filters.ratings.includes(cb.value);
+    });
+
+    hideModal('filter-modal');
+    loadImages();
+    showToast(`Preset "${name}" loaded`, 'success');
+    return true;
+}
+
+function deleteFilterPreset(name) {
+    const presets = getFilterPresets();
+    if (presets[name]) {
+        delete presets[name];
+        localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
+        showToast(`Preset "${name}" deleted`, 'success');
+        return true;
+    }
+    return false;
+}
+
+function renderFilterPresets() {
+    const container = $('#filter-presets-list');
+    if (!container) return;
+
+    const presets = getFilterPresets();
+    const presetNames = Object.keys(presets);
+
+    if (presetNames.length === 0) {
+        container.innerHTML = '<div class="presets-empty">No saved presets</div>';
+        return;
+    }
+
+    container.innerHTML = presetNames.map(name => {
+        const safeName = escapeHtml(name);
+        return `
+        <div class="preset-item">
+            <span class="preset-name">${safeName}</span>
+            <div class="preset-actions">
+                <button class="btn-small" data-preset-action="load" data-preset-name="${safeName}">Load</button>
+                <button class="btn-small btn-danger" data-preset-action="delete" data-preset-name="${safeName}">×</button>
+            </div>
+        </div>
+    `;}).join('');
+
+    container.querySelectorAll('[data-preset-action]').forEach(button => {
+        button.addEventListener('click', () => {
+            const { presetAction, presetName } = button.dataset;
+            if (presetAction === 'load') {
+                loadFilterPreset(presetName);
+            } else if (presetAction === 'delete' && deleteFilterPreset(presetName)) {
+                renderFilterPresets();
+            }
+        });
+    });
+}
+
+// Make preset functions globally accessible
+window.saveFilterPreset = saveFilterPreset;
+window.loadFilterPreset = loadFilterPreset;
+window.deleteFilterPreset = deleteFilterPreset;
+window.renderFilterPresets = renderFilterPresets;
 
 function initMissingFilterMarkup() {
     const generatorSection = document.getElementById('modal-generator-filters');
@@ -2188,51 +3004,59 @@ function clearArtistFilter() {
     showToast('Artist filter cleared', 'info');
 }
 
+// Save filter state to localStorage
+function saveFilterState() {
+    try {
+        const stateToSave = {
+            generators: AppState.filters.generators,
+            ratings: AppState.filters.ratings,
+            tags: AppState.filters.tags,
+            checkpoints: AppState.filters.checkpoints,
+            loras: AppState.filters.loras,
+            prompts: AppState.filters.prompts,
+            artist: AppState.filters.artist,
+            sortBy: AppState.filters.sortBy,
+            minWidth: AppState.filters.minWidth,
+            maxWidth: AppState.filters.maxWidth,
+            minHeight: AppState.filters.minHeight,
+            maxHeight: AppState.filters.maxHeight,
+            aspectRatio: AppState.filters.aspectRatio
+        };
+        localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(stateToSave));
+    } catch (e) {
+        Logger.warn('Failed to save filter state:', e);
+    }
+}
+
 function updateFilterSummary() {
+    // Save filter state whenever summary is updated
+    saveFilterState();
+
     const f = AppState.filters;
-    const allGens = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
-    const allRatings = ['general', 'sensitive', 'questionable', 'explicit'];
+
+    // Use shared filter summary formatter for common fields
+    const summary = window.formatFilterSummary(f);
 
     // Generators
-    $('#summary-generators').textContent =
-        f.generators.length === allGens.length ? 'All' :
-            f.generators.length === 0 ? 'None' :
-                f.generators.length > 2 ? `${f.generators.length} selected` : f.generators.join(', ');
+    $('#summary-generators').textContent = summary.generators;
 
     // Ratings
-    $('#summary-ratings').textContent =
-        f.ratings.length === allRatings.length ? 'All' :
-            f.ratings.length === 0 ? 'None' :
-                f.ratings.length > 2 ? `${f.ratings.length} selected` : f.ratings.join(', ');
+    $('#summary-ratings').textContent = summary.ratings;
 
     // Tags
-    $('#summary-tags').textContent =
-        f.tags.length === 0 ? 'None' :
-            f.tags.length > 2 ? `${f.tags.length} tags` : f.tags.join(', ');
+    $('#summary-tags').textContent = summary.tags;
 
     // Checkpoints
-    $('#summary-checkpoints').textContent =
-        (!f.checkpoints || f.checkpoints.length === 0) ? 'None' :
-            `${f.checkpoints.length} selected`;
+    $('#summary-checkpoints').textContent = summary.checkpoints;
 
     // Loras
-    $('#summary-loras').textContent =
-        (!f.loras || f.loras.length === 0) ? 'None' :
-            `${f.loras.length} selected`;
+    $('#summary-loras').textContent = summary.loras;
 
     // Prompt (now uses prompts array)
     const promptSummary = $('#summary-prompt');
     if (promptSummary) {
-        promptSummary.textContent =
-            (!f.prompts || f.prompts.length === 0) ? 'None' :
-                f.prompts.length > 2 ? `${f.prompts.length} prompts` : f.prompts.join(', ');
+        promptSummary.textContent = summary.prompts;
     }
-
-    const favoritesSummary = $('#summary-favorites');
-    if (favoritesSummary) {
-        favoritesSummary.textContent = f.favoritesOnly ? 'Only favorites' : 'All images';
-    }
-    $('#btn-toggle-favorites-filter')?.classList.toggle('active', !!f.favoritesOnly);
 
     // Artist filter
     const artistRow = $('#artist-filter-row');
@@ -2240,64 +3064,175 @@ function updateFilterSummary() {
     if (artistRow && artistSummary) {
         if (f.artist) {
             artistRow.style.display = 'flex';
-            // Format artist name (replace underscores with spaces, capitalize)
-            const formattedArtist = f.artist.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            artistSummary.textContent = formattedArtist;
+            artistSummary.textContent = summary.artist;
         } else {
             artistRow.style.display = 'none';
         }
+    }
+
+    // Update mobile filter badge
+    if (typeof updateMobileFilterBadge === 'function') {
+        updateMobileFilterBadge();
     }
 }
 
 // ============== Initialization ==============
 
+// Global keyboard shortcuts for gallery navigation
+function initGlobalKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Only handle when not in input/textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+            return;
+        }
+
+        // Only in gallery view
+        if (AppState.currentView !== 'gallery') {
+            return;
+        }
+
+        // G - Toggle grid view
+        if (e.key === 'g' || e.key === 'G') {
+            e.preventDefault();
+            setGalleryViewMode('grid');
+            showToast('Grid view', 'info');
+        }
+        // L - Toggle large view
+        else if (e.key === 'l' || e.key === 'L') {
+            e.preventDefault();
+            setGalleryViewMode('large');
+            showToast('Large view', 'info');
+        }
+        // W - Toggle waterfall view
+        else if (e.key === 'w' || e.key === 'W') {
+            e.preventDefault();
+            setGalleryViewMode('waterfall');
+            showToast('Waterfall view', 'info');
+        }
+        // F - Open filter modal
+        else if (e.key === 'f' || e.key === 'F') {
+            e.preventDefault();
+            openFilterModal();
+        }
+        // R - Random image
+        else if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            showRandomImage();
+        }
+        // S - Toggle selection mode
+        else if (e.key === 's' || e.key === 'S') {
+            e.preventDefault();
+            AppState.selectionMode = !AppState.selectionMode;
+            updateSelectionUI();
+            showToast(AppState.selectionMode ? 'Selection mode ON' : 'Selection mode OFF', 'info');
+        }
+        // Escape - Clear selection
+        else if (e.key === 'Escape') {
+            if (AppState.selectedIds.size > 0) {
+                e.preventDefault();
+                AppState.selectedIds.clear();
+                updateSelectionUI();
+                showToast('Selection cleared', 'info');
+            }
+        }
+        // Delete - Clear gallery (with confirmation)
+        else if (e.key === 'Delete') {
+            if (AppState.selectedIds.size > 0) {
+                e.preventDefault();
+                showConfirm(
+                    'Clear Selected Images',
+                    `Clear ${AppState.selectedIds.size} selected images from gallery?`,
+                    () => {
+                        AppState.selectedIds.clear();
+                        updateSelectionUI();
+                        showToast('Selection cleared', 'success');
+                    }
+                );
+            }
+        }
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initMissingFilterMarkup();
     initEventListeners();
     initInputModal();
+    initGlobalKeyboardShortcuts();
     setGalleryViewMode(AppState.viewMode);
     switchView('gallery');
     loadStats();
     updateFilterSummary();
 
+    // Initialize gallery keyboard navigation for accessibility
+    if (window.Gallery && typeof window.Gallery.initKeyboardNavigation === 'function') {
+        window.Gallery.initKeyboardNavigation();
+    }
+
     // Initialize Censor Edit module so addToCensorQueue is available from Gallery
-    if (typeof window.initCensorEdit === 'function') {
-        window.initCensorEdit();
+    // Note: do NOT init here - initCensorEdit is called when user switches to censor view
+    // to prevent mousemove/keydown listeners being attached while another view is active
+
+    // Setup event listeners for buttons that previously had inline onclick
+    const returnToGalleryBtn = document.getElementById('return-to-gallery-btn');
+    if (returnToGalleryBtn) {
+        returnToGalleryBtn.addEventListener('click', () => switchView('gallery'));
     }
 });
 
 
+function buildAppContext() {
+    return {
+        API,
+        AppState,
+        showToast,
+        createGuideOverlay,
+        copyTextToClipboard,
+        showModal,
+        hideModal,
+        showInputModal,
+        showGlobalLoading,
+        hideGlobalLoading,
+        formatSize,
+        loadImages,
+        loadStats,
+        updateSelectionUI,
+        showConfirm,
+        showRandomImage,
+        showAnalytics,
+        showExportModal,
+        showExportTagsModal,
+        updateCollapsibleFilterUI,
+        openModelSelect,
+        renderModelSelectList,
+        confirmModelSelection,
+        updateModelSelectionSummaries,
+        openFilterModal,
+        applyModalFilters,
+        resetAllFilters,
+        updateFilterSummary,
+        openTagsLibrary,
+        switchLibraryTab,
+        filterLibraryContent,
+        switchView,
+        openGalleryPreview,
+        applyPromptFilter,
+        $,
+        $$
+    };
+}
+
 // Export for other modules
-window.App = {
-    API,
-    AppState,
-    showToast,
-    showModal,
-    hideModal,
-    showInputModal,
-    showGlobalLoading,
-    hideGlobalLoading,
-    formatSize,
-    loadImages,
-    loadStats,
-    updateSelectionUI,
-    showConfirm,
-    showRandomImage,
-    showAnalytics,
-    showExportModal,
-    showExportTagsModal,
-    updateCollapsibleFilterUI,
-    openModelSelect,
-    renderModelSelectList,
-    confirmModelSelection,
-    updateModelSelectionSummaries,
-    openFilterModal,
-    applyModalFilters,
-    resetAllFilters,
-    updateFilterSummary,
-    openTagsLibrary,
-    switchLibraryTab,
-    filterLibraryContent,
-    $,
-    $$
-};
+window.App = buildAppContext();
+
+
+// ============== Empty State CTA Handlers ==============
+
+// Connect empty state scan button
+document.addEventListener('DOMContentLoaded', () => {
+    const emptyStateScanBtn = document.getElementById('empty-state-scan-btn');
+    if (emptyStateScanBtn) {
+        emptyStateScanBtn.addEventListener('click', () => {
+            showModal('scan-modal');
+        });
+    }
+});

@@ -5,13 +5,26 @@ Generates 512-dim CLIP embeddings per image and stores them in SQLite.
 Supports finding similar images by ID, by upload, and finding duplicates.
 """
 import io
+import logging
 import os
-import struct
+import tempfile
 import threading
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 from PIL import Image
+
+from config import (
+    CLIP_MODEL_NAME,
+    SIMILARITY_DEFAULT_LIMIT,
+    SIMILARITY_DEFAULT_THRESHOLD,
+    DUPLICATE_THRESHOLD,
+    EMBEDDING_BATCH_SIZE,
+    DUPLICATE_CHUNK_SIZE,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 # Lazy-loaded FastEmbed model
@@ -26,9 +39,9 @@ def _get_embed_model():
         with _embed_lock:
             if _embed_model is None:
                 try:
-                    from fastembed import ImageEmbedding
+                    from fastembed import ImageEmbedding  # type: ignore
                     _embed_model = ImageEmbedding(
-                        model_name="Qdrant/clip-ViT-B-32-vision",
+                        model_name=CLIP_MODEL_NAME,
                     )
                 except ImportError:
                     raise RuntimeError(
@@ -71,6 +84,7 @@ def embed_image_file(image_path: str) -> Optional[np.ndarray]:
 
 def embed_image_pil(pil_image: Image.Image) -> Optional[np.ndarray]:
     """Generate CLIP embedding for a PIL Image."""
+    tmp_path = None
     try:
         model = _get_embed_model()
         # Save to temp bytes, then embed
@@ -79,19 +93,23 @@ def embed_image_pil(pil_image: Image.Image) -> Optional[np.ndarray]:
         buf.seek(0)
 
         # FastEmbed needs a file path or bytes — use temp file
-        import tempfile
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             tmp.write(buf.getvalue())
             tmp_path = tmp.name
 
-        try:
-            embeddings = list(model.embed([tmp_path]))
-            if embeddings:
-                return np.array(embeddings[0], dtype=np.float32)
-        finally:
-            os.unlink(tmp_path)
+        embeddings = list(model.embed([tmp_path]))
+        if embeddings:
+            return np.array(embeddings[0], dtype=np.float32)
     except Exception as e:
-        print(f"[Similarity] Error embedding PIL image: {e}")
+        logger.error("[Similarity] Error embedding PIL image: %s", e)
+    finally:
+        # Clean up temp file with existence check
+        if tmp_path is not None:
+            try:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+            except OSError as e:
+                logger.debug("[Similarity] Failed to delete temp file %s: %s", tmp_path, e)
     return None
 
 
@@ -146,7 +164,7 @@ class SimilarityIndex:
                 self._progress["total"] = len(rows)
 
             # Process in small batches to allow progress tracking
-            batch_size = 10
+            batch_size = EMBEDDING_BATCH_SIZE
             for i in range(0, len(rows), batch_size):
                 batch = rows[i:i + batch_size]
                 paths = [r[1] for r in batch]
@@ -154,18 +172,24 @@ class SimilarityIndex:
                 # Filter to existing files
                 valid = [(r[0], r[1]) for r in batch if os.path.exists(r[1])]
 
+                # Batch update embeddings - collect all updates first
+                updates = []
                 for img_id, img_path in valid:
                     embedding = embed_image_file(img_path)
                     if embedding is not None:
-                        with self.db.get_db() as conn:
-                            cursor = conn.cursor()
-                            cursor.execute(
-                                "UPDATE images SET embedding = ? WHERE id = ?",
-                                (embedding_to_bytes(embedding), img_id),
-                            )
+                        updates.append((embedding_to_bytes(embedding), img_id))
                         self._progress["processed"] += 1
                     else:
                         self._progress["errors"] += 1
+
+                # Single batch UPDATE for all embeddings in this chunk
+                if updates:
+                    with self.db.get_db() as conn:
+                        cursor = conn.cursor()
+                        cursor.executemany(
+                            "UPDATE images SET embedding = ? WHERE id = ?",
+                            updates
+                        )
 
                 # Count non-existent files as errors
                 self._progress["errors"] += len(batch) - len(valid)
@@ -180,7 +204,7 @@ class SimilarityIndex:
         }
 
     def search_by_id(
-        self, image_id: int, limit: int = 20, threshold: float = 0.5
+        self, image_id: int, limit: int = SIMILARITY_DEFAULT_LIMIT, threshold: float = SIMILARITY_DEFAULT_THRESHOLD
     ) -> List[Dict[str, Any]]:
         """Find images similar to a given image ID."""
         with self.db.get_db() as conn:
@@ -204,7 +228,7 @@ class SimilarityIndex:
         return self._rank_candidates(query_emb, candidates, limit, threshold)
 
     def search_by_upload(
-        self, image_data: bytes, limit: int = 20, threshold: float = 0.5
+        self, image_data: bytes, limit: int = SIMILARITY_DEFAULT_LIMIT, threshold: float = SIMILARITY_DEFAULT_THRESHOLD
     ) -> List[Dict[str, Any]]:
         """Find images similar to an uploaded image."""
         pil_image = Image.open(io.BytesIO(image_data))
@@ -222,7 +246,7 @@ class SimilarityIndex:
         return self._rank_candidates(query_emb, candidates, limit, threshold)
 
     def find_duplicates(
-        self, threshold: float = 0.95, limit: int = 100
+        self, threshold: float = DUPLICATE_THRESHOLD, limit: int = 100
     ) -> List[Dict[str, Any]]:
         """Find near-duplicate image pairs above similarity threshold."""
         with self.db.get_db() as conn:
@@ -249,7 +273,7 @@ class SimilarityIndex:
         # Find pairs above threshold using matrix multiplication
         # Process in chunks to avoid memory issues
         duplicates = []
-        chunk_size = 500
+        chunk_size = DUPLICATE_CHUNK_SIZE
 
         for i in range(0, len(rows), chunk_size):
             chunk = normalized[i:i + chunk_size]

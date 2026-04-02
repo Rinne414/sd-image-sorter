@@ -5,6 +5,7 @@
 
 const ManualSortState = {
     active: false,
+    isProcessing: false,  // Lock to prevent race conditions during rapid keypresses
     currentImage: null,
     currentTags: [],
     folders: { w: '', a: '', s: '', d: '' },
@@ -29,6 +30,7 @@ const KEY_MAP = {
     'd': 'd', 'D': 'd', 'ArrowRight': 'd',
     ' ': 'skip',
     'z': 'undo', 'Z': 'undo',
+    'y': 'redo', 'Y': 'redo',
     'Escape': 'exit'
 };
 
@@ -41,7 +43,7 @@ const DIRECTION_MAP = {
 
 // ============== Initialization ==============
 
-function initManualSort() {
+async function initManualSort() {
     // Use direct selectors to avoid timing issues with window.App
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
@@ -55,14 +57,18 @@ function initManualSort() {
 
     // Browse folder buttons
     $$('.browse-folder').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             // Find the input in the same folder-slot as this button
             const folderSlot = btn.closest('.folder-slot');
             const input = folderSlot?.querySelector('.folder-path-input');
             if (input) {
                 const key = input.dataset.key?.toUpperCase() || '';
                 const currentValue = input.value || '';
-                const path = prompt(`Enter folder path for ${key}:\n\nExample: D:\\sorted\\folder-name`, currentValue);
+                const path = await window.App.showInputModal(
+                    `Folder Path for ${key}`,
+                    `Enter the destination folder path.\nExample: D:\\sorted\\folder-name`,
+                    currentValue
+                );
                 if (path !== null) {
                     input.value = path;
                     ManualSortState.folders[input.dataset.key] = path;
@@ -93,6 +99,51 @@ function initManualSort() {
         exitBtn.addEventListener('click', exitSorting);
     }
 
+    // Resume session button
+    const resumeBtn = $('#btn-resume-sorting');
+    if (resumeBtn) {
+        resumeBtn.addEventListener('click', async () => {
+            const banner = $('#sort-resume-banner');
+            if (banner) banner.style.display = 'none';
+            // Load folders from server and jump straight into the active session
+            try {
+                const { folders } = await window.App.API.get('/api/sort/folders');
+                ManualSortState.folders = folders || {};
+                // Restore folder inputs
+                document.querySelectorAll('.folder-path-input').forEach(input => {
+                    const key = input.dataset.key;
+                    if (key && ManualSortState.folders[key]) {
+                        input.value = ManualSortState.folders[key];
+                    }
+                });
+            } catch (e) {
+                if (window.Logger) Logger.warn('Failed to load sort folders:', e);
+            }
+            ManualSortState.active = true;
+            ManualSortState.startTime = Date.now();
+            ManualSortState.sortedCount = 0;
+            ManualSortState.skippedCount = 0;
+            document.addEventListener('keydown', handleSortKeypress);
+            $('#sort-setup').style.display = 'none';
+            $('#sort-interface').style.display = 'flex';
+            await loadCurrentImage();
+        });
+    }
+
+    // Discard saved session button
+    const discardBtn = $('#btn-discard-session');
+    if (discardBtn) {
+        discardBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/api/sort/session', {method: 'DELETE'});
+            } catch (e) {
+                if (window.Logger) Logger.warn('Failed to discard session:', e);
+            }
+            const banner = $('#sort-resume-banner');
+            if (banner) banner.style.display = 'none';
+        });
+    }
+
     // Keyboard listener (added when sorting starts)
 
     // Update filter summary display initially
@@ -101,6 +152,24 @@ function initManualSort() {
             updateManualSortFilterSummary();
         }
     }, 100);
+
+    // Check for saved session on the server
+    try {
+        const session = await window.App.API.get('/api/sort/current').catch(e => {
+            console.warn('Operation failed:', e);
+            return null;
+        });
+        if (session && !session.done && session.image) {
+            const banner = document.querySelector('#sort-resume-banner');
+            if (banner) {
+                banner.style.display = 'flex';
+                const countEl = banner.querySelector('.resume-count');
+                if (countEl) countEl.textContent = `${session.remaining} images remaining`;
+            }
+        }
+    } catch(e) {
+        if (window.Logger) Logger.warn('Failed to check sort session:', e);
+    }
 }
 
 // ============== Start Sorting ==============
@@ -205,7 +274,7 @@ async function startSorting() {
         window.AudioManager?.play('start');
 
     } catch (error) {
-        showToast('Failed to start sorting: ' + error.message, 'error');
+        showToast(formatUserError(error, "Failed to start sorting"), "error");
     }
 }
 
@@ -251,7 +320,9 @@ async function loadCurrentImage() {
         // Update tags
         const tagsEl = $('#current-image-tags');
         const topTags = ManualSortState.currentTags.slice(0, 5);
-        tagsEl.innerHTML = topTags.map(t => `<span class="image-tag">${t.tag}</span>`).join('');
+        tagsEl.innerHTML = topTags
+            .map(t => `<span class="image-tag">${escapeHtml(t.tag)}</span>`)
+            .join('');
 
         // Update progress
         updateProgress();
@@ -262,7 +333,7 @@ async function loadCurrentImage() {
         }, 300);
 
     } catch (error) {
-        console.error('Failed to load current image:', error);
+        Logger.error('Failed to load current image:', error);
     }
 }
 
@@ -345,7 +416,7 @@ function updateGalleryPreview() {
 
         thumbsHTML.push(`
             <div class="${className}" data-index="${i}" title="Image ${i + 1}">
-                <img src="${API.getThumbnailUrl(img.id)}" alt="" loading="lazy">
+                <img src="${API?.getThumbnailUrl?.(img.id) ?? `/api/image-thumbnail/${img.id}?size=256`}" alt="" loading="lazy">
             </div>
         `);
     }
@@ -364,6 +435,25 @@ function updateGalleryPreview() {
 function handleSortKeypress(e) {
     if (!ManualSortState.active) return;
 
+    // Handle Ctrl+Z (undo) and Ctrl+Y / Ctrl+Shift+Z (redo) explicitly
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' || e.key === 'Z') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                redoLastAction();
+            } else {
+                undoLastAction();
+            }
+            return;
+        }
+        if (e.key === 'y' || e.key === 'Y') {
+            e.preventDefault();
+            redoLastAction();
+            return;
+        }
+        return; // Ignore other Ctrl+key combos
+    }
+
     const action = KEY_MAP[e.key];
     if (!action) return;
 
@@ -371,6 +461,8 @@ function handleSortKeypress(e) {
 
     if (action === 'undo') {
         undoLastAction();
+    } else if (action === 'redo') {
+        redoLastAction();
     } else if (action === 'skip') {
         performSkip();
     } else if (action === 'exit') {
@@ -383,41 +475,47 @@ function handleSortKeypress(e) {
 async function performMove(folderKey) {
     const { $, API, showToast } = window.App;
 
-    // Check if folder is configured
-    if (!ManualSortState.folders[folderKey]) {
-        showToast(`Folder ${folderKey.toUpperCase()} not configured`, 'error');
-        return;
-    }
+    // Prevent race condition from rapid keypresses
+    if (ManualSortState.isProcessing) return;
+    ManualSortState.isProcessing = true;
 
-    // Animate folder highlight
-    const folderEl = $(`.sort-folder[data-key="${folderKey}"]`);
-    folderEl?.classList.add('active');
-    setTimeout(() => folderEl?.classList.remove('active'), 300);
-
-    // Animate image flying away
-    const direction = DIRECTION_MAP[folderKey];
-    const imgWrapper = $('.current-image-wrapper');
-    imgWrapper.classList.add(`fly-${direction}`);
-
-    // Play sound
-    window.AudioManager?.play('move', folderKey);
-
-    // Update combo
-    updateCombo();
-
-    // Track stats
-    ManualSortState.sortedCount++;
-    ManualSortState.actionTimestamps.push(Date.now());
-    // Keep only last 30 seconds of timestamps
-    const cutoff = Date.now() - 30000;
-    ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
-
-    // Wait for animation
-    await sleep(300);
-
-    // Send action to server
     try {
+        // Check if folder is configured
+        if (!ManualSortState.folders[folderKey]) {
+            showToast(`Folder ${folderKey.toUpperCase()} not configured`, 'error');
+            return;
+        }
+
+        // Animate folder highlight
+        const folderEl = $(`.sort-folder[data-key="${folderKey}"]`);
+        folderEl?.classList.add('active');
+        setTimeout(() => folderEl?.classList.remove('active'), 300);
+
+        // Animate image flying away
+        const direction = DIRECTION_MAP[folderKey];
+        const imgWrapper = $('.current-image-wrapper');
+        imgWrapper.classList.add(`fly-${direction}`);
+
+        // Play sound
+        window.AudioManager?.play('move', folderKey);
+
+        // Wait for animation
+        await sleep(300);
+
+        // Send action to server
         const result = await API.sortAction('move', folderKey);
+
+        if (result.error) {
+            showToast('Failed to move image: ' + result.error, 'error');
+            return;
+        }
+
+        // Update combo/stats only after successful move
+        updateCombo();
+        ManualSortState.sortedCount++;
+        ManualSortState.actionTimestamps.push(Date.now());
+        const cutoff = Date.now() - 30000;
+        ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
 
         if (result.done) {
             finishSorting();
@@ -428,34 +526,40 @@ async function performMove(folderKey) {
         await loadCurrentImage();
 
     } catch (error) {
-        console.error('Failed to move image:', error);
+        Logger.error('Failed to move image:', error);
         showToast('Failed to move image', 'error');
+    } finally {
+        ManualSortState.isProcessing = false;
     }
 }
 
 async function performSkip() {
-    const { $, API } = window.App;
+    const { $, API, showToast } = window.App;
 
-    // Animate skip
-    const imgWrapper = $('.current-image-wrapper');
-    imgWrapper.classList.add('skip');
-
-    // Play skip sound
-    window.AudioManager?.play('skip');
-
-    // Reset combo
-    ManualSortState.combo = 0;
-    updateComboDisplay();
-
-    // Track skip stats
-    ManualSortState.skippedCount++;
-    ManualSortState.actionTimestamps.push(Date.now());
-    const cutoff = Date.now() - 30000;
-    ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
-
-    await sleep(300);
+    // Prevent race condition from rapid keypresses
+    if (ManualSortState.isProcessing) return;
+    ManualSortState.isProcessing = true;
 
     try {
+        // Animate skip
+        const imgWrapper = $('.current-image-wrapper');
+        imgWrapper.classList.add('skip');
+
+        // Play skip sound
+        window.AudioManager?.play('skip');
+
+        // Reset combo
+        ManualSortState.combo = 0;
+        updateComboDisplay();
+
+        // Track skip stats
+        ManualSortState.skippedCount++;
+        ManualSortState.actionTimestamps.push(Date.now());
+        const cutoff = Date.now() - 30000;
+        ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
+
+        await sleep(300);
+
         const result = await API.sortAction('skip');
 
         if (result.done) {
@@ -466,13 +570,26 @@ async function performSkip() {
         await loadCurrentImage();
 
     } catch (error) {
-        console.error('Failed to skip:', error);
+        Logger.error('Failed to skip:', error);
         showToast('Failed to skip image', 'error');
+    } finally {
+        ManualSortState.isProcessing = false;
     }
 }
 
 async function undoLastAction() {
     const { $, API, showToast } = window.App;
+
+    // Store current action for potential redo before calling undo
+    if (ManualSortState.history && ManualSortState.history.length > 0) {
+        const lastAction = ManualSortState.history[ManualSortState.history.length - 1];
+        if (lastAction && lastAction.type === 'move') {
+            RedoStack.push({
+                type: 'move',
+                folderKey: lastAction.folderKey
+            });
+        }
+    }
 
     // Play undo sound
     window.AudioManager?.play('undo');
@@ -488,6 +605,18 @@ async function undoLastAction() {
         if (result.status === 'no_history') {
             showToast('Nothing to undo', 'info');
             return;
+        }
+
+        // Decrement the appropriate counter based on what was undone
+        // The server tells us what the last action was via result.undone_action
+        if (result.undone_action === 'move') {
+            ManualSortState.sortedCount = Math.max(0, ManualSortState.sortedCount - 1);
+        } else if (result.undone_action === 'skip') {
+            ManualSortState.skippedCount = Math.max(0, ManualSortState.skippedCount - 1);
+        } else {
+            // Fallback: if server doesn't tell us action type, decrement sorted
+            // since moves are more common than skips
+            ManualSortState.sortedCount = Math.max(0, ManualSortState.sortedCount - 1);
         }
 
         // Use the returned image data directly instead of making another API call
@@ -511,12 +640,14 @@ async function undoLastAction() {
             const img = $('#current-image');
             // Add cache-bust to force reload of the image
             const cacheBust = Date.now();
-            img.src = API.getImageUrl(result.image.id) + '?t=' + cacheBust;
+            img.src = (API?.getImageUrl?.(result.image.id) ?? `/api/image-file/${result.image.id}`) + '?t=' + cacheBust;
 
             // Update tags
             const tagsEl = $('#current-image-tags');
             const topTags = ManualSortState.currentTags.slice(0, 5);
-            tagsEl.innerHTML = topTags.map(t => `<span class="image-tag">${t.tag}</span>`).join('');
+            tagsEl.innerHTML = topTags
+                .map(t => `<span class="image-tag">${escapeHtml(t.tag)}</span>`)
+                .join('');
 
             // Update progress
             updateProgress();
@@ -529,24 +660,25 @@ async function undoLastAction() {
             showToast('Undid last action', 'info');
         } else {
             // Fallback to loadCurrentImage if no image data returned
-            console.log('[undo] No image data in response, falling back to loadCurrentImage');
             await loadCurrentImage();
             showToast('Undid last action', 'info');
         }
     } catch (error) {
-        console.error('Failed to undo:', error);
+        Logger.error('Failed to undo:', error);
         showToast('Failed to undo', 'error');
     }
 }
 
 // ============== Combo System ==============
 
+const COMBO_WINDOW_MS = 2000;
+const COMBO_SOUND_MILESTONE = 5;
+
 function updateCombo() {
     const now = Date.now();
     const timeSinceLast = now - ManualSortState.lastActionTime;
 
-    // Combo window is 2 seconds
-    if (timeSinceLast < 2000) {
+    if (timeSinceLast < COMBO_WINDOW_MS) {
         ManualSortState.combo++;
     } else {
         ManualSortState.combo = 1;
@@ -556,7 +688,7 @@ function updateCombo() {
     updateComboDisplay();
 
     // Play combo sound at milestones
-    if (ManualSortState.combo % 5 === 0 && ManualSortState.combo > 0) {
+    if (ManualSortState.combo % COMBO_SOUND_MILESTONE === 0 && ManualSortState.combo > 0) {
         window.AudioManager?.play('combo');
     }
 }
@@ -608,9 +740,13 @@ function finishSorting() {
     $('#sort-interface').style.display = 'none';
     $('#sort-setup').style.display = 'block';
 
+    fetch('/api/sort/session', {method: 'DELETE'}).catch(e => {
+        console.warn('Operation failed:', e);
+    });
+
     // Refresh gallery
-    if (window.loadImages) {
-        window.loadImages();
+    if (window.App && window.App.loadImages) {
+        window.App.loadImages();
     }
 }
 
@@ -623,7 +759,15 @@ function exitSorting() {
     $('#sort-interface').style.display = 'none';
     $('#sort-setup').style.display = 'block';
 
-    showToast('Exited sorting mode', 'info');
+    const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
+    const banner = $('#sort-resume-banner');
+    if (banner && remaining > 0) {
+        banner.style.display = 'flex';
+        const countEl = banner.querySelector('.resume-count');
+        if (countEl) countEl.textContent = `${remaining} images remaining`;
+    }
+
+    showToast('Sorting paused. You can resume later.', 'info');
 
     // Refresh gallery to show updated image locations
     if (window.App && window.App.loadImages) {
@@ -635,76 +779,38 @@ function exitSorting() {
 
 function updateManualSortFilterSummary() {
     const { $, AppState } = window.App;
-    if (!AppState) return;
+    if (!AppState || !AppState.filters) return;
 
-    const f = AppState.filters || {};
-    const allGens = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
-    const allRatings = ['general', 'sensitive', 'questionable', 'explicit'];
+    // Use shared filter summary formatter
+    const summary = window.formatFilterSummary(AppState.filters);
 
     // Generators
     const genEl = $('#manual-sort-summary-generators');
-    if (genEl) {
-        genEl.textContent =
-            !f.generators || f.generators.length === allGens.length ? 'All' :
-                f.generators.length === 0 ? 'None' :
-                    f.generators.length > 2 ? `${f.generators.length} selected` : f.generators.join(', ');
-    }
+    if (genEl) genEl.textContent = summary.generators;
 
     // Tags
     const tagEl = $('#manual-sort-summary-tags');
-    if (tagEl) {
-        tagEl.textContent =
-            !f.tags || f.tags.length === 0 ? 'None' :
-                f.tags.length > 2 ? `${f.tags.length} tags` : f.tags.join(', ');
-    }
+    if (tagEl) tagEl.textContent = summary.tags;
 
     // Ratings
     const ratingEl = $('#manual-sort-summary-ratings');
-    if (ratingEl) {
-        ratingEl.textContent =
-            !f.ratings || f.ratings.length === allRatings.length ? 'All' :
-                f.ratings.length === 0 ? 'None' :
-                    f.ratings.length > 2 ? `${f.ratings.length} selected` : f.ratings.join(', ');
-    }
+    if (ratingEl) ratingEl.textContent = summary.ratings;
 
     // Checkpoints
     const cpEl = $('#manual-sort-summary-checkpoints');
-    if (cpEl) {
-        cpEl.textContent =
-            !f.checkpoints?.length ? 'None' :
-                f.checkpoints.length > 2 ? `${f.checkpoints.length} selected` : f.checkpoints.join(', ');
-    }
+    if (cpEl) cpEl.textContent = summary.checkpoints;
 
     // Loras
     const loraEl = $('#manual-sort-summary-loras');
-    if (loraEl) {
-        loraEl.textContent =
-            !f.loras?.length ? 'None' :
-                f.loras.length > 2 ? `${f.loras.length} selected` : f.loras.join(', ');
-    }
+    if (loraEl) loraEl.textContent = summary.loras;
 
     // Prompts
     const promptEl = $('#manual-sort-summary-prompts');
-    if (promptEl) {
-        promptEl.textContent =
-            !f.prompts?.length ? 'None' :
-                f.prompts.length > 2 ? `${f.prompts.length} prompts` : f.prompts.join(', ');
-    }
+    if (promptEl) promptEl.textContent = summary.prompts;
 
     // Dimensions
     const dimEl = $('#manual-sort-summary-dimensions');
-    if (dimEl) {
-        const hasDimFilter = f.minWidth || f.maxWidth || f.minHeight || f.maxHeight || f.aspectRatio;
-        if (!hasDimFilter) {
-            dimEl.textContent = 'Any';
-        } else {
-            const parts = [];
-            if (f.minWidth || f.maxWidth) parts.push(`W: ${f.minWidth || 0}-${f.maxWidth || '∞'}`);
-            if (f.minHeight || f.maxHeight) parts.push(`H: ${f.minHeight || 0}-${f.maxHeight || '∞'}`);
-            if (f.aspectRatio) parts.push(f.aspectRatio);
-            dimEl.textContent = parts.join(', ') || 'Custom';
-        }
-    }
+    if (dimEl) dimEl.textContent = summary.dimensions;
 }
 
 // ============== Utilities ==============
@@ -722,3 +828,164 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for use by app.js and filter modal
 window.ManualSortState = ManualSortState;
 window.updateManualSortFilterSummary = updateManualSortFilterSummary;
+
+// ============== Touch Controls for Mobile ==============
+
+// Redo stack for manual sort
+const RedoStack = {
+    stack: [],
+    
+    push(action) {
+        this.stack.push(action);
+    },
+    
+    pop() {
+        return this.stack.pop();
+    },
+    
+    clear() {
+        this.stack = [];
+    },
+    
+    isEmpty() {
+        return this.stack.length === 0;
+    }
+};
+
+// Touch control button mapping
+const TOUCH_BUTTONS = [
+    { key: 'w', label: 'W', icon: '↑', action: 'move', folderKey: 'w' },
+    { key: 'a', label: 'A', icon: '←', action: 'move', folderKey: 'a' },
+    { key: 's', label: 'S', icon: '↓', action: 'move', folderKey: 's' },
+    { key: 'd', label: 'D', icon: '→', action: 'move', folderKey: 'd' }
+];
+
+function createTouchControls() {
+    const container = document.querySelector('.sort-interface');
+    if (!container) return;
+    
+    // Check if already created
+    if (document.getElementById('touch-sort-controls')) return;
+    
+    const touchControls = document.createElement('div');
+    touchControls.id = 'touch-sort-controls';
+    touchControls.className = 'touch-sort-controls';
+    
+    touchControls.innerHTML = `
+        <button class="touch-sort-btn" data-key="w" aria-label="Move to W folder">
+            <span class="key-label">W</span>
+            <span>↑</span>
+        </button>
+        <button class="touch-sort-btn" data-key="a" aria-label="Move to A folder">
+            <span class="key-label">A</span>
+            <span>←</span>
+        </button>
+        <button class="touch-sort-btn btn-undo" data-action="undo" aria-label="Undo last action">
+            <span class="key-label">Z</span>
+            <span>Undo</span>
+        </button>
+        <button class="touch-sort-btn btn-redo" data-action="redo" aria-label="Redo last undone action">
+            <span class="key-label">Y</span>
+            <span>Redo</span>
+        </button>
+        <button class="touch-sort-btn" data-key="s" aria-label="Move to S folder">
+            <span class="key-label">S</span>
+            <span>↓</span>
+        </button>
+        <button class="touch-sort-btn" data-key="d" aria-label="Move to D folder">
+            <span class="key-label">D</span>
+            <span>→</span>
+        </button>
+        <button class="touch-sort-btn btn-skip" data-action="skip" aria-label="Skip current image">
+            <span class="key-label">Space</span>
+            <span>Skip</span>
+        </button>
+        <button class="touch-sort-btn btn-undo" data-action="exit" aria-label="Exit sorting">
+            <span class="key-label">Esc</span>
+            <span>Exit</span>
+        </button>
+    `;
+    
+    container.appendChild(touchControls);
+    
+    // Add event listeners
+    touchControls.querySelectorAll('.touch-sort-btn').forEach(btn => {
+        btn.addEventListener('click', handleTouchControl);
+    });
+}
+
+function handleTouchControl(e) {
+    if (!ManualSortState.active) return;
+    
+    const btn = e.currentTarget;
+    const key = btn.dataset.key;
+    const action = btn.dataset.action;
+    
+    if (key) {
+        performMove(key);
+    } else if (action) {
+        switch (action) {
+            case 'undo':
+                undoLastAction();
+                break;
+            case 'redo':
+                redoLastAction();
+                break;
+            case 'skip':
+                performSkip();
+                break;
+            case 'exit':
+                exitSorting();
+                break;
+        }
+    }
+}
+
+// Redo functionality
+async function redoLastAction() {
+    const { $, API, showToast } = window.App;
+    
+    if (RedoStack.isEmpty()) {
+        showToast('Nothing to redo', 'info');
+        return;
+    }
+    
+    const action = RedoStack.pop();
+    
+    // Play redo sound
+    window.AudioManager?.play('move');
+    
+    try {
+        if (action.type === 'move') {
+            const result = await API.sortAction('move', action.folderKey);
+            
+            if (result.error) {
+                showToast('Failed to redo move: ' + result.error, 'error');
+                // Push back to redo stack
+                RedoStack.push(action);
+                return;
+            }
+            
+            ManualSortState.sortedCount++;
+            ManualSortState.actionTimestamps.push(Date.now());
+            
+            if (result.done) {
+                finishSorting();
+                return;
+            }
+            
+            await loadCurrentImage();
+            showToast('Redid move to ' + action.folderKey.toUpperCase(), 'info');
+        }
+        // Skip actions don't need redo
+    } catch (error) {
+        Logger.error('Failed to redo:', error);
+        showToast('Failed to redo', 'error');
+        RedoStack.push(action);
+    }
+}
+
+// Export touch control functions
+window.createTouchControls = createTouchControls;
+window.RedoStack = RedoStack;
+window.redoLastAction = redoLastAction;

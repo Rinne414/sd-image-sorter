@@ -1,0 +1,17 @@
+{
+  "name": "sd-image-sorter-e2e",
+  "version": "1.0.0",
+  "description": "E2E tests for SD Image Sorter",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report ../../artifacts/playwright-report",
+    "codegen": "playwright codegen http://127.0.0.1:8000"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0",
+    "@types/node": "^20.11.0"
+  }
+}

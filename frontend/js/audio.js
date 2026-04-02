@@ -31,7 +31,7 @@ class AudioManagerClass {
 
             this.initialized = true;
         } catch (e) {
-            console.warn('Web Audio API not available');
+            Logger.warn('Web Audio API not available');
         }
     }
 
@@ -39,6 +39,7 @@ class AudioManagerClass {
         if (!this.enabled) return;
 
         await this.init();
+        if (!this.ctx) return;
 
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume();
@@ -65,7 +66,6 @@ class AudioManagerClass {
         osc.type = 'sine';
 
         gain.gain.setValueAtTime(this.volume * 0.3, now);
-        gain.gain.exponentialDecayTo = 0.01;
         gain.gain.setTargetAtTime(0.01, now + 0.05, 0.1);
 
         osc.connect(gain);

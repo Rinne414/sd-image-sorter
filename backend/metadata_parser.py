@@ -11,11 +11,15 @@ Supports:
 - WebP EXIF + XMP
 """
 import json
+import logging
 import re
 from typing import Optional, Dict, Any, Tuple, List, Set
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 PARSED_METADATA_VERSION = 3
@@ -109,7 +113,7 @@ class MetadataParser:
                 "file_size": int
             }
         """
-        result = {
+        result: Dict[str, Any] = {
             "generator": "unknown",
             "prompt": None,
             "negative_prompt": None,
@@ -172,7 +176,7 @@ class MetadataParser:
                 }
 
         except Exception as e:
-            print(f"Error parsing {image_path}: {e}")
+            logger.error("Error parsing %s: %s", image_path, e, exc_info=True)
 
         return result
 
@@ -184,12 +188,12 @@ class MetadataParser:
                 # Try to serialize, skip if not possible
                 json.dumps({key: value})
                 result[key] = value
-            except (TypeError, ValueError):
-                # Convert bytes to string
+            except (TypeError, ValueError) as e:
+                # Convert bytes to string - serialization failed
                 if isinstance(value, bytes):
                     try:
                         result[key] = value.decode('utf-8', errors='replace')
-                    except Exception:
+                    except Exception as e:
                         result[key] = str(value)
                 else:
                     result[key] = str(value)
@@ -228,7 +232,7 @@ class MetadataParser:
         Returns a dict with keys: generator, prompt, negative_prompt, checkpoint, loras,
         generation_params, is_img2img, img2img_info, character_prompts, prompt_nodes.
         """
-        base = {
+        base: Dict[str, Any] = {
             "generator": "unknown",
             "prompt": None,
             "negative_prompt": None,
@@ -320,8 +324,8 @@ class MetadataParser:
                                 "source": "img2img",
                             }
                         return base
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                logger.debug("Failed to parse JSON: %s", e)
 
         # === Check for NovelAI Description field ===
         if "Description" in metadata:
@@ -338,8 +342,8 @@ class MetadataParser:
                             char_prompts = self._extract_nai_character_prompts(comment_data)
                             if char_prompts:
                                 base["character_prompts"] = char_prompts
-                    except (json.JSONDecodeError, TypeError, ValueError):
-                        pass
+                    except (json.JSONDecodeError, TypeError, ValueError) as e:
+                        logger.debug("Failed to parse Comment in Description path: %s", e)
                 base.update({"generator": "nai", "prompt": str(desc), "negative_prompt": neg})
                 return base
 
@@ -365,8 +369,8 @@ class MetadataParser:
                             base["is_img2img"] = True
                             base["img2img_info"] = img2img
                         return base
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+            except (json.JSONDecodeError, TypeError, ValueError) as e:
+                logger.debug("Failed to parse JSON: %s", e)
 
         # === Check for ComfyUI workflow key without prompt data ===
         if "workflow" in metadata:
@@ -378,7 +382,8 @@ class MetadataParser:
                 if isinstance(prompt_raw, str):
                     try:
                         prompt_raw = json.loads(prompt_raw)
-                    except (json.JSONDecodeError, TypeError, ValueError):
+                    except (json.JSONDecodeError, TypeError, ValueError) as e:
+                        logger.debug('Failed to parse prompt in workflow path: %s', e)
                         prompt_raw = {}
                 pos, neg, cp, lr, gen_params, prompt_nodes, img2img = self._extract_comfyui_data_extended(prompt_raw)
                 if not pos and isinstance(workflow, dict):
@@ -392,7 +397,8 @@ class MetadataParser:
                     base["is_img2img"] = True
                     base["img2img_info"] = img2img
                 return base
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to parse ComfyUI workflow: %s", e)
                 base["generator"] = "comfyui"
                 return base
 
@@ -477,7 +483,7 @@ class MetadataParser:
             if not is_nai and not has_nai_keys:
                 return None
 
-            result = {
+            result: Dict[str, Any] = {
                 "generator": "nai",
                 "prompt": self._flatten_text_value(data.get("Description", None)),
                 "negative_prompt": None,
@@ -533,14 +539,14 @@ class MetadataParser:
                                 "noise": float(noise) if noise is not None else None,
                                 "source": "img2img",
                             }
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    pass
+                except (json.JSONDecodeError, TypeError, ValueError) as e:
+                    logger.debug("Failed to parse NAI UserComment Comment JSON: %s", e)
 
             if result["prompt"] or result["negative_prompt"]:
                 return result
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug('Failed to parse NAI UserComment: %s', e)
 
         return None
 
@@ -642,7 +648,8 @@ class MetadataParser:
         if not isinstance(prompt_data, dict):
             try:
                 prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
-            except Exception:
+            except Exception as e:
+                logger.debug('Failed to parse ComfyUI prompt_data: %s', e)
                 return (None, None, None, [])
 
         if not prompt_data:
@@ -690,7 +697,8 @@ class MetadataParser:
         if not isinstance(prompt_data, dict):
             try:
                 prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
-            except Exception:
+            except Exception as e:
+                logger.debug('Failed to parse ComfyUI prompt_data (extended): %s', e)
                 return (None, None, None, [], None, None, None)
 
         if not prompt_data:
@@ -698,7 +706,7 @@ class MetadataParser:
 
         checkpoint = None
         loras = []
-        gen_params = {}
+        gen_params: Dict[str, Any] = {}
         prompt_nodes = []
         img2img_info = None
 
@@ -791,7 +799,9 @@ class MetadataParser:
         # Build prompt_nodes list (multi-node breakdown)
         prompt_nodes = self._collect_prompt_nodes(nodes)
         if not prompt_nodes:
-            prompt_nodes = self._collect_text_from_nodes_as_nodes(nodes)
+            fallback = self._collect_text_from_nodes_as_nodes(nodes)
+            if fallback:
+                prompt_nodes = fallback
 
         # Fallback
         if not positive_text:
@@ -1288,7 +1298,7 @@ class MetadataParser:
 
     def _parse_gen_params_line(self, params_line: str) -> Dict[str, Any]:
         """Parse the 'Steps: 20, Sampler: Euler a, CFG scale: 7, ...' line into a dict."""
-        result = {}
+        result: Dict[str, Any] = {}
         # Split by comma, but handle values that might contain commas in quotes
         pairs = re.split(r',\s*(?=[A-Z][a-z]*[\s_]*[A-Za-z]*:)', params_line)
 
@@ -1329,7 +1339,8 @@ class MetadataParser:
                 else:
                     # Store other params as-is
                     result[key_lower] = value
-            except (ValueError, TypeError):
+            except (ValueError, TypeError) as e:
+                logger.debug('Failed to parse gen param %s=%s: %s', key, value, e)
                 result[key_lower] = value
 
         return result
@@ -1346,12 +1357,13 @@ class MetadataParser:
                     if isinstance(value, bytes):
                         try:
                             metadata[tag_name] = value.decode('utf-8', errors='replace')
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("Failed to decode EXIF tag %s: %s", tag_name, e)
                             metadata[tag_name] = str(value)
                     else:
                         metadata[tag_name] = value
         except Exception as e:
-            print(f"Error extracting exif: {e}")
+            logger.debug("Error extracting EXIF: %s", e)
         return metadata
 
     def _extract_exif_ifd(self, img: Image.Image) -> dict:
@@ -1359,7 +1371,7 @@ class MetadataParser:
         Extract EXIF IFD (sub-directory) data, specifically UserComment.
         NovelAI V4+ stores prompt data here for WebP images.
         """
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         try:
             exif = img.getexif()
             if not exif:
@@ -1378,7 +1390,8 @@ class MetadataParser:
                     elif isinstance(value, bytes):
                         try:
                             metadata[tag_name] = value.decode('utf-8', errors='replace')
-                        except Exception:
+                        except Exception as e:
+                            logger.debug("Failed to decode EXIF IFD tag %s: %s", tag_name, e)
                             metadata[tag_name] = str(value)
                     else:
                         metadata[tag_name] = value
@@ -1389,7 +1402,7 @@ class MetadataParser:
 
     def _extract_jpeg_sd_metadata(self, img: Image.Image) -> dict:
         """Extract SD metadata from JPEG EXIF fields."""
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         try:
             exif = img.getexif()
             if not exif:
@@ -1404,8 +1417,8 @@ class MetadataParser:
             # Check for parameters in ImageDescription
             if img_desc and "Steps:" in str(img_desc) and "Sampler:" in str(img_desc):
                 metadata["parameters"] = str(img_desc)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Error extracting JPEG SD metadata: %s", e)
         return metadata
 
     def _extract_webp_xmp(self, image_path: str) -> dict:
@@ -1447,14 +1460,14 @@ class MetadataParser:
                                     try:
                                         json.loads(potential_json)
                                         metadata["prompt"] = potential_json
-                                    except json.JSONDecodeError:
-                                        pass
+                                    except json.JSONDecodeError as e:
+                                        logger.debug('Failed to parse XMP prompt JSON: %s', e)
 
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug("Failed to decode WebP XMP: %s", e)
 
         except Exception as e:
-            print(f"Error extracting webp xmp: {e}")
+            logger.error("Error extracting WebP XMP from %s: %s", image_path, e)
 
         return metadata
 

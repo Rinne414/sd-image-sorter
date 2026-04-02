@@ -3,6 +3,11 @@
  * Handles similarity search UI, duplicate finder, and embedding management.
  */
 
+// escapeHtml fallback — main definition is in app.js
+if (typeof escapeHtml === 'undefined') {
+    var escapeHtml = (value) => String(value ?? '');
+}
+
 const SimilarImages = {
     isEmbedding: false,
     embedProgress: { current: 0, total: 0 },
@@ -13,6 +18,36 @@ const SimilarImages = {
     init() {
         this.bindEvents();
         this.loadStats();
+        this.showFirstUseGuide();
+    },
+
+    showFirstUseGuide() {
+        if (localStorage.getItem('similar-guide-seen')) return;
+
+        const view = document.getElementById('view-similar');
+        if (!view) return;
+
+        const overlay = window.App.createGuideOverlay({
+            id: 'similar-first-use-guide',
+            storageKey: 'similar-guide-seen',
+            title: '🔍 Similar Images Guide',
+            description: 'Find visually similar images in your library using AI.',
+            steps: [
+                { title: 'Generate Embeddings', text: 'Creates visual fingerprints for all images (first time downloads ~200MB model)' },
+                { title: 'Search by ID', text: 'Enter an image ID from your gallery' },
+                { title: 'Upload Search', text: 'Drag & drop any image to find similar ones' },
+                { title: 'Duplicates', text: 'Find near-duplicate images in your library' },
+            ],
+            maxWidth: '480px',
+        });
+
+        view.style.position = 'relative';
+        view.appendChild(overlay);
+
+        overlay.querySelector('[data-guide-close]')?.addEventListener('click', () => {
+            overlay.remove();
+            localStorage.setItem('similar-guide-seen', 'true');
+        });
     },
 
     // ============== Data Loading ==============
@@ -22,22 +57,31 @@ const SimilarImages = {
         if (!statsEl) return;
 
         try {
-            const result = await window.App.API.get('/api/similarity/stats');
+            const app = window.App;
+            if (!app?.API?.get) {
+                throw new Error('App API is not ready yet');
+            }
+
+            const result = await app.API.get('/api/similarity/stats');
             statsEl.innerHTML = `
                 <div class="stat-card">
                     <span class="stat-number">${result.total_images || 0}</span>
                     <span class="stat-label">Total Images</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-number">${result.embedded_count || 0}</span>
+                    <span class="stat-number">${result.embedded_count ?? result.embedded_images ?? 0}</span>
                     <span class="stat-label">Embedded</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-number">${result.pending_count || 0}</span>
+                    <span class="stat-number">${result.pending_count ?? result.pending ?? 0}</span>
                     <span class="stat-label">Pending</span>
                 </div>
             `;
         } catch (e) {
+            if (e.message === 'App API is not ready yet') {
+                setTimeout(() => this.loadStats(), 100);
+                return;
+            }
             statsEl.innerHTML = '<div class="stat-card"><span class="stat-label">Failed to load stats</span></div>';
         }
     },
@@ -61,7 +105,7 @@ const SimilarImages = {
             showToast('Embedding started in background', 'info');
             this.pollEmbedProgress();
         } catch (e) {
-            showToast('Failed to start embedding: ' + e.message, 'error');
+            showToast(formatUserError(e, "Failed to start similarity processing"), "error");
             this.isEmbedding = false;
             if (btnEmbed) {
                 btnEmbed.disabled = false;
@@ -123,7 +167,7 @@ const SimilarImages = {
             this.searchResults = result.results || [];
             this.renderSearchResults();
         } catch (e) {
-            resultsContainer.innerHTML = `<div class="empty-state">Search failed: ${e.message}</div>`;
+            resultsContainer.innerHTML = `<div class="empty-state">Search failed: ${escapeHtml(e.message)}</div>`;
             showToast('Similarity search failed', 'error');
         }
     },
@@ -137,23 +181,23 @@ const SimilarImages = {
         resultsContainer.innerHTML = '<div class="spinner"></div>';
 
         try {
-            // Read file as base64
-            const reader = new FileReader();
-            const base64Data = await new Promise((resolve, reject) => {
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+            const formData = new FormData();
+            formData.append('file', file);
 
-            const result = await API.post('/api/similarity/search-upload', {
-                image_data: base64Data,
-                limit: 20
+            const response = await fetch('/api/similarity/search-upload?limit=20', {
+                method: 'POST',
+                body: formData,
             });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `API Error: ${response.status}`);
+            }
+            const result = await response.json();
 
             this.searchResults = result.results || [];
             this.renderSearchResults();
         } catch (e) {
-            resultsContainer.innerHTML = `<div class="empty-state">Upload search failed: ${e.message}</div>`;
+            resultsContainer.innerHTML = `<div class="empty-state">Upload search failed: ${escapeHtml(e.message)}</div>`;
             showToast('Upload search failed', 'error');
         }
     },
@@ -171,10 +215,10 @@ const SimilarImages = {
 
         try {
             const result = await API.get(`/api/similarity/duplicates?threshold=${threshold}&limit=50`);
-            this.duplicateResults = result.pairs || [];
+            this.duplicateResults = result.duplicates || [];
             this.renderDuplicateResults();
         } catch (e) {
-            resultsContainer.innerHTML = `<div class="empty-state">Duplicate search failed: ${e.message}</div>`;
+            resultsContainer.innerHTML = `<div class="empty-state">Duplicate search failed: ${escapeHtml(e.message)}</div>`;
             showToast('Duplicate search failed', 'error');
         }
     },
@@ -191,23 +235,24 @@ const SimilarImages = {
         }
 
         const { API } = window.App;
-        container.innerHTML = this.searchResults.map(r => `
-            <div class="similar-result" data-id="${r.id}">
-                <div class="similar-thumb">
-                    <img src="${API.getThumbnailUrl(r.id)}" alt="${r.filename || ''}" loading="lazy">
-                </div>
-                <div class="similar-info">
-                    <span class="similar-score">${(r.similarity * 100).toFixed(1)}%</span>
-                    <span class="similar-name" title="${r.filename || ''}">${r.filename || 'Unknown'}</span>
-                </div>
-            </div>
-        `).join('');
+        const getThumbnailUrl = (id) => API?.getThumbnailUrl?.(id) ?? `/api/image-thumbnail/${id}?size=256`;
+        const fragment = document.createDocumentFragment();
+
+        this.searchResults.forEach((result) => {
+            fragment.appendChild(this._renderSearchResult(result, getThumbnailUrl));
+        });
+
+        container.replaceChildren(fragment);
 
         // Click to open preview
         container.querySelectorAll('.similar-result').forEach(el => {
             el.addEventListener('click', () => {
-                const id = parseInt(el.dataset.id);
-                if (window.Gallery) window.Gallery.openPreview(id);
+                const id = parseInt(el.dataset.id, 10);
+                if (window.App && typeof window.App.openGalleryPreview === 'function') {
+                    window.App.openGalleryPreview(id);
+                } else if (window.Gallery) {
+                    window.Gallery.openPreview(id);
+                }
             });
         });
     },
@@ -222,29 +267,106 @@ const SimilarImages = {
         }
 
         const { API } = window.App;
-        container.innerHTML = this.duplicateResults.map(pair => `
-            <div class="duplicate-pair">
-                <div class="dup-image" data-id="${pair.id1}">
-                    <img src="${API.getThumbnailUrl(pair.id1)}" alt="" loading="lazy">
-                    <span class="dup-name">${pair.filename1 || ''}</span>
-                </div>
-                <div class="dup-score">${(pair.similarity * 100).toFixed(1)}%</div>
-                <div class="dup-image" data-id="${pair.id2}">
-                    <img src="${API.getThumbnailUrl(pair.id2)}" alt="" loading="lazy">
-                    <span class="dup-name">${pair.filename2 || ''}</span>
-                </div>
-            </div>
-        `).join('');
+        const getThumbnailUrl = (id) => API?.getThumbnailUrl?.(id) ?? `/api/image-thumbnail/${id}?size=256`;
+        const fragment = document.createDocumentFragment();
+
+        this.duplicateResults.forEach((pair) => {
+            fragment.appendChild(this._renderDuplicatePair(pair, getThumbnailUrl));
+        });
+
+        container.replaceChildren(fragment);
 
         container.querySelectorAll('.dup-image').forEach(el => {
             el.addEventListener('click', () => {
-                const id = parseInt(el.dataset.id);
-                if (window.Gallery) window.Gallery.openPreview(id);
+                const id = parseInt(el.dataset.id, 10);
+                if (window.App && typeof window.App.openGalleryPreview === 'function') {
+                    window.App.openGalleryPreview(id);
+                } else if (window.Gallery) {
+                    window.Gallery.openPreview(id);
+                }
             });
         });
     },
 
-    // ============== Event Binding ==============
+    _renderSearchResult(result, getThumbnailUrl) {
+        const card = document.createElement('div');
+        card.className = 'similar-result';
+        card.dataset.id = String(result.id);
+
+        const thumb = document.createElement('div');
+        thumb.className = 'similar-thumb';
+
+        const img = document.createElement('img');
+        img.src = getThumbnailUrl(result.id);
+        img.alt = result.filename || '';
+        img.loading = 'lazy';
+        thumb.appendChild(img);
+
+        const info = document.createElement('div');
+        info.className = 'similar-info';
+
+        const score = document.createElement('span');
+        score.className = 'similar-score';
+        score.textContent = `${(result.similarity * 100).toFixed(1)}%`;
+
+        const name = document.createElement('span');
+        name.className = 'similar-name';
+        name.title = result.filename || '';
+        name.textContent = result.filename || 'Unknown';
+
+        info.append(score, name);
+        card.append(thumb, info);
+        return card;
+    },
+
+    _renderDuplicatePair(pair, getThumbnailUrl) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'duplicate-pair';
+
+        // Backend returns {image_a: {id, filename}, image_b: {id, filename}, similarity}
+        // Legacy shape: {id1, filename1, id2, filename2, similarity}
+        const id1 = pair.id1 ?? pair.image_a?.id;
+        const id2 = pair.id2 ?? pair.image_b?.id;
+        const filename1 = pair.filename1 ?? pair.image_a?.filename ?? '';
+        const filename2 = pair.filename2 ?? pair.image_b?.filename ?? '';
+        const similarity = pair.similarity ?? 0;
+
+        const first = document.createElement('div');
+        first.className = 'dup-image';
+        if (id1 != null) first.dataset.id = String(id1);
+
+        const firstImg = document.createElement('img');
+        firstImg.src = id1 != null ? getThumbnailUrl(id1) : '';
+        firstImg.alt = '';
+        firstImg.loading = 'lazy';
+
+        const firstName = document.createElement('span');
+        firstName.className = 'dup-name';
+        firstName.textContent = filename1;
+
+        first.append(firstImg, firstName);
+
+        const score = document.createElement('div');
+        score.className = 'dup-score';
+        score.textContent = `${(similarity * 100).toFixed(1)}%`;
+
+        const second = document.createElement('div');
+        second.className = 'dup-image';
+        if (id2 != null) second.dataset.id = String(id2);
+
+        const secondImg = document.createElement('img');
+        secondImg.src = id2 != null ? getThumbnailUrl(id2) : '';
+        secondImg.alt = '';
+        secondImg.loading = 'lazy';
+
+        const secondName = document.createElement('span');
+        secondName.className = 'dup-name';
+        secondName.textContent = filename2;
+
+        second.append(secondImg, secondName);
+        wrapper.append(first, score, second);
+        return wrapper;
+    },
 
     bindEvents() {
         // Embed button
@@ -255,7 +377,7 @@ const SimilarImages = {
         const btnSearch = document.getElementById('btn-similar-search');
         btnSearch?.addEventListener('click', () => {
             const idInput = document.getElementById('similar-search-id');
-            const id = parseInt(idInput?.value);
+            const id = parseInt(idInput?.value, 10);
             if (id) {
                 this.searchByImage(id);
             } else {

@@ -6,11 +6,16 @@ More granular than generic YOLO for body-part-specific censoring.
 
 Requires: pip install nudenet
 """
+import logging
+import os
+import tempfile
 import threading
 from typing import Dict, List, Optional
 
 from PIL import Image
 
+
+logger = logging.getLogger(__name__)
 
 # Lazy-loaded detector
 _detector = None
@@ -24,14 +29,14 @@ def _get_nudenet():
         with _detector_lock:
             if _detector is None:
                 try:
-                    from nudenet import NudeDetector
+                    from nudenet import NudeDetector  # type: ignore
                 except ImportError:
                     raise RuntimeError(
                         "nudenet not installed. Run: pip install nudenet"
                     )
-                print("[NudeNet] Loading detector...")
+                logger.info("[NudeNet] Loading detector...")
                 _detector = NudeDetector()
-                print("[NudeNet] Detector loaded")
+                logger.info("[NudeNet] Detector loaded")
     return _detector
 
 
@@ -126,19 +131,24 @@ class NudeNetDetector:
         exposed_only: bool = True,
     ) -> List[Dict]:
         """Run NudeNet detection on a PIL Image."""
-        import tempfile
-        import os
-
-        # NudeNet requires a file path
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            image.save(tmp, format="PNG")
-            tmp_path = tmp.name
-
+        tmp_path = None
         try:
+            # NudeNet requires a file path
+            # Use delete=False and manual cleanup to ensure file is closed before deletion
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                image.save(tmp, format="PNG")
+                tmp_path = tmp.name
+
             raw_detections = self.detector.detect(tmp_path)
             return self._filter_detections(raw_detections, conf_threshold, exposed_only)
         finally:
-            os.unlink(tmp_path)
+            # Clean up temp file with existence check
+            if tmp_path is not None:
+                try:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+                except OSError as e:
+                    logger.debug("Failed to delete temp file %s: %s", tmp_path, e)
 
     def _filter_detections(
         self,

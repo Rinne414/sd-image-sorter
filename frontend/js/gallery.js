@@ -1,7 +1,65 @@
 /**
  * SD Image Sorter - Gallery Module
  * Handles image grid display, preview modal, multi-selection and drag-and-drop
+ * Supports virtual scrolling for large image collections (500+ images)
  */
+
+function getGalleryAppContext() {
+    const app = window.App || {};
+    return {
+        $: app.$ || ((selector) => document.querySelector(selector)),
+        API: app.API || window.API,
+        AppState: app.AppState || {
+            images: [],
+            filters: {},
+            selectedIds: new Set(),
+            selectionMode: false,
+            viewMode: 'grid'
+        },
+        updateSelectionUI: app.updateSelectionUI || window.updateSelectionUI,
+        showModal: app.showModal || window.showModal,
+        formatSize: app.formatSize || window.formatSize,
+        showToast: app.showToast || window.showToast
+    };
+}
+
+function getRequiredGalleryAPI() {
+    const { API } = getGalleryAppContext();
+    if (!API) {
+        throw new Error('App API is not ready yet');
+    }
+    return API;
+}
+
+/**
+ * Gallery Virtual Scrolling Configuration
+ */
+const GALLERY_VIRTUAL_CONFIG = {
+    bufferSize: 10,           // Items to render outside viewport
+    threshold: 500,           // Minimum items to enable virtual scrolling
+    estimatedItemHeight: 200, // Estimated height for grid mode
+    rowGap: 16,               // Gap between rows
+    columnGap: 16,            // Gap between columns
+    minColumnWidth: {
+        grid: 200,
+        large: 300,
+        waterfall: 280
+    },
+    waterfall: {
+        columnWidth: 280,
+        minHeight: 180,
+        maxHeight: 600,
+        estimatedHeight: 350
+    }
+};
+
+const DEFAULT_GENERATOR_COLORS = {
+    comfyui: '#22c55e',
+    nai: '#f97316',
+    webui: '#3b82f6',
+    forge: '#8b5cf6',
+    unknown: '#64748b'
+};
 
 const Gallery = {
     images: [],
@@ -11,76 +69,166 @@ const Gallery = {
     currentPreviewRequestId: 0,
     showAllTags: false,
 
-    setImages(images) {
-        this.images = images;
-        this.render();
+    // Virtual scrolling state
+    virtualList: null,
+    useVirtualScroll: false,
+
+    /**
+     * Get generator color map (uses global override if available)
+     * @returns {Object} Generator color mapping
+     */
+    _getGenColors() {
+        return window.GENERATOR_COLORS || DEFAULT_GENERATOR_COLORS;
     },
 
-    render() {
-        const { $, AppState } = window.App || { $: (s) => document.querySelector(s), AppState: window.AppState };
-        const grid = $('#gallery-grid');
-        if (!grid) return;
-
-        grid.innerHTML = '';
-        if (this.lazyObserver) {
-            this.lazyObserver.disconnect();
+    /**
+     * Check if virtual scrolling should be enabled
+     * @param {number} imageCount - Number of images
+     * @returns {boolean}
+     */
+    shouldUseVirtualScroll(imageCount) {
+        // Check if VirtualList class is available
+        if (typeof window.VirtualList === 'undefined' && typeof window.WaterfallVirtualList === 'undefined') {
+            return false;
         }
+        return imageCount >= GALLERY_VIRTUAL_CONFIG.threshold;
+    },
 
-        if (this.images.length === 0) {
-            grid.innerHTML = `
-                <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary);">
-                    <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
-                    <p>No images found. Click "Scan Folder" to add images.</p>
-                </div>
-            `;
-            return;
+    /**
+     * Create a shared IntersectionObserver for lazy-loading images
+     * @returns {IntersectionObserver}
+     */
+    _createLazyObserver() {
+        return new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    this._loadImage(entry.target);
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { rootMargin: '300px', threshold: 0 });
+    },
+
+    /**
+     * Load a single image by swapping data-src to src
+     * @param {HTMLElement} item - Gallery item element
+     */
+    _loadImage(item) {
+        const img = item.querySelector('img');
+        if (img && img.dataset.src) {
+            img.onerror = () => {
+                img.src = 'data:image/svg+xml,' + encodeURIComponent(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+                        <rect fill="#1e293b" width="200" height="200"/>
+                        <text fill="#64748b" font-family="sans-serif" font-size="14" x="100" y="100" text-anchor="middle">Not found</text>
+                    </svg>
+                `);
+            };
+            img.src = img.dataset.src;
+            delete img.dataset.src;
         }
+    },
 
-        const isWaterfall = AppState.viewMode === 'waterfall';
-        if (!isWaterfall) {
-            this.lazyObserver = new IntersectionObserver((entries, observer) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const img = entry.target.querySelector('img');
-                        if (img && img.dataset.src) {
-                            img.onerror = () => {
-                                img.src = 'data:image/svg+xml,' + encodeURIComponent(`
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
-                                        <rect fill="#1e293b" width="200" height="200"/>
-                                        <text fill="#64748b" font-family="sans-serif" font-size="14" x="100" y="100" text-anchor="middle">Not found</text>
-                                    </svg>
-                                `);
-                            };
-                            img.src = img.dataset.src;
-                            delete img.dataset.src;
-                        }
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, { rootMargin: '200px' });
-        }
+    /**
+     * Fallback: force-load images that are currently visible but not yet loaded.
+     * Handles edge cases where IntersectionObserver misses items.
+     * @param {HTMLElement[]} items - Items to check
+     */
+    _loadVisibleImages(items) {
+        if (!items || items.length === 0) return;
+        const viewportHeight = window.innerHeight;
+        const margin = 300;
 
-        const fragment = document.createDocumentFragment();
-        this.images.forEach((image, index) => {
-            const item = this.createGalleryItem(image, index, isWaterfall);
-            fragment.appendChild(item);
-            if (this.lazyObserver && !isWaterfall) {
-                this.lazyObserver.observe(item);
+        items.forEach(item => {
+            const rect = item.getBoundingClientRect();
+            if (rect.top < viewportHeight + margin && rect.bottom > -margin) {
+                this._loadImage(item);
+                if (this.lazyObserver) {
+                    try { this.lazyObserver.unobserve(item); } catch (_e) { /* already unobserved */ }
+                }
             }
         });
-
-        grid.appendChild(fragment);
     },
 
-    createGalleryItem(image, index, isWaterfall = false) {
-        const { API, AppState } = window.App || { API: window.API, AppState: window.AppState };
-        const genColors = window.GENERATOR_COLORS || {
-            comfyui: '#22c55e',
-            nai: '#f97316',
-            webui: '#3b82f6',
-            forge: '#8b5cf6',
-            unknown: '#64748b'
+    /**
+     * Initialize virtual scrolling if needed
+     * @param {string} viewMode - Current view mode ('grid', 'large', 'waterfall')
+     */
+    initVirtualScroll(viewMode) {
+        const { $ } = getGalleryAppContext();
+        const grid = $('#gallery-grid');
+        if (!grid) return null;
+
+        const scrollContainer = grid.parentElement;
+        if (!scrollContainer) return null;
+
+        // Cleanup existing virtual list
+        if (this.virtualList) {
+            this.virtualList.destroy();
+            this.virtualList = null;
+        }
+
+        const isWaterfall = viewMode === 'waterfall';
+        const isLarge = viewMode === 'large';
+        const minColumnWidth = isWaterfall
+            ? GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth
+            : (isLarge ? GALLERY_VIRTUAL_CONFIG.minColumnWidth.large : GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid);
+
+        const config = {
+            bufferSize: GALLERY_VIRTUAL_CONFIG.bufferSize,
+            threshold: GALLERY_VIRTUAL_CONFIG.threshold,
+            estimatedItemHeight: isLarge ? 300 : GALLERY_VIRTUAL_CONFIG.estimatedItemHeight,
+            rowGap: GALLERY_VIRTUAL_CONFIG.rowGap,
+            columnGap: GALLERY_VIRTUAL_CONFIG.columnGap,
+            minColumnWidth,
         };
+
+        // Create the appropriate virtual list type
+        const VirtualListClass = isWaterfall ? window.WaterfallVirtualList : window.VirtualList;
+        if (!VirtualListClass) return null;
+
+        try {
+            const options = {
+                container: grid,
+                scrollContainer,
+                renderItem: (index, image) => this.createVirtualGalleryItem(index, image, viewMode),
+                getItemKey: (index, image) => image.id || index,
+                config,
+            };
+
+            // Add waterfall-specific options
+            if (isWaterfall) {
+                options.columnWidth = GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth;
+                options.minHeight = GALLERY_VIRTUAL_CONFIG.waterfall.minHeight;
+                options.maxHeight = GALLERY_VIRTUAL_CONFIG.waterfall.maxHeight;
+                options.estimatedHeight = GALLERY_VIRTUAL_CONFIG.waterfall.estimatedHeight;
+            }
+
+            this.virtualList = new VirtualListClass(options);
+            this.virtualList.init(this.images);
+            this.useVirtualScroll = true;
+
+            return this.virtualList;
+        } catch (error) {
+            if (window.Logger) window.Logger.warn('Gallery: Failed to initialize virtual scrolling, falling back to standard rendering:', error);
+            this.useVirtualScroll = false;
+            return null;
+        }
+    },
+
+    /**
+     * Create a gallery item for virtual scrolling (without lazy loading)
+     * @param {number} index - Item index
+     * @param {Object} image - Image data
+     * @param {string} viewMode - Current view mode
+     * @returns {HTMLElement}
+     */
+    createVirtualGalleryItem(index, image, viewMode) {
+        const { API, AppState } = getGalleryAppContext();
+        const genColors = this._getGenColors();
+
+        const isWaterfall = viewMode === 'waterfall';
+        const isLarge = viewMode === 'large';
 
         const item = document.createElement('div');
         item.className = 'gallery-item';
@@ -95,16 +243,12 @@ const Gallery = {
         item.draggable = true;
 
         const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const star = image.is_favorite ? '★' : '☆';
-        const thumbSize = AppState.viewMode === 'large' ? 512 : AppState.viewMode === 'waterfall' ? 384 : 256;
-        const thumbnailUrl = API.getThumbnailUrl(image.id, thumbSize);
-        const imageTag = isWaterfall
-            ? `<img src="${thumbnailUrl}" alt="${safeFilename}" loading="lazy">`
-            : `<img data-src="${thumbnailUrl}" alt="${safeFilename}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">`;
+        const thumbSize = isLarge ? 512 : isWaterfall ? 384 : 256;
+        const thumbnailUrl = API?.getThumbnailUrl?.(image.id, thumbSize) ?? `/api/image-thumbnail/${image.id}?size=${thumbSize}`;
 
+        // For virtual scrolling, load image immediately (no lazy loading)
         item.innerHTML = `
-            ${imageTag}
-            <button class="gallery-favorite-btn" type="button" aria-label="Toggle favorite">${star}</button>
+            <img src="${thumbnailUrl}" alt="${safeFilename}" loading="lazy">
             <div class="gallery-item-overlay">
                 <span class="gallery-item-generator" style="background: ${genColors[image.generator] || genColors.unknown}">
                     ${this._escapeHtml(image.generator)}
@@ -112,6 +256,7 @@ const Gallery = {
             </div>
         `;
 
+        // Add event listeners
         item.addEventListener('click', () => {
             if (AppState.selectionMode) {
                 this.toggleSelection(image.id);
@@ -120,15 +265,8 @@ const Gallery = {
             }
         });
 
-        const favoriteBtn = item.querySelector('.gallery-favorite-btn');
-        favoriteBtn?.addEventListener('click', async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            await this.toggleFavorite(image.id);
-        });
-
         item.addEventListener('dragstart', (e) => {
-            const imgUrl = API.getImageUrl(image.id);
+            const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
             const absoluteUrl = new URL(imgUrl, window.location.origin).href;
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
             e.dataTransfer.setData('text/plain', absoluteUrl);
@@ -150,51 +288,291 @@ const Gallery = {
         return item;
     },
 
-    _setFavoriteState(imageId, isFavorite, favoriteCopyPath = null) {
-        this.images = this.images.map(image => image.id === imageId ? { ...image, is_favorite: isFavorite, favorite_copy_path: favoriteCopyPath } : image);
-        if (window.App?.AppState?.images) {
-            window.App.AppState.images = window.App.AppState.images.map(image => image.id === imageId ? { ...image, is_favorite: isFavorite, favorite_copy_path: favoriteCopyPath } : image);
-        }
+    /**
+     * Show skeleton gallery while loading
+     * @param {string} viewMode - 'grid', 'large', or 'waterfall'
+     */
+    showSkeleton(viewMode = 'grid') {
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return;
 
-        document.querySelectorAll(`.gallery-item[data-id="${imageId}"] .gallery-favorite-btn`).forEach(btn => {
-            btn.textContent = isFavorite ? '★' : '☆';
-        });
+        // Hide existing content
+        grid.innerHTML = '';
 
-        const modalFavoriteBtn = document.querySelector('#modal-favorite-toggle');
-        if (modalFavoriteBtn && this.currentPreviewIndex >= 0 && this.images[this.currentPreviewIndex]?.id === imageId) {
-            modalFavoriteBtn.textContent = isFavorite ? '★ Favorited' : '★ Favorite';
-        }
-        if (this._lastModalImage?.id === imageId) {
-            this._lastModalImage = {
-                ...this._lastModalImage,
-                is_favorite: isFavorite,
-                favorite_copy_path: favoriteCopyPath,
-            };
+        // Use SkeletonGallery if available
+        if (window.SkeletonGallery) {
+            window.SkeletonGallery.show(viewMode);
+        } else {
+            // Fallback: create simple skeleton items
+            const count = viewMode === 'large' ? 12 : 20;
+            for (let i = 0; i < count; i++) {
+                const item = document.createElement('div');
+                item.className = 'skeleton-gallery-item skeleton-item';
+                item.innerHTML = '<div class="skeleton-image"></div>';
+                grid.appendChild(item);
+            }
         }
     },
 
-    async toggleFavorite(imageId) {
-        const { API, showToast } = window.App || { API: window.API, showToast: window.showToast };
-        const current = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
-        const isFavorite = !!current?.is_favorite;
-
-        try {
-            if (isFavorite) {
-                await API.removeFromFavorites(imageId);
-                this._setFavoriteState(imageId, false, null);
-                showToast?.('Removed from Favorites', 'success');
-            } else {
-                const result = await API.addToFavorites(imageId);
-                this._setFavoriteState(imageId, true, result.copied_path || null);
-                showToast?.('Added to Favorites', 'success');
-            }
-        } catch (error) {
-            showToast?.('Failed to update Favorites: ' + error.message, 'error');
+    /**
+     * Hide skeleton gallery
+     */
+    hideSkeleton() {
+        if (window.SkeletonGallery) {
+            window.SkeletonGallery.hide();
         }
+        // Remove any skeleton items directly in grid
+        const grid = document.getElementById('gallery-grid');
+        if (grid) {
+            grid.querySelectorAll('.skeleton-gallery-item').forEach(el => el.remove());
+            grid.querySelectorAll('.skeleton-item').forEach(el => el.remove());
+        }
+    },
+
+    setImages(images) {
+        this.images = images;
+        // Hide skeleton before rendering
+        this.hideSkeleton();
+
+        // Decide whether to use virtual scrolling
+        const { AppState } = getGalleryAppContext();
+        const shouldVirtual = this.shouldUseVirtualScroll(images.length);
+
+        if (shouldVirtual) {
+            // Destroy existing virtual list first
+            if (this.virtualList) {
+                this.virtualList.destroy();
+                this.virtualList = null;
+            }
+            // Initialize virtual scrolling
+            this.initVirtualScroll(AppState.viewMode);
+        } else {
+            // Fall back to standard rendering
+            this.useVirtualScroll = false;
+            if (this.virtualList) {
+                this.virtualList.destroy();
+                this.virtualList = null;
+            }
+            this.render();
+        }
+    },
+
+    appendImages(newImages) {
+        if (!newImages || newImages.length === 0) return;
+
+        const { $, AppState } = getGalleryAppContext();
+        const grid = $('#gallery-grid');
+        if (!grid) return;
+
+        const isWaterfall = AppState.viewMode === 'waterfall';
+        const startIndex = this.images.length;
+
+        // Append to internal array
+        this.images = [...this.images, ...newImages];
+
+        // If using virtual scrolling, append to virtual list
+        if (this.useVirtualScroll && this.virtualList) {
+            this.virtualList.appendItems(newImages);
+            return;
+        }
+
+        // Always create a fresh observer for appended images
+        // The previous observer may have stale internal state
+        if (!isWaterfall) {
+            if (this.lazyObserver) {
+                this.lazyObserver.disconnect();
+            }
+            this.lazyObserver = this._createLazyObserver();
+
+            // Re-observe any existing items that still have data-src (not yet loaded)
+            grid.querySelectorAll('.gallery-item').forEach(item => {
+                const img = item.querySelector('img');
+                if (img && img.dataset.src) {
+                    this.lazyObserver.observe(item);
+                }
+            });
+        }
+
+        // Build new items in fragment
+        const fragment = document.createDocumentFragment();
+        const newItems = [];
+        newImages.forEach((image, i) => {
+            const index = startIndex + i;
+            const item = this.createGalleryItem(image, index, isWaterfall);
+            fragment.appendChild(item);
+            if (!isWaterfall) newItems.push(item);
+        });
+
+        // Append to DOM FIRST, then observe — items must be in DOM
+        grid.appendChild(fragment);
+
+        if (this.lazyObserver && !isWaterfall) {
+            newItems.forEach(item => this.lazyObserver.observe(item));
+            // Fallback: force-load any already-visible images
+            requestAnimationFrame(() => this._loadVisibleImages(newItems));
+        }
+    },
+
+    /**
+     * Set view mode and re-render
+     * @param {string} mode - View mode ('grid', 'large', 'waterfall')
+     */
+    setViewMode(mode) {
+        const { AppState } = getGalleryAppContext();
+
+        // If using virtual scrolling, reinitialize for new mode
+        if (this.useVirtualScroll) {
+            if (this.virtualList) {
+                this.virtualList.destroy();
+                this.virtualList = null;
+            }
+            this.initVirtualScroll(mode);
+        } else {
+            // Standard re-render
+            this.render();
+        }
+    },
+
+    /**
+     * Refresh the gallery (force re-render)
+     */
+    refresh() {
+        if (this.useVirtualScroll && this.virtualList) {
+            this.virtualList.refresh();
+        } else {
+            this.render();
+        }
+    },
+
+    render() {
+        const { $, AppState } = getGalleryAppContext();
+        const grid = $('#gallery-grid');
+        if (!grid) return;
+
+        grid.innerHTML = '';
+        if (this.lazyObserver) {
+            this.lazyObserver.disconnect();
+        }
+
+        if (this.images.length === 0) {
+            grid.innerHTML = `
+                <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary);">
+                    <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
+                    <p>No images found. Click "Scan Folder" to add images.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const isWaterfall = AppState.viewMode === 'waterfall';
+        if (!isWaterfall) {
+            this.lazyObserver = this._createLazyObserver();
+        }
+
+        const fragment = document.createDocumentFragment();
+        const allItems = [];
+        this.images.forEach((image, index) => {
+            const item = this.createGalleryItem(image, index, isWaterfall);
+            fragment.appendChild(item);
+            if (!isWaterfall) allItems.push(item);
+        });
+
+        // Append to DOM FIRST, then observe — items must be in the DOM
+        // for IntersectionObserver to reliably detect visibility
+        grid.appendChild(fragment);
+
+        if (this.lazyObserver && !isWaterfall) {
+            allItems.forEach(item => this.lazyObserver.observe(item));
+            // Fallback: force-load any already-visible images
+            requestAnimationFrame(() => this._loadVisibleImages(allItems));
+        }
+    },
+
+    createGalleryItem(image, index, isWaterfall = false) {
+        const { API, AppState } = getGalleryAppContext();
+        const genColors = this._getGenColors();
+
+        const item = document.createElement('div');
+        item.className = 'gallery-item';
+        if (isWaterfall) {
+            item.classList.add('waterfall-item');
+        }
+        if (AppState.selectedIds.has(image.id)) {
+            item.classList.add('selected');
+        }
+        item.dataset.id = image.id;
+        item.dataset.index = index;
+        item.draggable = true;
+
+        // Accessibility: make item focusable and add ARIA attributes
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('role', 'gridcell');
+        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${image.generator || 'Unknown generator'}`);
+        if (AppState.selectedIds.has(image.id)) {
+            item.setAttribute('aria-selected', 'true');
+        }
+
+        const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const thumbSize = AppState.viewMode === 'large' ? 512 : AppState.viewMode === 'waterfall' ? 384 : 256;
+        const thumbnailUrl = API?.getThumbnailUrl?.(image.id, thumbSize) ?? `/api/image-thumbnail/${image.id}?size=${thumbSize}`;
+        const imageTag = isWaterfall
+            ? `<img src="${thumbnailUrl}" alt="${safeFilename}" loading="lazy">`
+            : `<img data-src="${thumbnailUrl}" alt="${safeFilename}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">`;
+
+        item.innerHTML = `
+            ${imageTag}
+            <div class="gallery-item-overlay" aria-hidden="true">
+                <span class="gallery-item-generator" style="background: ${genColors[image.generator] || genColors.unknown}">
+                    ${this._escapeHtml(image.generator)}
+                </span>
+            </div>
+        `;
+
+        item.addEventListener('click', () => {
+            if (AppState.selectionMode) {
+                this.toggleSelection(image.id);
+            } else {
+                this.openPreview(image.id);
+            }
+        });
+
+        // Keyboard navigation: Enter/Space to open preview or toggle selection
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (AppState.selectionMode) {
+                    this.toggleSelection(image.id);
+                } else {
+                    this.openPreview(image.id);
+                }
+            }
+        });
+
+        item.addEventListener('dragstart', (e) => {
+            const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
+            const absoluteUrl = new URL(imgUrl, window.location.origin).href;
+            e.dataTransfer.setData('text/uri-list', absoluteUrl);
+            e.dataTransfer.setData('text/plain', absoluteUrl);
+            const mimeType = image.filename.toLowerCase().endsWith('.png') ? 'image/png' :
+                image.filename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+            e.dataTransfer.setData('DownloadURL', `${mimeType}:${image.filename}:${absoluteUrl}`);
+            const img = item.querySelector('img');
+            if (img && img.src) {
+                e.dataTransfer.setDragImage(img, 50, 50);
+            }
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'copyMove';
+        });
+
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+        });
+
+        return item;
     },
 
     toggleSelection(imageId) {
-        const { $, AppState, updateSelectionUI } = window.App || { $: (s) => document.querySelector(s), AppState: window.AppState, updateSelectionUI: window.updateSelectionUI };
+        const { $, AppState, updateSelectionUI } = getGalleryAppContext();
 
         const isNowSelected = !AppState.selectedIds.has(imageId);
 
@@ -210,13 +588,14 @@ const Gallery = {
             item.classList.toggle('selected', isNowSelected);
         }
 
-        // Force VirtualGallery to re-render visible rows to reflect selection changes
-        // (items not currently in DOM will pick up selection state when scrolled into view)
+        // Update virtual list's rendered item directly if available
+        if (this.useVirtualScroll && this.virtualList) {
+            this.virtualList.toggleItemClass(imageId, 'selected', isNowSelected);
+        }
+
+        // Also update legacy VirtualGallery if it's active
         if (window.VirtualGallery && window.VirtualGallery.initialized) {
-            // Only re-render if the item wasn't found in DOM (it's in a virtual row)
-            if (!item) {
-                window.VirtualGallery.renderVisible();
-            }
+            window.VirtualGallery.updateItemSelection(imageId, isNowSelected);
         }
 
         if (updateSelectionUI) updateSelectionUI();
@@ -248,182 +627,181 @@ const Gallery = {
     },
 
     /**
-     * JS fallback parser for images scanned before parser enhancement.
-     * Extracts what we can from raw metadata_json.
+     * Fallback parser for metadata (stub - should be implemented based on project needs)
      */
     _fallbackParseMeta(metaObj, image) {
-        const result = {
-            generation_params: null,
+        // Basic fallback - return empty parsed data
+        return {
+            generation_params: {},
             is_img2img: false,
-            img2img_info: null,
-            character_prompts: null,
-            prompt_nodes: null,
+            img2img_info: {},
+            character_prompts: [],
+            prompt_nodes: []
         };
-
-        if (!metaObj) return result;
-        const gen = (image.generator || '').toLowerCase();
-
-        // --- WebUI / Forge fallback ---
-        if (gen === 'webui' || gen === 'forge') {
-            const params = metaObj.parameters || '';
-            const paramsLine = this._extractWebUIParamsLine(params);
-            if (paramsLine) {
-                result.generation_params = this._parseGenParamsLine(paramsLine);
-            }
-            // img2img detection
-            if (result.generation_params && result.generation_params.denoising_strength != null) {
-                const hasHires = result.generation_params.hires_upscaler != null;
-                if (!hasHires) {
-                    result.is_img2img = true;
-                    result.img2img_info = { denoising_strength: result.generation_params.denoising_strength };
-                }
-            }
-        }
-
-        // --- NAI fallback ---
-        if (gen === 'nai') {
-            // Try Comment (PNG) or UserComment (WebP) or Description
-            let naiData = null;
-            const commentSources = [metaObj.Comment, metaObj.UserComment, metaObj.Description];
-            for (const src of commentSources) {
-                if (!src) continue;
-                let raw = src;
-                // Strip ASCII prefix from EXIF UserComment
-                if (typeof raw === 'string' && raw.startsWith('ASCII')) {
-                    raw = raw.replace(/^ASCII[\x00]*/,'');
-                }
-                try {
-                    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-                    // Validate it looks like NAI data (has prompt or steps)
-                    if (parsed && (parsed.steps != null || parsed.prompt != null || parsed.Description != null)) {
-                        naiData = parsed;
-                        break;
-                    }
-                } catch (_) { /* ignore */ }
-            }
-            if (naiData) {
-                // Gen params
-                const gp = {};
-                if (naiData.steps != null) gp.steps = naiData.steps;
-                if (naiData.sampler != null) gp.sampler = naiData.sampler;
-                if (naiData.seed != null) gp.seed = naiData.seed;
-                if (naiData.scale != null) gp.cfg_scale = naiData.scale;
-                if (naiData.strength != null) gp.strength = naiData.strength;
-                if (naiData.noise != null) gp.noise = naiData.noise;
-                if (naiData.sm != null) gp.sm = naiData.sm;
-                if (naiData.sm_dyn != null) gp.sm_dyn = naiData.sm_dyn;
-                if (naiData.cfg_rescale != null) gp.cfg_rescale = naiData.cfg_rescale;
-                if (naiData.noise_schedule != null) gp.noise_schedule = naiData.noise_schedule;
-                if (naiData.uncond_scale != null) gp.uncond_scale = naiData.uncond_scale;
-                if (naiData.skip_cfg_above_sigma != null) gp.skip_cfg_above_sigma = naiData.skip_cfg_above_sigma;
-                if (Object.keys(gp).length > 0) result.generation_params = gp;
-
-                // img2img
-                if (naiData.strength != null && naiData.strength < 1.0) {
-                    result.is_img2img = true;
-                    result.img2img_info = { strength: naiData.strength, noise: naiData.noise };
-                }
-
-                // Character prompts (NAI V4)
-                if (naiData.v4_prompt && naiData.v4_prompt.character_prompts) {
-                    const chars = naiData.v4_prompt.character_prompts;
-                    if (Array.isArray(chars) && chars.length > 0) {
-                        result.character_prompts = chars.map((c, i) => ({
-                            index: i,
-                            prompt: (c.prompt || c.caption || {}).base_caption || '',
-                            negative_prompt: (c.ucPrompt || c.uc || {}).base_caption || '',
-                            center: c.center || null,
-                        }));
-                    }
-                }
-            }
-        }
-
-        // --- ComfyUI fallback ---
-        if (gen === 'comfyui') {
-            let promptData = metaObj.prompt;
-            // prompt may be a JSON string in some cases
-            if (typeof promptData === 'string') {
-                try { promptData = JSON.parse(promptData); } catch (_) { promptData = null; }
-            }
-            if (promptData && typeof promptData === 'object') {
-                // Try to find KSampler params
-                for (const [nodeId, node] of Object.entries(promptData)) {
-                    const ct = (node.class_type || '').toLowerCase();
-                    if (ct.includes('ksampler')) {
-                        const inp = node.inputs || {};
-                        const gp = {};
-                        if (inp.seed != null) gp.seed = inp.seed;
-                        if (inp.steps != null) gp.steps = inp.steps;
-                        if (inp.cfg != null) gp.cfg_scale = inp.cfg;
-                        if (inp.sampler_name != null) gp.sampler = inp.sampler_name;
-                        if (inp.scheduler != null) gp.scheduler = inp.scheduler;
-                        if (inp.denoise != null) gp.denoise = inp.denoise;
-                        if (Object.keys(gp).length > 0) result.generation_params = gp;
-
-                        // img2img: if denoise < 1.0 and there's a LoadImage node
-                        if (inp.denoise != null && inp.denoise < 1.0) {
-                            const hasLoadImage = Object.values(promptData).some(n =>
-                                (n.class_type || '').toLowerCase().includes('loadimage')
-                            );
-                            if (hasLoadImage) {
-                                result.is_img2img = true;
-                                result.img2img_info = { denoise: inp.denoise };
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-
-        return result;
     },
 
-    /**
-     * Extract the generation params line from WebUI parameters text.
-     * e.g., "Steps: 20, Sampler: Euler a, CFG scale: 7, ..."
-     */
-    _extractWebUIParamsLine(params) {
-        if (!params) return null;
-        const lines = params.split('\n');
-        for (let i = lines.length - 1; i >= 0; i--) {
-            const line = lines[i].trim();
-            if (line.startsWith('Steps:')) return line;
-        }
-        return null;
+    _getModalPromptView() {
+        return this._modalPromptView || null;
     },
 
-    /**
-     * Parse WebUI generation params line into a key-value object.
-     * "Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 12345"
-     */
-    _parseGenParamsLine(line) {
-        if (!line) return null;
-        const params = {};
-        // Split on ", Key: " pattern (key may contain spaces like "CFG scale")
-        const regex = /([A-Za-z][A-Za-z0-9 _]*?):\s*((?:[^,]|,(?!\s*[A-Za-z][A-Za-z0-9 _]*?:\s))*)/g;
-        let match;
-        while ((match = regex.exec(line)) !== null) {
-            const key = match[1].trim().toLowerCase().replace(/\s+/g, '_');
-            let val = match[2].trim();
-            // Try numeric conversion
-            const num = Number(val);
-            if (!isNaN(num) && val !== '') {
-                params[key] = num;
+    _getPromptViewText() {
+        const view = this._getModalPromptView();
+        if (!view) {
+            return {
+                promptText: this._lastModalImage?.prompt || '',
+                negativeText: this._lastModalImage?.negative_prompt || '',
+                formatLabel: 'Original',
+                isConverted: false,
+                sourceFormat: this._detectPromptFormat(this._lastModalImage, this._lastParsedData),
+                targetFormat: 'original',
+                characterPrompts: [],
+            };
+        }
+        return view;
+    },
+
+    _detectPromptFormat(image, parsedData) {
+        const generator = String(image?.generator || '').toLowerCase();
+        if (generator.includes('novel') || generator.includes('nai')) return 'nai';
+        if (generator.includes('webui') || generator.includes('forge')) return 'sd';
+        if (parsedData?.character_prompts?.length) return 'nai';
+        if (parsedData?.prompt_nodes?.length) return 'sd';
+        return 'unknown';
+    },
+
+    _normalizeCharacterPrompt(characterPrompt, index) {
+        if (!characterPrompt) return null;
+
+        const prompt = String(characterPrompt.prompt || '').trim();
+        if (!prompt) return null;
+
+        return {
+            index: characterPrompt.index ?? index,
+            prompt,
+            negative_prompt: String(characterPrompt.negative_prompt || '').trim(),
+            center: characterPrompt.center || null,
+        };
+    },
+
+    _buildNaiMergedPromptText(image, parsedData) {
+        const mainPrompt = String(image?.prompt || '').trim();
+        const characterPrompts = Array.isArray(parsedData?.character_prompts)
+            ? parsedData.character_prompts.map((entry, index) => this._normalizeCharacterPrompt(entry, index)).filter(Boolean)
+            : [];
+
+        const promptParts = [];
+        if (mainPrompt) {
+            promptParts.push(mainPrompt);
+        }
+        characterPrompts.forEach(characterPrompt => {
+            promptParts.push(characterPrompt.prompt);
+        });
+
+        return {
+            promptText: promptParts.join('\n\n'),
+            characterPrompts,
+        };
+    },
+
+    _buildPromptView(image, parsedData, targetFormat = 'original') {
+        const promptText = String(image?.prompt || '').trim();
+        const negativeText = String(image?.negative_prompt || '').trim();
+        const sourceFormat = this._detectPromptFormat(image, parsedData);
+        const normalizedTarget = ['original', 'sd', 'nai'].includes(targetFormat) ? targetFormat : 'original';
+        const characterPrompts = Array.isArray(parsedData?.character_prompts)
+            ? parsedData.character_prompts.map((entry, index) => this._normalizeCharacterPrompt(entry, index)).filter(Boolean)
+            : [];
+
+        if (normalizedTarget === 'original') {
+            return {
+                promptText,
+                negativeText,
+                formatLabel: 'Original',
+                sourceFormat,
+                targetFormat: 'original',
+                isConverted: false,
+                characterPrompts,
+            };
+        }
+
+        if (normalizedTarget === 'sd') {
+            const mergedPrompt = sourceFormat === 'nai' || characterPrompts.length > 0
+                ? this._buildNaiMergedPromptText(image, parsedData).promptText
+                : promptText;
+
+            return {
+                promptText: mergedPrompt || promptText,
+                negativeText,
+                formatLabel: 'SD',
+                sourceFormat,
+                targetFormat: 'sd',
+                isConverted: sourceFormat !== 'sd',
+                characterPrompts,
+            };
+        }
+
+        return {
+            promptText,
+            negativeText,
+            formatLabel: 'NAI',
+            sourceFormat,
+            targetFormat: 'nai',
+            isConverted: sourceFormat !== 'nai',
+            characterPrompts,
+        };
+    },
+
+    _buildConvertedPromptView(image, parsedData, targetFormat) {
+        return this._buildPromptView(image, parsedData, targetFormat);
+    },
+
+    _applyModalPromptView(promptView) {
+        const promptText = document.querySelector('#modal-prompt-text');
+        const negSection = document.querySelector('#modal-negative-section');
+        const negText = document.querySelector('#modal-negative-text');
+        const promptHeader = document.querySelector('.modal-prompt h4');
+        const toggleBtn = document.querySelector('#btn-toggle-prompt-format');
+
+        if (promptText) {
+            promptText.textContent = promptView.promptText || 'No prompt data';
+        }
+        if (negText) {
+            negText.textContent = promptView.negativeText || '-';
+        }
+        if (negSection) {
+            negSection.style.display = promptView.negativeText ? '' : 'none';
+        }
+        if (promptHeader) {
+            promptHeader.textContent = `Prompt (${promptView.formatLabel})`;
+        }
+        if (toggleBtn) {
+            const hasPrompt = !!(promptView.promptText || promptView.negativeText || (promptView.characterPrompts && promptView.characterPrompts.length));
+            toggleBtn.disabled = !hasPrompt;
+            if (!hasPrompt) {
+                toggleBtn.textContent = 'No prompt';
+            } else if (promptView.targetFormat === 'original') {
+                toggleBtn.textContent = `View as ${promptView.sourceFormat === 'nai' ? 'SD' : 'NAI'}`;
             } else {
-                params[key] = val;
+                toggleBtn.textContent = 'View Original';
             }
         }
-        return Object.keys(params).length > 0 ? params : null;
+        this._modalPromptView = promptView;
     },
 
-    /**
-     * Render all expanded modal sections for the preview.
-     */
+    _togglePromptFormat() {
+        const view = this._getModalPromptView();
+        if (!view || !this._lastModalImage || !this._lastParsedData) return;
+
+        const nextFormat = view.targetFormat === 'original'
+            ? (view.sourceFormat === 'nai' ? 'sd' : 'nai')
+            : 'original';
+
+        this._applyModalPromptView(this._buildPromptView(this._lastModalImage, this._lastParsedData, nextFormat));
+    },
+
     _renderModalSections(image, parsedData) {
         const $ = (s) => document.querySelector(s);
-        const escapeHtml = window.escapeHtml || ((s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
+        // escapeHtml is now available globally from modules/utils/escape.js
 
         // --- Checkpoint ---
         const cpItem = $('#modal-checkpoint-item');
@@ -485,7 +863,7 @@ const Gallery = {
         }
         if (Array.isArray(loras) && loras.length > 0) {
             lorasSection.style.display = '';
-            lorasList.innerHTML = loras.map(l => `<span class="lora-pill">${escapeHtml(l)}</span>`).join('');
+            lorasList.innerHTML = loras.map(l => `<span class="lora-pill">${window.escapeHtml(l)}</span>`).join('');
         } else {
             lorasSection.style.display = 'none';
             lorasList.innerHTML = '';
@@ -510,12 +888,12 @@ const Gallery = {
             charsList.innerHTML = parsedData.character_prompts.map((c, i) => {
                 const centerStr = c.center ? ` (${c.center.x?.toFixed?.(2) || c.center.x}, ${c.center.y?.toFixed?.(2) || c.center.y})` : '';
                 const negHtml = c.negative_prompt
-                    ? `<div class="char-negative"><strong>Neg:</strong> ${escapeHtml(c.negative_prompt)}</div>`
+                    ? `<div class="char-negative"><strong>Neg:</strong> ${window.escapeHtml(c.negative_prompt)}</div>`
                     : '';
                 return `
                     <div class="character-card">
                         <div class="character-card-header">Character ${c.index != null ? c.index + 1 : i + 1}${centerStr}</div>
-                        <div>${escapeHtml(c.prompt)}</div>
+                        <div>${window.escapeHtml(c.prompt)}</div>
                         ${negHtml}
                     </div>
                 `;
@@ -561,8 +939,8 @@ const Gallery = {
                 const label = paramLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                 const displayVal = typeof val === 'number'
                     ? (Number.isInteger(val) ? val : val.toFixed(4).replace(/0+$/, '').replace(/\.$/, ''))
-                    : escapeHtml(String(val));
-                return `<div class="param-item"><span class="param-label">${escapeHtml(label)}</span><span class="param-value">${displayVal}</span></div>`;
+                    : window.escapeHtml(String(val));
+                return `<div class="param-item"><span class="param-label">${window.escapeHtml(label)}</span><span class="param-value">${displayVal}</span></div>`;
             }).join('');
             paramsGrid.style.display = '';
         } else {
@@ -577,7 +955,7 @@ const Gallery = {
             img2imgSection.style.display = '';
             img2imgInfo.innerHTML = Object.entries(parsedData.img2img_info).map(([key, val]) => {
                 const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                return `<div class="param-item"><span class="param-label">${escapeHtml(label)}</span><span class="param-value">${escapeHtml(String(val))}</span></div>`;
+                return `<div class="param-item"><span class="param-label">${window.escapeHtml(label)}</span><span class="param-value">${window.escapeHtml(String(val))}</span></div>`;
             }).join('');
         } else {
             img2imgSection.style.display = 'none';
@@ -596,10 +974,10 @@ const Gallery = {
                 return `
                     <div class="prompt-node-item">
                         <div class="prompt-node-header">
-                            <span>${escapeHtml(nodeTitle)}</span>
-                            <span class="node-role ${roleClass}">${escapeHtml(roleLabel)}</span>
+                            <span>${window.escapeHtml(nodeTitle)}</span>
+                            <span class="node-role ${roleClass}">${window.escapeHtml(roleLabel)}</span>
                         </div>
-                        <div class="prompt-node-text">${escapeHtml(node.text || '')}</div>
+                        <div class="prompt-node-text">${window.escapeHtml(node.text || '')}</div>
                     </div>
                 `;
             }).join('');
@@ -643,7 +1021,8 @@ const Gallery = {
     },
 
     _escapeHtml(value) {
-        return String(value || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        // Delegate to global escapeHtml from modules/utils/escape.js
+        return window.escapeHtml(value);
     },
 
     _renderModalTags(tags = []) {
@@ -691,7 +1070,7 @@ const Gallery = {
             .join('\n');
     },
 
-    _buildCopyAllText(image, parsedData, tags) {
+    _buildCopyAllText(image, parsedData, tags, promptView = null) {
         const loras = (() => {
             try {
                 if (!image?.loras) return [];
@@ -700,13 +1079,14 @@ const Gallery = {
                 return [];
             }
         })();
+        const currentPromptView = promptView || this._getModalPromptView() || this._buildConvertedPromptView(image, parsedData, 'original');
 
         const sections = [
             ['Filename', image?.filename],
             ['Generator', image?.generator],
             ['Size', image?.width && image?.height ? `${image.width}x${image.height}` : null],
-            ['Prompt', image?.prompt],
-            ['Negative', image?.negative_prompt],
+            ['Prompt', currentPromptView?.promptText ?? image?.prompt],
+            ['Negative', currentPromptView?.negativeText ?? image?.negative_prompt],
             ['Checkpoint', image?.checkpoint],
             ['LoRAs', loras.length ? loras.join(', ') : null],
             ['Tags', tags?.length ? tags.map(tag => tag.tag).join(', ') : null],
@@ -715,12 +1095,14 @@ const Gallery = {
 
         return sections
             .filter(([, value]) => value != null && value !== '' && value !== 'undefined')
-            .map(([label, value]) => `${label}:\n${String(value)}`)
+            .map(([label, value]) => `${label}:
+${String(value)}`)
             .join('\n\n');
     },
 
     async openPreview(imageId) {
-        const { $, API, showModal, formatSize, showToast } = window.App || { $: (s) => document.querySelector(s), API: window.API, showModal: window.showModal, formatSize: window.formatSize, showToast: window.showToast };
+        const { $, showModal, formatSize, showToast } = getGalleryAppContext();
+        const API = getRequiredGalleryAPI();
 
         this._initSectionToggles();
         const summaryImage = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
@@ -732,7 +1114,18 @@ const Gallery = {
         this._lastModalTags = [];
         this._lastParsedData = null;
 
-        $('#modal-image').src = API.getImageUrl(imageId);
+        // Show skeleton modal content while loading
+        if (window.SkeletonModal) {
+            window.SkeletonModal.showImageModal('image-modal');
+        }
+
+        $('#modal-image').src = API?.getImageUrl?.(imageId) ?? `/api/image-file/${imageId}`;
+        // When image loads, hide the skeleton
+        $('#modal-image').onload = () => {
+            if (window.SkeletonModal) {
+                window.SkeletonModal.hideImageModal('image-modal');
+            }
+        };
         $('#modal-filename').textContent = summaryImage?.filename || `Image #${imageId}`;
         $('#modal-generator').textContent = (summaryImage?.generator || '-').toUpperCase();
         $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
@@ -740,10 +1133,10 @@ const Gallery = {
         $('#modal-negative-text').textContent = 'Loading…';
         $('#modal-loading-state').textContent = 'Loading details…';
         $('#modal-loading-state').style.display = '';
-        $('#modal-favorite-toggle').textContent = summaryImage?.is_favorite ? '★ Favorited' : '★ Favorite';
         document.querySelector('#modal-tags-list').textContent = 'Loading tags…';
         document.querySelector('#modal-tags-list').style.color = 'var(--text-muted)';
-        $('#modal-favorite-toggle').onclick = () => this.toggleFavorite(imageId);
+        $('#btn-toggle-prompt-format').disabled = true;
+        $('#btn-toggle-prompt-format').textContent = 'View as SD';
         ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-img2img-section', '#modal-nodes-section'].forEach(selector => {
             const element = document.querySelector(selector);
             if (element) {
@@ -767,11 +1160,32 @@ const Gallery = {
                 this._hydratePreview(reparsed.image, reparsed.tags);
                 showToast?.('Metadata reparsed', 'success');
             } catch (error) {
-                showToast?.('Failed to reparse metadata: ' + error.message, 'error');
+                showToast?.(formatUserError(error, "Failed to reparse metadata"), "error");
             }
         };
         $('#modal-prev-image').onclick = () => this.openAdjacentPreview(-1);
         $('#modal-next-image').onclick = () => this.openAdjacentPreview(1);
+
+        if (this._modalKeydownHandler) {
+            document.removeEventListener('keydown', this._modalKeydownHandler);
+        }
+        this._modalKeydownHandler = (e) => {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                this.openAdjacentPreview(-1);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                this.openAdjacentPreview(1);
+            } else if (e.key === 'Escape') {
+                document.removeEventListener('keydown', this._modalKeydownHandler);
+                this._modalKeydownHandler = null;
+                const closeModal = window.App?.closeModal || window.closeModal;
+                if (typeof closeModal === 'function') {
+                    closeModal('image-modal');
+                }
+            }
+        };
+        document.addEventListener('keydown', this._modalKeydownHandler);
         $('#btn-toggle-all-tags').onclick = () => {
             this.showAllTags = !this.showAllTags;
             this._renderModalTags(this._lastModalTags || []);
@@ -785,11 +1199,13 @@ const Gallery = {
                 showToast?.('Failed to copy text', 'error');
             }
         };
-        $('#btn-copy-prompt').onclick = () => copyToClipboard(this._lastModalImage?.prompt || '', 'Prompt copied');
-        $('#btn-copy-negative').onclick = () => copyToClipboard(this._lastModalImage?.negative_prompt || '', 'Negative prompt copied');
+        const getPromptView = () => this._getModalPromptView() || this._buildPromptView(this._lastModalImage, this._lastParsedData, 'original');
+        $('#btn-toggle-prompt-format').onclick = () => this._togglePromptFormat();
+        $('#btn-copy-prompt').onclick = () => copyToClipboard((getPromptView().promptText || ''), 'Prompt copied');
+        $('#btn-copy-negative').onclick = () => copyToClipboard((getPromptView().negativeText || ''), 'Negative prompt copied');
         $('#btn-copy-tags').onclick = () => copyToClipboard((this._lastModalTags || []).map(tag => tag.tag).join(', '), 'Tags copied');
         $('#btn-copy-params').onclick = () => copyToClipboard(this._serializeGenerationParams(this._lastParsedData), 'Params copied');
-        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags), 'All metadata copied');
+        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), 'All metadata copied');
 
         showModal?.('image-modal');
 
@@ -809,13 +1225,17 @@ const Gallery = {
     },
 
     _hydratePreview(image, tags) {
-        const { $, formatSize } = window.App || { $: (s) => document.querySelector(s), formatSize: window.formatSize };
+        const { $, formatSize } = getGalleryAppContext();
+
+        // Hide skeleton modal content
+        if (window.SkeletonModal) {
+            window.SkeletonModal.hideImageModal('image-modal');
+        }
+
         $('#modal-filename').textContent = image.filename;
         $('#modal-generator').textContent = image.generator.toUpperCase();
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
         $('#modal-prompt-text').textContent = image.prompt || 'No prompt data';
-        $('#modal-favorite-toggle').textContent = image.is_favorite ? '★ Favorited' : '★ Favorite';
-
         const parsedData = this._extractParsedData(image);
         this._lastModalImage = image;
         this._lastModalTags = tags;
@@ -823,6 +1243,7 @@ const Gallery = {
 
         this._renderModalSections(image, parsedData);
         this._renderModalTags(tags);
+        this._applyModalPromptView(this._buildPromptView(image, parsedData, 'original'));
         $('#modal-loading-state').style.display = 'none';
         $('#btn-toggle-all-tags').textContent = 'Show More';
     },
@@ -840,11 +1261,136 @@ const Gallery = {
             this.lazyObserver.disconnect();
             this.lazyObserver = null;
         }
-        // Also cleanup VirtualGallery if it's active
+        // Cleanup virtual list
+        if (this.virtualList) {
+            this.virtualList.destroy();
+            this.virtualList = null;
+        }
+        this.useVirtualScroll = false;
+        // Also cleanup legacy VirtualGallery if it's active
         if (window.VirtualGallery && typeof window.VirtualGallery.destroy === 'function') {
             window.VirtualGallery.destroy();
+        }
+    },
+
+    /**
+     * Get virtual scrolling statistics
+     * @returns {Object} Statistics object
+     */
+    getVirtualStats() {
+        return {
+            enabled: this.useVirtualScroll,
+            itemCount: this.images.length,
+            renderedCount: this.virtualList ? this.virtualList.getRenderedCount() : this.images.length,
+            threshold: GALLERY_VIRTUAL_CONFIG.threshold,
+        };
+    },
+
+    /**
+     * Initialize keyboard navigation for gallery grid
+     * Enables arrow key navigation within the gallery grid
+     */
+    initKeyboardNavigation() {
+        if (this._keyboardNavInitialized) return;
+        this._keyboardNavInitialized = true;
+
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return;
+
+        grid.addEventListener('keydown', (e) => {
+            // Only handle arrow keys when focus is on a gallery item
+            if (!e.target.classList.contains('gallery-item')) return;
+
+            const items = Array.from(grid.querySelectorAll('.gallery-item'));
+            const currentIndex = items.findIndex(item => item === e.target);
+            if (currentIndex < 0) return;
+
+            // Get the grid layout to determine column count
+            const gridStyle = window.getComputedStyle(grid);
+            const gridWidth = grid.offsetWidth;
+            const itemWidth = items[0]?.offsetWidth || 200;
+            const columnGap = parseInt(gridStyle.columnGap) || 16;
+            const columns = Math.max(1, Math.floor((gridWidth + columnGap) / (itemWidth + columnGap)));
+
+            let nextIndex = -1;
+
+            switch (e.key) {
+                case 'ArrowRight':
+                    e.preventDefault();
+                    nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : currentIndex;
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    nextIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    nextIndex = currentIndex + columns < items.length ? currentIndex + columns : currentIndex;
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    nextIndex = currentIndex - columns >= 0 ? currentIndex - columns : currentIndex;
+                    break;
+                case 'Home':
+                    e.preventDefault();
+                    nextIndex = 0;
+                    break;
+                case 'End':
+                    e.preventDefault();
+                    nextIndex = items.length - 1;
+                    break;
+                default:
+                    return;
+            }
+
+            if (nextIndex >= 0 && items[nextIndex]) {
+                items[nextIndex].focus();
+                // Announce to screen readers
+                this.announceImagePosition(nextIndex, items.length);
+            }
+        });
+    },
+
+    /**
+     * Announce image position to screen readers
+     * @param {number} index - Current image index
+     * @param {number} total - Total number of images
+     */
+    announceImagePosition(index, total) {
+        const image = this.images[index];
+        if (!image) return;
+
+        const message = `Image ${index + 1} of ${total}: ${image.filename || 'Untitled'}`;
+        if (window.A11y && typeof window.A11y.announce === 'function') {
+            window.A11y.announce(message, 'polite');
+        }
+    },
+
+    /**
+     * Announce loading state to screen readers
+     * @param {string} message - The message to announce
+     */
+    announceLoading(message) {
+        if (window.A11y && typeof window.A11y.announce === 'function') {
+            window.A11y.announce(message, 'polite');
+        }
+    },
+
+    /**
+     * Announce selection change to screen readers
+     * @param {string} imageId - The image ID
+     * @param {boolean} selected - Whether the image is selected
+     */
+    announceSelection(imageId, selected) {
+        const image = this.images.find(img => img.id === imageId);
+        const filename = image?.filename || 'Image';
+        const message = selected ? `${filename} selected` : `${filename} deselected`;
+        if (window.A11y && typeof window.A11y.announce === 'function') {
+            window.A11y.announce(message, 'polite');
         }
     }
 };
 
+// Export configuration for external use
+window.GALLERY_VIRTUAL_CONFIG = GALLERY_VIRTUAL_CONFIG;
 window.Gallery = Gallery;

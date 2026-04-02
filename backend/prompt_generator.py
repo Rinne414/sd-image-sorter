@@ -24,11 +24,11 @@ class PromptGenerator:
 
     def __init__(self, db_module=None):
         self.db = db_module
-        self._tag_pool = {}  # category -> [tags]
-        self._tag_sets = list(BUILTIN_TAG_SETS)
-        self._exclusion_rules = list(BUILTIN_EXCLUSION_RULES)
-        self._user_exclusion_rules = []
-        self._user_tag_sets = []
+        self._tag_pool: Dict[str, List[Dict[str, Any]]] = {}  # category -> [tags]
+        self._tag_sets: List[Dict[str, Any]] = list(BUILTIN_TAG_SETS)
+        self._exclusion_rules: List[Dict[str, Any]] = list(BUILTIN_EXCLUSION_RULES)
+        self._user_exclusion_rules: List[Dict[str, Any]] = []
+        self._user_tag_sets: List[Dict[str, Any]] = []
 
     def load_from_db(self):
         """Load tag pool from database (all tags with their categories)."""
@@ -415,14 +415,14 @@ class PromptGenerator:
 
         # Fall back to tag pool
         if category in self._tag_pool:
-            available = [
+            available_tags = [
                 t for t in self._tag_pool[category]
                 if t["tag"].lower().replace(" ", "_") not in excluded
             ]
-            if available:
+            if available_tags:
                 # Weight by frequency in library
-                weights = [t["count"] for t in available]
-                chosen = random.choices(available, weights=weights, k=1)[0]
+                freq_weights = [t["count"] for t in available_tags]
+                chosen = random.choices(available_tags, weights=freq_weights, k=1)[0]
                 return chosen["tag"]
 
         return None
