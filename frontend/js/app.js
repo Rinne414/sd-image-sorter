@@ -114,7 +114,7 @@ const AppState = {
         cursor: null,
         hasMore: true,
         total: 0,
-        pageSize: 100
+        pageSize: 200
     },
 
     // Multi-select state
@@ -267,7 +267,8 @@ const API = {
         if (filters.artist) params.set('artist', filters.artist);  // Artist filter
         if (filters.search) params.set('search', filters.search);
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
-        params.set('limit', filters.limit ?? 999999);  // Load all images at once
+        params.set('limit', filters.limit ?? 200);
+        if (filters.cursor) params.set('cursor', filters.cursor);
 
         // Dimension filters
         if (filters.minWidth) params.set('min_width', filters.minWidth);
@@ -743,10 +744,8 @@ function setGalleryViewMode(mode) {
         grid.classList.toggle('waterfall', nextMode === 'waterfall');
     }
 
-    if (window.VirtualGallery && typeof window.VirtualGallery.setViewMode === 'function') {
-        window.VirtualGallery.setViewMode(nextMode);
-    } else if (window.Gallery) {
-        Gallery.render();
+    if (window.Gallery) {
+        Gallery.setViewMode(nextMode);
     }
 }
 
@@ -824,9 +823,6 @@ function switchView(viewName) {
 
     // View-specific initialization
     if (viewName === 'gallery') {
-        if (window.VirtualGallery && !window.VirtualGallery.initialized && typeof window.VirtualGallery.init === 'function') {
-            window.VirtualGallery.init();
-        }
         setGalleryViewMode(AppState.viewMode);
         // Re-render existing images immediately, only reload from API if needed
         if (AppState.images.length > 0 && window.Gallery) {
@@ -1809,39 +1805,59 @@ function generateSkeletonItems(count = 20) {
     return fragment;
 }
 
-async function loadImages() {
+async function loadImages(appendMode = false) {
     // Cancel any pending image load request
     RequestManager.cancel(IMAGE_LOAD_KEY);
 
     const galleryGrid = $('#gallery-grid');
 
-    if (galleryGrid) {
-        galleryGrid.innerHTML = '';
-        galleryGrid.appendChild(generateSkeletonItems(20));
+    if (!appendMode) {
+        AppState.pagination.cursor = null;
+        AppState.pagination.hasMore = true;
+        AppState.images = [];
+
+        if (galleryGrid) {
+            galleryGrid.innerHTML = '';
+            galleryGrid.appendChild(generateSkeletonItems(20));
+        }
     }
 
     AppState.isLoading = true;
     const galleryLoading = $('#gallery-loading');
     if (galleryLoading) galleryLoading.style.display = 'flex';
     const imageCount = $('#image-count');
-    if (imageCount) imageCount.textContent = 'Loading...';
+    if (imageCount && !appendMode) imageCount.textContent = 'Loading...';
 
     try {
         const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
-        const result = await API.getImages(AppState.filters, { signal: controller.signal });
+        const filters = {
+            ...AppState.filters,
+            limit: AppState.pagination.pageSize,
+            cursor: appendMode ? AppState.pagination.cursor : null
+        };
+        const result = await API.getImages(filters, { signal: controller.signal });
         RequestManager.complete(IMAGE_LOAD_KEY);
 
         if (result === null) return;
 
-        AppState.images = result.images;
+        // Update pagination
+        AppState.pagination.cursor = result.next_cursor;
+        AppState.pagination.hasMore = result.has_more;
+        AppState.pagination.total = result.total;
 
-        if (imageCount) {
-            imageCount.textContent = `${result.total || result.images.length} images`;
+        if (appendMode) {
+            AppState.images = [...AppState.images, ...result.images];
+        } else {
+            AppState.images = result.images;
         }
 
-        // Clean stale selections
-        if (AppState.selectedIds && AppState.selectedIds.size > 0) {
-            const validIds = new Set(result.images.map(img => img.id));
+        if (imageCount) {
+            imageCount.textContent = `${AppState.pagination.total || AppState.images.length} images`;
+        }
+
+        // Clean stale selections on fresh load
+        if (AppState.selectedIds && AppState.selectedIds.size > 0 && !appendMode) {
+            const validIds = new Set(AppState.images.map(img => img.id));
             const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
             if (staleIds.length > 0) {
                 staleIds.forEach(id => AppState.selectedIds.delete(id));
@@ -1849,10 +1865,14 @@ async function loadImages() {
             }
         }
 
-        tagsLibraryCache = null;
+        if (!appendMode) tagsLibraryCache = null;
 
         if (window.Gallery) {
-            Gallery.setImages(AppState.images);
+            if (appendMode) {
+                Gallery.appendImages(result.images);
+            } else {
+                Gallery.setImages(AppState.images);
+            }
         }
 
         const emptyState = $('#gallery-empty-state');
@@ -1874,6 +1894,32 @@ async function loadImages() {
         }
     }
 }
+
+// Load next page of images
+function loadMoreImages() {
+    if (AppState.isLoading || !AppState.pagination.hasMore) return;
+    loadImages(true);
+}
+
+// Simple scroll-based infinite scroll — no IntersectionObserver sentinel needed
+let _scrollLoadTimer = null;
+function _onGalleryScroll() {
+    if (_scrollLoadTimer) return;
+    _scrollLoadTimer = requestAnimationFrame(() => {
+        _scrollLoadTimer = null;
+        if (AppState.currentView !== 'gallery') return;
+        if (AppState.isLoading || !AppState.pagination.hasMore) return;
+
+        // Load more when user scrolls within 600px of bottom
+        const scrollY = window.scrollY || window.pageYOffset;
+        const windowH = window.innerHeight;
+        const docH = document.documentElement.scrollHeight;
+        if (scrollY + windowH >= docH - 600) {
+            loadMoreImages();
+        }
+    });
+}
+window.addEventListener('scroll', _onGalleryScroll, { passive: true });
 
 // ============== UI Components ==============
 
