@@ -209,6 +209,31 @@ DUPLICATE_THRESHOLD: float = float(os.environ.get(
 
 
 # =============================================================================
+# Artist Identification Configuration
+# =============================================================================
+
+# Default artist identification backend/source
+ARTIST_MODEL_SOURCE_DEFAULT: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_MODEL_SOURCE",
+    "huggingface"
+)
+
+# Current default stays on a Transformers-compatible image-classification model.
+# This is the most integration-friendly path for the existing pipeline, even if
+# a more domain-specific LSNet checkpoint may be preferable in the future.
+ARTIST_HF_MODEL_ID: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_HF_MODEL",
+    "cafeai/cafe_style"
+)
+
+# ModelScope mirror / alternative id used when source="modelscope".
+ARTIST_MODELSCOPE_MODEL_ID: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL",
+    "AI-ModelScope/cafe-style"
+)
+
+
+# =============================================================================
 # Image Processing Configuration
 # =============================================================================
 

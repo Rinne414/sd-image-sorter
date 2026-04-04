@@ -119,6 +119,9 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 > [!TIP]
 > **No Python installed?** Use the [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) branch — it auto-downloads Python for you!
 
+> [!NOTE]
+> Model licensing and redistribution are separate from runtime auto-download behavior. If you plan to ship GitHub Release archives, read [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md) before bundling any weights.
+
 ---
 
 ## 📖 Complete Tutorial (Playback Teaching Guide)
@@ -683,6 +686,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 > [!TIP]
 > **没有安装 Python?** 使用 [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) 分支 — 自动下载 Python!
+
+> [!NOTE]
+> 模型“可以自动下载”不等于“可以放心打包进 GitHub Releases 再分发”。如果你准备发布整包，请先阅读 [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md)。
 
 ---
 

@@ -28,6 +28,11 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 from PIL import Image
+from config import (
+    ARTIST_MODEL_SOURCE_DEFAULT,
+    ARTIST_HF_MODEL_ID,
+    ARTIST_MODELSCOPE_MODEL_ID,
+)
 
 logger = logging.getLogger("sd-image-sorter.artist")
 
@@ -582,7 +587,7 @@ class ArtistIdentifier:
     def __init__(
         self,
         model_path: Optional[str] = None,
-        model_source: str = "huggingface",
+        model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
         threshold: float = 0.35,
         artists_list: Optional[List[str]] = None,
     ):
@@ -651,8 +656,10 @@ class ArtistIdentifier:
             # Try to use transformers for CLIP-based classification
             from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-            # Common artist classification models on HuggingFace
-            model_name = "cafeai/cafe_style"  # Style classification
+            # Keep the default on a plain Transformers image-classification model.
+            # This favors integration compatibility today; it does not mean this is
+            # the best long-term artist model for bundling or release distribution.
+            model_name = ARTIST_HF_MODEL_ID
 
             logger.info(f"Loading from HuggingFace: {model_name}")
             self._processor = AutoImageProcessor.from_pretrained(model_name)
@@ -677,7 +684,7 @@ class ArtistIdentifier:
             from transformers import AutoImageProcessor, AutoModelForImageClassification
 
             # Download model from ModelScope
-            model_dir = snapshot_download('AI-ModelScope/cafe-style')
+            model_dir = snapshot_download(ARTIST_MODELSCOPE_MODEL_ID)
 
             logger.info("Loading from ModelScope")
             self._processor = AutoImageProcessor.from_pretrained(model_dir)
@@ -830,7 +837,7 @@ _identifier = None
 
 def get_artist_identifier(
     model_path: Optional[str] = None,
-    model_source: str = "huggingface",
+    model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
     threshold: float = 0.35,
 ) -> ArtistIdentifier:
     """Get the singleton artist identifier."""
