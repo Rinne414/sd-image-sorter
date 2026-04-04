@@ -7,6 +7,7 @@ import logging
 import os
 import json
 import threading
+import time
 from typing import Optional, List, Dict, Any
 
 from fastapi import HTTPException, BackgroundTasks, Query
@@ -124,6 +125,7 @@ class SortingService:
         """Initialize the sorting service."""
         self._scan_progress: Dict[str, Any] = {
             "status": "idle",
+            "step": "idle",
             "current": 0,
             "processed": 0,
             "total": 0,
@@ -131,6 +133,9 @@ class SortingService:
             "new": 0,
             "updated": 0,
             "message": "",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
         }
         self._scan_lock = threading.Lock()
 
@@ -238,13 +243,17 @@ class SortingService:
             if self._scan_progress["status"] == "running":
                 self._scan_progress = {
                     "status": "idle",
+                    "step": "idle",
                     "current": 0,
                     "processed": 0,
                     "total": 0,
                     "errors": 0,
                     "new": 0,
                     "updated": 0,
-                    "message": "Reset by user"
+                    "message": "Reset by user",
+                    "current_item": None,
+                    "started_at": None,
+                    "updated_at": time.time(),
                 }
                 return {"status": "reset", "message": "Scan progress reset to idle"}
             return {"status": self._scan_progress["status"], "message": "Nothing to reset (not running)"}
@@ -311,8 +320,10 @@ class SortingService:
 
         def run_scan():
             with self._scan_lock:
+                started_at = time.time()
                 self._scan_progress = {
                     "status": "running",
+                    "step": "starting",
                     "current": 0,
                     "processed": 0,
                     "total": 0,
@@ -320,18 +331,26 @@ class SortingService:
                     "new": 0,
                     "updated": 0,
                     "message": "Starting...",
+                    "current_item": None,
+                    "started_at": started_at,
+                    "updated_at": started_at,
                 }
 
             try:
                 def progress_cb(current, total, filename):
                     with self._scan_lock:
+                        now = time.time()
                         self._scan_progress["current"] = current
                         self._scan_progress["processed"] = current
                         self._scan_progress["total"] = total
+                        self._scan_progress["step"] = "scanning"
                         self._scan_progress["message"] = f"Processing: {filename}"
+                        self._scan_progress["current_item"] = filename
+                        self._scan_progress["updated_at"] = now
 
                 result = scan_folder(request.folder_path, request.recursive, progress_cb)
                 with self._scan_lock:
+                    now = time.time()
                     errors = result.get("errors", 0)
                     new_count = result.get("new", 0)
                     updated_count = result.get("updated", 0)
@@ -342,6 +361,7 @@ class SortingService:
                         summary += f" {errors} failed."
                     self._scan_progress = {
                         "status": "done",
+                        "step": "done",
                         "current": result["total"],
                         "processed": result["total"],
                         "total": result["total"],
@@ -349,25 +369,35 @@ class SortingService:
                         "new": new_count,
                         "updated": updated_count,
                         "message": summary,
+                        "current_item": None,
+                        "started_at": self._scan_progress.get("started_at"),
+                        "updated_at": now,
                         "result": result
                     }
             except Exception as e:
                 with self._scan_lock:
+                    now = time.time()
                     self._scan_progress = {
                         "status": "error",
+                        "step": "error",
                         "current": self._scan_progress.get("current", 0),
                         "processed": self._scan_progress.get("processed", self._scan_progress.get("current", 0)),
                         "total": self._scan_progress.get("total", 0),
                         "errors": self._scan_progress.get("errors", 0),
                         "new": self._scan_progress.get("new", 0),
                         "updated": self._scan_progress.get("updated", 0),
-                        "message": "Scan failed due to an internal error"
+                        "message": "Scan failed due to an internal error",
+                        "current_item": self._scan_progress.get("current_item"),
+                        "started_at": self._scan_progress.get("started_at"),
+                        "updated_at": now,
                     }
             finally:
                 with self._scan_lock:
                     if self._scan_progress["status"] == "running":
                         self._scan_progress["status"] = "error"
+                        self._scan_progress["step"] = "error"
                         self._scan_progress["message"] = "Scan ended unexpectedly"
+                        self._scan_progress["updated_at"] = time.time()
 
         background_tasks.add_task(run_scan)
         return {"status": "started", "message": "Scan started in background"}

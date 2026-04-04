@@ -527,6 +527,17 @@ class CensorService:
                 "has_yolov8s": legacy["has_yolov8s"],
                 "privacy_model_count": legacy.get("privacy_model_count", 0),
                 "general_model_count": legacy.get("general_model_count", 0),
+                "simple_user_advice": legacy.get("simple_user_advice"),
+                "advanced_user_advice": legacy.get("advanced_user_advice"),
+                "capabilities": {
+                    "input_mode_label": "Fixed built-in model classes",
+                    "output_mode_label": "Model-dependent legacy detection",
+                    "supports_text_prompt": False,
+                    "supports_mask_output": any(
+                        bool((file_info.get("capabilities") or {}).get("supports_mask_output"))
+                        for file_info in legacy.get("files", [])
+                    ),
+                },
             },
             {
                 "id": "nudenet",
@@ -537,6 +548,7 @@ class CensorService:
                 "recommended": nudenet["available"],
                 "message": nudenet["message"],
                 "model_path": nudenet["model_path"],
+                "capabilities": nudenet.get("capabilities", {}),
             },
             {
                 "id": "sam3",
@@ -548,6 +560,7 @@ class CensorService:
                 "message": sam3["message"],
                 "checkpoint_path": sam3["checkpoint_path"],
                 "missing_dependencies": sam3["missing_dependencies"],
+                "capabilities": sam3.get("capabilities", {}),
             },
         ]
 

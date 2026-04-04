@@ -168,6 +168,7 @@ function bindEvents() {
         localStorage.setItem('censor_model_path', CensorState.modelPath);
         const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
         updateSelectedLegacyModelHelp(legacy);
+        renderCensorCapabilityPanel();
     });
 
     $('#censor-model-file')?.addEventListener('change', (e) => {
@@ -180,6 +181,7 @@ function bindEvents() {
         localStorage.setItem('censor_model_path', CensorState.modelPath);
         const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
         updateSelectedLegacyModelHelp(legacy);
+        renderCensorCapabilityPanel();
     });
 
     $('#censor-confidence')?.addEventListener('input', (e) => {
@@ -189,6 +191,7 @@ function bindEvents() {
 
     $('#censor-model-type')?.addEventListener('change', () => {
         updateDetectionModelInputs();
+        renderCensorCapabilityPanel();
     });
 
     $('#censor-style')?.addEventListener('change', (e) => CensorState.style = e.target.value);
@@ -281,6 +284,11 @@ function bindEvents() {
     $('#btn-auto-detect-all-modal')?.addEventListener('click', () => {
         $('#detect-modal')?.classList.remove('visible');
         runDetectionForAll();
+    });
+
+    $('#btn-segment-text-current')?.addEventListener('click', async () => {
+        $('#detect-modal')?.classList.remove('visible');
+        await segmentCurrentImageByText();
     });
 
     $('#btn-clear-edits')?.addEventListener('click', () => {
@@ -804,6 +812,7 @@ function saveCurrentCanvasToState(serializedState = null) {
 
 async function loadCensorModelStatus() {
     const banner = document.getElementById('censor-model-health');
+    const simpleGuide = document.getElementById('censor-simple-guide');
     try {
         const result = await window.App.API.get('/api/censor/models');
         CensorState.backendModelStatus = result;
@@ -849,10 +858,17 @@ async function loadCensorModelStatus() {
 
         banner.className = classes.join(' ');
         banner.innerHTML = `<strong>Detection Ready:</strong> ${escapeHtml(readyNotes || 'None')} ${escapeHtml(recommended)}${extra}`;
+        if (simpleGuide) {
+            simpleGuide.textContent = legacy?.simple_user_advice || 'Keep the recommended mode and only touch custom paths if you know why.';
+        }
+        renderCensorCapabilityPanel();
     } catch (e) {
         if (!banner) return;
         banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
         banner.textContent = 'Model readiness could not be loaded right now.';
+        if (simpleGuide) {
+            simpleGuide.textContent = '';
+        }
     }
 }
 
@@ -860,6 +876,125 @@ function getLegacyModelRecordByPath(path) {
     const normalized = String(path || '').trim();
     if (!normalized) return null;
     return CensorState.availableLegacyModels.find(file => file?.path === normalized) || null;
+}
+
+function getSelectedLegacyModelRecord() {
+    const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
+    const selectedPath = manualPath || String(document.getElementById('censor-model-file')?.value || '').trim();
+    const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
+    return getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacy?.default_model_path);
+}
+
+function buildCapabilityCardHtml(title, badge, lines = [], note = '', { recommended = false } = {}) {
+    const safeLines = Array.isArray(lines)
+        ? lines.filter(Boolean).map(line => `<div>${escapeHtml(line)}</div>`).join('')
+        : '';
+    const cardClass = recommended
+        ? 'censor-capability-card is-recommended'
+        : 'censor-capability-card';
+    return `
+        <div class="${cardClass}">
+            <div class="censor-capability-title">
+                <span>${escapeHtml(title)}</span>
+                ${badge ? `<span class="censor-capability-badge">${escapeHtml(badge)}</span>` : ''}
+            </div>
+            <div class="censor-capability-lines">${safeLines}</div>
+            ${note ? `<div class="censor-capability-note">${escapeHtml(note)}</div>` : ''}
+        </div>
+    `;
+}
+
+function renderCensorCapabilityPanel() {
+    const panel = document.getElementById('censor-capability-panel');
+    const targetHelp = document.getElementById('censor-target-region-help');
+    const promptHelp = document.getElementById('censor-text-prompt-help');
+    const promptInput = document.getElementById('censor-text-prompt');
+    const targetChecks = Array.from(document.querySelectorAll('.target-region-check'));
+
+    if (!panel) return;
+
+    const models = CensorState.backendModelStatus?.models || [];
+    const legacy = models.find(model => model.id === 'legacy');
+    const nudenet = models.find(model => model.id === 'nudenet');
+    const sam3 = models.find(model => model.id === 'sam3');
+    const selectedLegacy = getSelectedLegacyModelRecord();
+    const modelType = document.getElementById('censor-model-type')?.value || 'legacy';
+
+    const cards = [];
+    if (selectedLegacy) {
+        const caps = selectedLegacy.capabilities || {};
+        cards.push(buildCapabilityCardHtml(
+            selectedLegacy.name,
+            selectedLegacy.profile_label,
+            [
+                `Input: ${caps.input_mode_label || 'Fixed model labels'}`,
+                `Output: ${caps.output_mode_label || 'Legacy detection'}`,
+                `Scope: ${caps.class_scope_label || 'Unknown'}`,
+                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+            ],
+            caps.plain_english || selectedLegacy.message || '',
+            { recommended: Boolean(selectedLegacy.recommended_for_censor) }
+        ));
+    }
+
+    if (nudenet) {
+        const caps = nudenet.capabilities || {};
+        cards.push(buildCapabilityCardHtml(
+            nudenet.name,
+            nudenet.available ? 'Ready' : 'Optional',
+            [
+                `Input: ${caps.input_mode_label || 'Built-in NSFW labels'}`,
+                `Output: ${caps.output_mode_label || 'Detection boxes'}`,
+                `Scope: ${caps.class_scope_label || 'Built-in NSFW labels'}`,
+                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+            ],
+            caps.plain_english || nudenet.message || '',
+            { recommended: Boolean(nudenet.recommended) }
+        ));
+    }
+
+    if (sam3) {
+        const caps = sam3.capabilities || {};
+        cards.push(buildCapabilityCardHtml(
+            sam3.name,
+            sam3.available ? 'Precision' : 'GPU-only optional',
+            [
+                `Input: ${caps.input_mode_label || 'Text prompt or box prompt'}`,
+                `Output: ${caps.output_mode_label || 'Pixel masks'}`,
+                `Scope: ${caps.class_scope_label || 'Prompt-guided segmentation'}`,
+                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+            ],
+            caps.plain_english || sam3.message || '',
+            { recommended: Boolean(sam3.available) }
+        ));
+    }
+
+    panel.innerHTML = cards.join('');
+
+    const quickFilterEnabled = (modelType === 'legacy' || modelType === 'both')
+        && selectedLegacy?.profile === 'privacy-censor';
+    targetChecks.forEach(input => {
+        input.disabled = !quickFilterEnabled;
+    });
+
+    if (targetHelp) {
+        if (quickFilterEnabled) {
+            targetHelp.textContent = 'These quick target filters are for the built-in privacy model and map to its fixed privacy classes.';
+        } else if (modelType === 'nudenet') {
+            targetHelp.textContent = 'NudeNet uses its own built-in exposed/covered labels, so the quick privacy checkboxes are ignored here.';
+        } else {
+            targetHelp.textContent = 'The currently selected general model uses its own fixed classes. These quick privacy checkboxes do not change that model.';
+        }
+    }
+
+    if (promptInput) {
+        promptInput.disabled = !sam3?.available;
+    }
+    if (promptHelp) {
+        promptHelp.textContent = sam3?.available
+            ? 'Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.'
+            : (sam3?.message || 'SAM3 is not ready yet in this environment.');
+    }
 }
 
 function formatLegacyModelOptionLabel(file) {
@@ -918,6 +1053,7 @@ function populateCensorModelSelect(legacyModel) {
     }
 
     updateSelectedLegacyModelHelp(legacyModel);
+    renderCensorCapabilityPanel();
 }
 
 function updateDetectionModelInputs() {
@@ -928,6 +1064,7 @@ function updateDetectionModelInputs() {
 
     if (modelFileGroup) modelFileGroup.style.display = needsLegacyPath ? '' : 'none';
     if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath ? '' : 'none';
+    renderCensorCapabilityPanel();
 }
 
 function getSelectedLegacyModelPath() {
@@ -1184,10 +1321,20 @@ function performClone(ctx, x, y, size) {
 
 async function runAutoCensorBatch() {
     const { showToast } = window.App;
+    const tracker = window.App.createProgressTracker();
 
-    showLoading(true, 'Batch Processing...');
+    showLoading(true, 'Auto Censor · preparing queue...');
 
-    for (const item of CensorState.queue) {
+    for (let index = 0; index < CensorState.queue.length; index += 1) {
+        const item = CensorState.queue[index];
+        showLoading(true, window.App.buildProgressText({
+            progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
+            completed: index,
+            total: CensorState.queue.length,
+            tracker,
+            defaultMessage: 'Running auto-censor...',
+            primaryLabel: 'Auto Censor'
+        }));
         await runDetectionForImage(item, true); // true = silent/no-refresh
     }
 
@@ -1288,6 +1435,98 @@ async function runDetectionForImage(item, silent = false) {
     } catch (e) {
         Logger.error(e);
         if (!silent) window.App.showToast(formatUserError(e, "Detection failed"), "error");
+    }
+}
+
+async function applyRasterMaskToActiveCanvas(maskDataUrl) {
+    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!canvas || !canvas.width || !canvas.height) {
+        throw new Error('No editable canvas is ready');
+    }
+
+    const ctx = canvas.getContext('2d');
+    const snapshot = captureCanvasState(canvas) || CensorState.queue.find(i => i.id === CensorState.activeId)?.originalUrl;
+    if (!snapshot) {
+        throw new Error('Could not capture the current canvas state');
+    }
+
+    const [baseImage, maskImage] = await Promise.all([
+        loadImage(snapshot),
+        loadImage(maskDataUrl),
+    ]);
+
+    const effectCanvas = document.createElement('canvas');
+    effectCanvas.width = canvas.width;
+    effectCanvas.height = canvas.height;
+    const effectCtx = effectCanvas.getContext('2d');
+
+    if (CensorState.style === 'mosaic') {
+        const downscale = Math.max(1, Math.round(CensorState.blockSize));
+        const smallW = Math.max(1, Math.floor(canvas.width / downscale));
+        const smallH = Math.max(1, Math.floor(canvas.height / downscale));
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = smallW;
+        tmpCanvas.height = smallH;
+        const tmpCtx = tmpCanvas.getContext('2d');
+        tmpCtx.imageSmoothingEnabled = false;
+        tmpCtx.drawImage(baseImage, 0, 0, smallW, smallH);
+        effectCtx.imageSmoothingEnabled = false;
+        effectCtx.drawImage(tmpCanvas, 0, 0, smallW, smallH, 0, 0, canvas.width, canvas.height);
+    } else if (CensorState.style === 'blur') {
+        effectCtx.filter = `blur(${Math.max(1, Math.round(CensorState.blockSize / 2))}px)`;
+        effectCtx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+        effectCtx.filter = 'none';
+    } else if (CensorState.style === 'white_bar') {
+        effectCtx.fillStyle = '#fff';
+        effectCtx.fillRect(0, 0, canvas.width, canvas.height);
+    } else {
+        effectCtx.fillStyle = '#000';
+        effectCtx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    effectCtx.globalCompositeOperation = 'destination-in';
+    effectCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+
+    ctx.drawImage(effectCanvas, 0, 0);
+    const committedState = pushUndoState();
+    saveCurrentCanvasToState(committedState);
+
+    const activeItem = CensorState.queue.find(i => i.id === CensorState.activeId);
+    if (activeItem) {
+        activeItem.isProcessed = true;
+    }
+}
+
+async function segmentCurrentImageByText() {
+    if (!CensorState.activeId) {
+        window.App.showToast('No image selected', 'error');
+        return;
+    }
+
+    const textPrompt = String(document.getElementById('censor-text-prompt')?.value || '').trim();
+    if (!textPrompt) {
+        window.App.showToast('Enter a text prompt first', 'warning');
+        return;
+    }
+
+    showLoading(true, `SAM3 text segment · ${textPrompt}`);
+    try {
+        const result = await window.App.API.post('/api/censor/segment-text', {
+            image_id: CensorState.activeId,
+            text_prompt: textPrompt,
+        });
+
+        if (!result?.mask) {
+            window.App.showToast(result?.message || 'No matching regions were found', 'info');
+            return;
+        }
+
+        await applyRasterMaskToActiveCanvas(result.mask);
+        window.App.showToast(`Applied SAM3 mask for "${textPrompt}"`, 'success');
+    } catch (error) {
+        window.App.showToast(formatUserError(error, 'SAM3 text segmentation failed'), 'error');
+    } finally {
+        showLoading(false);
     }
 }
 
@@ -1415,11 +1654,21 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
         return;
     }
 
-    showLoading(true, 'Saving all images...');
+    const tracker = window.App.createProgressTracker();
+    showLoading(true, 'Save · preparing files...');
 
     let count = 0;
-    for (const item of CensorState.queue) {
+    for (let index = 0; index < CensorState.queue.length; index += 1) {
+        const item = CensorState.queue[index];
         try {
+            showLoading(true, window.App.buildProgressText({
+                progress: { message: item.outputFilename || item.originalFilename || `Image ${item.id}` },
+                completed: index,
+                total: CensorState.queue.length,
+                tracker,
+                defaultMessage: 'Saving processed images...',
+                primaryLabel: 'Save'
+            }));
             let dataUrl;
 
             if (item.currentDataUrl) {
@@ -1789,11 +2038,21 @@ async function runDetectionForAll() {
         return;
     }
 
-    showLoading(true, 'Running detection on all images...');
+    const tracker = window.App.createProgressTracker();
+    showLoading(true, 'Detect All · preparing queue...');
     let count = 0;
 
-    for (const item of CensorState.queue) {
+    for (let index = 0; index < CensorState.queue.length; index += 1) {
+        const item = CensorState.queue[index];
         try {
+            showLoading(true, window.App.buildProgressText({
+                progress: { message: item.originalFilename || item.outputFilename || `Image ${item.id}` },
+                completed: index,
+                total: CensorState.queue.length,
+                tracker,
+                defaultMessage: 'Running detection...',
+                primaryLabel: 'Detect All'
+            }));
             await runDetectionForImage(item, true);
             count++;
         } catch (e) {

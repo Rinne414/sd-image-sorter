@@ -7,6 +7,7 @@ This folder is used by the **Legacy YOLO** path inside Censor Edit.
 - `wenaka_yolov8s-seg.onnx`
 - Purpose: privacy-part detection for censor workflows
 - UI label: `Privacy-part detector`
+- App behavior: fixed privacy labels with fast box-first censoring
 
 If this file exists, the app now picks it automatically when the user leaves the legacy model path empty.
 
@@ -17,6 +18,8 @@ If this file exists, the app now picks it automatically when the user leaves the
 - `.pt` variants of both
 
 These files are useful for runtime compatibility checks and general object segmentation tests.
+The current local `yolo26s-seg` / `yolov8s-seg` files expose fixed COCO-style classes from their metadata.
+They are not open-text prompt detectors in the current packaged setup.
 They are **not** the preferred model for privacy censoring.
 
 ## Source Notes

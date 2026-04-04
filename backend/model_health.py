@@ -164,11 +164,62 @@ def _infer_yolo_model_profile(class_names: List[str], filename: str) -> Dict[str
     }
 
 
+def _build_yolo_capabilities(profile_id: str, filename: str, class_names: List[str]) -> Dict[str, Any]:
+    filename_lower = filename.lower()
+    class_count = len(class_names)
+
+    if profile_id == "privacy-censor":
+        return {
+            "class_scope": "fixed-privacy",
+            "class_scope_label": f"{class_count or 5} built-in privacy classes",
+            "input_mode_label": "Fixed privacy-part labels",
+            "output_mode_label": "Fast box-first censoring",
+            "supports_text_prompt": False,
+            "supports_mask_output": False,
+            "recommended_user_level": "normal",
+            "best_for": "Quick privacy-part censoring",
+            "plain_english": (
+                "Best for normal users who want quick privacy-part auto-detection. "
+                "This route does not understand arbitrary text prompts."
+            ),
+        }
+
+    if profile_id == "general-object":
+        model_family = "YOLO26" if "yolo26" in filename_lower else "YOLOv8"
+        return {
+            "class_scope": "fixed-coco",
+            "class_scope_label": f"{class_count or 80} built-in object classes",
+            "input_mode_label": "Fixed built-in object classes",
+            "output_mode_label": "General object segmentation tests",
+            "supports_text_prompt": False,
+            "supports_mask_output": True,
+            "recommended_user_level": "pro",
+            "best_for": "Advanced compatibility checks and non-privacy object tests",
+            "plain_english": (
+                f"The current local {model_family} file is a fixed-class COCO model. "
+                "It is useful for general segmentation tests, but it is not an open-text prompt detector."
+            ),
+        }
+
+    return {
+        "class_scope": "unknown",
+        "class_scope_label": "Unknown class scope",
+        "input_mode_label": "Unknown",
+        "output_mode_label": "Unknown",
+        "supports_text_prompt": False,
+        "supports_mask_output": False,
+        "recommended_user_level": "pro",
+        "best_for": "Manual inspection required",
+        "plain_english": "The app could not determine what this model is good at automatically.",
+    }
+
+
 def _describe_yolo_model(model_path: Path) -> Dict[str, Any]:
     class_names = _load_yolo_class_names(model_path)
     profile = _infer_yolo_model_profile(class_names, model_path.name)
     canonical_names = [_canonicalize_yolo_class_name(name) for name in class_names]
     preview = canonical_names[:8]
+    capabilities = _build_yolo_capabilities(profile["id"], model_path.name, canonical_names)
 
     return {
         "name": model_path.name,
@@ -181,6 +232,7 @@ def _describe_yolo_model(model_path: Path) -> Dict[str, Any]:
         "profile_label": profile["label"],
         "recommended_for_censor": profile["recommended_for_censor"],
         "message": profile["message"],
+        "capabilities": capabilities,
     }
 
 
@@ -375,6 +427,14 @@ def get_model_health() -> Dict[str, Any]:
                 "has_yolov8s": any("yolov8s" in name for name in yolo_names),
                 "privacy_model_count": len(privacy_yolo_files),
                 "general_model_count": len(general_yolo_files),
+                "simple_user_advice": (
+                    "Keep mode on Both and leave the model path blank. The app will pick the recommended privacy model automatically."
+                    if privacy_yolo_files
+                    else "Install a privacy-focused YOLO file or switch to NudeNet for the simple workflow."
+                ),
+                "advanced_user_advice": (
+                    "The current local yolo26/yolov8 files are fixed-class models. They are useful for advanced compatibility tests, but not for free-text prompting."
+                ),
             },
             "nudenet": {
                 "available": nudenet_model.exists() and _module_available("nudenet"),
@@ -384,6 +444,17 @@ def get_model_health() -> Dict[str, Any]:
                     if nudenet_model.exists()
                     else "NudeNet local model file is missing."
                 ),
+                "capabilities": {
+                    "class_scope": "fixed-nudenet",
+                    "class_scope_label": "Built-in NSFW body-part classes",
+                    "input_mode_label": "No manual prompt input",
+                    "output_mode_label": "Detection boxes",
+                    "supports_text_prompt": False,
+                    "supports_mask_output": False,
+                    "recommended_user_level": "normal",
+                    "best_for": "Fast NSFW region detection",
+                    "plain_english": "Good default when you want the app to detect exposed and covered NSFW regions without setting up extra prompts.",
+                },
             },
             "sam3": {
                 "available": bool(sam3_checkpoint) and not sam3_missing and cuda_available,
@@ -399,6 +470,17 @@ def get_model_health() -> Dict[str, Any]:
                         else "SAM3 still needs a checkpoint or runtime dependencies."
                     )
                 ),
+                "capabilities": {
+                    "class_scope": "open-text",
+                    "class_scope_label": "Prompt-guided segmentation",
+                    "input_mode_label": "Text prompt or box prompt",
+                    "output_mode_label": "Pixel-accurate masks",
+                    "supports_text_prompt": True,
+                    "supports_mask_output": True,
+                    "recommended_user_level": "pro",
+                    "best_for": "Precise mask refinement and advanced text-guided segmentation",
+                    "plain_english": "This is the precise tool for pro users. It can refine a box or follow a text prompt, but the current runtime is GPU-only.",
+                },
             },
         },
         "artist": {

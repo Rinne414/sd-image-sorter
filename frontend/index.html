@@ -779,6 +779,7 @@
                             </div>
                             <div class="section-content" id="section-detection" style="padding-top: 8px;">
                                 <div class="model-health-banner model-health-banner-compact" id="censor-model-health"></div>
+                                <div class="helper-text" id="censor-simple-guide" style="margin: 8px 0 10px;"></div>
                                 <div class="prop-group-v2" style="margin-bottom: 8px;">
                                     <label data-i18n="censor.detectionModel">Detection Model</label>
                                     <select id="censor-model-type" class="toolbar-select" style="width: 100%; padding: 6px 8px;">
@@ -882,6 +883,11 @@
                         </div>
 
                         <div class="form-group">
+                            <label data-i18n="censor.modelCapabilities">Model Capabilities</label>
+                            <div id="censor-capability-panel" class="censor-capability-panel"></div>
+                        </div>
+
+                        <div class="form-group">
                             <label><span data-i18n="censor.confidenceThreshold">Confidence Threshold</span>: <span id="censor-confidence-value">0.50</span></label>
                             <input type="range" id="censor-confidence" min="0.1" max="0.9" step="0.05" value="0.5">
                         </div>
@@ -916,8 +922,19 @@
                                     <span class="checkbox-text" data-i18n="censor.regionCum">Cum</span>
                                 </label>
                             </div>
+                            <small class="helper-text" id="censor-target-region-help" data-i18n="censor.targetRegionHelp">These quick target filters are mainly for the built-in privacy model.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="censor.advancedPrecision">Advanced Precision (Pro)</label>
+                            <input type="text" id="censor-text-prompt" class="input-field"
+                                placeholder="e.g. exposed breasts, face, tattoo, hand" data-i18n-placeholder="censor.textPromptPlaceholder">
+                            <small class="helper-text" id="censor-text-prompt-help" data-i18n="censor.textPromptHelp">Uses SAM3 text-prompt segmentation on the current image when the GPU runtime is ready.</small>
                         </div>
                         <div class="modal-actions" style="margin-top: 24px; display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" id="btn-segment-text-current" style="flex: 1;">
+                                ✨ <span data-i18n="censor.segmentText">Segment by Text</span>
+                            </button>
                             <button class="btn btn-secondary" id="btn-auto-detect-current-modal" style="flex: 1;">
                                 🎯 <span data-i18n="censor.detectCurrentBtn">Detect Current</span>
                             </button>

@@ -11,6 +11,7 @@ const ArtistIdent = {
     stats: {},
     diagnostics: null,
     eventsBound: false,
+    progressTracker: null,
 
     init() {
         this.bindEvents();
@@ -374,8 +375,19 @@ const ArtistIdent = {
         if (progressContainer) progressContainer.style.display = 'block';
         if (progressFill) progressFill.style.width = `${percent}%`;
         if (progressText) {
+            if (!this.progressTracker) {
+                this.progressTracker = window.App.createProgressTracker();
+            }
+
             progressText.textContent = total > 0
-                ? `${completed}/${total} images (${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''})`
+                ? window.App.buildProgressText({
+                    progress,
+                    completed,
+                    total,
+                    tracker: this.progressTracker,
+                    defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
+                    primaryLabel: 'Artist ID'
+                })
                 : (progress.message || 'Preparing artist identification...');
         }
     },
@@ -389,6 +401,8 @@ const ArtistIdent = {
                 return;
             }
 
+            this.progressTracker = window.App.createProgressTracker();
+            window.App.resetProgressTracker(this.progressTracker);
             this.isIdentifying = true;
             this.syncSelectionActionState();
             this.updateProgressUi(progress);
@@ -410,6 +424,9 @@ const ArtistIdent = {
 
             this.isIdentifying = false;
             this.syncSelectionActionState();
+            if (this.progressTracker) {
+                window.App.resetProgressTracker(this.progressTracker);
+            }
             document.getElementById('artist-progress-container').style.display = 'none';
         }
     },
@@ -424,6 +441,8 @@ const ArtistIdent = {
 
         this.isIdentifying = true;
         this.syncSelectionActionState();
+        this.progressTracker = window.App.createProgressTracker();
+        window.App.resetProgressTracker(this.progressTracker);
 
         // Show global loading for initial setup
         showGlobalLoading('Starting artist identification...');
@@ -484,6 +503,9 @@ const ArtistIdent = {
             if (!handedOffToExistingTask) {
                 this.isIdentifying = false;
                 this.syncSelectionActionState();
+                if (this.progressTracker) {
+                    window.App.resetProgressTracker(this.progressTracker);
+                }
                 if (progressContainer) progressContainer.style.display = 'none';
             }
             hideGlobalLoading();
@@ -507,7 +529,14 @@ const ArtistIdent = {
                     const percent = Math.round(completed / progress.total * 100);
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
-                        progressText.textContent = `${completed}/${progress.total} images (${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''})`;
+                        progressText.textContent = window.App.buildProgressText({
+                            progress,
+                            completed,
+                            total: Number(progress.total || 0),
+                            tracker: this.progressTracker,
+                            defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
+                            primaryLabel: 'Artist ID'
+                        });
                     }
                 }
 
@@ -545,6 +574,8 @@ const ArtistIdent = {
 
         this.isIdentifying = true;
         this.syncSelectionActionState();
+        this.progressTracker = window.App.createProgressTracker();
+        window.App.resetProgressTracker(this.progressTracker);
 
         let handedOffToExistingTask = false;
 
@@ -579,6 +610,9 @@ const ArtistIdent = {
             if (!handedOffToExistingTask) {
                 this.isIdentifying = false;
                 this.syncSelectionActionState();
+                if (this.progressTracker) {
+                    window.App.resetProgressTracker(this.progressTracker);
+                }
                 if (progressContainer) progressContainer.style.display = 'none';
             }
         }

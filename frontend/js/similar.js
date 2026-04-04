@@ -12,6 +12,7 @@ const SimilarImages = {
     isEmbedding: false,
     isCheckingEmbeddingStatus: false,
     embedProgress: { processed: 0, total: 0, errors: 0 },
+    embedProgressTracker: null,
     modelStatus: null,
     searchResults: [],
     duplicateResults: [],
@@ -132,13 +133,21 @@ const SimilarImages = {
             progressFill.style.width = `${percent}%`;
         }
         if (progressText) {
-            if (progress.message) {
-                progressText.textContent = progress.message;
-            } else if (total > 0) {
-                const detail = errors > 0
-                    ? `${processed} embedded, ${errors} error(s)`
-                    : `${processed} embedded`;
-                progressText.textContent = `${completed}/${total} images (${detail})`;
+            if (!this.embedProgressTracker) {
+                this.embedProgressTracker = window.App.createProgressTracker();
+            }
+
+            if (total > 0) {
+                progressText.textContent = window.App.buildProgressText({
+                    progress,
+                    completed,
+                    total,
+                    tracker: this.embedProgressTracker,
+                    defaultMessage: errors > 0
+                        ? `${processed} embedded, ${errors} error(s)`
+                        : `${processed} embedded`,
+                    primaryLabel: 'Embedding'
+                });
             } else if (progress.running) {
                 progressText.textContent = 'Preparing embeddings...';
             } else {
@@ -162,9 +171,17 @@ const SimilarImages = {
             if (!progress?.running) {
                 this.isEmbedding = false;
                 this.setEmbeddingUiState(false);
+                if (this.embedProgressTracker) {
+                    window.App.resetProgressTracker(this.embedProgressTracker);
+                }
                 return;
             }
 
+            if (!this.embedProgressTracker) {
+                this.embedProgressTracker = window.App.createProgressTracker();
+            } else {
+                window.App.resetProgressTracker(this.embedProgressTracker);
+            }
             this.isEmbedding = true;
             this.setEmbeddingUiState(true);
             this.renderEmbeddingProgress(progress);
@@ -274,6 +291,8 @@ const SimilarImages = {
 
         const { showToast } = window.App;
         this.isEmbedding = true;
+        this.embedProgressTracker = window.App.createProgressTracker();
+        window.App.resetProgressTracker(this.embedProgressTracker);
 
         this.setEmbeddingUiState(true);
         this.renderEmbeddingProgress({ running: true, total: 0, processed: 0, errors: 0 });
@@ -321,6 +340,9 @@ const SimilarImages = {
                     : 'No pending images to embed.';
 
                 this.resetEmbeddingUi({ hideProgress: false, progressMessage: finalMessage });
+                if (this.embedProgressTracker) {
+                    window.App.resetProgressTracker(this.embedProgressTracker);
+                }
                 if (progressBar) {
                     setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
                 }
@@ -336,6 +358,9 @@ const SimilarImages = {
         } catch (e) {
             this.isEmbedding = false;
             this.resetEmbeddingUi();
+            if (this.embedProgressTracker) {
+                window.App.resetProgressTracker(this.embedProgressTracker);
+            }
             window.App.showToast(formatUserError(e, 'Failed to refresh embedding progress'), 'error');
         }
     },

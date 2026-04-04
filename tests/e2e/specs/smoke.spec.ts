@@ -1646,6 +1646,107 @@ test.describe('Smoke Tests', () => {
     await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 5000 }).toBe(initialSnapshot)
   })
 
+  test('censor detect modal should explain simple and pro model capabilities', async ({ page }) => {
+    await page.route('**/api/censor/models', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          recommended_backend: 'both',
+          models: [
+            {
+              id: 'legacy',
+              name: 'Legacy YOLO',
+              available: true,
+              recommended: true,
+              default_model_path: 'C:/models/wenaka_yolov8s-seg.onnx',
+              simple_user_advice: 'Keep mode on Both and leave the model path blank.',
+              files: [
+                {
+                  name: 'wenaka_yolov8s-seg.onnx',
+                  path: 'C:/models/wenaka_yolov8s-seg.onnx',
+                  size_mb: 45.7,
+                  profile: 'privacy-censor',
+                  profile_label: 'Privacy-part detector',
+                  recommended_for_censor: true,
+                  message: 'Specialized for privacy-part detection and censor workflows.',
+                  capabilities: {
+                    input_mode_label: 'Fixed privacy-part labels',
+                    output_mode_label: 'Fast box-first censoring',
+                    class_scope_label: '5 built-in privacy classes',
+                    supports_text_prompt: false,
+                    plain_english: 'Best for normal users who want quick privacy-part auto-detection.',
+                  },
+                },
+                {
+                  name: 'yolo26s-seg.onnx',
+                  path: 'C:/models/yolo26s-seg.onnx',
+                  size_mb: 40.0,
+                  profile: 'general-object',
+                  profile_label: 'General object segmentation',
+                  recommended_for_censor: false,
+                  message: 'General segmentation test model.',
+                  capabilities: {
+                    input_mode_label: 'Fixed built-in object classes',
+                    output_mode_label: 'General object segmentation tests',
+                    class_scope_label: '80 built-in object classes',
+                    supports_text_prompt: false,
+                    plain_english: 'Useful for advanced compatibility checks, not free-text prompting.',
+                  },
+                },
+              ],
+              privacy_model_count: 1,
+              general_model_count: 1,
+            },
+            {
+              id: 'nudenet',
+              name: 'NudeNet v3',
+              available: true,
+              recommended: true,
+              message: 'NudeNet model ready.',
+              capabilities: {
+                input_mode_label: 'No manual prompt input',
+                output_mode_label: 'Detection boxes',
+                class_scope_label: 'Built-in NSFW body-part classes',
+                supports_text_prompt: false,
+                plain_english: 'Good default for NSFW region detection.',
+              },
+            },
+            {
+              id: 'sam3',
+              name: 'SAM 3',
+              available: true,
+              recommended: true,
+              message: 'SAM3 checkpoint and runtime dependencies are ready.',
+              capabilities: {
+                input_mode_label: 'Text prompt or box prompt',
+                output_mode_label: 'Pixel-accurate masks',
+                class_scope_label: 'Prompt-guided segmentation',
+                supports_text_prompt: true,
+                plain_english: 'This is the precise tool for pro users.',
+              },
+            },
+          ],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await page.locator('.nav-tabs [data-view="censor"]').click()
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+
+    await expect(page.locator('#censor-simple-guide')).toContainText('Keep mode on Both')
+    await page.locator('#btn-open-detect-modal').click()
+    await expect(page.locator('#detect-modal.visible')).toBeVisible()
+    await expect(page.locator('#censor-capability-panel')).toContainText('5 built-in privacy classes')
+    await expect(page.locator('#censor-capability-panel')).toContainText('Prompt-guided segmentation')
+    await expect(page.locator('#censor-text-prompt')).toBeEnabled()
+
+    await page.selectOption('#censor-model-file', 'C:/models/yolo26s-seg.onnx')
+    await expect(page.locator('.target-region-check').first()).toBeDisabled()
+    await expect(page.locator('#censor-target-region-help')).toContainText('general model')
+  })
+
   test('should keep the filter modal readable across responsive widths', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')

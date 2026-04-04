@@ -64,11 +64,12 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Multi-Model Detection**: Choose between Legacy YOLO, NudeNet v3, or both
 - **Smart Defaults**: If the local Wenaka privacy model exists, the app auto-picks it so most users can leave the legacy model path blank
 - **AI Detection**: Privacy-focused Wenaka YOLO, NudeNet v3, or both can be used from the UI
+- **Clear Capability Split**: Wenaka is treated as the fast fixed-class privacy detector, the local YOLO26/YOLOv8 files are shown as fixed-class general segmentation test models, and SAM3 is the prompt-guided precision tool
 - **Multiple Styles**: Mosaic, blur, black bar, or white bar
-- **Precision Tools**: Manual brush, eraser, and clone stamp for detail work
+- **Precision Tools**: Manual brush, eraser, clone stamp, and SAM3 text-prompt segmentation for pro users when the GPU runtime is ready
 - **Batch Processing**: Queue-based workflow with batch save and rename
 - **Safer Failure Handling**: Unreadable files no longer poison the gallery or break the censor queue
-- **Runtime Feedback**: The banner now tells you which local models are actually ready and whether the recommended mode is `legacy`, `nudenet`, or `both`
+- **Runtime Feedback**: The banner now tells you which local models are actually ready, which workflow is recommended for normal users, and what each model can really do
 
 ### 🔍 Similar Images (NEW)
 - **Visual Search**: Find similar images by visual content using CLIP embeddings
@@ -667,11 +668,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **多模型支持**: 可选 Legacy YOLO、NudeNet v3 或两者并用
 - **默认更省心**: 如果本地有 Wenaka 隐私模型，程序会自动选它，普通用户不需要手填 Legacy 模型路径
 - **智能识别**: 可直接在前端切换 Wenaka 隐私 YOLO、NudeNet v3，或两者并用
+- **能力拆分更清楚**: Wenaka 走固定隐私类的快速检测，本地 YOLO26/YOLOv8 文件会明确标成固定类通用分割测试模型，SAM3 则是文本提示精细分割工具
 - **多样化处理**: 提供马赛克、模糊、纯色遮盖等多种打码方式
-- **精细修补**: 内置画笔、橡皮擦及仿制图章，满足手动精度需求
+- **精细修补**: 内置画笔、橡皮擦、仿制图章，并为专业用户补上 SAM3 文本提示分割入口
 - **批量导出**: 队列化工作流，支持批量重命名与保存
 - **更稳健**: 坏图不会再污染图库或把打码队列直接拖崩
-- **状态提示更诚实**: 页面会直接告诉你本地实际可用的模型、推荐模式，以及当前默认隐私模型
+- **状态提示更诚实**: 页面会直接告诉你本地实际可用的模型、推荐模式、当前默认隐私模型，以及各模型的真实输入/输出能力
 
 ### 🔍 相似图片 (NEW)
 - **视觉搜索**: 使用 CLIP 嵌入向量查找视觉相似的图片

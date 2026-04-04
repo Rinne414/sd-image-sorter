@@ -775,6 +775,95 @@ function hideGlobalLoading() {
     }
 }
 
+function createProgressTracker(maxSamples = 12) {
+    return {
+        maxSamples,
+        startedAt: null,
+        samples: [],
+    };
+}
+
+function resetProgressTracker(tracker) {
+    if (!tracker) return;
+    tracker.startedAt = null;
+    tracker.samples = [];
+}
+
+function formatDurationCompact(seconds) {
+    const safeSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const secs = safeSeconds % 60;
+
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+}
+
+function updateProgressTracker(tracker, completed, total) {
+    if (!tracker) return { elapsedText: '', etaText: '' };
+
+    const safeCompleted = Math.max(0, Number(completed) || 0);
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const now = Date.now();
+
+    if (!tracker.startedAt && safeCompleted > 0) {
+        tracker.startedAt = now;
+    }
+
+    if (tracker.startedAt) {
+        tracker.samples.push({ time: now, completed: safeCompleted });
+        if (tracker.samples.length > tracker.maxSamples) {
+            tracker.samples.shift();
+        }
+    }
+
+    const elapsedSeconds = tracker.startedAt ? Math.max(0, (now - tracker.startedAt) / 1000) : 0;
+    let etaSeconds = null;
+    if (safeTotal > 0 && tracker.samples.length >= 3) {
+        const first = tracker.samples[0];
+        const last = tracker.samples[tracker.samples.length - 1];
+        const completedDelta = last.completed - first.completed;
+        const secondsDelta = (last.time - first.time) / 1000;
+        if (completedDelta > 0 && secondsDelta > 0) {
+            const rate = completedDelta / secondsDelta;
+            const remaining = Math.max(0, safeTotal - safeCompleted);
+            if (rate > 0 && remaining > 0) {
+                etaSeconds = remaining / rate;
+            }
+        }
+    }
+
+    return {
+        elapsedSeconds,
+        elapsedText: elapsedSeconds > 0 ? formatDurationCompact(elapsedSeconds) : '',
+        etaSeconds,
+        etaText: etaSeconds != null ? formatDurationCompact(etaSeconds) : '',
+    };
+}
+
+function buildProgressText({
+    progress = {},
+    completed = 0,
+    total = 0,
+    tracker = null,
+    defaultMessage = 'Processing...',
+    primaryLabel = '',
+}) {
+    const meta = updateProgressTracker(tracker, completed, total);
+    const parts = [];
+
+    if (primaryLabel) parts.push(primaryLabel);
+    if (total > 0) parts.push(`${completed}/${total}`);
+    if (meta.etaText) parts.push(`ETA ${meta.etaText}`);
+    else if (meta.elapsedText) parts.push(`Elapsed ${meta.elapsedText}`);
+
+    const detail = progress.current_item || progress.message || defaultMessage;
+    if (detail) parts.push(detail);
+
+    return parts.join(' · ');
+}
+
 function formatSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -1876,6 +1965,8 @@ async function startScan() {
         const startBtn = $('#btn-start-scan');
         if (progressContainer) progressContainer.style.display = 'block';
         if (startBtn) startBtn.disabled = true;
+        resetProgressTracker(_scanProgressTracker);
+        $('#scan-progress-text').textContent = 'Scan · waiting for first update...';
 
         pollScanProgress();
     } catch (error) {
@@ -1902,7 +1993,14 @@ async function pollScanProgress(retryCount = 0) {
         const total = Number(progress.total || 0);
         const percent = total > 0 ? Math.min(100, (processed / total) * 100) : 0;
         $('#scan-progress-fill').style.width = percent + '%';
-        $('#scan-progress-text').textContent = progress.message || 'Processing...';
+        $('#scan-progress-text').textContent = buildProgressText({
+            progress,
+            completed: processed,
+            total,
+            tracker: _scanProgressTracker,
+            defaultMessage: 'Scanning files...',
+            primaryLabel: 'Scan'
+        });
 
         if (progress.status === 'done') {
             const errorCount = Number(progress.errors || progress.result?.errors || 0);
@@ -1910,6 +2008,7 @@ async function pollScanProgress(retryCount = 0) {
             hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
+            resetProgressTracker(_scanProgressTracker);
             promptsLibraryCache = null; // Invalidate cache after scan
             loadImages();
             loadStats();
@@ -1917,6 +2016,7 @@ async function pollScanProgress(retryCount = 0) {
             showToast(progress.message || 'Scan failed', 'error');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
+            resetProgressTracker(_scanProgressTracker);
         } else if (progress.status === 'running') {
             setTimeout(() => pollScanProgress(0), 500);
         } else if (progress.status === 'idle' && retryCount < 10) {
@@ -1925,6 +2025,7 @@ async function pollScanProgress(retryCount = 0) {
         } else if (progress.status === 'idle') {
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
+            resetProgressTracker(_scanProgressTracker);
         }
     } catch (error) {
         Logger.error('Poll error:', error);
@@ -1934,6 +2035,7 @@ async function pollScanProgress(retryCount = 0) {
             showToast('Error checking scan progress', 'error');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
+            resetProgressTracker(_scanProgressTracker);
         }
     }
 }
@@ -1950,6 +2052,7 @@ async function resumeScanProgress() {
         const startBtn = $('#btn-start-scan');
         if (progressContainer) progressContainer.style.display = 'block';
         if (startBtn) startBtn.disabled = true;
+        resetProgressTracker(_scanProgressTracker);
         $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
         pollScanProgress();
     } catch (error) {
@@ -1961,6 +2064,7 @@ async function resumeScanProgress() {
 
 let _tagProgressTimer = null;
 let _tagPollingActive = false;
+let _scanProgressTracker = createProgressTracker();
 
 function clearTagProgressTimer() {
     if (_tagProgressTimer) {
@@ -4071,6 +4175,11 @@ function buildAppContext() {
         showInputModal,
         showGlobalLoading,
         hideGlobalLoading,
+        createProgressTracker,
+        resetProgressTracker,
+        updateProgressTracker,
+        buildProgressText,
+        formatDurationCompact,
         formatSize,
         loadImages,
         loadStats,

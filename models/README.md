@@ -27,7 +27,8 @@ If the recommended local files are present, the app now auto-selects them and sh
 ## Important Notes
 
 - `wenaka_yolov8s-seg` is the privacy-part model you want for censoring.
-- `yolo26s-seg` and `yolov8s-seg` are useful compatibility models, but they are **not** the best privacy detector.
+- `wenaka_yolov8s-seg` is treated in the app as the quick fixed-class privacy detector. It is not a free-text prompt model.
+- `yolo26s-seg` and `yolov8s-seg` are useful compatibility models, but the current local files are fixed-class COCO models, not open-text detectors.
 - `SAM3` is currently treated as an advanced optional feature. In this project it is only considered ready when CUDA is available.
 - Artist ID now targets `Kaloscope2.0`, not `cafe_style`.
 

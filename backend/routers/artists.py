@@ -6,6 +6,7 @@ Endpoints for identifying artist/style in images using LSNet-style classificatio
 import os
 import threading
 import logging
+import time
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -75,6 +76,11 @@ class BatchProgress(BaseModel):
     processed: int
     errors: int
     results: List[dict]
+    step: Optional[str] = None
+    message: Optional[str] = None
+    current_item: Optional[str] = None
+    started_at: Optional[float] = None
+    updated_at: Optional[float] = None
 
 
 class ModelInfo(BaseModel):
@@ -99,6 +105,11 @@ _batch_progress: Dict[str, Any] = {
     "processed": 0,
     "errors": 0,
     "results": [],
+    "step": "idle",
+    "message": "",
+    "current_item": None,
+    "started_at": None,
+    "updated_at": None,
 }
 
 # Lock for thread-safe batch progress dict access
@@ -279,6 +290,11 @@ async def identify_batch(
             "processed": 0,
             "errors": 0,
             "results": [],
+            "step": "starting",
+            "message": "Preparing artist identification...",
+            "current_item": None,
+            "started_at": time.time(),
+            "updated_at": time.time(),
         }
 
     # Start background task
@@ -308,78 +324,111 @@ def _run_batch_identification(
     import database as db
     global _batch_progress
 
-    identifier = get_artist_identifier(
-        model_path=model_path,
-        model_source=model_source,
-        threshold=threshold,
-    )
+    try:
+        with _batch_lock:
+            _batch_progress["step"] = "loading_runtime"
+            _batch_progress["message"] = "Loading artist runtime..."
+            _batch_progress["updated_at"] = time.time()
 
-    # Batch fetch all image paths in a single query (N+1 fix)
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        placeholders = ",".join("?" * len(image_ids))
-        cursor.execute(
-            f"SELECT id, path FROM images WHERE id IN ({placeholders})",
-            image_ids
+        identifier = get_artist_identifier(
+            model_path=model_path,
+            model_source=model_source,
+            threshold=threshold,
         )
-        image_map = {row[0]: row[1] for row in cursor.fetchall()}
 
-    # Collect all predictions to insert
-    predictions_to_insert = []
+        # Batch fetch all image paths in a single query (N+1 fix)
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join("?" * len(image_ids))
+            cursor.execute(
+                f"SELECT id, path FROM images WHERE id IN ({placeholders})",
+                image_ids
+            )
+            image_map = {row[0]: row[1] for row in cursor.fetchall()}
 
-    for image_id in image_ids:
-        try:
-            # Check if image exists in our map
-            if image_id not in image_map:
-                raise FileNotFoundError(f"Image {image_id} not found in database")
+        with _batch_lock:
+            _batch_progress["step"] = "identifying"
+            _batch_progress["message"] = f"Identifying {len(image_ids)} image(s)..."
+            _batch_progress["updated_at"] = time.time()
 
-            image_path = image_map[image_id]
+        # Collect all predictions to insert
+        predictions_to_insert = []
 
-            if not os.path.exists(image_path):
-                raise FileNotFoundError(f"Image file not found for image {image_id}")
+        for image_id in image_ids:
+            try:
+                # Check if image exists in our map
+                if image_id not in image_map:
+                    raise FileNotFoundError(f"Image {image_id} not found in database")
 
-            # Identify artist
-            result = identifier.identify(image_path, top_k=top_k)
-            if result.get("error"):
-                raise RuntimeError(result["error"])
+                image_path = image_map[image_id]
+                current_item = os.path.basename(image_path)
+                with _batch_lock:
+                    _batch_progress["current_item"] = current_item
+                    _batch_progress["message"] = f"Identifying {current_item}"
+                    _batch_progress["updated_at"] = time.time()
 
-            # Collect for batch insert
-            predictions_to_insert.append({
-                "image_id": image_id,
-                "artist": result["artist"],
-                "confidence": result["confidence"],
-                "top_predictions": str(result["top_predictions"]),
-            })
+                if not os.path.exists(image_path):
+                    raise FileNotFoundError(f"Image file not found for image {image_id}")
 
-            with _batch_lock:
-                _batch_progress["results"].append({
+                # Identify artist
+                result = identifier.identify(image_path, top_k=top_k)
+                if result.get("error"):
+                    raise RuntimeError(result["error"])
+
+                # Collect for batch insert
+                predictions_to_insert.append({
                     "image_id": image_id,
                     "artist": result["artist"],
                     "confidence": result["confidence"],
+                    "top_predictions": str(result["top_predictions"]),
                 })
 
-        except Exception as e:
-            logger.error(f"Error processing image {image_id}: {e}")
-            with _batch_lock:
-                _batch_progress["errors"] += 1
-        finally:
-            with _batch_lock:
-                _batch_progress["processed"] += 1
+                with _batch_lock:
+                    _batch_progress["results"].append({
+                        "image_id": image_id,
+                        "artist": result["artist"],
+                        "confidence": result["confidence"],
+                    })
 
-    # Batch insert all predictions (N+1 fix)
-    if predictions_to_insert:
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.executemany(
-                """INSERT OR REPLACE INTO artist_predictions
-                   (image_id, artist, confidence, top_predictions)
-                   VALUES (?, ?, ?, ?)""",
-                [(p["image_id"], p["artist"], p["confidence"], p["top_predictions"])
-                 for p in predictions_to_insert]
+            except Exception as e:
+                logger.error(f"Error processing image {image_id}: {e}")
+                with _batch_lock:
+                    _batch_progress["errors"] += 1
+                    _batch_progress["updated_at"] = time.time()
+            finally:
+                with _batch_lock:
+                    _batch_progress["processed"] += 1
+                    _batch_progress["updated_at"] = time.time()
+
+        # Batch insert all predictions (N+1 fix)
+        if predictions_to_insert:
+            with db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.executemany(
+                    """INSERT OR REPLACE INTO artist_predictions
+                       (image_id, artist, confidence, top_predictions)
+                       VALUES (?, ?, ?, ?)""",
+                    [(p["image_id"], p["artist"], p["confidence"], p["top_predictions"])
+                     for p in predictions_to_insert]
+                )
+
+        with _batch_lock:
+            _batch_progress["running"] = False
+            _batch_progress["step"] = "done"
+            _batch_progress["message"] = (
+                f"Completed artist identification: {_batch_progress['processed']}/{_batch_progress['total']} processed"
+                + (f", {_batch_progress['errors']} failed." if _batch_progress["errors"] else ".")
             )
-
-    with _batch_lock:
-        _batch_progress["running"] = False
+            _batch_progress["current_item"] = None
+            _batch_progress["updated_at"] = time.time()
+    except Exception as exc:
+        logger.error("Artist batch job failed: %s", exc)
+        with _batch_lock:
+            _batch_progress["running"] = False
+            _batch_progress["step"] = "error"
+            _batch_progress["message"] = f"Artist identification failed: {exc}"
+            _batch_progress["current_item"] = None
+            _batch_progress["updated_at"] = time.time()
 
 
 @router.get("/batch-progress", response_model=BatchProgress)

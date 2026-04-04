@@ -225,6 +225,12 @@ window.I18nLang_en = {
     'censor.yoloModelPath': 'YOLO Model Path',
     'censor.confidenceThreshold': 'Confidence Threshold',
     'censor.targetRegions': 'Target Regions',
+    'censor.modelCapabilities': 'Model Capabilities',
+    'censor.targetRegionHelp': 'These quick target filters are mainly for the built-in privacy model.',
+    'censor.advancedPrecision': 'Advanced Precision (Pro)',
+    'censor.textPromptPlaceholder': 'e.g. exposed breasts, face, tattoo, hand',
+    'censor.textPromptHelp': 'Uses SAM3 text-prompt segmentation on the current image when the GPU runtime is ready.',
+    'censor.segmentText': 'Segment by Text',
     'censor.detectCurrentBtn': 'Detect Current',
     'censor.detectAll': 'Detect All',
 

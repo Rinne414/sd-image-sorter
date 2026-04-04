@@ -227,6 +227,12 @@ window.I18nLang_zhCN = {
     'censor.yoloModelPath': 'YOLO 模型路径',
     'censor.confidenceThreshold': '置信度阈值',
     'censor.targetRegions': '目标区域',
+    'censor.modelCapabilities': '模型能力说明',
+    'censor.targetRegionHelp': '这些快捷目标过滤主要给内置隐私模型使用。',
+    'censor.advancedPrecision': '高级精修（专业）',
+    'censor.textPromptPlaceholder': '例如：exposed breasts、face、tattoo、hand',
+    'censor.textPromptHelp': '当 GPU 版 SAM3 运行时可用时，会对当前图片执行文本提示分割。',
+    'censor.segmentText': '按文本分割',
     'censor.detectCurrentBtn': '检测当前',
     'censor.detectAll': '检测全部',
 

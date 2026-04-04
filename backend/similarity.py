@@ -9,6 +9,7 @@ import logging
 import os
 import tempfile
 import threading
+import time
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
@@ -186,6 +187,12 @@ class SimilarityIndex:
             "processed": 0,
             "errors": 0,
             "message": "",
+            "step": "idle",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
+            "current_batch": 0,
+            "total_batches": 0,
         }
 
     def get_progress(self) -> Dict[str, Any]:
@@ -207,6 +214,12 @@ class SimilarityIndex:
             "processed": 0,
             "errors": 0,
             "message": "Preparing embedding job...",
+            "step": "preparing",
+            "current_item": None,
+            "started_at": time.time(),
+            "updated_at": time.time(),
+            "current_batch": 0,
+            "total_batches": 0,
         }
 
         try:
@@ -226,9 +239,11 @@ class SimilarityIndex:
 
                 rows = cursor.fetchall()
                 self._progress["total"] = len(rows)
+                self._progress["updated_at"] = time.time()
 
             if not rows:
                 self._progress["message"] = "No images pending embeddings."
+                self._progress["step"] = "idle"
                 return {
                     "processed": 0,
                     "errors": 0,
@@ -237,11 +252,15 @@ class SimilarityIndex:
                 }
 
             self._progress["message"] = "Loading embedding model..."
+            self._progress["step"] = "loading_model"
+            self._progress["updated_at"] = time.time()
             try:
                 model = _get_embed_model()
             except Exception as exc:
                 self._progress["errors"] = len(rows)
                 self._progress["message"] = f"Embedding unavailable: {exc}"
+                self._progress["step"] = "error"
+                self._progress["updated_at"] = time.time()
                 logger.error("Similarity embedding unavailable: %s", exc)
                 return {
                     "processed": 0,
@@ -252,9 +271,15 @@ class SimilarityIndex:
 
             # Process in small batches to allow progress tracking
             batch_size = EMBEDDING_BATCH_SIZE
+            total_batches = max(1, int(np.ceil(len(rows) / batch_size)))
+            self._progress["total_batches"] = total_batches
             for i in range(0, len(rows), batch_size):
                 batch = rows[i:i + batch_size]
-                self._progress["message"] = f"Embedding batch {min(i + len(batch), len(rows))}/{len(rows)}..."
+                batch_index = (i // batch_size) + 1
+                self._progress["message"] = f"Embedding batch {batch_index}/{total_batches}..."
+                self._progress["step"] = "embedding"
+                self._progress["current_batch"] = batch_index
+                self._progress["updated_at"] = time.time()
 
                 # Filter to existing files
                 valid = [(r[0], r[1]) for r in batch if os.path.exists(r[1])]
@@ -262,6 +287,8 @@ class SimilarityIndex:
                 # Batch update embeddings - collect all updates first
                 updates = []
                 for img_id, img_path in valid:
+                    self._progress["current_item"] = os.path.basename(img_path)
+                    self._progress["updated_at"] = time.time()
                     embedding = embed_image_file(img_path, model=model)
                     if embedding is not None:
                         updates.append((embedding_to_bytes(embedding), img_id))
@@ -285,6 +312,9 @@ class SimilarityIndex:
                 f"Completed embeddings: {self._progress['processed']} processed"
                 + (f", {self._progress['errors']} failed." if self._progress["errors"] else ".")
             )
+            self._progress["step"] = "done"
+            self._progress["current_item"] = None
+            self._progress["updated_at"] = time.time()
 
         finally:
             self._progress["running"] = False
