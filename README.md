@@ -10,7 +10,7 @@
 
 A powerful image management tool for Stable Diffusion users. Automatically extract metadata, tag images with AI, filter, sort, and organize your AI-generated artwork with a premium glassmorphism UI.
 
-![Version](https://img.shields.io/badge/version-2.0.0-purple)
+![Version](https://img.shields.io/badge/version-2.1.0-purple)
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -62,11 +62,13 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 ### 🔳 Censor Edit (V2)
 - **Multi-Model Detection**: Choose between Legacy YOLO, NudeNet v3, or both
-- **AI Detection**: YOLOv8-based detection of sensitive areas (requires model)
+- **Smart Defaults**: If the local Wenaka privacy model exists, the app auto-picks it so most users can leave the legacy model path blank
+- **AI Detection**: Privacy-focused Wenaka YOLO, NudeNet v3, or both can be used from the UI
 - **Multiple Styles**: Mosaic, blur, black bar, or white bar
 - **Precision Tools**: Manual brush, eraser, and clone stamp for detail work
 - **Batch Processing**: Queue-based workflow with batch save and rename
 - **Safer Failure Handling**: Unreadable files no longer poison the gallery or break the censor queue
+- **Runtime Feedback**: The banner now tells you which local models are actually ready and whether the recommended mode is `legacy`, `nudenet`, or `both`
 
 ### 🔍 Similar Images (NEW)
 - **Visual Search**: Find similar images by visual content using CLIP embeddings
@@ -74,6 +76,7 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Upload Search**: Upload any image to find similar ones in your collection
 - **Adjustable Threshold**: Fine-tune similarity sensitivity
 - **Clearer Runtime Feedback**: Missing model/dependency issues now surface as actionable errors instead of silent empty results
+- **Local-First CLIP**: The app prefers the local `models/clip` cache when it exists and shows its status in the Similar tab
 
 ### 🧪 Prompt Lab (NEW)
 - **Smart Generation**: Generate random prompts with intelligent tag selection
@@ -90,6 +93,7 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Artist Filtering**: Filter gallery by identified artist
 - **Statistics**: View top artists and their image counts
 - **Default Backend**: Now targets `Kaloscope2.0`
+- **Runtime Diagnostics**: The Artist tab now tells you whether Kaloscope, the LSNet runtime, and Windows `triton` support are actually ready
 
 ---
 
@@ -117,11 +121,16 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 *The first run will automatically set up a virtual environment and install dependencies. Later launches also re-check `backend/requirements.txt` and refresh new or missing dependencies automatically.*
 
+The launcher also prints a local model readiness summary, and the `Censor`, `Similar`, and `Artist ID` tabs show user-facing health banners in the browser.
+
 > [!TIP]
 > **No Python installed?** Use the [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) branch — it auto-downloads Python for you!
 
 > [!NOTE]
 > Model licensing and redistribution are separate from runtime auto-download behavior. If you plan to ship GitHub Release archives, read [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md) before bundling any weights.
+
+> [!TIP]
+> **Want the least confusing setup?** Start with the release asset `sd-image-sorter-v2.1.0-portable-core-models.zip`, then read [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) and [models/README.md](models/README.md) only if you want optional large-model extras.
 
 ---
 
@@ -279,10 +288,14 @@ Navigate to the **Censor Edit** tab:
 3. Images are added to the Censor Edit queue
 
 #### AI Auto-Detection
-1. In the right sidebar, set your **YOLO model path** (`.pt` file)
-2. Adjust **Confidence threshold** (default: 0.25)
-3. Click **🎯 Detect Current** for single image
-4. Click **🎯 Detect All** to process entire queue
+1. Check the model banner at the top of the tab
+2. For most users, keep **Model Type** on `both`
+3. Leave the legacy YOLO path empty unless you are testing a custom local model
+4. Adjust **Confidence threshold** if needed
+5. Click **🎯 Detect Current** for single image
+6. Click **🎯 Detect All** to process entire queue
+
+> **💡 Tip**: If the banner says `Legacy default: wenaka_yolov8s-seg.onnx (Privacy-part detector)`, the recommended privacy model is already wired up.
 
 #### Manual Editing Tools
 | Tool | Hotkey | Description |
@@ -316,9 +329,10 @@ Navigate to the **Censor Edit** tab:
 Navigate to the **Similar** tab to find visually similar images:
 
 #### Generate Embeddings (First Time)
-1. Click **Generate Embeddings** to create visual fingerprints for all images
-2. Wait for the background process to complete (progress shown in UI)
-3. This uses CLIP AI model - first run downloads ~200MB
+1. Check the Similar tab health banner first
+2. Click **Generate Embeddings** to create visual fingerprints for all images
+3. Wait for the background process to complete (progress shown in UI)
+4. This uses CLIP AI model and prefers the local `models/clip` cache when present
 
 #### Find Similar Images
 1. **By Image ID**: Enter an image ID from your gallery
@@ -362,13 +376,15 @@ Navigate to the **Prompt Lab** tab to generate random prompts:
 Navigate to the **Artist ID** tab to identify artists/styles in your images:
 
 #### Configure Settings
-1. Select **Model Source**: HuggingFace (default), ModelScope (China mirror), or Local
-2. Set **Confidence Threshold**: Images below this will be labeled "undefined"
+1. Read the runtime banner first
+2. Leave **Model Source** on HuggingFace unless you intentionally use a custom mirror or local model
+3. Set **Confidence Threshold**: Images below this will be labeled "undefined"
 
 #### Identify Artists
-1. Click **Identify All Images** to analyze your entire library
+1. If the banner says Kaloscope is ready, click **Identify All Images** to analyze your library
 2. Or select images in Gallery, then click **Identify Selected**
 3. Watch the progress bar during batch processing
+4. If the banner reports missing runtime pieces, follow [models/artist/README.md](models/artist/README.md) first
 
 #### Explore Results
 1. Browse identified artists in the results grid
@@ -439,6 +455,7 @@ The backend provides a REST API for programmatic access:
 | `/api/tag` | POST | Run AI tagging on images |
 | `/api/move` | POST | Move images to folder |
 | `/api/similarity/stats` | GET | Get embedding statistics |
+| `/api/similarity/model-status` | GET | Get local CLIP runtime readiness details |
 | `/api/similarity/embed` | POST | Generate embeddings for all images |
 | `/api/similarity/search/{id}` | GET | Find similar images by ID |
 | `/api/similarity/duplicates` | GET | Find near-duplicate image pairs |
@@ -449,6 +466,7 @@ The backend provides a REST API for programmatic access:
 | `/api/censor/models` | GET | List available detection models |
 | `/api/artists/identify` | POST | Identify artist for single image |
 | `/api/artists/identify-batch` | POST | Batch identify artists |
+| `/api/artists/diagnostics` | GET | Get Kaloscope / LSNet runtime diagnostics |
 | `/api/artists/stats` | GET | Get identification statistics |
 | `/api/artists/list` | GET | List known artists |
 
@@ -483,15 +501,28 @@ When querying `/api/images`:
 
 **Q: Similar search returns empty or says the image has no embedding**
 - Run **Generate Embeddings** in the Similar tab first
+- Check the Similar tab model banner first
 - The first embedding run may need to download model assets
 - Missing dependency/model issues are now reported directly in the progress/error message
 
+**Q: Censor Edit detects the wrong things or finds nothing**
+- First check the Censor tab banner
+- If the installed legacy model says `General object segmentation`, it is only a compatibility model
+- For privacy workflows, use the Wenaka privacy model or keep `Model Type` on `both`
+- Leave the legacy model path blank unless you are intentionally testing a custom file
+
 **Q: Artist Identification keeps returning `undefined`**
 - This feature is still experimental and respects a confidence threshold
+- Check the Artist tab runtime banner before changing anything else
 - First use may need to download the Kaloscope checkpoint
 - Kaloscope also requires an external LSNet runtime checkout (`comfyui-lsnet` or `lsnet-test`)
 - On Windows, install `triton-windows`
 - If the model cannot load, the app now reports the error explicitly instead of pretending the run succeeded
+
+**Q: SAM3 is installed but still says unavailable**
+- In the current verified setup, SAM3 is treated as GPU-only
+- The checkpoint can be present locally while the feature still reports unavailable on a CPU-only machine
+- This is expected right now, not a silent failure
 
 **Q: Filters show wrong counts**
 - Click "Clear All Filters" and re-apply
@@ -515,6 +546,7 @@ sd-image-sorter/
 │   ├── metadata_parser.py    # SD metadata extraction
 │   ├── tagger.py             # WD14 AI tagging
 │   ├── censor.py             # Censor detection (ONNX)
+│   ├── model_health.py       # Local model discovery and readiness reporting
 │   ├── nudenet_detector.py   # NudeNet v3 detector
 │   ├── sam3_refiner.py       # SAM3 mask refinement
 │   ├── similarity.py         # CLIP embedding search
@@ -553,7 +585,7 @@ sd-image-sorter/
 │       ├── guide-translations.js # Guide localization
 │       ├── lang/             # English / Chinese UI strings
 │       └── audio.js          # Sound effects
-├── models/                   # Downloaded AI models
+├── models/                   # Downloaded AI models + local model guides
 ├── run.bat                   # Windows launcher
 ├── run.sh                    # Linux/Mac launcher
 └── README.md                 # This file
@@ -633,11 +665,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 🔳 隐私打码 (Censor Edit V2)
 - **多模型支持**: 可选 Legacy YOLO、NudeNet v3 或两者并用
-- **智能识别**: 依托 YOLOv8 自动锁定敏感区域（需自备模型）
+- **默认更省心**: 如果本地有 Wenaka 隐私模型，程序会自动选它，普通用户不需要手填 Legacy 模型路径
+- **智能识别**: 可直接在前端切换 Wenaka 隐私 YOLO、NudeNet v3，或两者并用
 - **多样化处理**: 提供马赛克、模糊、纯色遮盖等多种打码方式
 - **精细修补**: 内置画笔、橡皮擦及仿制图章，满足手动精度需求
 - **批量导出**: 队列化工作流，支持批量重命名与保存
 - **更稳健**: 坏图不会再污染图库或把打码队列直接拖崩
+- **状态提示更诚实**: 页面会直接告诉你本地实际可用的模型、推荐模式，以及当前默认隐私模型
 
 ### 🔍 相似图片 (NEW)
 - **视觉搜索**: 使用 CLIP 嵌入向量查找视觉相似的图片
@@ -661,6 +695,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **画师过滤**: 按识别出的画师过滤图库
 - **统计数据**: 查看热门画师及其图片数量
 - **默认后端**: 现已指向 `Kaloscope2.0`
+- **运行时诊断**: Artist 页面会直接告诉你 Kaloscope、LSNet runtime、Windows `triton` 支持是否真的就绪
 
 ---
 
@@ -688,11 +723,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 *首次启动会自动创建虚拟环境并安装依赖；之后启动时也会自动检查 `backend/requirements.txt`，如果依赖有变化会自动补装。*
 
+启动器现在还会打印本地模型就绪摘要，浏览器里的 `Censor`、`Similar`、`Artist ID` 页面也会显示用户看得懂的状态条。
+
 > [!TIP]
 > **没有安装 Python?** 使用 [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) 分支 — 自动下载 Python!
 
 > [!NOTE]
 > 模型“可以自动下载”不等于“可以放心打包进 GitHub Releases 再分发”。如果你准备发布整包，请先阅读 [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md)。
+
+> [!TIP]
+> **想最省事开用？** 直接从 release 下载 `sd-image-sorter-v2.1.0-portable-core-models.zip`，需要时再看 [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) 和 [models/README.md](models/README.md) 补大模型。
 
 ---
 
@@ -729,15 +769,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 🔹 第5步：隐私打码编辑
 1. 在画廊中选中图片，点击浮动栏的 **🔳 Censor Edit**
-2. 在右侧侧边栏指定 YOLO 模型路径并调整置信度
-3. 点击 **🎯 Detect Current** 自动识别敏感点
-4. 使用工具栏进行精修后，点击 **💾 Save All Processed** 批量保存
+2. 先看页面顶部模型状态条
+3. 普通用户直接把 **Model Type** 留在 `both`
+4. Legacy 模型路径留空即可，让程序自动选择本地推荐隐私模型
+5. 点击 **🎯 Detect Current** 自动识别敏感点
+6. 使用工具栏进行精修后，点击 **💾 Save All Processed** 批量保存
 
 ### 🔹 第6步：相似图片搜索 (NEW)
 1. 切换至 **Similar** 标签页
-2. 首次使用需点击 **Generate Embeddings** 生成视觉特征（首次约需下载 200MB 模型）
-3. 输入图片 ID 或上传图片搜索相似内容
-4. 切换至 **Duplicates** 子标签可查找重复图片
+2. 先看顶部 CLIP 状态条，确认本地模型是否就绪
+3. 首次使用需点击 **Generate Embeddings** 生成视觉特征
+4. 输入图片 ID 或上传图片搜索相似内容
+5. 切换至 **Duplicates** 子标签可查找重复图片
 
 ### 🔹 第7步：提示词工坊 (NEW)
 1. 切换至 **Prompt Lab** 标签页
@@ -748,10 +791,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 🔹 第8步：画师识别 (NEW)
 1. 切换至 **Artist ID** 标签页
-2. 设置置信度阈值（默认 0.35，低于此值标记为 "undefined"）
-3. 点击 **Identify All Images** 批量识别
-4. 浏览识别出的画师列表
-5. 点击画师卡片查看详情
+2. 先看顶部 Kaloscope 状态条
+3. 设置置信度阈值（默认 0.35，低于此值标记为 "undefined"）
+4. 如果状态条显示 ready，再点击 **Identify All Images** 批量识别
+5. 浏览识别出的画师列表
+6. 点击画师卡片查看详情
 
 ---
 
@@ -772,15 +816,28 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Q: 相似图片为空，或者提示没有 embedding**
 - 先到 Similar 标签页点击 **Generate Embeddings**
+- 先确认 Similar 页面顶部状态条显示本地 CLIP 已就绪
 - 首次 embedding 可能需要下载模型资源
 - 如果缺依赖或模型加载失败，界面现在会直接给出错误提示
 
+**Q: 打码识别不准，或者完全没识别到**
+- 先看 Censor 页顶部状态条
+- 如果当前 Legacy 模型被标成 `General object segmentation`，那只是通用兼容模型，不是推荐隐私模型
+- 隐私打码优先使用 Wenaka 那个 `Privacy-part detector`
+- 不确定时把 `Model Type` 留在 `both`，并把 Legacy 自定义路径留空
+
 **Q: 画师识别一直是 `undefined`**
 - 这是实验性功能，本身受置信度阈值影响
+- 先确认 Artist 页顶部状态条是否 ready
 - 首次使用可能需要下载 Kaloscope 检查点
 - Kaloscope 还需要额外的 LSNet runtime 仓库（`comfyui-lsnet` 或 `lsnet-test`）
 - Windows 环境建议安装 `triton-windows`
 - 如果模型无法加载，程序现在会明确提示错误，而不是假装成功
+
+**Q: SAM3 明明下载了，但界面还是说不可用**
+- 当前这套经过实测的接法里，SAM3 仍然按 GPU-only 对待
+- 也就是说：模型文件在本地，不代表 CPU 机器就能直接 refine
+- 这是当前已知限制，不是静默失败
 
 ---
 
@@ -795,6 +852,7 @@ sd-image-sorter/
 │   ├── metadata_parser.py    # SD 元数据解析
 │   ├── tagger.py             # WD14 AI 打标
 │   ├── censor.py             # 打码检测（ONNX）
+│   ├── model_health.py       # 本地模型发现与就绪状态报告
 │   ├── nudenet_detector.py   # NudeNet v3 检测器
 │   ├── sam3_refiner.py       # SAM3 掩码细化
 │   ├── similarity.py         # CLIP 相似图搜索
@@ -833,7 +891,7 @@ sd-image-sorter/
 │       ├── guide-translations.js # 引导翻译
 │       ├── lang/             # 中英文界面文案
 │       └── audio.js          # 音效
-├── models/                   # 下载后的 AI 模型
+├── models/                   # 下载后的 AI 模型与本地模型说明
 ├── run.bat                   # Windows 启动脚本
 ├── run.sh                    # Linux / Mac 启动脚本
 └── README.md                 # 本说明文件

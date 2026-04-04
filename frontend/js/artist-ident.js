@@ -9,12 +9,14 @@ const ArtistIdent = {
     selectedArtist: null,
     viewMode: 'grid',
     stats: {},
+    diagnostics: null,
     eventsBound: false,
 
     init() {
         this.bindEvents();
         this._syncControls();
         this.syncSelectionActionState();
+        this.loadDiagnostics();
         this.loadStats();
         this.resumeBatchProgress();
         this.showFirstUseGuide();
@@ -193,6 +195,36 @@ const ArtistIdent = {
             identifySelectedBtn.title = 'Select images in Gallery first';
         } else {
             identifySelectedBtn.removeAttribute('title');
+        }
+    },
+
+    async loadDiagnostics() {
+        const banner = document.getElementById('artist-model-health');
+        if (!banner) return;
+
+        try {
+            const result = await window.App.API.get('/api/artists/diagnostics');
+            this.diagnostics = result;
+
+            const classes = ['model-health-banner', 'is-visible'];
+            if (!result.available) {
+                classes.push('model-health-banner-warning');
+            }
+
+            const extras = [];
+            if (result.runtime_path) extras.push(`Runtime: ${result.runtime_path}`);
+            if (result.checkpoint_path) extras.push(`Checkpoint: ${result.checkpoint_path}`);
+            if (result.missing_dependencies?.length) {
+                extras.push(`Missing: ${result.missing_dependencies.join(', ')}`);
+            }
+
+            banner.className = classes.join(' ');
+            banner.innerHTML = `<strong>Kaloscope</strong> ${this._escapeHtml(result.message || '')}${
+                extras.length ? `<br><small>${this._escapeHtml(extras.join(' | '))}</small>` : ''
+            }`;
+        } catch (e) {
+            banner.className = 'model-health-banner is-visible model-health-banner-warning';
+            banner.textContent = 'Artist runtime status could not be loaded right now.';
         }
     },
 
@@ -649,7 +681,7 @@ const ArtistIdent = {
             description: 'Identify the artist/style of your images using AI classification.',
             steps: [
                 { title: 'Configure', text: 'Select model source and confidence threshold' },
-                { title: 'Runtime', text: 'If you switch to Kaloscope2.0, you also need the external LSNet runtime checkout' },
+                { title: 'Runtime', text: 'Check the runtime banner first. If it says ready, you can run Kaloscope directly.' },
                 { title: 'Identify', text: 'Click "Identify All Images" to analyze your library' },
                 { title: 'Explore', text: 'Browse identified artists and their images' },
                 { title: 'Filter', text: 'Use artist names to filter in Gallery' },

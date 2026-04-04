@@ -9,6 +9,7 @@ from typing import Optional, List
 from fastapi import HTTPException, UploadFile, File, Query, BackgroundTasks
 
 import database as db
+from model_health import get_model_health
 from similarity import (
     SimilarityEmbeddingMissingError,
     SimilarityImageNotFoundError,
@@ -151,4 +152,12 @@ class SimilarityService:
             "pending": total - embedded,
             "pending_count": total - embedded,
             "coverage": round(embedded / total * 100, 1) if total > 0 else 0,
+        }
+
+    def get_model_status(self) -> dict:
+        """Expose the local CLIP model readiness for the frontend."""
+        clip = get_model_health()["clip"]
+        return {
+            "status": "ok",
+            **clip,
         }

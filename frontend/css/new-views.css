@@ -666,6 +666,44 @@
     font-size: 13px;
 }
 
+.model-health-banner {
+    display: none;
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    background: rgba(45, 212, 191, 0.08);
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.model-health-banner.is-visible {
+    display: block;
+}
+
+.model-health-banner strong {
+    color: var(--text-primary);
+}
+
+.model-health-banner.model-health-banner-warning {
+    border-color: rgba(255, 138, 61, 0.32);
+    background: rgba(255, 138, 61, 0.08);
+    color: #ffd4b0;
+}
+
+.model-health-banner.model-health-banner-danger {
+    border-color: rgba(255, 107, 107, 0.3);
+    background: rgba(255, 107, 107, 0.08);
+    color: #ffd7d7;
+}
+
+.model-health-banner-compact {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+}
+
 /* Artist Identification */
 
 .artist-container {

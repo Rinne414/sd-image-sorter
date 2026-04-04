@@ -26,6 +26,10 @@ import os
 import csv
 import sys
 import threading
+import shutil
+import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -82,10 +86,71 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
     return None
 
 
+def _get_artist_model_root() -> Path:
+    project_root = Path(__file__).resolve().parent.parent
+    target = project_root / "models" / "artist"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="kaloscope-runtime-") as tmp_dir:
+        tmp_dir_path = Path(tmp_dir)
+        zip_path = tmp_dir_path / "repo.zip"
+        urllib.request.urlretrieve(zip_url, zip_path)
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            archive.extractall(tmp_dir_path / "extract")
+
+        extracted_root = next((tmp_dir_path / "extract").iterdir())
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        shutil.move(str(extracted_root), str(target_dir))
+    return target_dir
+
+
+def _ensure_comfyui_lsnet_runtime() -> str:
+    artist_root = _get_artist_model_root()
+    target_dir = artist_root / "comfyui-lsnet-runtime"
+    if (target_dir / "lsnet_model").exists():
+        return str(target_dir)
+
+    logger.info("Downloading comfyui-lsnet runtime into %s", target_dir)
+    zip_url = "https://github.com/spawner1145/comfyui-lsnet/archive/refs/heads/main.zip"
+    _download_and_extract_github_zip(zip_url, target_dir)
+    return str(target_dir)
+
+
+def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
+    from huggingface_hub import hf_hub_download
+
+    local_dir = _get_artist_model_root() / "kaloscope2.0"
+    local_checkpoint = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
+    local_mapping = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
+
+    if local_checkpoint.exists() and local_mapping.exists():
+        return str(local_checkpoint.resolve()), str(local_mapping.resolve())
+
+    checkpoint_path = hf_hub_download(
+        ARTIST_HF_MODEL_ID,
+        filename=ARTIST_KALOSCOPE_CHECKPOINT,
+        local_dir=str(local_dir),
+    )
+    class_mapping_path = hf_hub_download(
+        ARTIST_HF_MODEL_ID,
+        filename=ARTIST_KALOSCOPE_CLASS_MAPPING,
+        local_dir=str(local_dir),
+    )
+    return checkpoint_path, class_mapping_path
+
+
 def _has_lsnet_runtime() -> bool:
     runtime_path = _resolve_lsnet_runtime_path()
     if not runtime_path:
-        return False
+        try:
+            runtime_path = _ensure_comfyui_lsnet_runtime()
+        except Exception:
+            return False
 
     if runtime_path not in sys.path:
         sys.path.insert(0, runtime_path)
@@ -701,12 +766,16 @@ class ArtistIdentifier:
     def _load_kaloscope_runtime_modules(self):
         runtime_path = _resolve_lsnet_runtime_path()
         if not runtime_path:
-            raise RuntimeError(
-                "Kaloscope2.0 requires the LSNet runtime code.\n"
-                "Clone either https://github.com/spawner1145/comfyui-lsnet or "
-                "https://github.com/spawner1145/lsnet-test and set "
-                "SD_IMAGE_SORTER_LSNET_CODE_PATH to that repository root."
-            )
+            try:
+                runtime_path = _ensure_comfyui_lsnet_runtime()
+            except Exception as exc:
+                raise RuntimeError(
+                    "Kaloscope2.0 requires the LSNet runtime code.\n"
+                    "Automatic download of comfyui-lsnet failed.\n"
+                    "Clone either https://github.com/spawner1145/comfyui-lsnet or "
+                    "https://github.com/spawner1145/lsnet-test and set "
+                    "SD_IMAGE_SORTER_LSNET_CODE_PATH to that repository root."
+                ) from exc
 
         if runtime_path not in sys.path:
             sys.path.insert(0, runtime_path)
@@ -842,10 +911,7 @@ class ArtistIdentifier:
 
             logger.info(f"Loading from HuggingFace: {model_name}")
             if _is_kaloscope_model_id(model_name):
-                from huggingface_hub import hf_hub_download
-
-                checkpoint_path = hf_hub_download(model_name, filename=ARTIST_KALOSCOPE_CHECKPOINT)
-                class_mapping_path = hf_hub_download(model_name, filename=ARTIST_KALOSCOPE_CLASS_MAPPING)
+                checkpoint_path, class_mapping_path = _ensure_kaloscope_hf_files()
                 self._initialize_kaloscope(checkpoint_path, class_mapping_path)
             else:
                 from transformers import AutoImageProcessor, AutoModelForImageClassification

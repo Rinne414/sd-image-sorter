@@ -13,6 +13,7 @@ import threading
 from typing import Dict, List, Optional
 
 from PIL import Image
+from config import get_nudenet_model_dir
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ def _get_nudenet():
                         "nudenet not installed. Run: pip install nudenet"
                     )
                 logger.info("[NudeNet] Loading detector...")
-                _detector = NudeDetector()
+                local_model = os.path.join(get_nudenet_model_dir(), "320n.onnx")
+                _detector = NudeDetector(model_path=local_model if os.path.exists(local_model) else None)
                 logger.info("[NudeNet] Detector loaded")
     return _detector
 
@@ -170,14 +172,15 @@ class NudeNetDetector:
                 continue
 
             box = det.get("box", [0, 0, 0, 0])
-            # NudeNet returns [x1, y1, x2, y2]
+            # NudeNet returns [x, y, width, height], so normalize to [x1, y1, x2, y2]
+            x, y, w, h = [int(b) for b in box]
             mapped_label = NUDENET_CLASSES.get(label, label.lower())
 
             results.append({
                 "class": mapped_label,
                 "class_id": list(NUDENET_CLASSES.keys()).index(label) if label in NUDENET_CLASSES else -1,
                 "confidence": round(score, 4),
-                "box": [int(b) for b in box],
+                "box": [x, y, x + max(0, w), y + max(0, h)],
                 "label": label,  # Original NudeNet label
             })
 

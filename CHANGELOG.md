@@ -5,6 +5,26 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-04
+
+### Added
+- Local model readiness reporting in the launcher and browser UI
+- Portable release packaging script with core-model, artist-runtime, and split large-model assets
+- User-facing release and model setup guides
+- Artist diagnostics endpoint and Similar CLIP status endpoint
+
+### Changed
+- Default artist backend switched from `cafe_style` to `Kaloscope2.0`
+- Censor Edit now auto-selects the recommended Wenaka privacy model when it exists locally
+- Legacy YOLO support now distinguishes privacy-part models from general compatibility models
+- README and third-party model policy rewritten around the real verified model pipeline
+
+### Fixed
+- Kaloscope runtime path now works with `comfyui-lsnet` / `lsnet-test` layouts
+- Local CLIP model path is preferred correctly for similarity search
+- NudeNet box normalization is corrected for frontend/backend integration
+- General YOLO `.onnx` / `.pt` compatibility is validated instead of assuming Wenaka-only outputs
+
 ## [2.0.0] - 2024-03-XX
 
 ### Added

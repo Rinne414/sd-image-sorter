@@ -161,6 +161,53 @@ class TestCensorRouterValidation:
 
         assert response.status_code == 400
 
+    def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
+        from PIL import Image
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "censor-test.png"
+        Image.new("RGB", (64, 64), color="red").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="censor-test.png",
+            metadata_json="{}",
+        )
+
+        captured = {}
+
+        class FakeDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+                captured["model_path"] = self.model_path
+
+            def detect(self, _image_path, _threshold):
+                return [{"class": "breasts", "confidence": 0.9, "box": [0, 0, 16, 16]}]
+
+        monkeypatch.setattr(censor_service_module, "get_default_legacy_model_path", lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"))
+        monkeypatch.setattr(censor_module, "CensorDetector", FakeDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "legacy", "confidence_threshold": 0.5},
+        )
+
+        assert response.status_code == 200
+        assert captured["model_path"].endswith("wenaka_yolov8s-seg.onnx")
+        assert response.json()["detections"][0]["class"] == "breasts"
+
+    def test_censor_models_returns_recommended_backend(self, test_client):
+        response = test_client.get("/api/censor/models")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "models" in data
+        assert "recommended_backend" in data
+
 
 class TestSimilarityRouterValidation:
     def test_search_similar_rejects_invalid_limit(self, test_client):
@@ -215,6 +262,15 @@ class TestSimilarityRouterValidation:
         assert data["reason"] == "insufficient_embeddings"
         assert data["embedded_count"] == 0
         assert data["minimum_required"] == 2
+
+    def test_model_status_reports_clip_readiness_payload(self, test_client):
+        response = test_client.get("/api/similarity/model-status")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "model_name" in data
+        assert "available" in data
 
 
 class TestArtistsRouterValidation:
@@ -310,6 +366,15 @@ class TestArtistsRouterValidation:
             "model_source": "local",
             "model_path": str(model_path.resolve()),
         }
+
+    def test_artist_diagnostics_returns_runtime_payload(self, test_client):
+        response = test_client.get("/api/artists/diagnostics")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "available" in data
+        assert "message" in data
 
 
 class TestPromptGenerator:

@@ -12,6 +12,7 @@ const SimilarImages = {
     isEmbedding: false,
     isCheckingEmbeddingStatus: false,
     embedProgress: { processed: 0, total: 0, errors: 0 },
+    modelStatus: null,
     searchResults: [],
     duplicateResults: [],
     currentSearchId: null,
@@ -28,6 +29,7 @@ const SimilarImages = {
 
     init() {
         this.bindEvents();
+        this.loadModelStatus();
         this.loadStats();
         this.resumeEmbeddingProgress();
         this.updateActionAvailability();
@@ -105,6 +107,14 @@ const SimilarImages = {
         container.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
     },
 
+    async waitForEmbeddingStatusReady(timeoutMs = 10000) {
+        const startedAt = Date.now();
+        while (this.isCheckingEmbeddingStatus && (Date.now() - startedAt) < timeoutMs) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return !this.isCheckingEmbeddingStatus;
+    },
+
     renderEmbeddingProgress(progress = {}) {
         const progressBar = document.getElementById('similar-embed-progress');
         const progressFill = document.getElementById('similar-embed-fill');
@@ -180,7 +190,7 @@ const SimilarImages = {
             title: '🔍 Similar Images Guide',
             description: 'Find visually similar images in your library using AI.',
             steps: [
-                { title: 'Generate Embeddings', text: 'Creates visual fingerprints for all images (first time downloads ~200MB model)' },
+                { title: 'Generate Embeddings', text: 'Creates visual fingerprints for all images and builds the searchable local index.' },
                 { title: 'Search by ID', text: 'Enter an image ID from your gallery' },
                 { title: 'Upload Search', text: 'Drag & drop any image to find similar ones' },
                 { title: 'Duplicates', text: 'Find near-duplicate images in your library' },
@@ -195,6 +205,30 @@ const SimilarImages = {
             overlay.remove();
             localStorage.setItem('similar-guide-seen', 'true');
         });
+    },
+
+    async loadModelStatus() {
+        const banner = document.getElementById('similar-model-health');
+        if (!banner) return;
+
+        try {
+            const result = await window.App.API.get('/api/similarity/model-status');
+            this.modelStatus = result;
+
+            const classes = ['model-health-banner', 'is-visible'];
+            if (!result.available) {
+                classes.push('model-health-banner-warning');
+            }
+
+            const pathLabel = result.model_path
+                ? `<br><small>${escapeHtml(result.model_path)}</small>`
+                : '';
+            banner.className = classes.join(' ');
+            banner.innerHTML = `<strong>CLIP</strong> ${escapeHtml(result.message || '')}${pathLabel}`;
+        } catch (e) {
+            banner.className = 'model-health-banner is-visible model-health-banner-warning';
+            banner.textContent = 'CLIP status could not be loaded right now.';
+        }
     },
 
     // ============== Data Loading ==============
@@ -315,6 +349,10 @@ const SimilarImages = {
         const resultsContainer = document.getElementById('similar-results');
         if (!resultsContainer) return;
 
+        if (this.isCheckingEmbeddingStatus) {
+            await this.waitForEmbeddingStatusReady();
+        }
+
         if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
             const message = 'Embeddings are still running. Wait until indexing finishes before searching.';
             this.renderSearchMessage(message);
@@ -352,6 +390,10 @@ const SimilarImages = {
 
         const resultsContainer = document.getElementById('similar-results');
         if (!resultsContainer) return;
+
+        if (this.isCheckingEmbeddingStatus) {
+            await this.waitForEmbeddingStatusReady();
+        }
 
         if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
             const message = 'Embeddings are still running. Wait until indexing finishes before searching.';
@@ -436,6 +478,10 @@ const SimilarImages = {
         const threshold = parseFloat(document.getElementById('similar-dup-threshold')?.value || '0.95');
         const resultsContainer = document.getElementById('similar-duplicates');
         if (!resultsContainer) return;
+
+        if (this.isCheckingEmbeddingStatus) {
+            await this.waitForEmbeddingStatusReady();
+        }
 
         if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
             const message = 'Embeddings are still running. Wait until indexing finishes before checking duplicates.';

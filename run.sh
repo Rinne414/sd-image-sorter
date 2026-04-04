@@ -143,6 +143,10 @@ else
     echo
 fi
 
+echo "[Info] Checking local model readiness..."
+backend/venv/bin/python backend/model_health.py
+echo
+
 if [ "$FIRST_RUN" -eq 1 ]; then
     echo "[3/3] Starting server..."
 else

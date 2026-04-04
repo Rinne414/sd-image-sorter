@@ -201,3 +201,11 @@ async def embedding_stats(
 ):
     """Get statistics about embeddings."""
     return service.get_stats()
+
+
+@router.get("/model-status")
+async def embedding_model_status(
+    service: SimilarityService = Depends(get_similarity_service),
+):
+    """Get local CLIP model readiness details for the frontend."""
+    return service.get_model_status()

@@ -81,6 +81,24 @@ DEFAULT_CACHE_DIR: str = os.environ.get(
     str(Path.home() / ".cache" / "sd-image-sorter")
 )
 
+# Shared local model directories
+CLIP_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_CLIP_MODEL_DIR",
+    str(PROJECT_ROOT / "models" / "clip")
+)
+ARTIST_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_MODEL_DIR",
+    str(PROJECT_ROOT / "models" / "artist")
+)
+SAM3_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_SAM3_MODEL_DIR",
+    str(PROJECT_ROOT / "models" / "sam3")
+)
+NUDENET_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_NUDENET_MODEL_DIR",
+    str(PROJECT_ROOT / "models" / "nudenet")
+)
+
 
 # =============================================================================
 # WD14 Tagger Configuration
@@ -372,6 +390,34 @@ def get_yolo_model_dir() -> str:
     return str(model_dir)
 
 
+def get_clip_model_dir() -> str:
+    """Get the CLIP model directory, creating it if necessary."""
+    model_dir = Path(CLIP_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_artist_model_dir() -> str:
+    """Get the artist model directory, creating it if necessary."""
+    model_dir = Path(ARTIST_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_sam3_model_dir() -> str:
+    """Get the SAM3 model directory, creating it if necessary."""
+    model_dir = Path(SAM3_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_nudenet_model_dir() -> str:
+    """Get the NudeNet model directory, creating it if necessary."""
+    model_dir = Path(NUDENET_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
 def ensure_directories():
     """
     Ensure all required directories exist.
@@ -387,6 +433,10 @@ def ensure_directories():
     # Model directories
     get_wd14_model_dir()
     get_yolo_model_dir()
+    get_clip_model_dir()
+    get_artist_model_dir()
+    get_sam3_model_dir()
+    get_nudenet_model_dir()
 
     # Cache directory
     Path(DEFAULT_CACHE_DIR).mkdir(parents=True, exist_ok=True)

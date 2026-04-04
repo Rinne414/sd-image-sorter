@@ -25,6 +25,10 @@ backend/images.db
 
 # Downloaded AI models (large files, auto-downloaded on first use)
 models/wd14-tagger/
+models/artist/
+models/clip/
+models/sam3/
+models/nudenet/
 
 # Test images and personal folders (may contain personal images)
 testimage/
@@ -68,6 +72,7 @@ backend/.mypy_cache/
 
 # Thumbnail cache (runtime generated)
 backend/thumbnails/
+backend/sort_session.json
 
 # Temp test directories
 .tmp_*/
@@ -86,3 +91,10 @@ reference/
 
 # Windows temp files
 nul
+
+# Optional local YOLO compatibility downloads (packaged via release assets, not source control)
+models/yolo/civitai/
+models/yolo/yolo26s-seg.onnx
+models/yolo/yolo26s-seg.pt
+models/yolo/yolov8s-seg.onnx
+models/yolo/yolov8s-seg.pt

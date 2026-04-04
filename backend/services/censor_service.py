@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, field_validator
 from PIL import Image, PngImagePlugin
 
 import database as db
+from model_health import get_default_legacy_model_path, get_model_health
 
 logger = logging.getLogger(__name__)
 
@@ -199,19 +200,20 @@ class CensorService:
 
                 try:
                     from censor import CensorDetector
-                    from utils.path_validation import validate_file_path, ALLOWED_MODEL_EXTENSIONS
                     from config import PROJECT_ROOT
 
-                    if request.model_path:
-                        is_valid, error = validate_file_path(request.model_path, ALLOWED_MODEL_EXTENSIONS, allowed_base=str(PROJECT_ROOT / "models"))
-                        if is_valid:
-                            if self._detector is None or self._detector.model_path != request.model_path or self._detector.session is None:
-                                self._detector = CensorDetector(request.model_path)
-                                self._detector.load()
-                            legacy_results = self._detector.detect(image_path, request.confidence_threshold)
-                            for d in legacy_results:
-                                d["source"] = "legacy"
-                            all_detections.extend(legacy_results)
+                    legacy_model_path = self._resolve_legacy_model_path(
+                        request.model_path,
+                        allowed_base=str(PROJECT_ROOT / "models"),
+                    )
+                    if legacy_model_path:
+                        if self._detector is None or self._detector.model_path != legacy_model_path or self._detector.session is None:
+                            self._detector = CensorDetector(legacy_model_path)
+                            self._detector.load()
+                        legacy_results = self._detector.detect(image_path, request.confidence_threshold)
+                        for d in legacy_results:
+                            d["source"] = "legacy"
+                        all_detections.extend(legacy_results)
                 except Exception as e:
                     logger.warning("Legacy detection failed: %s", e)
 
@@ -219,22 +221,16 @@ class CensorService:
 
             else:
                 from censor import CensorDetector
-                from utils.path_validation import validate_file_path, ALLOWED_MODEL_EXTENSIONS
                 from config import PROJECT_ROOT
 
-                if not request.model_path:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="model_path is required for legacy detection mode"
-                    )
+                legacy_model_path = self._resolve_legacy_model_path(
+                    request.model_path,
+                    allowed_base=str(PROJECT_ROOT / "models"),
+                )
 
-                is_valid, error = validate_file_path(request.model_path, ALLOWED_MODEL_EXTENSIONS, allowed_base=str(PROJECT_ROOT / "models"))
-                if not is_valid:
-                    raise HTTPException(status_code=400, detail=error or "Invalid model path")
-
-                if self._detector is None or self._detector.model_path != request.model_path or self._detector.session is None:
-                    logger.info("Loading censor model: %s", request.model_path)
-                    self._detector = CensorDetector(request.model_path)
+                if self._detector is None or self._detector.model_path != legacy_model_path or self._detector.session is None:
+                    logger.info("Loading censor model: %s", legacy_model_path)
+                    self._detector = CensorDetector(legacy_model_path)
                     self._detector.load()
                     logger.info("Model loaded successfully")
 
@@ -304,7 +300,7 @@ class CensorService:
     def save(self, request: CensorSaveRequest) -> Dict[str, str]:
         """Apply censoring and save to output folder."""
         from censor import Censor
-        from utils.path_validation import ALLOWED_IMAGE_EXTENSIONS, validate_folder_path, validate_file_path
+        from utils.path_validation import validate_folder_path, validate_file_path
 
         image_data = db.get_image_by_id(request.image_id)
         if not image_data:
@@ -405,17 +401,18 @@ class CensorService:
     def refine_mask(self, request: MaskRefineRequest) -> Dict[str, Any]:
         """Refine a bounding box into a pixel-precise segmentation mask using SAM3."""
         try:
-            from sam3_refiner import get_sam3_refiner, SAM3Refiner
-        except Exception as _sam3_import_err:
+            from sam3_refiner import get_sam3_refiner
+        except Exception:
             raise HTTPException(
                 status_code=503,
                 detail="SAM3 module unavailable"
             )
 
-        if not SAM3Refiner.is_available():
+        sam3_status = get_model_health()["censor"]["sam3"]
+        if not sam3_status["available"]:
             raise HTTPException(
                 status_code=503,
-                detail="SAM3 is not available."
+                detail=sam3_status["message"]
             )
 
         image_data = db.get_image_by_id(request.image_id)
@@ -452,23 +449,26 @@ class CensorService:
                 "mask": f"data:image/png;base64,{mask_b64}",
                 "box": request.box,
             }
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
         except Exception:
             raise HTTPException(status_code=500, detail="Mask refinement failed")
 
     def segment_text(self, request: TextSegmentRequest) -> Dict[str, Any]:
         """Segment objects by text description using SAM3."""
         try:
-            from sam3_refiner import get_sam3_refiner, SAM3Refiner
-        except Exception as _sam3_import_err:
+            from sam3_refiner import get_sam3_refiner
+        except Exception:
             raise HTTPException(
                 status_code=503,
                 detail="SAM3 module unavailable"
             )
 
-        if not SAM3Refiner.is_available():
+        sam3_status = get_model_health()["censor"]["sam3"]
+        if not sam3_status["available"]:
             raise HTTPException(
                 status_code=503,
-                detail="SAM3 is not available."
+                detail=sam3_status["message"]
             )
 
         image_data = db.get_image_by_id(request.image_id)
@@ -500,53 +500,91 @@ class CensorService:
                 "mask": f"data:image/png;base64,{mask_b64}",
                 "text_prompt": request.text_prompt,
             }
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
         except Exception:
             raise HTTPException(status_code=500, detail="Text segmentation failed")
 
     def list_models(self) -> Dict[str, Any]:
         """List available detection backends and their status."""
-        models = []
+        health = get_model_health()["censor"]
+        legacy = health["legacy"]
+        nudenet = health["nudenet"]
+        sam3 = health["sam3"]
 
-        models.append({
-            "id": "legacy",
-            "name": "YOLOv8 ONNX (Legacy)",
-            "description": "Original wenaka segmentation model. Requires .onnx model file.",
-            "available": True,
-            "requires_model_path": True,
-        })
-
-        try:
-            from nudenet import NudeDetector
-            nudenet_available = True
-        except ImportError:
-            nudenet_available = False
-
-        models.append({
-            "id": "nudenet",
-            "name": "NudeNet v3",
-            "description": "ONNX-based 20-class body part detection. Optimized for NSFW content.",
-            "available": nudenet_available,
-            "requires_model_path": False,
-        })
-
-        try:
-            from sam3_refiner import SAM3Refiner
-            sam3_available = SAM3Refiner.is_available()
-        except Exception:
-            sam3_available = False
-
-        models.append({
-            "id": "sam3",
-            "name": "SAM 3 (Segment Anything with Concepts)",
-            "description": "Pixel-precise mask refinement with text-guided segmentation. Requires GPU.",
-            "available": sam3_available,
-            "requires_model_path": False,
-        })
+        models = [
+            {
+                "id": "legacy",
+                "name": "Legacy YOLO",
+                "description": "Uses the built-in local YOLO model from models/yolo. The recommended file is the privacy-part detector; generic YOLO26/YOLOv8 files are listed for compatibility tests only.",
+                "available": legacy["available"],
+                "requires_model_path": False,
+                "recommended": legacy["available"] and legacy.get("privacy_model_count", 0) > 0,
+                "default_model_path": legacy["default_model_path"],
+                "message": legacy["message"],
+                "files": legacy["files"],
+                "has_yolo26": legacy["has_yolo26"],
+                "has_yolov8s": legacy["has_yolov8s"],
+                "privacy_model_count": legacy.get("privacy_model_count", 0),
+                "general_model_count": legacy.get("general_model_count", 0),
+            },
+            {
+                "id": "nudenet",
+                "name": "NudeNet v3",
+                "description": "Recommended for NSFW region detection. No manual model path required.",
+                "available": nudenet["available"],
+                "requires_model_path": False,
+                "recommended": nudenet["available"],
+                "message": nudenet["message"],
+                "model_path": nudenet["model_path"],
+            },
+            {
+                "id": "sam3",
+                "name": "SAM 3",
+                "description": "Used after detection to refine masks or segment by text prompt.",
+                "available": sam3["available"],
+                "requires_model_path": False,
+                "recommended": sam3["available"],
+                "message": sam3["message"],
+                "checkpoint_path": sam3["checkpoint_path"],
+                "missing_dependencies": sam3["missing_dependencies"],
+            },
+        ]
 
         return {
             "status": "ok",
             "models": models,
+            "recommended_backend": (
+                "both"
+                if nudenet["available"] and legacy["available"] and legacy.get("privacy_model_count", 0) > 0
+                else ("nudenet" if nudenet["available"] else ("legacy" if legacy["available"] else None))
+            ),
         }
+
+    @staticmethod
+    def _resolve_legacy_model_path(requested_path: str, *, allowed_base: str) -> str:
+        """Pick a safe legacy YOLO path, falling back to the built-in default."""
+        from utils.path_validation import ALLOWED_MODEL_EXTENSIONS, validate_file_path
+
+        normalized = str(requested_path or "").strip()
+        if normalized:
+            is_valid, error = validate_file_path(
+                normalized,
+                ALLOWED_MODEL_EXTENSIONS,
+                allowed_base=allowed_base,
+            )
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error or "Invalid model path")
+            return str(Path(os.path.abspath(normalized)))
+
+        default_model_path = get_default_legacy_model_path()
+        if default_model_path:
+            return default_model_path
+
+        raise HTTPException(
+            status_code=503,
+            detail="No local legacy YOLO model was found in models/yolo. Download one there or switch to NudeNet.",
+        )
 
     @staticmethod
     def _decode_base64_image(image_data: str) -> tuple:

@@ -6,6 +6,7 @@ Requires a YOLOv8 ONNX model trained to detect body parts.
 Recommended model: https://civitai.com/models/1736285
 """
 
+import ast
 import logging
 import os
 import numpy as np
@@ -41,11 +42,142 @@ class CensorDetector:
     def __init__(self, model_path: Optional[str] = None, classes: Optional[List[str]] = None):
         self.model_path = model_path
         self.session = None
-        self.classes = classes or CENSOR_DEFAULT_CLASSES
+        self.runtime = None
+        self.runtime_backend = None
+        self.requested_classes = list(classes) if classes else None
+        self.raw_classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
+        self.classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
         self.input_size = YOLO_INPUT_SIZE
+
+    @staticmethod
+    def _canonicalize_class_name(class_name: str) -> str:
+        normalized = str(class_name or "").strip().lower().replace("_", " ").replace("-", " ")
+        collapsed = normalized.replace(" ", "")
+        aliases = {
+            "breast": "breasts",
+            "breasts": "breasts",
+            "boob": "breasts",
+            "boobs": "breasts",
+            "tits": "breasts",
+            "tit": "breasts",
+            "vagina": "pussy",
+            "vulva": "pussy",
+            "pussy": "pussy",
+            "labia": "pussy",
+            "penis": "dick",
+            "dick": "dick",
+            "cock": "dick",
+            "cum": "cum",
+            "semen": "cum",
+            "anus": "anus",
+            "butthole": "anus",
+        }
+        return aliases.get(collapsed, normalized)
+
+    def _set_classes(self, class_names: List[str]):
+        cleaned = [str(name).strip() for name in class_names if str(name).strip()]
+        if not cleaned:
+            cleaned = list(self.requested_classes) if self.requested_classes else list(CENSOR_DEFAULT_CLASSES)
+        self.raw_classes = cleaned
+        self.classes = [self._canonicalize_class_name(name) for name in cleaned]
+
+    @staticmethod
+    def _names_from_mapping(mapping) -> List[str]:
+        if isinstance(mapping, dict):
+            ordered = []
+            for key in sorted(mapping.keys(), key=lambda item: int(item) if str(item).isdigit() else str(item)):
+                ordered.append(str(mapping[key]))
+            return ordered
+        if isinstance(mapping, list):
+            return [str(item) for item in mapping]
+        return []
+
+    def _load_onnx_metadata(self, session):
+        try:
+            metadata = session.get_modelmeta().custom_metadata_map or {}
+            raw_names = metadata.get("names")
+            if not raw_names:
+                return
+            parsed = ast.literal_eval(raw_names) if isinstance(raw_names, str) else raw_names
+            names = self._names_from_mapping(parsed)
+            if names:
+                self._set_classes(names)
+        except Exception as exc:
+            logger.debug("Could not parse ONNX metadata names for %s: %s", self.model_path, exc)
+
+    def _supports_lightweight_onnx(self, session) -> bool:
+        outputs = session.get_outputs()
+        if not outputs:
+            return False
+
+        output_shape = outputs[0].shape
+        if len(output_shape) != 3:
+            return False
+
+        channel_dim = output_shape[1]
+        if not isinstance(channel_dim, int):
+            return False
+
+        expected_channels = 4 + len(self.classes)
+        if len(outputs) > 1:
+            expected_channels += 32
+        return channel_dim == expected_channels
+
+    def _load_with_ultralytics(self, model_path: str):
+        from ultralytics import YOLO
+
+        logger.info("Loading model with Ultralytics runtime: %s", model_path)
+        model = YOLO(model_path)
+        self.runtime = model
+        self.session = model
+        self.runtime_backend = "ultralytics"
+        self.input_size = YOLO_INPUT_SIZE
+
+        names = self._names_from_mapping(getattr(model, "names", {}))
+        if names:
+            self._set_classes(names)
+
+    @staticmethod
+    def _lookup_runtime_name(names, class_id: int) -> str:
+        if isinstance(names, dict):
+            return str(names.get(class_id, names.get(str(class_id), f"class_{class_id}")))
+        if isinstance(names, list) and 0 <= class_id < len(names):
+            return str(names[class_id])
+        return f"class_{class_id}"
+
+    def _detect_with_ultralytics(self, image_source, conf_threshold: float) -> List[Dict]:
+        if self.runtime is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        results = self.runtime.predict(image_source, conf=conf_threshold, device="cpu", verbose=False)
+        if not results:
+            return []
+
+        result = results[0]
+        boxes = getattr(result, "boxes", None)
+        if boxes is None or len(boxes) == 0:
+            return []
+
+        detections = []
+        names = getattr(result, "names", getattr(self.runtime, "names", {}))
+        for index in range(len(boxes)):
+            class_id = int(boxes.cls[index].item())
+            confidence = float(boxes.conf[index].item())
+            x1, y1, x2, y2 = [int(round(value)) for value in boxes.xyxy[index].tolist()]
+            class_name = self._canonicalize_class_name(self._lookup_runtime_name(names, class_id))
+            detections.append(
+                {
+                    "class": class_name,
+                    "class_id": class_id,
+                    "confidence": confidence,
+                    "box": [x1, y1, x2, y2],
+                }
+            )
+
+        return detections
         
     def load(self, model_path: Optional[str] = None):
-        """Load the ONNX model, converting from .pt if necessary."""
+        """Load the selected YOLO model with the most compatible runtime."""
         _ensure_ort()
 
         if model_path:
@@ -54,66 +186,30 @@ class CensorDetector:
         if not self.model_path or not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model file not found: {self.model_path}")
 
-        # Handle .pt files by auto-converting to ONNX
-        if self.model_path.lower().endswith('.pt') or self.model_path.lower().endswith('.pth'):
+        extension = os.path.splitext(self.model_path)[1].lower()
+        if extension in {".pt", ".pth"}:
             try:
-                logger.info("Detected PyTorch model: %s", self.model_path)
-
-                # Check if already converted (cache)
-                base_path = os.path.splitext(self.model_path)[0] + ".onnx"
-                if os.path.exists(base_path):
-                    logger.info("Found cached ONNX model: %s", base_path)
-                    self.model_path = base_path
-                else:
-                    logger.info("Attempting to convert to ONNX using ultralytics...")
-                    try:
-                        from ultralytics import YOLO
-                    except ImportError:
-                        raise RuntimeError(
-                            "Cannot load .pt model: 'ultralytics' package not installed.\n\n"
-                            "To fix this issue, install ultralytics:\n"
-                            "  pip install ultralytics\n\n"
-                            "Alternatively, export your model to ONNX format first:\n"
-                            "  from ultralytics import YOLO\n"
-                            "  model = YOLO('your_model.pt')\n"
-                            "  model.export(format='onnx')\n"
-                        )
-                    
-                    # Load and export
-                    model = YOLO(self.model_path)
-                    # Export returns the path to the exported file
-                    exported_path = model.export(format='onnx')
-                    
-                    if exported_path and isinstance(exported_path, str):
-                        self.model_path = exported_path
-                        logger.info("Model converted successfully: %s", self.model_path)
-                    else:
-                        # Fallback if export returns something else or fails silently
-                        if os.path.exists(base_path):
-                            self.model_path = base_path
-                            logger.info("Using exported ONNX model: %s", self.model_path)
-                        else:
-                            raise RuntimeError("Export failed or returned invalid path")
-                        
-            except ImportError as e:
-                # Already handled above with better message
-                raise e
-            except Exception as e:
-                logger.error("Error converting .pt model: %s", e)
+                self._load_with_ultralytics(self.model_path)
+                logger.info("Censor detector loaded via Ultralytics: %s", os.path.basename(self.model_path))
+                logger.info("Classes: %d", len(self.classes))
+                return
+            except ImportError as exc:
                 raise RuntimeError(
-                    f"Failed to convert PyTorch model to ONNX.\n\n"
-                    f"Error: {str(e)}\n\n"
-                    f"Please ensure:\n"
-                    f"1. The model file is valid and not corrupted\n"
-                    f"2. You have 'ultralytics' installed: pip install ultralytics\n"
-                    f"3. Or manually export the model to .onnx format"
-                )
+                    "Cannot load a PyTorch YOLO model because 'ultralytics' is not installed.\n\n"
+                    "Install ultralytics or switch to an ONNX model in models/yolo."
+                ) from exc
+            except Exception as exc:
+                logger.error("Error loading PyTorch YOLO model: %s", exc)
+                raise RuntimeError(f"Failed to load PyTorch YOLO model: {exc}") from exc
 
         try:
             # Create ONNX Runtime session
             # Note: We assign to a temp variable first to ensure full success before setting self.session
             logger.info("Initializing ONNX session for: %s", self.model_path)
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            available_providers = ort.get_available_providers()
+            providers = [provider for provider in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if provider in available_providers]
+            if not providers:
+                providers = ['CPUExecutionProvider']
             session = ort.InferenceSession(self.model_path, providers=providers)
             
             # Get input details
@@ -125,14 +221,30 @@ class CensorDetector:
                 _, _, h, w = input_info.shape
                 if isinstance(h, int) and isinstance(w, int):
                     self.input_size = (w, h)
+
+            self._load_onnx_metadata(session)
+
+            if not self._supports_lightweight_onnx(session):
+                logger.info(
+                    "ONNX output layout for %s is not supported by the lightweight parser. Falling back to Ultralytics runtime.",
+                    self.model_path,
+                )
+                self._load_with_ultralytics(self.model_path)
+                logger.info("Censor detector loaded via Ultralytics fallback: %s", os.path.basename(self.model_path))
+                logger.info("Classes: %d", len(self.classes))
+                return
             
             self.session = session
+            self.runtime = None
+            self.runtime_backend = "onnxruntime"
             logger.info("Censor detector loaded: %s", os.path.basename(self.model_path))
             logger.info("Input size: %s, Classes: %d", self.input_size, len(self.classes))
             
         except Exception as e:
             logger.error("Error loading ONNX model: %s", e)
             self.session = None  # Ensure it's None on failure
+            self.runtime = None
+            self.runtime_backend = None
             
             # Provide helpful error message
             error_msg = str(e)
@@ -296,6 +408,9 @@ class CensorDetector:
         if self.session is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
+        if self.runtime_backend == "ultralytics":
+            return self._detect_with_ultralytics(image_path, conf_threshold)
+
         # Load and preprocess image
         image = Image.open(image_path).convert('RGB')
         original_size = image.size
@@ -320,6 +435,9 @@ class CensorDetector:
         """Run detection on a PIL Image."""
         if self.session is None:
             raise RuntimeError("Model not loaded. Call load() first.")
+
+        if self.runtime_backend == "ultralytics":
+            return self._detect_with_ultralytics(image, conf_threshold)
         
         original_size = image.size
         img_array, scale_info, pad_info = self.preprocess(image)

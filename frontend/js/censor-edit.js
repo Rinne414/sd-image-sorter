@@ -42,6 +42,8 @@ const CensorState = {
 
     // Config
     modelPath: localStorage.getItem('censor_model_path') || '',
+    availableLegacyModels: [],
+    backendModelStatus: null,
     outputFolder: localStorage.getItem('censor_output_folder') || '',
     confidence: 0.5,
     style: 'mosaic',
@@ -106,6 +108,8 @@ function initCensorEdit() {
     const outputFolderEl = $('#save-output-folder'); // Changed from removed rename-output-folder
     if (CensorState.modelPath && modelPathEl) modelPathEl.value = CensorState.modelPath;
     if (CensorState.outputFolder && outputFolderEl) outputFolderEl.value = CensorState.outputFolder;
+    updateDetectionModelInputs();
+    loadCensorModelStatus();
 
     // Only bind events once to prevent duplicate listeners
     if (!censorEventsInitialized) {
@@ -156,13 +160,35 @@ function bindEvents() {
 
     // Properties Panel
     $('#censor-model-path')?.addEventListener('change', (e) => {
-        CensorState.modelPath = e.target.value;
+        CensorState.modelPath = String(e.target.value || '').trim();
+        const modelFileEl = $('#censor-model-file');
+        if (modelFileEl && modelFileEl.value !== CensorState.modelPath) {
+            modelFileEl.value = '';
+        }
         localStorage.setItem('censor_model_path', CensorState.modelPath);
+        const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
+        updateSelectedLegacyModelHelp(legacy);
+    });
+
+    $('#censor-model-file')?.addEventListener('change', (e) => {
+        const selectedPath = String(e.target.value || '').trim();
+        CensorState.modelPath = selectedPath;
+        const modelPathInput = $('#censor-model-path');
+        if (modelPathInput) {
+            modelPathInput.value = selectedPath;
+        }
+        localStorage.setItem('censor_model_path', CensorState.modelPath);
+        const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
+        updateSelectedLegacyModelHelp(legacy);
     });
 
     $('#censor-confidence')?.addEventListener('input', (e) => {
         CensorState.confidence = parseFloat(e.target.value);
         $('#censor-confidence-value').textContent = CensorState.confidence.toFixed(2);
+    });
+
+    $('#censor-model-type')?.addEventListener('change', () => {
+        updateDetectionModelInputs();
     });
 
     $('#censor-style')?.addEventListener('change', (e) => CensorState.style = e.target.value);
@@ -312,6 +338,8 @@ function bindEvents() {
         );
         if (path !== null) {
             CensorState.modelPath = path;
+            const modelFileEl = $('#censor-model-file');
+            if (modelFileEl) modelFileEl.value = '';
             $('#censor-model-path').value = path;
             localStorage.setItem('censor_model_path', path);
         }
@@ -774,6 +802,144 @@ function saveCurrentCanvasToState(serializedState = null) {
     }
 }
 
+async function loadCensorModelStatus() {
+    const banner = document.getElementById('censor-model-health');
+    try {
+        const result = await window.App.API.get('/api/censor/models');
+        CensorState.backendModelStatus = result;
+
+        const legacy = (result.models || []).find(model => model.id === 'legacy');
+        CensorState.availableLegacyModels = legacy?.files || [];
+        populateCensorModelSelect(legacy);
+        const modelTypeSelect = document.getElementById('censor-model-type');
+        if (modelTypeSelect && result.recommended_backend) {
+            modelTypeSelect.value = result.recommended_backend;
+        }
+        updateDetectionModelInputs();
+
+        if (!banner) return;
+
+        const classes = ['model-health-banner', 'model-health-banner-compact', 'is-visible'];
+        if (!result.recommended_backend) {
+            classes.push('model-health-banner-danger');
+        } else if (!(legacy?.available)) {
+            classes.push('model-health-banner-warning');
+        }
+
+        const readyNotes = (result.models || [])
+            .filter(model => model.available)
+            .map(model => model.name)
+            .join(' / ');
+        const recommended = result.recommended_backend
+            ? `Recommended mode: ${result.recommended_backend}.`
+            : 'No detection backend is fully ready yet.';
+        const defaultLegacy = legacy?.files?.find(file => file.path === legacy?.default_model_path);
+        const extraNotes = [];
+        if (defaultLegacy) {
+            extraNotes.push(`Legacy default: ${defaultLegacy.name} (${defaultLegacy.profile_label})`);
+        } else if (legacy?.default_model_path) {
+            extraNotes.push(`Legacy default: ${legacy.default_model_path}`);
+        }
+        if ((legacy?.general_model_count || 0) > 0) {
+            extraNotes.push(`${legacy.general_model_count} general YOLO model(s) installed for compatibility tests`);
+        }
+        const extra = extraNotes.length
+            ? `<br><small>${escapeHtml(extraNotes.join(' · '))}</small>`
+            : '';
+
+        banner.className = classes.join(' ');
+        banner.innerHTML = `<strong>Detection Ready:</strong> ${escapeHtml(readyNotes || 'None')} ${escapeHtml(recommended)}${extra}`;
+    } catch (e) {
+        if (!banner) return;
+        banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
+        banner.textContent = 'Model readiness could not be loaded right now.';
+    }
+}
+
+function getLegacyModelRecordByPath(path) {
+    const normalized = String(path || '').trim();
+    if (!normalized) return null;
+    return CensorState.availableLegacyModels.find(file => file?.path === normalized) || null;
+}
+
+function formatLegacyModelOptionLabel(file) {
+    const profile = file?.profile_label ? ` - ${file.profile_label}` : '';
+    return `${file.name} (${file.size_mb} MB)${profile}`;
+}
+
+function updateSelectedLegacyModelHelp(legacyModel) {
+    const help = document.getElementById('censor-model-file-help');
+    if (!help) return;
+
+    const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
+    if (manualPath) {
+        help.textContent = 'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.';
+        return;
+    }
+
+    const selectedPath = String(document.getElementById('censor-model-file')?.value || '').trim();
+    const selectedFile = getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacyModel?.default_model_path);
+    if (!selectedFile) {
+        help.textContent = 'No legacy YOLO model was found locally. NudeNet can still work if it is installed.';
+        return;
+    }
+
+    const parts = [`Selected: ${selectedFile.name}`];
+    if (selectedFile.profile_label) {
+        parts.push(selectedFile.profile_label);
+    }
+    if (selectedFile.message) {
+        parts.push(selectedFile.message);
+    }
+    help.textContent = parts.join(' · ');
+}
+
+function populateCensorModelSelect(legacyModel) {
+    const select = document.getElementById('censor-model-file');
+    if (!select) return;
+
+    const currentValue = CensorState.modelPath || '';
+    const files = Array.isArray(legacyModel?.files) ? legacyModel.files : [];
+    const seen = new Set();
+    const options = ['<option value="">Auto-pick the recommended local model</option>'];
+
+    files.forEach(file => {
+        if (!file?.path || seen.has(file.path)) return;
+        seen.add(file.path);
+        const label = formatLegacyModelOptionLabel(file);
+        options.push(`<option value="${escapeHtml(file.path)}">${escapeHtml(label)}</option>`);
+    });
+
+    select.innerHTML = options.join('');
+    if (currentValue && seen.has(currentValue)) {
+        select.value = currentValue;
+    } else {
+        select.value = '';
+    }
+
+    updateSelectedLegacyModelHelp(legacyModel);
+}
+
+function updateDetectionModelInputs() {
+    const modelType = document.getElementById('censor-model-type')?.value || 'legacy';
+    const needsLegacyPath = modelType === 'legacy' || modelType === 'both';
+    const modelFileGroup = document.getElementById('censor-model-file')?.closest('.form-group');
+    const modelPathGroup = document.getElementById('censor-model-path')?.closest('.form-group');
+
+    if (modelFileGroup) modelFileGroup.style.display = needsLegacyPath ? '' : 'none';
+    if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath ? '' : 'none';
+}
+
+function getSelectedLegacyModelPath() {
+    const modelPathInput = document.getElementById('censor-model-path');
+    const select = document.getElementById('censor-model-file');
+    const manualPath = String(modelPathInput?.value || '').trim();
+    if (manualPath) {
+        return manualPath;
+    }
+    return String(select?.value || '').trim();
+}
+
 function captureCanvasState(canvas = null) {
     const targetCanvas = canvas || document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     if (!targetCanvas || !targetCanvas.width) return null;
@@ -1018,7 +1184,6 @@ function performClone(ctx, x, y, size) {
 
 async function runAutoCensorBatch() {
     const { showToast } = window.App;
-    if (!CensorState.modelPath) { showToast('Please select a model first', 'error'); return; }
 
     showLoading(true, 'Batch Processing...');
 
@@ -1040,7 +1205,7 @@ async function runDetectionForImage(item, silent = false) {
 
         const data = await window.App.API.post('/api/censor/detect', {
             image_id: item.id,
-            model_path: CensorState.modelPath,
+            model_path: getSelectedLegacyModelPath(),
             model_type: modelType,
             confidence_threshold: CensorState.confidence
         });
@@ -1621,10 +1786,6 @@ async function runDetectionForAll() {
     const { showToast } = window.App;
     if (CensorState.queue.length === 0) {
         showToast('Queue is empty', 'error');
-        return;
-    }
-    if (!CensorState.modelPath) {
-        showToast('Please set a model path first', 'error');
         return;
     }
 

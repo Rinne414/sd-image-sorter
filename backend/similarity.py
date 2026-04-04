@@ -16,12 +16,14 @@ from PIL import Image, UnidentifiedImageError
 
 from config import (
     CLIP_MODEL_NAME,
+    get_clip_model_dir,
     SIMILARITY_DEFAULT_LIMIT,
     SIMILARITY_DEFAULT_THRESHOLD,
     DUPLICATE_THRESHOLD,
     EMBEDDING_BATCH_SIZE,
     DUPLICATE_CHUNK_SIZE,
 )
+from model_health import get_clip_local_model_path
 
 
 logger = logging.getLogger(__name__)
@@ -78,13 +80,35 @@ def _get_embed_model():
             if _embed_model is None:
                 try:
                     from fastembed import ImageEmbedding  # type: ignore
+                    local_model_path = get_clip_local_model_path()
+                    model_kwargs = {
+                        "model_name": CLIP_MODEL_NAME,
+                        "cache_dir": get_clip_model_dir(),
+                    }
+                    if local_model_path:
+                        model_kwargs.update(
+                            {
+                                "local_files_only": True,
+                                "specific_model_path": local_model_path,
+                            }
+                        )
                     _embed_model = ImageEmbedding(
-                        model_name=CLIP_MODEL_NAME,
+                        **model_kwargs,
                     )
                 except ImportError:
                     raise RuntimeError(
                         "fastembed not installed. Run: pip install fastembed"
                     )
+                except Exception as exc:
+                    if get_clip_local_model_path():
+                        raise RuntimeError(
+                            "Local CLIP model exists but FastEmbed could not open it. "
+                            f"Checked: {get_clip_local_model_path()}. Error: {exc}"
+                        ) from exc
+                    raise RuntimeError(
+                        "CLIP embedding model is not ready yet. "
+                        "Download the local model first or allow the first-run model download."
+                    ) from exc
     return _embed_model
 
 

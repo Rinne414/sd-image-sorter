@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import get_artist_identifier, ArtistIdentifier
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
+from model_health import get_model_health
 
 logger = logging.getLogger(__name__)
 
@@ -391,22 +392,20 @@ async def get_batch_progress():
 @router.get("/models", response_model=List[ModelInfo])
 async def list_models():
     """List available artist identification models."""
+    health = get_model_health()["artist"]
     models = []
-
-    # Check if transformers is available
-    available = ArtistIdentifier.is_available()
 
     models.append(ModelInfo(
         name=f"{ARTIST_HF_MODEL_ID} (HuggingFace)",
         source="huggingface",
-        available=available,
+        available=health["available"],
         artist_count=0,  # Will be determined when loaded
     ))
 
     models.append(ModelInfo(
         name=(f"{ARTIST_MODELSCOPE_MODEL_ID} (ModelScope)" if ARTIST_MODELSCOPE_MODEL_ID else "Custom ModelScope mirror"),
         source="modelscope",
-        available=available,
+        available=bool(health["runtime_path"] and health["missing_dependencies"] == []),
         artist_count=0,
     ))
 
@@ -426,6 +425,16 @@ async def list_models():
             logger.warning(f"Permission denied when accessing local models directory: {local_models_dir}")
 
     return models
+
+
+@router.get("/diagnostics")
+async def get_artist_diagnostics():
+    """Return user-friendly runtime diagnostics for the artist feature."""
+    artist = get_model_health()["artist"]
+    return {
+        "status": "ok",
+        **artist,
+    }
 
 
 @router.get("/stats", response_model=StatsResponse)

@@ -148,6 +148,10 @@ if !NEED_INSTALL! EQU 1 (
     echo.
 )
 
+echo [Info] Checking local model readiness...
+backend\venv\Scripts\python.exe backend\model_health.py
+echo.
+
 echo.
 echo ==========================================
 echo   SD Image Sorter is running!
