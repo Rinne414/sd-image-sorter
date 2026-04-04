@@ -102,8 +102,8 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 ### Prerequisites
 - **Python 3.9+**
-- **RAM**: 4GB minimum, 8GB+ recommended (AI models need memory)
-- **Disk Space**: ~2GB for dependencies + models
+- **RAM**: 4GB minimum for the base app, 8GB+ recommended for most AI features, 16GB+ recommended for Artist ID
+- **Disk Space**: ~2GB for the app/runtime, plus optional model downloads
 - **Windows** (Recommended) or Linux/Mac
 
 ### Installation & Run
@@ -132,6 +132,115 @@ The launcher also prints a local model readiness summary, and the `Censor`, `Sim
 
 > [!TIP]
 > **Want the least confusing setup?** Start with the release asset `sd-image-sorter-v2.1.0-portable-core-models.zip`, then read [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) and [models/README.md](models/README.md) only if you want optional large-model extras.
+
+---
+
+## 🧰 Hardware Guide
+
+### Does it support weak hardware?
+
+**Yes, partly.**
+
+- **Works well on weak hardware**: Gallery, metadata parsing, filters, Auto-Separate, Manual Sort, Prompt Lab
+- **Works on weak hardware but may be slow**: WD14 tagging, basic censor detection, Similar/CLIP embedding generation
+- **Not recommended for weak hardware**: Artist ID with `Kaloscope2.0`
+- **Currently not supported on weak hardware / CPU-only machines**: `SAM3`
+
+In this README, **weak hardware** means something like:
+
+- 4 CPU cores
+- 8GB RAM
+- integrated graphics or an older GPU
+- SATA SSD or even HDD
+
+That class of machine can still use the app, but you should stay on the lighter workflows and avoid the largest optional models.
+
+### Recommended hardware by feature
+
+| Feature | Weak hardware support | Minimum usable hardware | Recommended hardware | Notes |
+|:--------|:----------------------|:------------------------|:---------------------|:------|
+| Gallery / metadata / filters | Yes | 2-4 CPU cores, 4GB RAM | 4+ cores, 8GB RAM, SSD | This is mostly file I/O and SQLite work. SSD helps a lot on large libraries. |
+| Scan folder / large library indexing | Yes, but slower | 4 CPU cores, 4GB RAM, SSD preferred | 6+ cores, 8-16GB RAM, SSD | Very large libraries benefit more from SSD and CPU than from GPU. |
+| Auto-Separate / Manual Sort | Yes | 4GB RAM | 8GB RAM, SSD | These workflows are light unless you combine them with AI tagging or censoring. |
+| Prompt Lab | Yes | 4GB RAM | 8GB RAM | Mostly database + frontend work. |
+| WD14 tagging (`wd-swinv2-tagger-v3`) | Yes, but slower | 4 CPU cores, 8GB RAM | 6+ CPU cores, 16GB RAM, optional NVIDIA GPU with 6GB+ VRAM | This is the best default model for normal and weaker machines. CPU mode works. |
+| WD14 tagging (`wd-eva02-large-tagger-v3`) | Not ideal for weak hardware | 16GB RAM | 16-32GB RAM, optional NVIDIA GPU with 8GB+ VRAM | Higher accuracy, but much heavier than `wd-swinv2-tagger-v3`. |
+| Censor detection: Wenaka / NudeNet | Yes | 4 CPU cores, 8GB RAM | 6+ cores, 8-16GB RAM, optional GPU with 4GB+ VRAM | Good low-end route. On weaker machines, use one detector at a time if `both` feels too slow. |
+| Censor detection: YOLO26 / YOLOv8 compatibility models | Yes, but only as advanced tests | 4 CPU cores, 8GB RAM | 6+ cores, 8-16GB RAM | These are fixed-class general models in the current local setup, not free-text privacy detectors. |
+| Similar Images / CLIP embeddings | Yes, but first build can be slow | 4 CPU cores, 8GB RAM, SSD strongly recommended | 6+ CPU cores, 16GB RAM, SSD | The current CLIP path is local-first and CPU-friendly, but full-library embedding still takes time on big collections. |
+| Artist ID (`Kaloscope2.0`) | Technically possible on some CPU systems, but not weak-hardware-friendly | 16GB RAM, fast SSD, Windows users also need `triton-windows` | 8+ CPU cores, 32GB RAM, fast SSD, NVIDIA GPU with 8GB+ VRAM recommended | Treat this as an advanced optional feature, not a baseline feature. |
+| SAM3 text/box refinement | No for CPU-only or weak hardware | CUDA-capable NVIDIA GPU required | NVIDIA GPU with 10GB+ VRAM and 16GB+ system RAM recommended | In the current verified setup, SAM3 is treated as GPU-only. |
+
+### Verified local model sizes
+
+These are the currently verified file sizes from the local `models/` folder, so users can estimate disk needs more realistically:
+
+| Model | Current verified size |
+|:------|:----------------------|
+| `wd-swinv2-tagger-v3` | ~445.8 MB |
+| `wd-eva02-large-tagger-v3` | ~1202.0 MB |
+| `Qdrant-clip-ViT-B-32-vision` | ~335.4 MB |
+| `wenaka_yolov8s-seg.onnx` | ~45.7 MB |
+| `yolo26s-seg.onnx` | ~40.0 MB |
+| `yolov8s-seg.onnx` | ~45.3 MB |
+| `NudeNet 320n.onnx` | ~11.6 MB |
+| `Kaloscope2.0 best_checkpoint.pth` | ~2801.8 MB |
+| `SAM3 sam3.pt` | ~3290.2 MB |
+
+### Low-end hardware advice
+
+If you are setting this up for non-technical users or a weaker PC:
+
+- Start with **Gallery**, **Manual Sort**, and **Prompt Lab**
+- Use **`wd-swinv2-tagger-v3`**, not the larger EVA02 model
+- For censoring, prefer the default Wenaka route or `NudeNet v3` alone before trying heavier combinations
+- Expect the first **CLIP embedding** build to take time on large libraries
+- Treat **Artist ID** and **SAM3** as optional extras, not must-have defaults
+- Put the project and models on an **SSD** whenever possible
+
+## 🧭 Censor Model Guide
+
+### Which censor model should normal users pick?
+
+| Option | Input | Output | Best for | Who should use it |
+|:-------|:------|:-------|:---------|:------------------|
+| `both` | No prompt required | Detection boxes from Wenaka + NudeNet | Best default balance of convenience and recall | Most users |
+| `legacy` + auto-picked Wenaka | Fixed privacy-part labels | Fast privacy-part boxes | Quick privacy workflows | Users who want the simplest privacy-only route |
+| `nudenet` | No prompt required | Built-in NSFW/body-part boxes | Fast body-region detection without custom setup | Users who want one simple detector |
+| `legacy` + `yolo26s` / `yolov8s` | Fixed built-in object classes | General segmentation results | Compatibility tests and advanced experiments | Pro users only |
+| `SAM3` text/box refine | Text prompt or box prompt | Pixel-accurate masks | Precision cleanup after coarse detection | Pro users with CUDA GPU |
+
+### Why keep the normal `yolov8s` / `yolo26s` files if Wenaka already exists?
+
+- `wenaka_yolov8s-seg` is the real privacy-part route and should be treated as the normal censor workflow.
+- The local `yolov8s-seg` and `yolo26s-seg` files are kept for **advanced compatibility and segmentation testing**.
+- In the currently verified local setup, those general files are **fixed-class models**, not open-text detectors and not privacy-part specialists.
+- They are still useful when a pro user wants to compare outputs, verify ONNX/PT loading, or test non-privacy segmentation behavior.
+- They are **not** the recommended path for ordinary privacy censoring, so the UI hides them behind **Show advanced legacy models** by default.
+
+### How to use `NudeNet`
+
+1. Open **Censor Edit** and add one or more images to the queue.
+2. In the detection panel, set **Model Type** to `nudenet`.
+3. Ignore the privacy quick-checkboxes and the text prompt box for this route.
+4. Click **Detect Current** or **Detect All**.
+5. Review the boxes, then use brush/eraser/clone tools if you want manual cleanup.
+6. Save with your preferred output format and metadata option.
+
+`NudeNet` is meant to be simple: it uses its own built-in NSFW/body-region labels and does not rely on free-text prompting.
+
+### Pro text prompt: what it really does
+
+- **Advanced Precision (Pro)** is the SAM3 route.
+- The text box is for **text-prompt segmentation on the current image**, not for Wenaka, NudeNet, or the general YOLO models.
+- In the current verified setup, SAM3 still needs a **CUDA-capable NVIDIA GPU**.
+- If SAM3 is unavailable, you can still type in the box on the current build, but the text prompt path will not become a working segmentation route until the SAM3 runtime is actually ready.
+
+### Artist ID log note on Windows
+
+- `SkaFn failed; falling back to PyTorchSkaFn` is usually a **fallback note**, not a hard failure.
+- If the Artist tab still returns predicted artists, then the Kaloscope pipeline is working and the runtime simply fell back to the slower PyTorch path.
+- If no artist results appear, then check the Artist banner for missing runtime files, missing `timm`, or missing `triton-windows`.
 
 ---
 
@@ -512,6 +621,23 @@ When querying `/api/images`:
 - For privacy workflows, use the Wenaka privacy model or keep `Model Type` on `both`
 - Leave the legacy model path blank unless you are intentionally testing a custom file
 
+**Q: Why is the normal `yolov8s` still there if Wenaka exists?**
+- Because it is kept for advanced compatibility and segmentation testing
+- In the current verified local setup, `yolov8s-seg` and `yolo26s-seg` are general fixed-class models
+- They are not the normal privacy workflow and not open-text prompt detectors
+- Ordinary users should leave **Show advanced legacy models** turned off
+
+**Q: How should I use NudeNet?**
+- Switch `Model Type` to `nudenet`
+- Ignore the text prompt box and privacy quick-checkboxes for this route
+- Click `Detect Current` or `Detect All`
+- Review the returned boxes and then save or manually clean up the result
+
+**Q: The Advanced Precision text box is visible. What is it for?**
+- It is for the SAM3 text-prompt path, not for Wenaka, NudeNet, or general YOLO models
+- The current build keeps the input editable, but the actual segmentation route still depends on SAM3 being ready
+- If SAM3 is unavailable on your machine, the text prompt will not become a working segmentation feature yet
+
 **Q: Artist Identification keeps returning `undefined`**
 - This feature is still experimental and respects a confidence threshold
 - Check the Artist tab runtime banner before changing anything else
@@ -519,6 +645,12 @@ When querying `/api/images`:
 - Kaloscope also requires an external LSNet runtime checkout (`comfyui-lsnet` or `lsnet-test`)
 - On Windows, install `triton-windows`
 - If the model cannot load, the app now reports the error explicitly instead of pretending the run succeeded
+
+**Q: The log says `SkaFn failed; falling back to PyTorchSkaFn`. Is Artist ID broken?**
+- Usually no
+- On Windows, that message normally means the runtime fell back away from Triton
+- If artist predictions still show up in the UI, the feature is working, just on the fallback path
+- If predictions do not show up, then treat it as a setup problem and check the Artist diagnostics banner
 
 **Q: SAM3 is installed but still says unavailable**
 - In the current verified setup, SAM3 is treated as GPU-only
@@ -705,8 +837,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 环境要求
 - **Python 3.9+**
-- **内存**: 最低 4GB，推荐 8GB+（AI 模型需要内存）
-- **磁盘空间**: 约 2GB（依赖 + 模型）
+- **内存**: 基础功能最低 4GB，多数 AI 功能建议 8GB+，画师识别建议 16GB+
+- **磁盘空间**: 程序与运行环境约 2GB，外加可选模型下载空间
 - **Windows** (推荐) 或 Linux/Mac
 
 ### 安装与运行
@@ -735,6 +867,115 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 > [!TIP]
 > **想最省事开用？** 直接从 release 下载 `sd-image-sorter-v2.1.0-portable-core-models.zip`，需要时再看 [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) 和 [models/README.md](models/README.md) 补大模型。
+
+---
+
+## 🧰 硬件指南
+
+### 弱硬件能不能用？
+
+**能用，但不是所有功能都适合。**
+
+- **很适合弱硬件**：图库、元数据解析、筛选、自动分类、手动排序、提示词工坊
+- **弱硬件能跑但会比较慢**：WD14 打标、基础打码检测、Similar / CLIP 向量生成
+- **不建议弱硬件主打使用**：`Kaloscope2.0` 画师识别
+- **当前不适合弱硬件 / 纯 CPU 机器**：`SAM3`
+
+这里说的**弱硬件**，大致可以理解为：
+
+- 4 核 CPU
+- 8GB 内存
+- 核显或比较老的独显
+- SATA SSD，甚至机械硬盘
+
+这类机器依然能把软件用起来，但应该优先走轻量路线，不要默认把所有大模型功能都开满。
+
+### 按功能看的推荐硬件
+
+| 功能 | 弱硬件支持情况 | 最低可用配置 | 推荐配置 | 说明 |
+|:-----|:---------------|:-------------|:---------|:-----|
+| 图库 / 元数据 / 筛选 | 支持 | 2-4 核 CPU，4GB 内存 | 4 核以上 CPU，8GB 内存，SSD | 这部分主要吃文件读写和 SQLite，SSD 提升很明显。 |
+| 扫描文件夹 / 大图库建索引 | 支持，但会慢 | 4 核 CPU，4GB 内存，最好有 SSD | 6 核以上 CPU，8-16GB 内存，SSD | 大图库更吃 CPU 和磁盘，不太吃 GPU。 |
+| 自动分类 / 手动排序 | 支持 | 4GB 内存 | 8GB 内存，SSD | 本身很轻，除非你同时叠加 AI 打标或打码。 |
+| 提示词工坊 | 支持 | 4GB 内存 | 8GB 内存 | 主要是数据库和前端逻辑。 |
+| WD14 打标（`wd-swinv2-tagger-v3`） | 支持，但会慢 | 4 核 CPU，8GB 内存 | 6 核以上 CPU，16GB 内存，可选 NVIDIA 6GB+ 显存 | 这是更适合普通用户和弱硬件的默认打标模型，CPU 模式可用。 |
+| WD14 打标（`wd-eva02-large-tagger-v3`） | 不适合弱硬件 | 16GB 内存 | 16-32GB 内存，可选 NVIDIA 8GB+ 显存 | 精度更高，但比 `wd-swinv2-tagger-v3` 重很多。 |
+| 打码检测：Wenaka / NudeNet | 支持 | 4 核 CPU，8GB 内存 | 6 核以上 CPU，8-16GB 内存，可选 4GB+ 显存 | 这是低配机器也比较适合的路线。觉得 `both` 太慢时，可以一次只开一个检测器。 |
+| 打码检测：YOLO26 / YOLOv8 通用兼容模型 | 支持，但更偏高级测试 | 4 核 CPU，8GB 内存 | 6 核以上 CPU，8-16GB 内存 | 当前本地这两份是固定类通用模型，不是开放文本隐私检测器。 |
+| 相似图片 / CLIP 向量 | 支持，但首次建库会慢 | 4 核 CPU，8GB 内存，强烈建议 SSD | 6 核以上 CPU，16GB 内存，SSD | 当前 CLIP 路线偏本地优先、CPU 友好，但大图库第一次建向量仍然会花时间。 |
+| 画师识别（`Kaloscope2.0`） | 某些 CPU 机器理论上能跑，但完全不算弱硬件友好 | 16GB 内存，快速 SSD，Windows 还要 `triton-windows` | 8 核以上 CPU，32GB 内存，快速 SSD，建议 NVIDIA 8GB+ 显存 | 这个应当视为高级可选功能，不应该当成基础默认功能。 |
+| SAM3 文本 / 框精修 | 不支持纯 CPU 弱硬件路线 | 必须有支持 CUDA 的 NVIDIA 显卡 | 建议 NVIDIA 10GB+ 显存，16GB+ 系统内存 | 以当前实测接法，SAM3 仍按 GPU-only 对待。 |
+
+### 当前实测本地模型体积
+
+下面这些是我按当前 `models/` 目录实际文件大小整理出来的，方便用户估算磁盘空间：
+
+| 模型 | 当前实测大小 |
+|:-----|:-------------|
+| `wd-swinv2-tagger-v3` | 约 445.8 MB |
+| `wd-eva02-large-tagger-v3` | 约 1202.0 MB |
+| `Qdrant-clip-ViT-B-32-vision` | 约 335.4 MB |
+| `wenaka_yolov8s-seg.onnx` | 约 45.7 MB |
+| `yolo26s-seg.onnx` | 约 40.0 MB |
+| `yolov8s-seg.onnx` | 约 45.3 MB |
+| `NudeNet 320n.onnx` | 约 11.6 MB |
+| `Kaloscope2.0 best_checkpoint.pth` | 约 2801.8 MB |
+| `SAM3 sam3.pt` | 约 3290.2 MB |
+
+### 给弱硬件用户的实际建议
+
+如果你是给普通人装，或者机器配置不强，建议直接照这个思路用：
+
+- 先用 **图库**、**手动排序**、**提示词工坊**
+- WD14 优先选 **`wd-swinv2-tagger-v3`**，不要先上 EVA02-Large
+- 打码优先走默认 Wenaka 路线，或者单独用 `NudeNet v3`
+- **CLIP** 首次建向量要有心理准备，大图库会比较慢
+- **Artist ID** 和 **SAM3** 视为可选增强功能，不要当必备默认项
+- 能放到 **SSD** 就尽量放 SSD
+
+## 🧭 打码模型怎么选
+
+### 普通用户该选哪条路线？
+
+| 选项 | 输入 | 输出 | 最适合做什么 | 适合谁 |
+|:-----|:-----|:-----|:-------------|:-------|
+| `both` | 不用填提示词 | Wenaka + NudeNet 的检测框 | 方便、稳、召回更高 | 大多数用户 |
+| `legacy` + 自动选中的 Wenaka | 固定隐私部位标签 | 快速隐私部位框 | 快速隐私打码 | 想走最简单隐私主流程的人 |
+| `nudenet` | 不用填提示词 | 内置 NSFW / 身体部位框 | 不想额外设置的身体区域检测 | 想单独用一个简单检测器的人 |
+| `legacy` + `yolo26s` / `yolov8s` | 固定内置类别 | 通用分割结果 | 兼容性测试和高级实验 | 只建议专业用户 |
+| `SAM3` 文本 / 框精修 | 文本提示或框提示 | 像素级 mask | 粗检测之后做精修 | 有 CUDA 显卡的专业用户 |
+
+### 明明有 Wenaka，为什么还保留普通 `yolov8s` / `yolo26s`？
+
+- `wenaka_yolov8s-seg` 才是真正的隐私部位主路线，普通打码应该优先走它。
+- 本地 `yolov8s-seg` 和 `yolo26s-seg` 保留下来，是给**高级兼容性 / 分割测试**用的。
+- 按当前这份已经实测过的本地接法，它们是**固定类模型**，不是开放文本检测器，也不是隐私专用模型。
+- 它们的价值主要在于：专业用户可以比较输出、验证 ONNX/PT 加载、测试非隐私类分割行为。
+- 所以界面默认把它们藏在 **Show advanced legacy models** 后面，不让普通用户误选。
+
+### `NudeNet` 怎么用？
+
+1. 打开 **Censor Edit**，先把图片加进队列。
+2. 在检测面板把 **Model Type** 切到 `nudenet`。
+3. 这条路线不用看隐私快捷复选框，也不用看文本提示框。
+4. 直接点 **Detect Current** 或 **Detect All**。
+5. 看返回的框够不够，用画笔 / 橡皮 / 仿制图章手修也可以。
+6. 最后按你要的输出格式和元数据策略保存。
+
+`NudeNet` 的定位就是省事：它走自己内置的 NSFW / 身体区域标签，不靠自由文本提示。
+
+### Pro 文本框到底是干嘛的？
+
+- **Advanced Precision (Pro)** 这块是给 SAM3 用的。
+- 这个文本框对应的是**当前图片的文本提示分割**，不是给 Wenaka、NudeNet、通用 YOLO 用的。
+- 以当前这套已经实测过的接法，SAM3 仍然需要 **支持 CUDA 的 NVIDIA 显卡**。
+- 如果 SAM3 还没 ready，你现在这版依然可以在输入框里打字，但文本提示这条分割能力本身还不会真正变成可用路线。
+
+### Windows 下 Artist ID 那条日志是什么意思？
+
+- `SkaFn failed; falling back to PyTorchSkaFn` 通常只是 **fallback 提示**，不等于功能直接坏掉。
+- 如果 Artist 页面还能正常给出画师结果，说明 Kaloscope 这条链路是通的，只是退回了较慢的 PyTorch 路径。
+- 如果结果根本不出来，再去看 Artist 页面状态条，检查 runtime、`timm`、`triton-windows` 有没有缺。
 
 ---
 
@@ -828,6 +1069,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 隐私打码优先使用 Wenaka 那个 `Privacy-part detector`
 - 不确定时把 `Model Type` 留在 `both`，并把 Legacy 自定义路径留空
 
+**Q: 明明有 Wenaka，为什么还看得到普通 `yolov8s`？**
+- 因为它是保留给高级兼容性 / 分割测试用的
+- 按当前实测接法，`yolov8s-seg` 和 `yolo26s-seg` 都是通用固定类模型
+- 它们不是普通隐私打码主流程，也不是开放文本检测器
+- 普通用户保持 **Show advanced legacy models** 关闭就好
+
+**Q: `NudeNet` 应该怎么用？**
+- 把 `Model Type` 切到 `nudenet`
+- 不用管文本提示框，也不用管隐私快捷复选框
+- 直接点 `Detect Current` 或 `Detect All`
+- 看框够不够，再决定要不要手修和保存
+
+**Q: `Advanced Precision` 那个输入框是干嘛的？**
+- 它是给 SAM3 文本提示路线用的，不是给 Wenaka、NudeNet、通用 YOLO 用的
+- 当前版本已经修掉了输入焦点被全局快捷键抢走的问题
+- 但真正能不能拿它做文本分割，仍然取决于 SAM3 runtime 有没有 ready
+
 **Q: 画师识别一直是 `undefined`**
 - 这是实验性功能，本身受置信度阈值影响
 - 先确认 Artist 页顶部状态条是否 ready
@@ -835,6 +1093,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Kaloscope 还需要额外的 LSNet runtime 仓库（`comfyui-lsnet` 或 `lsnet-test`）
 - Windows 环境建议安装 `triton-windows`
 - 如果模型无法加载，程序现在会明确提示错误，而不是假装成功
+
+**Q: 日志里写 `SkaFn failed; falling back to PyTorchSkaFn`，是不是 Artist 坏了？**
+- 通常不是
+- 这在 Windows 上一般表示 runtime 没走 Triton，而是退回到 PyTorch fallback
+- 只要 UI 里还能正常出现画师预测结果，这条链路就是通的，只是跑在 fallback 路径
+- 如果 UI 里根本没有结果，那才把它当成环境问题，去看 Artist 诊断条
 
 **Q: SAM3 明明下载了，但界面还是说不可用**
 - 当前这套经过实测的接法里，SAM3 仍然按 GPU-only 对待

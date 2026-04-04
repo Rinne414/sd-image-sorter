@@ -12,6 +12,20 @@ const ArtistIdent = {
     diagnostics: null,
     eventsBound: false,
     progressTracker: null,
+    thresholdDefaults: {
+        value: 0.03,
+        suggestedLow: 0.02,
+        suggestedHigh: 0.08,
+    },
+
+    tText(enText, zhText) {
+        return window.I18n?.getLang?.() === 'zh-CN' ? zhText : enText;
+    },
+
+    getThresholdValue() {
+        const rawValue = parseFloat(document.getElementById('artist-threshold')?.value || this.thresholdDefaults.value);
+        return Number.isFinite(rawValue) ? rawValue : this.thresholdDefaults.value;
+    },
 
     init() {
         this.bindEvents();
@@ -87,11 +101,24 @@ const ArtistIdent = {
         const entries = Object.entries(artistCounts).sort((a, b) => b[1] - a[1]);
 
         if (entries.length === 0) {
+            const identifiedImages = Number(this.stats?.identified_images || 0);
+            const undefinedCount = Number(this.stats?.undefined_count || 0);
+            const currentThreshold = this.getThresholdValue().toFixed(2);
+            const allUndefined = identifiedImages > 0 && undefinedCount >= identifiedImages;
+            const emptyTitle = allUndefined
+                ? this.tText('Kaloscope finished, but every result fell below the threshold.', 'Kaloscope 已经跑完了，但结果全部低于当前阈值。')
+                : this.tText('No artists identified yet.', '还没有识别到画师。');
+            const emptyHint = allUndefined
+                ? this.tText(
+                    `Lower the threshold from ${currentThreshold} to around ${this.thresholdDefaults.suggestedLow.toFixed(2)}-${this.thresholdDefaults.suggestedHigh.toFixed(2)} and run again.`,
+                    `把阈值从 ${currentThreshold} 降到大约 ${this.thresholdDefaults.suggestedLow.toFixed(2)}-${this.thresholdDefaults.suggestedHigh.toFixed(2)}，再跑一次。`
+                )
+                : this.tText('Click "Identify All Images" to start.', '点击“识别所有图片”开始。');
             grid.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-icon">🎨</div>
-                    <p>No artists identified yet.</p>
-                    <p class="empty-hint">Click "Identify All Images" to start.</p>
+                    <p>${emptyTitle}</p>
+                    <p class="empty-hint">${emptyHint}</p>
                 </div>
             `;
             return;
@@ -166,7 +193,7 @@ const ArtistIdent = {
         const thresholdSlider = document.getElementById('artist-threshold');
         const thresholdValue = document.getElementById('artist-threshold-value');
         if (thresholdSlider && thresholdValue) {
-            thresholdValue.textContent = thresholdSlider.value;
+            thresholdValue.textContent = Number(thresholdSlider.value).toFixed(2);
         }
 
         const modelSource = document.getElementById('artist-model-source');
@@ -218,6 +245,9 @@ const ArtistIdent = {
             if (result.missing_dependencies?.length) {
                 extras.push(`Missing: ${result.missing_dependencies.join(', ')}`);
             }
+            if (result.runtime_note) {
+                extras.push(result.runtime_note);
+            }
 
             banner.className = classes.join(' ');
             banner.innerHTML = `<strong>Kaloscope</strong> ${this._escapeHtml(result.message || '')}${
@@ -261,9 +291,51 @@ const ArtistIdent = {
     _getIdentifyPayload(imageIds) {
         return {
             image_ids: imageIds,
-            threshold: parseFloat(document.getElementById('artist-threshold')?.value || 0.35),
+            threshold: this.getThresholdValue(),
             top_k: 5,
             ...this._getIdentifyModelConfig(),
+        };
+    },
+
+    _buildCompletionToast(progress, requestedCount = 0) {
+        const results = Array.isArray(progress?.results) ? progress.results : [];
+        const errors = Number(progress?.errors || 0);
+        const allUndefined = results.length > 0 && results.every(result => String(result?.artist || '').toLowerCase() === 'undefined');
+        const targetCount = requestedCount || Number(progress?.total || 0) || results.length;
+
+        if (errors > 0) {
+            return {
+                level: 'warning',
+                message: this.tText(
+                    `Artist identification finished with ${errors} error(s).`,
+                    `画师识别完成，但有 ${errors} 个错误。`
+                ),
+            };
+        }
+
+        if (allUndefined) {
+            return {
+                level: 'warning',
+                message: this.tText(
+                    `The run completed, but the current threshold turned all ${results.length} result(s) into "undefined". Try ${this.thresholdDefaults.suggestedLow.toFixed(2)}-${this.thresholdDefaults.suggestedHigh.toFixed(2)}.`,
+                    `这轮识别完成了，但当前阈值把 ${results.length} 个结果全压成了“未定义”。建议改成 ${this.thresholdDefaults.suggestedLow.toFixed(2)}-${this.thresholdDefaults.suggestedHigh.toFixed(2)} 再试。`
+                ),
+            };
+        }
+
+        if (targetCount > 0) {
+            return {
+                level: 'success',
+                message: this.tText(
+                    `Identified ${targetCount} image(s).`,
+                    `已完成 ${targetCount} 张图片的画师识别。`
+                ),
+            };
+        }
+
+        return {
+            level: 'success',
+            message: this.tText('Artist identification complete!', '画师识别完成。'),
         };
     },
 
@@ -408,13 +480,9 @@ const ArtistIdent = {
             this.updateProgressUi(progress);
 
             const finalProgress = await this.pollProgress();
-            const errorCount = Number(finalProgress?.errors || 0);
-            if (errorCount > 0) {
-                window.App.showToast(`Artist identification finished with ${errorCount} error(s)`, 'warning');
-            } else {
-                window.App.showToast('Artist identification complete!', 'success');
-            }
-            this.loadStats();
+            await this.loadStats();
+            const completion = this._buildCompletionToast(finalProgress);
+            window.App.showToast(completion.message, completion.level);
         } catch (e) {
             Logger.warn('Failed to resume artist identification progress:', e);
         } finally {
@@ -483,13 +551,9 @@ const ArtistIdent = {
 
             // Poll progress
             const progress = await this.pollProgress();
-            const errorCount = progress?.errors || 0;
-            if (errorCount > 0) {
-                showToast(`Artist identification finished with ${errorCount} error(s)`, 'warning');
-            } else {
-                showToast('Artist identification complete!', 'success');
-            }
-            this.loadStats();
+            await this.loadStats();
+            const completion = this._buildCompletionToast(progress, imageIds.length);
+            showToast(completion.message, completion.level);
 
         } catch (e) {
             if (/already in progress/i.test(String(e?.message || ''))) {
@@ -590,13 +654,9 @@ const ArtistIdent = {
             );
 
             const progress = await this.pollProgress();
-            const errorCount = progress?.errors || 0;
-            if (errorCount > 0) {
-                showToast(`Identification finished with ${errorCount} error(s)`, 'warning');
-            } else {
-                showToast(`Identified ${normalizedSelectedIds.size} images`, 'success');
-            }
-            this.loadStats();
+            await this.loadStats();
+            const completion = this._buildCompletionToast(progress, normalizedSelectedIds.size);
+            showToast(completion.message, completion.level);
 
         } catch (e) {
             if (/already in progress/i.test(String(e?.message || ''))) {
@@ -647,7 +707,7 @@ const ArtistIdent = {
             if (event.target?.id === 'artist-threshold') {
                 const thresholdValue = document.getElementById('artist-threshold-value');
                 if (thresholdValue) {
-                    thresholdValue.textContent = event.target.value;
+                    thresholdValue.textContent = Number(event.target.value).toFixed(2);
                 }
             }
         });
@@ -714,13 +774,13 @@ const ArtistIdent = {
             title: '🎨 Artist Identification',
             description: 'Identify the artist/style of your images using AI classification.',
             steps: [
-                { title: 'Configure', text: 'Select model source and confidence threshold' },
+                { title: 'Configure', text: 'Select model source and start with a low threshold like 0.03' },
                 { title: 'Runtime', text: 'Check the runtime banner first. If it says ready, you can run Kaloscope directly.' },
                 { title: 'Identify', text: 'Click "Identify All Images" to analyze your library' },
                 { title: 'Explore', text: 'Browse identified artists and their images' },
                 { title: 'Filter', text: 'Use artist names to filter in Gallery' },
             ],
-            note: 'Images below the confidence threshold will be labeled as "undefined"',
+            note: 'Kaloscope usually needs a low threshold such as 0.02-0.08. Higher values often turn everything into "undefined".',
             maxWidth: '480px',
         });
 

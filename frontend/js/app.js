@@ -382,7 +382,7 @@ const API = {
         return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -390,6 +390,7 @@ const API = {
             checkpoints,
             loras,
             prompts,
+            search,
             min_width: dimensions?.minWidth || null,
             max_width: dimensions?.maxWidth || null,
             min_height: dimensions?.minHeight || null,
@@ -400,7 +401,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null) {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -408,6 +409,7 @@ const API = {
         if (checkpoints?.length) params.set('checkpoints', checkpoints.join(','));
         if (loras?.length) params.set('loras', loras.join(','));
         if (prompts?.length) params.set('prompts', prompts.join(','));
+        if (search) params.set('search', search);
         if (dimensions?.minWidth) params.set('min_width', dimensions.minWidth);
         if (dimensions?.maxWidth) params.set('max_width', dimensions.maxWidth);
         if (dimensions?.minHeight) params.set('min_height', dimensions.minHeight);
@@ -1604,13 +1606,8 @@ function initEventListeners() {
     $('#btn-send-to-censor')?.addEventListener('click', (e) => {
         e.stopPropagation();
         if (AppState.selectedIds.size > 0) {
-            if (typeof window.App.addToCensorQueue !== 'function' && typeof window.initCensorEdit === 'function') {
-                window.initCensorEdit();
-            }
-            if (typeof window.App.addToCensorQueue === 'function') {
-                window.App.addToCensorQueue(Array.from(AppState.selectedIds));
-                return;
-            }
+            addToCensorQueue(Array.from(AppState.selectedIds));
+            return;
         }
         switchView('censor');
         if (typeof window.initCensorEdit === 'function') window.initCensorEdit();
@@ -3839,6 +3836,7 @@ function saveFilterPreset(name) {
         checkpoints: AppState.filters.checkpoints,
         loras: AppState.filters.loras,
         prompts: AppState.filters.prompts,
+        search: AppState.filters.search,
         artist: AppState.filters.artist,
         minWidth: AppState.filters.minWidth,
         maxWidth: AppState.filters.maxWidth,
@@ -3980,6 +3978,7 @@ function saveFilterState() {
             checkpoints: AppState.filters.checkpoints,
             loras: AppState.filters.loras,
             prompts: AppState.filters.prompts,
+            search: AppState.filters.search,
             artist: AppState.filters.artist,
             sortBy: AppState.filters.sortBy,
             minWidth: AppState.filters.minWidth,
@@ -4022,6 +4021,11 @@ function updateFilterSummary() {
     const promptSummary = $('#summary-prompt');
     if (promptSummary) {
         promptSummary.textContent = summary.prompts;
+    }
+
+    const searchSummary = $('#summary-search');
+    if (searchSummary) {
+        searchSummary.textContent = summary.search;
     }
 
     // Artist filter
@@ -4162,6 +4166,28 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', _onGalleryScroll, { passive: true });
 });
 
+function addToCensorQueue(imageIds = []) {
+    const normalizedIds = Array.from(
+        new Set(
+            (Array.isArray(imageIds) ? imageIds : [imageIds])
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value > 0)
+        )
+    );
+
+    if (typeof window.initCensorEdit === 'function') {
+        window.initCensorEdit();
+    }
+
+    const runtimeHandler = window.App?._addToCensorQueue;
+    if (typeof runtimeHandler === 'function') {
+        return runtimeHandler(normalizedIds);
+    }
+
+    switchView('censor');
+    return false;
+}
+
 
 function buildAppContext() {
     return {
@@ -4204,6 +4230,8 @@ function buildAppContext() {
         switchView,
         openGalleryPreview,
         applyPromptFilter,
+        addToCensorQueue,
+        _addToCensorQueue: null,
         $,
         $$
     };

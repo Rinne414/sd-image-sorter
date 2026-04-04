@@ -72,6 +72,7 @@ class BatchMoveRequest(BaseModel):
     checkpoints: Optional[List[str]] = None
     loras: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
+    search: Optional[str] = Field(default=None, max_length=SEARCH_MAX_LENGTH)
     min_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     max_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     min_height: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
@@ -152,11 +153,16 @@ class SortingService:
         # Batch move progress
         self._batch_move_progress: Dict[str, Any] = {
             "status": "idle",
+            "step": "idle",
             "current": 0,
             "total": 0,
             "message": "",
             "errors": 0,
             "moved": 0,
+            "current_item": None,
+            "recent_errors": [],
+            "started_at": None,
+            "updated_at": None,
         }
         self._batch_move_lock = threading.Lock()
         self._batch_move_run_id = 0
@@ -448,6 +454,7 @@ class SortingService:
         checkpoints = request.checkpoints if request.checkpoints else None
         loras = request.loras if request.loras else None
         prompts = request.prompts if request.prompts else None
+        search_query = request.search.strip() if request.search else None
 
         total_count = db.get_filtered_image_count(
             generators=generators,
@@ -455,6 +462,7 @@ class SortingService:
             ratings=ratings,
             checkpoints=checkpoints,
             loras=loras,
+            search_query=search_query,
             prompt_terms=prompts,
             min_width=request.min_width,
             max_width=request.max_width,
@@ -479,11 +487,16 @@ class SortingService:
             run_id = self._batch_move_run_id
             self._batch_move_progress = {
                 "status": "running",
+                "step": "starting",
                 "current": 0,
                 "total": total_count,
                 "message": f"Starting move of {total_count} images...",
                 "errors": 0,
                 "moved": 0,
+                "current_item": None,
+                "recent_errors": [],
+                "started_at": time.time(),
+                "updated_at": time.time(),
             }
         
         def run_batch_move():
@@ -494,6 +507,7 @@ class SortingService:
                     ratings=ratings,
                     checkpoints=checkpoints,
                     loras=loras,
+                    search_query=search_query,
                     prompt_terms=prompts,
                     min_width=request.min_width,
                     max_width=request.max_width,
@@ -508,11 +522,16 @@ class SortingService:
                         run_id,
                         {
                             "status": "done",
+                            "step": "done",
                             "current": 0,
                             "total": 0,
                             "message": "No images match the filters",
                             "errors": 0,
                             "moved": 0,
+                            "current_item": None,
+                            "recent_errors": [],
+                            "started_at": time.time(),
+                            "updated_at": time.time(),
                         }
                     )
                     return
@@ -524,24 +543,32 @@ class SortingService:
                 errors = []
                 for image in images:
                     filename = image.get("filename", "image")
+                    error_message = None
 
                     if os.path.exists(image["path"]):
                         try:
                             move_image(image["id"], destination_folder, image["path"])
                             moved += 1
                         except Exception as e:
-                            errors.append(f"Error moving {image['path']}: {e}")
+                            error_message = f"Error moving {image['path']}: {e}"
                     else:
-                        errors.append(f"Image file not found: {image['path']}")
+                        error_message = f"Image file not found: {image['path']}"
+
+                    if error_message:
+                        errors.append(error_message)
 
                     processed += 1
                     if not self._update_batch_move_progress_if_current(
                         run_id,
+                        step="moving",
                         current=processed,
                         total=total_count,
                         errors=len(errors),
                         moved=moved,
                         message=f"Processed {filename} ({processed}/{total_count})",
+                        current_item=filename,
+                        recent_errors=errors[-3:],
+                        updated_at=time.time(),
                     ):
                         return
 
@@ -549,11 +576,16 @@ class SortingService:
                     run_id,
                     {
                         "status": "done",
+                        "step": "done",
                         "current": total_count,
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
                         "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "current_item": None,
+                        "recent_errors": errors[-3:],
+                        "started_at": self._batch_move_progress.get("started_at"),
+                        "updated_at": time.time(),
                     }
                 )
 
@@ -568,11 +600,16 @@ class SortingService:
                     run_id,
                     {
                         "status": "error",
+                        "step": "error",
                         "current": current,
                         "total": total_count,
                         "errors": errors_count,
                         "moved": moved_count,
                         "message": "Batch move failed due to an internal error",
+                        "current_item": None,
+                        "recent_errors": self._batch_move_progress.get("recent_errors", []) if run_id == self._batch_move_run_id else [],
+                        "started_at": self._batch_move_progress.get("started_at") if run_id == self._batch_move_run_id else None,
+                        "updated_at": time.time(),
                     }
                 )
 
@@ -592,6 +629,7 @@ class SortingService:
         checkpoints: Optional[str] = None,
         loras: Optional[str] = None,
         prompts: Optional[str] = None,
+        search: Optional[str] = None,
         min_width: Optional[int] = None,
         max_width: Optional[int] = None,
         min_height: Optional[int] = None,
@@ -619,6 +657,7 @@ class SortingService:
         cp_list = checkpoints.split(",") if checkpoints else None
         lr_list = loras.split(",") if loras else None
         prompt_list = prompts.split(",") if prompts else None
+        search_query = search.strip() if search else None
 
         image_ids = db.get_filtered_image_ids(
             generators=gen_list,
@@ -626,6 +665,7 @@ class SortingService:
             ratings=rating_list,
             checkpoints=cp_list,
             loras=lr_list,
+            search_query=search_query,
             prompt_terms=prompt_list,
             min_width=min_width,
             max_width=max_width,

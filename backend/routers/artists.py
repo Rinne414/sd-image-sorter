@@ -11,7 +11,11 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from artist_identifier import get_artist_identifier, ArtistIdentifier
+from artist_identifier import (
+    get_artist_identifier,
+    ArtistIdentifier,
+    ARTIST_THRESHOLD_DEFAULT,
+)
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
 from model_health import get_model_health
 
@@ -49,13 +53,13 @@ class ArtistModelConfig(BaseModel):
 
 class IdentifyRequest(ArtistModelConfig):
     image_id: int = Field(..., ge=1)
-    threshold: float = Field(0.35, ge=0.0, le=1.0)
+    threshold: float = Field(ARTIST_THRESHOLD_DEFAULT, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
 
 
 class IdentifyBatchRequest(ArtistModelConfig):
     image_ids: List[int] = Field(..., min_length=1)
-    threshold: float = Field(0.35, ge=0.0, le=1.0)
+    threshold: float = Field(ARTIST_THRESHOLD_DEFAULT, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
 
 
@@ -163,7 +167,7 @@ async def identify_artist(request: IdentifyRequest):
     Args:
         request: IdentifyRequest with:
             - image_id: ID of image to analyze
-            - threshold: Minimum confidence to assign artist (default 0.35)
+            - threshold: Minimum confidence to assign artist (default 0.03)
             - top_k: Number of top predictions to return (default 5)
 
     Returns:

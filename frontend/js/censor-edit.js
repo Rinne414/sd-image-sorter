@@ -42,6 +42,7 @@ const CensorState = {
 
     // Config
     modelPath: localStorage.getItem('censor_model_path') || '',
+    showAdvancedLegacyModels: localStorage.getItem('censor_show_advanced_models') === '1',
     availableLegacyModels: [],
     backendModelStatus: null,
     outputFolder: localStorage.getItem('censor_output_folder') || '',
@@ -49,8 +50,8 @@ const CensorState = {
     style: 'mosaic',
     blockSize: 16,
     targetClasses: ['breasts', 'pussy', 'dick', 'anus'], // Matches Wenaka YOLO model classes
-    metadataOption: 'keep', // 'keep' or 'wash'
-    outputFormat: 'png' // 'png' or 'webp'
+    metadataOption: 'keep', // 'keep', 'minimal', or 'strip'
+    outputFormat: 'png' // 'png', 'jpg', or 'webp'
 };
 
 // Track bound handlers for cleanup to prevent memory leaks
@@ -63,6 +64,22 @@ let boundHandlers = {
     spaceKeydown: null,
     spaceKeyup: null
 };
+
+function isZhCn() {
+    return window.I18n?.getLang?.() === 'zh-CN';
+}
+
+function tText(enText, zhText) {
+    return isZhCn() ? zhText : enText;
+}
+
+function isEditableTarget(target) {
+    if (!target || !(target instanceof Element)) return false;
+    const tagName = String(target.tagName || '').toUpperCase();
+    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+    if (target.getAttribute('contenteditable') === 'true') return true;
+    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+}
 
 function cleanupGlobalListeners() {
     if (boundHandlers.mousemove) {
@@ -105,8 +122,10 @@ function initCensorEdit() {
 
     // Load saved settings (use optional chaining for elements that may not exist)
     const modelPathEl = $('#censor-model-path');
+    const advancedToggleEl = $('#censor-show-advanced-models');
     const outputFolderEl = $('#save-output-folder'); // Changed from removed rename-output-folder
     if (CensorState.modelPath && modelPathEl) modelPathEl.value = CensorState.modelPath;
+    if (advancedToggleEl) advancedToggleEl.checked = CensorState.showAdvancedLegacyModels;
     if (CensorState.outputFolder && outputFolderEl) outputFolderEl.value = CensorState.outputFolder;
     updateDetectionModelInputs();
     loadCensorModelStatus();
@@ -138,6 +157,8 @@ function bindEvents() {
     // Detection Modal handlers
     $('#btn-open-detect-modal')?.addEventListener('click', () => {
         $('#detect-modal')?.classList.add('visible');
+        updateDetectionModelInputs();
+        renderCensorCapabilityPanel();
     });
 
     $('#btn-close-detect-modal')?.addEventListener('click', () => {
@@ -184,6 +205,15 @@ function bindEvents() {
         renderCensorCapabilityPanel();
     });
 
+    $('#censor-show-advanced-models')?.addEventListener('change', (e) => {
+        CensorState.showAdvancedLegacyModels = Boolean(e.target.checked);
+        localStorage.setItem('censor_show_advanced_models', CensorState.showAdvancedLegacyModels ? '1' : '0');
+        const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
+        populateCensorModelSelect(legacy);
+        updateDetectionModelInputs();
+        syncAdvancedLegacyModelUi(legacy);
+    });
+
     $('#censor-confidence')?.addEventListener('input', (e) => {
         CensorState.confidence = parseFloat(e.target.value);
         $('#censor-confidence-value').textContent = CensorState.confidence.toFixed(2);
@@ -224,6 +254,8 @@ function bindEvents() {
             () => {
                 CensorState.queue = [];
                 CensorState.activeId = null;
+                CensorState.selectedItems.clear();
+                CensorState.lastSelectedIndex = -1;
                 CensorState.undoStack = [];
                 CensorState.baseCanvasState = null;
                 CensorState.baseItemState = null;
@@ -237,6 +269,10 @@ function bindEvents() {
 
     $('#btn-clear-queue')?.addEventListener('click', clearQueueHandler);
     $('#btn-clear-selected')?.addEventListener('click', clearQueueHandler);
+    $('#btn-queue-move-top')?.addEventListener('click', () => moveQueueSelection('top'));
+    $('#btn-queue-move-up')?.addEventListener('click', () => moveQueueSelection('up'));
+    $('#btn-queue-move-down')?.addEventListener('click', () => moveQueueSelection('down'));
+    $('#btn-queue-move-bottom')?.addEventListener('click', () => moveQueueSelection('bottom'));
 
     // Canvas Interactions
     const wrapper = $('#canvas-wrapper');
@@ -358,7 +394,7 @@ function bindEvents() {
     document.addEventListener('keydown', boundHandlers.keydown);
 
     // Add to Queue (Hook for Gallery)
-    window.App.addToCensorQueue = (imageIds) => {
+    window.App._addToCensorQueue = (imageIds) => {
         const { API } = window.App;
         imageIds.forEach(id => {
             if (!CensorState.queue.find(i => i.id === id)) {
@@ -394,6 +430,7 @@ function bindEvents() {
         if (censorView) {
             censorView.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+        return true;
     };
 
     // Collapse toggle listener for sections
@@ -421,6 +458,14 @@ function renderQueue() {
     const list = document.getElementById('censor-queue-list');
     if (!list) return;
 
+    const validIds = new Set(CensorState.queue.map(item => item.id));
+    CensorState.selectedItems = new Set(
+        [...CensorState.selectedItems].filter(id => validIds.has(id))
+    );
+    if (CensorState.activeId && !validIds.has(CensorState.activeId)) {
+        CensorState.activeId = null;
+    }
+
     // Handle empty state
     if (CensorState.queue.length === 0) {
         list.innerHTML = `
@@ -430,6 +475,7 @@ function renderQueue() {
                 <small>Select from Gallery</small>
             </div>
         `;
+        updateQueueSelection();
         return;
     }
 
@@ -542,6 +588,8 @@ function renderQueue() {
         img.setAttribute('aria-selected', String(isSelected));
         img.setAttribute('aria-pressed', String(isSelected));
     });
+
+    updateQueueSelection();
 }
 
 function initDragAndDrop() {
@@ -563,12 +611,103 @@ function updateQueueSelection() {
     const countEl = document.getElementById('queue-selection-count');
     if (countEl) {
         const count = CensorState.selectedItems.size;
-        countEl.textContent = count > 1 ? `${count} selected` : '';
-        countEl.style.display = count > 1 ? 'block' : 'none';
+        countEl.textContent = count > 0
+            ? tText(`${count} selected`, `已选 ${count} 项`)
+            : '';
+        countEl.style.display = count > 0 ? 'inline-flex' : 'none';
     }
+
+    updateQueueActionState();
+}
+
+function updateQueueActionState() {
+    const hasQueue = CensorState.queue.length > 0;
+    const hasSelection = CensorState.selectedItems.size > 0;
+    [
+        'btn-queue-move-top',
+        'btn-queue-move-up',
+        'btn-queue-move-down',
+        'btn-queue-move-bottom',
+    ].forEach(id => {
+        const button = document.getElementById(id);
+        if (!button) return;
+        button.disabled = !hasQueue || !hasSelection;
+    });
+}
+
+function getOrderedSelectedQueueIds() {
+    return CensorState.queue
+        .filter(item => CensorState.selectedItems.has(item.id))
+        .map(item => item.id);
+}
+
+function scrollQueueItemIntoView(itemId) {
+    const thumb = document.querySelector(`.queue-thumb-v2[data-id="${itemId}"]`);
+    thumb?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+}
+
+function moveQueueSelection(direction) {
+    const selectedIds = getOrderedSelectedQueueIds();
+    if (!selectedIds.length) {
+        window.App.showToast(
+            tText('Select at least one queue item first', '请先选中至少一个队列项目'),
+            'warning'
+        );
+        return;
+    }
+
+    const selectedSet = new Set(selectedIds);
+    let changed = false;
+
+    switch (direction) {
+        case 'top': {
+            const selectedItems = CensorState.queue.filter(item => selectedSet.has(item.id));
+            const remainingItems = CensorState.queue.filter(item => !selectedSet.has(item.id));
+            changed = CensorState.queue.length > 1 && selectedItems.length > 0;
+            CensorState.queue = [...selectedItems, ...remainingItems];
+            break;
+        }
+        case 'bottom': {
+            const selectedItems = CensorState.queue.filter(item => selectedSet.has(item.id));
+            const remainingItems = CensorState.queue.filter(item => !selectedSet.has(item.id));
+            changed = CensorState.queue.length > 1 && selectedItems.length > 0;
+            CensorState.queue = [...remainingItems, ...selectedItems];
+            break;
+        }
+        case 'up': {
+            for (let i = 1; i < CensorState.queue.length; i++) {
+                if (selectedSet.has(CensorState.queue[i].id) && !selectedSet.has(CensorState.queue[i - 1].id)) {
+                    [CensorState.queue[i - 1], CensorState.queue[i]] = [CensorState.queue[i], CensorState.queue[i - 1]];
+                    changed = true;
+                }
+            }
+            break;
+        }
+        case 'down': {
+            for (let i = CensorState.queue.length - 2; i >= 0; i--) {
+                if (selectedSet.has(CensorState.queue[i].id) && !selectedSet.has(CensorState.queue[i + 1].id)) {
+                    [CensorState.queue[i], CensorState.queue[i + 1]] = [CensorState.queue[i + 1], CensorState.queue[i]];
+                    changed = true;
+                }
+            }
+            break;
+        }
+        default:
+            return;
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    CensorState.lastSelectedIndex = CensorState.queue.findIndex(item => item.id === selectedIds[0]);
+    renderQueue();
+    scrollQueueItemIntoView(selectedIds[0]);
 }
 
 let draggedItemIndex = null;
+const QUEUE_DRAG_SCROLL_EDGE_PX = 64;
+const QUEUE_DRAG_SCROLL_STEP_PX = 28;
 
 function handleDragStart(e) {
     draggedItemIndex = parseInt(this.dataset.index, 10);
@@ -592,7 +731,27 @@ function handleDragEnd(e) {
 function handleDragOver(e) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    maybeAutoScrollQueue(e.clientY);
     return false;
+}
+
+function maybeAutoScrollQueue(clientY) {
+    const queueList = document.getElementById('censor-queue-list');
+    if (!queueList) return;
+
+    const rect = queueList.getBoundingClientRect();
+    if (!rect.height) return;
+
+    const distanceFromTop = clientY - rect.top;
+    const distanceFromBottom = rect.bottom - clientY;
+
+    if (distanceFromTop >= 0 && distanceFromTop < QUEUE_DRAG_SCROLL_EDGE_PX) {
+        const intensity = 1 - (distanceFromTop / QUEUE_DRAG_SCROLL_EDGE_PX);
+        queueList.scrollTop -= Math.max(10, Math.round(QUEUE_DRAG_SCROLL_STEP_PX * intensity));
+    } else if (distanceFromBottom >= 0 && distanceFromBottom < QUEUE_DRAG_SCROLL_EDGE_PX) {
+        const intensity = 1 - (distanceFromBottom / QUEUE_DRAG_SCROLL_EDGE_PX);
+        queueList.scrollTop += Math.max(10, Math.round(QUEUE_DRAG_SCROLL_STEP_PX * intensity));
+    }
 }
 
 function handleDrop(e) {
@@ -626,7 +785,7 @@ function handleDrop(e) {
         CensorState.queue.splice(adjustedTarget, 0, ...selectedItems);
 
         renderQueue();
-        updateQueueSelection();
+        scrollQueueItemIntoView(selectedItems[0]?.id);
     } else {
         // Single item move (original logic)
         const currentIndex = CensorState.queue.findIndex(item => item.id.toString() === draggedId);
@@ -636,6 +795,7 @@ function handleDrop(e) {
             CensorState.queue.splice(currentIndex, 1);
             CensorState.queue.splice(targetIndex, 0, item);
             renderQueue();
+            scrollQueueItemIntoView(item.id);
         }
     }
 
@@ -656,6 +816,10 @@ async function loadCanvasImage(id) {
     const item = CensorState.queue.find(i => i.id === id);
     if (!item) return;
 
+    CensorState.selectedItems.clear();
+    CensorState.selectedItems.add(id);
+    CensorState.lastSelectedIndex = CensorState.queue.findIndex(queueItem => queueItem.id === id);
+
     // Prevent race conditions from rapid clicking
     if (CensorState.isLoadingImage) return;
     CensorState.isLoadingImage = true;
@@ -666,6 +830,7 @@ async function loadCanvasImage(id) {
 
     CensorState.activeId = id;
     renderQueue();
+    scrollQueueItemIntoView(id);
 
     // Identify current and next canvas
     const currentCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
@@ -909,6 +1074,7 @@ function renderCensorCapabilityPanel() {
     const targetHelp = document.getElementById('censor-target-region-help');
     const promptHelp = document.getElementById('censor-text-prompt-help');
     const promptInput = document.getElementById('censor-text-prompt');
+    const simpleGuide = document.getElementById('censor-simple-guide');
     const targetChecks = Array.from(document.querySelectorAll('.target-region-check'));
 
     if (!panel) return;
@@ -979,27 +1145,114 @@ function renderCensorCapabilityPanel() {
 
     if (targetHelp) {
         if (quickFilterEnabled) {
-            targetHelp.textContent = 'These quick target filters are for the built-in privacy model and map to its fixed privacy classes.';
+            targetHelp.textContent = tText(
+                'These quick target filters are for the built-in privacy model and map to its fixed privacy classes.',
+                '这些快捷目标只会作用在内置隐私模型上，对应的是它自己的固定隐私类别。'
+            );
         } else if (modelType === 'nudenet') {
-            targetHelp.textContent = 'NudeNet uses its own built-in exposed/covered labels, so the quick privacy checkboxes are ignored here.';
+            targetHelp.textContent = tText(
+                'NudeNet uses its own built-in exposed/covered labels, so the quick privacy checkboxes are ignored here.',
+                'NudeNet 用的是自己内置的暴露/遮挡标签，所以这里的隐私复选框不会影响它。'
+            );
         } else {
-            targetHelp.textContent = 'The currently selected general model uses its own fixed classes. These quick privacy checkboxes do not change that model.';
+            targetHelp.textContent = tText(
+                'The currently selected general model uses its own fixed classes. These quick privacy checkboxes do not change that model.',
+                '当前这个通用模型只认它自己的固定类别，这些隐私复选框不会改变它的识别范围。'
+            );
         }
     }
 
-    if (promptInput) {
-        promptInput.disabled = !sam3?.available;
-    }
     if (promptHelp) {
         promptHelp.textContent = sam3?.available
-            ? 'Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.'
-            : (sam3?.message || 'SAM3 is not ready yet in this environment.');
+            ? tText(
+                'Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.',
+                '这里会对当前图片执行 SAM3 文本提示分割，这是给专业用户用的精细工具。'
+            )
+            : tText(
+                `You can still type a prompt here, but this machine cannot run SAM3 yet. ${sam3?.message || ''}`.trim(),
+                `你现在仍然可以先输入提示词，但这台机器暂时跑不了 SAM3。${sam3?.message || ''}`.trim()
+            );
+    }
+
+    if (promptInput) {
+        promptInput.readOnly = false;
+        promptInput.removeAttribute('disabled');
+        promptInput.setAttribute('aria-disabled', 'false');
+    }
+
+    if (simpleGuide) {
+        if (modelType === 'nudenet') {
+            simpleGuide.textContent = tText(
+                'NudeNet is the simple path: no text prompt, no custom labels. Just click Detect Current or Detect All and it will return its built-in NSFW/body-part boxes.',
+                'NudeNet 是最省事的路线：不用填文本，也不用自定义类别。直接点“检测当前”或“检测全部”，它会返回自己内置的 NSFW/身体部位框。'
+            );
+        } else if (modelType === 'both') {
+            simpleGuide.textContent = tText(
+                'Recommended for most people: run NudeNet together with the auto-picked privacy YOLO. The app will use the Wenaka privacy model when it is installed.',
+                '大多数人建议用这个：让 NudeNet 和自动挑选的隐私 YOLO 一起跑。只要装了 Wenaka 隐私模型，应用就会优先用它。'
+            );
+        } else if (selectedLegacy?.profile === 'privacy-censor') {
+            simpleGuide.textContent = tText(
+                'This local YOLO file is the privacy-part route. It only understands its fixed privacy labels and is meant for fast censor boxes, not free-text prompts.',
+                '当前这个本地 YOLO 文件就是隐私部位路线。它只认固定隐私标签，适合快速打码框，不支持任意文本提示。'
+            );
+        } else if (selectedLegacy) {
+            simpleGuide.textContent = tText(
+                `${selectedLegacy.name} is a general fixed-class model kept for advanced compatibility and segmentation tests. It is not the normal privacy workflow and not an open-text detector.`,
+                `${selectedLegacy.name} 是保留下来的通用固定类模型，只给高级兼容/分割测试用。它不是普通隐私打码主流程，也不是开放文本检测器。`
+            );
+        } else {
+            simpleGuide.textContent = tText(
+                'Keep the recommended mode and leave custom paths blank unless you are doing advanced model experiments.',
+                '除非你在做高级模型实验，否则保持推荐模式、把自定义路径留空就好。'
+            );
+        }
     }
 }
 
 function formatLegacyModelOptionLabel(file) {
     const profile = file?.profile_label ? ` - ${file.profile_label}` : '';
-    return `${file.name} (${file.size_mb} MB)${profile}`;
+    const purpose = file?.recommended_for_censor
+        ? tText('Recommended privacy route', '推荐隐私路线')
+        : tText('Advanced test only', '仅高级测试');
+    return `${file.name} (${file.size_mb} MB)${profile} · ${purpose}`;
+}
+
+function getVisibleLegacyModels(files, currentValue = '') {
+    return files.filter((file) => {
+        if (!file?.path) return false;
+        if (CensorState.showAdvancedLegacyModels) return true;
+        if (file.recommended_for_censor) return true;
+        return Boolean(currentValue) && file.path === currentValue;
+    });
+}
+
+function syncAdvancedLegacyModelUi(legacyModel) {
+    const toggle = document.getElementById('censor-show-advanced-models');
+    const help = document.getElementById('censor-advanced-models-help');
+    if (toggle) {
+        toggle.checked = CensorState.showAdvancedLegacyModels;
+    }
+    if (!help) return;
+
+    const generalCount = Number(legacyModel?.general_model_count || 0);
+    if (generalCount <= 0) {
+        help.textContent = tText(
+            'No extra general YOLO compatibility models were found locally.',
+            '本地没有额外的通用 YOLO 兼容模型。'
+        );
+        return;
+    }
+
+    help.textContent = CensorState.showAdvancedLegacyModels
+        ? tText(
+            `${generalCount} advanced fixed-class YOLO model(s) are visible below. They are for compatibility tests, not normal privacy censoring.`,
+            `下方已显示 ${generalCount} 个高级固定类 YOLO 模型。它们是给兼容/分割测试用的，不是普通隐私打码主流程。`
+        )
+        : tText(
+            `${generalCount} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler.`,
+            `为了让普通流程更简单，已隐藏 ${generalCount} 个高级固定类 YOLO 模型。`
+        );
 }
 
 function updateSelectedLegacyModelHelp(legacyModel) {
@@ -1008,18 +1261,24 @@ function updateSelectedLegacyModelHelp(legacyModel) {
 
     const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
     if (manualPath) {
-        help.textContent = 'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.';
+        help.textContent = tText(
+            'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.',
+            '当前正在使用自定义路径。如果你想让应用自动挑选推荐的本地隐私模型，就把这里留空。'
+        );
         return;
     }
 
     const selectedPath = String(document.getElementById('censor-model-file')?.value || '').trim();
     const selectedFile = getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacyModel?.default_model_path);
     if (!selectedFile) {
-        help.textContent = 'No legacy YOLO model was found locally. NudeNet can still work if it is installed.';
+        help.textContent = tText(
+            'No local YOLO model was found. NudeNet can still work if it is installed.',
+            '本地没有找到 YOLO 模型。如果已经装好 NudeNet，它仍然可以继续工作。'
+        );
         return;
     }
 
-    const parts = [`Selected: ${selectedFile.name}`];
+    const parts = [tText(`Selected: ${selectedFile.name}`, `当前选择：${selectedFile.name}`)];
     if (selectedFile.profile_label) {
         parts.push(selectedFile.profile_label);
     }
@@ -1035,10 +1294,11 @@ function populateCensorModelSelect(legacyModel) {
 
     const currentValue = CensorState.modelPath || '';
     const files = Array.isArray(legacyModel?.files) ? legacyModel.files : [];
+    const visibleFiles = getVisibleLegacyModels(files, currentValue);
     const seen = new Set();
-    const options = ['<option value="">Auto-pick the recommended local model</option>'];
+    const options = [`<option value="">${escapeHtml(tText('Auto-pick the recommended local model', '自动选择推荐的本地模型'))}</option>`];
 
-    files.forEach(file => {
+    visibleFiles.forEach(file => {
         if (!file?.path || seen.has(file.path)) return;
         seen.add(file.path);
         const label = formatLegacyModelOptionLabel(file);
@@ -1052,6 +1312,7 @@ function populateCensorModelSelect(legacyModel) {
         select.value = '';
     }
 
+    syncAdvancedLegacyModelUi(legacyModel);
     updateSelectedLegacyModelHelp(legacyModel);
     renderCensorCapabilityPanel();
 }
@@ -1061,9 +1322,11 @@ function updateDetectionModelInputs() {
     const needsLegacyPath = modelType === 'legacy' || modelType === 'both';
     const modelFileGroup = document.getElementById('censor-model-file')?.closest('.form-group');
     const modelPathGroup = document.getElementById('censor-model-path')?.closest('.form-group');
+    const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
+    const showAdvancedInputs = CensorState.showAdvancedLegacyModels || Boolean(manualPath);
 
     if (modelFileGroup) modelFileGroup.style.display = needsLegacyPath ? '' : 'none';
-    if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath ? '' : 'none';
+    if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath && showAdvancedInputs ? '' : 'none';
     renderCensorCapabilityPanel();
 }
 
@@ -1826,7 +2089,7 @@ function undo() {
 }
 
 function handleKeydown(e) {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (isEditableTarget(e.target)) return;
 
     // Only handle keys when censor view is active
     const censorView = document.getElementById('view-censor');
@@ -1841,6 +2104,24 @@ function handleKeydown(e) {
         e.preventDefault();
     } else if (code === 'ArrowRight') {
         navigateQueue(1);
+        e.preventDefault();
+    } else if (e.altKey && code === 'Home') {
+        moveQueueSelection('top');
+        e.preventDefault();
+    } else if (e.altKey && code === 'End') {
+        moveQueueSelection('bottom');
+        e.preventDefault();
+    } else if (e.altKey && code === 'ArrowUp') {
+        moveQueueSelection('up');
+        e.preventDefault();
+    } else if (e.altKey && code === 'ArrowDown') {
+        moveQueueSelection('down');
+        e.preventDefault();
+    } else if (e.ctrlKey && key === 'a') {
+        CensorState.selectedItems = new Set(CensorState.queue.map(item => item.id));
+        CensorState.lastSelectedIndex = CensorState.queue.length - 1;
+        updateQueueSelection();
+        window.App.showToast(tText('Selected the whole queue', '已选中整个队列'), 'info');
         e.preventDefault();
     }
     // Brush size [ ]
@@ -2130,7 +2411,7 @@ function initPanControls() {
 
     // Space key to enable pan mode - store for cleanup
     boundHandlers.spaceKeydown = (e) => {
-        if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        if (e.code === 'Space' && !isEditableTarget(document.activeElement)) {
             spacePressed = true;
             wrapper.style.cursor = 'grab';
             e.preventDefault();

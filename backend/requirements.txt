@@ -3,7 +3,7 @@ starlette<1.0  # Required for compatibility with FastAPI routers
 uvicorn[standard]>=0.27.0
 onnxruntime>=1.17.0
 Pillow>=10.0.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 huggingface-hub>=0.20.0
 aiofiles>=23.0.0
 python-multipart>=0.0.6

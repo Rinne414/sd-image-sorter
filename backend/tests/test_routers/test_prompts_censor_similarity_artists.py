@@ -4,6 +4,7 @@ Minimal route coverage for prompts, censor, similarity, and artists endpoints.
 Focuses on high-value validation behavior and a few lightweight success-path
 assertions that do not require heavy model execution.
 """
+import base64
 import sys
 from pathlib import Path
 
@@ -160,6 +161,40 @@ class TestCensorRouterValidation:
         )
 
         assert response.status_code == 400
+
+    def test_save_data_accepts_minimal_metadata_with_jpg_output(self, test_client, tmp_path):
+        from PIL import Image, PngImagePlugin
+
+        source_path = tmp_path / "source.png"
+        pnginfo = PngImagePlugin.PngInfo()
+        pnginfo.add_text("prompt", "manual metadata test")
+        Image.new("RGB", (32, 32), color="blue").save(source_path, pnginfo=pnginfo, dpi=(300, 300))
+
+        image_id = test_client.test_db.add_image(
+            path=str(source_path),
+            filename="source.png",
+            metadata_json="{}",
+        )
+
+        output_folder = tmp_path / "out"
+        payload_image = base64.b64encode(source_path.read_bytes()).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": "saved-image.png",
+                "output_folder": str(output_folder),
+                "metadata_option": "minimal",
+                "output_format": "jpg",
+                "original_image_id": image_id,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["filename"].endswith(".jpg")
+        assert (output_folder / data["filename"]).exists()
 
     def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
         from PIL import Image
@@ -331,6 +366,41 @@ class TestArtistsRouterValidation:
         assert response.status_code == 503
         assert "Artist model unavailable" in response.json()["error"]
 
+    def test_identify_uses_low_default_threshold(self, test_client, monkeypatch, tmp_path):
+        from artist_identifier import ARTIST_THRESHOLD_DEFAULT
+        from routers import artists as artists_router
+        from PIL import Image
+
+        image_path = tmp_path / "artist_threshold.png"
+        Image.new("RGB", (64, 64), color="orange").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="artist_threshold.png",
+            metadata_json="{}",
+        )
+
+        captured = {}
+
+        class FakeIdentifier:
+            def identify(self, _image_path, top_k=5):
+                return {
+                    "artist": "undefined",
+                    "confidence": 0.02,
+                    "top_predictions": [{"artist": "artist_a", "confidence": 0.02}],
+                    "model_loaded": True,
+                }
+
+        def fake_get_identifier(**kwargs):
+            captured.update(kwargs)
+            return FakeIdentifier()
+
+        monkeypatch.setattr(artists_router, "get_artist_identifier", fake_get_identifier)
+
+        response = test_client.post("/api/artists/identify", json={"image_id": image_id})
+
+        assert response.status_code == 200
+        assert captured["threshold"] == ARTIST_THRESHOLD_DEFAULT
+
     def test_identify_batch_passes_model_configuration_to_background_task(self, test_client, monkeypatch, tmp_path):
         from routers import artists as artists_router
 
@@ -366,6 +436,41 @@ class TestArtistsRouterValidation:
             "model_source": "local",
             "model_path": str(model_path.resolve()),
         }
+
+    def test_identify_batch_uses_low_default_threshold(self, test_client, monkeypatch):
+        from artist_identifier import ARTIST_THRESHOLD_DEFAULT
+        from routers import artists as artists_router
+
+        captured = {}
+        artists_router._batch_progress = {
+            "running": False,
+            "total": 0,
+            "processed": 0,
+            "errors": 0,
+            "results": [],
+            "step": "idle",
+            "message": "",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
+        }
+
+        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
+            captured["image_ids"] = image_ids
+            captured["threshold"] = threshold
+            captured["top_k"] = top_k
+            captured["model_source"] = model_source
+            captured["model_path"] = model_path
+
+        monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
+
+        response = test_client.post("/api/artists/identify-batch", json={"image_ids": [1, 2]})
+
+        assert response.status_code == 200
+        assert captured["threshold"] == ARTIST_THRESHOLD_DEFAULT
+        assert captured["top_k"] == 5
+        assert captured["model_source"] == "huggingface"
+        assert captured["model_path"] is None
 
     def test_artist_diagnostics_returns_runtime_payload(self, test_client):
         response = test_client.get("/api/artists/diagnostics")

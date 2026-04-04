@@ -6347,6 +6347,22 @@ input[type="radio"],
     text-align: center;
 }
 
+.autosep-move-errors {
+    display: grid;
+    gap: 6px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(248, 113, 113, 0.24);
+    background: rgba(127, 29, 29, 0.24);
+    color: #fecaca;
+    font-size: 12px;
+}
+
+.autosep-move-error-item {
+    line-height: 1.45;
+    word-break: break-word;
+}
+
 /* ===== UX Enhancement: Cancel Button for Operations ===== */
 .operation-controls {
     display: flex;

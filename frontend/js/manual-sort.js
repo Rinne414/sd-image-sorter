@@ -193,6 +193,7 @@ async function startSorting() {
     const checkpoints = f.checkpoints?.length > 0 ? f.checkpoints : null;
     const loras = f.loras?.length > 0 ? f.loras : null;
     const prompts = f.prompts?.length > 0 ? f.prompts : null;
+    const search = f.search?.trim() || null;
     const dimensions = {
         minWidth: f.minWidth,
         maxWidth: f.maxWidth,
@@ -214,7 +215,8 @@ async function startSorting() {
             checkpoints,
             loras,
             prompts,
-            dimensions
+            dimensions,
+            search
         );
 
         if (result.total_images === 0) {
@@ -234,6 +236,7 @@ async function startSorting() {
                 checkpoints: checkpoints,
                 loras: loras,
                 prompts: prompts,
+                search: search,
                 minWidth: f.minWidth,
                 maxWidth: f.maxWidth,
                 minHeight: f.minHeight,
@@ -900,6 +903,10 @@ function updateManualSortFilterSummary() {
     // Prompts
     const promptEl = $('#manual-sort-summary-prompts');
     if (promptEl) promptEl.textContent = summary.prompts;
+
+    // Search
+    const searchEl = $('#manual-sort-summary-search');
+    if (searchEl) searchEl.textContent = summary.search;
 
     // Dimensions
     const dimEl = $('#manual-sort-summary-dimensions');

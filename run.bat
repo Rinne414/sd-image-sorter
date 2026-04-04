@@ -8,7 +8,7 @@ echo.
 
 cd /d "%~dp0"
 
-REM ── Find Python ────────────────────────────────────────────────
+REM -- Find Python
 set "PYTHON_CMD="
 
 REM Try common Anaconda locations first
@@ -46,7 +46,7 @@ exit /b 1
 :found_python
 echo [OK] Found Python: !PYTHON_CMD!
 
-REM ── Check Python version (>= 3.9) ─────────────────────────────
+REM -- Check Python version (>= 3.9)
 set "PY_VER="
 set "PY_MAJOR=0"
 set "PY_MINOR=0"
@@ -78,7 +78,7 @@ if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 9 (
 echo [OK] Python !PY_VER!
 echo.
 
-REM ── Detect first run ──────────────────────────────────────────
+REM -- Detect first run
 set FIRST_RUN=0
 if not exist "backend\venv\Scripts\python.exe" set FIRST_RUN=1
 set NEED_INSTALL=0
@@ -161,7 +161,7 @@ echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.
 
-REM ── Open browser and start server ─────────────────────────────
+REM -- Open browser and start server
 start "" http://localhost:8000
 
 cd backend

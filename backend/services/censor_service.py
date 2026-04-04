@@ -87,7 +87,7 @@ class CensorSaveDataRequest(BaseModel):
     image_data: str = Field(..., max_length=100_000_000)  # ~75MB decoded
     filename: str = Field(..., min_length=1)
     output_folder: str = Field(..., min_length=1)
-    metadata_option: str = Field("keep", pattern="^(keep|strip)$")
+    metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
     original_image_id: Optional[int] = Field(None, ge=1)
 
@@ -666,7 +666,7 @@ class CensorService:
         if metadata_option == "strip":
             return save_kwargs
 
-        if metadata_option != "keep" or not original_image_id:
+        if metadata_option not in {"keep", "minimal"} or not original_image_id:
             return save_kwargs
 
         original_image_data = db.get_image_by_id(original_image_id)
@@ -676,16 +676,16 @@ class CensorService:
         try:
             original_img = Image.open(self._ensure_safe_existing_file(original_image_data["path"]))
 
-            if 'exif' in original_img.info:
-                save_kwargs['exif'] = original_img.info['exif']
-
             if 'icc_profile' in original_img.info:
                 save_kwargs['icc_profile'] = original_img.info['icc_profile']
 
             if 'dpi' in original_img.info:
                 save_kwargs['dpi'] = original_img.info['dpi']
 
-            if output_format == 'png':
+            if metadata_option == "keep" and 'exif' in original_img.info:
+                save_kwargs['exif'] = original_img.info['exif']
+
+            if metadata_option == "keep" and output_format == 'png':
                 pnginfo = self._copy_png_text_metadata(original_img)
                 if pnginfo:
                     save_kwargs['pnginfo'] = pnginfo
@@ -712,5 +712,5 @@ class CensorService:
             jpeg_kwargs = {k: v for k, v in save_kwargs.items() if k in ['exif', 'icc_profile', 'dpi']}
             image.save(output_path, format='JPEG', quality=95, **jpeg_kwargs)
         else:
-            png_kwargs = {k: v for k, v in save_kwargs.items() if k in ['pnginfo', 'dpi']}
+            png_kwargs = {k: v for k, v in save_kwargs.items() if k in ['pnginfo', 'dpi', 'icc_profile']}
             image.save(output_path, format='PNG', **png_kwargs)

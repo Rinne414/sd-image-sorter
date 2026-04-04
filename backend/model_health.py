@@ -490,6 +490,11 @@ def get_model_health() -> Dict[str, Any]:
             "checkpoint_path": artist_checkpoint,
             "class_mapping_path": artist_class_mapping,
             "missing_dependencies": artist_missing,
+            "runtime_note": (
+                "On Windows, comfyui-lsnet may log 'SkaFn failed; falling back to PyTorchSkaFn'. That fallback is usually okay if artist predictions still appear."
+                if platform.system() == "Windows"
+                else None
+            ),
             "message": (
                 "Kaloscope runtime is ready."
                 if artist_runtime_path and artist_checkpoint and artist_class_mapping and not artist_missing

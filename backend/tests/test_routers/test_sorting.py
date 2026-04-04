@@ -303,6 +303,21 @@ class TestBatchMove:
         data = response.json()
         assert "count" in data
 
+    def test_batch_move_forwards_search_query(self, test_client, tmp_path: Path):
+        """Batch move should forward free-text search to the filtering layer."""
+        with patch("services.sorting_service.db.get_filtered_image_count", return_value=0) as mock_count:
+            response = test_client.post(
+                "/api/batch-move",
+                json={
+                    "search": "manual_test_autosep_token_20260405",
+                    "destination_folder": str(tmp_path)
+                }
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_count.call_args.kwargs
+        assert kwargs["search_query"] == "manual_test_autosep_token_20260405"
+
     def test_batch_move_invalid_destination(self, test_client):
         """Batch move to invalid destination - path validation allows creation."""
         response = test_client.post(
@@ -401,6 +416,17 @@ class TestSortSession:
         assert response.status_code == 200
         data = response.json()
         assert data["total_images"] == 0
+
+    def test_start_sort_session_forwards_search_query(self, test_client):
+        """Manual sort should pass the free-text search filter into the ID query."""
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start?search=manual_test_autosep_token_20260405"
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["search_query"] == "manual_test_autosep_token_20260405"
 
     def test_start_sort_session_rejects_invalid_folders_payload(self, test_client):
         """Bad folders JSON should fail instead of silently becoming an empty config."""

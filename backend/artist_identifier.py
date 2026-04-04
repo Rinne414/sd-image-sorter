@@ -17,7 +17,7 @@ Model Sources:
 Usage:
     from artist_identifier import ArtistIdentifier
 
-    identifier = ArtistIdentifier(threshold=0.5)
+    identifier = ArtistIdentifier(threshold=0.03)
     result = identifier.identify("path/to/image.png")
     # Returns: {"artist": "some_artist", "confidence": 0.85, "top_predictions": [...]}
 """
@@ -51,6 +51,7 @@ logger = logging.getLogger("sd-image-sorter.artist")
 _model = None
 _processor = None
 _model_lock = threading.Lock()
+ARTIST_THRESHOLD_DEFAULT = 0.03
 _model_source = None
 
 
@@ -710,7 +711,7 @@ class ArtistIdentifier:
         self,
         model_path: Optional[str] = None,
         model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
-        threshold: float = 0.35,
+        threshold: float = ARTIST_THRESHOLD_DEFAULT,
         artists_list: Optional[List[str]] = None,
     ):
         """
@@ -719,7 +720,9 @@ class ArtistIdentifier:
         Args:
             model_path: Path to local model file (ONNX or PyTorch)
             model_source: "huggingface", "modelscope", or "local"
-            threshold: Minimum confidence threshold. Below this = "undefined"
+            threshold: Minimum confidence threshold. Kaloscope logits are
+                usually quite low, so values around 0.02-0.08 are more
+                realistic than the old 0.35 default.
             artists_list: Custom list of artist names (optional)
         """
         self.model_path = model_path
@@ -1074,7 +1077,7 @@ class ArtistIdentifier:
             logits = logits[0]
 
         probs = torch.nn.functional.softmax(logits, dim=0)
-        return probs.numpy()
+        return probs.detach().cpu().numpy()
 
     def _run_torch_classifier(self, image: Image.Image) -> np.ndarray:
         """Run inference with a Transformers-compatible image classifier."""
@@ -1091,7 +1094,7 @@ class ArtistIdentifier:
             logits = outputs.logits[0]
 
         probs = torch.nn.functional.softmax(logits, dim=0)
-        return probs.numpy()
+        return probs.detach().cpu().numpy()
 
     def set_threshold(self, threshold: float):
         """Set the confidence threshold."""
@@ -1126,7 +1129,7 @@ _identifier = None
 def get_artist_identifier(
     model_path: Optional[str] = None,
     model_source: str = ARTIST_MODEL_SOURCE_DEFAULT,
-    threshold: float = 0.35,
+    threshold: float = ARTIST_THRESHOLD_DEFAULT,
 ) -> ArtistIdentifier:
     """Get the singleton artist identifier."""
     global _identifier

@@ -204,6 +204,10 @@
                             <span class="summary-label">Prompt:</span>
                             <span class="summary-value" id="summary-prompt">-</span>
                         </div>
+                        <div class="summary-row">
+                            <span class="summary-label">Search:</span>
+                            <span class="summary-value" id="summary-search">None</span>
+                        </div>
                         <div class="summary-row" id="artist-filter-row" style="display: none;">
                             <span class="summary-label">Artist:</span>
                             <span class="summary-value" id="summary-artist">-</span>
@@ -406,6 +410,8 @@
                                         id="autosep-summary-loras">None</span></span>
                                 <span class="summary-item"><strong>Prompts:</strong> <span
                                         id="autosep-summary-prompts">None</span></span>
+                                <span class="summary-item"><strong>Search:</strong> <span
+                                        id="autosep-summary-search">None</span></span>
                                 <span class="summary-item"><strong>Dimensions:</strong> <span
                                         id="autosep-summary-dimensions">Any</span></span>
                             </div>
@@ -519,6 +525,8 @@
                                         id="manual-sort-summary-loras">None</span></span>
                                 <span class="summary-item"><strong>Prompts:</strong> <span
                                         id="manual-sort-summary-prompts">None</span></span>
+                                <span class="summary-item"><strong>Search:</strong> <span
+                                        id="manual-sort-summary-search">None</span></span>
                                 <span class="summary-item"><strong>Dimensions:</strong> <span
                                         id="manual-sort-summary-dimensions">Any</span></span>
                             </div>
@@ -667,8 +675,23 @@
                     <!-- Left Sidebar (Queue Only) -->
                     <aside class="censor-sidebar-v2 left">
                         <div class="sidebar-header-v2">
-                            <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
-                            <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Drag to reorder • Click to edit</p>
+                              <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
+                              <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Click to edit • Ctrl/Shift multi-select • Use Top/Bottom or Alt+Home/End for big queues</p>
+                            <div class="queue-actions-row">
+                                <span class="queue-selection-count" id="queue-selection-count"></span>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-top" type="button">
+                                    ⤒ <span data-i18n="censor.moveTop">Top</span>
+                                </button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-up" type="button">
+                                    ↑ <span data-i18n="censor.moveUp">Up</span>
+                                </button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-down" type="button">
+                                    ↓ <span data-i18n="censor.moveDown">Down</span>
+                                </button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-bottom" type="button">
+                                    ⤓ <span data-i18n="censor.moveBottom">Bottom</span>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="censor-queue-grid" id="censor-queue-list">
@@ -870,6 +893,15 @@
                                 <option value="">Auto-pick the recommended local model</option>
                             </select>
                             <small class="helper-text" id="censor-model-file-help">The app will use the recommended local model automatically.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="censor-show-advanced-models">
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-text" data-i18n="censor.showAdvancedModels">Show advanced legacy models (YOLO26 / generic YOLOv8)</span>
+                            </label>
+                            <small class="helper-text" id="censor-advanced-models-help" data-i18n="censor.advancedModelsHelp">Leave this off unless you are doing compatibility tests or know which fixed-class model you want.</small>
                         </div>
 
                         <div class="form-group">
@@ -1123,9 +1155,9 @@
                                         placeholder="path/to/best_checkpoint.pth">
                                 </div>
                                 <div class="form-group">
-                                    <label><span data-i18n="artist.confidenceThreshold">Confidence Threshold</span>: <span id="artist-threshold-value">0.35</span></label>
-                                    <input type="range" id="artist-threshold" class="slider" min="0.1" max="0.9"
-                                        step="0.05" value="0.35">
+                                    <label><span data-i18n="artist.confidenceThreshold">Confidence Threshold</span>: <span id="artist-threshold-value">0.03</span></label>
+                                    <input type="range" id="artist-threshold" class="slider" min="0.00" max="0.25"
+                                        step="0.01" value="0.03">
                                     <small class="helper-text" data-i18n="artist.belowThreshold">Below this = "undefined"</small>
                                 </div>
                             </div>
@@ -1789,7 +1821,7 @@
                     <select id="save-metadata-option" class="input-field">
                         <option value="strip">Strip All Metadata (Recommended for sharing)</option>
                         <option value="keep">Keep Original Metadata</option>
-                        <option value="minimal">Keep Only Basic Info (dimensions, format)</option>
+                        <option value="minimal">Keep Only Color Profile / DPI</option>
                     </select>
                     <small class="helper-text">Choose how to handle image metadata/EXIF data</small>
                 </div>
@@ -1798,6 +1830,7 @@
                     <label>Output Format</label>
                     <select id="save-format-option" class="input-field">
                         <option value="png">PNG (Lossless, larger file)</option>
+                        <option value="jpg">JPG (Smaller file, widely compatible)</option>
                         <option value="webp">WebP (Smaller file, good quality)</option>
                     </select>
                     <small class="helper-text">Choose the output image format</small>

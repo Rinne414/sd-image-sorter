@@ -15,6 +15,7 @@
  *   - checkpoints: string
  *   - loras: string
  *   - prompts: string
+ *   - search: string
  *   - dimensions: string
  *   - artist: string
  */
@@ -49,6 +50,10 @@ function formatFilterSummary(filters) {
         prompts:
             !f.prompts || f.prompts.length === 0 ? 'None' :
                 f.prompts.length > 2 ? `${f.prompts.length} prompts` : f.prompts.join(', '),
+
+        search:
+            !f.search || !String(f.search).trim() ? 'None' :
+                String(f.search).trim().length > 40 ? `${String(f.search).trim().slice(0, 37)}...` : String(f.search).trim(),
 
         dimensions: formatDimensionsSummary(f),
 

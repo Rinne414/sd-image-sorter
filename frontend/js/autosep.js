@@ -93,6 +93,10 @@ function updateAutoSepSummary() {
     const promptEl = $('#autosep-summary-prompts');
     if (promptEl) promptEl.textContent = summary.prompts;
 
+    // Search
+    const searchEl = $('#autosep-summary-search');
+    if (searchEl) searchEl.textContent = summary.search;
+
     // Dimensions
     const dimEl = $('#autosep-summary-dimensions');
     if (dimEl) dimEl.textContent = summary.dimensions;
@@ -106,6 +110,7 @@ function getAutoSepFilterSignature(filters) {
         checkpoints: filters.checkpoints || [],
         loras: filters.loras || [],
         prompts: filters.prompts || [],
+        search: filters.search || '',
         minWidth: filters.minWidth || null,
         maxWidth: filters.maxWidth || null,
         minHeight: filters.minHeight || null,
@@ -185,6 +190,7 @@ async function updateAutoSepPreview() {
         (f.checkpoints?.length > 0) ||
         (f.loras?.length > 0) ||
         (f.prompts?.length > 0) ||
+        Boolean(f.search?.trim()) ||
         f.minWidth || f.maxWidth || f.minHeight || f.maxHeight || f.aspectRatio;
 
     if (!hasFilters) {
@@ -204,6 +210,7 @@ async function updateAutoSepPreview() {
             checkpoints: f.checkpoints?.length > 0 ? f.checkpoints : null,
             loras: f.loras?.length > 0 ? f.loras : null,
             prompts: f.prompts?.length > 0 ? f.prompts : null,
+            search: f.search?.trim() || null,
             minWidth: f.minWidth,
             maxWidth: f.maxWidth,
             minHeight: f.minHeight,
@@ -273,7 +280,8 @@ async function executeAutoSeparate() {
                     f.checkpoints?.length > 0 ? f.checkpoints : null,
                     f.loras?.length > 0 ? f.loras : null,
                     f.prompts?.length > 0 ? f.prompts : null,
-                    dimensions
+                    dimensions,
+                    f.search?.trim() || null
                 );
 
                 if (result.count === 0) {
@@ -326,6 +334,7 @@ window.invalidateAutoSepPreview = invalidateAutoSepPreview;
 
 // State for move operation
 let autosepMoveController = null;
+let autosepMoveTracker = null;
 
 function showAutosepMoveProgress(total) {
     const container = document.querySelector('.preview-section');
@@ -342,6 +351,7 @@ function showAutosepMoveProgress(total) {
                 <div class="progress-fill" id="autosep-move-fill" style="width: 0%"></div>
             </div>
             <div class="progress-text" id="autosep-move-text">Moving images...</div>
+            <div class="autosep-move-errors" id="autosep-move-errors" style="display: none;"></div>
             <div class="operation-controls">
                 <button class="btn-cancel-operation" id="btn-cancel-autosep-move">Hide</button>
             </div>
@@ -350,8 +360,13 @@ function showAutosepMoveProgress(total) {
     }
     
     progressEl.classList.add('visible');
+    autosepMoveTracker = window.App?.createProgressTracker?.() || null;
+    if (autosepMoveTracker && typeof window.App?.resetProgressTracker === 'function') {
+        window.App.resetProgressTracker(autosepMoveTracker);
+    }
     document.getElementById('autosep-move-fill').style.width = '0%';
     document.getElementById('autosep-move-text').textContent = `Preparing to move ${total} images in the background...`;
+    renderAutosepMoveErrors([]);
     
     // The backend move runs in the background; the UI can only dismiss progress.
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
@@ -367,7 +382,31 @@ function hideAutosepMoveProgress() {
     if (progressEl) {
         progressEl.classList.remove('visible');
     }
+    if (autosepMoveTracker && typeof window.App?.resetProgressTracker === 'function') {
+        window.App.resetProgressTracker(autosepMoveTracker);
+    }
+    autosepMoveTracker = null;
     autosepMoveController = null;
+}
+
+function renderAutosepMoveErrors(errors = []) {
+    const errorsEl = document.getElementById('autosep-move-errors');
+    if (!errorsEl) return;
+
+    const normalizedErrors = Array.isArray(errors)
+        ? errors.map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [];
+
+    if (!normalizedErrors.length) {
+        errorsEl.style.display = 'none';
+        errorsEl.innerHTML = '';
+        return;
+    }
+
+    errorsEl.style.display = 'block';
+    errorsEl.innerHTML = normalizedErrors
+        .map((entry) => `<div class="autosep-move-error-item">${window.escapeHtml(entry)}</div>`)
+        .join('');
 }
 
 function updateAutosepMoveProgress(progress = {}, fallbackTotal = 0) {
@@ -381,12 +420,25 @@ function updateAutosepMoveProgress(progress = {}, fallbackTotal = 0) {
         const errors = Number(progress.errors || 0);
         const percent = total > 0 ? Math.round((current / total) * 100) : 0;
         fillEl.style.width = percent + '%';
-        const details = [`${moved} moved`];
-        if (errors > 0) {
-            details.push(`${errors} error(s)`);
+        if (typeof window.App?.buildProgressText === 'function') {
+            textEl.textContent = window.App.buildProgressText({
+                progress,
+                completed: current,
+                total,
+                tracker: autosepMoveTracker,
+                defaultMessage: `Processed ${moved} moved${errors > 0 ? `, ${errors} error(s)` : ''}`,
+                primaryLabel: 'Auto-Separate'
+            });
+        } else {
+            const details = [`${moved} moved`];
+            if (errors > 0) {
+                details.push(`${errors} error(s)`);
+            }
+            textEl.textContent = `Processed ${current} of ${total} images (${details.join(', ')})`;
         }
-        textEl.textContent = `Processed ${current} of ${total} images (${details.join(', ')})`;
     }
+
+    renderAutosepMoveErrors(progress.recent_errors || []);
 }
 
 async function pollAutosepMoveProgress(expectedTotal, destination = '') {
@@ -519,7 +571,8 @@ async function executeAutoSeparateWithProgress() {
                     f.checkpoints?.length > 0 ? f.checkpoints : null,
                     f.loras?.length > 0 ? f.loras : null,
                     f.prompts?.length > 0 ? f.prompts : null,
-                    dimensions
+                    dimensions,
+                    f.search?.trim() || null
                 );
 
                 if (startResult?.error) {
