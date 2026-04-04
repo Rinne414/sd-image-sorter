@@ -218,18 +218,35 @@ ARTIST_MODEL_SOURCE_DEFAULT: str = os.environ.get(
     "huggingface"
 )
 
-# Current default stays on a Transformers-compatible image-classification model.
-# This is the most integration-friendly path for the existing pipeline, even if
-# a more domain-specific LSNet checkpoint may be preferable in the future.
+# Default artist model remains on the compatibility backend until the LSNet
+# runtime dependency story is stable across platforms.
 ARTIST_HF_MODEL_ID: str = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_HF_MODEL",
     "cafeai/cafe_style"
 )
 
-# ModelScope mirror / alternative id used when source="modelscope".
+# Optional ModelScope mirror id. Leave empty if you do not have a compatible mirror.
 ARTIST_MODELSCOPE_MODEL_ID: str = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL",
-    "AI-ModelScope/cafe-style"
+    ""
+)
+
+# Optional external LSNet runtime checkout path. This should point to the
+# `lsnet-test` repository root (or another compatible runtime providing the same
+# `model` package layout).
+ARTIST_LSNET_CODE_PATH: str = os.environ.get(
+    "SD_IMAGE_SORTER_LSNET_CODE_PATH",
+    ""
+)
+
+# Kaloscope checkpoint/class mapping files inside the HuggingFace repo.
+ARTIST_KALOSCOPE_CHECKPOINT: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_KALOSCOPE_CHECKPOINT",
+    "448-90.13/best_checkpoint.pth"
+)
+ARTIST_KALOSCOPE_CLASS_MAPPING: str = os.environ.get(
+    "SD_IMAGE_SORTER_ARTIST_KALOSCOPE_CLASS_MAPPING",
+    "class_mapping.csv"
 )
 
 

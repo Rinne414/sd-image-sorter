@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import get_artist_identifier, ArtistIdentifier
+from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
 
 logger = logging.getLogger(__name__)
 
@@ -396,14 +397,14 @@ async def list_models():
     available = ArtistIdentifier.is_available()
 
     models.append(ModelInfo(
-        name="cafe_style (HuggingFace)",
+        name=f"{ARTIST_HF_MODEL_ID} (HuggingFace)",
         source="huggingface",
         available=available,
         artist_count=0,  # Will be determined when loaded
     ))
 
     models.append(ModelInfo(
-        name="cafe_style (ModelScope)",
+        name=(f"{ARTIST_MODELSCOPE_MODEL_ID} (ModelScope)" if ARTIST_MODELSCOPE_MODEL_ID else "Custom ModelScope mirror"),
         source="modelscope",
         available=available,
         artist_count=0,

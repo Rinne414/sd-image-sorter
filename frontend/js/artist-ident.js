@@ -649,6 +649,7 @@ const ArtistIdent = {
             description: 'Identify the artist/style of your images using AI classification.',
             steps: [
                 { title: 'Configure', text: 'Select model source and confidence threshold' },
+                { title: 'Runtime', text: 'If you switch to Kaloscope2.0, you also need the external LSNet runtime checkout' },
                 { title: 'Identify', text: 'Click "Identify All Images" to analyze your library' },
                 { title: 'Explore', text: 'Browse identified artists and their images' },
                 { title: 'Filter', text: 'Use artist names to filter in Gallery' },

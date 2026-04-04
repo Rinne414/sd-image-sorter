@@ -23,7 +23,10 @@ Usage:
 """
 import logging
 import os
+import csv
+import sys
 import threading
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
@@ -32,6 +35,9 @@ from config import (
     ARTIST_MODEL_SOURCE_DEFAULT,
     ARTIST_HF_MODEL_ID,
     ARTIST_MODELSCOPE_MODEL_ID,
+    ARTIST_LSNET_CODE_PATH,
+    ARTIST_KALOSCOPE_CHECKPOINT,
+    ARTIST_KALOSCOPE_CLASS_MAPPING,
 )
 
 logger = logging.getLogger("sd-image-sorter.artist")
@@ -42,6 +48,52 @@ _model = None
 _processor = None
 _model_lock = threading.Lock()
 _model_source = None
+
+
+def _is_kaloscope_model_id(model_id: Optional[str]) -> bool:
+    normalized = str(model_id or "").strip().lower()
+    return normalized == "heathcliff01/kaloscope2.0"
+
+
+def _normalize_state_dict_keys(state_dict):
+    normalized = {}
+    for key, value in state_dict.items():
+        normalized[key[7:] if key.startswith("module.") else key] = value
+    return normalized
+
+
+def _resolve_lsnet_runtime_path() -> Optional[str]:
+    candidates = []
+    if ARTIST_LSNET_CODE_PATH:
+        candidates.append(ARTIST_LSNET_CODE_PATH)
+
+    project_root = Path(__file__).resolve().parent.parent
+    candidates.extend([
+        project_root / "models" / "artist" / "lsnet-test",
+        project_root / "third_party" / "lsnet-test",
+    ])
+
+    for candidate in candidates:
+        candidate_path = Path(candidate).expanduser().resolve()
+        if candidate_path.exists() and (candidate_path / "model").exists():
+            return str(candidate_path)
+    return None
+
+
+def _has_lsnet_runtime() -> bool:
+    runtime_path = _resolve_lsnet_runtime_path()
+    if not runtime_path:
+        return False
+
+    if runtime_path not in sys.path:
+        sys.path.insert(0, runtime_path)
+
+    try:
+        import timm  # noqa: F401
+        from model import lsnet_artist  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 # Default artist list (common anime artists)
 # This is a sample list - actual model will have its own labels
@@ -606,6 +658,115 @@ class ArtistIdentifier:
         self.artists = artists_list or DEFAULT_ARTISTS
         self._model: Any = None
         self._session: Any = None
+        self._processor: Any = None
+        self._transform: Any = None
+        self._input_size: int = 224
+        self._backend: str = "unknown"
+        self._load_error: Optional[str] = None
+
+    def _load_class_mapping_csv(self, csv_path: str) -> List[str]:
+        artists: List[str] = []
+        with open(csv_path, "r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if not reader.fieldnames or "class_id" not in reader.fieldnames or "class_name" not in reader.fieldnames:
+                raise RuntimeError("Kaloscope class mapping CSV must contain class_id and class_name columns.")
+
+            rows = []
+            for row in reader:
+                class_id = int(row["class_id"])
+                class_name = str(row["class_name"] or "").strip().strip("'").strip('"')
+                rows.append((class_id, class_name or f"unknown_{class_id}"))
+
+        rows.sort(key=lambda item: item[0])
+        artists = [name for _, name in rows]
+        if not artists:
+            raise RuntimeError("Kaloscope class mapping CSV is empty.")
+        return artists
+
+    def _load_kaloscope_checkpoint_blob(self, checkpoint_path: str):
+        import argparse
+        import torch
+
+        torch.serialization.add_safe_globals([argparse.Namespace])
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+        if not isinstance(checkpoint, dict):
+            raise RuntimeError("Unexpected Kaloscope checkpoint format.")
+        return checkpoint
+
+    def _load_kaloscope_runtime_modules(self):
+        runtime_path = _resolve_lsnet_runtime_path()
+        if not runtime_path:
+            raise RuntimeError(
+                "Kaloscope2.0 requires the LSNet runtime code.\n"
+                "Clone https://github.com/spawner1145/lsnet-test and set "
+                "SD_IMAGE_SORTER_LSNET_CODE_PATH to that repository root."
+            )
+
+        if runtime_path not in sys.path:
+            sys.path.insert(0, runtime_path)
+
+        try:
+            from model import lsnet_artist  # noqa: F401
+            from timm.models import create_model
+            from timm.data import resolve_data_config
+            from timm.data.transforms_factory import create_transform
+        except ModuleNotFoundError as exc:
+            if exc.name == "triton":
+                raise RuntimeError(
+                    "Kaloscope2.0 currently requires the LSNet runtime plus `triton`.\n"
+                    "The upstream LSNet runtime imports `triton`, which is not available in this environment.\n"
+                    "Do not switch the default artist backend to Kaloscope on this machine until that dependency is solved."
+                ) from exc
+        except ImportError as exc:
+            raise RuntimeError(
+                "Kaloscope2.0 requires `timm` plus the LSNet runtime repository.\n"
+                "Install `timm` and point SD_IMAGE_SORTER_LSNET_CODE_PATH at the lsnet-test checkout."
+            ) from exc
+
+        return create_model, resolve_data_config, create_transform
+
+    def _initialize_kaloscope(self, checkpoint_path: str, class_mapping_path: str):
+        import torch
+
+        create_model, resolve_data_config, create_transform = self._load_kaloscope_runtime_modules()
+        checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
+        args = checkpoint.get("args")
+        model_name = getattr(args, "model", None) or "lsnet_xl_artist_448"
+        feature_dim = getattr(args, "feature_dim", None)
+
+        artists = self._load_class_mapping_csv(class_mapping_path)
+        state_dict = checkpoint.get("model_ema") or checkpoint.get("model")
+        if state_dict is None:
+            raise RuntimeError("Kaloscope checkpoint is missing model weights.")
+        state_dict = _normalize_state_dict_keys(state_dict)
+
+        model = create_model(
+            model_name,
+            pretrained=False,
+            num_classes=len(artists),
+            feature_dim=feature_dim,
+        )
+        load_result = model.load_state_dict(state_dict, strict=False)
+        unexpected = [key for key in load_result.unexpected_keys if not key.startswith("head_dist")]
+        if unexpected:
+            logger.warning("Kaloscope unexpected keys ignored: %s", unexpected[:10])
+        if load_result.missing_keys:
+            logger.warning("Kaloscope missing keys during load: %s", load_result.missing_keys[:10])
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device)
+        model.eval()
+
+        data_config = resolve_data_config({}, model=model)
+        transform = create_transform(**data_config, is_training=False)
+
+        self._model = model
+        self._processor = None
+        self._transform = transform
+        self._input_size = int(getattr(args, "input_size", data_config.get("input_size", (3, 448, 448))[-1]))
+        self.artists = artists
+        self._backend = "kaloscope"
+        logger.info("Loaded Kaloscope model '%s' with %d artist classes", model_name, len(self.artists))
 
     def load(self):
         """Load the model (lazy loading)."""
@@ -634,72 +795,89 @@ class ArtistIdentifier:
                 import onnxruntime as ort  # type: ignore
                 self._session = ort.InferenceSession(path)
                 self._model = "onnx"
+                self._backend = "onnx"
             else:
-                # Try PyTorch
-                try:
-                    import torch
-                    self._model = torch.load(path, map_location='cpu')
-                    self._model.eval()
-                except Exception:
-                    # Fall back to ONNX runtime
-                    import onnxruntime as ort  # type: ignore
-                    self._session = ort.InferenceSession(path)
-                    self._model = "onnx"
+                class_mapping_path = os.path.join(os.path.dirname(path), ARTIST_KALOSCOPE_CLASS_MAPPING)
+                if os.path.exists(class_mapping_path):
+                    self._initialize_kaloscope(path, class_mapping_path)
+                else:
+                    # Try generic PyTorch model as legacy fallback
+                    try:
+                        import torch
+                        self._model = torch.load(path, map_location='cpu')
+                        self._model.eval()
+                        self._backend = "torch-generic"
+                    except Exception:
+                        # Fall back to ONNX runtime
+                        import onnxruntime as ort  # type: ignore
+                        self._session = ort.InferenceSession(path)
+                        self._model = "onnx"
+                        self._backend = "onnx"
+            self._load_error = None
             logger.info(f"Loaded model from: {path}")
         except Exception as e:
             logger.warning(f"Failed to load model: {e}")
             self._model = "placeholder"
+            self._load_error = str(e)
 
     def _load_from_huggingface(self):
         """Load model from HuggingFace."""
         try:
-            # Try to use transformers for CLIP-based classification
-            from transformers import AutoImageProcessor, AutoModelForImageClassification
-
-            # Keep the default on a plain Transformers image-classification model.
-            # This favors integration compatibility today; it does not mean this is
-            # the best long-term artist model for bundling or release distribution.
             model_name = ARTIST_HF_MODEL_ID
 
             logger.info(f"Loading from HuggingFace: {model_name}")
-            self._processor = AutoImageProcessor.from_pretrained(model_name)
-            self._model = AutoModelForImageClassification.from_pretrained(model_name)
-            self._model.eval()
+            if _is_kaloscope_model_id(model_name):
+                from huggingface_hub import hf_hub_download
 
-            # Get artist names from model config
-            if hasattr(self._model.config, 'id2label'):
-                self.artists = [self._model.config.id2label.get(i, f"unknown_{i}")
-                               for i in range(len(self._model.config.id2label))]
+                checkpoint_path = hf_hub_download(model_name, filename=ARTIST_KALOSCOPE_CHECKPOINT)
+                class_mapping_path = hf_hub_download(model_name, filename=ARTIST_KALOSCOPE_CLASS_MAPPING)
+                self._initialize_kaloscope(checkpoint_path, class_mapping_path)
+            else:
+                from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-            logger.info(f"Loaded model with {len(self.artists)} styles")
+                self._processor = AutoImageProcessor.from_pretrained(model_name)
+                self._model = AutoModelForImageClassification.from_pretrained(model_name)
+                self._model.eval()
+                self._backend = "transformers"
+
+                if hasattr(self._model.config, 'id2label'):
+                    self.artists = [self._model.config.id2label.get(i, f"unknown_{i}")
+                                   for i in range(len(self._model.config.id2label))]
+
+                logger.info(f"Loaded model with {len(self.artists)} styles")
+            self._load_error = None
         except Exception as e:
             logger.warning(f"HuggingFace load failed: {e}")
             logger.info("Using placeholder mode (no model loaded)")
             self._model = "placeholder"
+            self._load_error = str(e)
 
     def _load_from_modelscope(self):
         """Load model from ModelScope."""
         try:
             from modelscope import snapshot_download  # type: ignore
-            from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-            # Download model from ModelScope
+            if not ARTIST_MODELSCOPE_MODEL_ID:
+                raise RuntimeError(
+                    "No compatible ModelScope artist model is configured. "
+                    "Use HuggingFace or set SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL."
+                )
+
             model_dir = snapshot_download(ARTIST_MODELSCOPE_MODEL_ID)
 
             logger.info("Loading from ModelScope")
-            self._processor = AutoImageProcessor.from_pretrained(model_dir)
-            self._model = AutoModelForImageClassification.from_pretrained(model_dir)
-            self._model.eval()
-
-            if hasattr(self._model.config, 'id2label'):
-                self.artists = [self._model.config.id2label.get(i, f"unknown_{i}")
-                               for i in range(len(self._model.config.id2label))]
-
-            logger.info(f"Loaded model with {len(self.artists)} styles")
+            checkpoint_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CHECKPOINT)
+            class_mapping_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CLASS_MAPPING)
+            if os.path.exists(checkpoint_path) and os.path.exists(class_mapping_path):
+                self._initialize_kaloscope(checkpoint_path, class_mapping_path)
+            else:
+                raise RuntimeError("Configured ModelScope artist model does not match the expected Kaloscope file layout.")
+            self._load_error = None
         except Exception as e:
             logger.warning(f"ModelScope load failed: {e}")
-            logger.info("Falling back to HuggingFace")
-            self._load_from_huggingface()
+            logger.info("Using placeholder mode (no model loaded)")
+            self._model = "placeholder"
+            self._load_error = str(e)
 
     def identify(
         self,
@@ -732,8 +910,9 @@ class ArtistIdentifier:
 
         if self._model == "placeholder":
             result["error"] = (
-                "Artist model unavailable. Install the required dependencies and restart the app, "
-                "or configure a working local model."
+                self._load_error
+                or "Artist model unavailable. Install the required dependencies and restart the app, "
+                   "or configure a working local model."
             )
             return result
 
@@ -744,9 +923,11 @@ class ArtistIdentifier:
             if self._session is not None:
                 # ONNX inference
                 predictions = self._run_onnx(image)
+            elif self._backend == "kaloscope":
+                predictions = self._run_kaloscope(image)
             else:
                 # PyTorch/Transformers inference
-                predictions = self._run_transformers(image)
+                predictions = self._run_torch_classifier(image)
 
             # Get top predictions
             top_indices = np.argsort(predictions)[::-1][:top_k]
@@ -795,20 +976,39 @@ class ArtistIdentifier:
         exp_logits = np.exp(logits - np.max(logits))
         return exp_logits / np.sum(exp_logits)
 
-    def _run_transformers(self, image: Image.Image) -> np.ndarray:
-        """Run inference with Transformers model."""
+    def _run_kaloscope(self, image: Image.Image) -> np.ndarray:
+        """Run inference with the LSNet/Kaloscope classifier."""
         import torch
 
-        # Preprocess
+        if self._transform is None:
+            raise RuntimeError("Kaloscope transform pipeline is not initialized.")
+
+        tensor = self._transform(image).unsqueeze(0)
+        assert self._model is not None
+        device = next(self._model.parameters()).device
+        with torch.no_grad():
+            logits = self._model(tensor.to(device))
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            logits = logits[0]
+
+        probs = torch.nn.functional.softmax(logits, dim=0)
+        return probs.numpy()
+
+    def _run_torch_classifier(self, image: Image.Image) -> np.ndarray:
+        """Run inference with a Transformers-compatible image classifier."""
+        import torch
+
+        if self._processor is None:
+            raise RuntimeError("Artist processor is not initialized.")
+
         inputs = self._processor(images=image, return_tensors="pt")
 
-        # Inference
         assert self._model is not None
         with torch.no_grad():
             outputs = self._model(**inputs)
             logits = outputs.logits[0]
 
-        # Softmax
         probs = torch.nn.functional.softmax(logits, dim=0)
         return probs.numpy()
 
@@ -824,8 +1024,15 @@ class ArtistIdentifier:
     def is_available() -> bool:
         """Check if artist identification is available."""
         try:
-            import torch
-            from transformers import AutoImageProcessor, AutoModelForImageClassification
+            import torch  # noqa: F401
+        except ImportError:
+            return False
+
+        if _is_kaloscope_model_id(ARTIST_HF_MODEL_ID):
+            return _has_lsnet_runtime()
+
+        try:
+            from transformers import AutoImageProcessor, AutoModelForImageClassification  # noqa: F401
             return True
         except ImportError:
             return False

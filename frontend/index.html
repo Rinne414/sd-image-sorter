@@ -1083,15 +1083,15 @@
                                 <div class="form-group">
                                     <label data-i18n="artist.modelSource">Model Source</label>
                                     <select id="artist-model-source" class="input-field">
-                                        <option value="huggingface" data-i18n="artist.huggingface">HuggingFace (Default)</option>
-                                        <option value="modelscope" data-i18n="artist.modelscope">ModelScope (China)</option>
-                                        <option value="local" data-i18n="artist.localModel">Local Model</option>
+                                        <option value="huggingface" data-i18n="artist.huggingface">HuggingFace (Configured)</option>
+                                        <option value="modelscope" data-i18n="artist.modelscope">ModelScope Mirror</option>
+                                        <option value="local" data-i18n="artist.localModel">Local Checkpoint</option>
                                     </select>
                                 </div>
                                 <div class="form-group" id="artist-local-model-group" style="display: none;">
                                     <label data-i18n="artist.localModelPath">Local Model Path</label>
                                     <input type="text" id="artist-model-path" class="input-field"
-                                        placeholder="path/to/model.onnx">
+                                        placeholder="path/to/best_checkpoint.pth">
                                 </div>
                                 <div class="form-group">
                                     <label><span data-i18n="artist.confidenceThreshold">Confidence Threshold</span>: <span id="artist-threshold-value">0.35</span></label>
