@@ -152,18 +152,154 @@ class TestImageCRUD:
         assert loras == ["lora1", "lora2", "lora3"]
 
     def test_add_image_replaces_existing(self, test_db):
-        """Adding image with same path should replace existing."""
+        """Adding an image with the same path should update in place."""
         path = "/test/duplicate.png"
 
         id1 = db.add_image(path=path, filename="duplicate.png", prompt="first")
         id2 = db.add_image(path=path, filename="duplicate.png", prompt="second")
 
-        # Both should exist, but the latest one should have the updated prompt
-        # Note: INSERT OR REPLACE may create a new ID, but path is unique
-        # So we check that the path only has one entry with the latest data
-        image = db.get_image_by_id(id2)
+        assert id2 == id1
+
+        image = db.get_image_by_id(id1)
         assert image["prompt"] == "second"
         assert image["path"] == path
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM images WHERE path = ?", (path,))
+            assert cursor.fetchone()[0] == 1
+
+    def test_rescan_preserves_child_records_for_existing_path(self, test_db):
+        """Rescanning an indexed path should not cascade-delete child rows."""
+        path = "/test/rescan.png"
+        image_id = db.add_image(
+            path=path,
+            filename="rescan.png",
+            prompt="first prompt",
+            loras=["first_style"],
+            metadata_json="{}",
+            width=512,
+            height=512,
+            file_size=1024,
+        )
+        db.add_tags(image_id, [
+            {"tag": "cat", "confidence": 0.9},
+            {"tag": "indoors", "confidence": 0.8},
+        ])
+
+        favorites = db.get_collection_by_slug("favorites")
+        db.add_collection_item(
+            collection_id=favorites["id"],
+            source_image_id=image_id,
+            copied_path="/favorites/rescan.png",
+            prompt="favorite prompt",
+            negative_prompt=None,
+            checkpoint=None,
+            loras='["first_style"]',
+            metadata_json="{}",
+            created_at=None,
+            width=512,
+            height=512,
+            file_size=1024,
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    image_id,
+                    "artist_one",
+                    0.97,
+                    json.dumps([{"artist": "artist_one", "confidence": 0.97}]),
+                ),
+            )
+
+        rescanned_id = db.add_image(
+            path=path,
+            filename="rescan.png",
+            prompt="rescanned prompt",
+            loras=["second_style"],
+            metadata_json='{"rescanned": true}',
+            width=768,
+            height=768,
+            file_size=2048,
+        )
+
+        assert rescanned_id == image_id
+        assert {tag["tag"] for tag in db.get_image_tags(image_id)} == {"cat", "indoors"}
+        assert image_id in db.get_favorite_source_ids()
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM images WHERE path = ?", (path,))
+            assert cursor.fetchone()[0] == 1
+
+            cursor.execute(
+                "SELECT artist, confidence FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            )
+            artist_row = cursor.fetchone()
+
+        assert artist_row["artist"] == "artist_one"
+        assert artist_row["confidence"] == pytest.approx(0.97)
+
+        image = db.get_image_by_id(image_id)
+        assert image["prompt"] == "rescanned prompt"
+        assert image["width"] == 768
+        assert image["height"] == 768
+
+    def test_update_image_metadata_refreshes_image_loras_index(self, test_db):
+        """Reparsing metadata should refresh the normalized image_loras rows."""
+        image_id = db.add_image(
+            path="/test/reparse.png",
+            filename="reparse.png",
+            generator="unknown",
+            prompt="portrait <lora:old_prompt:0.8>",
+            negative_prompt=None,
+            metadata_json="{}",
+            width=512,
+            height=512,
+            file_size=1024,
+            checkpoint=None,
+            loras=["old_style.safetensors"],
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT lora_name FROM image_loras WHERE image_id = ? ORDER BY lora_name",
+                (image_id,),
+            )
+            original_loras = [row["lora_name"] for row in cursor.fetchall()]
+
+        assert original_loras == ["old_prompt", "old_style"]
+
+        db.update_image_metadata(
+            image_id=image_id,
+            generator="comfyui",
+            prompt="portrait <lora:new_prompt:0.7>",
+            negative_prompt="low quality",
+            metadata_json='{"source": "reparse"}',
+            width=768,
+            height=1024,
+            file_size=2048,
+            checkpoint="updated_checkpoint.safetensors",
+            loras=["new_style.safetensors"],
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT lora_name FROM image_loras WHERE image_id = ? ORDER BY lora_name",
+                (image_id,),
+            )
+            refreshed_loras = [row["lora_name"] for row in cursor.fetchall()]
+
+        assert refreshed_loras == ["new_prompt", "new_style"]
 
 
 class TestTagOperations:

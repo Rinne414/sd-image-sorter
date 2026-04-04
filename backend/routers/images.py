@@ -144,6 +144,11 @@ async def get_images(
         description="Cursor for pagination (image ID from previous page's next_cursor)",
         examples=["42"],
     ),
+    offset: Optional[int] = Query(
+        default=None,
+        description="Offset for fallback pagination when the selected sort does not support cursor pagination",
+        examples=[200],
+    ),
     min_width: Optional[int] = Query(
         default=None,
         ge=1,
@@ -197,6 +202,7 @@ async def get_images(
         sort_by=sort_by,
         limit=limit,
         cursor=cursor,
+        offset=offset,
         min_width=min_width,
         max_width=max_width,
         min_height=min_height,

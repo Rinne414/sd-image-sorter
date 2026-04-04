@@ -13,7 +13,7 @@ from pathlib import Path
 from io import BytesIO
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from PIL import Image, PngImagePlugin
 
 import database as db
@@ -23,56 +23,72 @@ logger = logging.getLogger(__name__)
 
 class CensorDetectRequest(BaseModel):
     """Request model for detection."""
-    image_id: int
+    image_id: int = Field(..., ge=1)
     model_path: str = ""
-    model_type: str = "legacy"
-    confidence_threshold: float = 0.5
+    model_type: str = Field("legacy", pattern="^(legacy|nudenet|both)$")
+    confidence_threshold: float = Field(0.5, ge=0.0, le=1.0)
     exposed_only: bool = True
 
 
 class MaskRefineRequest(BaseModel):
     """Request model for mask refinement."""
-    image_id: int
-    box: List[int]
+    image_id: int = Field(..., ge=1)
+    box: List[int] = Field(..., min_length=4, max_length=4)
     text_prompt: Optional[str] = None
 
 
 class TextSegmentRequest(BaseModel):
     """Request model for text segmentation."""
-    image_id: int
-    text_prompt: str
+    image_id: int = Field(..., ge=1)
+    text_prompt: str = Field(..., min_length=1)
 
 
 class CensorApplyRequest(BaseModel):
     """Request model for censor apply/preview."""
-    image_id: int
-    regions: List[List[int]]
-    style: str = "mosaic"
-    block_size: int = 16
-    blur_radius: int = 20
+    image_id: int = Field(..., ge=1)
+    regions: List[List[int]] = Field(..., min_length=1)
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    block_size: int = Field(16, ge=1)
+    blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
+
+    @field_validator("regions")
+    @classmethod
+    def validate_regions(cls, value: List[List[int]]) -> List[List[int]]:
+        for region in value:
+            if len(region) != 4:
+                raise ValueError("Each region must contain exactly 4 coordinates")
+        return value
 
 
 class CensorSaveRequest(BaseModel):
     """Request model for censor save."""
-    image_id: int
-    regions: List[List[int]]
-    style: str = "mosaic"
-    block_size: int = 16
-    blur_radius: int = 20
+    image_id: int = Field(..., ge=1)
+    regions: List[List[int]] = Field(..., min_length=1)
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    block_size: int = Field(16, ge=1)
+    blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
-    output_folder: str
+    output_folder: str = Field(..., min_length=1)
     filename_suffix: str = "_censored"
+
+    @field_validator("regions")
+    @classmethod
+    def validate_save_regions(cls, value: List[List[int]]) -> List[List[int]]:
+        for region in value:
+            if len(region) != 4:
+                raise ValueError("Each region must contain exactly 4 coordinates")
+        return value
 
 
 class CensorSaveDataRequest(BaseModel):
     """Request to save base64 image data directly."""
     image_data: str = Field(..., max_length=100_000_000)  # ~75MB decoded
-    filename: str
-    output_folder: str
-    metadata_option: str = "keep"
-    output_format: str = "png"
-    original_image_id: Optional[int] = None
+    filename: str = Field(..., min_length=1)
+    output_folder: str = Field(..., min_length=1)
+    metadata_option: str = Field("keep", pattern="^(keep|strip)$")
+    output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
+    original_image_id: Optional[int] = Field(None, ge=1)
 
 
 class CensorService:

@@ -80,12 +80,14 @@ def scan_folder(
 
     # Process each image
     for i, image_path in enumerate(image_files):
+        filename = os.path.basename(image_path)
         try:
-            if progress_callback:
-                progress_callback(i + 1, result["total"], os.path.basename(image_path))
-            
             # Parse metadata
             metadata = parse_image(image_path)
+            if metadata["width"] <= 0 or metadata["height"] <= 0:
+                logger.warning("Skipping unreadable image during scan: %s", image_path)
+                result["errors"] += 1
+                continue
             
             # Get file timestamps
             stat = os.stat(image_path)
@@ -129,6 +131,9 @@ def scan_folder(
         except Exception as e:
             logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
             result["errors"] += 1
+        finally:
+            if progress_callback:
+                progress_callback(i + 1, result["total"], filename)
     
     return result
 

@@ -8,6 +8,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Environment variables (user-specific configuration)
 .env
@@ -47,6 +49,7 @@ backend/lora_debug.txt
 
 # IDE files
 .vscode/
+.vs/
 .idea/
 *.swp
 *.swo
@@ -68,6 +71,12 @@ backend/thumbnails/
 
 # Temp test directories
 .tmp_*/
+.playwright-tmp-results/
+test-results/
+artifacts/
+tests/e2e/node_modules/
+tests/e2e/test-results/
+tests/e2e/.pw-out/
 
 # Reference files (binaries, external tools)
 reference/

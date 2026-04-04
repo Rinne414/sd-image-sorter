@@ -10,7 +10,7 @@ import threading
 from typing import Optional, List, Dict, Any
 
 from fastapi import HTTPException, BackgroundTasks, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database as db
 from image_manager import scan_folder, move_image
@@ -29,7 +29,7 @@ FOLDER_KEY_MAX_LENGTH = 100
 BATCH_MOVE_LIMIT = 5000
 SEARCH_MAX_LENGTH = 1000
 VALID_ASPECT_RATIOS = ["square", "landscape", "portrait"]
-VALID_SORT_ACTIONS = ["move", "skip", "undo"]
+VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
 
 
 class ScanRequest(BaseModel):
@@ -122,7 +122,16 @@ class SortingService:
 
     def __init__(self):
         """Initialize the sorting service."""
-        self._scan_progress: Dict[str, Any] = {"status": "idle", "current": 0, "total": 0, "message": ""}
+        self._scan_progress: Dict[str, Any] = {
+            "status": "idle",
+            "current": 0,
+            "processed": 0,
+            "total": 0,
+            "errors": 0,
+            "new": 0,
+            "updated": 0,
+            "message": "",
+        }
         self._scan_lock = threading.Lock()
 
         self._sort_session: Dict[str, Any] = {
@@ -130,13 +139,88 @@ class SortingService:
             "image_ids": [],
             "current_index": 0,
             "folders": {},
-            "history": []
+            "history": [],
+            "redo_stack": [],
         }
         self._sort_session_lock = threading.Lock()
         
         # Batch move progress
-        self._batch_move_progress: Dict[str, Any] = {"status": "idle", "current": 0, "total": 0, "message": ""}
+        self._batch_move_progress: Dict[str, Any] = {
+            "status": "idle",
+            "current": 0,
+            "total": 0,
+            "message": "",
+            "errors": 0,
+            "moved": 0,
+        }
         self._batch_move_lock = threading.Lock()
+        self._batch_move_run_id = 0
+
+    def _get_sort_history_counts(self, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
+        """Summarize move/skip counts from the current manual-sort history."""
+        active_history = history if history is not None else self._sort_session.get("history", [])
+        sorted_count = sum(1 for item in active_history if item.get("action") == "move")
+        skipped_count = sum(1 for item in active_history if item.get("action") == "skip")
+        return {
+            "sorted_count": sorted_count,
+            "skipped_count": skipped_count,
+        }
+
+    def _get_sort_session_flags(
+        self,
+        history: Optional[List[Dict[str, Any]]] = None,
+        redo_stack: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """Expose undo/redo availability alongside move/skip counters."""
+        active_history = history if history is not None else self._sort_session.get("history", [])
+        active_redo = redo_stack if redo_stack is not None else self._sort_session.get("redo_stack", [])
+        return {
+            **self._get_sort_history_counts(active_history),
+            "undo_available": bool(active_history),
+            "redo_available": bool(active_redo),
+        }
+
+    def _filter_sort_actions(
+        self,
+        actions: Optional[List[Dict[str, Any]]],
+        valid_image_ids: set[int],
+    ) -> List[Dict[str, Any]]:
+        """Drop persisted sort actions that point at images no longer in the database."""
+        filtered: List[Dict[str, Any]] = []
+        for entry in actions or []:
+            image_id = entry.get("image_id")
+            if image_id in valid_image_ids:
+                filtered.append(entry)
+        return filtered
+
+    def _parse_sort_folders(self, folders: Optional[str]) -> Dict[str, str]:
+        """Parse and validate manual-sort folder config from query params."""
+        if not folders:
+            return {}
+
+        try:
+            raw_config = json.loads(folders)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid folders payload") from exc
+
+        if not isinstance(raw_config, dict):
+            raise HTTPException(status_code=400, detail="Invalid folders payload")
+
+        try:
+            config = FolderConfig(folders=raw_config)
+        except ValidationError as exc:
+            raise HTTPException(status_code=400, detail="Invalid folders payload") from exc
+
+        validated_folders = {}
+        for key, path in config.folders.items():
+            if not path:
+                continue
+            is_valid, error = validate_folder_path(path, allow_create=True)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=error or f"Invalid folder path for key '{key}'")
+            validated_folders[key] = path
+
+        return validated_folders
 
     def get_scan_progress(self) -> Dict[str, Any]:
         """Get the current scan progress."""
@@ -155,7 +239,11 @@ class SortingService:
                 self._scan_progress = {
                     "status": "idle",
                     "current": 0,
+                    "processed": 0,
                     "total": 0,
+                    "errors": 0,
+                    "new": 0,
+                    "updated": 0,
                     "message": "Reset by user"
                 }
                 return {"status": "reset", "message": "Scan progress reset to idle"}
@@ -176,14 +264,27 @@ class SortingService:
         """Reset batch move progress to idle."""
         with self._batch_move_lock:
             if self._batch_move_progress["status"] == "running":
-                self._batch_move_progress = {
-                    "status": "idle",
-                    "current": 0,
-                    "total": 0,
-                    "message": "Reset by user"
-                }
-                return {"status": "reset", "message": "Batch move progress reset"}
+                raise HTTPException(status_code=409, detail="Cannot reset batch move while it is still running")
             return {"status": self._batch_move_progress["status"], "message": "Nothing to reset"}
+
+    def _set_batch_move_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
+        """Only allow the active batch-move task to replace shared progress state."""
+        with self._batch_move_lock:
+            if run_id != self._batch_move_run_id:
+                return False
+            self._batch_move_progress = state
+            return True
+
+    def _update_batch_move_progress_if_current(self, run_id: int, **updates: Any) -> bool:
+        """Only allow the active batch-move task to mutate shared progress state."""
+        with self._batch_move_lock:
+            if run_id != self._batch_move_run_id:
+                return False
+            self._batch_move_progress = {
+                **self._batch_move_progress,
+                **updates,
+            }
+            return True
 
     def set_sort_session(self, session: Dict[str, Any]) -> None:
         """Set the sort session."""
@@ -210,22 +311,44 @@ class SortingService:
 
         def run_scan():
             with self._scan_lock:
-                self._scan_progress = {"status": "running", "current": 0, "total": 0, "message": "Starting..."}
+                self._scan_progress = {
+                    "status": "running",
+                    "current": 0,
+                    "processed": 0,
+                    "total": 0,
+                    "errors": 0,
+                    "new": 0,
+                    "updated": 0,
+                    "message": "Starting...",
+                }
 
             try:
                 def progress_cb(current, total, filename):
                     with self._scan_lock:
                         self._scan_progress["current"] = current
+                        self._scan_progress["processed"] = current
                         self._scan_progress["total"] = total
                         self._scan_progress["message"] = f"Processing: {filename}"
 
                 result = scan_folder(request.folder_path, request.recursive, progress_cb)
                 with self._scan_lock:
+                    errors = result.get("errors", 0)
+                    new_count = result.get("new", 0)
+                    updated_count = result.get("updated", 0)
+                    summary = f"Completed! {new_count} images indexed."
+                    if updated_count:
+                        summary += f" {updated_count} updated."
+                    if errors:
+                        summary += f" {errors} failed."
                     self._scan_progress = {
                         "status": "done",
                         "current": result["total"],
+                        "processed": result["total"],
                         "total": result["total"],
-                        "message": f"Completed! {result['new']} images indexed.",
+                        "errors": errors,
+                        "new": new_count,
+                        "updated": updated_count,
+                        "message": summary,
                         "result": result
                     }
             except Exception as e:
@@ -233,7 +356,11 @@ class SortingService:
                     self._scan_progress = {
                         "status": "error",
                         "current": self._scan_progress.get("current", 0),
+                        "processed": self._scan_progress.get("processed", self._scan_progress.get("current", 0)),
                         "total": self._scan_progress.get("total", 0),
+                        "errors": self._scan_progress.get("errors", 0),
+                        "new": self._scan_progress.get("new", 0),
+                        "updated": self._scan_progress.get("updated", 0),
                         "message": "Scan failed due to an internal error"
                     }
             finally:
@@ -281,6 +408,10 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
+        with self._batch_move_lock:
+            if self._batch_move_progress["status"] == "running":
+                raise HTTPException(status_code=409, detail="Batch move already in progress")
+
         generators = request.generators if request.generators else None
         tags = request.tags if request.tags else None
         ratings = request.ratings if request.ratings else None
@@ -303,28 +434,29 @@ class SortingService:
         )
 
         if total_count > BATCH_MOVE_LIMIT:
-            return {
-                "error": "Too many images to process safely",
-                "total_count": total_count,
-                "limit": BATCH_MOVE_LIMIT,
-                "message": f"Found {total_count} images matching filters. Maximum allowed is {BATCH_MOVE_LIMIT}."
-            }
+            raise HTTPException(
+                status_code=400,
+                detail=f"Found {total_count} images matching filters. Maximum allowed is {BATCH_MOVE_LIMIT}.",
+            )
 
         if total_count == 0:
             return {"message": "No images match the filters", "count": 0}
 
         # Run actual move in background with progress tracking
         destination_folder = request.destination_folder
+        with self._batch_move_lock:
+            self._batch_move_run_id += 1
+            run_id = self._batch_move_run_id
+            self._batch_move_progress = {
+                "status": "running",
+                "current": 0,
+                "total": total_count,
+                "message": f"Starting move of {total_count} images...",
+                "errors": 0,
+                "moved": 0,
+            }
         
         def run_batch_move():
-            with self._batch_move_lock:
-                self._batch_move_progress = {
-                    "status": "running",
-                    "current": 0,
-                    "total": total_count,
-                    "message": f"Starting move of {total_count} images..."
-                }
-
             try:
                 images = db.get_images(
                     generators=generators,
@@ -342,23 +474,26 @@ class SortingService:
                 )
 
                 if not images:
-                    with self._batch_move_lock:
-                        self._batch_move_progress = {
+                    self._set_batch_move_progress_if_current(
+                        run_id,
+                        {
                             "status": "done",
                             "current": 0,
                             "total": 0,
-                            "message": "No images match the filters"
+                            "message": "No images match the filters",
+                            "errors": 0,
+                            "moved": 0,
                         }
+                    )
                     return
 
                 os.makedirs(destination_folder, exist_ok=True)
 
                 moved = 0
+                processed = 0
                 errors = []
-                for i, image in enumerate(images):
-                    with self._batch_move_lock:
-                        self._batch_move_progress["current"] = i + 1
-                        self._batch_move_progress["message"] = f"Moving {image.get('filename', 'image')} ({i + 1}/{total_count})"
+                for image in images:
+                    filename = image.get("filename", "image")
 
                     if os.path.exists(image["path"]):
                         try:
@@ -366,27 +501,58 @@ class SortingService:
                             moved += 1
                         except Exception as e:
                             errors.append(f"Error moving {image['path']}: {e}")
+                    else:
+                        errors.append(f"Image file not found: {image['path']}")
 
-                with self._batch_move_lock:
-                    self._batch_move_progress = {
+                    processed += 1
+                    if not self._update_batch_move_progress_if_current(
+                        run_id,
+                        current=processed,
+                        total=total_count,
+                        errors=len(errors),
+                        moved=moved,
+                        message=f"Processed {filename} ({processed}/{total_count})",
+                    ):
+                        return
+
+                self._set_batch_move_progress_if_current(
+                    run_id,
+                    {
                         "status": "done",
-                        "current": moved,
+                        "current": total_count,
                         "total": total_count,
-                        "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else "")
+                        "errors": len(errors),
+                        "moved": moved,
+                        "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else ""),
                     }
+                )
 
             except Exception as e:
                 logger.error("Batch move failed: %s", e)
                 with self._batch_move_lock:
-                    self._batch_move_progress = {
+                    current = self._batch_move_progress.get("current", 0) if run_id == self._batch_move_run_id else 0
+                    errors_count = self._batch_move_progress.get("errors", 0) if run_id == self._batch_move_run_id else 0
+                    moved_count = self._batch_move_progress.get("moved", 0) if run_id == self._batch_move_run_id else 0
+
+                self._set_batch_move_progress_if_current(
+                    run_id,
+                    {
                         "status": "error",
-                        "current": self._batch_move_progress.get("current", 0),
+                        "current": current,
                         "total": total_count,
-                        "message": "Batch move failed due to an internal error"
+                        "errors": errors_count,
+                        "moved": moved_count,
+                        "message": "Batch move failed due to an internal error",
                     }
+                )
 
         background_tasks.add_task(run_batch_move)
-        return {"status": "started", "message": f"Moving {total_count} images in background", "total": total_count}
+        return {
+            "status": "started",
+            "message": f"Moving {total_count} images in background",
+            "total": total_count,
+            "count": total_count,
+        }
 
     def start_sort_session(
         self,
@@ -438,12 +604,7 @@ class SortingService:
             aspect_ratio=aspect_ratio
         )
 
-        folder_config = {}
-        try:
-            if folders:
-                folder_config = json.loads(folders)
-        except (TypeError, ValueError):
-            folder_config = {}
+        folder_config = self._parse_sort_folders(folders)
 
         with self._sort_session_lock:
             self._sort_session = {
@@ -451,7 +612,8 @@ class SortingService:
                 "image_ids": image_ids,
                 "current_index": 0,
                 "folders": folder_config,
-                "history": []
+                "history": [],
+                "redo_stack": [],
             }
             self._save_session_to_disk()
 
@@ -468,7 +630,19 @@ class SortingService:
         while True:
             with self._sort_session_lock:
                 if not self._sort_session["active"]:
-                    raise HTTPException(status_code=400, detail="No active sort session")
+                    return {
+                        "active": False,
+                        "done": True,
+                        "message": "No active sort session",
+                        "image": None,
+                        "tags": [],
+                        "index": 0,
+                        "total": 0,
+                        "remaining": 0,
+                        "image_ids": [],
+                        "folders": {},
+                        **self._get_sort_session_flags([], []),
+                    }
 
                 image_ids = self._sort_session["image_ids"]
                 if self._sort_session["current_index"] >= len(image_ids):
@@ -476,11 +650,13 @@ class SortingService:
 
                 current_id = image_ids[self._sort_session["current_index"]]
                 current_index = self._sort_session["current_index"]
+                history_snapshot = list(self._sort_session["history"])
 
             current = db.get_image_by_id(current_id)
             if not current:
                 with self._sort_session_lock:
                     self._sort_session["current_index"] += 1
+                    self._save_session_to_disk()
                 continue
 
             tags = db.get_image_tags(current_id)
@@ -490,7 +666,10 @@ class SortingService:
                 "tags": tags,
                 "index": current_index,
                 "total": len(image_ids),
-                "remaining": len(image_ids) - current_index
+                "remaining": len(image_ids) - current_index,
+                "image_ids": list(image_ids),
+                "folders": dict(self._sort_session["folders"]),
+                **self._get_sort_session_flags(history_snapshot, self._sort_session.get("redo_stack", [])),
             }
 
     def sort_action(
@@ -498,7 +677,7 @@ class SortingService:
         action: str,
         folder_key: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Perform a sort action: move, skip, or undo."""
+        """Perform a sort action: move, skip, undo, or redo."""
         if action not in VALID_SORT_ACTIONS:
             raise HTTPException(
                 status_code=400,
@@ -514,7 +693,9 @@ class SortingService:
             if action == "undo":
                 if self._sort_session["history"]:
                     last = self._sort_session["history"].pop()
+                    self._sort_session.setdefault("redo_stack", []).append(last)
                     undone_action = last.get("action")
+                    undone_folder_key = last.get("folder_key")
                     if last["action"] == "move":
                         image = db.get_image_by_id(last["image_id"])
                         if image:
@@ -524,14 +705,26 @@ class SortingService:
                                 logger.warning("Error moving image back during undo: %s", e)
                     self._sort_session["current_index"] = max(0, self._sort_session["current_index"] - 1)
                 else:
-                    return {"status": "no_history", "message": "Nothing to undo"}
+                    return {
+                        "status": "no_history",
+                        "message": "Nothing to undo",
+                        **self._get_sort_session_flags(),
+                    }
+
+                session_flags = self._get_sort_session_flags()
 
                 if self._sort_session["current_index"] < len(image_ids):
                     current_id = image_ids[self._sort_session["current_index"]]
                     current_index = self._sort_session["current_index"]
                     self._save_session_to_disk()
                 else:
-                    return {"status": "undone", "current_index": self._sort_session["current_index"]}
+                    return {
+                        "status": "undone",
+                        "current_index": self._sort_session["current_index"],
+                        "undone_action": undone_action,
+                        "folder_key": undone_folder_key,
+                        **session_flags,
+                    }
 
                 current = db.get_image_by_id(current_id)
                 if not current:
@@ -540,11 +733,92 @@ class SortingService:
                 return {
                     "status": "undone",
                     "undone_action": undone_action,
+                    "folder_key": undone_folder_key,
                     "image": current,
                     "tags": current_tags,
                     "index": current_index,
                     "total": len(image_ids),
-                    "remaining": len(image_ids) - current_index
+                    "remaining": len(image_ids) - current_index,
+                    "image_ids": list(image_ids),
+                    "folders": dict(self._sort_session["folders"]),
+                    **session_flags,
+                }
+
+            if action == "redo":
+                redo_stack = self._sort_session.setdefault("redo_stack", [])
+                if not redo_stack:
+                    return {
+                        "status": "no_redo",
+                        "message": "Nothing to redo",
+                        **self._get_sort_session_flags(),
+                    }
+
+                redo_entry = redo_stack.pop()
+                redone_action = redo_entry.get("action")
+                redone_folder_key = redo_entry.get("folder_key")
+                target_id = redo_entry.get("image_id")
+
+                if redone_action == "move":
+                    folder = self._sort_session["folders"].get(redone_folder_key)
+                    if not folder:
+                        redo_stack.append(redo_entry)
+                        return {
+                            "error": f"Folder {str(redone_folder_key).upper()} is not configured",
+                            **self._get_sort_session_flags(),
+                        }
+
+                    target_image = db.get_image_by_id(target_id) if target_id is not None else None
+                    if not target_image or not target_image.get("path") or not os.path.exists(target_image["path"]):
+                        redo_stack.append(redo_entry)
+                        return {
+                            "error": "Image file not found on disk",
+                            **self._get_sort_session_flags(),
+                        }
+
+                    try:
+                        redo_entry["new_path"] = move_image(target_image["id"], folder, target_image["path"])
+                    except Exception as e:
+                        logger.error("Redo move failed for image %s: %s", target_id, e)
+                        redo_stack.append(redo_entry)
+                        return {
+                            "error": "Failed to redo move",
+                            **self._get_sort_session_flags(),
+                        }
+
+                self._sort_session["history"].append(redo_entry)
+                self._sort_session["current_index"] += 1
+                session_flags = self._get_sort_session_flags()
+
+                if self._sort_session["current_index"] >= len(image_ids):
+                    self._save_session_to_disk()
+                    return {
+                        "status": "redone",
+                        "done": True,
+                        "message": "All images sorted",
+                        "redone_action": redone_action,
+                        "folder_key": redone_folder_key,
+                        **session_flags,
+                    }
+
+                next_id = image_ids[self._sort_session["current_index"]]
+                next_index = self._sort_session["current_index"]
+                self._save_session_to_disk()
+
+                next_image = db.get_image_by_id(next_id)
+                next_tags = db.get_image_tags(next_id) if next_image else []
+
+                return {
+                    "status": "redone",
+                    "redone_action": redone_action,
+                    "folder_key": redone_folder_key,
+                    "image": next_image,
+                    "tags": next_tags,
+                    "index": next_index,
+                    "total": len(image_ids),
+                    "remaining": len(image_ids) - next_index,
+                    "image_ids": list(image_ids),
+                    "folders": dict(self._sort_session["folders"]),
+                    **session_flags,
                 }
 
             if self._sort_session["current_index"] >= len(image_ids):
@@ -552,6 +826,12 @@ class SortingService:
 
             current_id = image_ids[self._sort_session["current_index"]]
             current_index = self._sort_session["current_index"]
+
+            if action == "move" and not folder_key:
+                return {
+                    "error": "Folder key is required for move",
+                    **self._get_sort_session_flags(),
+                }
 
             if action == "move" and folder_key:
                 folder = self._sort_session["folders"].get(folder_key)
@@ -563,8 +843,9 @@ class SortingService:
                 self._sort_session["current_index"] += 1
                 self._save_session_to_disk()
                 # Skip missing images: fetch next
+                session_flags = self._get_sort_session_flags()
                 if self._sort_session["current_index"] >= len(image_ids):
-                    return {"done": True, "message": "All images sorted"}
+                    return {"done": True, "message": "All images sorted", **session_flags}
                 next_id = image_ids[self._sort_session["current_index"]]
                 next_index = self._sort_session["current_index"]
                 next_image = db.get_image_by_id(next_id)
@@ -574,17 +855,25 @@ class SortingService:
                     "tags": next_tags,
                     "index": next_index,
                     "total": len(image_ids),
-                    "remaining": len(image_ids) - next_index
+                    "remaining": len(image_ids) - next_index,
+                    **session_flags,
                 }
 
             if action == "move" and folder_key:
                 if not folder:
-                    return {"error": f"Folder {folder_key.upper()} is not configured"}
+                    return {
+                        "error": f"Folder {folder_key.upper()} is not configured",
+                        **self._get_sort_session_flags(),
+                    }
                 if not current.get("path") or not os.path.exists(current["path"]):
-                    return {"error": "Image file not found on disk"}
+                    return {
+                        "error": "Image file not found on disk",
+                        **self._get_sort_session_flags(),
+                    }
                 try:
                     original_path = current["path"]
                     new_path = move_image(current["id"], folder, current["path"])
+                    self._sort_session["redo_stack"] = []
                     self._sort_session["history"].append({
                         "action": "move",
                         "image_id": current["id"],
@@ -594,18 +883,23 @@ class SortingService:
                     })
                 except Exception as e:
                     logger.error("Sort move failed for image %d: %s", current["id"], e)
-                    return {"error": "Failed to move image"}
+                    return {
+                        "error": "Failed to move image",
+                        **self._get_sort_session_flags(),
+                    }
             elif action == "skip":
+                self._sort_session["redo_stack"] = []
                 self._sort_session["history"].append({
                     "action": "skip",
                     "image_id": current["id"]
                 })
 
             self._sort_session["current_index"] += 1
+            session_flags = self._get_sort_session_flags()
 
             if self._sort_session["current_index"] >= len(image_ids):
                 self._save_session_to_disk()
-                return {"done": True, "message": "All images sorted"}
+                return {"done": True, "message": "All images sorted", **session_flags}
 
             next_id = image_ids[self._sort_session["current_index"]]
             next_index = self._sort_session["current_index"]
@@ -619,7 +913,8 @@ class SortingService:
                 "tags": next_tags,
                 "index": next_index,
                 "total": len(image_ids),
-                "remaining": len(image_ids) - next_index
+                "remaining": len(image_ids) - next_index,
+                **session_flags,
             }
 
     def set_sort_folders(self, config: FolderConfig) -> Dict[str, Any]:
@@ -644,7 +939,14 @@ class SortingService:
     def clear_sort_session(self) -> Dict[str, str]:
         """Clear the current sort session."""
         with self._sort_session_lock:
-            self._sort_session = {'active': False, 'image_ids': [], 'current_index': 0, 'folders': {}, 'history': []}
+            self._sort_session = {
+                'active': False,
+                'image_ids': [],
+                'current_index': 0,
+                'folders': {},
+                'history': [],
+                'redo_stack': [],
+            }
         try:
             if os.path.exists(SESSION_FILE):
                 os.remove(SESSION_FILE)
@@ -776,7 +1078,37 @@ class SortingService:
                 valid_ids = []
 
             if not valid_ids:
+                try:
+                    os.remove(SESSION_FILE)
+                except OSError:
+                    pass
                 return
+
+            original_index = data.get('current_index', 0)
+            try:
+                original_index = int(original_index)
+            except (TypeError, ValueError):
+                original_index = 0
+            original_index = max(0, min(original_index, len(image_ids)))
+
+            original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
+            restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
+            restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
+            history_image_ids = {entry.get('image_id') for entry in restored_history}
+            restored_redo_stack = [
+                entry for entry in restored_redo_stack
+                if entry.get('image_id') not in history_image_ids
+            ]
+            restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
+            restored_history = [
+                entry for entry in restored_history
+                if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
+            ]
+            restored_redo_stack = [
+                entry for entry in restored_redo_stack
+                if original_positions.get(entry.get('image_id'), -1) >= original_index
+            ]
+            restored_index = min(len(valid_ids), restored_index)
 
             # Validate all folder paths loaded from JSON
             validated_folders = {}
@@ -794,10 +1126,12 @@ class SortingService:
                 self._sort_session = {
                     'active': True,
                     'image_ids': valid_ids,
-                    'current_index': min(data.get('current_index', 0), len(valid_ids)),
+                    'current_index': restored_index,
                     'folders': validated_folders,
-                    'history': data.get('history', [])
+                    'history': restored_history,
+                    'redo_stack': restored_redo_stack,
                 }
+                self._save_session_to_disk()
             logger.info("Restored session: %d images", len(valid_ids))
         except Exception as e:
             logger.warning("Failed to restore session: %s", e)
@@ -810,6 +1144,7 @@ class SortingService:
                 'current_index': self._sort_session['current_index'],
                 'folders': self._sort_session['folders'],
                 'history': self._sort_session['history'],
+                'redo_stack': self._sort_session.get('redo_stack', []),
                 'image_ids': self._sort_session['image_ids']
             }
             with open(SESSION_FILE, 'w', encoding='utf-8') as f:

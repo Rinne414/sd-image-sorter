@@ -167,6 +167,28 @@ def extract_lora_names(loras_json: str, prompt: str) -> set:
     
     return loras
 
+
+def _serialize_loras(loras: Optional[List[str]]) -> Optional[str]:
+    """Serialize LoRA names for storage while preserving empty lists."""
+    return json.dumps(loras) if loras is not None else None
+
+
+def _sync_image_loras(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    loras: Optional[List[str]],
+    prompt: Optional[str],
+) -> None:
+    """Refresh the normalized image_loras rows for an image."""
+    cursor.execute("DELETE FROM image_loras WHERE image_id = ?", (image_id,))
+
+    lora_names = extract_lora_names(_serialize_loras(loras) or '', prompt or '')
+    for lora_name in lora_names:
+        cursor.execute(
+            "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
+            (image_id, lora_name)
+        )
+
 def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory and performance optimizations."""
     conn = sqlite3.connect(DATABASE_PATH)
@@ -444,27 +466,73 @@ def add_image(
     """Add an image to the database. Returns the image ID."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO images 
-            (path, filename, generator, prompt, negative_prompt, metadata_json, 
-             width, height, file_size, checkpoint, loras, created_at, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (path, filename, generator, prompt, negative_prompt, metadata_json,
-              width, height, file_size, checkpoint, json.dumps(loras) if loras else None, created_at))
-        image_id = cursor.lastrowid
-        
-        # Populate image_loras junction table for efficient filtering
-        if loras or (prompt and '<lora:' in prompt):
-            lora_names = extract_lora_names(
-                json.dumps(loras) if loras else '',
-                prompt or ''
-            )
-            for lora_name in lora_names:
-                cursor.execute(
-                    "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
-                    (image_id, lora_name)
+        serialized_loras = _serialize_loras(loras)
+        existing = cursor.execute(
+            "SELECT id FROM images WHERE path = ?",
+            (path,)
+        ).fetchone()
+
+        if existing:
+            image_id = existing["id"]
+            cursor.execute(
+                """
+                UPDATE images
+                SET filename = ?,
+                    generator = ?,
+                    prompt = ?,
+                    negative_prompt = ?,
+                    metadata_json = ?,
+                    width = ?,
+                    height = ?,
+                    file_size = ?,
+                    checkpoint = ?,
+                    loras = ?,
+                    created_at = COALESCE(?, created_at),
+                    indexed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (
+                    filename,
+                    generator,
+                    prompt,
+                    negative_prompt,
+                    metadata_json,
+                    width,
+                    height,
+                    file_size,
+                    checkpoint,
+                    serialized_loras,
+                    created_at,
+                    image_id,
                 )
-        
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO images
+                (path, filename, generator, prompt, negative_prompt, metadata_json,
+                 width, height, file_size, checkpoint, loras, created_at, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    path,
+                    filename,
+                    generator,
+                    prompt,
+                    negative_prompt,
+                    metadata_json,
+                    width,
+                    height,
+                    file_size,
+                    checkpoint,
+                    serialized_loras,
+                    created_at,
+                )
+            )
+            image_id = cursor.lastrowid
+
+        _sync_image_loras(cursor, image_id, loras, prompt)
+
         return image_id
 
 
@@ -1549,7 +1617,15 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
     """Get a single image by ID."""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM images WHERE id = ?", (image_id,))
+        cursor.execute(
+            """
+            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
+                   width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at
+            FROM images
+            WHERE id = ?
+            """,
+            (image_id,),
+        )
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -1570,7 +1646,12 @@ def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
         cursor = conn.cursor()
         placeholders = ",".join("?" * len(image_ids))
         cursor.execute(
-            f"SELECT * FROM images WHERE id IN ({placeholders})",
+            f"""
+            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
+                   width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at
+            FROM images
+            WHERE id IN ({placeholders})
+            """,
             image_ids
         )
         return {row['id']: dict(row) for row in cursor.fetchall()}
@@ -1696,6 +1777,7 @@ def update_image_metadata(
     """Update parsed metadata fields for an existing image without replacing the row."""
     with get_db() as conn:
         cursor = conn.cursor()
+        serialized_loras = _serialize_loras(loras)
         cursor.execute(
             """
             UPDATE images
@@ -1720,10 +1802,11 @@ def update_image_metadata(
                 height,
                 file_size,
                 checkpoint,
-                json.dumps(loras) if loras else None,
+                serialized_loras,
                 image_id,
             )
         )
+        _sync_image_loras(cursor, image_id, loras, prompt)
 
 
 def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:

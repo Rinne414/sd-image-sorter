@@ -11,13 +11,14 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 import database as db
 from image_manager import reparse_image_metadata
 from thumbnail_cache import (
     get_thumbnail,
     get_thumbnail_async,
+    generate_placeholder_thumbnail,
     clear_cache as clear_thumbnail_cache,
     cleanup_old_cache,
     get_cache_stats,
@@ -93,6 +94,7 @@ class ImageService:
         sort_by: str = "newest",
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: Optional[str] = None,
+        offset: Optional[int] = None,
         min_width: Optional[int] = None,
         max_width: Optional[int] = None,
         min_height: Optional[int] = None,
@@ -114,6 +116,7 @@ class ImageService:
             sort_by: Sorting method
             limit: Number of images to return
             cursor: Image ID cursor for pagination
+            offset: Offset for fallback pagination when cursor sorting is unavailable
             min_width: Minimum width filter
             max_width: Maximum width filter
             min_height: Minimum height filter
@@ -172,8 +175,32 @@ class ImageService:
                     detail="Invalid cursor format. Must be an integer image ID."
                 )
 
-        # Fetch from database
-        return db.get_images_paginated(
+        supports_cursor_pagination = sort_by in {"newest", "oldest"} and offset is None
+
+        if supports_cursor_pagination:
+            result = db.get_images_paginated(
+                generators=gen_list,
+                tags=tag_list,
+                ratings=rating_list,
+                checkpoints=cp_list,
+                loras=lr_list,
+                search_query=search,
+                prompt_terms=prompt_list,
+                artist=artist,
+                sort_by=sort_by,
+                limit=limit,
+                cursor_id=cursor_id,
+                min_width=min_width,
+                max_width=max_width,
+                min_height=min_height,
+                max_height=max_height,
+                aspect_ratio=aspect_ratio,
+            )
+            result["next_offset"] = None
+            return result
+
+        page_offset = max(0, offset or 0)
+        images = db.get_images(
             generators=gen_list,
             tags=tag_list,
             ratings=rating_list,
@@ -183,14 +210,42 @@ class ImageService:
             prompt_terms=prompt_list,
             artist=artist,
             sort_by=sort_by,
-            limit=limit,
-            cursor_id=cursor_id,
+            limit=limit + 1,
+            offset=page_offset,
             min_width=min_width,
             max_width=max_width,
             min_height=min_height,
             max_height=max_height,
             aspect_ratio=aspect_ratio,
         )
+
+        has_more = len(images) > limit
+        if has_more:
+            images = images[:limit]
+
+        total = db.get_filtered_image_count(
+            generators=gen_list,
+            tags=tag_list,
+            ratings=rating_list,
+            checkpoints=cp_list,
+            loras=lr_list,
+            search_query=search,
+            prompt_terms=prompt_list,
+            artist=artist,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+            aspect_ratio=aspect_ratio,
+        )
+
+        return {
+            "images": images,
+            "next_cursor": None,
+            "next_offset": page_offset + len(images) if has_more else None,
+            "has_more": has_more,
+            "total": total,
+        }
 
     def get_image_by_id(self, image_id: int) -> Dict[str, Any]:
         """
@@ -327,7 +382,6 @@ class ImageService:
             if os.path.islink(source_path):
                 raise HTTPException(status_code=404, detail="Image file not found on disk")
             thumbnail_bytes, last_modified, cache_hit = await get_thumbnail_async(source_path, size)
-
             media_type = "image/webp"
             max_age = 86400 if cache_hit else 3600
 
@@ -338,6 +392,17 @@ class ImageService:
                     "Cache-Control": f"public, max-age={max_age}",
                     "Last-Modified": format_datetime(last_modified, usegmt=True),
                     "X-Thumbnail-Cache": "HIT" if cache_hit else "MISS",
+                },
+            )
+        except (UnidentifiedImageError, OSError):
+            placeholder_bytes = generate_placeholder_thumbnail(size)
+            return StreamingResponse(
+                io.BytesIO(placeholder_bytes),
+                media_type="image/webp",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Thumbnail-Cache": "MISS",
+                    "X-Thumbnail-Placeholder": "UNREADABLE",
                 },
             )
         except Exception as exc:

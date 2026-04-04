@@ -85,6 +85,66 @@ class WD14Tagger:
         self.rating_indices: Dict[str, int] = {}  # Map rating name to index
 
         self._loaded = False
+        self._resolved_model_path: Optional[str] = None
+        self._resolved_tags_path: Optional[str] = None
+
+    def _build_session_options(self, gpu_enabled: bool) -> "ort.SessionOptions":
+        """Build safer ONNX Runtime session options for the current hardware mode."""
+        sess_options = ort.SessionOptions()
+
+        import multiprocessing
+
+        cpu_count = max(1, multiprocessing.cpu_count())
+        if gpu_enabled:
+            num_threads = 1
+        else:
+            num_threads = min(4, max(1, cpu_count // 2))
+
+        sess_options.intra_op_num_threads = num_threads
+        sess_options.inter_op_num_threads = 1
+        sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.enable_cpu_mem_arena = False
+        sess_options.enable_mem_pattern = False
+
+        logger.debug(
+            "ONNX session configured with %s thread(s), gpu_enabled=%s",
+            num_threads,
+            gpu_enabled,
+        )
+        return sess_options
+
+    def _create_session(
+        self,
+        model_path: str,
+        tags_path: str,
+        sess_options: "ort.SessionOptions",
+        providers: List[str],
+    ) -> "ort.InferenceSession":
+        """Create an ONNX session, retrying once after repairing a corrupted model."""
+        try:
+            return ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
+        except Exception as e:
+            error_msg = str(e)
+            if "INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg:
+                logger.error(f"Model file is corrupted: {model_path}")
+                logger.info("Attempting to delete and re-download...")
+
+                try:
+                    os.remove(model_path)
+                    logger.info("Deleted corrupted model file.")
+                except Exception as del_error:
+                    logger.warning(f"Could not delete corrupted file: {del_error}")
+
+                logger.info("Re-downloading model...")
+                model_path, tags_path = self._download_model()
+                try:
+                    return ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
+                except Exception as e2:
+                    raise RuntimeError(f"Failed to load model even after re-download. Error: {e2}") from e2
+
+            raise RuntimeError(f"Failed to load ONNX model: {error_msg}") from e
     
     def _validate_model_file(self, model_path: str) -> bool:
         """
@@ -231,6 +291,8 @@ class WD14Tagger:
             return
 
         model_path, tags_path = self._get_model_paths()
+        self._resolved_model_path = model_path
+        self._resolved_tags_path = tags_path
 
         # Load ONNX model with error handling
         logger.info(f"Loading model from {model_path}...")
@@ -245,62 +307,53 @@ class WD14Tagger:
         providers = [p for p in providers if p in available_providers]
         logger.info(f"Using providers: {providers} (GPU {'enabled' if self.use_gpu else 'disabled'})")
 
-        # Create session options to prevent CPU overload / BSOD
-        # This fixes CLOCK_WATCHDOG_TIMEOUT crashes
-        sess_options = ort.SessionOptions()
-
-        # Limit threads to prevent CPU overload (use half of available cores, min 1)
-        import multiprocessing
-        num_threads = max(1, multiprocessing.cpu_count() // 2)
-        sess_options.intra_op_num_threads = num_threads
-        sess_options.inter_op_num_threads = 1  # Sequential graph execution
-
-        # Disable thread spinning to reduce CPU usage (prevents BSOD)
-        sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
-
-        # Use sequential execution mode (safer for CPU)
-        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-
-        # Optimize for inference
-        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-
-        logger.debug(f"ONNX session using {num_threads} threads (spinning disabled)")
+        session_uses_gpu = self.use_gpu and 'CUDAExecutionProvider' in providers
+        sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:
-            self.session = ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
-        except Exception as e:
-            error_msg = str(e)
-            if "INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg:
-                # Model file is corrupted
-                logger.error(f"Model file is corrupted: {model_path}")
-                logger.info("Attempting to delete and re-download...")
-
-                # Try to delete corrupted file
-                try:
-                    os.remove(model_path)
-                    logger.info("Deleted corrupted model file.")
-                except Exception as del_error:
-                    logger.warning(f"Could not delete corrupted file: {del_error}")
-
-                # Try to re-download
-                logger.info("Re-downloading model...")
-                model_path, tags_path = self._download_model()
-
-                # Try loading again
-                try:
-                    self.session = ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
-                    logger.info("Successfully loaded model after re-download!")
-                except Exception as e2:
-                    raise RuntimeError(f"Failed to load model even after re-download. Error: {e2}")
+            self.session = self._create_session(model_path, tags_path, sess_options, providers)
+        except RuntimeError as e:
+            if session_uses_gpu:
+                logger.warning(
+                    "Failed to initialize %s on GPU, retrying with CPU Safe Mode: %s",
+                    self.model_name,
+                    e,
+                )
+                cpu_providers = ['CPUExecutionProvider']
+                cpu_options = self._build_session_options(gpu_enabled=False)
+                self.session = self._create_session(model_path, tags_path, cpu_options, cpu_providers)
+                self.use_gpu = False
             else:
-                # Some other ONNX error
-                raise RuntimeError(f"Failed to load ONNX model: {error_msg}")
+                raise
 
         # Load tags
         self._load_tags(tags_path)
 
         self._loaded = True
         logger.info(f"Model loaded. Using providers: {self.session.get_providers()}")
+
+    def _session_uses_gpu(self) -> bool:
+        """Return True when the active ONNX session is using CUDA."""
+        return bool(self.session and 'CUDAExecutionProvider' in self.session.get_providers())
+
+    def _fallback_to_cpu_session(self, error: Exception) -> None:
+        """Rebuild the active ONNX session in CPU Safe Mode."""
+        if not self._resolved_model_path or not self._resolved_tags_path:
+            raise RuntimeError("Cannot switch tagger to CPU Safe Mode before model paths are resolved.") from error
+
+        logger.warning(
+            "GPU inference failed for %s, switching to CPU Safe Mode: %s",
+            self.model_name,
+            error,
+        )
+        cpu_options = self._build_session_options(gpu_enabled=False)
+        self.session = self._create_session(
+            self._resolved_model_path,
+            self._resolved_tags_path,
+            cpu_options,
+            ['CPUExecutionProvider'],
+        )
+        self.use_gpu = False
     
     def _preprocess(self, image: Image.Image) -> np.ndarray:
         """Preprocess image for inference."""
@@ -349,16 +402,23 @@ class WD14Tagger:
         """
         if not self._loaded:
             self.load()
-        
+
         # Load and preprocess image
-        image = Image.open(image_path)
-        input_data = self._preprocess(image)
-        image.close()  # Free memory immediately
-        
+        with Image.open(image_path) as image:
+            input_data = self._preprocess(image)
+
         # Run inference
         assert self.session is not None
         input_name = self.session.get_inputs()[0].name
-        output = self.session.run(None, {input_name: input_data})[0]
+        try:
+            output = self.session.run(None, {input_name: input_data})[0]
+        except Exception as error:
+            if not self._session_uses_gpu():
+                raise
+            self._fallback_to_cpu_session(error)
+            assert self.session is not None
+            input_name = self.session.get_inputs()[0].name
+            output = self.session.run(None, {input_name: input_data})[0]
         
         # Process output
         probs = output[0]
@@ -405,7 +465,11 @@ class WD14Tagger:
         result["general_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["character_tags"].sort(key=lambda x: x["confidence"], reverse=True)
         result["all_tags"].sort(key=lambda x: x["confidence"], reverse=True)
-        
+
+        del input_data
+        del output
+        del probs
+
         return result
     
     def tag_batch(self, image_paths: List[str]) -> List[Dict[str, Any]]:

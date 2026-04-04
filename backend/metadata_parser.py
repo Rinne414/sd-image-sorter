@@ -1299,8 +1299,30 @@ class MetadataParser:
     def _parse_gen_params_line(self, params_line: str) -> Dict[str, Any]:
         """Parse the 'Steps: 20, Sampler: Euler a, CFG scale: 7, ...' line into a dict."""
         result: Dict[str, Any] = {}
-        # Split by comma, but handle values that might contain commas in quotes
-        pairs = re.split(r',\s*(?=[A-Z][a-z]*[\s_]*[A-Za-z]*:)', params_line)
+        pairs = []
+        current = []
+        in_quotes = False
+
+        for idx, char in enumerate(params_line):
+            if char == '"' and (idx == 0 or params_line[idx - 1] != '\\'):
+                in_quotes = not in_quotes
+                current.append(char)
+                continue
+
+            if char == ',' and not in_quotes:
+                remainder = params_line[idx + 1:]
+                if re.match(r'^\s*[A-Za-z][A-Za-z0-9 _/\-]*:', remainder):
+                    pair = ''.join(current).strip()
+                    if pair:
+                        pairs.append(pair)
+                    current = []
+                    continue
+
+            current.append(char)
+
+        trailing = ''.join(current).strip()
+        if trailing:
+            pairs.append(trailing)
 
         for pair in pairs:
             match = re.match(r'^\s*([^:]+):\s*(.+)$', pair.strip())

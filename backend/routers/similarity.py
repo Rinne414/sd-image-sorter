@@ -95,7 +95,7 @@ greater visual/semantic similarity.
                     "example": {
                         "query_image_id": 1,
                         "results": [
-                            {"image_id": 42, "similarity": 0.95, "filename": "similar_image.png"}
+                            {"id": 42, "similarity": 0.95, "filename": "similar_image.png"}
                         ],
                         "count": 1
                     }
@@ -130,7 +130,7 @@ and searches the database for similar images.
                 "application/json": {
                     "example": {
                         "results": [
-                            {"image_id": 42, "similarity": 0.89, "filename": "similar_image.png"}
+                            {"id": 42, "similarity": 0.89, "filename": "similar_image.png"}
                         ],
                         "count": 1
                     }
@@ -173,11 +173,9 @@ duplicate or near-duplicate images.
                     "example": {
                         "duplicates": [
                             {
-                                "image_id_1": 1,
-                                "image_id_2": 2,
+                                "image_a": {"id": 1, "filename": "image_001.png"},
+                                "image_b": {"id": 2, "filename": "image_002.png"},
                                 "similarity": 0.98,
-                                "filename_1": "image_001.png",
-                                "filename_2": "image_002.png"
                             }
                         ],
                         "count": 1,

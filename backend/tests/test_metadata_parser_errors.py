@@ -421,18 +421,19 @@ class TestJPEGErrors:
         assert result is not None
         assert result["generator"] == "unknown"
 
-    def test_jpeg_with_corrupted_exif(self, tmp_path: Path):
+    def test_jpeg_with_corrupted_exif(self, tmp_path: Path, monkeypatch):
         """JPEG with corrupted EXIF should be handled."""
         from PIL import Image
-        from PIL.ExifTags import TAGS
+        from metadata_parser import MetadataParser
 
         img_path = tmp_path / "corrupted_exif.jpg"
         img = Image.new("RGB", (100, 100), color="white")
+        img.save(img_path, "JPEG")
 
-        # Add some EXIF data
-        exif = img.getexif()
-        exif[256] = "corrupted data"  # Invalid EXIF value
-        img.save(img_path, "JPEG", exif=exif)
+        def raise_corrupted_exif(_self, _img):
+            raise OSError("corrupted exif block")
+
+        monkeypatch.setattr(MetadataParser, "_extract_exif", raise_corrupted_exif)
 
         result = parse_image(str(img_path))
 

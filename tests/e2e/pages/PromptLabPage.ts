@@ -65,15 +65,15 @@ export class PromptLabPage {
     this.seedInput = page.locator('#seed-input')
 
     // Actions
-    this.generateButton = page.locator('#generate-prompt-btn')
-    this.regenerateButton = page.locator('#regenerate-btn')
-    this.copyPromptButton = page.locator('#copy-prompt-btn')
+    this.generateButton = page.locator('#btn-promptlab-generate')
+    this.regenerateButton = page.locator('#btn-promptlab-random')
+    this.copyPromptButton = page.locator('#btn-promptlab-copy')
     this.copyNegativeButton = page.locator('#copy-negative-btn')
-    this.savePresetButton = page.locator('#save-preset-btn')
+    this.savePresetButton = page.locator('#btn-promptlab-save-preset')
     this.loadPresetSelect = page.locator('#load-preset-select')
 
     // Results
-    this.generatedPrompt = page.locator('#generated-prompt')
+    this.generatedPrompt = page.locator('#promptlab-output')
     this.generatedNegative = page.locator('#generated-negative')
     this.usedSeed = page.locator('#used-seed')
 
@@ -89,7 +89,7 @@ export class PromptLabPage {
    */
   async goto() {
     await this.page.goto('/')
-    await this.page.locator('[data-view="prompt-lab"]').click()
+    await this.page.locator('[data-view="promptlab"]').click()
     await this.page.waitForLoadState('networkidle')
   }
 

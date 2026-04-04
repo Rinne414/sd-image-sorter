@@ -14,6 +14,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
 class TestPromptsRouter:
+    def test_list_categories_returns_builtin_fallback_when_library_is_empty(self, test_client):
+        response = test_client.get("/api/prompts/categories")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "categories" in data
+        assert data["categories"]["outfit"]
+        assert data["categories"]["pose"]
+        assert data["categories"]["style"]
+
     def test_list_categories_orders_tags_by_frequency(self, test_client, monkeypatch):
         from routers import prompts as prompts_router
 
@@ -57,6 +67,12 @@ class TestPromptsRouter:
 
         class FakeGenerator:
             def generate(self, config):
+                assert config["categories"]["style"]["tags"] == ["cinematic_lighting"]
+                assert config["categories"]["pose"]["tags"] == ["standing"]
+                assert config["tag_sets"] == ["Outfit Combo"]
+                assert config["quality_preset"] == "none"
+                assert config["count_tag"] == ""
+                assert config["include_negative"] is False
                 return {
                     "prompt": "1girl, masterpiece",
                     "negative_prompt": "lowres",
@@ -68,7 +84,17 @@ class TestPromptsRouter:
 
         response = test_client.post(
             "/api/prompts/generate",
-            json={"seed": 12345, "include_negative": True},
+            json={
+                "seed": 12345,
+                "include_negative": False,
+                "quality_preset": "none",
+                "count_tag": "",
+                "tag_sets": ["Outfit Combo"],
+                "categories": {
+                    "style": {"tags": ["cinematic_lighting"], "weight": 1.0, "locked": True},
+                    "pose": {"tags": ["standing"], "weight": 0.5, "locked": False},
+                },
+            },
         )
 
         assert response.status_code == 200
@@ -76,13 +102,14 @@ class TestPromptsRouter:
         assert data["prompt"] == "1girl, masterpiece"
         assert data["negative_prompt"] == "lowres"
         assert data["seed"] == 12345
+        assert data["config"]["categories"]["style"]["locked"] is True
 
     def test_validate_prompt_uses_generator_output(self, test_client, monkeypatch):
         from routers import prompts as prompts_router
 
         class FakeGenerator:
             def validate_prompt(self, tags):
-                return {"valid": True, "count": len(tags)}
+                return {"valid": True, "violations": [], "suggestions": []}
 
         monkeypatch.setattr(prompts_router, "get_generator", lambda _db: FakeGenerator())
 
@@ -90,16 +117,16 @@ class TestPromptsRouter:
 
         assert response.status_code == 200
         data = response.json()
-        assert data == {"valid": True, "count": 2}
+        assert data == {"valid": True, "violations": [], "suggestions": []}
 
 
 class TestCensorRouterValidation:
     @pytest.mark.parametrize(
         "payload, expected_status",
         [
-            ({"image_id": 1, "model_type": "invalid"}, 404),
-            ({"image_id": 0, "model_type": "legacy"}, 404),
-            ({"image_id": 1, "model_type": "legacy", "confidence_threshold": 1.1}, 404),
+            ({"image_id": 1, "model_type": "invalid"}, 400),
+            ({"image_id": 0, "model_type": "legacy"}, 400),
+            ({"image_id": 1, "model_type": "legacy", "confidence_threshold": 1.1}, 400),
         ],
     )
     def test_detect_validation_rejects_invalid_payloads(self, test_client, payload, expected_status):
@@ -110,9 +137,9 @@ class TestCensorRouterValidation:
     @pytest.mark.parametrize(
         "payload, expected_status",
         [
-            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "invalid"}, 404),
-            ({"image_id": 1, "regions": [], "style": "mosaic"}, 404),
-            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "mosaic", "block_size": 0}, 404),
+            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "invalid"}, 400),
+            ({"image_id": 1, "regions": [], "style": "mosaic"}, 400),
+            ({"image_id": 1, "regions": [[0, 0, 10, 10]], "style": "mosaic", "block_size": 0}, 400),
         ],
     )
     def test_preview_validation_rejects_invalid_payloads(self, test_client, payload, expected_status):
@@ -132,7 +159,7 @@ class TestCensorRouterValidation:
             },
         )
 
-        assert response.status_code in [400, 422, 500]
+        assert response.status_code == 400
 
 
 class TestSimilarityRouterValidation:
@@ -150,6 +177,44 @@ class TestSimilarityRouterValidation:
         response = test_client.get("/api/similarity/duplicates?threshold=0.4")
 
         assert response.status_code in [400, 422]
+
+    def test_search_similar_returns_404_for_missing_image(self, test_client):
+        response = test_client.get("/api/similarity/search/999999")
+
+        assert response.status_code == 404
+        assert response.json()["error"] == "Image 999999 was not found."
+
+    def test_search_similar_requires_embedding_for_existing_image(self, test_client):
+        image_id = test_client.test_db.add_image(
+            path="/tmp/no_embedding.png",
+            filename="no_embedding.png",
+            metadata_json="{}",
+        )
+
+        response = test_client.get(f"/api/similarity/search/{image_id}")
+
+        assert response.status_code == 409
+        assert "has no embedding yet" in response.json()["error"]
+
+    def test_search_upload_rejects_invalid_image_content(self, test_client):
+        response = test_client.post(
+            "/api/similarity/search-upload",
+            files={"file": ("not-image.txt", b"definitely not an image", "text/plain")},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["error"] == "Invalid image file. Upload a readable PNG, JPG, or WebP image."
+
+    def test_duplicates_report_insufficient_embeddings_instead_of_fake_empty(self, test_client):
+        response = test_client.get("/api/similarity/duplicates?threshold=0.95")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["duplicates"] == []
+        assert data["count"] == 0
+        assert data["reason"] == "insufficient_embeddings"
+        assert data["embedded_count"] == 0
+        assert data["minimum_required"] == 2
 
 
 class TestArtistsRouterValidation:
@@ -170,3 +235,165 @@ class TestArtistsRouterValidation:
         response = test_client.post("/api/artists/identify-batch", json={"image_ids": []})
 
         assert response.status_code in [400, 422]
+
+    def test_identify_batch_rejects_local_model_without_path(self, test_client):
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={"image_ids": [1], "model_source": "local"},
+        )
+
+        assert response.status_code == 400
+
+    def test_identify_batch_rejects_missing_local_model_file(self, test_client):
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={"image_ids": [1], "model_source": "local", "model_path": "C:/missing/artist.onnx"},
+        )
+
+        assert response.status_code == 400
+
+    def test_identify_returns_503_when_model_is_unavailable(self, test_client, monkeypatch, tmp_path):
+        from routers import artists as artists_router
+        from PIL import Image
+
+        image_path = tmp_path / "artist_test.png"
+        Image.new("RGB", (64, 64), color="purple").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="artist_test.png",
+            metadata_json="{}",
+        )
+
+        class FakeIdentifier:
+            def identify(self, _image_path, top_k=5):
+                return {"error": "Artist model unavailable. Install the required dependencies and restart the app."}
+
+        monkeypatch.setattr(artists_router, "get_artist_identifier", lambda **kwargs: FakeIdentifier())
+
+        response = test_client.post("/api/artists/identify", json={"image_id": image_id})
+
+        assert response.status_code == 503
+        assert "Artist model unavailable" in response.json()["error"]
+
+    def test_identify_batch_passes_model_configuration_to_background_task(self, test_client, monkeypatch, tmp_path):
+        from routers import artists as artists_router
+
+        captured = {}
+        model_path = tmp_path / "artist.onnx"
+        model_path.write_bytes(b"fake-model")
+
+        def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
+            captured["image_ids"] = image_ids
+            captured["threshold"] = threshold
+            captured["top_k"] = top_k
+            captured["model_source"] = model_source
+            captured["model_path"] = model_path
+
+        monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
+
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={
+                "image_ids": [1, 2],
+                "threshold": 0.42,
+                "top_k": 7,
+                "model_source": "local",
+                "model_path": str(model_path),
+            },
+        )
+
+        assert response.status_code == 200
+        assert captured == {
+            "image_ids": [1, 2],
+            "threshold": 0.42,
+            "top_k": 7,
+            "model_source": "local",
+            "model_path": str(model_path.resolve()),
+        }
+
+
+class TestPromptGenerator:
+    def test_generate_uses_manual_promptlab_categories_without_random_fallbacks(self):
+        from prompt_generator import PromptGenerator
+
+        generator = PromptGenerator()
+        result = generator.generate(
+            {
+                "quality_preset": "low",
+                "count_tag": "",
+                "include_negative": False,
+                "categories": {
+                    "style": {"tags": ["cinematic_lighting"], "weight": 1.0, "locked": True},
+                    "pose": {"tags": ["standing"], "weight": 0.5, "locked": False},
+                    "background": {"tags": ["city_night"], "weight": 1.0, "locked": False},
+                },
+            }
+        )
+
+        assert result["positive_prompt"] == "cinematic_lighting, standing, city_night"
+        assert result["negative_prompt"] == ""
+        assert [tag["tag"] for tag in result["tags_used"]] == [
+            "cinematic_lighting",
+            "standing",
+            "city_night",
+        ]
+
+    def test_load_from_db_resets_user_state_and_moves_recategorized_tags(self, test_db):
+        from prompt_generator import PromptGenerator
+
+        image_a = test_db.add_image(path="/tmp/a.png", filename="a.png", metadata_json="{}")
+        image_b = test_db.add_image(path="/tmp/b.png", filename="b.png", metadata_json="{}")
+        test_db.add_tags(image_a, [{"tag": "school_uniform", "confidence": 0.9}])
+        test_db.add_tags(image_b, [{"tag": "school_uniform", "confidence": 0.8}])
+
+        with test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO tag_categories (tag, category, is_user_defined) VALUES (?, ?, 1)",
+                ("school_uniform", "style"),
+            )
+            cursor.execute(
+                "INSERT INTO tag_sets (name, description, category) VALUES (?, ?, ?)",
+                ("Uniform Combo", "test set", "outfit"),
+            )
+            set_id = cursor.lastrowid
+            cursor.execute(
+                "INSERT INTO tag_set_members (set_id, tag, weight, is_required) VALUES (?, ?, ?, ?)",
+                (set_id, "school_uniform", 1.0, 1),
+            )
+            cursor.execute(
+                "INSERT INTO tag_exclusions (rule_name, description) VALUES (?, ?)",
+                ("No Uniform Clash", "test rule"),
+            )
+            rule_id = cursor.lastrowid
+            cursor.execute(
+                "INSERT INTO tag_exclusion_conditions (exclusion_id, condition_tag, condition_type) VALUES (?, ?, ?)",
+                (rule_id, "school_uniform", "present"),
+            )
+            cursor.execute(
+                "INSERT INTO tag_exclusion_targets (exclusion_id, excluded_tag, excluded_category) VALUES (?, ?, ?)",
+                (rule_id, "swimsuit", "outfit"),
+            )
+
+        generator = PromptGenerator(db_module=test_db)
+        generator.load_from_db()
+        generator.load_from_db()
+
+        pool = generator.get_tag_pool()
+        assert any(tag["tag"] == "school_uniform" for tag in pool.get("style", []))
+        assert not any(tag["tag"] == "school_uniform" for tag in pool.get("outfit", []))
+
+        user_sets = [tag_set for tag_set in generator.get_all_tag_sets() if tag_set.get("id") == set_id]
+        user_rules = [rule for rule in generator.get_all_rules() if rule.get("id") == rule_id]
+        assert len(user_sets) == 1
+        assert len(user_rules) == 1
+
+    def test_resolve_tag_sets_supports_stable_ids_and_legacy_indexes(self):
+        from prompt_generator import PromptGenerator
+
+        generator = PromptGenerator()
+        first_set = generator.get_all_tag_sets()[0]
+
+        resolved = generator._resolve_tag_sets([first_set["id"], "1", first_set["name"]])
+
+        assert resolved == [first_set]

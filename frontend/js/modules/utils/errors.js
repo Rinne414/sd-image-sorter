@@ -89,17 +89,23 @@ function formatUserError(error, context = '') {
         }
     }
     
-    // Check if error message is already user-friendly (no technical jargon)
-    const hasTechnicalJargon = /[\[\]{}()._\\/]|ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null/i.test(errorMsg);
-    
-    if (!hasTechnicalJargon && errorMsg.length < 100) {
+    // Preserve short, human-readable backend messages instead of collapsing them
+    const hasTechnicalJargon = /(?:\b(?:ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null|TypeError|ReferenceError|SyntaxError)\b|https?:\/\/|\/api\/|[A-Za-z]:\\| at .+\(|stack trace)/i.test(errorMsg);
+
+    if (!hasTechnicalJargon && errorMsg.length < 180) {
         return context ? `${context}: ${errorMsg}` : errorMsg;
     }
     
     // Return generic message with context
-    return context 
-        ? `Failed to ${context}. Please try again.`
-        : 'An unexpected error occurred. Please try again.';
+    if (context) {
+        const normalizedContext = String(context).trim();
+        const prefix = /^failed to\b/i.test(normalizedContext)
+            ? normalizedContext
+            : `Failed to ${normalizedContext}`;
+        return `${prefix}. Please try again.`;
+    }
+
+    return 'An unexpected error occurred. Please try again.';
 }
 
 /**

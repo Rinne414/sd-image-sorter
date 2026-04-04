@@ -10,6 +10,7 @@ This is the main application entry point. Endpoints are organized into routers:
 """
 import os
 import sys
+import asyncio
 import logging
 import threading
 import time
@@ -159,6 +160,7 @@ async def lifespan(app: FastAPI):
     """Application startup and shutdown handler."""
     # Startup
     logger.info("SD Image Sorter backend starting...")
+    _install_windows_loop_exception_handler()
 
     # Ensure all required directories exist
     ensure_directories()
@@ -311,20 +313,13 @@ async def rate_limit_middleware(request: Request, call_next):
         bucket = _rate_limit_buckets[client_host]
         while bucket and bucket[0] <= cutoff:
             bucket.popleft()
-        if not bucket:
-            try:
-                del _rate_limit_buckets[client_host]
-            except KeyError:
-                pass
-            # Don't return inside the lock — would deadlock the event loop
-        elif len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
+        if len(bucket) >= RATE_LIMIT_MAX_REQUESTS:
             logger.warning("Rate limit exceeded for %s on %s", client_host, path)
             return JSONResponse(
                 status_code=429,
                 content={"error": "Too many requests. Please try again shortly.", "type": "RateLimitExceeded"},
             )
-        else:
-            bucket.append(now)
+        bucket.append(now)
 
     return await call_next(request)
 
@@ -473,6 +468,61 @@ def _check_host_security(host: str) -> None:
         raise ValueError("This application only allows localhost binding. Use 127.0.0.1 or localhost.")
 
 
+def _configure_event_loop_policy() -> None:
+    """Use the selector event loop on Windows to avoid noisy Proactor shutdown resets."""
+    if sys.platform != "win32":
+        return
+
+    selector_policy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if selector_policy is None:
+        return
+
+    current_policy = asyncio.get_event_loop_policy()
+    if isinstance(current_policy, selector_policy):
+        return
+
+    asyncio.set_event_loop_policy(selector_policy())
+
+
+def _should_ignore_windows_shutdown_connection_reset(context: Dict[str, Any]) -> bool:
+    """Ignore the known Proactor shutdown reset noise on Windows without hiding real app errors."""
+    if sys.platform != "win32":
+        return False
+
+    exc = context.get("exception")
+    if not isinstance(exc, ConnectionResetError):
+        return False
+    if getattr(exc, "winerror", None) != 10054:
+        return False
+
+    message = str(context.get("message") or "")
+    handle_repr = repr(context.get("handle")) if context.get("handle") else ""
+    transport_marker = "_ProactorBasePipeTransport._call_connection_lost"
+    return transport_marker in message or transport_marker in handle_repr
+
+
+def _install_windows_loop_exception_handler() -> None:
+    """Suppress the specific Proactor shutdown reset callback noise on Windows."""
+    if sys.platform != "win32":
+        return
+
+    loop = asyncio.get_running_loop()
+    previous_handler = loop.get_exception_handler()
+
+    def handler(loop: asyncio.AbstractEventLoop, context: Dict[str, Any]) -> None:
+        if _should_ignore_windows_shutdown_connection_reset(context):
+            logger.debug("Ignored Windows Proactor shutdown ConnectionResetError noise: %s", context.get("message"))
+            return
+
+        if previous_handler is not None:
+            previous_handler(loop, context)
+            return
+
+        loop.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)
+
+
 if __name__ == "__main__":
     import argparse
     import uvicorn
@@ -483,6 +533,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     _check_host_security(args.host)
+    _configure_event_loop_policy()
     os.environ["SD_IMAGE_SORTER_BIND_HOST"] = args.host
     logger.info(f"Starting server on {args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port)

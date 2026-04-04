@@ -38,22 +38,22 @@ export class GalleryPage {
 
     // Navigation tabs
     this.galleryTab = page.locator('[data-view="gallery"]')
-    this.autoSeparateTab = page.locator('[data-view="auto-separate"]')
-    this.manualSortTab = page.locator('[data-view="manual-sort"]')
+    this.autoSeparateTab = page.locator('[data-view="autosep"]')
+    this.manualSortTab = page.locator('[data-view="manual"]')
     this.censorEditorTab = page.locator('[data-view="censor"]')
-    this.promptLabTab = page.locator('[data-view="prompt-lab"]')
-    this.similarityTab = page.locator('[data-view="similarity"]')
-    this.artistIdentTab = page.locator('[data-view="artist-ident"]')
+    this.promptLabTab = page.locator('[data-view="promptlab"]')
+    this.similarityTab = page.locator('[data-view="similar"]')
+    this.artistIdentTab = page.locator('[data-view="artist"]')
 
     // Filter elements
     this.generatorFilters = page.locator('.generator-filters')
     this.ratingFilters = page.locator('.rating-filters')
     this.tagFilterInput = page.locator('#tag-filter-input')
     this.searchInput = page.locator('#search-input')
-    this.sortDropdown = page.locator('#sort-select')
+    this.sortDropdown = page.locator('#gallery-sort')
 
     // Gallery elements
-    this.imageGrid = page.locator('#image-grid')
+    this.imageGrid = page.locator('#gallery-grid')
     this.imageCards = page.locator('.image-card')
     this.loadingIndicator = page.locator('.loading-indicator')
     this.noResultsMessage = page.locator('.no-results')

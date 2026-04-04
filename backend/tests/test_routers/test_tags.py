@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import tempfile
+import queue
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -375,6 +376,18 @@ class TestTaggingPipeline:
         data = response.json()
         assert "status" in data
 
+    def test_cancel_tagging(self, test_client):
+        """Cancelling a running tagging task should return cancelling state."""
+        from routers import tags as tags_router
+
+        tags_router.tag_progress = {"status": "running", "current": 2, "total": 10, "message": "Tagging"}
+
+        response = test_client.post("/api/tag/cancel")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] in ["cancelling", "running", "idle"]
+
     def test_reset_tag_progress(self, test_client):
         """Resetting tag progress should work."""
         from routers import tags as tags_router
@@ -388,6 +401,160 @@ class TestTaggingPipeline:
         data = response.json()
         # Should reset to idle (status="reset") or stay running if reset logic changed
         assert data["status"] in ["reset", "idle", "running"]
+
+    def test_get_tagger_models_exposes_runtime_guidance(self, test_client):
+        """Tagger models endpoint should expose stability guidance for the UI."""
+        response = test_client.get("/api/tagger/models")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["default"] == "wd-swinv2-tagger-v3"
+
+        models_by_name = {model["name"]: model for model in data["models"]}
+        assert models_by_name["wd-swinv2-tagger-v3"]["recommended"] is True
+        assert models_by_name["wd-swinv2-tagger-v3"]["gpu_default"] is True
+        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_locked"] is True
+        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is False
+        assert models_by_name["wd-eva02-large-tagger-v3"]["memory"] == "High"
+
+    def test_build_runtime_plan_locks_max_quality_model_to_cpu_safe_mode(self):
+        """Max Quality should keep the high-quality model while forcing a safer runtime plan."""
+        from services.tagging_service import TaggingService, TagRequest
+
+        service = TaggingService()
+        plan = service._build_runtime_plan(
+            TagRequest(
+                model_name="wd-eva02-large-tagger-v3",
+                use_gpu=True,
+                allow_unsafe_acceleration=True,
+            )
+        )
+
+        assert plan["gpu_locked"] is True
+        assert plan["effective_use_gpu"] is False
+        assert plan["request"]["use_gpu"] is False
+        assert plan["request"]["allow_unsafe_acceleration"] is False
+        assert plan["fetch_batch_size"] <= 24
+        assert plan["commit_interval"] <= 10
+        assert "protected CPU Safe Mode" in plan["startup_notice"]
+
+    def test_start_tagging_blocks_high_risk_custom_gpu_without_confirmation(self, test_client):
+        """Custom GPU tagging should still require explicit confirmation."""
+        response = test_client.post(
+            "/api/tag/start",
+            json={
+                "model_path": "C:/models/custom-model.onnx",
+                "tags_path": "C:/models/selected_tags.csv",
+                "use_gpu": True,
+            }
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        assert "CPU Safe Mode" in data["error"]
+
+    def test_start_tagging_rejects_non_onnx_custom_model(self, test_client):
+        """Custom tagger path should reject unsupported model formats early."""
+        response = test_client.post(
+            "/api/tag/start",
+            json={
+                "model_path": "C:/models/custom-model.safetensors",
+                "tags_path": "C:/models/selected_tags.csv",
+                "use_gpu": False,
+            }
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert ".onnx" in data["error"]
+
+    def test_start_tagging_allows_confirmed_high_risk_custom_gpu_combo(self, test_client):
+        """Explicit confirmation should allow the risky combo to proceed."""
+        from routers import tags as tags_router
+
+        tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
+
+        with patch.object(tags_router.TaggingService, "_run_tagging_job", return_value=None):
+            response = test_client.post(
+                "/api/tag/start",
+                json={
+                    "model_path": "C:/models/custom-model.onnx",
+                    "tags_path": "C:/models/selected_tags.csv",
+                    "use_gpu": True,
+                    "allow_unsafe_acceleration": True,
+                }
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "started"
+
+    def test_tagging_worker_crash_is_reported_without_killing_service(self):
+        """A crashed worker process should turn into an API-visible error state instead of taking down the app."""
+        from services.tagging_service import TaggingService, TagRequest
+
+        service = TaggingService()
+        service.set_tagger_getter(lambda **kwargs: object())
+
+        class FakeQueue:
+            def get(self, timeout=None):
+                raise queue.Empty
+
+            def get_nowait(self):
+                raise queue.Empty
+
+            def close(self):
+                return None
+
+            def join_thread(self):
+                return None
+
+        class FakeEvent:
+            def __init__(self):
+                self._is_set = False
+
+            def set(self):
+                self._is_set = True
+
+            def is_set(self):
+                return self._is_set
+
+        class FakeProcess:
+            def __init__(self, *args, **kwargs):
+                self.exitcode = -1073741819
+                self._alive = False
+
+            def start(self):
+                self._alive = False
+
+            def is_alive(self):
+                return False
+
+            def join(self, timeout=None):
+                return None
+
+        class FakeContext:
+            def Queue(self):
+                return FakeQueue()
+
+            def Event(self):
+                return FakeEvent()
+
+            def Process(self, *args, **kwargs):
+                return FakeProcess(*args, **kwargs)
+
+        with patch("services.tagging_service.multiprocessing.get_context", return_value=FakeContext()):
+            service._run_tagging_job(
+                TagRequest(
+                    image_ids=[],
+                    model_name="wd-swinv2-tagger-v3",
+                    use_gpu=False,
+                )
+            )
+
+        progress = service.get_progress()
+        assert progress["status"] == "error"
+        assert "stayed alive" in progress["message"]
 
 class TestFixRatings:
     """Tests for POST /api/tags/fix-ratings endpoint."""
@@ -429,7 +596,7 @@ class TestExportTagsBatch:
     """Tests for POST /api/tags/export-batch endpoint."""
 
     def test_export_batch_empty(self, test_client, tmp_path: Path):
-        """Exporting empty batch should fail validation (min_length=1)."""
+        """Exporting empty batch should return normalized validation failure."""
         response = test_client.post(
             "/api/tags/export-batch",
             json={
@@ -438,8 +605,7 @@ class TestExportTagsBatch:
             }
         )
 
-        # Should fail validation since min_length=1 for image_ids
-        assert response.status_code in [400, 422]
+        assert response.status_code == 400
 
     def test_export_batch_invalid_folder(self, test_client):
         """Exporting to invalid folder - path validation allows creation."""
@@ -456,7 +622,7 @@ class TestExportTagsBatch:
         assert response.status_code == 200
 
     def test_export_batch_with_prefix(self, test_client, test_db, tmp_path: Path):
-        """Exporting with prefix should add prefix to tags."""
+        """Exporting with prefix should prepend it once per file."""
         import database as db
         from PIL import Image
 
@@ -465,17 +631,21 @@ class TestExportTagsBatch:
         img.save(img_path)
 
         image_id = db.add_image(path=str(img_path), filename="prefix_test.png")
-        db.add_tags(image_id, [{"tag": "test_tag", "confidence": 0.9}])
+        db.add_tags(image_id, [
+            {"tag": "test_tag", "confidence": 0.9},
+            {"tag": "second_tag", "confidence": 0.7},
+        ])
 
         output_dir = tmp_path / "tags_out"
         output_dir.mkdir()
+        prefix = "masterpiece, best quality, "
 
         response = test_client.post(
             "/api/tags/export-batch",
             json={
                 "image_ids": [image_id],
                 "output_folder": str(output_dir),
-                "prefix": "prefix_"
+                "prefix": prefix
             }
         )
 
@@ -483,7 +653,39 @@ class TestExportTagsBatch:
 
         txt_file = output_dir / "prefix_test.txt"
         content = txt_file.read_text()
-        assert "prefix_" in content
+        assert content == f"{prefix}test_tag, second_tag"
+
+    def test_export_batch_keeps_same_basename_files_distinct(self, test_client, test_db, tmp_path: Path):
+        """Files that only differ by extension should not overwrite each other on export."""
+        import database as db
+        from PIL import Image
+
+        jpg_path = tmp_path / "sample.jpg"
+        gif_path = tmp_path / "sample.gif"
+        Image.new("RGB", (100, 100), color="red").save(jpg_path)
+        Image.new("RGB", (100, 100), color="blue").save(gif_path)
+
+        jpg_id = db.add_image(path=str(jpg_path), filename="sample.jpg")
+        gif_id = db.add_image(path=str(gif_path), filename="sample.gif")
+        db.add_tags(jpg_id, [{"tag": "jpg_tag", "confidence": 0.9}])
+        db.add_tags(gif_id, [{"tag": "gif_tag", "confidence": 0.9}])
+
+        output_dir = tmp_path / "collision_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [jpg_id, gif_id],
+                "output_folder": str(output_dir),
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 2
+        assert (output_dir / "sample.txt").exists()
+        assert len(list(output_dir.glob("sample*.txt"))) == 2
 
 
 class TestEdgeCases:

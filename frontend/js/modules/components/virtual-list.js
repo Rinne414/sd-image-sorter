@@ -18,8 +18,10 @@ class VirtualList {
      */
     static DEFAULT_CONFIG = {
         bufferSize: 10,           // Items to render outside viewport (above + below)
-        threshold: 500,           // Minimum items to enable virtual scrolling
+        threshold: 240,           // Minimum items to enable virtual scrolling
+        forceVirtual: false,      // Always use virtual layout regardless of item count
         estimatedItemHeight: 200, // Estimated height for grid mode
+        itemAspectRatio: 1,       // Width / height ratio for fixed-aspect layouts
         rowGap: 16,               // Gap between rows
         columnGap: 16,            // Gap between columns
         minColumnWidth: 200,      // Minimum column width for grid
@@ -40,13 +42,14 @@ class VirtualList {
     constructor(options) {
         this.validateOptions(options);
 
-        const { container, scrollContainer, renderItem, getItemKey, estimateItemHeight, config } = options;
+        const { container, scrollContainer, renderItem, getItemKey, estimateItemHeight, config, onItemsRendered } = options;
 
         this.container = container;
         this.scrollContainer = scrollContainer;
         this.renderItem = renderItem;
         this.getItemKey = getItemKey || ((index) => index);
         this.estimateItemHeight = estimateItemHeight || (() => this.config.estimatedItemHeight);
+        this.onItemsRendered = typeof onItemsRendered === 'function' ? onItemsRendered : null;
 
         this.config = { ...VirtualList.DEFAULT_CONFIG, ...config };
 
@@ -69,6 +72,7 @@ class VirtualList {
         this.scrollHandler = null;
         this.resizeDebounceTimer = null;
         this.scrollRAF = null;
+        this.scrollEventTarget = this._resolveScrollEventTarget(scrollContainer);
 
         // Bind methods
         this._onScroll = this._onScroll.bind(this);
@@ -91,6 +95,56 @@ class VirtualList {
     }
 
     /**
+     * Use `window` as the event target for document scrolling.
+     * Browsers do not consistently dispatch `scroll` on `documentElement`.
+     */
+    _resolveScrollEventTarget(scrollContainer) {
+        if (
+            typeof window !== 'undefined' &&
+            scrollContainer &&
+            (
+                scrollContainer === document.documentElement ||
+                scrollContainer === document.body ||
+                scrollContainer === document.scrollingElement
+            )
+        ) {
+            return window;
+        }
+
+        return scrollContainer;
+    }
+
+    _isViewportScrollContainer() {
+        return this.scrollEventTarget === window;
+    }
+
+    _getScrollTop() {
+        if (this._isViewportScrollContainer()) {
+            return window.pageYOffset || document.documentElement.scrollTop || this.scrollContainer.scrollTop || 0;
+        }
+
+        return this.scrollContainer.scrollTop;
+    }
+
+    _getViewportHeight() {
+        return this._isViewportScrollContainer()
+            ? window.innerHeight
+            : this.scrollContainer.clientHeight;
+    }
+
+    _getRelativeScroll() {
+        if (this._isViewportScrollContainer()) {
+            return Math.max(0, -this.container.getBoundingClientRect().top);
+        }
+
+        const scrollTop = this._getScrollTop();
+        const containerRect = this.container.getBoundingClientRect();
+        const scrollRect = this.scrollContainer.getBoundingClientRect();
+        const containerTop = containerRect.top - scrollRect.top;
+        return Math.max(0, scrollTop - containerTop);
+    }
+
+    /**
      * Initialize the virtual list
      * @param {Array} items - Initial items array
      * @returns {VirtualList} this for chaining
@@ -102,7 +156,7 @@ class VirtualList {
 
         // Add scroll listener
         this.scrollHandler = this._onScroll;
-        this.scrollContainer.addEventListener('scroll', this.scrollHandler, { passive: true });
+        this.scrollEventTarget.addEventListener('scroll', this.scrollHandler, { passive: true });
 
         // Add virtual-scroll class
         this.container.classList.add('virtual-scroll');
@@ -186,9 +240,10 @@ class VirtualList {
     setItems(items) {
         this.items = items || [];
         this.renderedElements.clear();
+        this.visibleRange = { start: -1, end: -1 };
 
         // Decide whether to enable virtual scrolling based on threshold
-        const shouldEnableVirtual = this.items.length >= this.config.threshold;
+        const shouldEnableVirtual = this.config.forceVirtual || this.items.length >= this.config.threshold;
 
         if (shouldEnableVirtual !== this.isVirtualEnabled) {
             this.isVirtualEnabled = shouldEnableVirtual;
@@ -251,6 +306,7 @@ class VirtualList {
         if (!this.container) return;
 
         const containerWidth = this.container.clientWidth;
+        const itemAspectRatio = Number(this.config.itemAspectRatio) > 0 ? Number(this.config.itemAspectRatio) : 1;
 
         // Calculate columns based on minimum width
         this.columns = Math.max(1, Math.floor(
@@ -260,7 +316,7 @@ class VirtualList {
 
         // Calculate item dimensions
         this.itemWidth = (containerWidth - (this.columns - 1) * this.config.columnGap) / this.columns;
-        this.itemHeight = this.itemWidth; // Square items for grid
+        this.itemHeight = this.itemWidth / itemAspectRatio;
 
         // Calculate total height
         const totalRows = Math.ceil(this.items.length / this.columns);
@@ -312,12 +368,8 @@ class VirtualList {
             return;
         }
 
-        const scrollTop = this.scrollContainer.scrollTop;
-        const viewportHeight = this.scrollContainer.clientHeight;
-        const containerRect = this.container.getBoundingClientRect();
-        const scrollRect = this.scrollContainer.getBoundingClientRect();
-        const containerTop = containerRect.top - scrollRect.top;
-        const relativeScroll = Math.max(0, scrollTop - containerTop);
+        const viewportHeight = this._getViewportHeight();
+        const relativeScroll = this._getRelativeScroll();
 
         const rowHeight = this.itemHeight + this.config.rowGap;
         const bufferHeight = this.config.bufferSize * rowHeight;
@@ -375,6 +427,7 @@ class VirtualList {
      */
     _renderVisibleRange(startIdx, endIdx) {
         const fragment = document.createDocumentFragment();
+        const newElements = [];
 
         for (let i = startIdx; i <= endIdx && i < this.items.length; i++) {
             const key = this.getItemKey(i, this.items[i]);
@@ -387,11 +440,13 @@ class VirtualList {
                     data: this.items[i],
                 });
                 fragment.appendChild(element);
+                newElements.push(element);
             }
         }
 
-        if (fragment.children.length > 0) {
+        if (newElements.length > 0) {
             this.container.appendChild(fragment);
+            this._notifyItemsRendered(newElements);
         }
     }
 
@@ -428,16 +483,19 @@ class VirtualList {
         this.container.style.gridTemplateColumns = '';
 
         const fragment = document.createDocumentFragment();
+        const renderedElements = [];
 
         for (let i = 0; i < this.items.length; i++) {
             const element = this.renderItem(i, this.items[i]);
             if (element) {
                 element.dataset.virtualIndex = i;
                 fragment.appendChild(element);
+                renderedElements.push(element);
             }
         }
 
         this.container.appendChild(fragment);
+        this._notifyItemsRendered(renderedElements);
     }
 
     /**
@@ -503,6 +561,10 @@ class VirtualList {
             itemData.element.classList.remove(className);
         }
 
+        if (className === 'selected') {
+            itemData.element.setAttribute('aria-selected', add ? 'true' : 'false');
+        }
+
         return true;
     }
 
@@ -561,11 +623,100 @@ class VirtualList {
         this.config = { ...this.config, ...newConfig };
 
         // Re-evaluate virtual scrolling
-        const shouldEnableVirtual = this.items.length >= this.config.threshold;
+        const shouldEnableVirtual = this.config.forceVirtual || this.items.length >= this.config.threshold;
         if (shouldEnableVirtual !== this.isVirtualEnabled) {
             this.setItems(this.items);
         } else {
             this.refresh();
+        }
+    }
+
+    /**
+     * Reconfigure rendering without destroying observers/listeners.
+     * Useful when the same virtual list can be reused across view changes.
+     * @param {Object} options
+     */
+    reconfigure(options = {}) {
+        if (typeof options.renderItem === 'function') {
+            this.renderItem = options.renderItem;
+        }
+        if (typeof options.getItemKey === 'function') {
+            this.getItemKey = options.getItemKey;
+        }
+        if (typeof options.estimateItemHeight === 'function') {
+            this.estimateItemHeight = options.estimateItemHeight;
+        }
+        if (Object.prototype.hasOwnProperty.call(options, 'onItemsRendered')) {
+            this.onItemsRendered = typeof options.onItemsRendered === 'function' ? options.onItemsRendered : null;
+        }
+        if (options.config) {
+            this.config = { ...this.config, ...options.config };
+        }
+
+        this.renderedElements.forEach(({ element }) => element?.remove());
+        this.renderedElements.clear();
+        this.visibleRange = { start: -1, end: -1 };
+
+        const shouldEnableVirtual = this.config.forceVirtual || this.items.length >= this.config.threshold;
+        this.isVirtualEnabled = shouldEnableVirtual;
+
+        if (!shouldEnableVirtual) {
+            this._renderAllItems();
+            return;
+        }
+
+        this.container.innerHTML = '';
+        this.container.classList.add('virtual-scroll');
+        this._recalculateLayout();
+        this._updateVisibleItems();
+    }
+
+    /**
+     * Get the index for a key using the configured key getter.
+     * @param {number|string} targetKey
+     * @returns {number}
+     */
+    getIndexForKey(targetKey) {
+        for (let i = 0; i < this.items.length; i++) {
+            if (String(this.getItemKey(i, this.items[i])) === String(targetKey)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Get layout data for an item index.
+     * @param {number} index
+     * @returns {Object|null}
+     */
+    getLayoutForIndex(index) {
+        return this.layoutCache?.[index] || null;
+    }
+
+    /**
+     * Get layout data for an item key.
+     * @param {number|string} targetKey
+     * @returns {Object|null}
+     */
+    getLayoutForKey(targetKey) {
+        const index = this.getIndexForKey(targetKey);
+        return index >= 0 ? this.getLayoutForIndex(index) : null;
+    }
+
+    /**
+     * Notify caller when new elements have been mounted.
+     * @param {HTMLElement[]} elements
+     */
+    _notifyItemsRendered(elements) {
+        if (!this.onItemsRendered || !elements || elements.length === 0) return;
+
+        try {
+            this.onItemsRendered(elements);
+        } catch (error) {
+            if (typeof window !== 'undefined' && window.Logger) {
+                window.Logger.warn('VirtualList: onItemsRendered callback failed:', error);
+            }
         }
     }
 
@@ -593,7 +744,7 @@ class VirtualList {
 
         // Remove scroll listener
         if (this.scrollHandler) {
-            this.scrollContainer.removeEventListener('scroll', this.scrollHandler);
+            this.scrollEventTarget.removeEventListener('scroll', this.scrollHandler);
             this.scrollHandler = null;
         }
 
@@ -606,14 +757,17 @@ class VirtualList {
         }
 
         // Clear rendered elements
+        this.onItemsRendered = null;
         this.renderedElements.clear();
 
         // Remove virtual-scroll class
         if (this.container) {
+            this.container.innerHTML = '';
             this.container.classList.remove('virtual-scroll');
             this.container.style.position = '';
             this.container.style.display = '';
             this.container.style.minHeight = '';
+            this.container.style.gridTemplateColumns = '';
         }
 
         // Clear state
@@ -698,7 +852,7 @@ class WaterfallVirtualList extends VirtualList {
         }
 
         // Total height is the tallest column
-        this.totalHeight = Math.max(...this.columnHeights, 0);
+        this.totalHeight = Math.max(0, Math.max(...this.columnHeights, 0) - this.config.rowGap);
 
         // Set container styles
         this.container.style.position = 'relative';
@@ -708,6 +862,76 @@ class WaterfallVirtualList extends VirtualList {
 
         // Use itemPositions as layout cache
         this.layoutCache = this.itemPositions;
+    }
+
+    /**
+     * Append items without reflowing already-positioned cards.
+     * Existing items stay in place; only new items are laid out below.
+     */
+    appendItems(newItems) {
+        if (!newItems || newItems.length === 0) return;
+
+        const previousLength = this.items.length;
+        this.items = [...this.items, ...newItems];
+
+        if (!this.isVirtualEnabled) {
+            this.setItems(this.items);
+            return;
+        }
+
+        if (!this.container) {
+            this._recalculateLayout();
+            this._updateVisibleItems();
+            return;
+        }
+
+        const containerWidth = this.container.clientWidth;
+        const nextColumns = Math.max(1, Math.floor(
+            (containerWidth + this.config.columnGap) /
+            (this.waterfallConfig.columnWidth + this.config.columnGap)
+        ));
+        const nextColumnWidth = (containerWidth - (nextColumns - 1) * this.config.columnGap) / nextColumns;
+
+        if (
+            this.itemPositions.length === 0 ||
+            nextColumns !== this.columns ||
+            Math.abs(nextColumnWidth - this.columnWidth) > 1
+        ) {
+            this._recalculateLayout();
+            this._updateVisibleItems();
+            return;
+        }
+
+        newItems.forEach((item, offset) => {
+            const index = previousLength + offset;
+            const height = this._estimateItemHeight(index, item);
+
+            let minCol = 0;
+            let minHeight = this.columnHeights[0];
+            for (let c = 1; c < this.columns; c++) {
+                if (this.columnHeights[c] < minHeight) {
+                    minCol = c;
+                    minHeight = this.columnHeights[c];
+                }
+            }
+
+            this.itemPositions.push({
+                index,
+                column: minCol,
+                top: minHeight,
+                left: minCol * (this.columnWidth + this.config.columnGap),
+                width: this.columnWidth,
+                height,
+            });
+
+            this.columnHeights[minCol] += height + this.config.rowGap;
+        });
+
+        this.totalHeight = Math.max(0, Math.max(...this.columnHeights, 0) - this.config.rowGap);
+        this.container.style.minHeight = `${this.totalHeight}px`;
+        this.layoutCache = this.itemPositions;
+
+        this._updateVisibleItems();
     }
 
     /**
@@ -735,12 +959,8 @@ class WaterfallVirtualList extends VirtualList {
             return;
         }
 
-        const scrollTop = this.scrollContainer.scrollTop;
-        const viewportHeight = this.scrollContainer.clientHeight;
-        const containerRect = this.container.getBoundingClientRect();
-        const scrollRect = this.scrollContainer.getBoundingClientRect();
-        const containerTop = containerRect.top - scrollRect.top;
-        const relativeScroll = Math.max(0, scrollTop - containerTop);
+        const viewportHeight = this._getViewportHeight();
+        const relativeScroll = this._getRelativeScroll();
 
         const bufferHeight = this.config.bufferSize * this.waterfallConfig.estimatedHeight;
         const visibleTop = relativeScroll - bufferHeight;
@@ -779,6 +999,7 @@ class WaterfallVirtualList extends VirtualList {
 
         // Add newly visible items
         const fragment = document.createDocumentFragment();
+        const newElements = [];
         for (const i of visibleIndices) {
             const key = this.getItemKey(i, this.items[i]);
 
@@ -791,12 +1012,14 @@ class WaterfallVirtualList extends VirtualList {
                         data: this.items[i],
                     });
                     fragment.appendChild(element);
+                    newElements.push(element);
                 }
             }
         }
 
-        if (fragment.children.length > 0) {
+        if (newElements.length > 0) {
             this.container.appendChild(fragment);
+            this._notifyItemsRendered(newElements);
         }
     }
 
@@ -814,6 +1037,7 @@ class WaterfallVirtualList extends VirtualList {
             element.style.top = `${layout.top}px`;
             element.style.left = `${layout.left}px`;
             element.style.width = `${layout.width}px`;
+            element.style.height = `${layout.height}px`;
             element.style.aspectRatio = 'auto';
             element.dataset.virtualIndex = index;
         }

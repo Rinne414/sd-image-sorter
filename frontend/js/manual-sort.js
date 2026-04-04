@@ -18,6 +18,8 @@ const ManualSortState = {
     // Enhanced tracking
     sortedCount: 0,
     skippedCount: 0,
+    undoAvailable: false,
+    redoAvailable: false,
     startTime: null,
     actionTimestamps: []  // For speed calculation
 };
@@ -39,6 +41,13 @@ const DIRECTION_MAP = {
     'a': 'left',
     's': 'down',
     'd': 'right'
+};
+
+const DEFAULT_FOLDER_LABELS = {
+    w: 'Top',
+    a: 'Keep',
+    s: 'Delete',
+    d: 'Best'
 };
 
 // ============== Initialization ==============
@@ -102,45 +111,28 @@ async function initManualSort() {
     // Resume session button
     const resumeBtn = $('#btn-resume-sorting');
     if (resumeBtn) {
-        resumeBtn.addEventListener('click', async () => {
-            const banner = $('#sort-resume-banner');
-            if (banner) banner.style.display = 'none';
-            // Load folders from server and jump straight into the active session
-            try {
-                const { folders } = await window.App.API.get('/api/sort/folders');
-                ManualSortState.folders = folders || {};
-                // Restore folder inputs
-                document.querySelectorAll('.folder-path-input').forEach(input => {
-                    const key = input.dataset.key;
-                    if (key && ManualSortState.folders[key]) {
-                        input.value = ManualSortState.folders[key];
-                    }
-                });
-            } catch (e) {
-                if (window.Logger) Logger.warn('Failed to load sort folders:', e);
-            }
-            ManualSortState.active = true;
-            ManualSortState.startTime = Date.now();
-            ManualSortState.sortedCount = 0;
-            ManualSortState.skippedCount = 0;
-            document.addEventListener('keydown', handleSortKeypress);
-            $('#sort-setup').style.display = 'none';
-            $('#sort-interface').style.display = 'flex';
-            await loadCurrentImage();
-        });
+        resumeBtn.addEventListener('click', resumeSavedSession);
     }
 
     // Discard saved session button
     const discardBtn = $('#btn-discard-session');
     if (discardBtn) {
-        discardBtn.addEventListener('click', async () => {
-            try {
-                await fetch('/api/sort/session', {method: 'DELETE'});
-            } catch (e) {
-                if (window.Logger) Logger.warn('Failed to discard session:', e);
-            }
-            const banner = $('#sort-resume-banner');
-            if (banner) banner.style.display = 'none';
+        discardBtn.addEventListener('click', () => {
+            window.App.showConfirm(
+                'Discard Saved Session',
+                'Delete the saved manual-sort session and lose the remaining progress? This cannot be undone.',
+                async () => {
+                    try {
+                        await window.App.API.delete('/api/sort/session');
+                        const banner = $('#sort-resume-banner');
+                        if (banner) banner.style.display = 'none';
+                        window.App.showToast('Saved session discarded', 'success');
+                    } catch (e) {
+                        if (window.Logger) Logger.warn('Failed to discard session:', e);
+                        window.App.showToast(formatUserError(e, 'Failed to discard saved session'), 'error');
+                    }
+                }
+            );
         });
     }
 
@@ -230,45 +222,66 @@ async function startSorting() {
             return;
         }
 
-        // Fetch images for gallery preview with all filter types
-        const imagesResult = await API.getImages({
-            generators: generators,
-            tags: tags,
-            ratings: ratings,
-            checkpoints: checkpoints,
-            loras: loras,
-            prompts: prompts,
-            minWidth: f.minWidth,
-            maxWidth: f.maxWidth,
-            minHeight: f.minHeight,
-            maxHeight: f.maxHeight,
-            aspectRatio: f.aspectRatio,
-            limit: 10000
-        });
+        // Fetch images for gallery preview with paginated requests.
+        const previewImages = [];
+        let previewCursor = null;
 
-        ManualSortState.active = true;
+        while (previewImages.length < result.total_images) {
+            const imagesResult = await API.getImages({
+                generators: generators,
+                tags: tags,
+                ratings: ratings,
+                checkpoints: checkpoints,
+                loras: loras,
+                prompts: prompts,
+                minWidth: f.minWidth,
+                maxWidth: f.maxWidth,
+                minHeight: f.minHeight,
+                maxHeight: f.maxHeight,
+                aspectRatio: f.aspectRatio,
+                limit: 1000,
+                cursor: previewCursor
+            });
+
+            if (!imagesResult?.images?.length) {
+                break;
+            }
+
+            previewImages.push(...imagesResult.images);
+
+            if (!imagesResult.has_more || !imagesResult.next_cursor) {
+                break;
+            }
+
+            previewCursor = imagesResult.next_cursor;
+        }
+
         ManualSortState.total = result.total_images;
         ManualSortState.index = 0;
         ManualSortState.combo = 0;
         ManualSortState.history = [];
-        ManualSortState.images = imagesResult.images || [];
+        RedoStack.clear();
+        ManualSortState.images = previewImages;
         ManualSortState.sortedCount = 0;
         ManualSortState.skippedCount = 0;
+        ManualSortState.undoAvailable = false;
+        ManualSortState.redoAvailable = false;
         ManualSortState.startTime = Date.now();
         ManualSortState.actionTimestamps = [];
+        ManualSortState.currentImage = null;
+        ManualSortState.currentTags = [];
 
         // Update folder names in UI
         updateFolderNames();
 
-        // Show sort interface
-        $('#sort-setup').style.display = 'none';
-        $('#sort-interface').style.display = 'flex';
+        activateSortingUi();
 
-        // Load first image
-        await loadCurrentImage();
-
-        // Add keyboard listener
-        document.addEventListener('keydown', handleSortKeypress);
+        try {
+            await loadCurrentImage();
+        } catch (error) {
+            rollbackSortingUi();
+            throw error;
+        }
 
         // Play start sound
         window.AudioManager?.play('start');
@@ -281,59 +294,203 @@ async function startSorting() {
 function updateFolderNames() {
     const { $ } = window.App;
 
-    Object.entries(ManualSortState.folders).forEach(([key, path]) => {
+    Object.keys(DEFAULT_FOLDER_LABELS).forEach((key) => {
+        const path = ManualSortState.folders[key];
         const nameEl = $(`#folder-name-${key}`);
-        if (nameEl && path) {
-            // Get folder name from path
+        if (!nameEl) return;
+
+        if (path) {
             const parts = path.split(/[/\\]/);
             nameEl.textContent = parts[parts.length - 1] || path;
+        } else {
+            nameEl.textContent = DEFAULT_FOLDER_LABELS[key] || key.toUpperCase();
         }
     });
 }
 
-// ============== Load Current Image ==============
+function restoreFolderInputs() {
+    document.querySelectorAll('.folder-path-input').forEach(input => {
+        const key = input.dataset.key;
+        input.value = key ? (ManualSortState.folders[key] || '') : '';
+    });
+    updateFolderNames();
+}
 
-async function loadCurrentImage() {
+function syncPreviewImages(imageIds = [], currentImage = null) {
+    if (!Array.isArray(imageIds) || imageIds.length === 0) {
+        ManualSortState.images = [];
+        return;
+    }
+
+    const existingById = new Map((ManualSortState.images || []).map(image => [image.id, image]));
+    ManualSortState.images = imageIds.map(id => existingById.get(id) || { id });
+
+    if (currentImage?.id) {
+        const currentIndex = imageIds.indexOf(currentImage.id);
+        if (currentIndex >= 0) {
+            ManualSortState.images[currentIndex] = currentImage;
+        }
+    }
+}
+
+function updateHistoryControlState(state = {}) {
+    if (typeof state.undo_available === 'boolean') {
+        ManualSortState.undoAvailable = state.undo_available;
+    }
+    if (typeof state.redo_available === 'boolean') {
+        ManualSortState.redoAvailable = state.redo_available;
+    }
+
+    document.querySelectorAll('[data-action="undo"]').forEach(btn => {
+        const disabled = !ManualSortState.active || !ManualSortState.undoAvailable;
+        btn.disabled = disabled;
+        btn.setAttribute('aria-disabled', String(disabled));
+    });
+
+    document.querySelectorAll('[data-action="redo"]').forEach(btn => {
+        const disabled = !ManualSortState.active || !ManualSortState.redoAvailable;
+        btn.disabled = disabled;
+        btn.setAttribute('aria-disabled', String(disabled));
+    });
+}
+
+function activateSortingUi() {
+    const { $ } = window.App;
+    ManualSortState.active = true;
+    document.removeEventListener('keydown', handleSortKeypress);
+    document.addEventListener('keydown', handleSortKeypress);
+    $('#sort-setup').style.display = 'none';
+    $('#sort-interface').style.display = 'flex';
+    updateHistoryControlState();
+}
+
+function rollbackSortingUi() {
+    const { $ } = window.App;
+    ManualSortState.active = false;
+    document.removeEventListener('keydown', handleSortKeypress);
+    $('#sort-interface').style.display = 'none';
+    $('#sort-setup').style.display = 'block';
+    updateHistoryControlState({ undo_available: false, redo_available: false });
+}
+
+function applyCurrentSortPayload(result, options = {}) {
     const { $, API } = window.App;
+    const { cacheBust = false } = options;
+
+    if (result?.folders && typeof result.folders === 'object') {
+        ManualSortState.folders = { ...ManualSortState.folders, ...result.folders };
+        restoreFolderInputs();
+    }
+
+    if (Array.isArray(result?.image_ids)) {
+        syncPreviewImages(result.image_ids, result.image || null);
+    }
+
+    if (Number.isFinite(result?.sorted_count)) {
+        ManualSortState.sortedCount = result.sorted_count;
+    }
+    if (Number.isFinite(result?.skipped_count)) {
+        ManualSortState.skippedCount = result.skipped_count;
+    }
+
+    updateHistoryControlState(result || {});
+
+    if (result?.done) {
+        finishSorting();
+        return false;
+    }
+
+    ManualSortState.currentImage = result.image;
+    ManualSortState.currentTags = result.tags || [];
+    ManualSortState.index = result.index;
+    ManualSortState.total = result.total;
+
+    if (ManualSortState.currentImage?.id && ManualSortState.images?.length > ManualSortState.index) {
+        ManualSortState.images[ManualSortState.index] = ManualSortState.currentImage;
+    }
+
+    const imgWrapper = $('.current-image-wrapper');
+    imgWrapper.classList.remove('fly-up', 'fly-down', 'fly-left', 'fly-right', 'skip');
+    imgWrapper.classList.add('slide-in');
+
+    const img = $('#current-image');
+    const cacheSuffix = cacheBust ? `?t=${Date.now()}` : '';
+    img.src = ManualSortState.currentImage?.id ? API.getImageUrl(ManualSortState.currentImage.id) + cacheSuffix : '';
+
+    const tagsEl = $('#current-image-tags');
+    const topTags = ManualSortState.currentTags.slice(0, 5);
+    tagsEl.innerHTML = topTags
+        .map(t => `<span class="image-tag">${escapeHtml(t.tag)}</span>`)
+        .join('');
+
+    updateProgress();
+
+    setTimeout(() => {
+        imgWrapper.classList.remove('slide-in');
+    }, 300);
+
+    return true;
+}
+
+async function resumeSavedSession() {
+    const { $, API, showToast } = window.App;
 
     try {
-        const result = await API.getCurrentSortImage();
+        const session = await API.getCurrentSortImage();
 
-        if (result.done) {
-            finishSorting();
+        if (!session || session.done || !session.image) {
+            const banner = $('#sort-resume-banner');
+            if (banner) banner.style.display = 'none';
+            showToast('No saved sorting session to resume', 'info');
             return;
         }
 
-        ManualSortState.currentImage = result.image;
-        ManualSortState.currentTags = result.tags || [];
-        ManualSortState.index = result.index;
-        ManualSortState.total = result.total;
+        ManualSortState.folders = session.folders || {};
+        ManualSortState.startTime = Date.now();
+        ManualSortState.combo = 0;
+        ManualSortState.lastActionTime = 0;
+        ManualSortState.history = [];
+        ManualSortState.images = [];
+        ManualSortState.currentImage = null;
+        ManualSortState.currentTags = [];
+        ManualSortState.actionTimestamps = [];
+        ManualSortState.sortedCount = 0;
+        ManualSortState.skippedCount = 0;
+        ManualSortState.undoAvailable = false;
+        ManualSortState.redoAvailable = false;
+        RedoStack.clear();
 
-        // Update image
-        const imgWrapper = $('.current-image-wrapper');
-        imgWrapper.classList.remove('fly-up', 'fly-down', 'fly-left', 'fly-right', 'skip');
-        imgWrapper.classList.add('slide-in');
+        if (!Object.keys(ManualSortState.folders).length) {
+            const folderResult = await API.get('/api/sort/folders');
+            ManualSortState.folders = folderResult?.folders || {};
+        }
 
-        const img = $('#current-image');
-        img.src = API.getImageUrl(result.image.id);
+        restoreFolderInputs();
+        activateSortingUi();
+        applyCurrentSortPayload(session);
 
-        // Update tags
-        const tagsEl = $('#current-image-tags');
-        const topTags = ManualSortState.currentTags.slice(0, 5);
-        tagsEl.innerHTML = topTags
-            .map(t => `<span class="image-tag">${escapeHtml(t.tag)}</span>`)
-            .join('');
+        const banner = $('#sort-resume-banner');
+        if (banner) banner.style.display = 'none';
+    } catch (error) {
+        rollbackSortingUi();
+        const banner = $('#sort-resume-banner');
+        if (banner) banner.style.display = 'flex';
+        Logger.error('Failed to resume saved session:', error);
+        showToast(formatUserError(error, 'Failed to resume saved session'), 'error');
+    }
+}
 
-        // Update progress
-        updateProgress();
+// ============== Load Current Image ==============
 
-        // Remove slide-in class after animation
-        setTimeout(() => {
-            imgWrapper.classList.remove('slide-in');
-        }, 300);
+async function loadCurrentImage(prefetchedResult = null) {
+    const { API } = window.App;
 
+    try {
+        const result = prefetchedResult || await API.getCurrentSortImage();
+        applyCurrentSortPayload(result, { cacheBust: !!prefetchedResult });
     } catch (error) {
         Logger.error('Failed to load current image:', error);
+        throw error;
     }
 }
 
@@ -506,24 +663,17 @@ async function performMove(folderKey) {
         const result = await API.sortAction('move', folderKey);
 
         if (result.error) {
+            updateHistoryControlState(result);
             showToast('Failed to move image: ' + result.error, 'error');
             return;
         }
 
         // Update combo/stats only after successful move
         updateCombo();
-        ManualSortState.sortedCount++;
         ManualSortState.actionTimestamps.push(Date.now());
         const cutoff = Date.now() - 30000;
         ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
-
-        if (result.done) {
-            finishSorting();
-            return;
-        }
-
-        // Load next image
-        await loadCurrentImage();
+        await loadCurrentImage(result);
 
     } catch (error) {
         Logger.error('Failed to move image:', error);
@@ -552,22 +702,20 @@ async function performSkip() {
         ManualSortState.combo = 0;
         updateComboDisplay();
 
-        // Track skip stats
-        ManualSortState.skippedCount++;
+        await sleep(300);
+
+        const result = await API.sortAction('skip');
+        if (result.error) {
+            updateHistoryControlState(result);
+            showToast('Failed to skip image: ' + result.error, 'error');
+            return;
+        }
+
         ManualSortState.actionTimestamps.push(Date.now());
         const cutoff = Date.now() - 30000;
         ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
 
-        await sleep(300);
-
-        const result = await API.sortAction('skip');
-
-        if (result.done) {
-            finishSorting();
-            return;
-        }
-
-        await loadCurrentImage();
+        await loadCurrentImage(result);
 
     } catch (error) {
         Logger.error('Failed to skip:', error);
@@ -579,17 +727,6 @@ async function performSkip() {
 
 async function undoLastAction() {
     const { $, API, showToast } = window.App;
-
-    // Store current action for potential redo before calling undo
-    if (ManualSortState.history && ManualSortState.history.length > 0) {
-        const lastAction = ManualSortState.history[ManualSortState.history.length - 1];
-        if (lastAction && lastAction.type === 'move') {
-            RedoStack.push({
-                type: 'move',
-                folderKey: lastAction.folderKey
-            });
-        }
-    }
 
     // Play undo sound
     window.AudioManager?.play('undo');
@@ -603,66 +740,13 @@ async function undoLastAction() {
 
         // Check if there was nothing to undo
         if (result.status === 'no_history') {
+            updateHistoryControlState(result);
             showToast('Nothing to undo', 'info');
             return;
         }
 
-        // Decrement the appropriate counter based on what was undone
-        // The server tells us what the last action was via result.undone_action
-        if (result.undone_action === 'move') {
-            ManualSortState.sortedCount = Math.max(0, ManualSortState.sortedCount - 1);
-        } else if (result.undone_action === 'skip') {
-            ManualSortState.skippedCount = Math.max(0, ManualSortState.skippedCount - 1);
-        } else {
-            // Fallback: if server doesn't tell us action type, decrement sorted
-            // since moves are more common than skips
-            ManualSortState.sortedCount = Math.max(0, ManualSortState.sortedCount - 1);
-        }
-
-        // Use the returned image data directly instead of making another API call
-        if (result.image && result.image.id) {
-            ManualSortState.currentImage = result.image;
-            ManualSortState.currentTags = result.tags || [];
-            ManualSortState.index = result.index;
-            ManualSortState.total = result.total;
-
-            // Update the images array at the current index with the restored image data
-            // This ensures the gallery preview stays in sync after undo operations
-            if (ManualSortState.images && ManualSortState.index < ManualSortState.images.length) {
-                ManualSortState.images[ManualSortState.index] = result.image;
-            }
-
-            // Update image display
-            const imgWrapper = $('.current-image-wrapper');
-            imgWrapper.classList.remove('fly-up', 'fly-down', 'fly-left', 'fly-right', 'skip');
-            imgWrapper.classList.add('slide-in');
-
-            const img = $('#current-image');
-            // Add cache-bust to force reload of the image
-            const cacheBust = Date.now();
-            img.src = (API?.getImageUrl?.(result.image.id) ?? `/api/image-file/${result.image.id}`) + '?t=' + cacheBust;
-
-            // Update tags
-            const tagsEl = $('#current-image-tags');
-            const topTags = ManualSortState.currentTags.slice(0, 5);
-            tagsEl.innerHTML = topTags
-                .map(t => `<span class="image-tag">${escapeHtml(t.tag)}</span>`)
-                .join('');
-
-            // Update progress
-            updateProgress();
-
-            // Remove slide-in class after animation
-            setTimeout(() => {
-                imgWrapper.classList.remove('slide-in');
-            }, 300);
-
-            showToast('Undid last action', 'info');
-        } else {
-            // Fallback to loadCurrentImage if no image data returned
-            await loadCurrentImage();
-            showToast('Undid last action', 'info');
-        }
+        await loadCurrentImage(result);
+        showToast('Undid last action', 'info');
     } catch (error) {
         Logger.error('Failed to undo:', error);
         showToast('Failed to undo', 'error');
@@ -718,7 +802,12 @@ function finishSorting() {
     const { $, showToast } = window.App;
 
     ManualSortState.active = false;
+    ManualSortState.history = [];
+    ManualSortState.undoAvailable = false;
+    ManualSortState.redoAvailable = false;
+    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
+    updateHistoryControlState({ undo_available: false, redo_available: false });
 
     // Play finish sound
     window.AudioManager?.play('finish');
@@ -754,7 +843,11 @@ function exitSorting() {
     const { $, showToast } = window.App;
 
     ManualSortState.active = false;
+    ManualSortState.undoAvailable = false;
+    ManualSortState.redoAvailable = false;
+    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
+    updateHistoryControlState({ undo_available: false, redo_available: false });
 
     $('#sort-interface').style.display = 'none';
     $('#sort-setup').style.display = 'block';
@@ -912,6 +1005,8 @@ function createTouchControls() {
     touchControls.querySelectorAll('.touch-sort-btn').forEach(btn => {
         btn.addEventListener('click', handleTouchControl);
     });
+
+    updateHistoryControlState();
 }
 
 function handleTouchControl(e) {
@@ -943,45 +1038,38 @@ function handleTouchControl(e) {
 
 // Redo functionality
 async function redoLastAction() {
-    const { $, API, showToast } = window.App;
-    
-    if (RedoStack.isEmpty()) {
-        showToast('Nothing to redo', 'info');
-        return;
-    }
-    
-    const action = RedoStack.pop();
-    
-    // Play redo sound
-    window.AudioManager?.play('move');
-    
+    const { API, showToast } = window.App;
+
     try {
-        if (action.type === 'move') {
-            const result = await API.sortAction('move', action.folderKey);
-            
-            if (result.error) {
-                showToast('Failed to redo move: ' + result.error, 'error');
-                // Push back to redo stack
-                RedoStack.push(action);
-                return;
-            }
-            
-            ManualSortState.sortedCount++;
-            ManualSortState.actionTimestamps.push(Date.now());
-            
-            if (result.done) {
-                finishSorting();
-                return;
-            }
-            
-            await loadCurrentImage();
-            showToast('Redid move to ' + action.folderKey.toUpperCase(), 'info');
+        const result = await API.sortAction('redo');
+
+        if (result.status === 'no_redo') {
+            updateHistoryControlState(result);
+            showToast('Nothing to redo', 'info');
+            return;
         }
-        // Skip actions don't need redo
+
+        if (result.error) {
+            updateHistoryControlState(result);
+            showToast(result.error, 'error');
+            return;
+        }
+
+        window.AudioManager?.play('move');
+        ManualSortState.actionTimestamps.push(Date.now());
+        const cutoff = Date.now() - 30000;
+        ManualSortState.actionTimestamps = ManualSortState.actionTimestamps.filter(t => t > cutoff);
+
+        await loadCurrentImage(result);
+
+        if (result.redone_action === 'move' && result.folder_key) {
+            showToast('Redid move to ' + result.folder_key.toUpperCase(), 'info');
+        } else {
+            showToast('Redid skip', 'info');
+        }
     } catch (error) {
         Logger.error('Failed to redo:', error);
         showToast('Failed to redo', 'error');
-        RedoStack.push(action);
     }
 }
 

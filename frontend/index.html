@@ -12,8 +12,9 @@
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/censor-v2.css">
     <link rel="stylesheet" href="/static/css/new-views.css">
+    <link rel="stylesheet" href="/static/css/ui-refresh.css">
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap"
         rel="stylesheet">
 </head>
 
@@ -31,7 +32,7 @@
         <nav class="nav-bar" role="navigation" aria-label="Main navigation">
             <div class="nav-brand">
                 <span class="brand-icon" aria-hidden="true">🎨</span>
-                <span class="brand-text">SD Image Sorter</span>
+                <span class="brand-text" data-i18n="brand.name">SD Image Sorter</span>
             </div>
             <!-- Mobile Menu Toggle Button -->
             <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
@@ -44,35 +45,35 @@
                 <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
                     <span class="tab-step" aria-hidden="true">1</span>
                     <span class="tab-icon" aria-hidden="true">🖼️</span>
-                    <span class="tab-text">Gallery</span>
+                    <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                 </button>
                 <button class="nav-tab" data-view="autosep" role="tab" aria-selected="false" aria-controls="view-autosep">
                     <span class="tab-step" aria-hidden="true">2</span>
                     <span class="tab-icon" aria-hidden="true">📁</span>
-                    <span class="tab-text">Auto-Separate</span>
+                    <span class="tab-text" data-i18n="nav.autosep">Auto-Separate</span>
                 </button>
                 <button class="nav-tab" data-view="manual" role="tab" aria-selected="false" aria-controls="view-manual">
                     <span class="tab-step" aria-hidden="true">3</span>
                     <span class="tab-icon" aria-hidden="true">🎮</span>
-                    <span class="tab-text">Manual Sort</span>
+                    <span class="tab-text" data-i18n="nav.manual">Manual Sort</span>
                 </button>
                 <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
                     <span class="tab-step" aria-hidden="true">4</span>
                     <span class="tab-icon" aria-hidden="true">🔳</span>
-                    <span class="tab-text">Censored Edit</span>
+                    <span class="tab-text" data-i18n="nav.censor">Censored Edit</span>
                 </button>
                 <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
                     <span class="tab-icon" aria-hidden="true">🔍</span>
-                    <span class="tab-text">Similar</span>
+                    <span class="tab-text" data-i18n="nav.similar">Similar</span>
                 </button>
                 <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
                     <span class="tab-icon" aria-hidden="true">🧪</span>
-                    <span class="tab-text">Prompt Lab</span>
+                    <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
                 </button>
                 <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
                     <span class="tab-icon" aria-hidden="true">🎨</span>
-                    <span class="tab-text">Artist ID</span>
-                    <span class="tab-badge tab-badge-experimental">Experimental</span>
+                    <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
+                    <span class="tab-badge tab-badge-experimental" data-i18n="nav.experimental">Experimental</span>
                 </button>
             </div>
 
@@ -80,7 +81,7 @@
             <div class="mobile-nav-overlay" id="mobile-nav-overlay" role="dialog" aria-modal="true" aria-labelledby="mobile-nav-title-text">
                 <div class="mobile-nav-menu">
                     <div class="mobile-nav-header">
-                        <span class="mobile-nav-title" id="mobile-nav-title-text">Navigation</span>
+                        <span class="mobile-nav-title" id="mobile-nav-title-text" data-i18n="nav.navigation">Navigation</span>
                         <button class="mobile-nav-close" id="mobile-nav-close" aria-label="Close navigation menu">
                             <span aria-hidden="true">✕</span>
                         </button>
@@ -88,62 +89,78 @@
                     <div class="mobile-nav-tabs" role="navigation" aria-label="Mobile navigation">
                         <button class="mobile-nav-item active" data-view="gallery" aria-label="Gallery view">
                             <span class="mobile-nav-icon" aria-hidden="true">🖼️</span>
-                            <span class="mobile-nav-text">Gallery</span>
+                            <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
                         <button class="mobile-nav-item" data-view="autosep" aria-label="Auto-Separate view">
                             <span class="mobile-nav-icon" aria-hidden="true">📁</span>
-                            <span class="mobile-nav-text">Auto-Separate</span>
+                            <span class="mobile-nav-text" data-i18n="nav.autosep">Auto-Separate</span>
                         </button>
                         <button class="mobile-nav-item" data-view="manual" aria-label="Manual Sort view">
                             <span class="mobile-nav-icon" aria-hidden="true">🎮</span>
-                            <span class="mobile-nav-text">Manual Sort</span>
+                            <span class="mobile-nav-text" data-i18n="nav.manual">Manual Sort</span>
                         </button>
                         <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
-                            <span class="mobile-nav-text">Censored Edit</span>
+                            <span class="mobile-nav-text" data-i18n="nav.censor">Censored Edit</span>
                         </button>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔍</span>
-                            <span class="mobile-nav-text">Similar</span>
+                            <span class="mobile-nav-text" data-i18n="nav.similar">Similar</span>
                         </button>
                         <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
-                            <span class="mobile-nav-text">Prompt Lab</span>
+                            <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
                         </button>
                         <button class="mobile-nav-item" data-view="artist" aria-label="Artist ID view">
                             <span class="mobile-nav-icon" aria-hidden="true">🎨</span>
-                            <span class="mobile-nav-text">Artist ID</span>
-                            <span class="tab-badge tab-badge-experimental">Experimental</span>
+                            <span class="mobile-nav-text" data-i18n="nav.artist">Artist ID</span>
+                            <span class="tab-badge tab-badge-experimental" data-i18n="nav.experimental">Experimental</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
                         <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Scan folder for images">
-                            <span aria-hidden="true">📂</span> Scan Folder
+                            <span aria-hidden="true">📂</span>
+                            <span data-i18n="action.scan">Scan Folder</span>
                         </button>
                         <button class="btn btn-secondary full-width" id="mobile-btn-tag" aria-label="Tag images with AI">
-                            <span>🏷️</span> Tag Images
+                            <span>🏷️</span>
+                            <span data-i18n="action.tag">Tag Images</span>
                         </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-tags-library">
-                            <span>📚</span> Library
+                            <span>📚</span>
+                            <span data-i18n="action.library">Library</span>
+                        </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
+                            <span aria-hidden="true">🌐</span>
+                            <span data-i18n="lang.toggle">中文</span>
                         </button>
                     </div>
                 </div>
             </div>
             <div class="nav-actions">
                 <button id="btn-clear-db" class="btn btn-ghost danger" aria-label="Clear gallery database">
-                    <span aria-hidden="true">🗑️</span> Clear Gallery
+                    <span aria-hidden="true">🗑️</span>
+                    <span data-i18n="action.clearGallery">Clear Gallery</span>
                 </button>
                 <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library">
-                    <span aria-hidden="true">📚</span> Library
+                    <span aria-hidden="true">📚</span>
+                    <span data-i18n="action.library">Library</span>
                 </button>
-                <button id="btn-help" class="btn-help" title="Show onboarding tour" aria-label="Show help and onboarding tour">
-                    <span aria-hidden="true">❓</span> Help
+                <button id="btn-language-toggle" class="btn btn-ghost btn-language" title="Switch language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
+                    <span aria-hidden="true">🌐</span>
+                    <span data-i18n="lang.toggle">中文</span>
+                </button>
+                <button id="btn-help" class="btn-help" title="Open guide for current tab" aria-label="Open guide for current tab">
+                    <span aria-hidden="true">❓</span>
+                    <span data-i18n="guide.label">Guide</span>
                 </button>
                 <button id="btn-scan" class="btn btn-primary" aria-label="Scan folder for images">
-                    <span aria-hidden="true">📂</span> Scan Folder
+                    <span aria-hidden="true">📂</span>
+                    <span data-i18n="action.scan">Scan Folder</span>
                 </button>
                 <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI">
-                    <span aria-hidden="true">🏷️</span> Tag Images
+                    <span aria-hidden="true">🏷️</span>
+                    <span data-i18n="action.tag">Tag Images</span>
                 </button>
             </div>
         </nav>
@@ -154,9 +171,10 @@
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters">
                     <div class="filter-header">
-                        <h3 class="sidebar-title" id="filter-sidebar-title">Filters</h3>
+                        <h3 class="sidebar-title" id="filter-sidebar-title" data-i18n="filter.title">Filters</h3>
                         <button id="btn-open-filters" class="btn btn-primary btn-small" aria-label="Open filter editor">
-                            <span aria-hidden="true">🔍</span> Edit Filters
+                            <span aria-hidden="true">🔍</span>
+                            <span data-i18n="gallery.editFilters">Edit Filters</span>
                         </button>
                     </div>
 
@@ -195,12 +213,13 @@
                         </div>
                     </div>
 
-                    <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters">Clear All Filters</button>
+                    <button id="btn-clear-filters" class="btn btn-ghost full-width" aria-label="Clear all active filters" data-i18n="filter.clearAll">Clear All Filters</button>
 
                     <div class="divider-h" aria-hidden="true"></div>
 
                     <button id="btn-toggle-select" class="btn btn-primary btn-large full-width" aria-pressed="false" aria-label="Toggle image selection mode">
-                        <span aria-hidden="true">✔</span> Select Images
+                        <span aria-hidden="true">✔</span>
+                        <span data-i18n="gallery.selectImages">Select Images</span>
                     </button>
                 </aside>
 
@@ -215,11 +234,13 @@
                         <div class="gallery-header-left">
                             <!-- Mobile Filter Toggle (shown in header on mobile) -->
                             <button class="mobile-filter-header-btn" id="mobile-filter-header-btn" aria-label="Open filters">
-                                <span aria-hidden="true">🔍</span> Filters
+                                <span aria-hidden="true">🔍</span>
+                                <span data-i18n="gallery.filters">Filters</span>
                             </button>
                             <span class="image-count" id="image-count" aria-live="polite">0 images</span>
                             <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image" aria-label="Show random image">
-                                <span aria-hidden="true">🎲</span> Random
+                                <span aria-hidden="true">🎲</span>
+                                <span data-i18n="gallery.random">Random</span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
@@ -362,15 +383,15 @@
             <section id="view-autosep" class="view">
                 <div class="autosep-container">
                     <div class="autosep-panel">
-                        <h2 class="panel-title">Auto-Separate Images</h2>
-                        <p class="panel-description">Move images matching your filters to a new folder automatically.
+                        <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
+                        <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.
                         </p>
 
                         <div class="filter-section">
                             <div class="filter-header-compact">
-                                <h4>Filter Criteria</h4>
-                                <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span> Edit
-                                    Filters</button>
+                                <h4 data-i18n="filter.criteria">Filter Criteria</h4>
+                                <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span>
+                                    <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
                             <div class="filter-summary-compact" id="autosep-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
@@ -391,7 +412,7 @@
                         </div>
 
                         <div class="filter-section">
-                            <h4>Destination Folder</h4>
+                            <h4 data-i18n="autosep.destination">Destination Folder</h4>
                             <div class="folder-input-group">
                                 <input type="text" id="autosep-destination" class="input-field"
                                     placeholder="D:\sorted\my-folder">
@@ -400,20 +421,21 @@
                         </div>
 
                         <div class="preview-section">
-                            <h4>Preview</h4>
+                            <h4 data-i18n="autosep.preview">Preview</h4>
                             <div class="preview-stats" id="autosep-preview">
                                 <span class="stat-number">0</span>
-                                <span class="stat-label">images will be moved</span>
+                                <span class="stat-label" data-i18n="common.images">images</span>
                             </div>
                             <div class="autosep-preview-list" id="autosep-preview-list">
-                                <div class="autosep-preview-empty">Click "Preview Results" to review matching images before moving them.</div>
+                                <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
                             </div>
-                            <div class="autosep-preview-hint">Preview shows the first few matches only.</div>
-                            <button class="btn btn-secondary" id="btn-preview-autosep">Preview Results</button>
+                            <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview shows the first few matches only.</div>
+                            <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
                         </div>
 
                         <button class="btn btn-primary btn-large" id="btn-execute-autosep">
-                            <span>📁</span> Move Images
+                            <span>📁</span>
+                            <span data-i18n="autosep.moveBtn">Move Images</span>
                         </button>
                     </div>
                 </div>
@@ -425,17 +447,17 @@
                 <div class="mobile-warning" id="manual-sort-mobile-warning">
                     <div class="mobile-warning-content">
                         <span class="mobile-warning-icon">⚠️</span>
-                        <h3>Keyboard Required</h3>
-                        <p>Manual Sort mode uses WASD keys for quick sorting. Please use a device with a keyboard for the best experience.</p>
-                        <button class="btn btn-secondary" id="return-to-gallery-btn">Return to Gallery</button>
+                        <h3 data-i18n="manual.keyboardRequired">Keyboard Required</h3>
+                        <p data-i18n="manual.keyboardMsg">Manual Sort mode uses WASD keys for quick sorting. Please use a device with a keyboard for the best experience.</p>
+                        <button class="btn btn-secondary" id="return-to-gallery-btn" data-i18n="manual.returnToGallery">Return to Gallery</button>
                     </div>
                 </div>
 
                 <div class="manual-sort-container">
                     <!-- Setup Panel (shown initially) -->
                     <div class="sort-setup" id="sort-setup">
-                        <h2 class="setup-title">Manual Sort Mode</h2>
-                        <p class="setup-description">Configure your folder destinations and start sorting!</p>
+                        <h2 class="setup-title" data-i18n="manual.title">Manual Sort Mode</h2>
+                        <p class="setup-description" data-i18n="manual.description">Configure your folder destinations and start sorting!</p>
 
                         <div class="folder-config">
                             <div class="folder-slot" data-key="w">
@@ -480,10 +502,9 @@
 
                         <div class="filter-section">
                             <div class="filter-header-compact">
-                                <h4>Filter Images to Sort</h4>
+                                <h4 data-i18n="filter.imagesToSort">Filter Images to Sort</h4>
                                 <button class="btn btn-primary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
-                                    Edit
-                                    Filters</button>
+                                    <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
@@ -504,7 +525,7 @@
                         </div>
 
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
-                            🎮 Start Sorting
+                            🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
                         </button>
 
                         <!-- Resume banner shown when a saved session is detected -->
@@ -571,16 +592,16 @@
                         <!-- Gallery Preview Bar (Minimap) -->
                         <div class="gallery-preview-bar" id="gallery-preview-bar">
                             <div class="minimap-header">
-                                <span class="minimap-label">Minimap</span>
+                                <span class="minimap-label" data-i18n="manual.minimap">Minimap</span>
                                 <span class="minimap-position" id="minimap-position">0/0</span>
                             </div>
                             <div class="preview-scroll" id="preview-scroll">
                                 <!-- Thumbnails will be inserted here by JS -->
                             </div>
                             <div class="minimap-legend">
-                                <span class="legend-item legend-current">Current</span>
-                                <span class="legend-item legend-processed">Sorted</span>
-                                <span class="legend-item legend-pending">Pending</span>
+                                <span class="legend-item legend-current" data-i18n="manual.current">Current</span>
+                                <span class="legend-item legend-processed" data-i18n="manual.sorted">Sorted</span>
+                                <span class="legend-item legend-pending" data-i18n="manual.pending">Pending</span>
                             </div>
                         </div>
 
@@ -589,23 +610,23 @@
                             <div class="progress-stats-row">
                                 <div class="progress-stat">
                                     <span class="progress-stat-value" id="sort-sorted-count">0</span>
-                                    <span class="progress-stat-label">Sorted</span>
+                                    <span class="progress-stat-label" data-i18n="manual.sorted">Sorted</span>
                                 </div>
                                 <div class="progress-stat">
                                     <span class="progress-stat-value" id="sort-skipped-count">0</span>
-                                    <span class="progress-stat-label">Skipped</span>
+                                    <span class="progress-stat-label" data-i18n="manual.skipped">Skipped</span>
                                 </div>
                                 <div class="progress-stat progress-stat-main">
                                     <span class="progress-stat-value" id="sort-percent">0%</span>
-                                    <span class="progress-stat-label">Progress</span>
+                                    <span class="progress-stat-label" data-i18n="manual.progress">Progress</span>
                                 </div>
                                 <div class="progress-stat">
                                     <span class="progress-stat-value" id="sort-remaining-count">0</span>
-                                    <span class="progress-stat-label">Remaining</span>
+                                    <span class="progress-stat-label" data-i18n="manual.remaining">Remaining</span>
                                 </div>
                                 <div class="progress-stat">
                                     <span class="progress-stat-value" id="sort-speed">0/s</span>
-                                    <span class="progress-stat-label">Speed</span>
+                                    <span class="progress-stat-label" data-i18n="manual.speed">Speed</span>
                                 </div>
                             </div>
                             <div class="progress-bar-segmented">
@@ -617,40 +638,24 @@
                             </div>
                             <div class="progress-info">
                                 <span id="sort-progress-text">0 / 0</span>
-                                <span class="progress-hint">SPACE to skip • Z to undo • ESC to exit</span>
+                                <span class="progress-hint" data-i18n="manual.progressHint">SPACE to skip • Z to undo • ESC to exit</span>
                             </div>
                         </div>
 
                         <!-- Keyboard Legend -->
-                        <div class="wasd-legend" style="
-                            position: absolute;
-                            bottom: 70px;
-                            right: 16px;
-                            background: var(--glass-bg, rgba(15,15,30,0.75));
-                            border: 1px solid var(--glass-border, rgba(255,255,255,0.1));
-                            backdrop-filter: blur(12px);
-                            -webkit-backdrop-filter: blur(12px);
-                            border-radius: 10px;
-                            padding: 10px 14px;
-                            font-size: 12px;
-                            color: rgba(255,255,255,0.75);
-                            line-height: 1.8;
-                            pointer-events: none;
-                            z-index: 10;
-                            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-                        ">
-                            <div style="font-weight:600; margin-bottom:4px; color:rgba(168,85,247,0.9); letter-spacing:0.05em;">⌨ 鍵盤操作</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">W</kbd> 上方資料夾</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">A</kbd> 左方資料夾</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">S</kbd> 下方資料夾</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">D</kbd> 右方資料夾</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">Z</kbd> 復原上一步</div>
-                            <div><kbd style="background:rgba(168,85,247,0.2);border:1px solid rgba(168,85,247,0.4);border-radius:4px;padding:1px 5px;font-family:inherit;">Space</kbd> 略過</div>
+                        <div class="wasd-legend">
+                            <div class="wasd-legend-title" data-i18n="manual.keyboardOps">Keyboard Controls</div>
+                            <div class="wasd-legend-row"><kbd>W</kbd><span data-i18n="manual.keyW">Top folder</span></div>
+                            <div class="wasd-legend-row"><kbd>A</kbd><span data-i18n="manual.keyA">Left folder</span></div>
+                            <div class="wasd-legend-row"><kbd>S</kbd><span data-i18n="manual.keyS">Bottom folder</span></div>
+                            <div class="wasd-legend-row"><kbd>D</kbd><span data-i18n="manual.keyD">Right folder</span></div>
+                            <div class="wasd-legend-row"><kbd>Z</kbd><span data-i18n="manual.keyZ">Undo last</span></div>
+                            <div class="wasd-legend-row"><kbd>Space</kbd><span data-i18n="manual.keySpace">Skip</span></div>
                         </div>
 
                         <!-- Exit Button -->
                         <button class="btn btn-ghost sort-exit" id="btn-exit-sorting">
-                            ✕ Exit
+                            ✕ <span data-i18n="manual.exit">Exit</span>
                         </button>
                     </div>
                 </div>
@@ -662,16 +667,16 @@
                     <!-- Left Sidebar (Queue Only) -->
                     <aside class="censor-sidebar-v2 left">
                         <div class="sidebar-header-v2">
-                            <h4 class="sidebar-title-v2">Processing Queue</h4>
-                            <p class="sidebar-subtitle">Drag to reorder • Click to edit</p>
+                            <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
+                            <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Drag to reorder • Click to edit</p>
                         </div>
 
                         <div class="censor-queue-grid" id="censor-queue-list">
                             <!-- Queue items injected here as grid -->
                             <div class="queue-empty-state-v2">
                                 <span class="empty-icon">📷</span>
-                                <p>No images selected</p>
-                                <small>Select from Gallery</small>
+                                <p data-i18n="censor.noImages">No images selected</p>
+                                <small data-i18n="censor.selectFromGallery">Select from Gallery</small>
                             </div>
                         </div>
                     </aside>
@@ -681,38 +686,38 @@
                         <div class="censor-toolbar-v2">
                             <button class="tool-btn-v2 active" data-tool="brush" title="Brush (B)">
                                 <span class="tool-icon-v2">✏️</span>
-                                <span class="tool-label">Brush <kbd>B</kbd></span>
+                                <span class="tool-label"><span data-i18n="censor.brush">Brush</span> <kbd>B</kbd></span>
                             </button>
                             <button class="tool-btn-v2" data-tool="pen" title="Pen (P)">
                                 <span class="tool-icon-v2">🖊️</span>
-                                <span class="tool-label">Pen <kbd>P</kbd></span>
+                                <span class="tool-label"><span data-i18n="censor.pen">Pen</span> <kbd>P</kbd></span>
                             </button>
                             <button class="tool-btn-v2" data-tool="eraser" title="Eraser (E)">
                                 <span class="tool-icon-v2">🧹</span>
-                                <span class="tool-label">Eraser <kbd>E</kbd></span>
+                                <span class="tool-label"><span data-i18n="censor.eraser">Eraser</span> <kbd>E</kbd></span>
                             </button>
                             <button class="tool-btn-v2" data-tool="clone" title="Clone Stamp (G)">
                                 <span class="tool-icon-v2">📋</span>
-                                <span class="tool-label">Clone <kbd>G</kbd></span>
+                                <span class="tool-label"><span data-i18n="censor.clone">Clone</span> <kbd>G</kbd></span>
                             </button>
                             <div class="toolbar-divider"></div>
                             <!-- Censor Style Dropdown in Toolbar -->
                             <div class="toolbar-dropdown">
                                 <select id="censor-style" class="toolbar-select" title="Censor Style">
-                                    <option value="mosaic">🔳 Mosaic</option>
-                                    <option value="blur">🌀 Blur</option>
-                                    <option value="black_bar">⬛ Black</option>
-                                    <option value="white_bar">⬜ White</option>
+                                    <option value="mosaic" data-i18n="censor.mosaic">🔳 Mosaic</option>
+                                    <option value="blur" data-i18n="censor.blur">🌀 Blur</option>
+                                    <option value="black_bar" data-i18n="censor.black">⬛ Black</option>
+                                    <option value="white_bar" data-i18n="censor.white">⬜ White</option>
                                 </select>
                             </div>
                             <div class="toolbar-divider"></div>
                             <button class="tool-btn-v2" id="btn-undo" title="Undo (Ctrl+Z)">
                                 <span class="tool-icon-v2">↩️</span>
-                                <span class="tool-label">Undo <kbd>Z</kbd></span>
+                                <span class="tool-label"><span data-i18n="censor.undo">Undo</span> <kbd>Z</kbd></span>
                             </button>
                             <button class="tool-btn-v2" id="btn-clear-edits" title="Reset to Original">
                                 <span class="tool-icon-v2">🔄</span>
-                                <span class="tool-label">Reset</span>
+                                <span class="tool-label" data-i18n="censor.reset">Reset</span>
                             </button>
                         </div>
 
@@ -726,14 +731,14 @@
                             <!-- Overlays -->
                             <div id="censor-loading" class="censor-loading-v2" style="display: none;">
                                 <div class="spinner-v2"></div>
-                                <span id="censor-loading-msg">Processing...</span>
+                                <span id="censor-loading-msg" data-i18n="censor.processing">Processing...</span>
                             </div>
                             <div id="brush-size-indicator" class="brush-indicator-v2">30px</div>
                             <div id="cursor-overlay"></div>
                             <!-- No Image State -->
                             <div id="censor-no-image" class="no-image-state-v2">
                                 <span class="empty-canvas-icon">🖼️</span>
-                                <p>Select an image from the queue to edit</p>
+                                <p data-i18n="censor.selectToEdit">Select an image from the queue to edit</p>
                             </div>
                         </div>
 
@@ -744,10 +749,10 @@
                                 <button class="btn-icon-small" id="btn-rename-single"
                                     title="Rename this image (R)">✏️</button>
                                 <div class="status-divider-h"></div>
-                                <div class="status-item">⌨️ Arrows Navigate</div>
-                                <div class="status-item">🖌️ [ ] Brush Size</div>
-                                <div class="status-item">🔍 Ctrl+Scroll Zoom</div>
-                                <div class="status-item">🎯 'D' Detect Current</div>
+                                <div class="status-item">⌨️ <span data-i18n="censor.arrowsNav">Arrows Navigate</span></div>
+                                <div class="status-item">🖌️ <span data-i18n="censor.brushSizeKeys">[ ] Brush Size</span></div>
+                                <div class="status-item">🔍 <span data-i18n="censor.ctrlScrollZoom">Ctrl+Scroll Zoom</span></div>
+                                <div class="status-item">🎯 <span data-i18n="censor.detectCurrent">'D' Detect Current</span></div>
                             </div>
 
                             <div class="zoom-controls-v2">
@@ -763,32 +768,32 @@
                     <!-- Right Sidebar (Settings & Tools) -->
                     <aside class="censor-sidebar-v2 right">
                         <div class="properties-header">
-                            <h4 class="properties-title">Settings & Tools</h4>
+                            <h4 class="properties-title" data-i18n="censor.settings">Settings & Tools</h4>
                         </div>
 
                         <!-- Auto-Detection Section -->
                         <div class="property-section">
                             <div class="section-header">
-                                <span class="section-title">🔍 Auto-Detection</span>
+                                <span class="section-title">🔍 <span data-i18n="censor.detection">Auto-Detection</span></span>
                                 <span class="collapse-arrow">▼</span>
                             </div>
                             <div class="section-content" id="section-detection" style="padding-top: 8px;">
                                 <div class="prop-group-v2" style="margin-bottom: 8px;">
-                                    <label>Detection Model</label>
+                                    <label data-i18n="censor.detectionModel">Detection Model</label>
                                     <select id="censor-model-type" class="toolbar-select" style="width: 100%; padding: 6px 8px;">
-                                        <option value="legacy">Legacy YOLO (Default)</option>
-                                        <option value="nudenet">NudeNet v3</option>
-                                        <option value="both">Both (NudeNet + Legacy)</option>
+                                        <option value="legacy" data-i18n="censor.legacyYolo">Legacy YOLO (Default)</option>
+                                        <option value="nudenet" data-i18n="censor.nudenet">NudeNet v3</option>
+                                        <option value="both" data-i18n="censor.both">Both (NudeNet + Legacy)</option>
                                     </select>
                                 </div>
                                 <div class="sidebar-action-row-v2">
                                     <button class="btn-side-v2" id="btn-open-detect-modal"
                                         title="Configure detection settings">
-                                        <span class="btn-icon">⚙️</span> Settings
+                                        <span class="btn-icon">⚙️</span> <span data-i18n="common.settings">Settings</span>
                                     </button>
                                     <button class="btn-side-v2 primary" id="btn-auto-detect-current"
                                         title="Run AI detection on current image (D)" style="white-space: nowrap;">
-                                        <span class="btn-icon">🎯</span> Detect <kbd>D</kbd>
+                                        <span class="btn-icon">🎯</span> <span data-i18n="censor.detectCurrentBtn">Detect Current</span> <kbd>D</kbd>
                                     </button>
                                 </div>
                             </div>
@@ -797,27 +802,27 @@
                         <!-- Brush & Censor Section -->
                         <div class="property-section" id="section-pen">
                             <div class="section-header">
-                                <span class="section-title">🖌️ Brush & Censor</span>
+                                <span class="section-title">🖌️ <span data-i18n="censor.brushCensor">Brush & Censor</span></span>
                                 <span class="collapse-arrow">▼</span>
                             </div>
                             <div class="section-content" style="padding-top: 8px;">
                                 <div class="prop-group-v2">
-                                    <label>Brush Size: <span id="tool-size-value">30</span>px</label>
+                                    <label><span data-i18n="censor.brushSize">Brush Size</span>: <span id="tool-size-value">30</span>px</label>
                                     <input type="range" id="tool-size" class="slider-v2" min="5" max="200" step="5"
                                         value="30">
                                 </div>
                                 <div class="prop-group-v2">
-                                    <label>Block Size: <span id="censor-block-size-value">16</span></label>
+                                    <label><span data-i18n="censor.blockSize">Block Size</span>: <span id="censor-block-size-value">16</span></label>
                                     <input type="range" id="censor-block-size" class="slider-v2" min="4" max="64"
                                         step="2" value="16">
                                 </div>
                                 <div class="prop-group-v2">
-                                    <label>Pen Color</label>
+                                    <label data-i18n="censor.penColor">Pen Color</label>
                                     <input type="color" id="pen-color" class="input-v2" value="#ff0000"
                                         style="height: 40px; padding: 4px;">
                                 </div>
                                 <div class="prop-group-v2">
-                                    <label>Opacity: <span id="pen-opacity-value">100%</span></label>
+                                    <label><span data-i18n="censor.opacity">Opacity</span>: <span id="pen-opacity-value">100%</span></label>
                                     <input type="range" id="pen-opacity" class="slider-v2" min="10" max="100" step="5"
                                         value="100">
                                 </div>
@@ -827,23 +832,23 @@
                         <!-- Output & Save Section -->
                         <div class="property-section">
                             <div class="section-header">
-                                <span class="section-title">📤 Output & Save</span>
+                                <span class="section-title">📤 <span data-i18n="censor.output">Output & Save</span></span>
                                 <span class="collapse-arrow">▼</span>
                             </div>
                             <div class="section-content" id="section-output" style="padding-top: 8px;">
                                 <button class="btn-side-v2 primary" id="btn-save-all-processed"
                                     style="margin-top: 12px; width: 100%;">
-                                    <span class="btn-icon">💾</span> Save All Processed
+                                    <span class="btn-icon">💾</span> <span data-i18n="censor.saveAll">Save All Processed</span>
                                 </button>
                                 <button class="btn-side-v2" id="btn-batch-rename" style="margin-top: 8px; width: 100%;">
-                                    <span class="btn-icon">📝</span> Batch Rename
+                                    <span class="btn-icon">📝</span> <span data-i18n="censor.batchRename">Batch Rename</span>
                                 </button>
                             </div>
                         </div>
 
                         <div class="properties-footer">
                             <button class="btn-side-v2 danger" id="btn-clear-queue" style="width: 100%;">
-                                <span class="btn-icon">🗑️</span> Clear Queue
+                                <span class="btn-icon">🗑️</span> <span data-i18n="censor.clearQueue">Clear Queue</span>
                             </button>
                         </div>
                     </aside>
@@ -854,11 +859,11 @@
                     <div class="modal-backdrop"></div>
                     <div class="modal-content modal-medium">
                         <button class="modal-close" id="btn-close-detect-modal">✕</button>
-                        <h3>🔍 Auto-Detect Settings</h3>
-                        <p class="modal-description">Configure AI detection and apply censoring automatically.</p>
+                        <h3>🔍 <span data-i18n="censor.autoDetectSettings">Auto-Detect Settings</span></h3>
+                        <p class="modal-description" data-i18n="censor.autoDetectDesc">Configure AI detection and apply censoring automatically.</p>
 
                         <div class="form-group">
-                            <label>YOLO Model Path</label>
+                            <label data-i18n="censor.yoloModelPath">YOLO Model Path</label>
                             <div class="input-row" style="display: flex; gap: 8px;">
                                 <input type="text" id="censor-model-path" class="input-field"
                                     placeholder="Path to .pt or .onnx model" style="flex: 1;">
@@ -867,47 +872,47 @@
                         </div>
 
                         <div class="form-group">
-                            <label>Confidence Threshold: <span id="censor-confidence-value">0.50</span></label>
+                            <label><span data-i18n="censor.confidenceThreshold">Confidence Threshold</span>: <span id="censor-confidence-value">0.50</span></label>
                             <input type="range" id="censor-confidence" min="0.1" max="0.9" step="0.05" value="0.5">
                         </div>
 
                         <div class="form-group">
-                            <label>Target Regions</label>
+                            <label data-i18n="censor.targetRegions">Target Regions</label>
                             <div class="checkbox-grid"
                                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="target-region-check" value="breasts" checked>
                                     <span class="checkbox-custom"></span>
-                                    <span class="checkbox-text">Breasts</span>
+                                    <span class="checkbox-text" data-i18n="censor.regionBreasts">Breasts</span>
                                 </label>
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="target-region-check" value="pussy" checked>
                                     <span class="checkbox-custom"></span>
-                                    <span class="checkbox-text">Pussy</span>
+                                    <span class="checkbox-text" data-i18n="censor.regionPussy">Pussy</span>
                                 </label>
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="target-region-check" value="dick" checked>
                                     <span class="checkbox-custom"></span>
-                                    <span class="checkbox-text">Dick</span>
+                                    <span class="checkbox-text" data-i18n="censor.regionDick">Dick</span>
                                 </label>
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="target-region-check" value="anus" checked>
                                     <span class="checkbox-custom"></span>
-                                    <span class="checkbox-text">Anus</span>
+                                    <span class="checkbox-text" data-i18n="censor.regionAnus">Anus</span>
                                 </label>
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="target-region-check" value="cum">
                                     <span class="checkbox-custom"></span>
-                                    <span class="checkbox-text">Cum</span>
+                                    <span class="checkbox-text" data-i18n="censor.regionCum">Cum</span>
                                 </label>
                             </div>
                         </div>
                         <div class="modal-actions" style="margin-top: 24px; display: flex; gap: 8px;">
                             <button class="btn btn-secondary" id="btn-auto-detect-current-modal" style="flex: 1;">
-                                🎯 Detect Current
+                                🎯 <span data-i18n="censor.detectCurrentBtn">Detect Current</span>
                             </button>
                             <button class="btn btn-primary" id="btn-auto-detect-all-modal" style="flex: 1;">
-                                ⚡ Detect All
+                                ⚡ <span data-i18n="censor.detectAll">Detect All</span>
                             </button>
                         </div>
                     </div>
@@ -919,15 +924,15 @@
                 <div class="similar-container">
                     <!-- Header with stats -->
                     <div class="similar-header">
-                        <h3>Similar Images</h3>
+                        <h3 data-i18n="similar.title">Similar Images</h3>
                         <div id="similar-stats">
                             <div class="stat-card">
                                 <span class="stat-number">-</span>
-                                <span class="stat-label">Loading...</span>
+                                <span class="stat-label" data-i18n="common.loading">Loading...</span>
                             </div>
                         </div>
                         <div class="similar-embed-row">
-                            <button class="btn btn-primary" id="btn-similar-embed">Generate Embeddings</button>
+                            <button class="btn btn-primary" id="btn-similar-embed" data-i18n="similar.generateEmbed">Generate Embeddings</button>
                             <div class="similar-embed-progress" id="similar-embed-progress">
                                 <div class="progress-bar">
                                     <div class="progress-fill" id="similar-embed-fill" style="width: 0%"></div>
@@ -939,8 +944,8 @@
 
                     <!-- Sub-tabs -->
                     <div class="similar-tabs">
-                        <button class="similar-tab active" data-target="panel-similar-search">Search</button>
-                        <button class="similar-tab" data-target="panel-similar-duplicates">Duplicates</button>
+                        <button class="similar-tab active" data-target="panel-similar-search" data-i18n="similar.search">Search</button>
+                        <button class="similar-tab" data-target="panel-similar-duplicates" data-i18n="similar.duplicates">Duplicates</button>
                     </div>
 
                     <!-- Body -->
@@ -948,26 +953,32 @@
                         <!-- Search Panel -->
                         <div class="similar-panel" id="panel-similar-search">
                             <div class="similar-search-controls">
-                                <input type="number" id="similar-search-id" class="input" placeholder="Image ID">
-                                <button class="btn btn-primary" id="btn-similar-search">Search by ID</button>
-                                <button class="btn btn-secondary" id="btn-similar-upload">Upload Image</button>
-                                <input type="file" id="similar-upload-input" accept="image/*" style="display: none;">
+                                <input type="number" id="similar-search-id" class="input" placeholder="Image ID" data-i18n-placeholder="similar.searchById">
+                                <button class="btn btn-primary" id="btn-similar-search" data-i18n="similar.searchById">Search by ID</button>
+                                <div class="similar-upload-dropzone" id="similar-upload-dropzone" role="button" tabindex="0" aria-describedby="similar-upload-hint">
+                                    <div class="similar-upload-copy">
+                                        <span class="similar-upload-title">Drop an image here</span>
+                                        <span class="similar-upload-hint" id="similar-upload-hint">or click to browse and compare against your library</span>
+                                    </div>
+                                    <button class="btn btn-secondary" id="btn-similar-upload" data-i18n="similar.upload">Upload Image</button>
+                                    <input type="file" id="similar-upload-input" accept="image/*" style="display: none;">
+                                </div>
                             </div>
                             <div id="similar-results">
-                                <div class="empty-state">Enter an image ID or upload an image to find similar images.</div>
+                                <div class="empty-state" data-i18n="similar.searchEmpty">Enter an image ID or upload an image to find similar images.</div>
                             </div>
                         </div>
 
                         <!-- Duplicates Panel -->
                         <div class="similar-panel" id="panel-similar-duplicates" style="display: none;">
                             <div class="dup-threshold-row">
-                                <label>Similarity Threshold:</label>
+                                <label data-i18n="similar.threshold">Similarity Threshold:</label>
                                 <input type="range" id="similar-dup-threshold" min="0.80" max="0.99" step="0.01" value="0.95">
                                 <span id="similar-dup-threshold-value">95%</span>
-                                <button class="btn btn-primary" id="btn-similar-duplicates">Find Duplicates</button>
+                                <button class="btn btn-primary" id="btn-similar-duplicates" data-i18n="similar.findDuplicates">Find Duplicates</button>
                             </div>
                             <div id="similar-duplicates">
-                                <div class="empty-state">Click "Find Duplicates" to scan for duplicate images.</div>
+                                <div class="empty-state" data-i18n="similar.duplicatesEmpty">Click "Find Duplicates" to scan for duplicate images.</div>
                             </div>
                         </div>
                     </div>
@@ -980,59 +991,59 @@
                     <!-- Left: Category Browser -->
                     <div class="promptlab-browser">
                         <div class="promptlab-browser-header">
-                            <h4>Tag Categories</h4>
-                            <input type="text" class="input" id="promptlab-search" placeholder="Search tags...">
+                            <h4 data-i18n="promptlab.categories">Tag Categories</h4>
+                            <input type="text" class="input" id="promptlab-search" placeholder="Search tags..." data-i18n-placeholder="promptlab.searchTags">
                         </div>
                         <div class="promptlab-browser-body" id="promptlab-categories">
-                            <div class="empty-state">Loading categories...</div>
+                            <div class="empty-state" data-i18n="promptlab.loadingCategories">Loading categories...</div>
                         </div>
                         <!-- Tag set selector -->
                         <div class="tagset-selector">
-                            <label>Tag Set:</label>
+                            <label data-i18n="promptlab.tagSet">Tag Set:</label>
                             <select class="input" id="promptlab-set-select">
-                                <option value="">-- Select Tag Set --</option>
+                                <option value="" data-i18n="promptlab.selectTagSet">-- Select Tag Set --</option>
                             </select>
-                            <button class="btn btn-small btn-secondary" id="btn-promptlab-apply-tagset">Apply</button>
+                            <button class="btn btn-small btn-secondary" id="btn-promptlab-apply-tagset" data-i18n="promptlab.applyTagSet">Apply</button>
                         </div>
                     </div>
 
                     <!-- Center: Slot Builder -->
                     <div class="promptlab-builder">
                         <div class="promptlab-builder-header">
-                            <h4>Prompt Slots</h4>
+                            <h4 data-i18n="promptlab.slots">Prompt Slots</h4>
                             <div class="promptlab-builder-actions">
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 Randomize</button>
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ Clear</button>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 <span data-i18n="promptlab.randomize">Randomize</span></button>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ <span data-i18n="promptlab.clear">Clear</span></button>
                             </div>
                         </div>
                         <div class="promptlab-slots-container" id="promptlab-slots">
-                            <div class="empty-state">Loading slots...</div>
+                            <div class="empty-state" data-i18n="promptlab.loadingSlots">Loading slots...</div>
                         </div>
                     </div>
 
                     <!-- Right: Output Panel -->
                     <div class="promptlab-output-panel">
                         <div class="promptlab-output-header">
-                            <h4>Generated Prompt</h4>
+                            <h4 data-i18n="promptlab.output">Generated Prompt</h4>
                             <div class="promptlab-gen-buttons">
-                                <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 Use in Gallery</button>
-                                <button class="btn btn-primary" id="btn-promptlab-generate">Generate</button>
-                                <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy to clipboard">📋 Copy</button>
-                                <button class="btn btn-secondary" id="btn-promptlab-validate" title="Check for issues">✅ Validate</button>
+                                <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 <span data-i18n="promptlab.useInGallery">Use in Gallery</span></button>
+                                <button class="btn btn-primary" id="btn-promptlab-generate" data-i18n="promptlab.generate">Generate</button>
+                                <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy to clipboard">📋 <span data-i18n="promptlab.copy">Copy</span></button>
+                                <button class="btn btn-secondary" id="btn-promptlab-validate" title="Check for issues">✅ <span data-i18n="promptlab.validate">Validate</span></button>
                             </div>
                         </div>
                         <div class="promptlab-output-body">
-                            <textarea id="promptlab-output" placeholder="Click Generate or Randomize to create a prompt..."></textarea>
+                            <textarea id="promptlab-output" placeholder="Click Generate or Randomize to create a prompt..." data-i18n-placeholder="promptlab.outputPlaceholder"></textarea>
                             <div id="promptlab-warnings"></div>
                         </div>
                         <!-- Presets -->
                         <div class="promptlab-presets-section">
                             <div class="promptlab-presets-header">
-                                <h5>Presets</h5>
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 Save</button>
+                                <h5 data-i18n="promptlab.presets">Presets</h5>
+                                <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 <span data-i18n="promptlab.savePreset">Save</span></button>
                             </div>
                             <div id="promptlab-presets">
-                                <div class="preset-empty">No presets saved yet.</div>
+                                <div class="preset-empty" data-i18n="promptlab.noPresets">No presets saved yet.</div>
                             </div>
                         </div>
                     </div>
@@ -1042,24 +1053,24 @@
             <!-- Artist Identification View -->
             <section id="view-artist" class="view">
                 <div class="artist-container">
-                    <div class="artist-results-header-note">Experimental feature — model availability and result quality may vary.</div>
+                    <div class="artist-results-header-note" data-i18n="artist.experimental">Experimental feature — model availability and result quality may vary.</div>
                     <!-- Stats Header -->
                     <div class="artist-stats" id="artist-stats">
                         <div class="stat-card">
                             <span class="stat-number">0</span>
-                            <span class="stat-label">Total Images</span>
+                            <span class="stat-label" data-i18n="artist.totalImages">Total Images</span>
                         </div>
                         <div class="stat-card">
                             <span class="stat-number">0</span>
-                            <span class="stat-label">Identified</span>
+                            <span class="stat-label" data-i18n="artist.identified">Identified</span>
                         </div>
                         <div class="stat-card">
                             <span class="stat-number">0</span>
-                            <span class="stat-label">Undefined</span>
+                            <span class="stat-label" data-i18n="artist.undefined">Undefined</span>
                         </div>
                         <div class="stat-card">
                             <span class="stat-number">0</span>
-                            <span class="stat-label">Artists Found</span>
+                            <span class="stat-label" data-i18n="artist.artistsFound">Artists Found</span>
                         </div>
                     </div>
 
@@ -1068,51 +1079,51 @@
                         <!-- Left Panel: Controls -->
                         <div class="artist-controls">
                             <div class="control-section">
-                                <h3>🎨 Model Settings</h3>
+                                <h3>🎨 <span data-i18n="artist.modelSettings">Model Settings</span></h3>
                                 <div class="form-group">
-                                    <label>Model Source</label>
+                                    <label data-i18n="artist.modelSource">Model Source</label>
                                     <select id="artist-model-source" class="input-field">
-                                        <option value="huggingface">HuggingFace (Default)</option>
-                                        <option value="modelscope">ModelScope (China)</option>
-                                        <option value="local">Local Model</option>
+                                        <option value="huggingface" data-i18n="artist.huggingface">HuggingFace (Default)</option>
+                                        <option value="modelscope" data-i18n="artist.modelscope">ModelScope (China)</option>
+                                        <option value="local" data-i18n="artist.localModel">Local Model</option>
                                     </select>
                                 </div>
                                 <div class="form-group" id="artist-local-model-group" style="display: none;">
-                                    <label>Local Model Path</label>
+                                    <label data-i18n="artist.localModelPath">Local Model Path</label>
                                     <input type="text" id="artist-model-path" class="input-field"
                                         placeholder="path/to/model.onnx">
                                 </div>
                                 <div class="form-group">
-                                    <label>Confidence Threshold: <span id="artist-threshold-value">0.35</span></label>
+                                    <label><span data-i18n="artist.confidenceThreshold">Confidence Threshold</span>: <span id="artist-threshold-value">0.35</span></label>
                                     <input type="range" id="artist-threshold" class="slider" min="0.1" max="0.9"
                                         step="0.05" value="0.35">
-                                    <small class="helper-text">Below this = "undefined"</small>
+                                    <small class="helper-text" data-i18n="artist.belowThreshold">Below this = "undefined"</small>
                                 </div>
                             </div>
 
                             <div class="control-section">
-                                <h3>🔍 Identification</h3>
+                                <h3>🔍 <span data-i18n="artist.identification">Identification</span></h3>
                                 <button class="btn btn-primary btn-block" id="btn-identify-all">
-                                    <span>🎨</span> Identify All Images
+                                    <span>🎨</span> <span data-i18n="artist.identifyAll">Identify All Images</span>
                                 </button>
                                 <button class="btn btn-secondary btn-block" id="btn-identify-selected">
-                                    <span>🎯</span> Identify Selected
+                                    <span>🎯</span> <span data-i18n="artist.identifySelected">Identify Selected</span>
                                 </button>
                                 <div class="progress-container" id="artist-progress-container" style="display: none;">
                                     <div class="progress-bar">
                                         <div class="progress-fill" id="artist-progress-fill"></div>
                                     </div>
-                                    <span class="progress-text" id="artist-progress-text">Starting...</span>
+                                    <span class="progress-text" id="artist-progress-text" data-i18n="artist.starting">Starting...</span>
                                 </div>
                             </div>
 
                             <div class="control-section">
-                                <h3>📊 Actions</h3>
+                                <h3>📊 <span data-i18n="artist.actions">Actions</span></h3>
                                 <button class="btn btn-ghost btn-block" id="btn-refresh-artist-stats">
-                                    <span>🔄</span> Refresh Stats
+                                    <span>🔄</span> <span data-i18n="artist.refreshStats">Refresh Stats</span>
                                 </button>
                                 <button class="btn btn-ghost danger btn-block" id="btn-clear-artist-data">
-                                    <span>🗑️</span> Clear All Predictions
+                                    <span>🗑️</span> <span data-i18n="artist.clearPredictions">Clear All Predictions</span>
                                 </button>
                             </div>
                         </div>
@@ -1120,10 +1131,10 @@
                         <!-- Center Panel: Results -->
                         <div class="artist-results">
                             <div class="results-header">
-                                <h3>🏆 Top Artists</h3>
+                                <h3>🏆 <span data-i18n="artist.topArtists">Top Artists</span></h3>
                                 <div class="view-toggle">
-                                    <button class="toggle-btn active" data-view="grid">Grid</button>
-                                    <button class="toggle-btn" data-view="list">List</button>
+                                    <button class="toggle-btn active" data-view="grid" data-i18n="artist.grid">Grid</button>
+                                    <button class="toggle-btn" data-view="list" data-i18n="artist.list">List</button>
                                 </div>
                             </div>
                             <div class="artist-grid" id="artist-results-grid">
@@ -1137,9 +1148,9 @@
 
                         <!-- Right Panel: Artist Details -->
                         <div class="artist-details">
-                            <h3>📋 Artist Details</h3>
+                            <h3>📋 <span data-i18n="artist.details">Artist Details</span></h3>
                             <div class="artist-detail-content" id="artist-detail-content">
-                                <p class="detail-placeholder">Select an artist to view their images.</p>
+                                <p class="detail-placeholder" data-i18n="artist.selectArtist">Select an artist to view their images.</p>
                             </div>
                             <div class="artist-images-preview" id="artist-images-preview">
                                 <!-- Preview images will be inserted here -->
@@ -1285,13 +1296,14 @@
                 <div class="form-group">
                     <label for="tag-model-select" id="tag-model-select-label">Model</label>
                     <select id="tag-model-select" class="input-field" aria-describedby="tag-model-select-label">
-                        <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3 (Best Quality)</option>
-                        <option value="wd-swinv2-tagger-v3">wd-swinv2-tagger-v3</option>
+                        <option value="wd-swinv2-tagger-v3" selected>wd-swinv2-tagger-v3</option>
                         <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
                         <option value="wd-vit-tagger-v3">wd-vit-tagger-v3</option>
                         <option value="wd-vit-large-tagger-v3">wd-vit-large-tagger-v3</option>
+                        <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3</option>
                         <option value="custom">Custom Local Model...</option>
                     </select>
+                    <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good speed, good quality, and less likely to freeze your PC.</small>
                 </div>
 
                 <div class="form-group custom-model-group" id="custom-model-group" style="display: none;">
@@ -1333,12 +1345,24 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="tag-use-gpu" checked>
-                        <span class="checkbox-custom"></span>
-                        <span class="checkbox-text">Use GPU acceleration (faster but uses more VRAM)</span>
-                    </label>
-                    <small class="helper-text">Uncheck to use CPU only (slower but won't freeze system)</small>
+                    <div class="tag-runtime-card" role="status" aria-live="polite">
+                        <div class="tag-runtime-eyebrow">Recommended Runtime</div>
+                        <p class="tag-runtime-summary" id="tag-runtime-summary">The app will automatically use the recommended runtime mode for this model.</p>
+                    </div>
+                    <details class="tag-runtime-advanced" id="tag-runtime-advanced">
+                        <summary class="tag-runtime-advanced-summary">
+                            <span>Advanced Runtime Override</span>
+                            <span class="tag-runtime-advanced-hint" id="tag-runtime-advanced-hint">Only change this if you already know your setup is stable.</span>
+                        </summary>
+                        <div class="tag-runtime-advanced-body">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="tag-use-gpu" checked>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-text">Run this tagging job on GPU</span>
+                            </label>
+                            <small class="helper-text" id="tag-gpu-help" aria-live="polite">Recommended runtime mode is active. You usually do not need to change anything here.</small>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="progress-container" id="tag-progress-container" style="display: none;">
@@ -1348,13 +1372,13 @@
                     <span class="progress-text" id="tag-progress-text">Loading model...</span>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-export-tags" title="Export all tags to JSON file">📤 Export
+                    <button class="btn btn-ghost" id="btn-export-tags-json" title="Export all tags to JSON file">📤 Export
                         Tags</button>
                     <button class="btn btn-ghost" id="btn-import-tags" title="Import tags from JSON file">📥 Import
                         Tags</button>
                     <input type="file" id="import-tags-file" accept=".json" style="display: none;">
                     <div style="flex: 1;"></div>
-                    <button class="btn btn-ghost" id="btn-cancel-tag">Cancel</button>
+                    <button class="btn btn-ghost" id="btn-cancel-tag">Close</button>
                     <button class="btn btn-primary" id="btn-start-tag">Start Tagging</button>
                 </div>
             </div>
@@ -1489,99 +1513,184 @@
         <!-- Unified Filter Modal -->
         <div class="modal" id="filter-modal" role="dialog" aria-modal="true" aria-labelledby="filter-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
-            <div class="modal-content modal-large">
+            <div class="modal-content modal-large filter-modal-shell">
                 <button class="modal-close" id="btn-close-filter-modal" aria-label="Close filter modal">
                     <span aria-hidden="true">✕</span>
                 </button>
-                <h3 id="filter-modal-title">Filter Images</h3>
+                <div class="filter-modal-hero">
+                    <div class="filter-modal-hero-copy">
+                        <div class="filter-modal-eyebrow">Gallery</div>
+                        <h3 id="filter-modal-title" data-i18n="filter.filterImages">Filter Images</h3>
+                        <p class="modal-description" data-i18n="filter.description">Choose source, rating, tag, prompt, checkpoint, and LoRA filters in one place.</p>
+                    </div>
+                    <div class="filter-modal-hero-actions">
+                        <div class="filter-modal-summary-card">
+                            <p class="filter-modal-summary-label">What will happen</p>
+                            <p id="filter-modal-selection-summary">No extra limits selected yet. Apply now to keep the current gallery scope.</p>
+                            <p class="filter-modal-summary-hint" id="filter-modal-summary-hint">Tip: use tags, prompts, or dimensions when you want a smaller and more targeted result list.</p>
+                        </div>
+                        <button class="btn btn-secondary filter-library-btn" id="btn-open-library-from-filter" data-i18n-aria="filter.browseLibrary" aria-label="Open tags and prompts library">
+                            <span aria-hidden="true">📚</span>
+                            <span data-i18n="filter.browseLibrary">Browse Library</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-modal-stat-grid" aria-label="Current filter counts">
+                    <div class="filter-stat-card"><span class="filter-stat-label">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">5/5</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">Ratings</span><strong class="filter-stat-value" id="filter-modal-count-ratings">4/4</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">Tags</span><strong class="filter-stat-value" id="filter-modal-count-tags">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">Prompts</span><strong class="filter-stat-value" id="filter-modal-count-prompts">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">Checkpoints</span><strong class="filter-stat-value" id="filter-modal-count-checkpoints">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">LoRAs</span><strong class="filter-stat-value" id="filter-modal-count-loras">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label">Size Rules</span><strong class="filter-stat-value" id="filter-modal-count-dimensions">Any</strong></div>
+                </div>
 
                 <div class="filter-modal-grid">
-                    <!-- Left Column: Quick Filters -->
-                    <div class="filter-column">
-                        <div class="filter-section">
-                            <h4 id="generator-filters-heading">Generators</h4>
-                            <div class="filter-options" id="modal-generator-filters" role="group" aria-labelledby="generator-filters-heading">
-                                <label class="checkbox-label"><input type="checkbox" value="comfyui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">ComfyUI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="nai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">NovelAI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="webui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">WebUI</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="forge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Forge</span></label>
-                                <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Unknown</span></label>
+                    <div class="filter-column filter-column-primary">
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker" data-i18n="filter.quickChoices">Quick Choices</p>
+                                    <h4 data-i18n="filter.criteria">Filter Criteria</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.quickChoicesHelp">Start with generator and rating filters.</p>
                             </div>
-                        </div>
 
-                        <button class="btn btn-ghost" id="btn-open-library-from-filter" style="margin-top: 10px; width: 100%;" aria-label="Open tags and prompts library">
-                            <span aria-hidden="true">📚</span> Browse Library
-                        </button>
-
-                        <div class="filter-section">
-                            <h4 id="dimensions-heading">Dimensions & Aspect</h4>
-                            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;" role="group" aria-labelledby="dimensions-heading">
-                                <input type="number" id="filter-min-width" class="input-field input-small" placeholder="W min" min="0" step="64" style="width: 65px;" aria-label="Minimum width">
-                                <span style="color: var(--text-muted);" aria-hidden="true">–</span>
-                                <input type="number" id="filter-max-width" class="input-field input-small"
-                                    placeholder="W max" min="0" step="64" style="width: 65px;">
-                                <span style="margin: 0 4px; color: var(--text-muted);">×</span>
-                                <input type="number" id="filter-min-height" class="input-field input-small"
-                                    placeholder="H min" min="0" step="64" style="width: 65px;">
-                                <span style="color: var(--text-muted);">–</span>
-                                <input type="number" id="filter-max-height" class="input-field input-small"
-                                    placeholder="H max" min="0" step="64" style="width: 65px;">
+                            <div class="filter-section">
+                                <h5 id="generator-filters-heading" data-i18n="filter.generators">Generators</h5>
+                                <div class="filter-options filter-toggle-grid" id="modal-generator-filters" role="group" aria-labelledby="generator-filters-heading">
+                                    <label class="checkbox-label"><input type="checkbox" value="comfyui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">ComfyUI</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="nai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">NovelAI</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="webui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">WebUI</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="forge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Forge</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Unknown</span></label>
+                                </div>
                             </div>
-                            <div style="display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap;">
-                                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
-                                        type="radio" name="aspect-ratio" value="" checked> Any</label>
-                                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
-                                        type="radio" name="aspect-ratio" value="square"> ■ Square</label>
-                                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
-                                        type="radio" name="aspect-ratio" value="landscape"> ▬ Landscape</label>
-                                <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;"><input
-                                        type="radio" name="aspect-ratio" value="portrait"> ▮ Portrait</label>
-                            </div>
-                        </div>
 
-                        <!-- Action Buttons - positioned in left column for easy access -->
-                        <div class="filter-actions-inline" style="display: flex; gap: 12px; margin-top: 8px;">
-                            <button class="btn btn-ghost" id="btn-reset-filters" style="flex: 1;">Reset All</button>
-                            <button class="btn btn-primary" id="btn-apply-modal-filters" style="flex: 1;">Apply
-                                Filters</button>
-                        </div>
+                            <div class="filter-section">
+                                <h5 id="rating-filters-heading" data-i18n="filter.ratings">Ratings</h5>
+                                <div class="filter-options filter-toggle-grid" id="modal-rating-filters" role="group" aria-labelledby="rating-filters-heading">
+                                    <label class="checkbox-label"><input type="checkbox" value="general" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">General</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="sensitive" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Sensitive</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="questionable" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Questionable</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="explicit" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Explicit</span></label>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker" data-i18n="filter.imageSize">Image Size</p>
+                                    <h4 data-i18n="filter.dimensions">Dimensions &amp; Aspect</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.imageSizeHelp">Narrow results by width, height, or aspect ratio.</p>
+                            </div>
+
+                            <div class="dimension-grid" role="group" aria-labelledby="dimensions-heading">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.widthMin">Min width</span>
+                                    <input type="number" id="filter-min-width" class="input-field" placeholder="Min width" data-i18n-placeholder="filter.widthMin" min="0" step="64" aria-label="Minimum width">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.widthMax">Max width</span>
+                                    <input type="number" id="filter-max-width" class="input-field" placeholder="Max width" data-i18n-placeholder="filter.widthMax" min="0" step="64" aria-label="Maximum width">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.heightMin">Min height</span>
+                                    <input type="number" id="filter-min-height" class="input-field" placeholder="Min height" data-i18n-placeholder="filter.heightMin" min="0" step="64" aria-label="Minimum height">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.heightMax">Max height</span>
+                                    <input type="number" id="filter-max-height" class="input-field" placeholder="Max height" data-i18n-placeholder="filter.heightMax" min="0" step="64" aria-label="Maximum height">
+                                </label>
+                            </div>
+
+                            <div class="aspect-choice-grid" id="dimensions-heading">
+                                <label class="filter-choice">
+                                    <input type="radio" name="aspect-ratio" value="" checked>
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">◻</span>
+                                        <span data-i18n="filter.any">Any</span>
+                                    </span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="aspect-ratio" value="square">
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">■</span>
+                                        <span data-i18n="filter.square">Square</span>
+                                    </span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="aspect-ratio" value="landscape">
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">▬</span>
+                                        <span data-i18n="filter.landscape">Landscape</span>
+                                    </span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="aspect-ratio" value="portrait">
+                                    <span class="filter-choice-card">
+                                        <span class="filter-choice-icon">▮</span>
+                                        <span data-i18n="filter.portrait">Portrait</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </section>
                     </div>
 
-                    <!-- Right Column: Searchable Lists -->
-                    <div class="filter-column">
-                        <div class="filter-section">
-                            <h4>Tags</h4>
-                            <div class="tag-search-container">
-                                <input type="text" id="modal-tag-search" class="input-field"
-                                    placeholder="Search tags to add...">
-                                <div class="tag-suggestions" id="modal-tag-suggestions"></div>
+                    <div class="filter-column filter-column-secondary">
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker" data-i18n="filter.searchAndRefine">Search &amp; Refine</p>
+                                    <h4 data-i18n="filter.imagesToSort">Filter Images to Sort</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.searchAndRefineHelp">Add tags or prompts, then narrow the result with models below.</p>
                             </div>
-                            <div class="active-tags" id="modal-active-tags"></div>
-                        </div>
 
-                        <div class="filter-section">
-                            <h4>Prompt Search</h4>
-                            <div class="tag-search-container">
-                                <input type="text" id="modal-prompt-search" class="input-field"
-                                    placeholder="Type to search prompts...">
-                                <div class="tag-suggestions" id="modal-prompt-suggestions"></div>
+                            <div class="filter-section">
+                                <h5 data-i18n="filter.tags">Tags</h5>
+                                <div class="tag-search-container">
+                                    <input type="text" id="modal-tag-search" class="input-field" placeholder="Search tags to add..." data-i18n-placeholder="filter.searchTags">
+                                    <div class="tag-suggestions" id="modal-tag-suggestions"></div>
+                                </div>
+                                <div class="active-tags" id="modal-active-tags"></div>
                             </div>
-                            <div class="active-tags" id="modal-active-prompts"></div>
-                        </div>
 
-                        <div class="filter-section">
-                            <h4>Checkpoints</h4>
-                            <input type="text" id="modal-checkpoint-search" class="input-field"
-                                placeholder="Search checkpoints...">
-                            <div class="filter-list" id="modal-checkpoint-list"></div>
-                        </div>
+                            <div class="filter-section">
+                                <h5 data-i18n="filter.promptSearch">Prompt Search</h5>
+                                <div class="tag-search-container">
+                                    <input type="text" id="modal-prompt-search" class="input-field" placeholder="Type to search prompts..." data-i18n-placeholder="filter.searchPrompts">
+                                    <div class="tag-suggestions" id="modal-prompt-suggestions"></div>
+                                </div>
+                                <div class="active-tags" id="modal-active-prompts"></div>
+                            </div>
+                        </section>
 
-                        <div class="filter-section">
-                            <h4>Loras</h4>
-                            <input type="text" id="modal-lora-search" class="input-field" placeholder="Search loras...">
-                            <div class="filter-list" id="modal-lora-list"></div>
-                        </div>
+                        <section class="filter-panel">
+                            <div class="filter-list-grid">
+                                <div class="filter-section">
+                                    <h5 data-i18n="filter.checkpoints">Checkpoints</h5>
+                                    <input type="text" id="modal-checkpoint-search" class="input-field" placeholder="Search checkpoints..." data-i18n-placeholder="filter.searchCheckpoints">
+                                    <div class="filter-list" id="modal-checkpoint-list"></div>
+                                </div>
+
+                                <div class="filter-section">
+                                    <h5 data-i18n="filter.loras">Loras</h5>
+                                    <input type="text" id="modal-lora-search" class="input-field" placeholder="Search loras..." data-i18n-placeholder="filter.searchLoras">
+                                    <div class="filter-list" id="modal-lora-list"></div>
+                                </div>
+                            </div>
+                        </section>
                     </div>
+                </div>
+
+                <div class="modal-sticky-actions filter-modal-actions">
+                    <p class="filter-modal-footer-note" data-i18n="filter.footerHint">Apply filters to refresh the gallery results. Press Enter inside tag or prompt search to add multiple values separated by commas.</p>
+                    <button class="btn btn-ghost" id="btn-reset-filters" data-i18n="filter.reset">Reset All</button>
+                    <button class="btn btn-primary" id="btn-apply-modal-filters" data-i18n="filter.apply">Apply Filters</button>
                 </div>
             </div>
         </div>
@@ -1693,38 +1802,48 @@
         </div>
 
         <!-- Tags Library Modal -->
-        <div class="modal" id="tags-library-modal">
+        <div class="modal" id="tags-library-modal" role="dialog" aria-modal="true" aria-labelledby="tags-library-title">
             <div class="modal-backdrop"></div>
-            <div class="modal-content modal-large">
+            <div class="modal-content modal-large tags-library-shell">
                 <button class="modal-close" id="btn-close-tags-library">✕</button>
-                <h3>📚 Tags & Prompts Library</h3>
-                <p class="modal-description">Browse all discovered tags with their frequencies</p>
+                <div class="library-header">
+                    <div>
+                        <h3 id="tags-library-title" data-i18n="library.title">Tags &amp; Prompts Library</h3>
+                        <p class="modal-description" data-i18n="library.description">Browse all discovered tags with their frequencies</p>
+                    </div>
+                </div>
 
-                <div class="library-tabs" style="display: flex; gap: 10px; margin: 15px 0;">
-                    <button class="btn btn-secondary active" id="library-tab-tags" data-tab="tags">🏷️ Tags</button>
-                    <button class="btn btn-ghost" id="library-tab-prompts" data-tab="prompts">📝 Prompts</button>
-                    <div style="flex: 1;"></div>
-                    <select id="library-sort" class="sort-dropdown" style="width: auto;">
-                        <option value="frequency">Sort: Frequency</option>
-                        <option value="alphabetical">Sort: A-Z</option>
+                <div class="library-tab-row">
+                    <div class="library-tabs">
+                        <button class="btn btn-secondary active" id="library-tab-tags" data-tab="tags">
+                            <span aria-hidden="true">🏷️</span>
+                            <span data-i18n="library.tags">Tags</span>
+                        </button>
+                        <button class="btn btn-ghost" id="library-tab-prompts" data-tab="prompts">
+                            <span aria-hidden="true">📝</span>
+                            <span data-i18n="library.prompts">Prompts</span>
+                        </button>
+                    </div>
+                    <select id="library-sort" class="sort-dropdown library-sort">
+                        <option value="frequency" data-i18n="library.sortFrequency">Sort: Frequency</option>
+                        <option value="alphabetical" data-i18n="library.sortAlpha">Sort: A-Z</option>
                     </select>
                 </div>
 
-                <div class="search-container" style="margin: 10px 0;">
-                    <input type="text" id="library-search" class="input-field" placeholder="Search tags or prompts...">
+                <div class="search-container library-search-row">
+                    <input type="text" id="library-search" class="input-field" placeholder="Search tags or prompts..." data-i18n-placeholder="library.search">
                 </div>
 
-                <div id="library-content"
-                    style="max-height: 450px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0;">
+                <div id="library-content" class="library-content">
                     <!-- Populated dynamically -->
                 </div>
 
-                <div class="library-stats" style="margin-top: 15px; color: var(--text-muted); font-size: 13px;">
-                    <span id="library-stats-text">Loading...</span>
+                <div class="library-stats">
+                    <span id="library-stats-text" data-i18n="library.loading">Loading...</span>
                 </div>
 
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-close-tags-library-2">Close</button>
+                    <button class="btn btn-ghost" id="btn-close-tags-library-2" data-i18n="library.close">Close</button>
                 </div>
             </div>
         </div>
@@ -1758,6 +1877,11 @@
     <script src="/static/js/modules/components/onboarding.js"></script>
     <script src="/static/js/modules/components/keyboard-shortcuts.js"></script>
     <script src="/static/js/modules/components/virtual-list.js"></script>
+    <script src="/static/js/lang/en.js"></script>
+    <script src="/static/js/lang/zh-CN.js"></script>
+    <script src="/static/js/guide-translations.js"></script>
+    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/guide.js"></script>
     <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/gallery.js"></script>
@@ -1769,7 +1893,7 @@
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
-    <!-- Help button is handled by keyboard-shortcuts.js -->
+    <script src="/static/js/ui-refresh.js"></script>
 </body>
 
 </html>

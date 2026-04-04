@@ -32,8 +32,8 @@ export class AutoSeparatePage {
     this.page = page
 
     // Scan elements
-    this.scanPathInput = page.locator('#scan-path-input')
-    this.scanButton = page.locator('#scan-button')
+    this.scanPathInput = page.locator('#autosep-destination')
+    this.scanButton = page.locator('#btn-preview-autosep')
     this.scanProgress = page.locator('#scan-progress')
     this.scanResetButton = page.locator('#scan-reset-button')
 
@@ -44,8 +44,8 @@ export class AutoSeparatePage {
     this.tagResetButton = page.locator('#tag-reset-button')
 
     // Batch move elements
-    this.moveTargetInput = page.locator('#move-target-input')
-    this.batchMoveButton = page.locator('#batch-move-button')
+    this.moveTargetInput = page.locator('#autosep-destination')
+    this.batchMoveButton = page.locator('#btn-execute-autosep')
     this.batchMoveProgress = page.locator('#batch-move-progress')
 
     // Batch filters
@@ -59,7 +59,7 @@ export class AutoSeparatePage {
    */
   async goto() {
     await this.page.goto('/')
-    await this.page.locator('[data-view="auto-separate"]').click()
+    await this.page.locator('[data-view="autosep"]').click()
     await this.page.waitForLoadState('networkidle')
   }
 

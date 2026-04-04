@@ -1,32 +1,82 @@
 /**
  * SD Image Sorter - Keyboard Shortcuts Panel
  */
-const KeyboardShortcutsPanel = (function() {
+const KeyboardShortcutsPanel = (function () {
     const PANEL_ID = 'keyboard-shortcuts-panel';
     const SHORTCUTS = {
         global: [
-            { key: '?', description: 'Show this help panel' },
-            { key: 'Esc', description: 'Close modal / Cancel action' },
-            { key: '1-7', description: 'Switch views' }
+            { key: '?', descKey: 'shortcuts.global.help', fallback: 'Open the keyboard shortcuts panel.' },
+            { key: 'Esc', descKey: 'shortcuts.global.escape', fallback: 'Close a modal or cancel the current action.' },
+            { key: '1-7', descKey: 'shortcuts.global.views', fallback: 'Switch tabs quickly.' },
         ],
         gallery: [
-            { key: 'Arrow Left/Right', description: 'Navigate images' },
-            { key: 'Space', description: 'Toggle selection mode' },
-            { key: 'R', description: 'Show random image' }
+            { key: 'Arrow Left/Right', descKey: 'shortcuts.gallery.navigate', fallback: 'Navigate images in the detail modal.' },
+            { key: 'Space', descKey: 'shortcuts.gallery.selection', fallback: 'Toggle selection mode.' },
+            { key: 'R', descKey: 'shortcuts.gallery.random', fallback: 'Show a random image.' },
         ],
         manual: [
-            { key: 'W/A/S/D', description: 'Move to folder' },
-            { key: 'Space', description: 'Skip image' },
-            { key: 'Z', description: 'Undo last action' }
+            { key: 'W/A/S/D', descKey: 'shortcuts.manual.move', fallback: 'Send the image to one of the four folders.' },
+            { key: 'Space', descKey: 'shortcuts.manual.skip', fallback: 'Skip the current image.' },
+            { key: 'Z', descKey: 'shortcuts.manual.undo', fallback: 'Undo the last move.' },
         ],
         censor: [
-            { key: 'B', description: 'Brush tool' },
-            { key: 'E', description: 'Eraser tool' },
-            { key: 'C', description: 'Clone stamp' }
-        ]
+            { key: 'B', descKey: 'shortcuts.censor.brush', fallback: 'Switch to the brush tool.' },
+            { key: 'E', descKey: 'shortcuts.censor.eraser', fallback: 'Switch to the eraser tool.' },
+            { key: 'C', descKey: 'shortcuts.censor.clone', fallback: 'Switch to clone mode.' },
+        ],
     };
+
     let isPanelOpen = false;
     let panelElement = null;
+
+    function t(key, fallback) {
+        if (window.I18n && typeof window.I18n.t === 'function') {
+            const translated = window.I18n.t(key);
+            if (translated && translated !== key) {
+                return translated;
+            }
+        }
+        return fallback || key;
+    }
+
+    function getSectionLabel(section) {
+        const labels = {
+            global: { key: 'shortcuts.section.global', fallback: 'Global', icon: '🌐' },
+            gallery: { key: 'shortcuts.section.gallery', fallback: 'Gallery', icon: '🖼️' },
+            manual: { key: 'shortcuts.section.manual', fallback: 'Manual Sort', icon: '🎮' },
+            censor: { key: 'shortcuts.section.censor', fallback: 'Censor Edit', icon: '🔳' },
+        };
+        const label = labels[section] || { key: section, fallback: section, icon: '⌨️' };
+        return `${label.icon} ${t(label.key, label.fallback)}`;
+    }
+
+    function renderPanel(panel) {
+        let bodyHtml = '';
+        for (const [section, items] of Object.entries(SHORTCUTS)) {
+            bodyHtml += `<div class="shortcuts-group"><h4 class="shortcuts-group-title">${getSectionLabel(section)}</h4><ul class="shortcuts-list">`;
+            bodyHtml += items.map((shortcut) => (
+                `<li class="shortcut-item"><span class="shortcut-key">${shortcut.key}</span><span class="shortcut-description">${t(shortcut.descKey, shortcut.fallback)}</span></li>`
+            )).join('');
+            bodyHtml += '</ul></div>';
+        }
+
+        panel.innerHTML = `
+            <div class="shortcuts-panel-content">
+                <div class="shortcuts-panel-header">
+                    <h3>⌨️ ${t('shortcuts.title', 'Keyboard Shortcuts')}</h3>
+                    <button class="shortcuts-panel-close" aria-label="${t('common.close', 'Close')}">&times;</button>
+                </div>
+                <div class="shortcuts-panel-body">${bodyHtml}</div>
+                <div class="shortcuts-panel-footer">
+                    <p class="shortcuts-hint">${t('shortcuts.hint', 'Press ? any time to open this panel.')}</p>
+                </div>
+            </div>`;
+
+        panel.querySelector('.shortcuts-panel-close').addEventListener('click', hide);
+        panel.addEventListener('click', function (e) {
+            if (e.target === panel) hide();
+        });
+    }
 
     function createPanel() {
         if (panelElement) return panelElement;
@@ -34,31 +84,8 @@ const KeyboardShortcutsPanel = (function() {
         panel.id = PANEL_ID;
         panel.className = 'keyboard-shortcuts-panel';
         panel.setAttribute('role', 'dialog');
-
-        // Build shortcuts HTML from data
-        let bodyHtml = '';
-        const sectionLabels = { global: '🌐 Global', gallery: '🖼️ Gallery', manual: '🎮 Manual Sort', censor: '🔳 Censor Edit' };
-        for (const [section, items] of Object.entries(SHORTCUTS)) {
-            bodyHtml += `<div class="shortcuts-group"><h4 class="shortcuts-group-title">${sectionLabels[section] || section}</h4><ul class="shortcuts-list">`;
-            bodyHtml += items.map(s =>
-                `<li class="shortcut-item"><span class="shortcut-key">${s.key}</span><span class="shortcut-description">${s.description}</span></li>`
-            ).join('');
-            bodyHtml += '</ul></div>';
-        }
-
-        panel.innerHTML = `
-            <div class="shortcuts-panel-content">
-                <div class="shortcuts-panel-header">
-                    <h3>⌨️ Keyboard Shortcuts</h3>
-                    <button class="shortcuts-panel-close">&times;</button>
-                </div>
-                <div class="shortcuts-panel-body">${bodyHtml}</div>
-                <div class="shortcuts-panel-footer">
-                    <p>Press <kbd>?</kbd> anytime to show this panel</p>
-                </div>
-            </div>`;
-        panel.querySelector('.shortcuts-panel-close').addEventListener('click', hide);
-        panel.addEventListener('click', function(e) { if (e.target === panel) hide(); });
+        panel.setAttribute('aria-modal', 'true');
+        renderPanel(panel);
         document.body.appendChild(panel);
         panelElement = panel;
         return panel;
@@ -67,6 +94,7 @@ const KeyboardShortcutsPanel = (function() {
     function show() {
         if (isPanelOpen) return;
         createPanel();
+        renderPanel(panelElement);
         panelElement.classList.add('visible');
         isPanelOpen = true;
         document.addEventListener('keydown', handleKeydown);
@@ -83,16 +111,42 @@ const KeyboardShortcutsPanel = (function() {
         if (e.key === 'Escape') hide();
     }
 
-    function init() {
-        document.addEventListener('keydown', function(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            if (e.key === '?' && !isPanelOpen) { e.preventDefault(); show(); }
-        });
-        const helpBtn = document.getElementById('btn-help');
-        if (helpBtn) helpBtn.addEventListener('click', show);
+    function showGuideForCurrentTab() {
+        if (!window.Guide || typeof window.Guide.show !== 'function') return false;
+        const currentTab = typeof window.Guide.getCurrentTab === 'function'
+            ? window.Guide.getCurrentTab()
+            : (window.App && window.App.AppState && window.App.AppState.currentView) || 'gallery';
+        window.Guide.show(currentTab);
+        return true;
     }
 
-    return { init: init, show: show, hide: hide, SHORTCUTS: SHORTCUTS };
+    function init() {
+        document.addEventListener('keydown', function (e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === '?' && !isPanelOpen) {
+                e.preventDefault();
+                show();
+            }
+        });
+
+        document.addEventListener('languageChanged', function () {
+            if (panelElement) {
+                renderPanel(panelElement);
+            }
+        });
+
+        const helpBtn = document.getElementById('btn-help');
+        if (helpBtn) {
+            helpBtn.addEventListener('click', function () {
+                if (!showGuideForCurrentTab()) {
+                    show();
+                }
+            });
+        }
+    }
+
+    return { init, show, hide, SHORTCUTS };
 })();
+
 document.addEventListener('DOMContentLoaded', KeyboardShortcutsPanel.init);
 window.KeyboardShortcutsPanel = KeyboardShortcutsPanel;

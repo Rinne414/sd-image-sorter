@@ -14,7 +14,9 @@ const ArtistIdent = {
     init() {
         this.bindEvents();
         this._syncControls();
+        this.syncSelectionActionState();
         this.loadStats();
+        this.resumeBatchProgress();
         this.showFirstUseGuide();
     },
 
@@ -146,7 +148,15 @@ const ArtistIdent = {
     },
 
     formatArtistName(name) {
-        return String(name ?? '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const safeName = String(name ?? '').trim();
+        if (!safeName || safeName === 'undefined') return 'Undefined';
+
+        return safeName
+            .replace(/_/g, ' ')
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
     },
 
     _syncControls() {
@@ -161,6 +171,29 @@ const ArtistIdent = {
         if (modelSource && localModelGroup) {
             localModelGroup.style.display = modelSource.value === 'local' ? 'block' : 'none';
         }
+
+        this.syncSelectionActionState();
+    },
+
+    syncSelectionActionState() {
+        const identifySelectedBtn = document.getElementById('btn-identify-selected');
+        if (!identifySelectedBtn) return;
+
+        const selectedIds = window.App?.AppState?.selectedIds;
+        const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+        const hasSelection = normalizedSelectedIds.size > 0;
+        const disabled = this.isIdentifying || !hasSelection;
+
+        identifySelectedBtn.disabled = disabled;
+        identifySelectedBtn.setAttribute('aria-disabled', String(disabled));
+
+        if (this.isIdentifying) {
+            identifySelectedBtn.title = 'Artist identification is already running';
+        } else if (!hasSelection) {
+            identifySelectedBtn.title = 'Select images in Gallery first';
+        } else {
+            identifySelectedBtn.removeAttribute('title');
+        }
     },
 
     _escapeHtml(value) {
@@ -174,6 +207,31 @@ const ArtistIdent = {
         } catch (e) {
             return String(value ?? '');
         }
+    },
+
+    _getIdentifyModelConfig() {
+        const modelSourceEl = document.getElementById('artist-model-source');
+        const modelPathEl = document.getElementById('artist-model-path');
+        const modelSource = String(modelSourceEl?.value || 'huggingface').trim() || 'huggingface';
+        const modelPath = String(modelPathEl?.value || '').trim();
+
+        if (modelSource === 'local' && !modelPath) {
+            throw new Error('Local model path is required when using the local model source');
+        }
+
+        return {
+            model_source: modelSource,
+            model_path: modelSource === 'local' ? modelPath : null,
+        };
+    },
+
+    _getIdentifyPayload(imageIds) {
+        return {
+            image_ids: imageIds,
+            threshold: parseFloat(document.getElementById('artist-threshold')?.value || 0.35),
+            top_k: 5,
+            ...this._getIdentifyModelConfig(),
+        };
     },
 
 
@@ -236,22 +294,16 @@ const ArtistIdent = {
 
 
     filterGalleryByArtist(artist) {
-        // Set the artist filter in AppState
-        if (window.App && window.App.AppState) {
-            window.App.AppState.filters.artist = artist;
+        if (!window.App?.AppState?.filters) return;
+
+        window.App.AppState.filters.artist = artist;
+        if (typeof window.App.updateFilterSummary === 'function') {
+            window.App.updateFilterSummary();
         }
-
-        // Switch to gallery view
-        const galleryTab = document.querySelector('[data-view="gallery"]');
-        if (galleryTab) {
-            galleryTab.click();
+        if (typeof window.App.switchView === 'function') {
+            window.App.switchView('gallery');
         }
-
-        // Update filter summary to show artist filter
-        this.updateFilterSummary(artist);
-
-        // Trigger image reload with artist filter
-        if (window.App && typeof window.App.loadImages === 'function') {
+        if (typeof window.App.loadImages === 'function') {
             window.App.loadImages();
         }
 
@@ -259,34 +311,76 @@ const ArtistIdent = {
     },
 
     clearArtistFilter() {
-        // Clear the artist filter
-        if (window.App && window.App.AppState) {
-            window.App.AppState.filters.artist = null;
-        }
+        if (!window.App?.AppState?.filters) return;
 
-        // Switch to gallery view
-        const galleryTab = document.querySelector('[data-view="gallery"]');
-        if (galleryTab) {
-            galleryTab.click();
+        window.App.AppState.filters.artist = null;
+        if (typeof window.App.updateFilterSummary === 'function') {
+            window.App.updateFilterSummary();
         }
-
-        // Trigger image reload without artist filter
-        if (window.App && typeof window.App.loadImages === 'function') {
+        if (typeof window.App.switchView === 'function') {
+            window.App.switchView('gallery');
+        }
+        if (typeof window.App.loadImages === 'function') {
             window.App.loadImages();
         }
 
         window.App.showToast('Artist filter cleared', 'info');
     },
 
-    updateFilterSummary(artist) {
-        // Update the filter summary in the sidebar to show artist filter
-        const summaryEl = document.getElementById('summary-artist');
-        if (summaryEl) {
-            summaryEl.textContent = this.formatArtistName(artist);
+    // ============== Identification ==============
+
+    updateProgressUi(progress = {}) {
+        const progressContainer = document.getElementById('artist-progress-container');
+        const progressFill = document.getElementById('artist-progress-fill');
+        const progressText = document.getElementById('artist-progress-text');
+        const total = Number(progress.total || 0);
+        const processed = Number(progress.processed || 0);
+        const errors = Number(progress.errors || 0);
+        const completed = total > 0 ? Math.min(total, processed + errors) : 0;
+        const percent = total > 0 ? Math.round(completed / total * 100) : 0;
+
+        if (progressContainer) progressContainer.style.display = 'block';
+        if (progressFill) progressFill.style.width = `${percent}%`;
+        if (progressText) {
+            progressText.textContent = total > 0
+                ? `${completed}/${total} images (${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''})`
+                : (progress.message || 'Preparing artist identification...');
         }
     },
 
-    // ============== Identification ==============
+    async resumeBatchProgress() {
+        if (this.isIdentifying) return;
+
+        try {
+            const progress = await window.App.API.get('/api/artists/batch-progress');
+            if (!progress?.running) {
+                return;
+            }
+
+            this.isIdentifying = true;
+            this.syncSelectionActionState();
+            this.updateProgressUi(progress);
+
+            const finalProgress = await this.pollProgress();
+            const errorCount = Number(finalProgress?.errors || 0);
+            if (errorCount > 0) {
+                window.App.showToast(`Artist identification finished with ${errorCount} error(s)`, 'warning');
+            } else {
+                window.App.showToast('Artist identification complete!', 'success');
+            }
+            this.loadStats();
+        } catch (e) {
+            Logger.warn('Failed to resume artist identification progress:', e);
+        } finally {
+            if (!document.getElementById('artist-progress-container')) {
+                return;
+            }
+
+            this.isIdentifying = false;
+            this.syncSelectionActionState();
+            document.getElementById('artist-progress-container').style.display = 'none';
+        }
+    },
 
     async identifyAll() {
         if (this.isIdentifying) return;
@@ -297,9 +391,12 @@ const ArtistIdent = {
         const progressText = document.getElementById('artist-progress-text');
 
         this.isIdentifying = true;
+        this.syncSelectionActionState();
 
         // Show global loading for initial setup
         showGlobalLoading('Starting artist identification...');
+
+        let handedOffToExistingTask = false;
 
         try {
             const pageSize = 1000;
@@ -331,23 +428,32 @@ const ArtistIdent = {
             if (progressText) progressText.textContent = `Identifying ${imageIds.length} images...`;
 
             // Start batch identification
-            await window.App.API.post('/api/artists/identify-batch', {
-                image_ids: imageIds,
-                threshold: parseFloat(document.getElementById('artist-threshold')?.value || 0.35),
-                top_k: 5,
-            });
+            await window.App.API.post('/api/artists/identify-batch', this._getIdentifyPayload(imageIds));
 
             // Poll progress
-            await this.pollProgress();
-
-            showToast('Artist identification complete!', 'success');
+            const progress = await this.pollProgress();
+            const errorCount = progress?.errors || 0;
+            if (errorCount > 0) {
+                showToast(`Artist identification finished with ${errorCount} error(s)`, 'warning');
+            } else {
+                showToast('Artist identification complete!', 'success');
+            }
             this.loadStats();
 
         } catch (e) {
-            showToast(formatUserError(e, "Artist identification failed"), "error");
+            if (/already in progress/i.test(String(e?.message || ''))) {
+                handedOffToExistingTask = true;
+                showToast('Artist identification is already running in the background', 'info');
+                await this.resumeBatchProgress();
+            } else {
+                showToast(formatUserError(e, "Artist identification failed"), "error");
+            }
         } finally {
-            this.isIdentifying = false;
-            if (progressContainer) progressContainer.style.display = 'none';
+            if (!handedOffToExistingTask) {
+                this.isIdentifying = false;
+                this.syncSelectionActionState();
+                if (progressContainer) progressContainer.style.display = 'none';
+            }
             hideGlobalLoading();
         }
     },
@@ -355,33 +461,43 @@ const ArtistIdent = {
     async pollProgress() {
         const progressFill = document.getElementById('artist-progress-fill');
         const progressText = document.getElementById('artist-progress-text');
+        let lastProgress = null;
 
         while (this.isIdentifying) {
             try {
                 const progress = await window.App.API.get('/api/artists/batch-progress');
+                lastProgress = progress;
 
                 if (progress.total > 0) {
-                    const percent = Math.round(progress.processed / progress.total * 100);
+                    const processed = Number(progress.processed || 0);
+                    const errors = Number(progress.errors || 0);
+                    const completed = Math.min(progress.total, processed + errors);
+                    const percent = Math.round(completed / progress.total * 100);
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
-                        progressText.textContent = `${progress.processed}/${progress.total} images (${percent}%)`;
+                        progressText.textContent = `${completed}/${progress.total} images (${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''})`;
                     }
                 }
 
                 if (!progress.running) {
-                    break;
+                    return progress;
                 }
 
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } catch (e) {
                 Logger.error('Progress poll error:', e);
-                break;
+                throw e;
             }
         }
+
+        return lastProgress;
     },
 
     async identifySelected() {
         const { showToast } = window.App;
+        const progressContainer = document.getElementById('artist-progress-container');
+        const progressFill = document.getElementById('artist-progress-fill');
+        const progressText = document.getElementById('artist-progress-text');
         const selectedIds = window.App?.AppState?.selectedIds;
         const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
 
@@ -396,22 +512,43 @@ const ArtistIdent = {
         }
 
         this.isIdentifying = true;
+        this.syncSelectionActionState();
+
+        let handedOffToExistingTask = false;
 
         try {
-            await window.App.API.post('/api/artists/identify-batch', {
-                image_ids: Array.from(normalizedSelectedIds),
-                threshold: parseFloat(document.getElementById('artist-threshold')?.value || 0.35),
-                top_k: 5,
-            });
+            if (progressContainer) progressContainer.style.display = 'block';
+            if (progressFill) progressFill.style.width = '0%';
+            if (progressText) progressText.textContent = `Identifying ${normalizedSelectedIds.size} selected image(s)...`;
 
-            await this.pollProgress();
-            showToast(`Identified ${normalizedSelectedIds.size} images`, 'success');
+            await window.App.API.post(
+                '/api/artists/identify-batch',
+                this._getIdentifyPayload(Array.from(normalizedSelectedIds)),
+            );
+
+            const progress = await this.pollProgress();
+            const errorCount = progress?.errors || 0;
+            if (errorCount > 0) {
+                showToast(`Identification finished with ${errorCount} error(s)`, 'warning');
+            } else {
+                showToast(`Identified ${normalizedSelectedIds.size} images`, 'success');
+            }
             this.loadStats();
 
         } catch (e) {
-            showToast(formatUserError(e, "Artist identification failed"), "error");
+            if (/already in progress/i.test(String(e?.message || ''))) {
+                handedOffToExistingTask = true;
+                showToast('Artist identification is already running in the background', 'info');
+                await this.resumeBatchProgress();
+            } else {
+                showToast(formatUserError(e, "Artist identification failed"), "error");
+            }
         } finally {
-            this.isIdentifying = false;
+            if (!handedOffToExistingTask) {
+                this.isIdentifying = false;
+                this.syncSelectionActionState();
+                if (progressContainer) progressContainer.style.display = 'none';
+            }
         }
     },
 
@@ -459,7 +596,10 @@ const ArtistIdent = {
         });
 
         document.addEventListener('click', (event) => {
-            const id = event.target?.id;
+            const actionButton = event.target?.closest?.(
+                '#btn-identify-all, #btn-identify-selected, #btn-refresh-artist-stats, #btn-clear-artist-data'
+            );
+            const id = actionButton?.id;
             switch (id) {
                 case 'btn-identify-all':
                     this.identifyAll();
@@ -485,6 +625,10 @@ const ArtistIdent = {
                 });
                 this.renderArtistGrid(this.stats.artist_counts || {}, nextMode);
             }
+        });
+
+        document.addEventListener('selection-state-changed', () => {
+            this.syncSelectionActionState();
         });
     },
 
@@ -515,11 +659,6 @@ const ArtistIdent = {
 
         view.style.position = 'relative';
         view.appendChild(overlay);
-
-        overlay.querySelector('[data-guide-close]')?.addEventListener('click', () => {
-            overlay.remove();
-            localStorage.setItem('artist-guide-seen', 'true');
-        });
     },
 
 };

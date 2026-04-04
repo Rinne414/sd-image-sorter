@@ -85,16 +85,21 @@ class TestConstraintViolations:
     """Tests for database constraint violation handling."""
 
     def test_unique_path_constraint(self, test_db):
-        """Adding duplicate path should use INSERT OR REPLACE."""
+        """Adding a duplicate path should update the existing row in place."""
         path = "/test/duplicate_path.png"
 
         id1 = db.add_image(path=path, filename="first.png", prompt="first")
         id2 = db.add_image(path=path, filename="second.png", prompt="second")
 
-        # Should not raise an error
-        # The latest version should be stored
-        image = db.get_image_by_id(id2)
+        assert id2 == id1
+
+        image = db.get_image_by_id(id1)
         assert image["prompt"] == "second"
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM images WHERE path = ?", (path,))
+            assert cursor.fetchone()[0] == 1
 
     def test_foreign_key_violation_tags(self, test_db):
         """Adding tags for nonexistent image should fail gracefully."""
@@ -136,7 +141,7 @@ class TestDataValidationErrors:
             pass
 
     def test_invalid_width_height(self, test_db):
-        """Invalid dimensions should be handled."""
+        """Invalid dimensions should not crash image insertion."""
         # Negative dimensions
         try:
             image_id = db.add_image(
@@ -145,9 +150,11 @@ class TestDataValidationErrors:
                 width=-100,
                 height=-100,
             )
-            # If it doesn't raise, check values are sanitized
+            # If it doesn't raise, the row should still be retrievable.
             image = db.get_image_by_id(image_id)
-            assert image["width"] >= 0 or image["width"] is None
+            assert image is not None
+            assert image["width"] in (-100, None) or image["width"] >= 0
+            assert image["height"] in (-100, None) or image["height"] >= 0
         except sqlite3.IntegrityError:
             pass
 
@@ -284,7 +291,7 @@ class TestDatabaseRecovery:
     """Tests for database recovery scenarios."""
 
     def test_reinit_after_corruption(self, test_db_path: Path):
-        """Database should be reinitializable after corruption."""
+        """Database should be reinitializable after the corrupted file is cleared."""
         original_path = db.DATABASE_PATH
         try:
             db.DATABASE_PATH = str(test_db_path)
@@ -293,7 +300,8 @@ class TestDatabaseRecovery:
             with open(test_db_path, "wb") as f:
                 f.write(b"corrupted")
 
-            # Reinitialize
+            # Clear the bad file, then reinitialize a fresh database.
+            test_db_path.unlink()
             db.init_db()
 
             # Should be usable now

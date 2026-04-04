@@ -185,6 +185,27 @@ class TestGetSingleImage:
         data = response.json()
         assert len(data["tags"]) > 0
 
+    def test_get_existing_image_ignores_embedding_blob(self, test_client, test_db):
+        """Image detail payload should stay JSON-safe even when embeddings exist in the database."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/embedded.png",
+            filename="embedded.png",
+            metadata_json="{}",
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE images SET embedding = ? WHERE id = ?", (b"\xf2\x00\x01", image_id))
+
+        response = test_client.get(f"/api/images/{image_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["image"]["id"] == image_id
+        assert "embedding" not in data["image"]
+
 
 class TestImageFileServing:
     """Tests for GET /api/image-file/{image_id} endpoint."""
@@ -292,6 +313,24 @@ class TestThumbnailGeneration:
         assert response.status_code == 200
         assert "Cache-Control" in response.headers
         assert "Last-Modified" in response.headers
+
+    def test_thumbnail_unreadable_file_returns_placeholder(self, test_client, test_db, tmp_path):
+        """Unreadable files should render a placeholder thumbnail instead of 500."""
+        import database as db
+
+        broken_path = tmp_path / "broken.png"
+        broken_path.write_bytes(b"not-a-real-png")
+
+        image_id = db.add_image(
+            path=str(broken_path),
+            filename="broken.png",
+        )
+
+        response = test_client.get(f"/api/image-thumbnail/{image_id}")
+
+        assert response.status_code == 200
+        assert response.headers.get("content-type") == "image/webp"
+        assert response.headers.get("X-Thumbnail-Placeholder") == "UNREADABLE"
 
 
 class TestReparseImage:

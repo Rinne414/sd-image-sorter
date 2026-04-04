@@ -4,7 +4,7 @@ Prompt generation and tag management router.
 Endpoints for tag categorization, tag sets, exclusion rules,
 and intelligent random prompt generation.
 """
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -73,6 +73,12 @@ class ExclusionRuleResponse(BaseModel):
     targets: List[ExclusionTarget]
 
 
+class PromptCategoryConfig(BaseModel):
+    tags: List[str] = Field(default_factory=list)
+    weight: float = Field(1.0, ge=0.0, le=1.0)
+    locked: bool = False
+
+
 class GenerateConfig(BaseModel):
     character: Optional[str] = None
     outfit: Optional[str] = None
@@ -83,11 +89,14 @@ class GenerateConfig(BaseModel):
     style: Optional[str] = None
     artist: Optional[str] = None
     body: Optional[str] = None
-    quality_preset: str = Field("high", pattern="^(high|medium|low)$")
-    count_tag: str = Field("1girl", min_length=1)
+    quality_preset: Optional[str] = Field("high", pattern="^(high|medium|low|none)?$")
+    count_tag: Optional[str] = None
     nsfw: bool = False
     include_negative: bool = True
     seed: Optional[int] = Field(default=None, ge=0)
+    count: int = Field(1, ge=1, le=20)
+    categories: Dict[str, PromptCategoryConfig] = Field(default_factory=dict)
+    tag_sets: List[Any] = Field(default_factory=list)
 
 
 class ValidateRequest(BaseModel):
@@ -105,6 +114,10 @@ class PresetSave(BaseModel):
         if len(json.dumps(v)) > 65536:
             raise ValueError('Config too large')
         return v
+
+
+def _normalize_prompt_resource_ref(value: Any) -> str:
+    return str(value or "").strip()
 
 
 # ============================================================
@@ -201,6 +214,8 @@ async def recategorize_tag(tag: str, category: str):
                VALUES (?, ?, 1)""",
             (tag, category),
         )
+    gen = get_generator(db)
+    gen.load_from_db()
     return {"tag": tag, "category": category, "saved": True}
 
 
@@ -216,7 +231,7 @@ async def list_tag_sets():
     return {
         "sets": [
             {
-                "id": idx + 1,
+                "id": s.get("id", idx + 1),
                 "name": s["name"],
                 "category": s["category"],
                 "description": s.get("description", ""),
@@ -259,21 +274,25 @@ async def create_tag_set(data: TagSetCreate):
     return {"id": set_id, "name": data.name, "created": True}
 
 
-@router.delete("/sets/{name}")
-async def delete_tag_set(name: str):
-    """Delete a user-defined tag set."""
+@router.delete("/sets/{set_ref}")
+async def delete_tag_set(set_ref: str):
+    """Delete a user-defined tag set by id or legacy name."""
+    normalized_ref = _normalize_prompt_resource_ref(set_ref)
     with db.get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM tag_sets WHERE name = ?", (name,))
+        cursor.execute(
+            "SELECT id, name FROM tag_sets WHERE CAST(id AS TEXT) = ? OR name = ?",
+            (normalized_ref, normalized_ref),
+        )
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail=f"Tag set '{name}' not found")
-        set_id = row[0]
+            raise HTTPException(status_code=404, detail=f"Tag set '{set_ref}' not found")
+        set_id, set_name = row[0], row[1]
         cursor.execute("DELETE FROM tag_set_members WHERE set_id = ?", (set_id,))
         cursor.execute("DELETE FROM tag_sets WHERE id = ?", (set_id,))
     gen = get_generator(db)
     gen.load_from_db()
-    return {"deleted": True, "name": name}
+    return {"deleted": True, "id": set_id, "name": set_name}
 
 
 # ============================================================
@@ -331,22 +350,26 @@ async def create_exclusion_rule(data: ExclusionRuleCreate):
     return {"id": rule_id, "name": data.rule_name, "created": True}
 
 
-@router.delete("/exclusions/{name}")
-async def delete_exclusion_rule(name: str):
-    """Delete a user-defined exclusion rule."""
+@router.delete("/exclusions/{rule_ref}")
+async def delete_exclusion_rule(rule_ref: str):
+    """Delete a user-defined exclusion rule by id or legacy name."""
+    normalized_ref = _normalize_prompt_resource_ref(rule_ref)
     with db.get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM tag_exclusions WHERE rule_name = ?", (name,))
+        cursor.execute(
+            "SELECT id, rule_name FROM tag_exclusions WHERE CAST(id AS TEXT) = ? OR rule_name = ?",
+            (normalized_ref, normalized_ref),
+        )
         row = cursor.fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail=f"Exclusion rule '{name}' not found")
-        rule_id = row[0]
+            raise HTTPException(status_code=404, detail=f"Exclusion rule '{rule_ref}' not found")
+        rule_id, rule_name = row[0], row[1]
         cursor.execute("DELETE FROM tag_exclusion_conditions WHERE exclusion_id = ?", (rule_id,))
         cursor.execute("DELETE FROM tag_exclusion_targets WHERE exclusion_id = ?", (rule_id,))
         cursor.execute("DELETE FROM tag_exclusions WHERE id = ?", (rule_id,))
     gen = get_generator(db)
     gen.load_from_db()
-    return {"deleted": True, "name": name}
+    return {"deleted": True, "id": rule_id, "name": rule_name}
 
 
 # ============================================================
@@ -399,8 +422,8 @@ async def generate_prompt(config: GenerateConfig):
             - style: Art style
             - artist: Artist style to emulate
             - body: Body features
-            - quality_preset: "high", "medium", or "low"
-            - count_tag: Character count tag (e.g., "1girl", "2girls")
+            - quality_preset: "high", "medium", "low", or "none"
+            - count_tag: Character count tag (e.g., "1girl", "2girls") or empty for none
             - nsfw: Include NSFW tags
             - include_negative: Generate negative prompt
             - seed: Random seed for reproducibility

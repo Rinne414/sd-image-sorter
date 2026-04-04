@@ -19,6 +19,72 @@ from services.tagging_service import (
 
 router = APIRouter(prefix="/api", tags=["tags"])
 
+TAGGER_MODEL_HINTS = {
+    "wd-eva02-large-tagger-v3": {
+        "summary": "Most accurate overall. In this app it runs in protected CPU Safe Mode so Max Quality stays stable.",
+        "speed": "Slow",
+        "memory": "High",
+        "best_for": "Max Quality / final library cleanup",
+        "safe_mode_note": "GPU is locked off for this model inside the app. Quality stays high; runtime is tuned to avoid crashes.",
+        "gpu_default": False,
+        "gpu_confirmation_required": False,
+        "gpu_locked": True,
+        "runtime_note": "Protected CPU Safe Mode. Highest quality, safer runtime.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 4,
+    },
+    "wd-swinv2-tagger-v3": {
+        "summary": "Balanced quality and speed. Good default if you are not sure.",
+        "speed": "Medium",
+        "memory": "Medium",
+        "best_for": "Recommended general use",
+        "recommended": True,
+        "safe_mode_note": "Usually fine on average PCs. Safe Mode is optional.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-convnext-tagger-v3": {
+        "summary": "Faster than the larger models while keeping decent tagging quality.",
+        "speed": "Medium-fast",
+        "memory": "Medium",
+        "best_for": "Daily tagging on average PCs",
+        "safe_mode_note": "A good fallback when EVA02 feels too heavy.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 3,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-vit-tagger-v3": {
+        "summary": "Lightweight and quick, but less accurate than the larger models.",
+        "speed": "Fast",
+        "memory": "Low",
+        "best_for": "Weak machines / fastest pass",
+        "safe_mode_note": "Best pick for weak machines. CPU Safe Mode works well here.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 2,
+        "speed_score": 5,
+        "stability_score": 5,
+    },
+    "wd-vit-large-tagger-v3": {
+        "summary": "A middle ground between ViT speed and EVA02 accuracy.",
+        "speed": "Medium",
+        "memory": "Medium-high",
+        "best_for": "Better accuracy without going full EVA02",
+        "safe_mode_note": "Use Safe Mode if you notice freezes during model load.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 3,
+        "stability_score": 3,
+    },
+}
+
 # Service instance - will be set via dependency injection
 _tagging_service: Optional[TaggingService] = None
 
@@ -241,7 +307,19 @@ async def get_tagger_models():
         {
             "name": name,
             "path": config["repo_id"],
-            "description": f"{name.replace('-', ' ').upper()} model",
+            "description": TAGGER_MODEL_HINTS.get(name, {}).get("summary", f"{name} model"),
+            "speed": TAGGER_MODEL_HINTS.get(name, {}).get("speed", "Unknown"),
+            "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
+            "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
+            "recommended": TAGGER_MODEL_HINTS.get(name, {}).get("recommended", False),
+            "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Use Safe Mode if your PC becomes unstable."),
+            "gpu_default": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_default", True),
+            "gpu_confirmation_required": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_confirmation_required", False),
+            "gpu_locked": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_locked", False),
+            "runtime_note": TAGGER_MODEL_HINTS.get(name, {}).get("runtime_note", ""),
+            "quality_score": TAGGER_MODEL_HINTS.get(name, {}).get("quality_score", 3),
+            "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
+            "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
         }
         for name, config in TAGGER_MODELS.items()
     ]
@@ -257,6 +335,14 @@ async def get_tag_progress(
 ):
     """Get current tagging progress."""
     return service.get_progress()
+
+
+@router.post("/tag/cancel")
+async def cancel_tagging(
+    service: TaggingService = Depends(get_tagging_service),
+):
+    """Request cancellation of the current tagging task."""
+    return service.cancel_tagging()
 
 
 @router.post("/tag/reset")

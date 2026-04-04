@@ -13,7 +13,7 @@ from pathlib import Path
 import asyncio
 from typing import Optional, Tuple
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +170,42 @@ def get_thumbnail(source_path: str, size: int = DEFAULT_SIZE) -> Tuple[bytes, da
     # Generate and cache
     thumbnail_bytes, last_modified = generate_and_cache_thumbnail(source_path, size)
     return (thumbnail_bytes, last_modified, False)
+
+
+def generate_placeholder_thumbnail(
+    size: int = DEFAULT_SIZE,
+    *,
+    label: str = "Unreadable",
+) -> bytes:
+    """Generate a lightweight placeholder thumbnail for unreadable images."""
+    canvas_size = max(64, size if size in SUPPORTED_SIZES else min(SUPPORTED_SIZES, key=lambda s: abs(s - size)))
+    image = Image.new("RGBA", (canvas_size, canvas_size), (28, 35, 52, 255))
+    draw = ImageDraw.Draw(image)
+
+    accent = (255, 159, 67, 255)
+    muted = (98, 114, 164, 255)
+
+    draw.rounded_rectangle(
+        (8, 8, canvas_size - 8, canvas_size - 8),
+        radius=18,
+        outline=muted,
+        width=3,
+        fill=(18, 24, 38, 255),
+    )
+    draw.line((22, 22, canvas_size - 22, canvas_size - 22), fill=accent, width=8)
+    draw.line((canvas_size - 22, 22, 22, canvas_size - 22), fill=accent, width=8)
+    draw.rounded_rectangle(
+        (24, canvas_size - 64, canvas_size - 24, canvas_size - 24),
+        radius=12,
+        outline=muted,
+        width=2,
+        fill=(36, 46, 66, 230),
+    )
+    draw.text((canvas_size // 2 - 32, canvas_size - 54), label[:10], fill=(240, 244, 255, 255))
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="WEBP", quality=85, method=4)
+    return buffer.getvalue()
 
 
 

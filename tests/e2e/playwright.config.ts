@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test'
 /**
  * E2E Test Configuration for SD Image Sorter
  *
- * Tests run against the local FastAPI server on localhost:8000
+ * Tests run against the local FastAPI server on localhost:8001
  */
 export default defineConfig({
   testDir: './specs',
@@ -17,7 +17,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.BASE_URL || 'http://127.0.0.1:8000',
+    baseURL: process.env.BASE_URL || 'http://127.0.0.1:8001',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -31,9 +31,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'cd ../../backend && python main.py --port 8001',
+    command: '..\\..\\backend\\venv\\Scripts\\python.exe ..\\..\\backend\\main.py --port 8001',
     url: 'http://127.0.0.1:8001',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120000,
     stdout: 'pipe',
     stderr: 'pipe',

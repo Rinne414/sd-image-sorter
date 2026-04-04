@@ -19,6 +19,22 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
+def _assert_error_contract(data):
+    """Shared assertion for normalized JSON error payloads."""
+    assert "error" in data
+    assert "type" in data
+    assert "detail" not in data
+
+
+def _assert_validation_error_contract(data):
+    """Validation failures are normalized to a 400 payload."""
+    _assert_error_contract(data)
+    assert data["error"] == "Invalid request parameters"
+    assert data["type"] == "ValidationError"
+    assert isinstance(data.get("details"), list)
+    assert data["details"]
+
+
 class TestHTTPErrorCodes:
     """Tests for correct HTTP error codes."""
 
@@ -28,7 +44,7 @@ class TestHTTPErrorCodes:
 
         assert response.status_code == 404
         data = response.json()
-        assert "detail" in data
+        _assert_error_contract(data)
 
     def test_404_for_nonexistent_image_file(self, test_client, test_db):
         """Image with missing file should return 404."""
@@ -49,15 +65,17 @@ class TestHTTPErrorCodes:
         response = test_client.get("/api/images?sort_by=invalid_sort_option")
         assert response.status_code == 400
 
-    def test_422_for_validation_errors(self, test_client):
-        """Validation errors should return 422."""
+    def test_400_for_validation_errors(self, test_client):
+        """Validation errors should return normalized 400 payloads."""
         # Invalid type for path parameter
         response = test_client.get("/api/images/abc")
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
         # Invalid limit (must be >= 1)
         response = test_client.get("/api/images?limit=0")
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
     def test_400_for_scan_already_running(self, test_client):
         """Scan already running should return 400."""
@@ -102,22 +120,20 @@ class TestHTTPErrorCodes:
 class TestErrorResponseFormat:
     """Tests for error response format."""
 
-    def test_error_has_detail_field(self, test_client):
-        """Error responses should have 'detail' field."""
+    def test_error_uses_normalized_error_fields(self, test_client):
+        """Error responses should use the normalized error contract."""
         response = test_client.get("/api/images/999999")
 
         assert response.status_code == 404
         data = response.json()
-        assert "detail" in data
+        _assert_error_contract(data)
 
     def test_validation_error_has_details(self, test_client):
-        """Validation errors should have detailed information."""
+        """Validation errors should expose normalized details."""
         response = test_client.get("/api/images/invalid")
 
-        assert response.status_code == 422
-        data = response.json()
-        # FastAPI returns 'detail' with validation info
-        assert "detail" in data
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
     def test_error_content_type(self, test_client):
         """Error responses should be JSON."""
@@ -140,7 +156,8 @@ class TestEdgeCaseErrors:
         )
 
         # min_length=1 validation should trigger
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
     def test_very_long_search_query(self, test_client, test_db_with_images):
         """Very long search query should be handled."""
@@ -148,7 +165,7 @@ class TestEdgeCaseErrors:
         response = test_client.get(f"/api/images?search={long_query}")
 
         # Should either succeed or return validation error
-        assert response.status_code in [200, 422]
+        assert response.status_code in [200, 400]
 
     def test_special_characters_in_path_param(self, test_client):
         """Special characters in path should be handled safely."""
@@ -163,14 +180,14 @@ class TestEdgeCaseErrors:
         for pattern in injection_patterns:
             response = test_client.get(f"/api/images/{pattern}")
             # Should return 404 or 422, not 500
-            assert response.status_code in [404, 422, 400]
+            assert response.status_code in [404, 400]
 
     def test_null_byte_in_params(self, test_client):
         """Null bytes should be handled safely."""
-        response = test_client.get("/api/images?search=test\x00injection")
+        response = test_client.get("/api/images?search=test%00injection")
 
         # Should not crash
-        assert response.status_code in [200, 400, 422]
+        assert response.status_code in [200, 400]
 
     def test_unicode_in_params(self, test_client, test_db_with_images):
         """Unicode characters should work."""
@@ -242,7 +259,7 @@ class TestCensorErrors:
             "/api/censor/preview",
             json={
                 "image_id": 999999,
-                "regions": [{"box": [0, 0, 100, 100], "label": "test"}],
+                "regions": [[0, 0, 100, 100]],
                 "style": "blur",
             }
         )
@@ -269,7 +286,8 @@ class TestCensorErrors:
             }
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
 
 class TestSimilarityErrors:
@@ -280,12 +298,16 @@ class TestSimilarityErrors:
         response = test_client.get("/api/similarity/search/999999")
 
         assert response.status_code == 404
+        data = response.json()
+        _assert_error_contract(data)
+        assert data["error"] == "Image 999999 was not found."
 
     def test_invalid_threshold(self, test_client):
         """Invalid similarity threshold should fail validation."""
         response = test_client.get("/api/similarity/search/1?threshold=1.5")
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
     def test_upload_empty_file(self, test_client):
         """Empty file upload should return error."""
@@ -345,7 +367,8 @@ class TestArtistErrors:
             json={"image_id": 1, "threshold": 1.5}
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 400
+        _assert_validation_error_contract(response.json())
 
 
 class TestRateLimiting:
@@ -358,6 +381,30 @@ class TestRateLimiting:
             response = test_client.get("/api/images?limit=10")
             # Should not be rate limited (429)
             assert response.status_code != 429
+
+    def test_excess_requests_are_rate_limited(self, test_client, monkeypatch):
+        """Rapid requests beyond the bucket size should return 429."""
+        import main
+
+        monkeypatch.setattr(main, "RATE_LIMIT_MAX_REQUESTS", 3)
+
+        with main._rate_limit_lock:
+            main._rate_limit_buckets.clear()
+
+        for _ in range(3):
+            response = test_client.get("/api/images?limit=1")
+            assert response.status_code != 429
+
+        response = test_client.get("/api/images?limit=1")
+
+        assert response.status_code == 429
+        assert response.json() == {
+            "error": "Too many requests. Please try again shortly.",
+            "type": "RateLimitExceeded",
+        }
+
+        with main._rate_limit_lock:
+            main._rate_limit_buckets.clear()
 
 
 class TestCORSHeaders:

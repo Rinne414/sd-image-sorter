@@ -35,28 +35,28 @@ export class SimilarityPage {
     this.page = page
 
     // Embedding
-    this.embedButton = page.locator('#embed-btn')
-    this.embedProgress = page.locator('#embed-progress')
+    this.embedButton = page.locator('#btn-similar-embed')
+    this.embedProgress = page.locator('#similar-embed-text')
     this.embedStats = page.locator('#embed-stats')
 
     // Search
-    this.searchInput = page.locator('#similarity-search-input')
-    this.searchButton = page.locator('#similarity-search-btn')
+    this.searchInput = page.locator('#similar-search-id')
+    this.searchButton = page.locator('#btn-similar-search')
     this.similarityThresholdSlider = page.locator('#similarity-threshold')
     this.resultsLimitInput = page.locator('#results-limit')
 
     // Results
-    this.searchResults = page.locator('#similarity-results')
-    this.resultCards = page.locator('.similarity-result-card')
-    this.noResultsMessage = page.locator('#no-similarity-results')
+    this.searchResults = page.locator('#similar-results')
+    this.resultCards = page.locator('#similar-results > *')
+    this.noResultsMessage = page.locator('#similar-results .empty-state')
 
     // Duplicate detection
-    this.findDuplicatesButton = page.locator('#find-duplicates-btn')
-    this.duplicateThresholdSlider = page.locator('#duplicate-threshold')
-    this.duplicateResults = page.locator('#duplicate-results')
+    this.findDuplicatesButton = page.locator('#btn-similar-duplicates')
+    this.duplicateThresholdSlider = page.locator('#similar-dup-threshold')
+    this.duplicateResults = page.locator('#similar-duplicates')
 
     // Upload
-    this.uploadInput = page.locator('#similarity-upload-input')
+    this.uploadInput = page.locator('#similar-upload-input')
     this.uploadResults = page.locator('#upload-results')
   }
 
@@ -65,7 +65,7 @@ export class SimilarityPage {
    */
   async goto() {
     await this.page.goto('/')
-    await this.page.locator('[data-view="similarity"]').click()
+    await this.page.locator('[data-view="similar"]').click()
     await this.page.waitForLoadState('networkidle')
   }
 

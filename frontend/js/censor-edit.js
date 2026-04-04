@@ -37,6 +37,8 @@ const CensorState = {
 
     // Undo/Redo
     undoStack: [],
+    baseCanvasState: null,
+    baseItemState: null,
 
     // Config
     modelPath: localStorage.getItem('censor_model_path') || '',
@@ -194,6 +196,8 @@ function bindEvents() {
                 CensorState.queue = [];
                 CensorState.activeId = null;
                 CensorState.undoStack = [];
+                CensorState.baseCanvasState = null;
+                CensorState.baseItemState = null;
                 CensorState.originalImageData = null;
                 renderQueue();
                 clearCanvas();
@@ -654,10 +658,22 @@ async function loadCanvasImage(id) {
         const ctx = nextCanvas.getContext('2d', { willReadFrequently: true });
         ctx.drawImage(img, 0, 0);
 
-        // Store data
-        CensorState.originalImageData = ctx.getImageData(0, 0, img.width, img.height);
-        CensorState.undoStack = [];
-        pushUndo();
+        // Store true original image data for eraser/reset
+        const originalCanvas = document.createElement('canvas');
+        originalCanvas.width = originalImg.width;
+        originalCanvas.height = originalImg.height;
+        const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
+        originalCtx.drawImage(originalImg, 0, 0);
+        CensorState.originalImageData = originalCtx.getImageData(0, 0, originalImg.width, originalImg.height);
+
+        // Initialize undo stack from the image that is actually shown on screen
+        const initialState = captureCanvasState(nextCanvas);
+        CensorState.baseCanvasState = initialState;
+        CensorState.baseItemState = {
+            currentDataUrl: item.currentDataUrl || null,
+            isModified: Boolean(item.isModified)
+        };
+        CensorState.undoStack = initialState ? [initialState] : [];
 
         // Fit canvases to container before showing
         fitCanvasToContainer(nextCanvas, img.width, img.height);
@@ -737,16 +753,51 @@ window.addEventListener('resize', () => {
     }
 });
 
-function saveCurrentCanvasToState() {
+function saveCurrentCanvasToState(serializedState = null) {
     // Save from the CURRENT active canvas
     if (!CensorState.activeId) return;
     const item = CensorState.queue.find(i => i.id === CensorState.activeId);
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
 
     if (item && canvas) {
-        item.currentDataUrl = canvas.toDataURL('image/png');
+        const nextState = serializedState || captureCanvasState(canvas);
+        if (!nextState) return;
+
+        if (CensorState.baseCanvasState && nextState === CensorState.baseCanvasState) {
+            item.currentDataUrl = CensorState.baseItemState?.currentDataUrl || null;
+            item.isModified = Boolean(CensorState.baseItemState?.isModified);
+            return;
+        }
+
+        item.currentDataUrl = nextState;
         item.isModified = true;
     }
+}
+
+function captureCanvasState(canvas = null) {
+    const targetCanvas = canvas || document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!targetCanvas || !targetCanvas.width) return null;
+
+    try {
+        return targetCanvas.toDataURL('image/png');
+    } catch (error) {
+        Logger.error('Failed to capture canvas state:', error);
+        return null;
+    }
+}
+
+function pushUndoState(serializedState = null) {
+    const state = serializedState || captureCanvasState();
+    if (!state) return null;
+
+    const previousState = CensorState.undoStack[CensorState.undoStack.length - 1];
+    if (previousState === state) {
+        return state;
+    }
+
+    CensorState.undoStack.push(state);
+    if (CensorState.undoStack.length > 20) CensorState.undoStack.shift();
+    return state;
 }
 
 function clearCanvas() {
@@ -785,7 +836,6 @@ function onCanvasMouseDown(e) {
         return;
     }
 
-    pushUndo();
     drawAtPoint(x, y);
 }
 
@@ -810,8 +860,13 @@ function onCanvasMouseMove(e) {
 }
 
 function onCanvasMouseUp() {
+    const wasDrawing = CensorState.isDrawing;
     CensorState.isDrawing = false;
-    if (CensorState.activeId) saveCurrentCanvasToState(); // Save state after stroke
+
+    if (!wasDrawing || !CensorState.activeId) return;
+
+    const committedState = pushUndoState();
+    saveCurrentCanvasToState(committedState);
 }
 
 function getCanvasCoordinates(e) {
@@ -1335,22 +1390,7 @@ function updateCursorOverlay(e) {
 }
 
 function pushUndo() {
-    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-    if (!canvas || !canvas.width) return; // Guard against missing canvas
-    // Use WebP for best compression while maintaining quality (falls back to PNG if unsupported)
-    // WebP at 0.6 quality is ~30% smaller than JPEG at same quality, saves significant memory
-    let dataUrl;
-    try {
-        dataUrl = canvas.toDataURL('image/webp', 0.6);
-        // Check if browser actually produced WebP (some return PNG as fallback)
-        if (!dataUrl.startsWith('data:image/webp')) {
-            dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        }
-    } catch (e) {
-        dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-    }
-    CensorState.undoStack.push(dataUrl);
-    if (CensorState.undoStack.length > 20) CensorState.undoStack.shift();
+    return pushUndoState();
 }
 
 
@@ -1362,10 +1402,11 @@ function undo() {
     const img = new Image();
     img.onload = () => {
         const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+        if (!canvas) return;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-        saveCurrentCanvasToState();
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        saveCurrentCanvasToState(prev);
     };
     img.src = prev;
 }
@@ -1503,16 +1544,20 @@ function clearAllEdits() {
     // Restore original image data
     ctx.putImageData(CensorState.originalImageData, 0, 0);
 
-    // Clear undo stack and push clean state
-    CensorState.undoStack = [];
-    pushUndo();
-
     // Clear modified flag
     const item = CensorState.queue.find(i => i.id === CensorState.activeId);
     if (item) {
         item.isModified = false;
         item.currentDataUrl = null;
     }
+
+    const restoredState = captureCanvasState(canvas);
+    CensorState.baseCanvasState = restoredState;
+    CensorState.baseItemState = {
+        currentDataUrl: null,
+        isModified: false
+    };
+    CensorState.undoStack = restoredState ? [restoredState] : [];
 
     window.App.showToast('Edits cleared - image restored to original', 'success');
 }

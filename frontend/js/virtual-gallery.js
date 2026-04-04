@@ -324,6 +324,10 @@ const VirtualGallery = {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.Gallery && typeof window.Gallery.initVirtualScroll === 'function') {
+        return;
+    }
+
     // Delay init slightly to ensure Gallery is available
     setTimeout(() => {
         VirtualGallery.init();

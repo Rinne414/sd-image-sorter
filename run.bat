@@ -81,6 +81,9 @@ echo.
 REM ── Detect first run ──────────────────────────────────────────
 set FIRST_RUN=0
 if not exist "backend\venv\Scripts\python.exe" set FIRST_RUN=1
+set NEED_INSTALL=0
+set NEW_HASH=
+set OLD_HASH=
 
 if !FIRST_RUN! EQU 1 (
     echo ==========================================
@@ -98,7 +101,30 @@ if !FIRST_RUN! EQU 1 (
     )
     echo       Done.
     echo.
+    set NEED_INSTALL=1
+) else (
+    if not exist "backend\.requirements_hash" (
+        set NEED_INSTALL=1
+    ) else (
+        where certutil >nul 2>&1
+        if errorlevel 1 (
+            echo [INFO] certutil not found. Refreshing dependencies to stay in sync.
+            set NEED_INSTALL=1
+        ) else (
+            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile backend\requirements.txt MD5 ^| findstr /r /v "hash of file CertUtil"') do (
+                if not defined NEW_HASH set "NEW_HASH=%%H"
+            )
+            set "NEW_HASH=!NEW_HASH: =!"
+            set /p OLD_HASH=<backend\.requirements_hash
+            if /I not "!NEW_HASH!"=="!OLD_HASH!" (
+                echo [INFO] requirements.txt changed. Updating dependencies...
+                set NEED_INSTALL=1
+            )
+        )
+    )
+)
 
+if !NEED_INSTALL! EQU 1 (
     echo [2/3] Installing dependencies...
     backend\venv\Scripts\pip.exe install -r backend\requirements.txt
     if errorlevel 1 (
@@ -106,12 +132,20 @@ if !FIRST_RUN! EQU 1 (
         pause
         exit /b 1
     )
+    if not defined NEW_HASH (
+        where certutil >nul 2>&1
+        if not errorlevel 1 (
+            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile backend\requirements.txt MD5 ^| findstr /r /v "hash of file CertUtil"') do (
+                if not defined NEW_HASH set "NEW_HASH=%%H"
+            )
+            set "NEW_HASH=!NEW_HASH: =!"
+        )
+    )
+    if defined NEW_HASH (
+        > backend\.requirements_hash echo !NEW_HASH!
+    )
     echo       Done.
     echo.
-
-    echo [3/3] Starting server...
-) else (
-    echo Starting server...
 )
 
 echo.

@@ -28,22 +28,22 @@ export class ManualSortPage {
     this.page = page
 
     // Sort session elements
-    this.startSortButton = page.locator('#start-sort-button')
-    this.sortImage = page.locator('#sort-current-image')
+    this.startSortButton = page.locator('#btn-start-sorting')
+    this.sortImage = page.locator('#current-image')
     this.sortPrompt = page.locator('#sort-prompt')
-    this.sortProgress = page.locator('#sort-progress')
+    this.sortProgress = page.locator('#sort-progress-text')
     this.sortFolders = page.locator('.sort-folders')
 
     // Action buttons
     this.moveButtons = page.locator('.move-btn')
     this.skipButton = page.locator('#skip-btn')
     this.undoButton = page.locator('#undo-btn')
-    this.endSessionButton = page.locator('#end-sort-btn')
+    this.endSessionButton = page.locator('#btn-exit-sorting')
 
     // Folder configuration
     this.folderConfigModal = page.locator('#folder-config-modal')
     this.addFolderButton = page.locator('#add-folder-btn')
-    this.folderInputs = page.locator('.folder-input')
+    this.folderInputs = page.locator('.folder-path-input')
   }
 
   /**
@@ -51,7 +51,7 @@ export class ManualSortPage {
    */
   async goto() {
     await this.page.goto('/')
-    await this.page.locator('[data-view="manual-sort"]').click()
+    await this.page.locator('[data-view="manual"]').click()
     await this.page.waitForLoadState('networkidle')
   }
 

@@ -15,6 +15,9 @@ const PromptLab = {
     exclusionRules: [],
     presets: [],
     generatedPrompt: '',
+    isReady: false,
+    eventsBound: false,
+    randomizeExcludedCategories: new Set(['unknown', 'rating', 'meta']),
 
     // Current builder state (slot-based)
     slots: {},       // { category: [selected tags] }
@@ -22,15 +25,26 @@ const PromptLab = {
     locked: {},      // { category: bool } - locked slots survive randomize
 
     async init() {
-        await this.loadCategories();
-        await this.loadTagSets();
-        await this.loadExclusionRules();
-        await this.loadPresets();
-        this.renderCategoryBrowser();
-        this.renderSlotBuilder();
-        this.renderPresetList();
-        this.bindEvents();
-        this.showFirstUseGuide();
+        if (!this.eventsBound) {
+            this.bindEvents();
+            this.eventsBound = true;
+        }
+
+        this.setReadyState(false);
+
+        try {
+            await this.loadCategories();
+            await this.loadTagSets();
+            await this.loadExclusionRules();
+            await this.loadPresets();
+            this.renderTagSetOptions();
+            this.renderCategoryBrowser();
+            this.renderSlotBuilder();
+            this.renderPresetList();
+            this.showFirstUseGuide();
+        } finally {
+            this.setReadyState(true);
+        }
     },
 
     showFirstUseGuide() {
@@ -116,6 +130,60 @@ const PromptLab = {
         }
     },
 
+    _t(key, fallback) {
+        return window.I18n?.t?.(key) || fallback || key;
+    },
+
+    hasBuilderSelection() {
+        return Object.values(this.slots).some((tags) => Array.isArray(tags) && tags.length > 0);
+    },
+
+    updateActionState() {
+        const hasSelection = this.hasBuilderSelection();
+        const hasPrompt = Boolean(this.generatedPrompt?.trim());
+
+        const btnGenerate = document.getElementById('btn-promptlab-generate');
+        const btnValidate = document.getElementById('btn-promptlab-validate');
+        const btnUseGallery = document.getElementById('btn-promptlab-use-gallery');
+        const btnCopy = document.getElementById('btn-promptlab-copy');
+        const btnRandom = document.getElementById('btn-promptlab-random');
+        const btnClear = document.getElementById('btn-promptlab-clear');
+        const btnSavePreset = document.getElementById('btn-promptlab-save-preset');
+
+        if (btnGenerate) btnGenerate.disabled = !this.isReady || !hasSelection;
+        if (btnValidate) btnValidate.disabled = !this.isReady || !hasSelection;
+        if (btnUseGallery) btnUseGallery.disabled = !this.isReady || !hasPrompt;
+        if (btnCopy) btnCopy.disabled = !this.isReady || !hasPrompt;
+        if (btnRandom) btnRandom.disabled = !this.isReady;
+        if (btnClear) btnClear.disabled = !this.isReady;
+        if (btnSavePreset) btnSavePreset.disabled = !this.isReady;
+    },
+
+    setReadyState(isReady) {
+        this.isReady = isReady;
+        const searchInput = document.getElementById('promptlab-search');
+        const tagSetSelect = document.getElementById('promptlab-set-select');
+        const applyTagSet = document.getElementById('btn-promptlab-apply-tagset');
+
+        if (searchInput) searchInput.disabled = !isReady;
+        if (tagSetSelect) tagSetSelect.disabled = !isReady;
+        if (applyTagSet) applyTagSet.disabled = !isReady;
+        this.updateActionState();
+    },
+
+    invalidateGeneratedPrompt() {
+        this.generatedPrompt = '';
+        this.renderOutput();
+    },
+
+    getSelectedTags() {
+        return [...new Set(
+            Object.values(this.slots)
+                .flat()
+                .filter((tag) => Boolean(tag))
+        )];
+    },
+
     _buildTagChip(tag, category, selectedTags) {
         const safeTag = this._escapeValue(tag);
         const safeCategory = this._escapeValue(category);
@@ -151,7 +219,9 @@ const PromptLab = {
 
         const categoryNames = Object.keys(this.categories);
         if (categoryNames.length === 0) {
-            container.innerHTML = '<div class="empty-state">No categories loaded. Check backend connection.</div>';
+            container.innerHTML = `<div class="empty-state">${this._escapeValue(
+                this._t('promptlab.categoriesUnavailable', 'No categories loaded. Check backend connection.')
+            )}</div>`;
             return;
         }
 
@@ -206,7 +276,9 @@ const PromptLab = {
 
         const categoryNames = Object.keys(this.categories);
         if (categoryNames.length === 0) {
-            container.innerHTML = '<div class="empty-state">Load categories first</div>';
+            container.innerHTML = `<div class="empty-state">${this._escapeValue(
+                this._t('promptlab.loadCategoriesFirst', 'Load categories first')
+            )}</div>`;
             return;
         }
 
@@ -274,6 +346,8 @@ const PromptLab = {
                 slider.nextElementSibling.textContent = `${slider.value}%`;
             });
         });
+
+        this.updateActionState();
     },
 
     renderPresetList() {
@@ -281,7 +355,9 @@ const PromptLab = {
         if (!container) return;
 
         if (this.presets.length === 0) {
-            container.innerHTML = '<div class="preset-empty">No saved presets. Save your current configuration as a preset.</div>';
+            container.innerHTML = `<div class="preset-empty">${this._escapeValue(
+                this._t('promptlab.noPresetsDetailed', 'No saved presets. Save your current configuration as a preset.')
+            )}</div>`;
             return;
         }
 
@@ -302,6 +378,23 @@ const PromptLab = {
         container.querySelectorAll('.btn-preset-delete').forEach((btn) => {
             btn.addEventListener('click', () => this.deletePreset(btn.dataset.id));
         });
+    },
+
+    renderTagSetOptions() {
+        const selector = document.getElementById('promptlab-set-select');
+        if (!selector) return;
+
+        const defaultLabel = window.I18n?.t?.('promptlab.selectTagSet') || '-- Select Tag Set --';
+        const options = [
+            `<option value="">${this._escapeValue(defaultLabel)}</option>`,
+            ...this.tagSets.map((set) => `
+                <option value="${this._escapeValue(String(set.id))}">
+                    ${this._escapeValue(set.name)}${set.category ? ` (${this._escapeValue(set.category)})` : ''}
+                </option>
+            `)
+        ];
+
+        selector.innerHTML = options.join('');
     },
 
     renderOutput() {
@@ -328,6 +421,8 @@ const PromptLab = {
             warningsEl.replaceChildren();
             warningsEl.style.display = 'none';
         }
+
+        this.updateActionState();
     },
 
     // ============== Slot Management ==============
@@ -344,6 +439,7 @@ const PromptLab = {
             this.slots[category] = [...this.slots[category], tag];
         }
 
+        this.invalidateGeneratedPrompt();
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
     },
@@ -352,6 +448,7 @@ const PromptLab = {
         if (this.slots[category]) {
             this.slots[category] = this.slots[category].filter(t => t !== tag);
         }
+        this.invalidateGeneratedPrompt();
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
     },
@@ -429,10 +526,23 @@ const PromptLab = {
     async generate() {
         const { showToast } = window.App;
 
+        if (!this.isReady) {
+            showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            return;
+        }
+
+        if (!this.hasBuilderSelection()) {
+            showToast('Add at least one tag or apply a tag set before generating', 'warning');
+            return;
+        }
+
         try {
             const config = {
                 categories: {},
                 tag_sets: [],
+                quality_preset: 'none',
+                count_tag: '',
+                include_negative: false,
                 count: 1,
             };
 
@@ -459,7 +569,13 @@ const PromptLab = {
     },
 
     async randomize() {
+        if (!this.isReady) {
+            window.App.showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            return;
+        }
+
         for (const cat of Object.keys(this.categories)) {
+            if (this.randomizeExcludedCategories.has(cat)) continue;
             if (this.locked[cat]) continue;
 
             const tags = this.categories[cat] || [];
@@ -476,6 +592,18 @@ const PromptLab = {
             this.slots[cat] = shuffled.slice(0, count);
         }
 
+        if (!this.hasBuilderSelection()) {
+            const fallbackOrder = ['character', 'outfit', 'style', 'pose', 'background', 'expression', 'body', 'angle', 'quality'];
+            const fallbackCategory = fallbackOrder.find((cat) => (this.categories[cat] || []).length > 0)
+                || Object.keys(this.categories).find((cat) => (this.categories[cat] || []).length > 0);
+
+            if (fallbackCategory) {
+                const fallbackTags = this.categories[fallbackCategory];
+                const fallbackTag = fallbackTags[Math.floor(Math.random() * fallbackTags.length)];
+                this.slots[fallbackCategory] = [fallbackTag];
+            }
+        }
+
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
         await this.generate();
@@ -484,12 +612,23 @@ const PromptLab = {
     async validate() {
         const { showToast } = window.App;
 
-        try {
-            const allTags = Object.values(this.slots).flat();
-            const result = await window.App.API.post('/api/prompts/validate', { tags: allTags });
+        if (!this.isReady) {
+            showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            return;
+        }
 
-            if (result.conflicts?.length > 0) {
-                showToast(`Found ${result.conflicts.length} conflict(s)`, 'error');
+        if (!this.hasBuilderSelection()) {
+            showToast('Add at least one tag before validating conflicts', 'warning');
+            return;
+        }
+
+        try {
+            const allTags = this.getSelectedTags();
+            const result = await window.App.API.post('/api/prompts/validate', { tags: allTags });
+            const violations = result.violations || result.conflicts || [];
+
+            if (violations.length > 0 || result.valid === false) {
+                showToast(`Found ${violations.length} conflict(s)`, 'error');
             } else {
                 showToast('No conflicts detected', 'success');
             }
@@ -530,10 +669,11 @@ const PromptLab = {
             const preset = this.presets.find(p => String(p.id) === String(id));
             if (!preset?.config) return;
 
-            this.slots = { ...preset.config.slots } || {};
-            this.weights = { ...preset.config.weights } || {};
-            this.locked = { ...preset.config.locked } || {};
+            this.slots = { ...(preset.config.slots || {}) };
+            this.weights = { ...(preset.config.weights || {}) };
+            this.locked = { ...(preset.config.locked || {}) };
 
+            this.invalidateGeneratedPrompt();
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
             window.App.showToast(`Loaded preset "${preset.name}"`, 'success');
@@ -579,6 +719,7 @@ const PromptLab = {
             }
         }
 
+        this.invalidateGeneratedPrompt();
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
         window.App.showToast(`Applied tag set "${set.name}"`, 'success');
@@ -601,10 +742,9 @@ const PromptLab = {
         this.slots = {};
         this.weights = {};
         this.locked = {};
-        this.generatedPrompt = '';
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
-        this.renderOutput();
+        this.invalidateGeneratedPrompt();
     },
 
     // ============== Event Binding ==============

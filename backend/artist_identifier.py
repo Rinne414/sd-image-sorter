@@ -724,12 +724,10 @@ class ArtistIdentifier:
         }
 
         if self._model == "placeholder":
-            # No model loaded - return random artist for demo
-            result["artist"] = "undefined"
-            result["confidence"] = 0.0
-            result["top_predictions"] = [
-                {"artist": "undefined", "confidence": 0.0, "note": "No model loaded"}
-            ]
+            result["error"] = (
+                "Artist model unavailable. Install the required dependencies and restart the app, "
+                "or configure a working local model."
+            )
             return result
 
         try:
@@ -837,10 +835,18 @@ def get_artist_identifier(
 ) -> ArtistIdentifier:
     """Get the singleton artist identifier."""
     global _identifier
-    if _identifier is None:
+    normalized_path = str(model_path).strip() if model_path else None
+
+    if (
+        _identifier is None
+        or _identifier.model_source != model_source
+        or _identifier.model_path != normalized_path
+    ):
         _identifier = ArtistIdentifier(
-            model_path=model_path,
+            model_path=normalized_path,
             model_source=model_source,
             threshold=threshold,
         )
+    else:
+        _identifier.set_threshold(threshold)
     return _identifier

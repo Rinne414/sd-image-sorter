@@ -112,6 +112,7 @@ const AppState = {
     // Pagination state
     pagination: {
         cursor: null,
+        offset: 0,
         hasMore: true,
         total: 0,
         pageSize: 200
@@ -135,6 +136,10 @@ const AppState = {
         search: ''
     }
 };
+
+function supportsCursorPagination(sortBy = AppState.filters.sortBy) {
+    return sortBy === 'newest' || sortBy === 'oldest';
+}
 
 // ============== API Functions ==============
 
@@ -269,6 +274,7 @@ const API = {
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
         params.set('limit', filters.limit ?? 200);
         if (filters.cursor) params.set('cursor', filters.cursor);
+        if (Number.isFinite(filters.offset)) params.set('offset', filters.offset);
 
         // Dimension filters
         if (filters.minWidth) params.set('min_width', filters.minWidth);
@@ -350,12 +356,25 @@ const API = {
             tags_path: options.tagsPath || null,
             image_ids: options.imageIds || null,
             retag_all: options.retagAll || false,
-            use_gpu: options.useGpu ?? true
+            use_gpu: options.useGpu ?? true,
+            allow_unsafe_acceleration: options.allowUnsafeAcceleration ?? false
         });
     },
 
     async getTagProgress() {
         return this.get('/api/tag/progress');
+    },
+
+    async cancelTagging() {
+        return this.post('/api/tag/cancel');
+    },
+
+    async exportAllTags() {
+        return this.get('/api/tags/export');
+    },
+
+    async getTaggerModels() {
+        return this.get('/api/tagger/models');
     },
 
     // Move
@@ -499,6 +518,41 @@ function createGuideOverlay({ id, title, description, steps = [], note = '', max
     `;
 
     overlay.dataset.storageKey = storageKey || '';
+    let cleanedUp = false;
+
+    const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        document.removeEventListener('keydown', handleEscape);
+        removalObserver.disconnect();
+    };
+
+    const closeOverlay = () => {
+        if (storageKey) {
+            localStorage.setItem(storageKey, 'true');
+        }
+        cleanup();
+        overlay.remove();
+    };
+
+    const handleEscape = (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeOverlay();
+        }
+    };
+
+    const removalObserver = new MutationObserver(() => {
+        if (!overlay.isConnected) {
+            cleanup();
+        }
+    });
+
+    overlay.querySelector('.guide-backdrop')?.addEventListener('click', closeOverlay);
+    overlay.querySelector('[data-guide-close]')?.addEventListener('click', closeOverlay);
+    document.addEventListener('keydown', handleEscape);
+    removalObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
     return overlay;
 }
 
@@ -744,10 +798,285 @@ function setGalleryViewMode(mode) {
     if (grid) {
         grid.classList.toggle('large', nextMode === 'large');
         grid.classList.toggle('waterfall', nextMode === 'waterfall');
+        grid.classList.toggle('selection-mode', !!AppState.selectionMode);
     }
 
     if (window.Gallery) {
         Gallery.setViewMode(nextMode);
+    }
+
+    requestAnimationFrame(() => {
+        attachGalleryPaginationListener();
+        _onGalleryScroll();
+    });
+}
+
+const TAGGER_MODEL_ALIASES = {
+    'best quality': 'wd-eva02-large-tagger-v3',
+    'best-quality': 'wd-eva02-large-tagger-v3',
+    'eva02': 'wd-eva02-large-tagger-v3',
+    'quality': 'wd-eva02-large-tagger-v3',
+    'recommended': 'wd-swinv2-tagger-v3',
+    'balanced': 'wd-swinv2-tagger-v3',
+    'fast': 'wd-vit-tagger-v3',
+    'lightweight': 'wd-vit-tagger-v3',
+};
+
+let _taggerModelCatalog = [];
+let _taggerModelCatalogMap = new Map();
+
+function normalizeTaggerModelName(value, fallback = 'wd-swinv2-tagger-v3') {
+    const rawValue = String(value ?? '').trim();
+    if (!rawValue) {
+        return fallback;
+    }
+
+    return TAGGER_MODEL_ALIASES[rawValue.toLowerCase()] || rawValue;
+}
+
+function getTaggerModelMeta(modelName) {
+    const normalizedName = normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3');
+    return _taggerModelCatalogMap.get(normalizedName) || null;
+}
+
+function isGpuLockedTaggerModel(modelName, options = {}) {
+    const { isCustom = false } = options;
+    if (isCustom) return false;
+
+    const meta = getTaggerModelMeta(modelName);
+    return Boolean(meta?.gpu_locked);
+}
+
+function isRiskyTaggerGpuSelection(modelName, options = {}) {
+    const { isCustom = false, useGpu = false } = options;
+    if (!useGpu) return false;
+    if (isCustom) return true;
+    if (isGpuLockedTaggerModel(modelName, { isCustom })) return false;
+
+    const meta = getTaggerModelMeta(modelName);
+    return Boolean(meta?.gpu_confirmation_required);
+}
+
+function describeTaggerModel(meta) {
+    if (!meta) {
+        return 'Balanced default. Good speed, good quality, and less likely to freeze your PC.';
+    }
+
+    const summary = meta.description || meta.summary || 'WD14 tagger model';
+    const bestFor = meta.best_for ? ` Best for: ${meta.best_for}.` : '';
+    const quality = Number(meta.quality_score || 0);
+    const speed = Number(meta.speed_score || 0);
+    const stability = Number(meta.stability_score || 0);
+    const runtimeNote = meta.runtime_note ? ` ${meta.runtime_note}` : '';
+    return `${summary} Quality ${quality}/5 | Speed ${speed}/5 | Stability ${stability}/5.${bestFor}${runtimeNote}`;
+}
+
+function describeTaggerRuntime(options = {}) {
+    const {
+        isCustom = false,
+        gpuLocked = false,
+        gpuEnabled = false,
+        riskyGpu = false,
+        meta = null
+    } = options;
+
+    if (gpuLocked) {
+        return 'Recommended mode is active: Protected CPU Safe Mode. You keep the highest-quality model, while the app blocks the crash-prone GPU path.';
+    }
+
+    if (isCustom) {
+        if (gpuEnabled) {
+            return 'Advanced override is active: custom model on GPU. This may be faster, but it is much more crash-prone than CPU Safe Mode.';
+        }
+        return 'Recommended mode is active: CPU Safe Mode for the custom model. Finish one stable CPU run first, then open Advanced Runtime only if you really need GPU.';
+    }
+
+    if (riskyGpu) {
+        return 'Advanced override is active: risky GPU acceleration. This is not the recommended stable path for this model.';
+    }
+
+    if (gpuEnabled) {
+        const focus = meta?.best_for ? ` Best for: ${meta.best_for}.` : '';
+        return `Recommended mode is active: balanced GPU acceleration. The app is already using the fastest stable path for this model.${focus}`;
+    }
+
+    return 'Advanced override is active: CPU Safe Mode. Slower, but safer when VRAM is tight or other AI tools are already running.';
+}
+
+function syncTaggerModelUi(options = {}) {
+    const { applyModelDefaults = false, toastOnAutoSafe = false } = options;
+    const modelSelect = $('#tag-model-select');
+    const useGpu = $('#tag-use-gpu');
+    const modelHelp = $('#tag-model-help');
+    const gpuHelp = $('#tag-gpu-help');
+    const runtimeSummary = $('#tag-runtime-summary');
+    const runtimeAdvanced = $('#tag-runtime-advanced');
+    const runtimeAdvancedHint = $('#tag-runtime-advanced-hint');
+    const customModelGroup = $('#custom-model-group');
+    const customTagsGroup = $('#custom-tags-group');
+    if (!modelSelect) return;
+
+    const rawValue = modelSelect.value || '';
+    const isCustom = rawValue === 'custom';
+    const normalizedModel = normalizeTaggerModelName(rawValue, 'wd-swinv2-tagger-v3');
+    const meta = getTaggerModelMeta(normalizedModel);
+    const gpuLocked = isGpuLockedTaggerModel(normalizedModel, { isCustom });
+    const taggingIsRunning = $('#btn-start-tag')?.disabled === true;
+
+    if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
+    if (customTagsGroup) customTagsGroup.style.display = isCustom ? 'block' : 'none';
+
+    if (useGpu && (applyModelDefaults || gpuLocked)) {
+        const recommendedGpu = gpuLocked ? false : (isCustom ? false : Boolean(meta?.gpu_default ?? true));
+        const changedToSafeMode = useGpu.checked && !recommendedGpu;
+        useGpu.checked = recommendedGpu;
+        if (changedToSafeMode && toastOnAutoSafe) {
+            showToast(
+                gpuLocked
+                    ? 'Max Quality now runs in protected CPU Safe Mode inside the app.'
+                    : 'This model was switched to CPU Safe Mode to avoid crashes.',
+                'warning'
+            );
+        }
+    }
+
+    if (runtimeAdvanced && applyModelDefaults && !taggingIsRunning) {
+        runtimeAdvanced.open = false;
+    }
+
+    if (useGpu) {
+        useGpu.disabled = taggingIsRunning ? true : gpuLocked;
+        useGpu.setAttribute('aria-disabled', String(useGpu.disabled));
+    }
+
+    if (modelHelp) {
+        modelHelp.textContent = isCustom
+            ? 'Custom ONNX model. Start with CPU Safe Mode first, then try GPU only after one stable run.'
+            : describeTaggerModel(meta);
+    }
+
+    const gpuEnabled = useGpu?.checked ?? false;
+    const riskyGpu = isRiskyTaggerGpuSelection(normalizedModel, { isCustom, useGpu: gpuEnabled });
+
+    if (runtimeSummary) {
+        runtimeSummary.textContent = describeTaggerRuntime({
+            isCustom,
+            gpuLocked,
+            gpuEnabled,
+            riskyGpu,
+            meta
+        });
+    }
+
+    if (runtimeAdvancedHint) {
+        if (gpuLocked) {
+            runtimeAdvancedHint.textContent = 'Max Quality does not allow a GPU override inside the app.';
+        } else if (isCustom) {
+            runtimeAdvancedHint.textContent = 'Leave this alone unless your custom model already finished one stable CPU run.';
+        } else if (gpuEnabled && !riskyGpu) {
+            runtimeAdvancedHint.textContent = 'The recommended mode is already active. Most users never need to touch this.';
+        } else {
+            runtimeAdvancedHint.textContent = 'Only change this if you need to troubleshoot or already know your setup is stable.';
+        }
+    }
+
+    if (gpuHelp) {
+        if (gpuLocked) {
+            gpuHelp.textContent = 'Protected CPU Safe Mode is locked on for Max Quality. GPU override stays unavailable here on purpose.';
+        } else if (!gpuEnabled) {
+            gpuHelp.textContent = isCustom
+                ? 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.'
+                : 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.';
+        } else if (riskyGpu) {
+            gpuHelp.textContent = 'High-risk GPU override is active. You will be asked to confirm before this run starts.';
+        } else if (meta?.safe_mode_note) {
+            gpuHelp.textContent = `Recommended GPU mode is active. ${meta.safe_mode_note}`;
+        } else {
+            gpuHelp.textContent = 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.';
+        }
+    }
+}
+
+function confirmUnsafeTaggerGpuRun(modelName, meta = null) {
+    const displayName = modelName === 'custom'
+        ? 'custom model'
+        : normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3');
+    const summary = meta?.best_for
+        ? `Model focus: ${meta.best_for}.`
+        : 'This setup is optimized for maximum speed, not maximum stability.';
+    const message = [
+        `${displayName} on GPU is the most crash-prone tagger setup.`,
+        '',
+        summary,
+        'Recommended: switch to CPU Safe Mode first.',
+        'Continue with risky GPU mode anyway?'
+    ].join('\n');
+
+    return new Promise((resolve) => {
+        if (typeof showConfirm === 'function') {
+            showConfirm(
+                'Risky GPU Tagger Run',
+                message,
+                () => resolve(true),
+                () => resolve(false)
+            );
+            return;
+        }
+
+        resolve(window.confirm(message));
+    });
+}
+
+function syncSelectionModeButton() {
+    const toggleBtn = $('#btn-toggle-select');
+    if (!toggleBtn) return;
+
+    const iconEl = toggleBtn.querySelector('span:first-child');
+    const labelEl = toggleBtn.querySelector('span:last-child');
+    const selectedCount = AppState.selectedIds.size;
+    const isSelecting = Boolean(AppState.selectionMode);
+    const countSuffix = isSelecting && selectedCount > 0 ? ` (${selectedCount})` : '';
+
+    toggleBtn.classList.toggle('active', isSelecting);
+    toggleBtn.classList.toggle('selection-active', isSelecting);
+    toggleBtn.setAttribute('aria-pressed', String(isSelecting));
+    toggleBtn.setAttribute('data-state', isSelecting ? 'selecting' : 'idle');
+    toggleBtn.setAttribute(
+        'aria-label',
+        isSelecting ? 'Exit image selection mode' : 'Enable image selection mode'
+    );
+
+    if (iconEl) {
+        iconEl.textContent = isSelecting ? '✦' : '✔';
+    }
+
+    if (labelEl) {
+        labelEl.textContent = isSelecting ? `Done Selecting${countSuffix}` : 'Select Images';
+    }
+}
+
+function emitSelectionStateChanged() {
+    window.dispatchEvent(new CustomEvent('selection-state-changed', {
+        detail: {
+            selectionMode: Boolean(AppState.selectionMode),
+            selectedCount: AppState.selectedIds.size,
+        }
+    }));
+}
+
+function setSelectionMode(enabled, options = {}) {
+    const { clearSelectionWhenDisabled = true } = options;
+    AppState.selectionMode = Boolean(enabled);
+
+    if (!AppState.selectionMode && clearSelectionWhenDisabled) {
+        AppState.selectedIds.clear();
+    }
+
+    updateSelectionUI();
+    emitSelectionStateChanged();
+
+    if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+        Gallery.syncSelectionState();
     }
 }
 
@@ -764,11 +1093,16 @@ function applyPromptFilter(prompt) {
     const value = String(prompt ?? '').trim();
     if (!value) return false;
 
-    if (!AppState.filters.prompts.includes(value)) {
-        AppState.filters.prompts = [...AppState.filters.prompts, value];
-    }
+    AppState.filters.prompts = [value];
 
+    if (typeof renderModalActivePrompts === 'function') {
+        renderModalActivePrompts();
+    }
     updateFilterSummary();
+    if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
+    if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
+    if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
+    syncGenTabsWithFilters();
     switchView('gallery');
     loadImages();
     return true;
@@ -785,6 +1119,7 @@ function switchView(viewName) {
         if (window.VirtualGallery && typeof window.VirtualGallery.destroy === 'function') {
             window.VirtualGallery.destroy();
         }
+        detachGalleryPaginationListener();
     }
 
     // Cleanup censor view listeners when leaving
@@ -832,6 +1167,10 @@ function switchView(viewName) {
         } else {
             loadImages();
         }
+        requestAnimationFrame(() => {
+            attachGalleryPaginationListener();
+            _onGalleryScroll();
+        });
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
     } else if (viewName === 'promptlab') {
@@ -878,8 +1217,9 @@ function initEventListeners() {
     }
 
     // Tag modal
-    $('#btn-cancel-tag').addEventListener('click', () => hideModal('tag-modal'));
+    $('#btn-cancel-tag').addEventListener('click', cancelTagging);
     $('#btn-start-tag').addEventListener('click', startTagging);
+    $('#btn-export-tags-json')?.addEventListener('click', exportTagLibraryJson);
 
     // Tag threshold sliders
     $('#tag-threshold').addEventListener('input', (e) => {
@@ -890,10 +1230,11 @@ function initEventListeners() {
     });
 
     // Model selection toggle for custom model
-    $('#tag-model-select').addEventListener('change', (e) => {
-        const isCustom = e.target.value === 'custom';
-        $('#custom-model-group').style.display = isCustom ? 'block' : 'none';
-        $('#custom-tags-group').style.display = isCustom ? 'block' : 'none';
+    $('#tag-model-select').addEventListener('change', () => {
+        syncTaggerModelUi({ applyModelDefaults: true, toastOnAutoSafe: true });
+    });
+    $('#tag-use-gpu')?.addEventListener('change', () => {
+        syncTaggerModelUi({ applyModelDefaults: false });
     });
 
     // Image modal
@@ -972,15 +1313,7 @@ function initEventListeners() {
 
     // Multi-select toggle
     $('#btn-toggle-select').addEventListener('click', () => {
-        AppState.selectionMode = !AppState.selectionMode;
-        $('#btn-toggle-select').classList.toggle('active', AppState.selectionMode);
-
-        if (!AppState.selectionMode) {
-            AppState.selectedIds.clear();
-            updateSelectionUI();
-        }
-
-        Gallery.render();
+        setSelectionMode(!AppState.selectionMode);
     });
 
     // Export selected
@@ -990,14 +1323,20 @@ function initEventListeners() {
     $('#btn-clear-selection').addEventListener('click', () => {
         AppState.selectedIds.clear();
         updateSelectionUI();
-        Gallery.render();
+        emitSelectionStateChanged();
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
     });
 
     // Select All - select all currently visible/filtered images
     $('#btn-select-all').addEventListener('click', () => {
         AppState.images.forEach(img => AppState.selectedIds.add(img.id));
         updateSelectionUI();
-        Gallery.render();
+        emitSelectionStateChanged();
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
     });
 
 
@@ -1022,22 +1361,11 @@ function initEventListeners() {
             showToast('Failed to copy', 'error');
         });
     });
-    // Toggle between prompts and tags
-    $('#btn-export-tags').addEventListener('click', () => {
-        const btn = $('#btn-export-tags');
-        if (btn.textContent.includes('Tags')) {
-            showExportTagsModal();
-            btn.innerHTML = '📤 Export Prompts Instead';
-        } else {
-            showExportModal();
-            btn.innerHTML = '🏷️ Export Tags Instead';
-        }
-    });
-
     // --- Export Tags from FAB ---
     $('#btn-export-tags-selected').addEventListener('click', () => {
         showExportTagsModal();
-        $('#btn-export-tags').innerHTML = '📤 Export Prompts Instead';
+        const exportAltBtn = $('#btn-export-tags-alt');
+        if (exportAltBtn) exportAltBtn.innerHTML = '📤 Export Prompts Instead';
     });
 
     // --- Alt export button in modal ---
@@ -1061,6 +1389,8 @@ function initEventListeners() {
     $('#btn-apply-modal-filters').addEventListener('click', applyModalFilters);
     $('#btn-reset-filters').addEventListener('click', resetAllFilters);
     $('#btn-clear-artist')?.addEventListener('click', clearArtistFilter);
+    $('#filter-modal')?.addEventListener('change', () => updateFilterModalSummary());
+    $('#filter-modal')?.addEventListener('input', () => updateFilterModalSummary());
 
     // Modal tag search (debounced)
     const debouncedTagSearch = debounce((value) => searchModalTags(value), 300);
@@ -1568,21 +1898,33 @@ async function pollScanProgress(retryCount = 0) {
     try {
         const progress = await API.getScanProgress();
 
-        const percent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+        const processed = Number(progress.processed ?? progress.current ?? 0);
+        const total = Number(progress.total || 0);
+        const percent = total > 0 ? Math.min(100, (processed / total) * 100) : 0;
         $('#scan-progress-fill').style.width = percent + '%';
         $('#scan-progress-text').textContent = progress.message || 'Processing...';
 
         if (progress.status === 'done') {
-            showToast(progress.message, 'success');
+            const errorCount = Number(progress.errors || progress.result?.errors || 0);
+            showToast(progress.message, errorCount > 0 ? 'warning' : 'success');
             hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             promptsLibraryCache = null; // Invalidate cache after scan
             loadImages();
             loadStats();
-        } else if (progress.status === 'running' || progress.status === 'idle') {
-            // If idle, the background task might just be starting, keep polling
+        } else if (progress.status === 'error') {
+            showToast(progress.message || 'Scan failed', 'error');
+            $('#scan-progress-container').style.display = 'none';
+            $('#btn-start-scan').disabled = false;
+        } else if (progress.status === 'running') {
             setTimeout(() => pollScanProgress(0), 500);
+        } else if (progress.status === 'idle' && retryCount < 10) {
+            // Allow a brief idle window when attaching to an in-flight background task.
+            setTimeout(() => pollScanProgress(0), 500);
+        } else if (progress.status === 'idle') {
+            $('#scan-progress-container').style.display = 'none';
+            $('#btn-start-scan').disabled = false;
         }
     } catch (error) {
         Logger.error('Poll error:', error);
@@ -1590,25 +1932,157 @@ async function pollScanProgress(retryCount = 0) {
             setTimeout(() => pollScanProgress(retryCount + 1), 1000);
         } else {
             showToast('Error checking scan progress', 'error');
+            $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
         }
     }
 }
 
+async function resumeScanProgress() {
+    try {
+        const progress = await API.getScanProgress();
+        const hasMeaningfulProgress = Number(progress?.current || 0) > 0 || Number(progress?.total || 0) > 0;
+        if (progress?.status !== 'running' && !(progress?.status === 'idle' && hasMeaningfulProgress)) {
+            return;
+        }
+
+        const progressContainer = $('#scan-progress-container');
+        const startBtn = $('#btn-start-scan');
+        if (progressContainer) progressContainer.style.display = 'block';
+        if (startBtn) startBtn.disabled = true;
+        $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
+        pollScanProgress();
+    } catch (error) {
+        Logger.warn('Failed to resume scan progress:', error);
+    }
+}
+
 // ============== Tagging ==============
+
+let _tagProgressTimer = null;
+let _tagPollingActive = false;
+
+function clearTagProgressTimer() {
+    if (_tagProgressTimer) {
+        clearTimeout(_tagProgressTimer);
+        _tagProgressTimer = null;
+    }
+}
+
+function scheduleTagProgressPoll(delay = 500) {
+    clearTagProgressTimer();
+    _tagProgressTimer = setTimeout(() => pollTagProgress(), delay);
+}
+
+function setTaggingUiState(isRunning, options = {}) {
+    const startBtn = $('#btn-start-tag');
+    const cancelBtn = $('#btn-cancel-tag');
+    const modelSelect = $('#tag-model-select');
+    const thresholdInput = $('#tag-threshold');
+    const characterThresholdInput = $('#tag-character-threshold');
+    const retagAll = $('#tag-retag-all');
+    const useGpu = $('#tag-use-gpu');
+    const modelPath = $('#tag-model-path');
+    const tagsPath = $('#tag-tags-path');
+    const exportBtn = $('#btn-export-tags-json');
+    const importBtn = $('#btn-import-tags');
+
+    if (startBtn) {
+        startBtn.disabled = isRunning;
+        startBtn.textContent = isRunning ? 'Tagging...' : 'Start Tagging';
+    }
+
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = isRunning ? 'Cancel Tagging' : (options.idleLabel || 'Close');
+    }
+
+    [modelSelect, thresholdInput, characterThresholdInput, retagAll, useGpu, modelPath, tagsPath, exportBtn, importBtn].forEach((element) => {
+        if (element) {
+            element.disabled = isRunning;
+        }
+    });
+
+    if (!isRunning) {
+        syncTaggerModelUi({ applyModelDefaults: false });
+    }
+}
+
+async function loadTaggerModels() {
+    const select = $('#tag-model-select');
+    if (!select) return;
+
+    try {
+        const result = await API.getTaggerModels();
+        const models = Array.isArray(result.models) ? result.models : [];
+        const defaultModel = normalizeTaggerModelName(result.default, 'wd-swinv2-tagger-v3');
+        const currentValue = normalizeTaggerModelName(select.value, defaultModel);
+        _taggerModelCatalog = models;
+        _taggerModelCatalogMap = new Map(
+            models
+                .filter((model) => model?.name)
+                .map((model) => [normalizeTaggerModelName(model.name, defaultModel), model])
+        );
+
+        const options = models.map((model) => {
+            const name = model.name || model.path || 'unknown-model';
+            const bestFor = model.best_for ? ` - ${model.best_for}` : '';
+            const recommended = model.recommended ? ' (Recommended)' : '';
+            return `<option value="${escapeHtml(name)}" title="${escapeHtml(`${name}${bestFor}`)}">${escapeHtml(name)}${recommended}</option>`;
+        });
+        options.push('<option value="custom">Custom Local Model...</option>');
+
+        select.innerHTML = options.join('');
+        select.value = models.some((model) => model.name === currentValue)
+            ? currentValue
+            : defaultModel;
+        select.dispatchEvent(new Event('change'));
+    } catch (error) {
+        Logger.warn('Failed to load tagger models list:', error);
+        syncTaggerModelUi({ applyModelDefaults: false });
+    }
+}
+
+async function exportTagLibraryJson() {
+    try {
+        const data = await API.exportAllTags();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        a.href = url;
+        a.download = `sd-image-sorter-tags-${stamp}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Tags exported', 'success');
+    } catch (error) {
+        showToast(formatUserError(error, 'Failed to export tags'), 'error');
+    }
+}
 
 async function startTagging() {
     const threshold = parseFloat($('#tag-threshold')?.value) || 0.35;
     const characterThreshold = parseFloat($('#tag-character-threshold')?.value) || 0.85;
-    const modelSelect = $('#tag-model-select')?.value || 'wd-eva02-large-tagger-v3';
+    const modelSelectRaw = $('#tag-model-select')?.value || '';
+    const modelSelect = normalizeTaggerModelName(
+        modelSelectRaw,
+        'wd-swinv2-tagger-v3'
+    );
+    const isCustomModel = modelSelectRaw === 'custom';
+    const modelMeta = getTaggerModelMeta(modelSelect);
+    const useGpuCheckbox = $('#tag-use-gpu');
+    const gpuLocked = isGpuLockedTaggerModel(modelSelect, { isCustom: isCustomModel });
 
     const options = {
         threshold,
-        characterThreshold
+        characterThreshold,
+        allowUnsafeAcceleration: false
     };
 
     // Handle custom model
-    if (modelSelect === 'custom') {
+    if (isCustomModel) {
         const modelPath = $('#tag-model-path')?.value?.trim() || '';
         const tagsPath = $('#tag-tags-path')?.value?.trim() || '';
 
@@ -1629,7 +2103,28 @@ async function startTagging() {
     }
 
     options.retagAll = $('#tag-retag-all').checked;
-    options.useGpu = $('#tag-use-gpu')?.checked ?? true; // Default to GPU if checkbox is checked or missing
+    options.useGpu = useGpuCheckbox?.checked ?? true;
+
+    if (gpuLocked) {
+        options.useGpu = false;
+        options.allowUnsafeAcceleration = false;
+        if (useGpuCheckbox) {
+            useGpuCheckbox.checked = false;
+        }
+        syncTaggerModelUi({ applyModelDefaults: false });
+    } else if (isRiskyTaggerGpuSelection(modelSelect, { isCustom: isCustomModel, useGpu: options.useGpu })) {
+        const continueWithGpu = await confirmUnsafeTaggerGpuRun(modelSelectRaw || modelSelect, modelMeta);
+        if (continueWithGpu) {
+            options.allowUnsafeAcceleration = true;
+        } else {
+            options.useGpu = false;
+            if (useGpuCheckbox) {
+                useGpuCheckbox.checked = false;
+            }
+            syncTaggerModelUi({ applyModelDefaults: false });
+            showToast('Switched to CPU Safe Mode for a more stable tagging run.', 'warning');
+        }
+    }
 
     try {
         await API.startTagging(options);
@@ -1637,13 +2132,37 @@ async function startTagging() {
         // UI-03: Reset timing state when starting new tagging
         _tagStartTime = null;
         _tagProgressHistory = [];
+        _tagPollingActive = true;
+        clearTagProgressTimer();
 
         $('#tag-progress-container').style.display = 'block';
-        $('#btn-start-tag').disabled = true;
+        $('#tag-progress-fill').style.width = '0%';
+        $('#tag-progress-text').textContent = gpuLocked
+            ? 'Preparing Max Quality model in protected CPU Safe Mode...'
+            : (options.useGpu ? 'Preparing model on GPU...' : 'Preparing model on CPU...');
+        setTaggingUiState(true);
 
         pollTagProgress();
     } catch (error) {
+        _tagPollingActive = false;
+        clearTagProgressTimer();
         showToast(formatUserError(error, "Failed to start tagging"), "error");
+    }
+}
+
+async function cancelTagging() {
+    const progress = await API.getTagProgress().catch(() => null);
+    if (!progress || !['running', 'cancelling'].includes(progress.status)) {
+        hideModal('tag-modal');
+        return;
+    }
+
+    try {
+        await API.cancelTagging();
+        $('#tag-progress-text').textContent = 'Cancelling after current image...';
+        setTaggingUiState(true, { idleLabel: 'Close' });
+    } catch (error) {
+        showToast(formatUserError(error, 'Failed to cancel tagging'), 'error');
     }
 }
 
@@ -1652,18 +2171,22 @@ let _tagStartTime = null;
 let _tagProgressHistory = [];
 
 async function pollTagProgress() {
+    if (!_tagPollingActive) return;
+
     try {
         const progress = await API.getTagProgress();
 
         // UI-03: Improved progress display with ETA
-        const current = progress.current || 0;
+        const current = (progress.processed ?? progress.current ?? 0);
         const total = progress.total || 0;
         const percent = total > 0 ? (current / total) * 100 : 0;
+        const tagged = Number(progress.tagged || 0);
+        const errors = Number(progress.errors || 0);
 
         $('#tag-progress-fill').style.width = percent + '%';
 
         // Build progress text with ETA
-        let progressText = progress.message;
+        let progressText = progress.message || 'Preparing tagger...';
         if (total > 0 && current > 0) {
             // Initialize start time on first progress
             if (!_tagStartTime) {
@@ -1703,45 +2226,88 @@ async function pollTagProgress() {
                         }
 
                         // Update progress text with ETA
-                        progressText = `${current}/${total} (~${etaStr} remaining)`;
+                        progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''}, ~${etaStr} remaining)`;
                     } else {
-                        progressText = `${current}/${total}`;
+                        progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''})`;
                     }
                 } else {
-                    progressText = `${current}/${total}`;
+                    progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''})`;
                 }
             } else {
-                progressText = `${current}/${total}`;
+                progressText = `${progress.message || 'Tagging'} ${current}/${total}`;
             }
+        }
+
+        if (progress.status === 'cancelling') {
+            progressText = progress.message || `Cancelling... ${current}/${Math.max(total, current)}`;
         }
 
         $('#tag-progress-text').textContent = progressText;
 
         if (progress.status === 'done') {
-            showToast(progress.message, 'success');
+            _tagPollingActive = false;
+            clearTagProgressTimer();
+            showToast(progress.message, errors > 0 ? 'warning' : 'success');
             hideModal('tag-modal');
             $('#tag-progress-container').style.display = 'none';
-            $('#btn-start-tag').disabled = false;
+            setTaggingUiState(false);
             promptsLibraryCache = null; // Invalidate cache after tagging
             // Reset timing state
             _tagStartTime = null;
             _tagProgressHistory = [];
             loadImages();
+            loadStats();
+        } else if (progress.status === 'cancelled') {
+            _tagPollingActive = false;
+            clearTagProgressTimer();
+            showToast(progress.message || 'Tagging cancelled', 'info');
+            $('#tag-progress-container').style.display = 'none';
+            setTaggingUiState(false);
+            _tagStartTime = null;
+            _tagProgressHistory = [];
         } else if (progress.status === 'running') {
-            setTimeout(pollTagProgress, 500);
+            scheduleTagProgressPoll(500);
+        } else if (progress.status === 'cancelling') {
+            scheduleTagProgressPoll(300);
         } else if (progress.status === 'error') {
+            _tagPollingActive = false;
+            clearTagProgressTimer();
             showToast(progress.message, 'error');
             $('#tag-progress-container').style.display = 'none';
-            $('#btn-start-tag').disabled = false;
+            setTaggingUiState(false);
             // Reset timing state
             _tagStartTime = null;
             _tagProgressHistory = [];
+        } else {
+            scheduleTagProgressPoll(500);
         }
     } catch (error) {
+        _tagPollingActive = false;
+        clearTagProgressTimer();
         showToast('Error checking tag progress', 'error');
+        $('#tag-progress-container').style.display = 'none';
+        setTaggingUiState(false);
         // Reset timing state on error
         _tagStartTime = null;
         _tagProgressHistory = [];
+    }
+}
+
+async function resumeTaggingProgress() {
+    try {
+        const progress = await API.getTagProgress();
+        if (!['running', 'cancelling'].includes(progress?.status)) {
+            return;
+        }
+
+        _tagPollingActive = true;
+        clearTagProgressTimer();
+        $('#tag-progress-container').style.display = 'block';
+        $('#tag-progress-text').textContent = progress.message || 'Resuming tagging progress...';
+        setTaggingUiState(true, { idleLabel: 'Close' });
+        pollTagProgress();
+    } catch (error) {
+        Logger.warn('Failed to resume tagging progress:', error);
     }
 }
 
@@ -1830,6 +2396,7 @@ async function loadImages(appendMode = false) {
 
     if (!appendMode) {
         AppState.pagination.cursor = null;
+        AppState.pagination.offset = 0;
         AppState.pagination.hasMore = true;
         AppState.images = [];
 
@@ -1847,10 +2414,12 @@ async function loadImages(appendMode = false) {
 
     try {
         const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
+        const useCursorPagination = supportsCursorPagination(AppState.filters.sortBy);
         const filters = {
             ...AppState.filters,
             limit: AppState.pagination.pageSize,
-            cursor: appendMode ? AppState.pagination.cursor : null
+            cursor: appendMode && useCursorPagination ? AppState.pagination.cursor : null,
+            offset: appendMode && !useCursorPagination ? AppState.pagination.offset : undefined
         };
         const result = await API.getImages(filters, { signal: controller.signal });
         RequestManager.complete(IMAGE_LOAD_KEY);
@@ -1867,6 +2436,10 @@ async function loadImages(appendMode = false) {
         } else {
             AppState.images = result.images;
         }
+
+        AppState.pagination.offset = Number.isFinite(result.next_offset)
+            ? result.next_offset
+            : AppState.images.length;
 
         if (imageCount) {
             imageCount.textContent = `${AppState.pagination.total || AppState.images.length} images`;
@@ -1910,6 +2483,11 @@ async function loadImages(appendMode = false) {
         if (loadMoreContainer) {
             loadMoreContainer.style.display = AppState.pagination.hasMore ? 'flex' : 'none';
         }
+
+        requestAnimationFrame(() => {
+            attachGalleryPaginationListener();
+            _onGalleryScroll();
+        });
     }
 }
 
@@ -1921,6 +2499,55 @@ function loadMoreImages() {
 
 // Scroll-based infinite scroll — uses gallery grid bottom position for reliable detection
 let _scrollLoadTimer = null;
+let _galleryScrollContainer = null;
+let _galleryScrollTarget = null;
+
+function _isViewportScrollContainer(scrollContainer) {
+    return Boolean(
+        scrollContainer &&
+        (
+            scrollContainer === document.documentElement ||
+            scrollContainer === document.body ||
+            scrollContainer === document.scrollingElement
+        )
+    );
+}
+
+function _getGalleryScrollContainer() {
+    if (window.Gallery && typeof window.Gallery._getScrollContainer === 'function') {
+        return window.Gallery._getScrollContainer();
+    }
+
+    return document.scrollingElement || document.documentElement;
+}
+
+function _resolveGalleryScrollTarget(scrollContainer) {
+    return _isViewportScrollContainer(scrollContainer) ? window : scrollContainer;
+}
+
+function detachGalleryPaginationListener() {
+    if (_galleryScrollTarget) {
+        _galleryScrollTarget.removeEventListener('scroll', _onGalleryScroll);
+    }
+    _galleryScrollTarget = null;
+    _galleryScrollContainer = null;
+}
+
+function attachGalleryPaginationListener() {
+    const scrollContainer = _getGalleryScrollContainer();
+    if (!scrollContainer) return;
+
+    const scrollTarget = _resolveGalleryScrollTarget(scrollContainer);
+    if (_galleryScrollTarget === scrollTarget && _galleryScrollContainer === scrollContainer) {
+        return;
+    }
+
+    detachGalleryPaginationListener();
+    _galleryScrollContainer = scrollContainer;
+    _galleryScrollTarget = scrollTarget;
+    _galleryScrollTarget.addEventListener('scroll', _onGalleryScroll, { passive: true });
+}
+
 function _onGalleryScroll() {
     if (_scrollLoadTimer) return;
     _scrollLoadTimer = requestAnimationFrame(() => {
@@ -1932,13 +2559,16 @@ function _onGalleryScroll() {
         // getBoundingClientRect is always correct regardless of flex/grid layout
         const grid = document.getElementById('gallery-grid');
         if (!grid) return;
+        const scrollContainer = _galleryScrollContainer || _getGalleryScrollContainer();
+        const viewportBottom = _isViewportScrollContainer(scrollContainer)
+            ? window.innerHeight
+            : scrollContainer.getBoundingClientRect().bottom;
         const gridBottom = grid.getBoundingClientRect().bottom;
-        if (gridBottom <= window.innerHeight + 800) {
+        if (gridBottom <= viewportBottom + 800) {
             loadMoreImages();
         }
     });
 }
-window.addEventListener('scroll', _onGalleryScroll, { passive: true });
 
 // ============== UI Components ==============
 
@@ -2040,12 +2670,20 @@ const libraryData = {
 };
 
 function openTagsLibrary() {
+    const searchInput = $('#library-search');
+    if (searchInput) {
+        searchInput.value = '';
+    }
     showModal('tags-library-modal');
     loadLibraryContent();
 }
 
 function switchLibraryTab(tab) {
     libraryData.currentTab = tab;
+    const searchInput = $('#library-search');
+    if (searchInput) {
+        searchInput.value = '';
+    }
     // Update tab button active states
     const tagsTab = $('#library-tab-tags');
     const promptsTab = $('#library-tab-prompts');
@@ -2066,23 +2704,55 @@ async function loadLibraryContent() {
     const content = $('#library-content');
     const statsText = $('#library-stats-text');
     const sortBy = $('#library-sort')?.value || 'frequency';
+    const isTagsTab = libraryData.currentTab === 'tags';
+    const t = (key, params, fallback) => {
+        const translated = window.I18n?.t?.(key, params);
+        return translated && translated !== key ? translated : (fallback || key);
+    };
+    const loadingLabel = isTagsTab
+        ? t('library.loadingTags', null, 'Loading tag library…')
+        : t('library.loadingPrompts', null, 'Loading prompt library…');
 
-    content.innerHTML = '<div class="spinner"></div>';
+    content.innerHTML = `
+        <div class="library-status">
+            <div class="spinner" aria-hidden="true"></div>
+            <p>${loadingLabel}</p>
+        </div>
+    `;
+    if (statsText) {
+        statsText.textContent = window.I18n?.t?.('library.loading') || loadingLabel;
+    }
 
     try {
-        if (libraryData.currentTab === 'tags') {
+        if (isTagsTab) {
             const result = await API.getTagsLibrary(sortBy, 2000);
             libraryData.tags = result.tags;
             renderLibraryTags(result.tags);
-            statsText.textContent = `${result.total} unique tags found`;
+            if (statsText) {
+                statsText.textContent = t('library.tagsFound', { count: result.total }, `${result.total} unique tags found`);
+            }
         } else {
-            const result = await API.getPromptsLibrary(99999);
+            const result = await API.getPromptsLibrary(10000);
             libraryData.prompts = result.prompts;
             renderLibraryPrompts(result.prompts);
-            statsText.textContent = `${result.total} unique prompts found`;
+            if (statsText) {
+                statsText.textContent = t('library.promptsFound', { count: result.total }, `${result.total} unique prompts found`);
+            }
         }
     } catch (error) {
-        content.innerHTML = '<p style="color: var(--accent-danger);">Failed to load library</p>';
+        const fallbackMessage = isTagsTab
+            ? t('library.loadTagsFailed', null, 'Failed to load tag library')
+            : t('library.loadPromptsFailed', null, 'Failed to load prompt library');
+        const message = escapeHtml(formatUserError(error, fallbackMessage));
+        content.innerHTML = `
+            <div class="library-status library-status-error">
+                <strong>${fallbackMessage}</strong>
+                <p>${message}</p>
+            </div>
+        `;
+        if (statsText) {
+            statsText.textContent = message;
+        }
         Logger.error('Library load error:', error);
     }
 }
@@ -2165,8 +2835,32 @@ function filterLibraryContent() {
 function updateSelectionUI() {
     const fab = $('#selection-actions');
     const countEl = $('#selection-count');
+    const grid = $('#gallery-grid');
+    const hasSelection = AppState.selectedIds.size > 0;
+    const canRunBatchActions = AppState.selectionMode && hasSelection && AppState.currentView === 'gallery';
+    const buttonIds = [
+        'btn-select-all',
+        'btn-export-selected',
+        'btn-export-tags-selected',
+        'btn-batch-export-tags',
+        'btn-send-to-censor',
+        'btn-clear-selection'
+    ];
 
-    if (AppState.selectedIds.size > 0) {
+    syncSelectionModeButton();
+
+    if (grid) {
+        grid.classList.toggle('selection-mode', !!AppState.selectionMode);
+    }
+
+    buttonIds.forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) {
+            button.disabled = !canRunBatchActions;
+        }
+    });
+
+    if (canRunBatchActions) {
         fab.style.display = 'flex';
         countEl.textContent = `${AppState.selectedIds.size} items selected`;
     } else {
@@ -2301,7 +2995,8 @@ async function showExportModal() {
 
     $('#export-title').textContent = '📤 Export Prompts';
     $('#export-count').textContent = `${AppState.selectedIds.size} images selected`;
-    $('#btn-export-tags').innerHTML = '🏷️ Export Tags Instead';
+    const exportAltBtn = $('#btn-export-tags-alt');
+    if (exportAltBtn) exportAltBtn.innerHTML = '🏷️ Export Tags Instead';
     const textArea = $('#export-text');
     textArea.value = 'Loading prompts...';
 
@@ -2327,7 +3022,8 @@ async function showExportTagsModal() {
 
     $('#export-title').textContent = '🏷️ Export Tags';
     $('#export-count').textContent = `${AppState.selectedIds.size} images selected`;
-    $('#btn-export-tags').innerHTML = '📤 Export Prompts Instead';
+    const exportAltBtn = $('#btn-export-tags-alt');
+    if (exportAltBtn) exportAltBtn.innerHTML = '📤 Export Prompts Instead';
     const textArea = $('#export-text');
     textArea.value = 'Loading tags...';
 
@@ -2538,9 +3234,32 @@ async function openFilterModal() {
     $$('#modal-rating-filters input').forEach(cb => {
         cb.checked = AppState.filters.ratings.includes(cb.value);
     });
+    const minWidthInput = $('#filter-min-width');
+    const maxWidthInput = $('#filter-max-width');
+    const minHeightInput = $('#filter-min-height');
+    const maxHeightInput = $('#filter-max-height');
+    if (minWidthInput) minWidthInput.value = AppState.filters.minWidth ?? '';
+    if (maxWidthInput) maxWidthInput.value = AppState.filters.maxWidth ?? '';
+    if (minHeightInput) minHeightInput.value = AppState.filters.minHeight ?? '';
+    if (maxHeightInput) maxHeightInput.value = AppState.filters.maxHeight ?? '';
+    $$('input[name="aspect-ratio"]').forEach(radio => {
+        radio.checked = radio.value === (AppState.filters.aspectRatio || '');
+    });
     // Don't prefill prompt search bar with AppState.filters.search —
     // the prompt search is for adding prompt filters, not for text search
     $('#modal-prompt-search').value = '';
+    const modalTagSearch = $('#modal-tag-search');
+    const modalTagSuggestions = $('#modal-tag-suggestions');
+    const modalPromptSuggestions = $('#modal-prompt-suggestions');
+    if (modalTagSearch) modalTagSearch.value = '';
+    if (modalTagSuggestions) {
+        modalTagSuggestions.innerHTML = '';
+        modalTagSuggestions.classList.remove('visible');
+    }
+    if (modalPromptSuggestions) {
+        modalPromptSuggestions.innerHTML = '';
+        modalPromptSuggestions.classList.remove('visible');
+    }
 
     // Show active tags and prompts
     renderModalActiveTags();
@@ -2548,6 +3267,7 @@ async function openFilterModal() {
 
     // Load checkpoints and loras into modal lists
     await loadModalFilterLists();
+    updateFilterModalSummary();
 
     // Hide skeleton after loading
     if (window.SkeletonFilterModal) {
@@ -2579,6 +3299,8 @@ function renderModalActiveTags() {
         tagEl.appendChild(removeEl);
         container.appendChild(tagEl);
     });
+
+    updateFilterModalSummary();
 }
 
 function renderModalActivePrompts() {
@@ -2614,11 +3336,17 @@ function renderModalActivePrompts() {
         promptEl.appendChild(removeEl);
         container.appendChild(promptEl);
     });
+
+    updateFilterModalSummary();
 }
 
 async function loadModalFilterLists() {
     const cpList = $('#modal-checkpoint-list');
     const loraList = $('#modal-lora-list');
+    const t = (key, params, fallback) => {
+        const translated = window.I18n?.t?.(key, params);
+        return translated && translated !== key ? translated : (fallback || key);
+    };
 
     // Show skeleton while loading
     if (window.Skeleton) {
@@ -2639,32 +3367,100 @@ async function loadModalFilterLists() {
 
         // Render checkpoints
         if (cpList) {
-            cpList.innerHTML = (data.checkpoints || []).map(cp => `
+            cpList.innerHTML = (data.checkpoints || []).length > 0 ? (data.checkpoints || []).map(cp => `
                 <label class="checkbox-label">
                     <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
                     <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
                     <span class="checkbox-count">${cp.count}</span>
                 </label>
-            `).join('');
+            `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noCheckpoints', null, 'No checkpoints found yet.'))}</div>`;
         }
 
         // Render loras
         if (loraList) {
-            loraList.innerHTML = (data.loras || []).map(l => `
+            loraList.innerHTML = (data.loras || []).length > 0 ? (data.loras || []).map(l => `
                 <label class="checkbox-label">
                     <input type="checkbox" value="${escapeHtml(l.lora)}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
                     <span class="checkbox-text">${escapeHtml(l.lora)}</span>
                     <span class="checkbox-count">${l.count}</span>
                 </label>
-            `).join('');
+            `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noLoras', null, 'No LoRAs found yet.'))}</div>`;
         }
+
+        updateFilterModalSummary();
     } catch (e) {
         Logger.error('Failed to load filter lists:', e);
         // Show error state in lists
-        if (cpList) cpList.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">Failed to load checkpoints</div>';
-        if (loraList) loraList.innerHTML = '<div style="color: var(--text-muted); padding: 8px;">Failed to load loras</div>';
+        if (cpList) cpList.innerHTML = `<div class="filter-empty-state">${escapeHtml(t('filter.failedLoadCheckpoints', null, 'Failed to load checkpoints.'))}</div>`;
+        if (loraList) loraList.innerHTML = `<div class="filter-empty-state">${escapeHtml(t('filter.failedLoadLoras', null, 'Failed to load LoRAs.'))}</div>`;
+        updateFilterModalSummary();
+    }
+}
+
+function updateFilterModalSummary() {
+    const selectionSummary = $('#filter-modal-selection-summary');
+    const summaryHint = $('#filter-modal-summary-hint');
+    const t = (key, params, fallback) => {
+        const translated = window.I18n?.t?.(key, params);
+        return translated && translated !== key ? translated : (fallback || key);
+    };
+
+    const countChecked = (selector, fallback = 0) => {
+        const matches = $$(selector);
+        return matches.length > 0 ? matches.length : fallback;
+    };
+    const setCount = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.textContent = value;
+        }
+    };
+
+    const generatorTotal = Math.max(1, $$('#modal-generator-filters input').length || 5);
+    const ratingTotal = Math.max(1, $$('#modal-rating-filters input').length || 4);
+    const generatorCount = countChecked('#modal-generator-filters input:checked', AppState.filters.generators?.length || generatorTotal);
+    const ratingCount = countChecked('#modal-rating-filters input:checked', AppState.filters.ratings?.length || ratingTotal);
+    const checkpointCount = countChecked('#modal-checkpoint-list input:checked', AppState.filters.checkpoints?.length || 0);
+    const loraCount = countChecked('#modal-lora-list input:checked', AppState.filters.loras?.length || 0);
+    const tagCount = AppState.filters.tags?.length || 0;
+    const promptCount = AppState.filters.prompts?.length || 0;
+    const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
+    const maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
+    const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
+    const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
+    const aspectRatio = $('input[name="aspect-ratio"]:checked')?.value || '';
+    const dimensionCount = [minWidth, maxWidth, minHeight, maxHeight].filter(Boolean).length + (aspectRatio ? 1 : 0);
+
+    setCount('filter-modal-count-generators', `${generatorCount}/${generatorTotal}`);
+    setCount('filter-modal-count-ratings', `${ratingCount}/${ratingTotal}`);
+    setCount('filter-modal-count-tags', String(tagCount));
+    setCount('filter-modal-count-prompts', String(promptCount));
+    setCount('filter-modal-count-checkpoints', String(checkpointCount));
+    setCount('filter-modal-count-loras', String(loraCount));
+    setCount('filter-modal-count-dimensions', dimensionCount > 0 ? String(dimensionCount) : t('filter.any', null, 'Any'));
+
+    const activeGroupCount = [
+        generatorCount !== generatorTotal,
+        ratingCount !== ratingTotal,
+        tagCount > 0,
+        promptCount > 0,
+        checkpointCount > 0,
+        loraCount > 0,
+        dimensionCount > 0
+    ].filter(Boolean).length;
+
+    if (selectionSummary) {
+        selectionSummary.textContent = activeGroupCount > 0
+            ? t('filter.summaryReady', { count: activeGroupCount }, `${activeGroupCount} filter groups are active.`)
+            : t('filter.summaryIdle', null, 'No extra limits selected yet. Apply now to keep the current gallery scope.');
+    }
+
+    if (summaryHint) {
+        summaryHint.textContent = activeGroupCount > 0
+            ? t('filter.summaryHintActive', null, 'Tip: start broad, then add tags or prompts before tightening size, checkpoint, or LoRA filters.')
+            : t('filter.summaryHintIdle', null, 'Tip: use tags, prompts, or dimensions when you want a smaller and more targeted result list.');
     }
 }
 
@@ -2894,6 +3690,7 @@ function resetAllFilters() {
     if (filterMinHeight) filterMinHeight.value = '';
     if (filterMaxHeight) filterMaxHeight.value = '';
     $$('input[name="aspect-ratio"]').forEach(r => r.checked = r.value === '');
+    updateFilterModalSummary();
 
     // Hide artist filter row
     const artistRow = $('#artist-filter-row');
@@ -3187,8 +3984,7 @@ function initGlobalKeyboardShortcuts() {
         // S - Toggle selection mode
         else if (e.key === 's' || e.key === 'S') {
             e.preventDefault();
-            AppState.selectionMode = !AppState.selectionMode;
-            updateSelectionUI();
+            setSelectionMode(!AppState.selectionMode);
             showToast(AppState.selectionMode ? 'Selection mode ON' : 'Selection mode OFF', 'info');
         }
         // Escape - Clear selection
@@ -3197,6 +3993,10 @@ function initGlobalKeyboardShortcuts() {
                 e.preventDefault();
                 AppState.selectedIds.clear();
                 updateSelectionUI();
+                emitSelectionStateChanged();
+                if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+                    Gallery.syncSelectionState();
+                }
                 showToast('Selection cleared', 'info');
             }
         }
@@ -3210,6 +4010,7 @@ function initGlobalKeyboardShortcuts() {
                     () => {
                         AppState.selectedIds.clear();
                         updateSelectionUI();
+                        emitSelectionStateChanged();
                         showToast('Selection cleared', 'success');
                     }
                 );
@@ -3223,10 +4024,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initInputModal();
     initGlobalKeyboardShortcuts();
+    loadTaggerModels();
+    setTaggingUiState(false);
     setGalleryViewMode(AppState.viewMode);
     switchView('gallery');
     loadStats();
     updateFilterSummary();
+    updateSelectionUI();
+    resumeScanProgress();
+    resumeTaggingProgress();
 
     // Initialize gallery keyboard navigation for accessibility
     if (window.Gallery && typeof window.Gallery.initKeyboardNavigation === 'function') {
@@ -3248,6 +4054,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (returnToGalleryBtn) {
         returnToGalleryBtn.addEventListener('click', () => switchView('gallery'));
     }
+
+    window.addEventListener('resize', _onGalleryScroll, { passive: true });
 });
 
 

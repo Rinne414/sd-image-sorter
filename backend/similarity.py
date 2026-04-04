@@ -12,7 +12,7 @@ import threading
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from config import (
     CLIP_MODEL_NAME,
@@ -25,6 +25,44 @@ from config import (
 
 
 logger = logging.getLogger(__name__)
+
+
+class SimilarityError(RuntimeError):
+    """Base class for similarity workflow errors."""
+
+
+class SimilarityImageNotFoundError(SimilarityError):
+    """Raised when the requested image id does not exist."""
+
+    def __init__(self, image_id: int):
+        super().__init__(f"Image {image_id} was not found.")
+        self.image_id = image_id
+
+
+class SimilarityEmbeddingMissingError(SimilarityError):
+    """Raised when the requested image does not have an embedding yet."""
+
+    def __init__(self, image_id: int):
+        super().__init__(f"Image {image_id} has no embedding yet. Generate embeddings first.")
+        self.image_id = image_id
+
+
+class SimilarityInvalidImageError(SimilarityError):
+    """Raised when an uploaded image cannot be decoded."""
+
+    def __init__(self):
+        super().__init__("Invalid image file. Upload a readable PNG, JPG, or WebP image.")
+
+
+class SimilarityInsufficientEmbeddingsError(SimilarityError):
+    """Raised when duplicate detection does not have enough embedded images."""
+
+    def __init__(self, embedded_count: int, minimum_required: int = 2):
+        super().__init__(
+            f"Need at least {minimum_required} embedded images before duplicate search is meaningful."
+        )
+        self.embedded_count = embedded_count
+        self.minimum_required = minimum_required
 
 
 # Lazy-loaded FastEmbed model
@@ -69,16 +107,16 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (norm_a * norm_b))
 
 
-def embed_image_file(image_path: str) -> Optional[np.ndarray]:
+def embed_image_file(image_path: str, model=None) -> Optional[np.ndarray]:
     """Generate CLIP embedding for a single image file."""
     try:
-        model = _get_embed_model()
+        model = model or _get_embed_model()
         # FastEmbed accepts file paths
         embeddings = list(model.embed([image_path]))
         if embeddings:
             return np.array(embeddings[0], dtype=np.float32)
     except Exception as e:
-        print(f"[Similarity] Error embedding {image_path}: {e}")
+        logger.warning("[Similarity] Error embedding %s: %s", image_path, e)
     return None
 
 
@@ -123,6 +161,7 @@ class SimilarityIndex:
             "total": 0,
             "processed": 0,
             "errors": 0,
+            "message": "",
         }
 
     def get_progress(self) -> Dict[str, Any]:
@@ -143,6 +182,7 @@ class SimilarityIndex:
             "total": 0,
             "processed": 0,
             "errors": 0,
+            "message": "Preparing embedding job...",
         }
 
         try:
@@ -163,11 +203,34 @@ class SimilarityIndex:
                 rows = cursor.fetchall()
                 self._progress["total"] = len(rows)
 
+            if not rows:
+                self._progress["message"] = "No images pending embeddings."
+                return {
+                    "processed": 0,
+                    "errors": 0,
+                    "total": 0,
+                    "message": self._progress["message"],
+                }
+
+            self._progress["message"] = "Loading embedding model..."
+            try:
+                model = _get_embed_model()
+            except Exception as exc:
+                self._progress["errors"] = len(rows)
+                self._progress["message"] = f"Embedding unavailable: {exc}"
+                logger.error("Similarity embedding unavailable: %s", exc)
+                return {
+                    "processed": 0,
+                    "errors": self._progress["errors"],
+                    "total": self._progress["total"],
+                    "message": self._progress["message"],
+                }
+
             # Process in small batches to allow progress tracking
             batch_size = EMBEDDING_BATCH_SIZE
             for i in range(0, len(rows), batch_size):
                 batch = rows[i:i + batch_size]
-                paths = [r[1] for r in batch]
+                self._progress["message"] = f"Embedding batch {min(i + len(batch), len(rows))}/{len(rows)}..."
 
                 # Filter to existing files
                 valid = [(r[0], r[1]) for r in batch if os.path.exists(r[1])]
@@ -175,7 +238,7 @@ class SimilarityIndex:
                 # Batch update embeddings - collect all updates first
                 updates = []
                 for img_id, img_path in valid:
-                    embedding = embed_image_file(img_path)
+                    embedding = embed_image_file(img_path, model=model)
                     if embedding is not None:
                         updates.append((embedding_to_bytes(embedding), img_id))
                         self._progress["processed"] += 1
@@ -194,6 +257,11 @@ class SimilarityIndex:
                 # Count non-existent files as errors
                 self._progress["errors"] += len(batch) - len(valid)
 
+            self._progress["message"] = (
+                f"Completed embeddings: {self._progress['processed']} processed"
+                + (f", {self._progress['errors']} failed." if self._progress["errors"] else ".")
+            )
+
         finally:
             self._progress["running"] = False
 
@@ -201,6 +269,7 @@ class SimilarityIndex:
             "processed": self._progress["processed"],
             "errors": self._progress["errors"],
             "total": self._progress["total"],
+            "message": self._progress["message"],
         }
 
     def search_by_id(
@@ -211,12 +280,14 @@ class SimilarityIndex:
             cursor = conn.cursor()
 
             # Get query embedding
-            cursor.execute("SELECT embedding FROM images WHERE id = ?", (image_id,))
+            cursor.execute("SELECT id, embedding FROM images WHERE id = ?", (image_id,))
             row = cursor.fetchone()
-            if not row or not row[0]:
-                return []
+            if not row:
+                raise SimilarityImageNotFoundError(image_id)
+            if not row[1]:
+                raise SimilarityEmbeddingMissingError(image_id)
 
-            query_emb = bytes_to_embedding(row[0])
+            query_emb = bytes_to_embedding(row[1])
 
             # Get all embeddings
             cursor.execute(
@@ -231,7 +302,12 @@ class SimilarityIndex:
         self, image_data: bytes, limit: int = SIMILARITY_DEFAULT_LIMIT, threshold: float = SIMILARITY_DEFAULT_THRESHOLD
     ) -> List[Dict[str, Any]]:
         """Find images similar to an uploaded image."""
-        pil_image = Image.open(io.BytesIO(image_data))
+        try:
+            pil_image = Image.open(io.BytesIO(image_data))
+            pil_image.load()
+        except (UnidentifiedImageError, OSError) as exc:
+            raise SimilarityInvalidImageError() from exc
+
         query_emb = embed_image_pil(pil_image)
         if query_emb is None:
             return []
@@ -257,7 +333,7 @@ class SimilarityIndex:
             rows = cursor.fetchall()
 
         if len(rows) < 2:
-            return []
+            raise SimilarityInsufficientEmbeddingsError(len(rows))
 
         # Build embedding matrix
         ids = [r[0] for r in rows]

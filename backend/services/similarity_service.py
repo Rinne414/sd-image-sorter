@@ -9,7 +9,13 @@ from typing import Optional, List
 from fastapi import HTTPException, UploadFile, File, Query, BackgroundTasks
 
 import database as db
-from similarity import get_similarity_index
+from similarity import (
+    SimilarityEmbeddingMissingError,
+    SimilarityImageNotFoundError,
+    SimilarityInsufficientEmbeddingsError,
+    SimilarityInvalidImageError,
+    get_similarity_index,
+)
 
 
 class SimilarityService:
@@ -60,7 +66,12 @@ class SimilarityService:
         similar images.
         """
         index = get_similarity_index(db)
-        results = index.search_by_id(image_id, limit=limit, threshold=threshold)
+        try:
+            results = index.search_by_id(image_id, limit=limit, threshold=threshold)
+        except SimilarityImageNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SimilarityEmbeddingMissingError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {
             "query_image_id": image_id,
             "results": results,
@@ -87,7 +98,10 @@ class SimilarityService:
             raise HTTPException(status_code=413, detail="File too large (max 50MB)")
 
         index = get_similarity_index(db)
-        results = index.search_by_upload(image_data, limit=limit, threshold=threshold)
+        try:
+            results = index.search_by_upload(image_data, limit=limit, threshold=threshold)
+        except SimilarityInvalidImageError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
             "results": results,
             "count": len(results),
@@ -105,7 +119,17 @@ class SimilarityService:
         visually similar pairs.
         """
         index = get_similarity_index(db)
-        results = index.find_duplicates(threshold=threshold, limit=limit)
+        try:
+            results = index.find_duplicates(threshold=threshold, limit=limit)
+        except SimilarityInsufficientEmbeddingsError as exc:
+            return {
+                "duplicates": [],
+                "count": 0,
+                "threshold": threshold,
+                "reason": "insufficient_embeddings",
+                "embedded_count": exc.embedded_count,
+                "minimum_required": exc.minimum_required,
+            }
         return {
             "duplicates": results,
             "count": len(results),

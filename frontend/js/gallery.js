@@ -36,13 +36,32 @@ function getRequiredGalleryAPI() {
  */
 const GALLERY_VIRTUAL_CONFIG = {
     bufferSize: 10,           // Items to render outside viewport
-    threshold: 500,           // Minimum items to enable virtual scrolling
+    threshold: 96,            // Minimum items to enable virtual scrolling
     estimatedItemHeight: 200, // Estimated height for grid mode
     rowGap: 16,               // Gap between rows
     columnGap: 16,            // Gap between columns
+    aspectRatio: {
+        grid: 1,
+        large: 0.84
+    },
+    progressiveRender: {
+        initialCount: {
+            grid: 24,
+            large: 10
+        },
+        batchCount: {
+            grid: 36,
+            large: 12
+        }
+    },
+    largeThumb: {
+        initialSize: 384,
+        finalSize: 512,
+        visibleMargin: 320
+    },
     minColumnWidth: {
         grid: 200,
-        large: 300,
+        large: 340,
         waterfall: 280
     },
     waterfall: {
@@ -72,6 +91,11 @@ const Gallery = {
     // Virtual scrolling state
     virtualList: null,
     useVirtualScroll: false,
+    pendingRenderFrame: null,
+    renderSessionId: 0,
+    largeUpgradeQueue: new Set(),
+    largeUpgradeTaskId: null,
+    anchorRestoreToken: 0,
 
     /**
      * Get generator color map (uses global override if available)
@@ -81,16 +105,379 @@ const Gallery = {
         return window.GENERATOR_COLORS || DEFAULT_GENERATOR_COLORS;
     },
 
+    _getScrollContainer() {
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return null;
+
+        let node = grid.parentElement;
+        while (node) {
+            const style = window.getComputedStyle(node);
+            const canScroll = /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 4;
+            if (canScroll) {
+                return node;
+            }
+            node = node.parentElement;
+        }
+
+        return document.scrollingElement || document.documentElement;
+    },
+
+    _isViewportScrollContainer(scrollContainer = this._getScrollContainer()) {
+        return Boolean(
+            scrollContainer &&
+            (
+                scrollContainer === document.documentElement ||
+                scrollContainer === document.body ||
+                scrollContainer === document.scrollingElement
+            )
+        );
+    },
+
+    _getScrollViewportRect(scrollContainer = this._getScrollContainer()) {
+        if (!scrollContainer) return null;
+
+        if (this._isViewportScrollContainer(scrollContainer)) {
+            return {
+                top: 0,
+                bottom: window.innerHeight,
+                height: window.innerHeight,
+            };
+        }
+
+        return scrollContainer.getBoundingClientRect();
+    },
+
+    _isWaterfallVirtualList(instance = this.virtualList) {
+        return Boolean(instance && typeof window.WaterfallVirtualList !== 'undefined' && instance instanceof window.WaterfallVirtualList);
+    },
+
+    _cancelPendingRender() {
+        this.renderSessionId += 1;
+        if (this.pendingRenderFrame) {
+            cancelAnimationFrame(this.pendingRenderFrame);
+            this.pendingRenderFrame = null;
+        }
+    },
+
+    _scheduleIdleTask(callback) {
+        if (typeof window.requestIdleCallback === 'function') {
+            return window.requestIdleCallback(callback, { timeout: 180 });
+        }
+
+        return window.setTimeout(() => callback({
+            didTimeout: true,
+            timeRemaining: () => 0
+        }), 48);
+    },
+
+    _cancelIdleTask(taskId) {
+        if (!taskId) return;
+
+        if (typeof window.cancelIdleCallback === 'function') {
+            window.cancelIdleCallback(taskId);
+            return;
+        }
+
+        clearTimeout(taskId);
+    },
+
+    _cancelLargeUpgradeWork() {
+        this.largeUpgradeQueue.clear();
+        if (this.largeUpgradeTaskId) {
+            this._cancelIdleTask(this.largeUpgradeTaskId);
+            this.largeUpgradeTaskId = null;
+        }
+    },
+
+    _cancelPendingWork() {
+        this._cancelPendingRender();
+        this._cancelLargeUpgradeWork();
+    },
+
+    _getThumbnailSources(imageId, viewMode) {
+        const { API } = getGalleryAppContext();
+        const getUrl = (size) => API?.getThumbnailUrl?.(imageId, size) ?? `/api/image-thumbnail/${imageId}?size=${size}`;
+
+        if (viewMode === 'large') {
+            return {
+                initialUrl: getUrl(GALLERY_VIRTUAL_CONFIG.largeThumb.initialSize),
+                finalUrl: getUrl(GALLERY_VIRTUAL_CONFIG.largeThumb.finalSize)
+            };
+        }
+
+        const size = viewMode === 'waterfall' ? 384 : 256;
+        return {
+            initialUrl: getUrl(size),
+            finalUrl: null
+        };
+    },
+
+    _queueLargeImageUpgrade(img) {
+        const { AppState } = getGalleryAppContext();
+        if (
+            !img ||
+            !img.isConnected ||
+            AppState.viewMode !== 'large' ||
+            !img.dataset.highresSrc ||
+            img.dataset.src
+        ) {
+            return;
+        }
+
+        this.largeUpgradeQueue.add(img);
+
+        if (!this.largeUpgradeTaskId) {
+            this.largeUpgradeTaskId = this._scheduleIdleTask((deadline) => this._flushLargeImageUpgradeQueue(deadline));
+        }
+    },
+
+    _flushLargeImageUpgradeQueue(deadline) {
+        const { AppState } = getGalleryAppContext();
+        this.largeUpgradeTaskId = null;
+
+        if (AppState.viewMode !== 'large') {
+            this.largeUpgradeQueue.clear();
+            return;
+        }
+
+        let processed = 0;
+        while (
+            this.largeUpgradeQueue.size > 0 &&
+            processed < 4 &&
+            (deadline?.didTimeout || (typeof deadline?.timeRemaining === 'function' ? deadline.timeRemaining() > 2 : true))
+        ) {
+            const nextImg = this.largeUpgradeQueue.values().next().value;
+            this.largeUpgradeQueue.delete(nextImg);
+            processed += 1;
+
+            if (!nextImg?.isConnected || !nextImg.dataset.highresSrc) {
+                continue;
+            }
+
+            const highResSrc = nextImg.dataset.highresSrc;
+            const preload = new Image();
+            preload.decoding = 'async';
+            preload.onload = () => {
+                const { AppState: currentState } = getGalleryAppContext();
+                if (!nextImg.isConnected || currentState.viewMode !== 'large') return;
+                nextImg.src = highResSrc;
+                nextImg.dataset.upgraded = 'true';
+                delete nextImg.dataset.highresSrc;
+            };
+            preload.onerror = () => { /* keep the medium thumbnail */ };
+            preload.src = highResSrc;
+        }
+
+        if (this.largeUpgradeQueue.size > 0) {
+            this.largeUpgradeTaskId = this._scheduleIdleTask((nextDeadline) => this._flushLargeImageUpgradeQueue(nextDeadline));
+        }
+    },
+
+    _scheduleVisibleLargeImageUpgrade(items = null) {
+        const { AppState } = getGalleryAppContext();
+        if (AppState.viewMode !== 'large') return;
+
+        const scrollContainer = this._getScrollContainer();
+        if (!scrollContainer) return;
+
+        const scrollRect = this._getScrollViewportRect(scrollContainer);
+        if (!scrollRect) return;
+        const margin = GALLERY_VIRTUAL_CONFIG.largeThumb.visibleMargin;
+        const candidates = items && items.length > 0
+            ? items
+            : Array.from(document.querySelectorAll('#gallery-grid .gallery-item'));
+
+        candidates.forEach((item) => {
+            const target = item instanceof HTMLElement ? item : item?.closest?.('.gallery-item');
+            const img = target?.querySelector?.('img');
+            if (!target || !img || !img.dataset.highresSrc) return;
+
+            const rect = target.getBoundingClientRect();
+            if (rect.top < scrollRect.bottom + margin && rect.bottom > scrollRect.top - margin) {
+                this._queueLargeImageUpgrade(img);
+            }
+        });
+    },
+
+    _handleRenderedLargeItems(items) {
+        if (!items || items.length === 0) return;
+        requestAnimationFrame(() => this._scheduleVisibleLargeImageUpgrade(items));
+    },
+
+    _resetGridLayoutState() {
+        const grid = document.getElementById('gallery-grid');
+        if (!grid) return;
+
+        grid.classList.remove('virtual-scroll');
+        grid.style.position = '';
+        grid.style.display = '';
+        grid.style.minHeight = '';
+        grid.style.gridTemplateColumns = '';
+        grid.style.height = '';
+
+        grid.querySelectorAll('.gallery-item').forEach((item) => {
+            item.style.position = '';
+            item.style.top = '';
+            item.style.left = '';
+            item.style.width = '';
+            item.style.height = '';
+            item.style.aspectRatio = '';
+        });
+    },
+
+    _findImageIndexById(imageId) {
+        return this.images.findIndex((image) => String(image.id) === String(imageId));
+    },
+
+    _captureViewAnchor() {
+        const grid = document.getElementById('gallery-grid');
+        const scrollContainer = this._getScrollContainer();
+        if (!grid || !scrollContainer) return null;
+
+        const scrollRect = this._getScrollViewportRect(scrollContainer);
+        if (!scrollRect) return null;
+        const visibleItems = Array.from(grid.querySelectorAll('.gallery-item'));
+        if (visibleItems.length === 0) return null;
+
+        let anchorItem = visibleItems[0];
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        visibleItems.forEach((item) => {
+            const rect = item.getBoundingClientRect();
+            const intersectsViewport = rect.bottom > scrollRect.top && rect.top < scrollRect.bottom;
+            if (!intersectsViewport) return;
+
+            const distance = Math.abs(rect.top - scrollRect.top);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                anchorItem = item;
+            }
+        });
+
+        if (!anchorItem?.dataset?.id) return null;
+
+        return {
+            imageId: anchorItem.dataset.id,
+            offset: anchorItem.getBoundingClientRect().top - scrollRect.top
+        };
+    },
+
+    _restoreViewAnchor(anchor) {
+        if (!anchor?.imageId) return false;
+
+        const grid = document.getElementById('gallery-grid');
+        const scrollContainer = this._getScrollContainer();
+        if (!grid || !scrollContainer) return false;
+        const isViewportScroll = this._isViewportScrollContainer(scrollContainer);
+
+        const targetIndex = this._findImageIndexById(anchor.imageId);
+        if (targetIndex < 0) return false;
+
+        const currentPageTop = window.pageYOffset || document.documentElement.scrollTop || 0;
+        const gridOffsetTop = isViewportScroll
+            ? currentPageTop + grid.getBoundingClientRect().top
+            : grid.offsetTop;
+        const applyScroll = (itemTop) => {
+            const nextScrollTop = Math.max(0, gridOffsetTop + itemTop - anchor.offset);
+            if (isViewportScroll) {
+                window.scrollTo(0, nextScrollTop);
+            } else {
+                scrollContainer.scrollTop = nextScrollTop;
+            }
+        };
+
+        if (this.useVirtualScroll && this.virtualList) {
+            const layout = this.virtualList.getLayoutForIndex?.(targetIndex) || this.virtualList.getLayoutForKey?.(anchor.imageId);
+            if (!layout) return false;
+            applyScroll(layout.top);
+            return true;
+        }
+
+        const targetItem = Array.from(grid.querySelectorAll('.gallery-item'))
+            .find((item) => item.dataset.id === String(anchor.imageId));
+
+        if (!targetItem) return false;
+
+        applyScroll(targetItem.offsetTop);
+        return true;
+    },
+
+    _scheduleAnchorRestore(anchor) {
+        if (!anchor) return;
+
+        const token = ++this.anchorRestoreToken;
+        const attemptRestore = (remaining) => {
+            if (token !== this.anchorRestoreToken) return;
+
+            const restored = this._restoreViewAnchor(anchor);
+            if (!restored && remaining > 0) {
+                requestAnimationFrame(() => attemptRestore(remaining - 1));
+                return;
+            }
+
+            if (restored) {
+                this._scheduleVisibleLargeImageUpgrade();
+            }
+        };
+
+        requestAnimationFrame(() => requestAnimationFrame(() => attemptRestore(8)));
+    },
+
+    _buildVirtualListOptions(grid, scrollContainer, viewMode) {
+        const isWaterfall = viewMode === 'waterfall';
+        const isLarge = viewMode === 'large';
+        const minColumnWidth = isWaterfall
+            ? GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth
+            : (isLarge ? GALLERY_VIRTUAL_CONFIG.minColumnWidth.large : GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid);
+
+        const options = {
+            container: grid,
+            scrollContainer,
+            renderItem: (index, image) => this.createVirtualGalleryItem(index, image, viewMode),
+            getItemKey: (index, image) => image.id || index,
+            onItemsRendered: (elements) => this._handleRenderedLargeItems(elements),
+            config: {
+                bufferSize: GALLERY_VIRTUAL_CONFIG.bufferSize,
+                threshold: GALLERY_VIRTUAL_CONFIG.threshold,
+                forceVirtual: isWaterfall || isLarge,
+                estimatedItemHeight: isLarge ? 420 : GALLERY_VIRTUAL_CONFIG.estimatedItemHeight,
+                itemAspectRatio: isLarge ? GALLERY_VIRTUAL_CONFIG.aspectRatio.large : GALLERY_VIRTUAL_CONFIG.aspectRatio.grid,
+                rowGap: GALLERY_VIRTUAL_CONFIG.rowGap,
+                columnGap: GALLERY_VIRTUAL_CONFIG.columnGap,
+                minColumnWidth,
+            }
+        };
+
+        if (isWaterfall) {
+            options.columnWidth = GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth;
+            options.minHeight = GALLERY_VIRTUAL_CONFIG.waterfall.minHeight;
+            options.maxHeight = GALLERY_VIRTUAL_CONFIG.waterfall.maxHeight;
+            options.estimatedHeight = GALLERY_VIRTUAL_CONFIG.waterfall.estimatedHeight;
+        }
+
+        return options;
+    },
+
     /**
      * Check if virtual scrolling should be enabled
      * @param {number} imageCount - Number of images
      * @returns {boolean}
      */
-    shouldUseVirtualScroll(imageCount) {
-        // Check if VirtualList class is available
-        if (typeof window.VirtualList === 'undefined' && typeof window.WaterfallVirtualList === 'undefined') {
+    shouldUseVirtualScroll(imageCount, viewMode = null) {
+        const resolvedViewMode = viewMode || getGalleryAppContext().AppState.viewMode;
+
+        if (resolvedViewMode === 'waterfall') {
+            return imageCount > 0 && typeof window.WaterfallVirtualList !== 'undefined';
+        }
+
+        if (resolvedViewMode === 'large') {
+            return imageCount > 0 && typeof window.VirtualList !== 'undefined';
+        }
+
+        if (typeof window.VirtualList === 'undefined') {
             return false;
         }
+
         return imageCount >= GALLERY_VIRTUAL_CONFIG.threshold;
     },
 
@@ -114,6 +501,7 @@ const Gallery = {
      * @param {HTMLElement} item - Gallery item element
      */
     _loadImage(item) {
+        const { AppState } = getGalleryAppContext();
         const img = item.querySelector('img');
         if (img && img.dataset.src) {
             img.onerror = () => {
@@ -126,6 +514,10 @@ const Gallery = {
             };
             img.src = img.dataset.src;
             delete img.dataset.src;
+
+            if (AppState.viewMode === 'large') {
+                this._queueLargeImageUpgrade(img);
+            }
         }
     },
 
@@ -148,6 +540,95 @@ const Gallery = {
                 }
             }
         });
+
+        this._scheduleVisibleLargeImageUpgrade(items);
+    },
+
+    _formatLargeCardRating(image) {
+        const rating = String(image?.rating || '').trim().toLowerCase();
+        return ['general', 'sensitive', 'questionable', 'explicit'].includes(rating)
+            ? rating
+            : 'unrated';
+    },
+
+    _formatLargeCardAspect(image) {
+        const width = Number(image?.width || 0);
+        const height = Number(image?.height || 0);
+        if (!width || !height) return 'Unknown ratio';
+        if (width === height) return 'Square';
+        return width > height ? 'Landscape' : 'Portrait';
+    },
+
+    _truncateLargeCardPrompt(prompt, maxLength = 140) {
+        const normalized = String(prompt || '').replace(/\s+/g, ' ').trim();
+        if (!normalized) {
+            return 'No prompt metadata';
+        }
+
+        return normalized.length > maxLength
+            ? `${normalized.slice(0, maxLength - 1).trim()}...`
+            : normalized;
+    },
+
+    _buildGalleryItemMarkup(image, viewMode, initialUrl, finalUrl, generatorColor, immediateLoad = false) {
+        const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const isWaterfall = viewMode === 'waterfall';
+        const isLarge = viewMode === 'large';
+        const imgAttributes = immediateLoad
+            ? `src="${initialUrl}" loading="lazy" decoding="async"`
+            : `data-src="${initialUrl}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" decoding="async"`;
+        const highResAttr = finalUrl ? ` data-highres-src="${finalUrl}"` : '';
+
+        if (!isLarge) {
+            const imageTag = isWaterfall
+                ? `<img src="${initialUrl}" alt="${safeFilename}" loading="lazy" decoding="async"${highResAttr}>`
+                : `<img ${imgAttributes} alt="${safeFilename}"${highResAttr}>`;
+
+            return `
+                ${imageTag}
+                <div class="gallery-item-overlay" aria-hidden="true">
+                    <span class="gallery-item-generator" style="background: ${generatorColor}">
+                        ${this._escapeHtml(image.generator)}
+                    </span>
+                </div>
+            `;
+        }
+
+        const rating = this._formatLargeCardRating(image);
+        const ratingLabel = rating === 'unrated' ? 'Unrated' : rating.charAt(0).toUpperCase() + rating.slice(1);
+        const checkpoint = String(image?.checkpoint || '').trim() || 'No checkpoint';
+        const sizeLabel = image.width && image.height ? `${image.width}x${image.height}` : 'Unknown size';
+        const aspectLabel = this._formatLargeCardAspect(image);
+        const promptPreview = this._truncateLargeCardPrompt(image.prompt);
+
+        return `
+            <div class="gallery-item-media">
+                <img ${imgAttributes} alt="${safeFilename}"${highResAttr}>
+            </div>
+            <div class="gallery-item-large-meta">
+                <div class="gallery-item-large-top">
+                    <span class="gallery-item-generator" style="background: ${generatorColor}">
+                        ${this._escapeHtml(image.generator)}
+                    </span>
+                    <span class="gallery-item-rating rating-${rating}">
+                        ${this._escapeHtml(ratingLabel)}
+                    </span>
+                </div>
+                <div class="gallery-item-title" title="${safeFilename}">
+                    ${safeFilename}
+                </div>
+                <div class="gallery-item-subline">
+                    <span>${this._escapeHtml(sizeLabel)}</span>
+                    <span>${this._escapeHtml(aspectLabel)}</span>
+                </div>
+                <div class="gallery-item-checkpoint" title="${this._escapeHtml(checkpoint)}">
+                    ${this._escapeHtml(checkpoint)}
+                </div>
+                <div class="gallery-item-prompt" title="${this._escapeHtml(promptPreview)}">
+                    ${this._escapeHtml(promptPreview)}
+                </div>
+            </div>
+        `;
     },
 
     /**
@@ -159,8 +640,21 @@ const Gallery = {
         const grid = $('#gallery-grid');
         if (!grid) return null;
 
-        const scrollContainer = grid.parentElement;
+        if (window.VirtualGallery?.initialized && typeof window.VirtualGallery.destroy === 'function') {
+            window.VirtualGallery.destroy();
+        }
+
+        const scrollContainer = this._getScrollContainer();
         if (!scrollContainer) return null;
+
+        this._cancelPendingRender();
+        this._cancelLargeUpgradeWork();
+        this._resetGridLayoutState();
+
+        if (this.lazyObserver) {
+            this.lazyObserver.disconnect();
+            this.lazyObserver = null;
+        }
 
         // Cleanup existing virtual list
         if (this.virtualList) {
@@ -169,44 +663,15 @@ const Gallery = {
         }
 
         const isWaterfall = viewMode === 'waterfall';
-        const isLarge = viewMode === 'large';
-        const minColumnWidth = isWaterfall
-            ? GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth
-            : (isLarge ? GALLERY_VIRTUAL_CONFIG.minColumnWidth.large : GALLERY_VIRTUAL_CONFIG.minColumnWidth.grid);
-
-        const config = {
-            bufferSize: GALLERY_VIRTUAL_CONFIG.bufferSize,
-            threshold: GALLERY_VIRTUAL_CONFIG.threshold,
-            estimatedItemHeight: isLarge ? 300 : GALLERY_VIRTUAL_CONFIG.estimatedItemHeight,
-            rowGap: GALLERY_VIRTUAL_CONFIG.rowGap,
-            columnGap: GALLERY_VIRTUAL_CONFIG.columnGap,
-            minColumnWidth,
-        };
-
-        // Create the appropriate virtual list type
         const VirtualListClass = isWaterfall ? window.WaterfallVirtualList : window.VirtualList;
         if (!VirtualListClass) return null;
 
         try {
-            const options = {
-                container: grid,
-                scrollContainer,
-                renderItem: (index, image) => this.createVirtualGalleryItem(index, image, viewMode),
-                getItemKey: (index, image) => image.id || index,
-                config,
-            };
-
-            // Add waterfall-specific options
-            if (isWaterfall) {
-                options.columnWidth = GALLERY_VIRTUAL_CONFIG.waterfall.columnWidth;
-                options.minHeight = GALLERY_VIRTUAL_CONFIG.waterfall.minHeight;
-                options.maxHeight = GALLERY_VIRTUAL_CONFIG.waterfall.maxHeight;
-                options.estimatedHeight = GALLERY_VIRTUAL_CONFIG.waterfall.estimatedHeight;
-            }
-
+            const options = this._buildVirtualListOptions(grid, scrollContainer, viewMode);
             this.virtualList = new VirtualListClass(options);
             this.virtualList.init(this.images);
             this.useVirtualScroll = true;
+            this._scheduleVisibleLargeImageUpgrade();
 
             return this.virtualList;
         } catch (error) {
@@ -224,16 +689,20 @@ const Gallery = {
      * @returns {HTMLElement}
      */
     createVirtualGalleryItem(index, image, viewMode) {
-        const { API, AppState } = getGalleryAppContext();
+        const { AppState } = getGalleryAppContext();
         const genColors = this._getGenColors();
 
         const isWaterfall = viewMode === 'waterfall';
         const isLarge = viewMode === 'large';
+        const { initialUrl, finalUrl } = this._getThumbnailSources(image.id, viewMode);
 
         const item = document.createElement('div');
         item.className = 'gallery-item';
         if (isWaterfall) {
             item.classList.add('waterfall-item');
+        }
+        if (isLarge) {
+            item.classList.add('large-card');
         }
         if (AppState.selectedIds.has(image.id)) {
             item.classList.add('selected');
@@ -241,20 +710,19 @@ const Gallery = {
         item.dataset.id = image.id;
         item.dataset.index = index;
         item.draggable = true;
+        item.setAttribute('tabindex', '0');
+        item.setAttribute('role', 'gridcell');
+        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${image.generator || 'Unknown generator'}`);
+        item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
 
-        const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const thumbSize = isLarge ? 512 : isWaterfall ? 384 : 256;
-        const thumbnailUrl = API?.getThumbnailUrl?.(image.id, thumbSize) ?? `/api/image-thumbnail/${image.id}?size=${thumbSize}`;
-
-        // For virtual scrolling, load image immediately (no lazy loading)
-        item.innerHTML = `
-            <img src="${thumbnailUrl}" alt="${safeFilename}" loading="lazy">
-            <div class="gallery-item-overlay">
-                <span class="gallery-item-generator" style="background: ${genColors[image.generator] || genColors.unknown}">
-                    ${this._escapeHtml(image.generator)}
-                </span>
-            </div>
-        `;
+        item.innerHTML = this._buildGalleryItemMarkup(
+            image,
+            viewMode,
+            initialUrl,
+            finalUrl,
+            genColors[image.generator] || genColors.unknown,
+            true
+        );
 
         // Add event listeners
         item.addEventListener('click', () => {
@@ -265,7 +733,19 @@ const Gallery = {
             }
         });
 
+        item.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (AppState.selectionMode) {
+                    this.toggleSelection(image.id);
+                } else {
+                    this.openPreview(image.id);
+                }
+            }
+        });
+
         item.addEventListener('dragstart', (e) => {
+            const API = getRequiredGalleryAPI();
             const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
             const absoluteUrl = new URL(imgUrl, window.location.origin).href;
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
@@ -331,30 +811,47 @@ const Gallery = {
 
     setImages(images) {
         this.images = images;
+        this._cancelPendingWork();
+
         // Hide skeleton before rendering
         this.hideSkeleton();
 
         // Decide whether to use virtual scrolling
         const { AppState } = getGalleryAppContext();
-        const shouldVirtual = this.shouldUseVirtualScroll(images.length);
+        const shouldVirtual = this.shouldUseVirtualScroll(images.length, AppState.viewMode);
+        const wantsWaterfall = AppState.viewMode === 'waterfall';
+        const canReuseVirtual = Boolean(
+            shouldVirtual &&
+            this.virtualList &&
+            (wantsWaterfall ? this._isWaterfallVirtualList() : !this._isWaterfallVirtualList())
+        );
+
+        if (canReuseVirtual) {
+            this.useVirtualScroll = true;
+            this.virtualList.setItems(images);
+            this._scheduleVisibleLargeImageUpgrade();
+            return;
+        }
 
         if (shouldVirtual) {
-            // Destroy existing virtual list first
             if (this.virtualList) {
                 this.virtualList.destroy();
                 this.virtualList = null;
             }
-            // Initialize virtual scrolling
-            this.initVirtualScroll(AppState.viewMode);
-        } else {
-            // Fall back to standard rendering
-            this.useVirtualScroll = false;
-            if (this.virtualList) {
-                this.virtualList.destroy();
-                this.virtualList = null;
+            const virtualList = this.initVirtualScroll(AppState.viewMode);
+            if (!virtualList) {
+                this.useVirtualScroll = false;
+                this.render();
             }
-            this.render();
+            return;
         }
+
+        this.useVirtualScroll = false;
+        if (this.virtualList) {
+            this.virtualList.destroy();
+            this.virtualList = null;
+        }
+        this.render();
     },
 
     appendImages(newImages) {
@@ -364,11 +861,27 @@ const Gallery = {
         const grid = $('#gallery-grid');
         if (!grid) return;
 
-        const isWaterfall = AppState.viewMode === 'waterfall';
+        const viewMode = AppState.viewMode;
+        const isWaterfall = viewMode === 'waterfall';
         const startIndex = this.images.length;
 
         // Append to internal array
         this.images = [...this.images, ...newImages];
+
+        const shouldVirtualNow = this.shouldUseVirtualScroll(this.images.length, AppState.viewMode);
+
+        if (shouldVirtualNow && (!this.useVirtualScroll || !this.virtualList)) {
+            if (this.lazyObserver) {
+                this.lazyObserver.disconnect();
+                this.lazyObserver = null;
+            }
+            const virtualList = this.initVirtualScroll(AppState.viewMode);
+            if (!virtualList) {
+                this.useVirtualScroll = false;
+                this.render();
+            }
+            return;
+        }
 
         // If using virtual scrolling, append to virtual list
         if (this.useVirtualScroll && this.virtualList) {
@@ -398,7 +911,7 @@ const Gallery = {
         const newItems = [];
         newImages.forEach((image, i) => {
             const index = startIndex + i;
-            const item = this.createGalleryItem(image, index, isWaterfall);
+            const item = this.createGalleryItem(image, index, viewMode);
             fragment.appendChild(item);
             if (!isWaterfall) newItems.push(item);
         });
@@ -410,6 +923,8 @@ const Gallery = {
             newItems.forEach(item => this.lazyObserver.observe(item));
             // Fallback: force-load any already-visible images
             requestAnimationFrame(() => this._loadVisibleImages(newItems));
+        } else {
+            this._scheduleVisibleLargeImageUpgrade(newItems);
         }
     },
 
@@ -418,19 +933,52 @@ const Gallery = {
      * @param {string} mode - View mode ('grid', 'large', 'waterfall')
      */
     setViewMode(mode) {
-        const { AppState } = getGalleryAppContext();
+        const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
+        const anchor = this.images.length > 0 ? this._captureViewAnchor() : null;
+        const shouldVirtual = this.shouldUseVirtualScroll(this.images.length, nextMode);
+        const canReuseStandardVirtual = Boolean(
+            shouldVirtual &&
+            this.virtualList &&
+            !this._isWaterfallVirtualList() &&
+            nextMode !== 'waterfall'
+        );
 
-        // If using virtual scrolling, reinitialize for new mode
-        if (this.useVirtualScroll) {
-            if (this.virtualList) {
-                this.virtualList.destroy();
-                this.virtualList = null;
-            }
-            this.initVirtualScroll(mode);
-        } else {
-            // Standard re-render
-            this.render();
+        this._cancelPendingWork();
+
+        if (this.lazyObserver) {
+            this.lazyObserver.disconnect();
+            this.lazyObserver = null;
         }
+
+        if (canReuseStandardVirtual && typeof this.virtualList.reconfigure === 'function') {
+            const grid = document.getElementById('gallery-grid');
+            const scrollContainer = this._getScrollContainer();
+            if (grid && scrollContainer) {
+                this.useVirtualScroll = true;
+                this.virtualList.reconfigure(this._buildVirtualListOptions(grid, scrollContainer, nextMode));
+                this._scheduleAnchorRestore(anchor);
+                return;
+            }
+        }
+
+        if (this.virtualList) {
+            this.virtualList.destroy();
+            this.virtualList = null;
+        }
+
+        if (shouldVirtual) {
+            const virtualList = this.initVirtualScroll(nextMode);
+            if (!virtualList) {
+                this.useVirtualScroll = false;
+                this.render();
+            }
+            this._scheduleAnchorRestore(anchor);
+            return;
+        }
+
+        this.useVirtualScroll = false;
+        this.render();
+        this._scheduleAnchorRestore(anchor);
     },
 
     /**
@@ -449,7 +997,19 @@ const Gallery = {
         const grid = $('#gallery-grid');
         if (!grid) return;
 
+        if (window.VirtualGallery?.initialized && typeof window.VirtualGallery.destroy === 'function') {
+            window.VirtualGallery.destroy();
+        }
+
+        this._cancelPendingRender();
+        this._cancelLargeUpgradeWork();
+
         grid.innerHTML = '';
+        grid.classList.remove('virtual-scroll');
+        grid.style.position = '';
+        grid.style.display = '';
+        grid.style.minHeight = '';
+        grid.style.gridTemplateColumns = '';
         if (this.lazyObserver) {
             this.lazyObserver.disconnect();
         }
@@ -464,38 +1024,63 @@ const Gallery = {
             return;
         }
 
-        const isWaterfall = AppState.viewMode === 'waterfall';
+        const viewMode = AppState.viewMode;
+        const isWaterfall = viewMode === 'waterfall';
         if (!isWaterfall) {
             this.lazyObserver = this._createLazyObserver();
         }
 
-        const fragment = document.createDocumentFragment();
-        const allItems = [];
-        this.images.forEach((image, index) => {
-            const item = this.createGalleryItem(image, index, isWaterfall);
-            fragment.appendChild(item);
-            if (!isWaterfall) allItems.push(item);
-        });
+        const sessionId = ++this.renderSessionId;
+        const initialCount = GALLERY_VIRTUAL_CONFIG.progressiveRender.initialCount[viewMode] || this.images.length;
+        const batchCount = GALLERY_VIRTUAL_CONFIG.progressiveRender.batchCount[viewMode] || this.images.length;
 
-        // Append to DOM FIRST, then observe — items must be in the DOM
-        // for IntersectionObserver to reliably detect visibility
-        grid.appendChild(fragment);
+        const appendBatch = (startIndex, maxCount) => {
+            if (sessionId !== this.renderSessionId) return;
 
-        if (this.lazyObserver && !isWaterfall) {
-            allItems.forEach(item => this.lazyObserver.observe(item));
-            // Fallback: force-load any already-visible images
-            requestAnimationFrame(() => this._loadVisibleImages(allItems));
-        }
+            const endIndex = Math.min(this.images.length, startIndex + maxCount);
+            const fragment = document.createDocumentFragment();
+            const createdItems = [];
+
+            for (let index = startIndex; index < endIndex; index++) {
+                const item = this.createGalleryItem(this.images[index], index, viewMode);
+                fragment.appendChild(item);
+                createdItems.push(item);
+            }
+
+            grid.appendChild(fragment);
+
+            if (this.lazyObserver && !isWaterfall) {
+                createdItems.forEach(item => this.lazyObserver.observe(item));
+                requestAnimationFrame(() => this._loadVisibleImages(createdItems));
+            } else {
+                this._scheduleVisibleLargeImageUpgrade(createdItems);
+            }
+
+            if (endIndex < this.images.length) {
+                this.pendingRenderFrame = requestAnimationFrame(() => appendBatch(endIndex, batchCount));
+            } else {
+                this.pendingRenderFrame = null;
+            }
+        };
+
+        appendBatch(0, Math.min(initialCount, this.images.length));
     },
 
-    createGalleryItem(image, index, isWaterfall = false) {
-        const { API, AppState } = getGalleryAppContext();
+    createGalleryItem(image, index, viewMode = null) {
+        const { AppState } = getGalleryAppContext();
         const genColors = this._getGenColors();
+        const resolvedViewMode = viewMode || AppState.viewMode;
+        const isWaterfall = resolvedViewMode === 'waterfall';
+        const isLarge = resolvedViewMode === 'large';
+        const { initialUrl, finalUrl } = this._getThumbnailSources(image.id, resolvedViewMode);
 
         const item = document.createElement('div');
         item.className = 'gallery-item';
         if (isWaterfall) {
             item.classList.add('waterfall-item');
+        }
+        if (isLarge) {
+            item.classList.add('large-card');
         }
         if (AppState.selectedIds.has(image.id)) {
             item.classList.add('selected');
@@ -508,25 +1093,15 @@ const Gallery = {
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
         item.setAttribute('aria-label', `${image.filename || 'Image'} - ${image.generator || 'Unknown generator'}`);
-        if (AppState.selectedIds.has(image.id)) {
-            item.setAttribute('aria-selected', 'true');
-        }
-
-        const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const thumbSize = AppState.viewMode === 'large' ? 512 : AppState.viewMode === 'waterfall' ? 384 : 256;
-        const thumbnailUrl = API?.getThumbnailUrl?.(image.id, thumbSize) ?? `/api/image-thumbnail/${image.id}?size=${thumbSize}`;
-        const imageTag = isWaterfall
-            ? `<img src="${thumbnailUrl}" alt="${safeFilename}" loading="lazy">`
-            : `<img data-src="${thumbnailUrl}" alt="${safeFilename}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">`;
-
-        item.innerHTML = `
-            ${imageTag}
-            <div class="gallery-item-overlay" aria-hidden="true">
-                <span class="gallery-item-generator" style="background: ${genColors[image.generator] || genColors.unknown}">
-                    ${this._escapeHtml(image.generator)}
-                </span>
-            </div>
-        `;
+        item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
+        item.innerHTML = this._buildGalleryItemMarkup(
+            image,
+            resolvedViewMode,
+            initialUrl,
+            finalUrl,
+            genColors[image.generator] || genColors.unknown,
+            false
+        );
 
         item.addEventListener('click', () => {
             if (AppState.selectionMode) {
@@ -549,6 +1124,7 @@ const Gallery = {
         });
 
         item.addEventListener('dragstart', (e) => {
+            const API = getRequiredGalleryAPI();
             const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
             const absoluteUrl = new URL(imgUrl, window.location.origin).href;
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
@@ -586,6 +1162,7 @@ const Gallery = {
         const item = document.querySelector(`.gallery-item[data-id="${imageId}"]`);
         if (item) {
             item.classList.toggle('selected', isNowSelected);
+            item.setAttribute('aria-selected', isNowSelected ? 'true' : 'false');
         }
 
         // Update virtual list's rendered item directly if available
@@ -597,6 +1174,18 @@ const Gallery = {
         if (window.VirtualGallery && window.VirtualGallery.initialized) {
             window.VirtualGallery.updateItemSelection(imageId, isNowSelected);
         }
+
+        if (updateSelectionUI) updateSelectionUI();
+    },
+
+    syncSelectionState() {
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
+        document.querySelectorAll('.gallery-item').forEach((item) => {
+            const imageId = item.dataset.id;
+            const isSelected = AppState.selectedIds.has(Number(imageId)) || AppState.selectedIds.has(imageId);
+            item.classList.toggle('selected', isSelected);
+            item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+        });
 
         if (updateSelectionUI) updateSelectionUI();
     },
@@ -640,6 +1229,16 @@ const Gallery = {
         };
     },
 
+    _t(key, params, fallback) {
+        if (window.I18n && typeof window.I18n.t === 'function') {
+            const translated = window.I18n.t(key, params);
+            if (translated && translated !== key) {
+                return translated;
+            }
+        }
+        return fallback || key;
+    },
+
     _getModalPromptView() {
         return this._modalPromptView || null;
     },
@@ -662,10 +1261,15 @@ const Gallery = {
 
     _detectPromptFormat(image, parsedData) {
         const generator = String(image?.generator || '').toLowerCase();
+        const combinedPrompt = [image?.prompt, image?.negative_prompt].filter(Boolean).join('\n');
         if (generator.includes('novel') || generator.includes('nai')) return 'nai';
-        if (generator.includes('webui') || generator.includes('forge')) return 'sd';
+        if (generator.includes('webui') || generator.includes('forge') || generator.includes('comfy')) return 'sd';
         if (parsedData?.character_prompts?.length) return 'nai';
         if (parsedData?.prompt_nodes?.length) return 'sd';
+        if (/\b\d*\.?\d+\s*::/.test(combinedPrompt)) return 'nai';
+        if (/[{][^{}]+[}]|\[[^\[\]]+\]/.test(combinedPrompt)) return 'nai';
+        if (/<lora:[^>]+>/i.test(combinedPrompt)) return 'sd';
+        if (/\((?:[^()\\]|\\.)+:\s*-?\d*\.?\d+\)/.test(combinedPrompt)) return 'sd';
         return 'unknown';
     },
 
@@ -683,40 +1287,215 @@ const Gallery = {
         };
     },
 
-    _buildNaiMergedPromptText(image, parsedData) {
-        const mainPrompt = String(image?.prompt || '').trim();
+    _dedupePromptTokens(tokens) {
+        const seen = new Set();
+        const result = [];
+
+        (tokens || []).forEach((token) => {
+            const cleaned = String(token || '').trim();
+            if (!cleaned) return;
+
+            const normalized = cleaned.toLowerCase();
+            if (seen.has(normalized)) return;
+
+            seen.add(normalized);
+            result.push(cleaned);
+        });
+
+        return result;
+    },
+
+    _collectPromptTextsFromNodes(parsedData, role) {
+        if (!Array.isArray(parsedData?.prompt_nodes)) return [];
+
+        return parsedData.prompt_nodes
+            .filter((node) => {
+                const nodeRole = String(node?.role || '').toLowerCase();
+                return role === 'negative'
+                    ? nodeRole.includes('negative')
+                    : !nodeRole.includes('negative');
+            })
+            .map(node => String(node?.text || '').trim())
+            .filter(Boolean);
+    },
+
+    _mergePromptSegments(segments) {
+        const seen = new Set();
+        const cleaned = [];
+
+        (segments || []).forEach((segment) => {
+            const text = String(segment || '').trim();
+            if (!text) return;
+
+            const normalized = text.toLowerCase();
+            if (seen.has(normalized)) return;
+
+            seen.add(normalized);
+            cleaned.push(text);
+        });
+
+        return cleaned.join(', ');
+    },
+
+    _getPromptSourceBundle(image, parsedData) {
         const characterPrompts = Array.isArray(parsedData?.character_prompts)
             ? parsedData.character_prompts.map((entry, index) => this._normalizeCharacterPrompt(entry, index)).filter(Boolean)
             : [];
+        const positiveSources = [image?.prompt];
+        const negativeSources = [image?.negative_prompt];
 
-        const promptParts = [];
-        if (mainPrompt) {
-            promptParts.push(mainPrompt);
+        if (!String(image?.prompt || '').trim()) {
+            positiveSources.push(...this._collectPromptTextsFromNodes(parsedData, 'positive'));
         }
-        characterPrompts.forEach(characterPrompt => {
-            promptParts.push(characterPrompt.prompt);
-        });
+
+        if (!String(image?.negative_prompt || '').trim()) {
+            negativeSources.push(...this._collectPromptTextsFromNodes(parsedData, 'negative'));
+        }
+
+        if (characterPrompts.length > 0) {
+            positiveSources.push(...characterPrompts.map(entry => entry.prompt));
+            negativeSources.push(...characterPrompts.map(entry => entry.negative_prompt));
+        }
 
         return {
-            promptText: promptParts.join('\n\n'),
+            promptText: this._mergePromptSegments(positiveSources),
+            negativeText: this._mergePromptSegments(negativeSources),
             characterPrompts,
         };
     },
 
+    _formatPromptWeight(weight) {
+        const numeric = Number(weight);
+        if (!Number.isFinite(numeric)) return '';
+
+        return (Math.round(numeric * 1000) / 1000)
+            .toFixed(3)
+            .replace(/0+$/, '')
+            .replace(/\.$/, '');
+    },
+
+    _convertBracketRuns(text, openChar, closeChar, multiplier, transform) {
+        const escapedOpen = openChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedClose = closeChar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(${escapedOpen}+)([^${escapedOpen}${escapedClose}]+?)(${escapedClose}+)`, 'g');
+
+        return String(text || '').replace(pattern, (match, openRun, content, closeRun) => {
+            const trimmedContent = String(content || '').trim();
+            if (!trimmedContent || openRun.length !== closeRun.length) {
+                return match;
+            }
+
+            return transform(trimmedContent, Math.pow(multiplier, openRun.length), match);
+        });
+    },
+
+    _convertNaiPromptTextToSd(text) {
+        if (!text) return '';
+
+        let converted = String(text);
+
+        converted = converted.replace(/(^|[,\n]\s*|\s)(\d*\.?\d+)::\s*([\s\S]*?)\s*::(?=,|$|\n)/g, (match, prefix, weight, content) => {
+            const trimmedContent = String(content || '').trim();
+            const formattedWeight = this._formatPromptWeight(weight);
+            if (!trimmedContent || !formattedWeight) return match;
+            return `${prefix}(${trimmedContent}:${formattedWeight})`;
+        });
+
+        converted = this._convertBracketRuns(converted, '{', '}', 1.05, (content, weight) => {
+            const formattedWeight = this._formatPromptWeight(weight);
+            return formattedWeight ? `(${content}:${formattedWeight})` : content;
+        });
+
+        converted = this._convertBracketRuns(converted, '[', ']', 1 / 1.05, (content, weight) => {
+            const formattedWeight = this._formatPromptWeight(weight);
+            return formattedWeight ? `(${content}:${formattedWeight})` : content;
+        });
+
+        return converted.replace(/\s{2,}/g, ' ').trim();
+    },
+
+    _convertSdPromptTextToNai(text) {
+        if (!text) return '';
+
+        let converted = String(text);
+
+        converted = converted.replace(/<lora:([^:>]+):([^>]+)>/gi, (match, name, weight) => {
+            const formattedWeight = this._formatPromptWeight(weight);
+            const trimmedName = String(name || '').trim();
+            if (!trimmedName || !formattedWeight) return trimmedName || match;
+            return `${formattedWeight}::${trimmedName}::`;
+        });
+
+        converted = converted.replace(/\(([^()]*?):\s*(-?\d*\.?\d+)\)/g, (match, content, weight) => {
+            const trimmedContent = String(content || '').trim();
+            const formattedWeight = this._formatPromptWeight(weight);
+            if (!trimmedContent || !formattedWeight) return match;
+            return `${formattedWeight}::${trimmedContent}::`;
+        });
+
+        converted = this._convertBracketRuns(converted, '(', ')', 1.1, (content, weight, originalMatch) => {
+            if (/:\s*-?\d*\.?\d+\s*$/.test(content)) {
+                return originalMatch;
+            }
+
+            const formattedWeight = this._formatPromptWeight(weight);
+            return formattedWeight ? `${formattedWeight}::${content}::` : content;
+        });
+
+        converted = this._convertBracketRuns(converted, '[', ']', 1 / 1.1, (content, weight) => {
+            const formattedWeight = this._formatPromptWeight(weight);
+            return formattedWeight ? `${formattedWeight}::${content}::` : content;
+        });
+
+        return converted.replace(/\s{2,}/g, ' ').trim();
+    },
+
+    _convertPromptBundle(image, parsedData, targetFormat) {
+        const sourceBundle = this._getPromptSourceBundle(image, parsedData);
+        const sourceFormat = this._detectPromptFormat(image, parsedData);
+
+        if (targetFormat === 'sd') {
+            return {
+                promptText: sourceFormat === 'nai'
+                    ? this._convertNaiPromptTextToSd(sourceBundle.promptText)
+                    : sourceBundle.promptText,
+                negativeText: sourceFormat === 'nai'
+                    ? this._convertNaiPromptTextToSd(sourceBundle.negativeText)
+                    : sourceBundle.negativeText,
+            };
+        }
+
+        if (targetFormat === 'nai') {
+            return {
+                promptText: sourceFormat === 'sd'
+                    ? this._convertSdPromptTextToNai(sourceBundle.promptText)
+                    : sourceBundle.promptText,
+                negativeText: sourceFormat === 'sd'
+                    ? this._convertSdPromptTextToNai(sourceBundle.negativeText)
+                    : sourceBundle.negativeText,
+            };
+        }
+
+        return {
+            promptText: sourceBundle.promptText,
+            negativeText: sourceBundle.negativeText,
+        };
+    },
+
     _buildPromptView(image, parsedData, targetFormat = 'original') {
-        const promptText = String(image?.prompt || '').trim();
-        const negativeText = String(image?.negative_prompt || '').trim();
+        const sourceBundle = this._getPromptSourceBundle(image, parsedData);
+        const promptText = sourceBundle.promptText;
+        const negativeText = sourceBundle.negativeText;
         const sourceFormat = this._detectPromptFormat(image, parsedData);
         const normalizedTarget = ['original', 'sd', 'nai'].includes(targetFormat) ? targetFormat : 'original';
-        const characterPrompts = Array.isArray(parsedData?.character_prompts)
-            ? parsedData.character_prompts.map((entry, index) => this._normalizeCharacterPrompt(entry, index)).filter(Boolean)
-            : [];
+        const characterPrompts = sourceBundle.characterPrompts;
 
         if (normalizedTarget === 'original') {
             return {
                 promptText,
                 negativeText,
                 formatLabel: 'Original',
+                headerKey: 'modal.promptOriginal',
                 sourceFormat,
                 targetFormat: 'original',
                 isConverted: false,
@@ -725,14 +1504,13 @@ const Gallery = {
         }
 
         if (normalizedTarget === 'sd') {
-            const mergedPrompt = sourceFormat === 'nai' || characterPrompts.length > 0
-                ? this._buildNaiMergedPromptText(image, parsedData).promptText
-                : promptText;
+            const converted = this._convertPromptBundle(image, parsedData, 'sd');
 
             return {
-                promptText: mergedPrompt || promptText,
-                negativeText,
+                promptText: converted.promptText || promptText,
+                negativeText: converted.negativeText || negativeText,
                 formatLabel: 'SD',
+                headerKey: 'modal.promptSD',
                 sourceFormat,
                 targetFormat: 'sd',
                 isConverted: sourceFormat !== 'sd',
@@ -740,10 +1518,13 @@ const Gallery = {
             };
         }
 
+        const converted = this._convertPromptBundle(image, parsedData, 'nai');
+
         return {
-            promptText,
-            negativeText,
+            promptText: converted.promptText || promptText,
+            negativeText: converted.negativeText || negativeText,
             formatLabel: 'NAI',
+            headerKey: 'modal.promptNAI',
             sourceFormat,
             targetFormat: 'nai',
             isConverted: sourceFormat !== 'nai',
@@ -755,15 +1536,269 @@ const Gallery = {
         return this._buildPromptView(image, parsedData, targetFormat);
     },
 
+    _getAlternatePromptTarget(sourceFormat) {
+        if (sourceFormat === 'nai') return 'sd';
+        if (sourceFormat === 'sd') return 'nai';
+        return null;
+    },
+
+    _normalizeMetadataKey(key) {
+        return String(key || '')
+            .replace(/[\s_-]/g, '')
+            .toLowerCase();
+    },
+
+    _getMetadataObject(image) {
+        if (!image?.metadata_json) return {};
+
+        try {
+            const metadata = typeof image.metadata_json === 'string'
+                ? JSON.parse(image.metadata_json)
+                : image.metadata_json;
+            return metadata && typeof metadata === 'object' ? metadata : {};
+        } catch (_) {
+            return {};
+        }
+    },
+
+    _parseEmbeddedJson(value) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            return value;
+        }
+
+        if (typeof value !== 'string') return null;
+
+        let text = value.trim();
+        if (!text) return null;
+
+        if (text.startsWith('ASCII') || text.startsWith('UNICODE')) {
+            text = text.slice(7).trim();
+        }
+
+        const jsonStart = text.indexOf('{');
+        const jsonEnd = text.lastIndexOf('}');
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            text = text.slice(jsonStart, jsonEnd + 1);
+        }
+
+        try {
+            const parsed = JSON.parse(text);
+            return parsed && typeof parsed === 'object' ? parsed : null;
+        } catch (_) {
+            return null;
+        }
+    },
+
+    _extractCommentData(image) {
+        const metadata = this._getMetadataObject(image);
+        return this._parseEmbeddedJson(metadata.Comment)
+            || this._parseEmbeddedJson(metadata.UserComment)
+            || null;
+    },
+
+    _findMetadataValue(sources, aliases) {
+        const normalizedAliases = aliases.map(alias => this._normalizeMetadataKey(alias));
+
+        for (const source of sources) {
+            if (!source || typeof source !== 'object') continue;
+
+            for (const alias of aliases) {
+                if (Object.prototype.hasOwnProperty.call(source, alias) && source[alias] != null && source[alias] !== '') {
+                    return source[alias];
+                }
+            }
+
+            for (const [key, value] of Object.entries(source)) {
+                if (value == null || value === '') continue;
+                if (normalizedAliases.includes(this._normalizeMetadataKey(key))) {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    },
+
+    _formatMetadataValue(value) {
+        if (value == null) return '';
+
+        if (Array.isArray(value)) {
+            return value
+                .map(item => this._formatMetadataValue(item))
+                .filter(Boolean)
+                .join(', ');
+        }
+
+        if (typeof value === 'number') {
+            return Number.isInteger(value)
+                ? String(value)
+                : value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+        }
+
+        if (typeof value === 'boolean') {
+            return value ? 'true' : 'false';
+        }
+
+        if (typeof value === 'object') {
+            try {
+                return JSON.stringify(value);
+            } catch (_) {
+                return String(value);
+            }
+        }
+
+        return String(value).trim();
+    },
+
+    _extractRawParameterText(image) {
+        const metadata = this._getMetadataObject(image);
+        const rawValue = this._findMetadataValue(
+            [metadata],
+            ['parameters', 'Parameters', 'ImageDescription']
+        );
+
+        if (typeof rawValue !== 'string') return '';
+
+        const start = rawValue.search(/(?:^|\n)\s*Steps\s*:/i);
+        if (start === -1) return '';
+
+        return rawValue
+            .slice(start)
+            .replace(/\s*\n\s*/g, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+    },
+
+    _summarizeWorkflowValue(value, image, parsedData) {
+        const generator = String(image?.generator || '').toLowerCase();
+        const workflowFallback = generator.includes('comfy')
+            ? (parsedData?.is_img2img ? 'ComfyUI img2img workflow' : 'ComfyUI workflow')
+            : '';
+
+        if (value == null || value === '') {
+            return workflowFallback;
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return workflowFallback;
+            }
+
+            if (/^\s*[\[{]/.test(trimmed)) {
+                return workflowFallback;
+            }
+
+            if (/txt2img/i.test(trimmed)) return 'txt2img';
+            if (/img2img/i.test(trimmed)) return 'img2img';
+            if (/inpaint/i.test(trimmed)) return 'inpaint';
+            if (trimmed.length > 80) {
+                return workflowFallback || trimmed.slice(0, 80).trim() + '...';
+            }
+
+            return trimmed;
+        }
+
+        if (typeof value === 'object') {
+            return workflowFallback;
+        }
+
+        return workflowFallback || String(value);
+    },
+
+    _buildGenerationParamEntries(image, parsedData) {
+        const params = parsedData?.generation_params || {};
+        const metadata = this._getMetadataObject(image);
+        const commentData = this._extractCommentData(image);
+        const imageExtras = {
+            checkpoint: image?.checkpoint || null,
+        };
+        const sources = [params, commentData, imageExtras, metadata];
+        const entries = [];
+        const usedKeys = new Set();
+
+        const pushEntry = (label, aliases) => {
+            const aliasList = Array.isArray(aliases) ? aliases : [aliases];
+            const rawValue = this._findMetadataValue(sources, aliasList);
+            if (rawValue == null || rawValue === '') return;
+
+            const displayValue = this._formatMetadataValue(rawValue);
+            if (!displayValue) return;
+
+            entries.push({ label, value: displayValue });
+            aliasList.forEach(alias => usedKeys.add(this._normalizeMetadataKey(alias)));
+        };
+
+        pushEntry('Steps', ['steps']);
+        pushEntry('CFG scale', ['cfg_scale', 'cfg', 'scale']);
+        pushEntry('Sampler', ['sampler', 'sampler_name']);
+        pushEntry('Scheduler', ['scheduler', 'noise_schedule', 'schedule_type']);
+        pushEntry('Seed', ['seed', 'noise_seed']);
+        pushEntry(parsedData?.is_img2img ? 'Denoising strength' : 'Denoise', ['denoising_strength', 'denoise', 'strength']);
+        pushEntry('Noise', ['noise']);
+        const workflowSummary = this._summarizeWorkflowValue(
+            this._findMetadataValue([params, commentData], ['workflow', 'request_type']),
+            image,
+            parsedData
+        );
+        if (workflowSummary) {
+            entries.push({ label: 'Workflow', value: workflowSummary });
+            ['workflow', 'request_type'].forEach(alias => usedKeys.add(this._normalizeMetadataKey(alias)));
+        }
+        pushEntry('Size', ['size', 'resolution']);
+        pushEntry('Input', ['input']);
+        pushEntry('Output', ['output']);
+        pushEntry('Priority', ['priority']);
+        pushEntry('Quantity', ['quantity', 'n_samples']);
+        pushEntry('Ecosystem', ['ecosystem']);
+        pushEntry('Created Date', ['Created Date', 'created_date', 'createdDate', 'generation_time', 'Generation time']);
+        pushEntry('Output Format', ['outputFormat', 'output_format']);
+        pushEntry('Enhanced Compatibility', ['enhancedCompatibility', 'enhanced_compatibility']);
+        pushEntry('Clip skip', ['clip_skip', 'clipSkip']);
+        pushEntry('Model', ['model', 'checkpoint']);
+        pushEntry('Model Hash', ['model_hash']);
+        pushEntry('Hires Upscaler', ['hires_upscaler']);
+        pushEntry('Hires Scale', ['hires_upscale']);
+        pushEntry('Hires Steps', ['hires_steps']);
+        pushEntry('SMEA', ['sm']);
+        pushEntry('SMEA Dyn', ['sm_dyn']);
+        pushEntry('CFG Rescale', ['cfg_rescale']);
+        pushEntry('UC Preset', ['uc_preset', 'ucPreset']);
+        pushEntry('Quality Toggle', ['quality_toggle', 'qualityToggle']);
+        pushEntry('Dynamic Thresholding', ['dynamic_thresholding']);
+        pushEntry('Uncond Scale', ['uncond_scale']);
+        pushEntry('Skip CFG σ', ['skip_cfg_above_sigma']);
+        pushEntry('Use Coords', ['use_coords']);
+        pushEntry('Use Order', ['use_order']);
+
+        Object.entries(params).forEach(([key, value]) => {
+            const normalizedKey = this._normalizeMetadataKey(key);
+            if (usedKeys.has(normalizedKey) || value == null || value === '') {
+                return;
+            }
+
+            const label = key
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, char => char.toUpperCase());
+            const displayValue = this._formatMetadataValue(value);
+            if (!displayValue) return;
+
+            entries.push({ label, value: displayValue });
+        });
+
+        return entries;
+    },
+
     _applyModalPromptView(promptView) {
         const promptText = document.querySelector('#modal-prompt-text');
         const negSection = document.querySelector('#modal-negative-section');
         const negText = document.querySelector('#modal-negative-text');
         const promptHeader = document.querySelector('.modal-prompt h4');
         const toggleBtn = document.querySelector('#btn-toggle-prompt-format');
+        const alternateTarget = this._getAlternatePromptTarget(promptView.sourceFormat);
 
         if (promptText) {
-            promptText.textContent = promptView.promptText || 'No prompt data';
+            promptText.textContent = promptView.promptText || this._t('modal.noPrompt', null, 'No prompt');
         }
         if (negText) {
             negText.textContent = promptView.negativeText || '-';
@@ -772,18 +1807,29 @@ const Gallery = {
             negSection.style.display = promptView.negativeText ? '' : 'none';
         }
         if (promptHeader) {
-            promptHeader.textContent = `Prompt (${promptView.formatLabel})`;
+            const fallbackLabel = promptView.targetFormat === 'original'
+                ? 'Prompt (Original format)'
+                : `Prompt (${promptView.formatLabel} format)`;
+            promptHeader.textContent = this._t(promptView.headerKey || 'modal.prompt', null, fallbackLabel);
         }
         if (toggleBtn) {
             const hasPrompt = !!(promptView.promptText || promptView.negativeText || (promptView.characterPrompts && promptView.characterPrompts.length));
-            toggleBtn.disabled = !hasPrompt;
+            toggleBtn.disabled = !hasPrompt || (promptView.targetFormat === 'original' && !alternateTarget);
             if (!hasPrompt) {
-                toggleBtn.textContent = 'No prompt';
+                toggleBtn.textContent = this._t('modal.noPrompt', null, 'No prompt');
             } else if (promptView.targetFormat === 'original') {
-                toggleBtn.textContent = `View as ${promptView.sourceFormat === 'nai' ? 'SD' : 'NAI'}`;
+                if (alternateTarget === 'sd') {
+                    toggleBtn.textContent = this._t('modal.viewAsSD', null, 'View as SD format');
+                } else if (alternateTarget === 'nai') {
+                    toggleBtn.textContent = this._t('modal.viewAsNAI', null, 'View as NAI format');
+                } else {
+                    toggleBtn.textContent = this._t('modal.promptOriginal', null, 'Original format');
+                }
             } else {
-                toggleBtn.textContent = 'View Original';
+                toggleBtn.textContent = this._t('modal.viewOriginal', null, 'View original format');
             }
+            toggleBtn.title = toggleBtn.textContent;
+            toggleBtn.setAttribute('aria-label', toggleBtn.textContent);
         }
         this._modalPromptView = promptView;
     },
@@ -792,10 +1838,12 @@ const Gallery = {
         const view = this._getModalPromptView();
         if (!view || !this._lastModalImage || !this._lastParsedData) return;
 
+        const alternateTarget = this._getAlternatePromptTarget(view.sourceFormat);
         const nextFormat = view.targetFormat === 'original'
-            ? (view.sourceFormat === 'nai' ? 'sd' : 'nai')
+            ? alternateTarget
             : 'original';
 
+        if (!nextFormat) return;
         this._applyModalPromptView(this._buildPromptView(this._lastModalImage, this._lastParsedData, nextFormat));
     },
 
@@ -884,15 +1932,17 @@ const Gallery = {
         const charsSection = $('#modal-characters-section');
         const charsList = $('#modal-characters-list');
         if (parsedData.character_prompts && parsedData.character_prompts.length > 0) {
+            const characterLabel = window.escapeHtml(this._t('modal.character', null, 'Character'));
+            const negLabel = window.escapeHtml(this._t('modal.negativeShort', null, 'Neg'));
             charsSection.style.display = '';
             charsList.innerHTML = parsedData.character_prompts.map((c, i) => {
                 const centerStr = c.center ? ` (${c.center.x?.toFixed?.(2) || c.center.x}, ${c.center.y?.toFixed?.(2) || c.center.y})` : '';
                 const negHtml = c.negative_prompt
-                    ? `<div class="char-negative"><strong>Neg:</strong> ${window.escapeHtml(c.negative_prompt)}</div>`
+                    ? `<div class="char-negative"><strong>${negLabel}:</strong> ${window.escapeHtml(c.negative_prompt)}</div>`
                     : '';
                 return `
                     <div class="character-card">
-                        <div class="character-card-header">Character ${c.index != null ? c.index + 1 : i + 1}${centerStr}</div>
+                        <div class="character-card-header">${characterLabel} ${c.index != null ? c.index + 1 : i + 1}${centerStr}</div>
                         <div>${window.escapeHtml(c.prompt)}</div>
                         ${negHtml}
                     </div>
@@ -906,42 +1956,15 @@ const Gallery = {
         // --- Generation Parameters ---
         const paramsSection = $('#modal-params-section');
         const paramsGrid = $('#modal-params-grid');
-        if (parsedData.generation_params && Object.keys(parsedData.generation_params).length > 0) {
+        const paramEntries = this._buildGenerationParamEntries(image, parsedData);
+        if (paramEntries.length > 0) {
             paramsSection.style.display = '';
-            const paramLabels = {
-                steps: 'Steps',
-                sampler: 'Sampler',
-                seed: 'Seed',
-                cfg_scale: 'CFG Scale',
-                cfg: 'CFG',
-                scale: 'Scale',
-                scheduler: 'Scheduler',
-                denoise: 'Denoise',
-                denoising_strength: 'Denoise',
-                strength: 'Strength',
-                noise: 'Noise',
-                sm: 'SMEA',
-                sm_dyn: 'SMEA Dyn',
-                cfg_rescale: 'CFG Rescale',
-                clip_skip: 'Clip Skip',
-                hires_upscaler: 'Hires Upscaler',
-                hires_upscale: 'Hires Scale',
-                hires_steps: 'Hires Steps',
-                model: 'Model',
-                model_hash: 'Model Hash',
-                sampler_name: 'Sampler',
-                noise_schedule: 'Noise Schedule',
-                uncond_scale: 'Uncond Scale',
-                skip_cfg_above_sigma: 'Skip CFG σ',
-                schedule_type: 'Schedule Type',
-            };
-            paramsGrid.innerHTML = Object.entries(parsedData.generation_params).map(([key, val]) => {
-                const label = paramLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                const displayVal = typeof val === 'number'
-                    ? (Number.isInteger(val) ? val : val.toFixed(4).replace(/0+$/, '').replace(/\.$/, ''))
-                    : window.escapeHtml(String(val));
-                return `<div class="param-item"><span class="param-label">${window.escapeHtml(label)}</span><span class="param-value">${displayVal}</span></div>`;
-            }).join('');
+            paramsGrid.innerHTML = paramEntries.map(({ label, value }) => `
+                <div class="param-item">
+                    <span class="param-label">${window.escapeHtml(label)}</span>
+                    <span class="param-value">${window.escapeHtml(value)}</span>
+                </div>
+            `).join('');
             paramsGrid.style.display = '';
         } else {
             paramsSection.style.display = 'none';
@@ -1030,7 +2053,7 @@ const Gallery = {
         if (!tagsList) return;
 
         if (tags.length === 0) {
-            tagsList.textContent = 'No tags (run WD14 tagger)';
+            tagsList.textContent = this._t('modal.noTags', null, 'No tags. Run WD14 tagger first.');
             tagsList.style.color = 'var(--text-muted)';
             return;
         }
@@ -1059,15 +2082,21 @@ const Gallery = {
         const toggleBtn = document.querySelector('#btn-toggle-all-tags');
         if (toggleBtn) {
             toggleBtn.style.display = otherTags.length > 40 ? '' : 'none';
-            toggleBtn.textContent = this.showAllTags ? 'Show Less' : 'Show More';
+            toggleBtn.textContent = this.showAllTags
+                ? this._t('modal.showLess', null, 'Show Less')
+                : this._t('modal.showMore', null, 'Show More');
         }
     },
 
-    _serializeGenerationParams(parsedData) {
-        const params = parsedData?.generation_params || {};
-        return Object.entries(params)
-            .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`)
-            .join('\n');
+    _serializeGenerationParams(image, parsedData) {
+        const rawParamText = this._extractRawParameterText(image);
+        if (rawParamText) {
+            return rawParamText;
+        }
+
+        return this._buildGenerationParamEntries(image, parsedData)
+            .map(({ label, value }) => `${label}: ${value}`)
+            .join(', ');
     },
 
     _buildCopyAllText(image, parsedData, tags, promptView = null) {
@@ -1080,6 +2109,17 @@ const Gallery = {
             }
         })();
         const currentPromptView = promptView || this._getModalPromptView() || this._buildConvertedPromptView(image, parsedData, 'original');
+        const promptText = String(currentPromptView?.promptText ?? image?.prompt ?? '').trim();
+        const negativeText = String(currentPromptView?.negativeText ?? image?.negative_prompt ?? '').trim();
+        const paramsText = this._serializeGenerationParams(image, parsedData);
+
+        const civitaiParts = [];
+        if (promptText) civitaiParts.push(promptText);
+        if (negativeText) civitaiParts.push(`Negative prompt: ${negativeText}`);
+        if (paramsText) civitaiParts.push(paramsText);
+        if (civitaiParts.length > 0) {
+            return civitaiParts.join('\n');
+        }
 
         const sections = [
             ['Filename', image?.filename],
@@ -1090,7 +2130,7 @@ const Gallery = {
             ['Checkpoint', image?.checkpoint],
             ['LoRAs', loras.length ? loras.join(', ') : null],
             ['Tags', tags?.length ? tags.map(tag => tag.tag).join(', ') : null],
-            ['Params', this._serializeGenerationParams(parsedData)],
+            ['Params', paramsText],
         ];
 
         return sections
@@ -1129,14 +2169,14 @@ ${String(value)}`)
         $('#modal-filename').textContent = summaryImage?.filename || `Image #${imageId}`;
         $('#modal-generator').textContent = (summaryImage?.generator || '-').toUpperCase();
         $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
-        $('#modal-prompt-text').textContent = summaryImage?.prompt || 'Loading prompt…';
-        $('#modal-negative-text').textContent = 'Loading…';
-        $('#modal-loading-state').textContent = 'Loading details…';
+        $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
+        $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');
+        $('#modal-loading-state').textContent = this._t('modal.loadingDetails', null, 'Loading details…');
         $('#modal-loading-state').style.display = '';
-        document.querySelector('#modal-tags-list').textContent = 'Loading tags…';
+        document.querySelector('#modal-tags-list').textContent = this._t('modal.loadingTags', null, 'Loading tags…');
         document.querySelector('#modal-tags-list').style.color = 'var(--text-muted)';
         $('#btn-toggle-prompt-format').disabled = true;
-        $('#btn-toggle-prompt-format').textContent = 'View as SD';
+        $('#btn-toggle-prompt-format').textContent = this._t('modal.viewAsSD', null, 'View as SD');
         ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-img2img-section', '#modal-nodes-section'].forEach(selector => {
             const element = document.querySelector(selector);
             if (element) {
@@ -1153,14 +2193,14 @@ ${String(value)}`)
         document.querySelector('#modal-nodes-list').innerHTML = '';
         $('#btn-reparse-metadata').onclick = async () => {
             try {
-                $('#modal-loading-state').textContent = 'Reparsing metadata…';
+                $('#modal-loading-state').textContent = this._t('modal.reparsing', null, 'Reparsing metadata…');
                 $('#modal-loading-state').style.display = '';
                 const reparsed = await API.reparseImage(imageId);
                 if (requestId !== this.currentPreviewRequestId) return;
                 this._hydratePreview(reparsed.image, reparsed.tags);
-                showToast?.('Metadata reparsed', 'success');
+                showToast?.(this._t('modal.metadataReparsed', null, 'Metadata reparsed'), 'success');
             } catch (error) {
-                showToast?.(formatUserError(error, "Failed to reparse metadata"), "error");
+                showToast?.(formatUserError(error, this._t('modal.failedReparse', null, 'Failed to reparse metadata')), "error");
             }
         };
         $('#modal-prev-image').onclick = () => this.openAdjacentPreview(-1);
@@ -1196,16 +2236,19 @@ ${String(value)}`)
                 await navigator.clipboard.writeText(text || '');
                 showToast?.(successMessage, 'success');
             } catch (error) {
-                showToast?.('Failed to copy text', 'error');
+                showToast?.(this._t('modal.copyFailed', null, 'Failed to copy text'), 'error');
             }
         };
         const getPromptView = () => this._getModalPromptView() || this._buildPromptView(this._lastModalImage, this._lastParsedData, 'original');
         $('#btn-toggle-prompt-format').onclick = () => this._togglePromptFormat();
-        $('#btn-copy-prompt').onclick = () => copyToClipboard((getPromptView().promptText || ''), 'Prompt copied');
-        $('#btn-copy-negative').onclick = () => copyToClipboard((getPromptView().negativeText || ''), 'Negative prompt copied');
-        $('#btn-copy-tags').onclick = () => copyToClipboard((this._lastModalTags || []).map(tag => tag.tag).join(', '), 'Tags copied');
-        $('#btn-copy-params').onclick = () => copyToClipboard(this._serializeGenerationParams(this._lastParsedData), 'Params copied');
-        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), 'All metadata copied');
+        $('#btn-copy-prompt').onclick = () => copyToClipboard((getPromptView().promptText || ''), this._t('modal.promptCopied', null, 'Prompt copied'));
+        $('#btn-copy-negative').onclick = () => copyToClipboard((getPromptView().negativeText || ''), this._t('modal.negativeCopied', null, 'Negative prompt copied'));
+        $('#btn-copy-tags').onclick = () => copyToClipboard((this._lastModalTags || []).map(tag => tag.tag).join(', '), this._t('modal.tagsCopied', null, 'Tags copied'));
+        $('#btn-copy-params').onclick = () => copyToClipboard(
+            this._serializeGenerationParams(this._lastModalImage, this._lastParsedData),
+            this._t('modal.paramsCopied', null, 'Params copied')
+        );
+        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), this._t('modal.allCopied', null, 'All metadata copied'));
 
         showModal?.('image-modal');
 
@@ -1219,8 +2262,8 @@ ${String(value)}`)
             if (requestId !== this.currentPreviewRequestId) {
                 return;
             }
-            $('#modal-loading-state').textContent = 'Failed to load details';
-            showToast?.('Failed to load image details', 'error');
+            $('#modal-loading-state').textContent = this._t('modal.failedLoadDetails', null, 'Failed to load details');
+            showToast?.(this._t('modal.failedLoadDetails', null, 'Failed to load details'), 'error');
         }
     },
 
@@ -1235,7 +2278,7 @@ ${String(value)}`)
         $('#modal-filename').textContent = image.filename;
         $('#modal-generator').textContent = image.generator.toUpperCase();
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
-        $('#modal-prompt-text').textContent = image.prompt || 'No prompt data';
+        $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');
         const parsedData = this._extractParsedData(image);
         this._lastModalImage = image;
         this._lastModalTags = tags;
@@ -1245,7 +2288,7 @@ ${String(value)}`)
         this._renderModalTags(tags);
         this._applyModalPromptView(this._buildPromptView(image, parsedData, 'original'));
         $('#modal-loading-state').style.display = 'none';
-        $('#btn-toggle-all-tags').textContent = 'Show More';
+        $('#btn-toggle-all-tags').textContent = this._t('modal.showMore', null, 'Show More');
     },
 
     openAdjacentPreview(direction) {
@@ -1257,6 +2300,7 @@ ${String(value)}`)
 
     // Cleanup when switching views
     destroy() {
+        this._cancelPendingWork();
         if (this.lazyObserver) {
             this.lazyObserver.disconnect();
             this.lazyObserver = null;

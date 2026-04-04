@@ -8,7 +8,7 @@ import threading
 import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import get_artist_identifier, ArtistIdentifier
 
@@ -19,13 +19,38 @@ router = APIRouter(prefix="/api/artists", tags=["artists"])
 
 # ============== Request/Response Models ==============
 
-class IdentifyRequest(BaseModel):
+class ArtistModelConfig(BaseModel):
+    model_source: str = Field("huggingface", pattern="^(huggingface|modelscope|local)$")
+    model_path: Optional[str] = None
+
+    @field_validator("model_path", mode="before")
+    @classmethod
+    def normalize_model_path(cls, value):
+        if value is None:
+            return None
+        value = str(value).strip()
+        return value or None
+
+    @model_validator(mode="after")
+    def validate_local_model_path(self):
+        if self.model_source == "local":
+            if not self.model_path:
+                raise ValueError("Local model path is required when model_source is 'local'")
+
+            normalized_path = os.path.abspath(os.path.expanduser(self.model_path))
+            if not os.path.isfile(normalized_path):
+                raise ValueError("Local model file not found")
+            self.model_path = normalized_path
+        return self
+
+
+class IdentifyRequest(ArtistModelConfig):
     image_id: int = Field(..., ge=1)
     threshold: float = Field(0.35, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
 
 
-class IdentifyBatchRequest(BaseModel):
+class IdentifyBatchRequest(ArtistModelConfig):
     image_ids: List[int] = Field(..., min_length=1)
     threshold: float = Field(0.35, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
@@ -156,24 +181,29 @@ async def identify_artist(request: IdentifyRequest):
         raise HTTPException(status_code=404, detail="Image file not found")
 
     # Identify artist
-    identifier = get_artist_identifier(threshold=request.threshold)
+    identifier = get_artist_identifier(
+        model_path=request.model_path,
+        model_source=request.model_source,
+        threshold=request.threshold,
+    )
     result = identifier.identify(image_path, top_k=request.top_k)
+    if result.get("error"):
+        raise HTTPException(status_code=503, detail=result["error"])
 
     # Store result in database
-    if result["artist"] != "undefined":
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """INSERT OR REPLACE INTO artist_predictions
-                   (image_id, artist, confidence, top_predictions)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    request.image_id,
-                    result["artist"],
-                    result["confidence"],
-                    str(result["top_predictions"]),
-                ),
-            )
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT OR REPLACE INTO artist_predictions
+               (image_id, artist, confidence, top_predictions)
+               VALUES (?, ?, ?, ?)""",
+            (
+                request.image_id,
+                result["artist"],
+                result["confidence"],
+                str(result["top_predictions"]),
+            ),
+        )
 
     return IdentifyResponse(
         image_id=request.image_id,
@@ -255,6 +285,8 @@ async def identify_batch(
         request.image_ids,
         request.threshold,
         request.top_k,
+        request.model_source,
+        request.model_path,
     )
 
     return {
@@ -267,12 +299,18 @@ def _run_batch_identification(
     image_ids: List[int],
     threshold: float,
     top_k: int,
+    model_source: str = "huggingface",
+    model_path: Optional[str] = None,
 ):
     """Background task for batch identification with optimized batch operations."""
     import database as db
     global _batch_progress
 
-    identifier = get_artist_identifier(threshold=threshold)
+    identifier = get_artist_identifier(
+        model_path=model_path,
+        model_source=model_source,
+        threshold=threshold,
+    )
 
     # Batch fetch all image paths in a single query (N+1 fix)
     with db.get_db() as conn:
@@ -291,19 +329,17 @@ def _run_batch_identification(
         try:
             # Check if image exists in our map
             if image_id not in image_map:
-                with _batch_lock:
-                    _batch_progress["errors"] += 1
-                continue
+                raise FileNotFoundError(f"Image {image_id} not found in database")
 
             image_path = image_map[image_id]
 
             if not os.path.exists(image_path):
-                with _batch_lock:
-                    _batch_progress["errors"] += 1
-                continue
+                raise FileNotFoundError(f"Image file not found for image {image_id}")
 
             # Identify artist
             result = identifier.identify(image_path, top_k=top_k)
+            if result.get("error"):
+                raise RuntimeError(result["error"])
 
             # Collect for batch insert
             predictions_to_insert.append({
@@ -319,12 +355,14 @@ def _run_batch_identification(
                     "artist": result["artist"],
                     "confidence": result["confidence"],
                 })
-                _batch_progress["processed"] += 1
 
         except Exception as e:
             logger.error(f"Error processing image {image_id}: {e}")
             with _batch_lock:
                 _batch_progress["errors"] += 1
+        finally:
+            with _batch_lock:
+                _batch_progress["processed"] += 1
 
     # Batch insert all predictions (N+1 fix)
     if predictions_to_insert:

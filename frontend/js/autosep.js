@@ -36,7 +36,7 @@ function initAutoSeparate() {
     // Execute button
     const executeBtn = $('#btn-execute-autosep');
     if (executeBtn) {
-        executeBtn.addEventListener('click', executeAutoSeparate);
+        executeBtn.addEventListener('click', executeAutoSeparateWithProgress);
     }
 
     // Browse button for destination folder
@@ -56,6 +56,8 @@ function initAutoSeparate() {
             }
         });
     }
+
+    resumeAutosepMoveProgress();
 }
 
 // ============== Update Summary Display ==============
@@ -195,7 +197,7 @@ async function updateAutoSepPreview() {
     }
 
     try {
-        const result = await API.getImages({
+        const firstPage = await API.getImages({
             generators: f.generators?.length > 0 ? f.generators : null,
             tags: f.tags?.length > 0 ? f.tags : null,
             ratings: f.ratings?.length < 4 ? f.ratings : null,
@@ -207,14 +209,14 @@ async function updateAutoSepPreview() {
             minHeight: f.minHeight,
             maxHeight: f.maxHeight,
             aspectRatio: f.aspectRatio,
-            limit: 10000
+            limit: 1000
         });
 
-        AutoSepState.matchCount = result.count;
-        AutoSepState.previewImages = result.images || [];
+        AutoSepState.matchCount = firstPage.total || 0;
+        AutoSepState.previewImages = firstPage.images || [];
         AutoSepState.previewSignature = currentSignature;
-        $('#autosep-preview .stat-number').textContent = result.count;
-        renderAutoSepPreviewList(AutoSepState.previewImages, result.count);
+        $('#autosep-preview .stat-number').textContent = AutoSepState.matchCount;
+        renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount);
 
     } catch (error) {
         Logger.error('Failed to preview:', error);
@@ -341,7 +343,7 @@ function showAutosepMoveProgress(total) {
             </div>
             <div class="progress-text" id="autosep-move-text">Moving images...</div>
             <div class="operation-controls">
-                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">Cancel</button>
+                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">Hide</button>
             </div>
         `;
         container.appendChild(progressEl);
@@ -349,16 +351,13 @@ function showAutosepMoveProgress(total) {
     
     progressEl.classList.add('visible');
     document.getElementById('autosep-move-fill').style.width = '0%';
-    document.getElementById('autosep-move-text').textContent = `Preparing to move ${total} images...`;
+    document.getElementById('autosep-move-text').textContent = `Preparing to move ${total} images in the background...`;
     
-    // Setup cancel button
+    // The backend move runs in the background; the UI can only dismiss progress.
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
     if (cancelBtn) {
         cancelBtn.onclick = () => {
-            if (autosepMoveController) {
-                autosepMoveController.abort();
-                showToast('Move operation cancelled', 'info');
-            }
+            hideAutosepMoveProgress();
         };
     }
 }
@@ -371,14 +370,102 @@ function hideAutosepMoveProgress() {
     autosepMoveController = null;
 }
 
-function updateAutosepMoveProgress(current, total) {
+function updateAutosepMoveProgress(progress = {}, fallbackTotal = 0) {
     const fillEl = document.getElementById('autosep-move-fill');
     const textEl = document.getElementById('autosep-move-text');
     
     if (fillEl && textEl) {
+        const current = Number(progress.current || 0);
+        const total = Number(progress.total || fallbackTotal || 0);
+        const moved = Number(progress.moved || 0);
+        const errors = Number(progress.errors || 0);
         const percent = total > 0 ? Math.round((current / total) * 100) : 0;
         fillEl.style.width = percent + '%';
-        textEl.textContent = `Moving image ${current} of ${total}...`;
+        const details = [`${moved} moved`];
+        if (errors > 0) {
+            details.push(`${errors} error(s)`);
+        }
+        textEl.textContent = `Processed ${current} of ${total} images (${details.join(', ')})`;
+    }
+}
+
+async function pollAutosepMoveProgress(expectedTotal, destination = '') {
+    if (autosepMoveController?.active) return;
+
+    const controller = { active: true, destination };
+    autosepMoveController = controller;
+    const destinationLabel = destination ? ` to ${destination}` : '';
+
+    try {
+        while (autosepMoveController === controller && controller.active) {
+            const progress = await window.App.API.get('/api/batch-move/progress');
+            updateAutosepMoveProgress(progress, expectedTotal);
+
+            if (progress.status === 'idle') {
+                hideAutosepMoveProgress();
+                window.App.showToast('Batch move stopped before any progress was reported', 'error');
+                break;
+            }
+
+            if (progress.status === 'done') {
+                setTimeout(() => {
+                    hideAutosepMoveProgress();
+                    const movedCount = Number(progress.moved || 0);
+                    const errorCount = Number(progress.errors || 0);
+
+                    if (movedCount > 0 && errorCount > 0) {
+                        window.App.showToast(`Moved ${movedCount} images${destinationLabel}. ${errorCount} failed.`, 'warning');
+                    } else if (movedCount > 0) {
+                        window.App.showToast(`Moved ${movedCount} images${destinationLabel}`, 'success');
+                    } else if (errorCount > 0) {
+                        window.App.showToast(progress.message || `No images were moved. ${errorCount} failed.`, 'error');
+                    } else {
+                        window.App.showToast(progress.message || 'No images were moved', 'error');
+                    }
+
+                    if (movedCount > 0) {
+                        AutoSepState.matchCount = 0;
+                        AutoSepState.previewImages = [];
+                        AutoSepState.previewSignature = null;
+                        document.querySelector('#autosep-preview .stat-number').textContent = '0';
+                        renderAutoSepPreviewList([], 0);
+
+                        if (window.App && window.App.loadImages) {
+                            window.App.loadImages();
+                        }
+                    }
+                }, 300);
+                break;
+            }
+
+            if (progress.status === 'error') {
+                hideAutosepMoveProgress();
+                window.App.showToast(progress.message || 'Failed to move images', 'error');
+                break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+    } finally {
+        if (autosepMoveController === controller) {
+            controller.active = false;
+        }
+    }
+}
+
+async function resumeAutosepMoveProgress() {
+    try {
+        const progress = await window.App.API.get('/api/batch-move/progress');
+        if (progress?.status !== 'running') {
+            return;
+        }
+
+        const expectedTotal = Number(progress.total || 0);
+        showAutosepMoveProgress(expectedTotal);
+        updateAutosepMoveProgress(progress, expectedTotal);
+        pollAutosepMoveProgress(expectedTotal);
+    } catch (error) {
+        Logger.warn('Failed to resume auto-separate move progress:', error);
     }
 }
 
@@ -414,9 +501,6 @@ async function executeAutoSeparateWithProgress() {
         `Move ${total} matching images to:\n${destination}\n\nReview the preview list above before continuing.`,
         async () => {
             showAutosepMoveProgress(total);
-            
-            // Create abort controller for cancellation
-            autosepMoveController = new AbortController();
 
             try {
                 const dimensions = {
@@ -427,17 +511,7 @@ async function executeAutoSeparateWithProgress() {
                     aspectRatio: f.aspectRatio
                 };
 
-                // Simulate progress for now (backend doesn't support streaming progress)
-                // In a real implementation, this would use Server-Sent Events or polling
-                let progressInterval;
-                let simulatedProgress = 0;
-                
-                progressInterval = setInterval(() => {
-                    simulatedProgress = Math.min(simulatedProgress + Math.ceil(total * 0.1), total - 1);
-                    updateAutosepMoveProgress(simulatedProgress, total);
-                }, 200);
-
-                const result = await API.batchMove(
+                const startResult = await API.batchMove(
                     f.generators?.length > 0 ? f.generators : null,
                     f.tags?.length > 0 ? f.tags : null,
                     f.ratings?.length < 4 ? f.ratings : null,
@@ -448,37 +522,20 @@ async function executeAutoSeparateWithProgress() {
                     dimensions
                 );
 
-                clearInterval(progressInterval);
-
-                if (result.count === 0) {
-                    showToast('No images were moved. Check that the destination path exists and filters match images.', 'error');
-                    hideAutosepMoveProgress();
-                    return;
+                if (startResult?.error) {
+                    throw new Error(startResult.message || startResult.error);
+                }
+                if (startResult?.status !== 'started') {
+                    throw new Error(startResult?.message || 'Batch move did not start correctly');
                 }
 
-                // Show completion
-                updateAutosepMoveProgress(result.count, result.count);
-                
-                setTimeout(() => {
-                    hideAutosepMoveProgress();
-                    showToast(`Successfully moved ${result.count} images to ${destination}`, 'success');
-
-                    AutoSepState.matchCount = 0;
-                    AutoSepState.previewImages = [];
-                    AutoSepState.previewSignature = null;
-                    $('#autosep-preview .stat-number').textContent = '0';
-                    renderAutoSepPreviewList([], 0);
-
-                    if (window.App && window.App.loadImages) {
-                        window.App.loadImages();
-                    }
-                }, 500);
+                const expectedTotal = startResult.total || total;
+                updateAutosepMoveProgress({ current: 0, total: expectedTotal, moved: 0, errors: 0 }, expectedTotal);
+                await pollAutosepMoveProgress(expectedTotal, destination);
 
             } catch (error) {
                 hideAutosepMoveProgress();
-                if (error.name !== 'AbortError') {
-                    showToast(formatUserError(error, "Failed to move images"), "error");
-                }
+                showToast(formatUserError(error, "Failed to move images"), "error");
             }
         }
     );

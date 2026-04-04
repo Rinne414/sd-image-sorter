@@ -10,15 +10,162 @@ if (typeof escapeHtml === 'undefined') {
 
 const SimilarImages = {
     isEmbedding: false,
-    embedProgress: { current: 0, total: 0 },
+    isCheckingEmbeddingStatus: false,
+    embedProgress: { processed: 0, total: 0, errors: 0 },
     searchResults: [],
     duplicateResults: [],
     currentSearchId: null,
+    requestSequence: 0,
+    activeSearchToken: 0,
+    activeDuplicateToken: 0,
+    searchEmptyMessage: 'No similar images found. Try generating embeddings first.',
+    duplicateEmptyMessage: 'No duplicates found at this threshold.',
+    uploadDropzoneActive: false,
+
+    _t(key, fallback, params) {
+        return window.I18n?.t?.(key, params) || fallback || key;
+    },
 
     init() {
         this.bindEvents();
         this.loadStats();
+        this.resumeEmbeddingProgress();
+        this.updateActionAvailability();
         this.showFirstUseGuide();
+    },
+
+    setEmbeddingUiState(isRunning, label = null) {
+        const btnEmbed = document.getElementById('btn-similar-embed');
+        if (!btnEmbed) return;
+
+        btnEmbed.disabled = isRunning;
+        btnEmbed.textContent = label || (isRunning ? 'Embedding...' : 'Generate Embeddings');
+        this.updateActionAvailability();
+    },
+
+    resetEmbeddingUi({ hideProgress = true, progressMessage = '' } = {}) {
+        const progressBar = document.getElementById('similar-embed-progress');
+        const progressFill = document.getElementById('similar-embed-fill');
+        const progressText = document.getElementById('similar-embed-text');
+
+        this.setEmbeddingUiState(false);
+        if (progressFill) {
+            progressFill.style.width = '0%';
+        }
+        if (progressText) {
+            progressText.textContent = progressMessage;
+        }
+        if (progressBar && hideProgress) {
+            progressBar.style.display = 'none';
+        }
+        this.updateActionAvailability();
+    },
+
+    updateActionAvailability() {
+        const disableSearchActions = this.isEmbedding || this.isCheckingEmbeddingStatus;
+        const searchInput = document.getElementById('similar-search-id');
+        const btnSearch = document.getElementById('btn-similar-search');
+        const btnUpload = document.getElementById('btn-similar-upload');
+        const btnDuplicates = document.getElementById('btn-similar-duplicates');
+        const uploadInput = document.getElementById('similar-upload-input');
+        const uploadDropzone = document.getElementById('similar-upload-dropzone');
+
+        if (searchInput) searchInput.disabled = disableSearchActions;
+        if (btnSearch) btnSearch.disabled = disableSearchActions;
+        if (btnUpload) btnUpload.disabled = disableSearchActions;
+        if (btnDuplicates) btnDuplicates.disabled = disableSearchActions;
+        if (uploadInput) uploadInput.disabled = disableSearchActions;
+        if (uploadDropzone) {
+            uploadDropzone.classList.toggle('disabled', disableSearchActions);
+            uploadDropzone.setAttribute('aria-disabled', String(disableSearchActions));
+        }
+    },
+
+    beginSearchRequest() {
+        this.requestSequence += 1;
+        this.activeSearchToken = this.requestSequence;
+        return this.activeSearchToken;
+    },
+
+    beginDuplicateRequest() {
+        this.requestSequence += 1;
+        this.activeDuplicateToken = this.requestSequence;
+        return this.activeDuplicateToken;
+    },
+
+    renderSearchMessage(message) {
+        const container = document.getElementById('similar-results');
+        if (!container) return;
+        container.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+    },
+
+    renderDuplicateMessage(message) {
+        const container = document.getElementById('similar-duplicates');
+        if (!container) return;
+        container.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+    },
+
+    renderEmbeddingProgress(progress = {}) {
+        const progressBar = document.getElementById('similar-embed-progress');
+        const progressFill = document.getElementById('similar-embed-fill');
+        const progressText = document.getElementById('similar-embed-text');
+        const total = Number(progress.total || 0);
+        const processed = Number(progress.processed || progress.current || 0);
+        const errors = Number(progress.errors || 0);
+        const completed = total > 0 ? Math.min(total, processed + errors) : 0;
+        const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+        if (progressBar) {
+            progressBar.style.display = 'block';
+        }
+        if (progressFill) {
+            progressFill.style.width = `${percent}%`;
+        }
+        if (progressText) {
+            if (progress.message) {
+                progressText.textContent = progress.message;
+            } else if (total > 0) {
+                const detail = errors > 0
+                    ? `${processed} embedded, ${errors} error(s)`
+                    : `${processed} embedded`;
+                progressText.textContent = `${completed}/${total} images (${detail})`;
+            } else if (progress.running) {
+                progressText.textContent = 'Preparing embeddings...';
+            } else {
+                progressText.textContent = 'No pending images to embed.';
+            }
+        }
+    },
+
+    async resumeEmbeddingProgress({ optimistic = true } = {}) {
+        if (this.isEmbedding || this.isCheckingEmbeddingStatus) return;
+
+        this.isCheckingEmbeddingStatus = true;
+        if (optimistic) {
+            this.setEmbeddingUiState(true, 'Checking status...');
+        }
+
+        try {
+            const progress = await window.App.API.get('/api/similarity/progress');
+            this.embedProgress = progress;
+
+            if (!progress?.running) {
+                this.isEmbedding = false;
+                this.setEmbeddingUiState(false);
+                return;
+            }
+
+            this.isEmbedding = true;
+            this.setEmbeddingUiState(true);
+            this.renderEmbeddingProgress(progress);
+            this.pollEmbedProgress();
+        } catch (e) {
+            this.setEmbeddingUiState(false);
+            Logger.warn('Failed to resume similarity embedding progress:', e);
+        } finally {
+            this.isCheckingEmbeddingStatus = false;
+            this.updateActionAvailability();
+        }
     },
 
     showFirstUseGuide() {
@@ -94,60 +241,68 @@ const SimilarImages = {
         const { showToast } = window.App;
         this.isEmbedding = true;
 
-        const btnEmbed = document.getElementById('btn-similar-embed');
-        if (btnEmbed) {
-            btnEmbed.disabled = true;
-            btnEmbed.textContent = 'Embedding...';
-        }
+        this.setEmbeddingUiState(true);
+        this.renderEmbeddingProgress({ running: true, total: 0, processed: 0, errors: 0 });
 
         try {
-            await window.App.API.post('/api/similarity/embed');
-            showToast('Embedding started in background', 'info');
+            const result = await window.App.API.post('/api/similarity/embed');
+            this.embedProgress = result?.progress || this.embedProgress;
+            if (result?.progress) {
+                this.renderEmbeddingProgress(result.progress);
+            }
+
+            if (result?.status === 'already_running') {
+                showToast('Embedding is already running in the background', 'info');
+            } else {
+                showToast('Embedding started in background', 'info');
+            }
             this.pollEmbedProgress();
         } catch (e) {
             showToast(formatUserError(e, "Failed to start similarity processing"), "error");
             this.isEmbedding = false;
-            if (btnEmbed) {
-                btnEmbed.disabled = false;
-                btnEmbed.textContent = 'Generate Embeddings';
-            }
+            this.resetEmbeddingUi();
         }
     },
 
     async pollEmbedProgress() {
         const progressBar = document.getElementById('similar-embed-progress');
-        const progressFill = document.getElementById('similar-embed-fill');
-        const progressText = document.getElementById('similar-embed-text');
-
-        if (progressBar) progressBar.style.display = 'block';
 
         try {
             const result = await window.App.API.get('/api/similarity/progress');
             this.embedProgress = result;
+            this.renderEmbeddingProgress(result);
 
-            const percent = result.total > 0 ? (result.current / result.total) * 100 : 0;
-            if (progressFill) progressFill.style.width = percent + '%';
-            if (progressText) progressText.textContent = result.message || `${result.current}/${result.total}`;
-
-            if (result.status === 'running') {
+            if (result.running) {
                 setTimeout(() => this.pollEmbedProgress(), 1000);
             } else {
                 this.isEmbedding = false;
-                const btnEmbed = document.getElementById('btn-similar-embed');
-                if (btnEmbed) {
-                    btnEmbed.disabled = false;
-                    btnEmbed.textContent = 'Generate Embeddings';
-                }
+                this.setEmbeddingUiState(false);
+
+                const total = Number(result.total || 0);
+                const processed = Number(result.processed || result.current || 0);
+                const errors = Number(result.errors || 0);
+                const completed = total > 0 ? Math.min(total, processed + errors) : 0;
+                const finalMessage = total > 0
+                    ? `${completed}/${total} images (${processed} embedded${errors > 0 ? `, ${errors} error(s)` : ''})`
+                    : 'No pending images to embed.';
+
+                this.resetEmbeddingUi({ hideProgress: false, progressMessage: finalMessage });
                 if (progressBar) {
                     setTimeout(() => { progressBar.style.display = 'none'; }, 2000);
                 }
                 this.loadStats();
-                if (result.status === 'done') {
-                    window.App.showToast(result.message || 'Embedding complete', 'success');
+                if (total === 0) {
+                    window.App.showToast('No pending images to embed', 'info');
+                } else if (errors > 0) {
+                    window.App.showToast(`Embedding finished: ${processed} embedded, ${errors} failed`, 'warning');
+                } else {
+                    window.App.showToast(`Embedding complete: ${processed} images embedded`, 'success');
                 }
             }
         } catch (e) {
             this.isEmbedding = false;
+            this.resetEmbeddingUi();
+            window.App.showToast(formatUserError(e, 'Failed to refresh embedding progress'), 'error');
         }
     },
 
@@ -160,14 +315,34 @@ const SimilarImages = {
         const resultsContainer = document.getElementById('similar-results');
         if (!resultsContainer) return;
 
+        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+            const message = 'Embeddings are still running. Wait until indexing finishes before searching.';
+            this.renderSearchMessage(message);
+            showToast(message, 'info');
+            return;
+        }
+
+        const requestToken = this.beginSearchRequest();
+        this.searchEmptyMessage = 'No similar images found for this image at the current threshold.';
+
         resultsContainer.innerHTML = '<div class="spinner"></div>';
 
         try {
             const result = await API.get(`/api/similarity/search/${imageId}?limit=20`);
+            if (requestToken !== this.activeSearchToken) return;
             this.searchResults = result.results || [];
             this.renderSearchResults();
         } catch (e) {
-            resultsContainer.innerHTML = `<div class="empty-state">Search failed: ${escapeHtml(e.message)}</div>`;
+            if (requestToken !== this.activeSearchToken) return;
+            const message = String(e?.message || 'Similarity search failed');
+            if (message.includes('was not found') || message.includes('has no embedding yet')) {
+                this.searchResults = [];
+                this.searchEmptyMessage = message;
+                this.renderSearchResults();
+                showToast(message, 'warning');
+                return;
+            }
+            resultsContainer.innerHTML = `<div class="empty-state">Search failed: ${escapeHtml(message)}</div>`;
             showToast('Similarity search failed', 'error');
         }
     },
@@ -177,6 +352,16 @@ const SimilarImages = {
 
         const resultsContainer = document.getElementById('similar-results');
         if (!resultsContainer) return;
+
+        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+            const message = 'Embeddings are still running. Wait until indexing finishes before searching.';
+            this.renderSearchMessage(message);
+            showToast(message, 'info');
+            return;
+        }
+
+        const requestToken = this.beginSearchRequest();
+        this.searchEmptyMessage = 'No similar images found for the uploaded image at the current threshold.';
 
         resultsContainer.innerHTML = '<div class="spinner"></div>';
 
@@ -193,13 +378,54 @@ const SimilarImages = {
                 throw new Error(errorData.detail || `API Error: ${response.status}`);
             }
             const result = await response.json();
+            if (requestToken !== this.activeSearchToken) return;
 
             this.searchResults = result.results || [];
             this.renderSearchResults();
         } catch (e) {
-            resultsContainer.innerHTML = `<div class="empty-state">Upload search failed: ${escapeHtml(e.message)}</div>`;
+            if (requestToken !== this.activeSearchToken) return;
+            const message = String(e?.message || 'Upload search failed');
+            if (message.includes('Invalid image file')) {
+                this.searchResults = [];
+                this.searchEmptyMessage = message;
+                this.renderSearchResults();
+                showToast(message, 'warning');
+                return;
+            }
+            resultsContainer.innerHTML = `<div class="empty-state">Upload search failed: ${escapeHtml(message)}</div>`;
             showToast('Upload search failed', 'error');
         }
+    },
+
+    setUploadDropzoneActive(isActive) {
+        this.uploadDropzoneActive = Boolean(isActive);
+        const dropzone = document.getElementById('similar-upload-dropzone');
+        dropzone?.classList.toggle('is-active', this.uploadDropzoneActive);
+    },
+
+    handleUploadInputChange(event) {
+        const input = event.target;
+        const file = input?.files?.[0];
+        if (file) {
+            this.searchByUpload(file);
+        }
+        if (input) {
+            input.value = '';
+        }
+    },
+
+    handleUploadDrop(event) {
+        event.preventDefault();
+        this.setUploadDropzoneActive(false);
+
+        const files = Array.from(event.dataTransfer?.files || []);
+        const imageFile = files.find((file) => file.type.startsWith('image/'));
+        if (!imageFile) {
+            window.App.showToast('Drop an image file to search', 'warning');
+            return;
+        }
+
+        this.searchByUpload(imageFile);
     },
 
     // ============== Duplicate Finder ==============
@@ -211,13 +437,36 @@ const SimilarImages = {
         const resultsContainer = document.getElementById('similar-duplicates');
         if (!resultsContainer) return;
 
+        if (this.isEmbedding || this.isCheckingEmbeddingStatus) {
+            const message = 'Embeddings are still running. Wait until indexing finishes before checking duplicates.';
+            this.renderDuplicateMessage(message);
+            showToast(message, 'info');
+            return;
+        }
+
+        const requestToken = this.beginDuplicateRequest();
+        this.duplicateEmptyMessage = 'No duplicates found at this threshold.';
+
         resultsContainer.innerHTML = '<div class="spinner"></div>';
 
         try {
             const result = await API.get(`/api/similarity/duplicates?threshold=${threshold}&limit=50`);
+            if (requestToken !== this.activeDuplicateToken) return;
             this.duplicateResults = result.duplicates || [];
+            if (result.reason === 'insufficient_embeddings') {
+                this.duplicateEmptyMessage = this._t(
+                    'similar.needMoreEmbeddings',
+                    `Need at least ${result.minimum_required || 2} embedded images before duplicate search is meaningful.`,
+                    { count: result.minimum_required || 2 },
+                );
+            }
+            if (this.duplicateResults.length === 0) {
+                resultsContainer.innerHTML = `<div class="empty-state">${escapeHtml(this.duplicateEmptyMessage)}</div>`;
+                return;
+            }
             this.renderDuplicateResults();
         } catch (e) {
+            if (requestToken !== this.activeDuplicateToken) return;
             resultsContainer.innerHTML = `<div class="empty-state">Duplicate search failed: ${escapeHtml(e.message)}</div>`;
             showToast('Duplicate search failed', 'error');
         }
@@ -230,7 +479,7 @@ const SimilarImages = {
         if (!container) return;
 
         if (this.searchResults.length === 0) {
-            container.innerHTML = '<div class="empty-state">No similar images found. Try generating embeddings first.</div>';
+            container.innerHTML = `<div class="empty-state">${escapeHtml(this.searchEmptyMessage)}</div>`;
             return;
         }
 
@@ -262,7 +511,7 @@ const SimilarImages = {
         if (!container) return;
 
         if (this.duplicateResults.length === 0) {
-            container.innerHTML = '<div class="empty-state">No duplicates found at this threshold.</div>';
+            container.innerHTML = `<div class="empty-state">${escapeHtml(this.duplicateEmptyMessage)}</div>`;
             return;
         }
 
@@ -388,11 +637,53 @@ const SimilarImages = {
         // Upload search
         const uploadInput = document.getElementById('similar-upload-input');
         const btnUpload = document.getElementById('btn-similar-upload');
-        btnUpload?.addEventListener('click', () => uploadInput?.click());
-        uploadInput?.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) this.searchByUpload(file);
+        const uploadDropzone = document.getElementById('similar-upload-dropzone');
+
+        btnUpload?.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (uploadInput) {
+                uploadInput.value = '';
+                uploadInput.click();
+            }
         });
+
+        uploadDropzone?.addEventListener('click', () => {
+            if (uploadInput) {
+                uploadInput.value = '';
+                uploadInput.click();
+            }
+        });
+
+        uploadDropzone?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                if (uploadInput) {
+                    uploadInput.value = '';
+                    uploadInput.click();
+                }
+            }
+        });
+
+        ['dragenter', 'dragover'].forEach((eventName) => {
+            uploadDropzone?.addEventListener(eventName, (event) => {
+                event.preventDefault();
+                if (event.dataTransfer) {
+                    event.dataTransfer.dropEffect = 'copy';
+                }
+                this.setUploadDropzoneActive(true);
+            });
+        });
+
+        uploadDropzone?.addEventListener('dragleave', (event) => {
+            if (event.currentTarget?.contains(event.relatedTarget)) {
+                return;
+            }
+            this.setUploadDropzoneActive(false);
+        });
+        uploadDropzone?.addEventListener('dragend', () => this.setUploadDropzoneActive(false));
+        uploadDropzone?.addEventListener('drop', (event) => this.handleUploadDrop(event));
+        uploadInput?.addEventListener('change', (event) => this.handleUploadInputChange(event));
 
         // Duplicate finder
         const btnDuplicates = document.getElementById('btn-similar-duplicates');
@@ -424,7 +715,10 @@ const SimilarImages = {
 let similarInitialized = false;
 
 function initSimilar() {
-    if (similarInitialized) return;
+    if (similarInitialized) {
+        SimilarImages.resumeEmbeddingProgress();
+        return;
+    }
     similarInitialized = true;
     SimilarImages.init();
 }

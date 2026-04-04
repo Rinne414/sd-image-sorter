@@ -89,7 +89,7 @@ DEFAULT_CACHE_DIR: str = os.environ.get(
 # Default tagger model
 DEFAULT_TAGGER_MODEL: str = os.environ.get(
     "SD_IMAGE_SORTER_DEFAULT_TAGGER_MODEL",
-    "wd-eva02-large-tagger-v3"
+    "wd-swinv2-tagger-v3"
 )
 
 # Default thresholds
