@@ -66,18 +66,21 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Multiple Styles**: Mosaic, blur, black bar, or white bar
 - **Precision Tools**: Manual brush, eraser, and clone stamp for detail work
 - **Batch Processing**: Queue-based workflow with batch save and rename
+- **Safer Failure Handling**: Unreadable files no longer poison the gallery or break the censor queue
 
 ### 🔍 Similar Images (NEW)
 - **Visual Search**: Find similar images by visual content using CLIP embeddings
 - **Duplicate Detection**: Identify near-duplicate images in your library
 - **Upload Search**: Upload any image to find similar ones in your collection
 - **Adjustable Threshold**: Fine-tune similarity sensitivity
+- **Clearer Runtime Feedback**: Missing model/dependency issues now surface as actionable errors instead of silent empty results
 
 ### 🧪 Prompt Lab (NEW)
 - **Smart Generation**: Generate random prompts with intelligent tag selection
 - **Exclusion Rules**: Automatic prevention of conflicting tags (e.g., "from_behind" excludes "looking_at_viewer")
 - **Tag Sets**: Pre-built outfit combinations (School Uniform, Swimsuit, etc.)
 - **Category Browser**: Explore your library's tags by category
+- **Built-in Fallback Pools**: Still usable even when your own tag library is sparse
 - **Negative Prompt**: Auto-generate quality-focused negative prompts
 
 ### 🎨 Artist Identification (NEW)
@@ -111,7 +114,7 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 3. **Access UI**: Open `http://localhost:8000` in your browser.
 
-*The first run will automatically set up a virtual environment and install dependencies.*
+*The first run will automatically set up a virtual environment and install dependencies. Later launches also re-check `backend/requirements.txt` and refresh new or missing dependencies automatically.*
 
 > [!TIP]
 > **No Python installed?** Use the [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) branch — it auto-downloads Python for you!
@@ -137,18 +140,18 @@ This section provides a step-by-step walkthrough of every feature in the SD Imag
 1. Click the **📂 Scan Folder** button in the top navigation bar
 2. In the modal that appears:
    - Enter the **absolute path** to your image folder (e.g., `D:\AI_Images`)
-   - The folder should contain PNG images with embedded metadata
+   - Supported formats include **PNG / JPG / JPEG / WebP / GIF / BMP**
 3. Click **Start Scan**
 4. Watch the progress bar as images are indexed
 5. Once complete, images appear in the gallery grid
 
-> **💡 Tip**: Images from different generators (ComfyUI, NovelAI, WebUI/Forge) are automatically detected based on their metadata format.
+> **💡 Tip**: Images from different generators (ComfyUI, NovelAI, WebUI/Forge) are automatically detected based on their metadata format. Unreadable files are skipped and counted as scan errors instead of polluting the library.
 
 ### 🔹 Step 3: AI Tagging with WD14 Tagger
 
 1. Click the **🏷️ Tag Images** button
 2. In the tagging modal:
-   - **Select a model** (recommended: `wd-eva02-large-tagger-v3`)
+   - **Select a model** (recommended: `wd-swinv2-tagger-v3`)
    - Adjust **General Threshold** (default: 0.35) - higher = fewer tags
    - Adjust **Character Threshold** (default: 0.85) - for character recognition
 3. Click **Start Tagging**
@@ -465,13 +468,24 @@ When querying `/api/images`:
 
 **Q: Images don't show after scanning**
 - Ensure the path is absolute (e.g., `D:\Images` not `Images`)
-- Check that images are PNG format with embedded metadata
+- Supported image formats are PNG / JPG / JPEG / WebP / GIF / BMP
+- Unreadable files are skipped during scan and reported as scan errors
 - Look for errors in the terminal console
 
 **Q: Tagging is slow**
 - First run downloads the model (~500MB)
 - GPU acceleration requires CUDA-compatible GPU
 - Reduce batch size in settings for less memory usage
+
+**Q: Similar search returns empty or says the image has no embedding**
+- Run **Generate Embeddings** in the Similar tab first
+- The first embedding run may need to download model assets
+- Missing dependency/model issues are now reported directly in the progress/error message
+
+**Q: Artist Identification keeps returning `undefined`**
+- This feature is still experimental and respects a confidence threshold
+- First use may need to download the classification model
+- If the model cannot load, the app now reports the error explicitly instead of pretending the run succeeded
 
 **Q: Filters show wrong counts**
 - Click "Clear All Filters" and re-apply
@@ -516,7 +530,8 @@ sd-image-sorter/
 │   ├── css/
 │   │   ├── styles.css        # Glassmorphism styling
 │   │   ├── censor-v2.css     # Censor editor styles
-│   │   └── new-views.css     # Similar/Prompt Lab styles
+│   │   ├── new-views.css     # Similar/Prompt Lab styles
+│   │   └── ui-refresh.css    # UI refresh and polish
 │   └── js/
 │       ├── app.js            # Main application logic
 │       ├── gallery.js        # Gallery interactions
@@ -527,6 +542,10 @@ sd-image-sorter/
 │       ├── similar.js        # Similar images tab
 │       ├── prompt-lab.js     # Prompt lab tab
 │       ├── artist-ident.js   # Artist identification tab
+│       ├── i18n.js           # Language bootstrap
+│       ├── guide.js          # In-app guide overlays
+│       ├── guide-translations.js # Guide localization
+│       ├── lang/             # English / Chinese UI strings
 │       └── audio.js          # Sound effects
 ├── models/                   # Downloaded AI models
 ├── run.bat                   # Windows launcher
@@ -612,18 +631,21 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **多样化处理**: 提供马赛克、模糊、纯色遮盖等多种打码方式
 - **精细修补**: 内置画笔、橡皮擦及仿制图章，满足手动精度需求
 - **批量导出**: 队列化工作流，支持批量重命名与保存
+- **更稳健**: 坏图不会再污染图库或把打码队列直接拖崩
 
 ### 🔍 相似图片 (NEW)
 - **视觉搜索**: 使用 CLIP 嵌入向量查找视觉相似的图片
 - **重复检测**: 识别图库中的近似重复图片
 - **上传搜索**: 上传任意图片查找相似图片
 - **可调阈值**: 微调相似度敏感度
+- **错误提示更明确**: 缺模型或缺依赖时会直接给出可操作提示，不再默默返回空结果
 
 ### 🧪 提示词工坊 (NEW)
 - **智能生成**: 生成随机提示词，自动遵守排除规则
 - **排除规则**: 自动防止冲突标签（如 "from_behind" 排除 "looking_at_viewer"）
 - **标签套装**: 预设服装组合（校服、泳装等）
 - **分类浏览**: 按类别浏览图库标签
+- **内置兜底分类池**: 即使自己的标签库很少，也能直接开始生成
 - **负向提示词**: 自动生成质量优化的负向提示词
 
 ### 🎨 画师识别 (NEW)
@@ -657,7 +679,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 3. **访问界面**: 使用浏览器打开 `http://localhost:8000`
 
-*首次启动将自动创建虚拟环境并补全依赖包。*
+*首次启动会自动创建虚拟环境并安装依赖；之后启动时也会自动检查 `backend/requirements.txt`，如果依赖有变化会自动补装。*
 
 > [!TIP]
 > **没有安装 Python?** 使用 [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) 分支 — 自动下载 Python!
@@ -669,11 +691,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### 🔹 第1步：扫描图片入库
 1. 点击顶部导航栏的 **📂 Scan Folder**
 2. 输入图片所在文件夹的绝对路径（例如 `D:\AI_Images`）
-3. 点击 **Start Scan**，程序将扫描并建立本地索引数据库
+3. 支持格式：**PNG / JPG / JPEG / WebP / GIF / BMP**
+4. 点击 **Start Scan**，程序将扫描并建立本地索引数据库
+
+> **提示**：无法读取的坏图会被跳过，并计入扫描错误数，不会再把后续图库、相似图或打码流程拖坏。
 
 ### 🔹 第2步：AI 自动打标
 1. 点击 **🏷️ Tag Images**
-2. 选择推荐模型 `wd-eva02-large-tagger-v3`
+2. 选择推荐模型 `wd-swinv2-tagger-v3`
 3. 调整识别阈值（通用标签：0.35，角色标签：0.85）
 4. 点击 **Start Tagging**
 
@@ -706,7 +731,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### 🔹 第7步：提示词工坊 (NEW)
 1. 切换至 **Prompt Lab** 标签页
-2. 左侧浏览分类标签库
+2. 左侧浏览分类标签库；如果你自己的标签库还不多，也会自动显示内置基础分类
 3. 点击 **🎲 Randomize** 生成随机提示词
 4. 选择 **Tag Set** 套用预设服装组合
 5. 生成的提示词可直接复制使用
@@ -717,6 +742,90 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 3. 点击 **Identify All Images** 批量识别
 4. 浏览识别出的画师列表
 5. 点击画师卡片查看详情
+
+---
+
+## 🛠️ 故障排查
+
+### 常见问题
+
+**Q: 扫描后图片没有显示**
+- 确认填写的是绝对路径，例如 `D:\Images`
+- 支持格式为 PNG / JPG / JPEG / WebP / GIF / BMP
+- 坏图会被跳过，并在扫描结果里计入错误数
+- 查看启动终端里的错误信息
+
+**Q: 打标很慢**
+- 首次运行需要下载模型（约 500MB）
+- GPU 加速需要可用的 CUDA 环境
+- 如果机器内存偏紧，优先使用默认推荐模型
+
+**Q: 相似图片为空，或者提示没有 embedding**
+- 先到 Similar 标签页点击 **Generate Embeddings**
+- 首次 embedding 可能需要下载模型资源
+- 如果缺依赖或模型加载失败，界面现在会直接给出错误提示
+
+**Q: 画师识别一直是 `undefined`**
+- 这是实验性功能，本身受置信度阈值影响
+- 首次使用可能需要下载分类模型
+- 如果模型无法加载，程序现在会明确提示错误，而不是假装成功
+
+---
+
+## 📁 项目结构
+
+```
+sd-image-sorter/
+├── backend/
+│   ├── main.py               # FastAPI 应用入口
+│   ├── database.py           # SQLite 数据库操作
+│   ├── image_manager.py      # 图片扫描与元数据处理
+│   ├── metadata_parser.py    # SD 元数据解析
+│   ├── tagger.py             # WD14 AI 打标
+│   ├── censor.py             # 打码检测（ONNX）
+│   ├── nudenet_detector.py   # NudeNet v3 检测器
+│   ├── sam3_refiner.py       # SAM3 掩码细化
+│   ├── similarity.py         # CLIP 相似图搜索
+│   ├── prompt_generator.py   # 随机提示词生成
+│   ├── artist_identifier.py  # 画师识别
+│   ├── tag_rules.py          # 标签分类规则
+│   ├── routers/              # API 路由模块
+│   │   ├── images.py         # 图片相关接口
+│   │   ├── tags.py           # 标签管理
+│   │   ├── sorting.py        # 分类与排序
+│   │   ├── censor.py         # 打码编辑接口
+│   │   ├── similarity.py     # 相似图接口
+│   │   ├── prompts.py        # 提示词接口
+│   │   └── artists.py        # 画师识别接口
+│   └── utils/
+│       └── path_validation.py # 路径安全工具
+├── frontend/
+│   ├── index.html            # 主页面模板
+│   ├── css/
+│   │   ├── styles.css        # 主玻璃拟态样式
+│   │   ├── censor-v2.css     # 打码编辑器样式
+│   │   ├── new-views.css     # Similar / Prompt Lab 等新视图样式
+│   │   └── ui-refresh.css    # UI 细节刷新
+│   └── js/
+│       ├── app.js            # 主应用逻辑
+│       ├── gallery.js        # 画廊交互
+│       ├── virtual-gallery.js # 虚拟滚动
+│       ├── autosep.js        # 自动分类页
+│       ├── manual-sort.js    # WASD 手动排序
+│       ├── censor-edit.js    # 打码编辑器
+│       ├── similar.js        # 相似图片页
+│       ├── prompt-lab.js     # 提示词工坊
+│       ├── artist-ident.js   # 画师识别页
+│       ├── i18n.js           # 多语言入口
+│       ├── guide.js          # 页面引导层
+│       ├── guide-translations.js # 引导翻译
+│       ├── lang/             # 中英文界面文案
+│       └── audio.js          # 音效
+├── models/                   # 下载后的 AI 模型
+├── run.bat                   # Windows 启动脚本
+├── run.sh                    # Linux / Mac 启动脚本
+└── README.md                 # 本说明文件
+```
 
 ---
 
