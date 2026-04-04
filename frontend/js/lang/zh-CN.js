@@ -303,7 +303,7 @@ window.I18nLang_zhCN = {
     'artist.artistsFound': '已发现画师',
     'artist.modelSettings': '模型设置',
     'artist.modelSource': '模型来源',
-    'artist.huggingface': 'HuggingFace（已配置）',
+    'artist.huggingface': 'HuggingFace（Kaloscope2.0）',
     'artist.modelscope': 'ModelScope 镜像',
     'artist.localModel': '本地检查点',
     'artist.localModelPath': '本地检查点路径',

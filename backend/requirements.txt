@@ -13,6 +13,7 @@ nudenet>=3.0.0
 transformers>=4.36.0
 torch>=2.0.0
 timm>=0.9.0
+triton-windows>=3.6.0; sys_platform == "win32"
 slowapi>=0.1.9
 
 # Testing dependencies

@@ -218,11 +218,10 @@ ARTIST_MODEL_SOURCE_DEFAULT: str = os.environ.get(
     "huggingface"
 )
 
-# Default artist model remains on the compatibility backend until the LSNet
-# runtime dependency story is stable across platforms.
+# Default artist model targets Kaloscope2.0.
 ARTIST_HF_MODEL_ID: str = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_HF_MODEL",
-    "cafeai/cafe_style"
+    "heathcliff01/Kaloscope2.0"
 )
 
 # Optional ModelScope mirror id. Leave empty if you do not have a compatible mirror.
@@ -231,9 +230,8 @@ ARTIST_MODELSCOPE_MODEL_ID: str = os.environ.get(
     ""
 )
 
-# Optional external LSNet runtime checkout path. This should point to the
-# `lsnet-test` repository root (or another compatible runtime providing the same
-# `model` package layout).
+# Optional external LSNet runtime checkout path. This can point to either the
+# `lsnet-test` repository root or the `comfyui-lsnet` repository root.
 ARTIST_LSNET_CODE_PATH: str = os.environ.get(
     "SD_IMAGE_SORTER_LSNET_CODE_PATH",
     ""

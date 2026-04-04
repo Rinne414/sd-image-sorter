@@ -69,13 +69,15 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
 
     project_root = Path(__file__).resolve().parent.parent
     candidates.extend([
+        project_root / "models" / "artist" / "comfyui-lsnet",
         project_root / "models" / "artist" / "lsnet-test",
+        project_root / "third_party" / "comfyui-lsnet",
         project_root / "third_party" / "lsnet-test",
     ])
 
     for candidate in candidates:
         candidate_path = Path(candidate).expanduser().resolve()
-        if candidate_path.exists() and (candidate_path / "model").exists():
+        if candidate_path.exists() and ((candidate_path / "model").exists() or (candidate_path / "lsnet_model").exists()):
             return str(candidate_path)
     return None
 
@@ -90,7 +92,10 @@ def _has_lsnet_runtime() -> bool:
 
     try:
         import timm  # noqa: F401
-        from model import lsnet_artist  # noqa: F401
+        try:
+            from lsnet_model import lsnet_artist  # noqa: F401
+        except ImportError:
+            from model import lsnet_artist  # noqa: F401
         return True
     except ImportError:
         return False
@@ -698,7 +703,8 @@ class ArtistIdentifier:
         if not runtime_path:
             raise RuntimeError(
                 "Kaloscope2.0 requires the LSNet runtime code.\n"
-                "Clone https://github.com/spawner1145/lsnet-test and set "
+                "Clone either https://github.com/spawner1145/comfyui-lsnet or "
+                "https://github.com/spawner1145/lsnet-test and set "
                 "SD_IMAGE_SORTER_LSNET_CODE_PATH to that repository root."
             )
 
@@ -706,23 +712,29 @@ class ArtistIdentifier:
             sys.path.insert(0, runtime_path)
 
         try:
-            from model import lsnet_artist  # noqa: F401
             from timm.models import create_model
             from timm.data import resolve_data_config
             from timm.data.transforms_factory import create_transform
+            try:
+                from lsnet_model import lsnet_artist  # noqa: F401
+                runtime_kind = "comfyui-lsnet"
+            except ImportError:
+                from model import lsnet_artist  # noqa: F401
+                runtime_kind = "lsnet-test"
         except ModuleNotFoundError as exc:
             if exc.name == "triton":
                 raise RuntimeError(
                     "Kaloscope2.0 currently requires the LSNet runtime plus `triton`.\n"
-                    "The upstream LSNet runtime imports `triton`, which is not available in this environment.\n"
-                    "Do not switch the default artist backend to Kaloscope on this machine until that dependency is solved."
+                    "On Windows, install `triton-windows`.\n"
+                    "On Linux, install a compatible Triton package for your PyTorch/CUDA stack."
                 ) from exc
         except ImportError as exc:
             raise RuntimeError(
-                "Kaloscope2.0 requires `timm` plus the LSNet runtime repository.\n"
-                "Install `timm` and point SD_IMAGE_SORTER_LSNET_CODE_PATH at the lsnet-test checkout."
+                "Kaloscope2.0 requires `timm` plus a compatible LSNet runtime repository.\n"
+                "Install `timm` and point SD_IMAGE_SORTER_LSNET_CODE_PATH at a comfyui-lsnet or lsnet-test checkout."
             ) from exc
 
+        logger.info("Using %s runtime for Kaloscope", runtime_kind)
         return create_model, resolve_data_config, create_transform
 
     def _initialize_kaloscope(self, checkpoint_path: str, class_mapping_path: str):
@@ -733,6 +745,7 @@ class ArtistIdentifier:
         args = checkpoint.get("args")
         model_name = getattr(args, "model", None) or "lsnet_xl_artist_448"
         feature_dim = getattr(args, "feature_dim", None)
+        self._input_size = int(getattr(args, "input_size", 448) or 448)
 
         artists = self._load_class_mapping_csv(class_mapping_path)
         state_dict = checkpoint.get("model_ema") or checkpoint.get("model")
@@ -757,13 +770,15 @@ class ArtistIdentifier:
         model.to(device)
         model.eval()
 
-        data_config = resolve_data_config({}, model=model)
+        data_config = resolve_data_config(
+            {"input_size": (3, self._input_size, self._input_size)},
+            model=model,
+        )
         transform = create_transform(**data_config, is_training=False)
 
         self._model = model
         self._processor = None
         self._transform = transform
-        self._input_size = int(getattr(args, "input_size", data_config.get("input_size", (3, 448, 448))[-1]))
         self.artists = artists
         self._backend = "kaloscope"
         logger.info("Loaded Kaloscope model '%s' with %d artist classes", model_name, len(self.artists))

@@ -301,7 +301,7 @@ window.I18nLang_en = {
     'artist.artistsFound': 'Artists Found',
     'artist.modelSettings': 'Model Settings',
     'artist.modelSource': 'Model Source',
-    'artist.huggingface': 'HuggingFace (Configured)',
+    'artist.huggingface': 'HuggingFace (Kaloscope2.0)',
     'artist.modelscope': 'ModelScope Mirror',
     'artist.localModel': 'Local Checkpoint',
     'artist.localModelPath': 'Local Checkpoint Path',

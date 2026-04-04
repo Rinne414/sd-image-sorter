@@ -89,7 +89,7 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 - **Batch Processing**: Identify all images with progress tracking
 - **Artist Filtering**: Filter gallery by identified artist
 - **Statistics**: View top artists and their image counts
-- **Experimental Kaloscope Path**: The project now has an explicit Kaloscope2.0 integration path for future use, but the default backend remains the compatibility path until LSNet runtime dependencies are solved
+- **Default Backend**: Now targets `Kaloscope2.0`
 
 ---
 
@@ -488,8 +488,9 @@ When querying `/api/images`:
 
 **Q: Artist Identification keeps returning `undefined`**
 - This feature is still experimental and respects a confidence threshold
-- First use may need to download the configured classification model
-- If you explicitly switch to Kaloscope2.0, you also need the external LSNet runtime checkout
+- First use may need to download the Kaloscope checkpoint
+- Kaloscope also requires an external LSNet runtime checkout (`comfyui-lsnet` or `lsnet-test`)
+- On Windows, install `triton-windows`
 - If the model cannot load, the app now reports the error explicitly instead of pretending the run succeeded
 
 **Q: Filters show wrong counts**
@@ -659,7 +660,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **批量处理**: 带进度追踪的批量识别
 - **画师过滤**: 按识别出的画师过滤图库
 - **统计数据**: 查看热门画师及其图片数量
-- **Kaloscope 实验路径**: 项目已经补上 Kaloscope2.0 的接入路径，但在 LSNet runtime 依赖彻底稳定前，默认后端仍保持兼容方案
+- **默认后端**: 现已指向 `Kaloscope2.0`
 
 ---
 
@@ -776,8 +777,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Q: 画师识别一直是 `undefined`**
 - 这是实验性功能，本身受置信度阈值影响
-- 首次使用可能需要下载当前配置的分类模型
-- 如果你主动切换到 Kaloscope2.0，还需要额外的 LSNet runtime 仓库
+- 首次使用可能需要下载 Kaloscope 检查点
+- Kaloscope 还需要额外的 LSNet runtime 仓库（`comfyui-lsnet` 或 `lsnet-test`）
+- Windows 环境建议安装 `triton-windows`
 - 如果模型无法加载，程序现在会明确提示错误，而不是假装成功
 
 ---
