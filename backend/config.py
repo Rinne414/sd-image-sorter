@@ -53,7 +53,7 @@ FAVORITES_FOLDER_PATH: str = os.environ.get(
 
 # Server host and port
 SERVER_HOST: str = os.environ.get("SD_IMAGE_SORTER_HOST", "127.0.0.1")
-SERVER_PORT: int = int(os.environ.get("SD_IMAGE_SORTER_PORT", "8000"))
+SERVER_PORT: int = int(os.environ.get("SD_IMAGE_SORTER_PORT", "8487"))
 
 # CORS allowed origins (regex pattern for localhost)
 CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"

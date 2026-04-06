@@ -158,7 +158,7 @@ echo "=========================================="
 echo "  SD Image Sorter is running!"
 echo
 echo "  Opening browser to:"
-echo "    http://localhost:8000"
+echo "    http://localhost:8487"
 echo
 echo "  Press Ctrl+C to stop the server."
 echo "=========================================="
@@ -168,11 +168,11 @@ echo
 (
     sleep 2
     if [ "$(uname)" = "Darwin" ]; then
-        open "http://localhost:8000" 2>/dev/null
+        open "http://localhost:8487" 2>/dev/null
     elif command -v xdg-open &> /dev/null; then
-        xdg-open "http://localhost:8000" 2>/dev/null
+        xdg-open "http://localhost:8487" 2>/dev/null
     elif command -v wslview &> /dev/null; then
-        wslview "http://localhost:8000" 2>/dev/null
+        wslview "http://localhost:8487" 2>/dev/null
     fi
 ) &
 

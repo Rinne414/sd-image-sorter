@@ -6,13 +6,35 @@
 
 <a name="english"></a>
 
+<div align="center">
+
 # 🎨 SD Image Sorter
 
-A powerful image management tool for Stable Diffusion users. Automatically extract metadata, tag images with AI, filter, sort, and organize your AI-generated artwork.
+**The all-in-one image manager for Stable Diffusion creators.**
+
+Scan thousands of images. Auto-extract metadata. AI-tag everything.
+Sort at lightning speed. Censor with precision. Find duplicates instantly.
 
 ![Version](https://img.shields.io/badge/version-2.2.0-purple)
 ![Python](https://img.shields.io/badge/python-3.9+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
+
+[**Download for Windows**](https://github.com/peter119lee/sd-image-sorter/releases/latest) | [**Download for Linux/Mac**](https://github.com/peter119lee/sd-image-sorter/releases/latest)
+
+</div>
+
+---
+
+### 🤔 Sound familiar?
+
+> - 😵 Tons of images — some have metadata, some don't, can't tell them apart
+> - 🔍 Want to filter by tags / prompts / models, but nothing does it well
+> - 📚 Want a local tag/prompt library built from YOUR images
+> - 🔳 Auto-censor always misjudges, and you can't manually fix it
+> - 🧹 Need to batch-strip metadata or selectively keep it
+>
+> **Give this a try! 🍜**
 
 | Gallery View | Manual Sort | Censor Edit |
 |:------------:|:-----------:|:-----------:|
@@ -21,6 +43,314 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 | Gallery Navigation | Manual Sort Flow |
 |:------------------:|:----------------:|
 | ![Gallery Demo](docs/screenshots/gallery_demo.gif) | ![Manual Sort Demo](docs/screenshots/manual_sort_demo.gif) |
+
+---
+
+## ⬇️ Download & Run
+
+### Windows — extract and double-click
+
+1. Download **[sd-image-sorter-v2.2.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest)**
+2. Extract to any folder
+3. Double-click **`run-portable.bat`**
+
+Python is included. AI models download automatically on first use.
+
+### Linux / macOS
+
+1. Download **[sd-image-sorter-v2.2.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest)**
+2. `tar xzf sd-image-sorter-*.tar.gz && cd sd-image-sorter`
+3. `chmod +x run.sh && ./run.sh`
+
+Requires Python 3.9+. Virtualenv created automatically.
+
+### From source
+
+```bash
+git clone https://github.com/peter119lee/sd-image-sorter.git && cd sd-image-sorter
+# Windows: run.bat | Linux/Mac: ./run.sh
+```
+
+> App runs at **http://localhost:8487**. Models are NOT included (copyright) — they auto-download on first use (~500 MB).
+
+---
+
+## 🌐 China Mainland / 大陆镜像
+
+```env
+# Add to backend/.env
+HF_ENDPOINT=https://hf-mirror.com
+```
+
+Artist ID & SAM3 also support [ModelScope](https://modelscope.cn) — select it in the UI.
+
+---
+
+## ✨ Features
+
+<details open>
+<summary><b>🖼️ Gallery</b> — scan, filter, sort your image library</summary>
+
+- Auto-detect ComfyUI, NovelAI, WebUI/Forge metadata
+- Extract prompts, settings, checkpoints, LoRAs
+- Filter by generator, tags, ratings, checkpoints, LoRAs, prompts, dimensions
+- Sort by date, name, prompt length, tag count, rating
+</details>
+
+<details>
+<summary><b>🏷️ AI Tagging (WD14)</b> — auto-tag with anime/art tags</summary>
+
+- Models: EVA02-Large, SwinV2, ConvNeXt, ViT
+- Dual thresholds for general vs. character tags
+- Auto rating: General / Sensitive / Questionable / Explicit
+</details>
+
+<details>
+<summary><b>📁 Sorting</b> — Auto-Separate + WASD keyboard sort</summary>
+
+- **Auto-Separate**: Bulk move by filter
+- **Manual Sort**: WASD keys — like a game
+- **Undo**: Instant revert
+</details>
+
+<details>
+<summary><b>🔳 Censor Edit</b> — AI detect + manual touch-up</summary>
+
+- Multi-model: Wenaka YOLO, NudeNet v3, both
+- Styles: Mosaic, blur, black/white bar
+- Tools: Brush, pen, eraser, clone stamp, SAM3 (GPU)
+- Batch queue with rename & save
+</details>
+
+<details>
+<summary><b>🔍 Similar Images</b> — CLIP visual search & dedup</summary>
+
+- Find similar images by visual content
+- Upload any image to search
+- Near-duplicate detection
+</details>
+
+<details>
+<summary><b>🧪 Prompt Lab</b> — random prompt generator</summary>
+
+- Smart tag selection with exclusion rules
+- Pre-built outfit sets
+- Category browser
+</details>
+
+<details>
+<summary><b>🎨 Artist ID</b> — identify style (experimental)</summary>
+
+- Kaloscope2.0 classification
+- Batch processing
+- Filter by artist
+</details>
+
+---
+
+## 🧰 Hardware
+
+| Feature | RAM | GPU |
+|:--------|:----|:----|
+| Gallery, Sort, Prompt Lab | 4 GB | — |
+| WD14 Tagging | 8–16 GB | Optional |
+| Censor (Wenaka/NudeNet) | 8 GB | Optional |
+| Similar (CLIP) | 8 GB | — |
+| Artist ID (Kaloscope) | 16 GB | Recommended |
+| SAM3 | 16 GB | **Required** (CUDA) |
+
+---
+
+## ⌨️ Shortcuts
+
+| Context | Keys | Action |
+|:--------|:-----|:-------|
+| **Sort** | `W/A/S/D` | Move to folder |
+| | `Space` | Skip |
+| | `Z` | Undo |
+| **Censor** | `B/P/E/G` | Brush/Pen/Eraser/Clone |
+| | `[` `]` | Brush size |
+| | `Ctrl+Z` | Undo |
+
+---
+
+## 🙏 Credits
+
+| | |
+|:--|:--|
+| **[Antigravity](https://github.com/peter119lee)** & **Claude** | Core development |
+| **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | Censor inspiration & [YOLO model](https://civitai.com/models/1736285) |
+| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)** | LSNet artist identification |
+| **[SmilingWolf](https://huggingface.co/SmilingWolf)** | WD14 Tagger models |
+| **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | Prompt reader inspiration |
+
+📄 **License**: MIT — [LICENSE](LICENSE)
+
+---
+
+<br>
+
+<a name="简体中文"></a>
+
+<div align="center">
+
+# 🎨 SD Image Sorter (AI 图像筛选管理器)
+
+**Stable Diffusion 创作者的全能图像管理工具。**
+
+扫描海量图片。自动提取元数据。AI 一键打标。
+极速排序分类。精准打码修图。秒找重复图片。
+
+[**下载 Windows 版**](https://github.com/peter119lee/sd-image-sorter/releases/latest) | [**下载 Linux/Mac 版**](https://github.com/peter119lee/sd-image-sorter/releases/latest)
+
+</div>
+
+---
+
+### 🤔 你是不是正在烦恼...
+
+> - 😵 一堆图片有些有元数据、有些没有，分不清
+> - 🔍 想按 tags / prompts / 模型筛选，现有工具做不到
+> - 📚 想从自己的图库建立本地标签资料库
+> - 🔳 自动打码总是误判，又不能手动修
+> - 🧹 想批量清元数据，或打码后选择性保留
+>
+> **来试试吧！🍜**
+
+---
+
+## ⬇️ 下载安装
+
+### Windows — 解压双击就能用
+
+1. 下载 **[sd-image-sorter-v2.2.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest)**
+2. 解压到任意文件夹
+3. 双击 **`run-portable.bat`**
+
+内置 Python，无需安装。AI 模型首次使用自动下载。
+
+### Linux / macOS
+
+1. 下载 **[sd-image-sorter-v2.2.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest)**
+2. `tar xzf sd-image-sorter-*.tar.gz && cd sd-image-sorter`
+3. `chmod +x run.sh && ./run.sh`
+
+需要 Python 3.9+，脚本自动建虚拟环境。
+
+### 从源码
+
+```bash
+git clone https://github.com/peter119lee/sd-image-sorter.git && cd sd-image-sorter
+# Windows: run.bat | Linux/Mac: ./run.sh
+```
+
+> 程序运行在 **http://localhost:8487**。模型不包含在包里（版权），首次使用自动下载（约 500 MB）。
+
+---
+
+## 🌐 大陆镜像
+
+```env
+# 写到 backend/.env
+HF_ENDPOINT=https://hf-mirror.com
+```
+
+画师识别和 SAM3 还支持 [ModelScope](https://modelscope.cn) — 在界面里选。
+
+---
+
+## ✨ 功能
+
+<details open>
+<summary><b>🖼️ 画廊</b> — 扫描、筛选、排序图库</summary>
+
+- 自动识别 ComfyUI, NovelAI, WebUI/Forge
+- 提取提示词、参数、模型、LoRA
+- 按生成器、标签、评级、模型、LoRA、尺寸筛选
+- 按时间、提示词长度、标签密度、评级排序
+</details>
+
+<details>
+<summary><b>🏷️ AI 打标 (WD14)</b></summary>
+
+- 多模型：EVA02-Large, SwinV2, ConvNeXt, ViT
+- 通用标签和角色标签双阈值
+- 自动评级：General / Sensitive / Questionable / Explicit
+</details>
+
+<details>
+<summary><b>📁 排序</b> — 自动分类 + WASD 手动排</summary>
+
+- **自动分类**: 按条件批量移动
+- **手动排序**: WASD 键位，像打游戏
+- **撤销**: 随时撤
+</details>
+
+<details>
+<summary><b>🔳 打码编辑</b> — AI 检测 + 手动精修</summary>
+
+- 多模型：Wenaka YOLO, NudeNet v3
+- 风格：马赛克、模糊、黑条、白条
+- 工具：画笔、橡皮擦、仿制图章、SAM3（需 GPU）
+- 批量队列，重命名 + 保存
+</details>
+
+<details>
+<summary><b>🔍 相似图片</b> — CLIP 视觉搜索</summary>
+
+- 视觉相似搜索 + 重复检测
+- 上传图片搜索图库
+</details>
+
+<details>
+<summary><b>🧪 提示词工坊</b></summary>
+
+- 智能标签选择 + 排除规则
+- 预设服装套装
+- 分类浏览
+</details>
+
+<details>
+<summary><b>🎨 画师识别</b>（实验性）</summary>
+
+- Kaloscope2.0 分类
+- 批量处理
+- 按画师筛选
+</details>
+
+---
+
+## 🧰 硬件
+
+| 功能 | 内存 | GPU |
+|:-----|:-----|:----|
+| 画廊、排序、提示词 | 4 GB | — |
+| WD14 打标 | 8–16 GB | 可选 |
+| 打码 | 8 GB | 可选 |
+| 相似图 (CLIP) | 8 GB | — |
+| 画师识别 | 16 GB | 建议 |
+| SAM3 | 16 GB | **必须** (CUDA) |
+
+---
+
+## ⌨️ 快捷键
+
+| 场景 | 按键 | 动作 |
+|:-----|:-----|:-----|
+| **排序** | `W/A/S/D` | 移到文件夹 |
+| | `空格` | 跳过 |
+| | `Z` | 撤销 |
+| **打码** | `B/P/E/G` | 画笔/铅笔/橡皮/仿制 |
+| | `[` `]` | 笔触大小 |
+| | `Ctrl+Z` | 撤销 |
+
+---
+
+📄 **开源协议**: MIT — [LICENSE](LICENSE)
+
+---
+
+*Made with ❤️ for the Stable Diffusion community*
 
 ---
 

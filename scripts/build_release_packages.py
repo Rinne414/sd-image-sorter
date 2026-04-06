@@ -43,12 +43,18 @@ EXCLUDED_PREFIXES = (
     "backend/favorites",
     "backend/thumbnails",
     "backend/test-path",
-    "tests/e2e/node_modules",
-    "tests/e2e/test-results",
-    "tests/e2e/.pw-out",
+    "backend/tests",
+    "backend/test_",
+    "tests",
     "test-results",
     "reference",
     "testimage",
+    "example",
+    "scripts",
+    "docs/DELETION_LOG",
+    "docs/IMPROVEMENT_PLAN",
+    "docs/SECURITY_ARCHITECTURE",
+    "docs/architecture",
 )
 
 EXCLUDED_NAMES = {
@@ -71,6 +77,19 @@ EXCLUDED_FILES = {
     "backend/.requirements_hash",
     "backend/lora_debug.txt",
     "backend/sort_session.json",
+    "backend/pytest.ini",
+    "backend/verify_sorting.py",
+    "backend/fix_db_ratings.py",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "THIRD_PARTY_MODELS.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "docs/DELETION_LOG.md",
+    "docs/IMPROVEMENT_PLAN.md",
+    "docs/SECURITY_ARCHITECTURE.md",
+    "docs/architecture.md",
+    "docs/API.md",
 }
 
 CORE_MODEL_FILES = (
@@ -140,6 +159,9 @@ def should_skip_path(relative_path: Path) -> bool:
     if rel in EXCLUDED_FILES:
         return True
     if any(rel == prefix or rel.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES):
+        return True
+    # Exclude loose test files in backend/
+    if rel.startswith("backend/test_"):
         return True
     if any(part in EXCLUDED_NAMES for part in relative_path.parts):
         return True
@@ -332,12 +354,12 @@ def prepare_embedded_python(stage_dir: Path) -> None:
         'echo ==========================================\r\n'
         'echo   SD Image Sorter is starting!\r\n'
         'echo.\r\n'
-        'echo   Open browser: http://localhost:8000\r\n'
+        'echo   Open browser: http://localhost:8487\r\n'
         'echo   Press Ctrl+C to stop the server.\r\n'
         'echo ==========================================\r\n'
         'echo.\r\n'
         '\r\n'
-        'start "" http://localhost:8000\r\n'
+        'start "" http://localhost:8487\r\n'
         '\r\n'
         'cd backend\r\n'
         '"%~dp0python\\python.exe" main.py\r\n'

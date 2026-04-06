@@ -156,13 +156,13 @@ echo.
 echo ==========================================
 echo   SD Image Sorter is running!
 echo.
-echo   Open browser: http://localhost:8000
+echo   Open browser: http://localhost:8487
 echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.
 
 REM -- Open browser and start server
-start "" http://localhost:8000
+start "" http://localhost:8487
 
 cd backend
 call venv\Scripts\activate.bat 2>nul
