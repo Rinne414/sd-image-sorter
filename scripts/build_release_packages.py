@@ -370,73 +370,30 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
     assets: list[Path] = []
 
-    assets.append(
-        stage_archive(
-            "app",
-            version,
-            seven_zip,
-            populate=copy_project,
-        )
-    )
-
-    def populate_portable(stage_dir: Path) -> None:
-        copy_project(stage_dir)
-        for relative in CORE_MODEL_FILES:
-            copy_file(relative, stage_dir)
-
-    assets.append(stage_archive("portable-core-models", version, seven_zip, populate=populate_portable))
-
-    # Portable with embedded Python (no system Python needed)
-    def populate_portable_python(stage_dir: Path) -> None:
-        copy_project(stage_dir)
-        for relative in CORE_MODEL_FILES:
-            copy_file(relative, stage_dir)
-        prepare_embedded_python(stage_dir)
-
-    assets.append(stage_archive("portable-python-win64", version, seven_zip, populate=populate_portable_python))
-
-    # App-only with embedded Python (no models, auto-download on first use)
-    def populate_app_python(stage_dir: Path) -> None:
+    # === Windows portable: app + embedded Python, no models (auto-download) ===
+    def populate_windows_portable(stage_dir: Path) -> None:
         copy_project(stage_dir)
         prepare_embedded_python(stage_dir)
 
-    assets.append(stage_archive("app-python-win64", version, seven_zip, populate=populate_app_python))
+    assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 
-    def populate_eva(stage_dir: Path) -> None:
-        for relative in EVA_MODEL_FILES:
-            copy_file(relative, stage_dir)
+    # === Linux/Mac: app only, no models, no Python (uses system Python) ===
+    def populate_linux_mac(stage_dir: Path) -> None:
+        copy_project(stage_dir)
 
-    assets.append(stage_archive("wd14-eva02-model", version, seven_zip, populate=populate_eva))
+    # Build as tar.gz for Linux/Mac
+    linux_stage = STAGING_ROOT / "linux-mac"
+    if linux_stage.exists():
+        shutil.rmtree(linux_stage)
+    linux_stage.mkdir(parents=True, exist_ok=True)
+    populate_linux_mac(linux_stage)
 
-    def populate_artist_runtime(stage_dir: Path) -> None:
-        for relative in ARTIST_RUNTIME_FILES:
-            copy_file(relative, stage_dir)
-        copy_tree(
-            ROOT / "models" / "artist" / "comfyui-lsnet-runtime",
-            stage_dir,
-            "models/artist/comfyui-lsnet-runtime",
-        )
-
-    assets.append(stage_archive("artist-runtime", version, seven_zip, populate=populate_artist_runtime))
-
-    if seven_zip is None:
-        print("[release] 7z was not found; skipping split archives for Kaloscope and SAM3.")
-    else:
-        kaloscope_parts = create_split_zip(
-            ROOT / LARGE_MODEL_FILES["kaloscope"],
-            ARTIFACT_ROOT / f"sd-image-sorter-v{version}-kaloscope-checkpoint.zip",
-            split_size_mb,
-            seven_zip,
-        )
-        assets.extend(kaloscope_parts)
-
-        sam3_parts = create_split_zip(
-            ROOT / LARGE_MODEL_FILES["sam3"],
-            ARTIFACT_ROOT / f"sd-image-sorter-v{version}-sam3-modelscope-sam3pt.zip",
-            split_size_mb,
-            seven_zip,
-        )
-        assets.extend(sam3_parts)
+    import tarfile
+    tar_name = f"sd-image-sorter-v{version}-linux-mac.tar.gz"
+    tar_path = ARTIFACT_ROOT / tar_name
+    with tarfile.open(tar_path, "w:gz") as tar:
+        tar.add(linux_stage, arcname="sd-image-sorter")
+    assets.append(tar_path)
 
     manifest_entries = []
     for asset in assets:
