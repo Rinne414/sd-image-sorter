@@ -195,6 +195,7 @@ window.I18nLang_zhCN = {
     'censor.clone': '克隆',
     'censor.undo': '撤销',
     'censor.reset': '重置',
+    'censor.showChanges': '差异',
     'censor.settings': '设置与工具',
     'censor.detection': '自动检测',
     'censor.detectionModel': '检测模型',

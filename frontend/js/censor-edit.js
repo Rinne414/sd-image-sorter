@@ -2292,6 +2292,11 @@ function handleKeydown(e) {
         setTool('clone');
         e.preventDefault();
     }
+    // Show Changes shortcut ('H' for Highlight changes)
+    else if (key === 'h' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        toggleShowChanges();
+        e.preventDefault();
+    }
     // Detection shortcut ('D' for Detect)
     else if (key === 'd' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         const activeItem = CensorState.queue.find(i => i.id === CensorState.activeId);

@@ -193,6 +193,7 @@ window.I18nLang_en = {
     'censor.clone': 'Clone',
     'censor.undo': 'Undo',
     'censor.reset': 'Reset',
+    'censor.showChanges': 'Diff',
     'censor.settings': 'Settings & Tools',
     'censor.detection': 'Auto-Detection',
     'censor.detectionModel': 'Detection Model',
