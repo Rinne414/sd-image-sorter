@@ -16,17 +16,18 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  Scan thousands of images · Auto-extract metadata · AI-tag everything<br>
-  Sort at lightning speed · Censor with precision · Find duplicates instantly
-</p>
-
-<p align="center">
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 ---
+
+### Ever feel like this?
+
+> *Thousands of AI images scattered everywhere. Some have metadata, some don't. You can't search by prompt, can't filter by model, can't find that one image you made last week...*
+
+**SD Image Sorter** fixes all of that — and more.
 
 | Gallery View | Manual Sort | Censor Edit |
 |:------------:|:-----------:|:-----------:|
@@ -35,6 +36,73 @@
 | Gallery Navigation | Manual Sort Flow |
 |:------------------:|:----------------:|
 | ![Gallery Demo](docs/screenshots/gallery_demo.gif) | ![Manual Sort Demo](docs/screenshots/manual_sort_demo.gif) |
+
+---
+
+## ✨ What Can It Do?
+
+### 🖼️ Gallery — Your images, finally organized
+
+Point it at any folder. The app scans your images, **auto-detects the generator** (ComfyUI, NovelAI, WebUI, Forge), and **extracts everything**: prompts, negative prompts, sampling settings, checkpoints, LoRAs, seeds — all searchable, all filterable.
+
+- **Filter** by generator, tags, content rating, checkpoint, LoRA, prompt keywords, image dimensions, aspect ratio
+- **Sort** by date, filename, prompt length, tag count, or AI-predicted rating
+- **Tab view** separating images by generator type
+
+### 🏷️ AI Tagging — One click, thousands of tags
+
+Built-in **WD14 Tagger** (anime/illustration-focused) automatically labels every image with descriptive tags like `1girl`, `blue_hair`, `school_uniform`, `outdoors` — plus character recognition and content rating.
+
+- **5 model choices**: EVA02-Large (best quality), SwinV2 (best speed/quality balance), ConvNeXt, ViT, ViT-Large
+- **Dual thresholds**: tune general tag sensitivity separately from character tag sensitivity
+- **Content rating**: auto-classifies General / Sensitive / Questionable / Explicit
+- Models auto-download from HuggingFace on first use
+
+### 📁 Sorting — Organize at game speed
+
+Two powerful sorting modes:
+
+- **Auto-Separate**: set filter criteria → pick a destination folder → one click moves all matching images
+- **WASD Manual Sort**: images appear one by one, press `W`/`A`/`S`/`D` to sort into 4 folders. `Space` to skip, `Z` to undo. It's fast, satisfying, and hard to stop.
+
+### 🔳 Censor Edit — AI detection + pixel-perfect manual control
+
+A full canvas-based editor for privacy masking. The AI detects sensitive regions, then you fine-tune with manual tools.
+
+- **Detection models**: Wenaka YOLO (privacy-focused), NudeNet v3, or both combined for best coverage
+- **Censor styles**: mosaic pixelation, gaussian blur, solid black/white bars
+- **Manual tools**: variable-size brush, pen, eraser (restore original pixels), clone stamp
+- **SAM3 integration**: text-prompt guided segmentation for surgical precision (requires CUDA GPU)
+- **Batch workflow**: queue multiple images → detect all → review → batch save with custom naming and optional metadata stripping
+
+### 🔍 Similar Images — Find duplicates and visual matches
+
+Powered by **CLIP embeddings**, this feature creates a visual fingerprint of every image in your library.
+
+- **Search by ID**: click any image → find visually similar ones
+- **Search by upload**: drop in any image from outside your library
+- **Duplicate finder**: scan your entire collection for near-identical pairs
+- **Adjustable threshold**: from loose similarity to strict duplicate matching
+- Local-first: the CLIP model runs on your machine, nothing leaves your PC
+
+### 🧪 Prompt Lab — Generate new prompts from your own library
+
+Analyze the tags across your image collection and generate randomized, coherent prompts.
+
+- **Smart randomizer**: picks tags while respecting exclusion rules (e.g., `from_behind` auto-excludes `looking_at_viewer`)
+- **Tag sets**: pre-built outfits (school uniform, swimsuit, maid, etc.) for one-click outfit combos
+- **Category browser**: explore your library's tags organized by type (body, pose, outfit, expression, etc.)
+- **Negative prompt**: auto-generates quality-focused negative prompts
+- Works even with a small library — built-in fallback tag pools fill the gaps
+
+### 🎨 Artist Identification *(experimental)*
+
+Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based classifier).
+
+- Batch-process your entire library with progress tracking
+- Filter gallery by predicted artist
+- View top artists and their image counts
+- Supports HuggingFace, ModelScope, or local model loading
 
 ---
 
@@ -77,72 +145,7 @@ Models download from HuggingFace by default. Behind the GFW? Add one line to `ba
 HF_ENDPOINT=https://hf-mirror.com
 ```
 
-Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select it in the UI dropdown.
-
----
-
-## ✨ Features
-
-<details open>
-<summary><b>🖼️ Gallery</b></summary>
-
-- Auto-detect ComfyUI / NovelAI / WebUI / Forge metadata
-- Extract prompts, settings, checkpoints, LoRAs
-- Filter by generator, tags, ratings, checkpoint, LoRA, prompt keywords, dimensions
-- Sort by date, name, prompt length, tag count, rating
-</details>
-
-<details>
-<summary><b>🏷️ AI Tagging (WD14)</b></summary>
-
-- Models: EVA02-Large, SwinV2, ConvNeXt, ViT
-- Separate thresholds for general vs. character tags
-- Auto rating: General / Sensitive / Questionable / Explicit
-</details>
-
-<details>
-<summary><b>📁 Sorting — Auto-Separate + WASD</b></summary>
-
-- **Auto-Separate**: bulk move images by filter criteria
-- **Manual Sort**: WASD keyboard sorting, game-style speed
-- **Undo**: revert any move instantly
-</details>
-
-<details>
-<summary><b>🔳 Censor Edit</b></summary>
-
-- Multi-model detection: Wenaka YOLO · NudeNet v3 · both
-- Censor styles: mosaic, blur, black bar, white bar
-- Manual tools: brush, pen, eraser, clone stamp
-- SAM3 text-prompt segmentation (CUDA GPU required)
-- Batch queue with rename and export
-</details>
-
-<details>
-<summary><b>🔍 Similar Images (CLIP)</b></summary>
-
-- Visual similarity search across your library
-- Upload any image to find matches
-- Near-duplicate detection with adjustable threshold
-- Local-first CLIP model
-</details>
-
-<details>
-<summary><b>🧪 Prompt Lab</b></summary>
-
-- Random prompt generator with smart exclusion rules
-- Pre-built outfit tag sets (school uniform, swimsuit, etc.)
-- Category browser for your library's tags
-- Auto negative prompt
-</details>
-
-<details>
-<summary><b>🎨 Artist ID (experimental)</b></summary>
-
-- Kaloscope 2.0 LSNet-based classification
-- Batch identification with confidence threshold
-- Filter gallery by predicted artist
-</details>
+Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select in the UI.
 
 ---
 
@@ -161,10 +164,10 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 <details>
 <summary>Model sizes (downloaded on first use)</summary>
 
-| Model | Size | Used by |
+| Model | Size | Feature |
 |:------|:-----|:--------|
 | wd-swinv2-tagger-v3 | ~446 MB | AI Tagging (default) |
-| wd-eva02-large-tagger-v3 | ~1.2 GB | AI Tagging (high quality) |
+| wd-eva02-large-tagger-v3 | ~1.2 GB | AI Tagging (best quality) |
 | clip-ViT-B-32-vision | ~335 MB | Similar Images |
 | wenaka_yolov8s-seg | ~46 MB | Censor detection |
 | NudeNet 320n | ~12 MB | Censor detection |
@@ -219,6 +222,80 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ---
 
+### 你是不是也这样？
+
+> *几千张 AI 图散落各处。有些有元数据有些没有。想按提示词搜搜不了，想按模型筛筛不了，上周那张满意的图死活找不到…*
+
+**SD Image Sorter** 帮你全搞定。
+
+---
+
+## ✨ 功能介绍
+
+### 🖼️ 画廊 — 你的图库，终于能管了
+
+指向任意文件夹，程序自动扫描图片，**识别生成器**（ComfyUI、NovelAI、WebUI、Forge），**提取所有信息**：正向提示词、负向提示词、采样参数、模型、LoRA、种子 — 全部可搜索、可筛选。
+
+- **筛选**：按生成器、标签、内容评级、模型、LoRA、提示词关键字、图片尺寸、长宽比
+- **排序**：按时间、文件名、提示词长度、标签数量、AI 评级
+- **分页浏览**：按生成器类型自动分页
+
+### 🏷️ AI 打标 — 一键标注成千上万张图
+
+内置 **WD14 Tagger**（动漫/插画专用），自动为每张图打上描述标签：`1girl`、`blue_hair`、`school_uniform`、`outdoors` — 还能识别角色和内容分级。
+
+- **5 种模型**：EVA02-Large（最高精度）、SwinV2（最佳性价比）、ConvNeXt、ViT、ViT-Large
+- **双阈值**：通用标签和角色标签分开调节灵敏度
+- **内容评级**：自动分类 General / Sensitive / Questionable / Explicit
+- 模型首次使用时从 HuggingFace 自动下载
+
+### 📁 排序 — 打游戏一样快
+
+两种强大的排序模式：
+
+- **自动分类**：设好筛选条件 → 选目标文件夹 → 一键移动所有符合条件的图
+- **WASD 手动排序**：图片逐张显示，按 `W`/`A`/`S`/`D` 分到 4 个文件夹。`空格`跳过，`Z`撤销。快到停不下来。
+
+### 🔳 打码编辑 — AI 检测 + 像素级手动精修
+
+完整的画布编辑器，AI 自动检测敏感区域，然后你可以精修。
+
+- **检测模型**：Wenaka YOLO（隐私部位专用）、NudeNet v3、或两者并用覆盖更全
+- **打码风格**：马赛克、高斯模糊、纯黑条、纯白条
+- **手动工具**：可调大小画笔、铅笔、橡皮擦（恢复原图像素）、仿制图章
+- **SAM3**：文本提示引导的精准分割（需要 CUDA GPU）
+- **批量流程**：加入队列 → 全部检测 → 逐张审核 → 批量保存，支持自定义命名和元数据剥离
+
+### 🔍 相似图片 — 找重复、找相似
+
+基于 **CLIP 向量**，为图库里每张图创建视觉指纹。
+
+- **按 ID 搜索**：点击任意图片 → 找到视觉相似的
+- **上传搜索**：拖入外部图片搜索你的图库
+- **重复检测**：扫描整个图库找近似重复对
+- **阈值可调**：从宽松的相似到严格的重复
+- 本地运行：CLIP 模型在你电脑上跑，数据不外传
+
+### 🧪 提示词工坊 — 从你自己的图库生成新提示词
+
+分析你图库中的标签，生成随机但连贯的提示词。
+
+- **智能随机**：选标签时自动遵守排除规则（比如 `from_behind` 自动排除 `looking_at_viewer`）
+- **标签套装**：预设服装组合（校服、泳装、女仆装等），一键套用
+- **分类浏览**：按类别（身体、姿势、服装、表情等）探索你图库的标签
+- **负向提示词**：自动生成质量优化的负向提示词
+- 图库小也能用 — 内置兜底标签池
+
+### 🎨 画师识别 *（实验性）*
+
+用 **Kaloscope 2.0**（基于 LSNet）识别图片的画师或风格。
+
+- 批量处理整个图库
+- 按识别出的画师筛选画廊
+- 支持 HuggingFace、ModelScope、本地模型
+
+---
+
 ## ⬇️ 下载安装
 
 ### Windows
@@ -262,70 +339,7 @@ HF_ENDPOINT=https://hf-mirror.com
 
 ---
 
-## ✨ 功能
-
-<details open>
-<summary><b>🖼️ 画廊</b></summary>
-
-- 自动识别 ComfyUI / NovelAI / WebUI / Forge 元数据
-- 提取提示词、参数、模型、LoRA
-- 按生成器、标签、评级、模型、LoRA、提示词关键字、尺寸筛选
-- 按时间、名称、提示词长度、标签数、评级排序
-</details>
-
-<details>
-<summary><b>🏷️ AI 打标 (WD14)</b></summary>
-
-- 多模型：EVA02-Large、SwinV2、ConvNeXt、ViT
-- 通用标签和角色标签独立阈值
-- 自动评级：General / Sensitive / Questionable / Explicit
-</details>
-
-<details>
-<summary><b>📁 排序 — 自动分类 + WASD</b></summary>
-
-- **自动分类**：按筛选条件批量移动
-- **手动排序**：WASD 键位，打游戏一样快
-- **撤销**：随时撤回
-</details>
-
-<details>
-<summary><b>🔳 打码编辑</b></summary>
-
-- 多模型检测：Wenaka YOLO · NudeNet v3 · 两者并用
-- 打码风格：马赛克、模糊、黑条、白条
-- 手动工具：画笔、铅笔、橡皮擦、仿制图章
-- SAM3 文本提示分割（需 CUDA GPU）
-- 批量队列，重命名并导出
-</details>
-
-<details>
-<summary><b>🔍 相似图片 (CLIP)</b></summary>
-
-- 视觉相似搜索
-- 上传图片搜索图库
-- 近似重复检测，阈值可调
-</details>
-
-<details>
-<summary><b>🧪 提示词工坊</b></summary>
-
-- 随机提示词生成 + 智能排除规则
-- 预设服装标签套装
-- 分类浏览图库标签
-</details>
-
-<details>
-<summary><b>🎨 画师识别（实验性）</b></summary>
-
-- Kaloscope 2.0 分类
-- 批量识别
-- 按画师筛选图库
-</details>
-
----
-
-## 🧰 硬件
+## 🧰 硬件指南
 
 | 功能 | 内存 | GPU |
 |:-----|:-----|:----|
@@ -337,6 +351,20 @@ HF_ENDPOINT=https://hf-mirror.com
 | 画师识别 | 16 GB | 建议 |
 | SAM3 精修 | 16 GB | **必须 CUDA** |
 
+<details>
+<summary>模型体积（首次使用自动下载）</summary>
+
+| 模型 | 大小 | 用途 |
+|:-----|:-----|:-----|
+| wd-swinv2-tagger-v3 | ~446 MB | AI 打标（默认） |
+| wd-eva02-large-tagger-v3 | ~1.2 GB | AI 打标（最高质量） |
+| clip-ViT-B-32-vision | ~335 MB | 相似图片 |
+| wenaka_yolov8s-seg | ~46 MB | 打码检测 |
+| NudeNet 320n | ~12 MB | 打码检测 |
+| Kaloscope 2.0 | ~2.8 GB | 画师识别 |
+| SAM3 | ~3.3 GB | 打码精修 |
+</details>
+
 ---
 
 ## ⌨️ 快捷键
@@ -346,11 +374,21 @@ HF_ENDPOINT=https://hf-mirror.com
 | **排序** | `W` `A` `S` `D` | 移到对应文件夹 |
 | | `空格` | 跳过 |
 | | `Z` | 撤销 |
-| **打码** | `B` `P` `E` `G` | 画笔 · 铅笔 · 橡皮 · 仿制 |
+| **打码** | `A` / `D` | 上/下一张 |
+| | `B` `P` `E` `G` | 画笔 · 铅笔 · 橡皮 · 仿制 |
 | | `[` `]` | 笔触大小 |
 | | `Ctrl+Z` | 撤销 |
+| | `Ctrl+滚轮` | 缩放 |
 
 ---
+
+## 🙏 Credits
+
+[Antigravity](https://github.com/peter119lee) — core development &nbsp;·&nbsp;
+[Wenaka2004](https://github.com/Wenaka2004/auto-censor) — censor inspiration & [YOLO model](https://civitai.com/models/1736285) &nbsp;·&nbsp;
+[Spawner1145](https://github.com/spawner1145/comfyui-lsnet) — LSNet artist ID &nbsp;·&nbsp;
+[SmilingWolf](https://huggingface.co/SmilingWolf) — WD14 models &nbsp;·&nbsp;
+[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) — prompt reader inspiration
 
 📄 [MIT License](LICENSE)
 
