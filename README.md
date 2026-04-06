@@ -101,14 +101,33 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 ## 🚀 Quick Start
 
 ### Prerequisites
-- **Python 3.9+**
+- **Python 3.9+** (not needed if using the portable-python package)
 - **RAM**: 4GB minimum for the base app, 8GB+ recommended for most AI features, 16GB+ recommended for Artist ID
 - **Disk Space**: ~2GB for the app/runtime, plus optional model downloads
 - **Windows** (Recommended) or Linux/Mac
 
-### Installation & Run
+### Download (No Git Required)
 
-1. **Clone/Download** the repository:
+Don't know Git? Just download a `.zip` from [**GitHub Releases**](https://github.com/peter119lee/sd-image-sorter/releases):
+
+| Package | Description | Who Should Use |
+|:--------|:------------|:---------------|
+| `sd-image-sorter-vX.X.X-portable-python-win64.zip` | **Recommended for most users.** App + embedded Python + core models. No Python install needed. | Windows users who want zero setup |
+| `sd-image-sorter-vX.X.X-portable-core-models.zip` | App + core models (requires system Python 3.9+) | Users who already have Python installed |
+| `sd-image-sorter-vX.X.X-app-python-win64.zip` | App + embedded Python, no models (auto-downloads on first use) | Users who want a smaller download |
+| `sd-image-sorter-vX.X.X-app.zip` | App only, no models, no Python | Advanced users / Linux / Mac |
+
+After download:
+1. **Extract** the `.zip` to any folder (e.g. `D:\sd-image-sorter`)
+2. **Run**: Double-click `run-portable.bat` (portable-python packages) or `run.bat` (others)
+3. **Open**: Browser auto-opens `http://localhost:8000`
+
+> [!NOTE]
+> Models are **NOT included** in the repository or release packages to avoid copyright issues. They will be **automatically downloaded** from HuggingFace on first use, or you can download optional model packs separately. See [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md).
+
+### Installation From Source (Git)
+
+1. **Clone** the repository:
    ```bash
    git clone https://github.com/peter119lee/sd-image-sorter.git
    cd sd-image-sorter
@@ -124,6 +143,49 @@ A powerful image management tool for Stable Diffusion users. Automatically extra
 
 The launcher also prints a local model readiness summary, and the `Censor`, `Similar`, and `Artist ID` tabs show user-facing health banners in the browser.
 
+---
+
+## 🌐 Model Download Sources
+
+AI models are downloaded automatically on first use. By default, models come from **HuggingFace**. For users in **mainland China** or behind restricted networks, two alternative mirror options are available:
+
+### Option 1: hf-mirror (Recommended for China)
+
+Set the `HF_ENDPOINT` environment variable before launching:
+
+```bash
+# Windows (cmd)
+set HF_ENDPOINT=https://hf-mirror.com
+
+# Windows (PowerShell)
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+
+# Linux/Mac
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+Or add it to your `backend/.env` file:
+```env
+HF_ENDPOINT=https://hf-mirror.com
+```
+
+This redirects all HuggingFace downloads through the [hf-mirror.com](https://hf-mirror.com) proxy — no code changes needed.
+
+### Option 2: ModelScope (for Artist ID / SAM3)
+
+The **Artist Identification** and **SAM3** features support [ModelScope](https://modelscope.cn) as an alternative source:
+
+- In the **Artist ID** tab, select **ModelScope Mirror** as the model source
+- SAM3 automatically falls back to ModelScope if HuggingFace access fails
+
+### Summary
+
+| Source | Supported Features | How to Use |
+|:-------|:-------------------|:-----------|
+| **HuggingFace** (default) | WD14 Tagger, CLIP, Artist ID | No config needed |
+| **hf-mirror** | Everything that uses HuggingFace | Set `HF_ENDPOINT=https://hf-mirror.com` |
+| **ModelScope** | Artist ID, SAM3 | Select in UI or set `SD_IMAGE_SORTER_ARTIST_MODEL_SOURCE=modelscope` |
+
 > [!TIP]
 > **No Python installed?** Use the [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) branch — it auto-downloads Python for you!
 
@@ -131,7 +193,7 @@ The launcher also prints a local model readiness summary, and the `Censor`, `Sim
 > Model licensing and redistribution are separate from runtime auto-download behavior. If you plan to ship GitHub Release archives, read [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md) before bundling any weights.
 
 > [!TIP]
-> **Want the least confusing setup?** Start with the release asset `sd-image-sorter-v2.1.0-portable-core-models.zip`, then read [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) and [models/README.md](models/README.md) only if you want optional large-model extras.
+> **Want the least confusing setup?** Start with the release asset `sd-image-sorter-vX.X.X-portable-python-win64.zip`, then read [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) and [models/README.md](models/README.md) only if you want optional large-model extras.
 
 ---
 
@@ -836,12 +898,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🚀 快速开始
 
 ### 环境要求
-- **Python 3.9+**
+- **Python 3.9+**（使用内置 Python 的便携包则不需要）
 - **内存**: 基础功能最低 4GB，多数 AI 功能建议 8GB+，画师识别建议 16GB+
 - **磁盘空间**: 程序与运行环境约 2GB，外加可选模型下载空间
 - **Windows** (推荐) 或 Linux/Mac
 
-### 安装与运行
+### 下载安装（不需要 Git）
+
+不会用 Git？直接从 [**GitHub Releases**](https://github.com/peter119lee/sd-image-sorter/releases) 下载 `.zip`：
+
+| 安装包 | 说明 | 适合谁 |
+|:-------|:-----|:-------|
+| `sd-image-sorter-vX.X.X-portable-python-win64.zip` | **推荐大多数用户。** 程序 + 内置 Python + 核心模型，无需额外安装 Python | Windows 用户，零配置开箱即用 |
+| `sd-image-sorter-vX.X.X-portable-core-models.zip` | 程序 + 核心模型（需要系统已安装 Python 3.9+） | 电脑已有 Python 的用户 |
+| `sd-image-sorter-vX.X.X-app-python-win64.zip` | 程序 + 内置 Python，不含模型（首次使用自动下载） | 想要更小下载体积的用户 |
+| `sd-image-sorter-vX.X.X-app.zip` | 仅程序，不含模型和 Python | 高级用户 / Linux / Mac |
+
+下载后：
+1. **解压** `.zip` 到任意文件夹（例如 `D:\sd-image-sorter`）
+2. **运行**: 双击 `run-portable.bat`（内置 Python 版本）或 `run.bat`（其他版本）
+3. **打开**: 浏览器会自动打开 `http://localhost:8000`
+
+> [!NOTE]
+> 因为版权问题，仓库和发布包中 **不包含模型文件**。模型会在首次使用时从 HuggingFace **自动下载**，也可以单独下载可选模型包。详见 [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md)。
+
+### 从源码安装（Git）
 
 1. **获取代码**:
    ```bash
@@ -859,14 +940,57 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 启动器现在还会打印本地模型就绪摘要，浏览器里的 `Censor`、`Similar`、`Artist ID` 页面也会显示用户看得懂的状态条。
 
+---
+
+## 🌐 模型下载源
+
+AI 模型会在首次使用时自动下载。默认从 **HuggingFace** 下载。对于**中国大陆用户**或受限网络环境，提供两种镜像方案：
+
+### 方案一：hf-mirror（推荐大陆用户）
+
+启动前设置 `HF_ENDPOINT` 环境变量：
+
+```bash
+# Windows (cmd)
+set HF_ENDPOINT=https://hf-mirror.com
+
+# Windows (PowerShell)
+$env:HF_ENDPOINT = “https://hf-mirror.com”
+
+# Linux/Mac
+export HF_ENDPOINT=https://hf-mirror.com
+```
+
+或者写到 `backend/.env` 文件里：
+```env
+HF_ENDPOINT=https://hf-mirror.com
+```
+
+这会把所有 HuggingFace 下载都走 [hf-mirror.com](https://hf-mirror.com) 代理，不需要改代码。
+
+### 方案二：ModelScope（画师识别 / SAM3）
+
+**画师识别** 和 **SAM3** 功能支持 [ModelScope](https://modelscope.cn) 作为备选来源：
+
+- 在 **Artist ID** 标签页选择 **ModelScope 镜像** 作为模型来源
+- SAM3 如果 HuggingFace 下载失败，会自动尝试 ModelScope
+
+### 下载源对照表
+
+| 来源 | 支持的功能 | 使用方法 |
+|:-----|:-----------|:---------|
+| **HuggingFace**（默认） | WD14 打标、CLIP、画师识别 | 不需要额外配置 |
+| **hf-mirror** | 所有使用 HuggingFace 的功能 | 设置 `HF_ENDPOINT=https://hf-mirror.com` |
+| **ModelScope** | 画师识别、SAM3 | 在 UI 里选择，或设置 `SD_IMAGE_SORTER_ARTIST_MODEL_SOURCE=modelscope` |
+
 > [!TIP]
 > **没有安装 Python?** 使用 [`bundled-python`](https://github.com/peter119lee/sd-image-sorter/tree/bundled-python) 分支 — 自动下载 Python!
 
 > [!NOTE]
-> 模型“可以自动下载”不等于“可以放心打包进 GitHub Releases 再分发”。如果你准备发布整包，请先阅读 [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md)。
+> 模型”可以自动下载”不等于”可以放心打包进 GitHub Releases 再分发”。如果你准备发布整包，请先阅读 [THIRD_PARTY_MODELS.md](THIRD_PARTY_MODELS.md)。
 
 > [!TIP]
-> **想最省事开用？** 直接从 release 下载 `sd-image-sorter-v2.1.0-portable-core-models.zip`，需要时再看 [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) 和 [models/README.md](models/README.md) 补大模型。
+> **想最省事开用？** 直接从 release 下载 `sd-image-sorter-vX.X.X-portable-python-win64.zip`，需要时再看 [docs/RELEASE_PACKS.md](docs/RELEASE_PACKS.md) 和 [models/README.md](models/README.md) 补大模型。
 
 ---
 

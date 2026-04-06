@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 from typing import Iterable
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -19,6 +20,11 @@ ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
 DEFAULT_VERSION = "2.1.0"
 DEFAULT_SPLIT_SIZE_MB = 1900
+
+# Python embeddable package URL template (Windows amd64)
+PYTHON_EMBED_VERSION = "3.11.9"
+PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
+GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
 
 DOC_FILES = {
     "models/README.md",
@@ -233,6 +239,116 @@ def sha256sum(file_path: Path) -> str:
     return digest.hexdigest()
 
 
+def download_file(url: str, dest: Path) -> None:
+    """Download a file from a URL to a local path."""
+    print(f"[release] Downloading {url} ...")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    urllib.request.urlretrieve(url, dest)
+    print(f"[release] Downloaded to {dest} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
+
+
+def prepare_embedded_python(stage_dir: Path) -> None:
+    """Download and prepare an embedded Python for portable distribution."""
+    python_dir = stage_dir / "python"
+    python_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download embeddable Python
+    embed_zip = ARTIFACT_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
+    if not embed_zip.exists():
+        download_file(PYTHON_EMBED_URL, embed_zip)
+
+    # Extract
+    import zipfile
+    with zipfile.ZipFile(embed_zip, "r") as zf:
+        zf.extractall(python_dir)
+
+    # Enable pip: uncomment "import site" in python3XX._pth
+    pth_files = list(python_dir.glob("python*._pth"))
+    for pth_file in pth_files:
+        content = pth_file.read_text(encoding="utf-8")
+        content = content.replace("#import site", "import site")
+        pth_file.write_text(content, encoding="utf-8")
+
+    # Download get-pip.py
+    get_pip = python_dir / "get-pip.py"
+    if not get_pip.exists():
+        download_file(GET_PIP_URL, get_pip)
+
+    # Write a portable run.bat that uses the embedded Python
+    portable_bat = stage_dir / "run-portable.bat"
+    portable_bat.write_text(
+        '@echo off\r\n'
+        'setlocal enabledelayedexpansion\r\n'
+        '\r\n'
+        'echo ==========================================\r\n'
+        'echo    SD Image Sorter - Portable Launch\r\n'
+        'echo ==========================================\r\n'
+        'echo.\r\n'
+        '\r\n'
+        'cd /d "%~dp0"\r\n'
+        '\r\n'
+        'set "PYTHON_CMD=%~dp0python\\python.exe"\r\n'
+        '\r\n'
+        'if not exist "%PYTHON_CMD%" (\r\n'
+        '    echo [ERROR] Embedded Python not found at %PYTHON_CMD%\r\n'
+        '    echo         Please re-download the portable package.\r\n'
+        '    pause\r\n'
+        '    exit /b 1\r\n'
+        ')\r\n'
+        '\r\n'
+        'echo [OK] Using embedded Python: %PYTHON_CMD%\r\n'
+        '\r\n'
+        'REM -- Install pip if not present\r\n'
+        'if not exist "%~dp0python\\Scripts\\pip.exe" (\r\n'
+        '    echo [INFO] Installing pip...\r\n'
+        '    "%PYTHON_CMD%" "%~dp0python\\get-pip.py" --no-warn-script-location\r\n'
+        '    if errorlevel 1 (\r\n'
+        '        echo [ERROR] Failed to install pip.\r\n'
+        '        pause\r\n'
+        '        exit /b 1\r\n'
+        '    )\r\n'
+        ')\r\n'
+        '\r\n'
+        'REM -- Install dependencies\r\n'
+        'if not exist "backend\\.requirements_hash" (\r\n'
+        '    set NEED_INSTALL=1\r\n'
+        ') else (\r\n'
+        '    set NEED_INSTALL=0\r\n'
+        ')\r\n'
+        '\r\n'
+        'if !NEED_INSTALL! EQU 1 (\r\n'
+        '    echo [INFO] Installing dependencies (first run, may take a few minutes)...\r\n'
+        '    "%~dp0python\\Scripts\\pip.exe" install -r backend\\requirements.txt --no-warn-script-location\r\n'
+        '    if errorlevel 1 (\r\n'
+        '        echo [ERROR] Failed to install dependencies.\r\n'
+        '        pause\r\n'
+        '        exit /b 1\r\n'
+        '    )\r\n'
+        '    echo installed > backend\\.requirements_hash\r\n'
+        '    echo [OK] Dependencies installed.\r\n'
+        ')\r\n'
+        '\r\n'
+        'echo.\r\n'
+        'echo ==========================================\r\n'
+        'echo   SD Image Sorter is starting!\r\n'
+        'echo.\r\n'
+        'echo   Open browser: http://localhost:8000\r\n'
+        'echo   Press Ctrl+C to stop the server.\r\n'
+        'echo ==========================================\r\n'
+        'echo.\r\n'
+        '\r\n'
+        'start "" http://localhost:8000\r\n'
+        '\r\n'
+        'cd backend\r\n'
+        '"%~dp0python\\python.exe" main.py\r\n'
+        '\r\n'
+        'echo.\r\n'
+        'echo Server stopped.\r\n'
+        'pause\r\n',
+        encoding="utf-8",
+    )
+
+
 def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) -> Path:
     stage_dir = STAGING_ROOT / name
     if stage_dir.exists():
@@ -269,6 +385,22 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
             copy_file(relative, stage_dir)
 
     assets.append(stage_archive("portable-core-models", version, seven_zip, populate=populate_portable))
+
+    # Portable with embedded Python (no system Python needed)
+    def populate_portable_python(stage_dir: Path) -> None:
+        copy_project(stage_dir)
+        for relative in CORE_MODEL_FILES:
+            copy_file(relative, stage_dir)
+        prepare_embedded_python(stage_dir)
+
+    assets.append(stage_archive("portable-python-win64", version, seven_zip, populate=populate_portable_python))
+
+    # App-only with embedded Python (no models, auto-download on first use)
+    def populate_app_python(stage_dir: Path) -> None:
+        copy_project(stage_dir)
+        prepare_embedded_python(stage_dir)
+
+    assets.append(stage_archive("app-python-win64", version, seven_zip, populate=populate_app_python))
 
     def populate_eva(stage_dir: Path) -> None:
         for relative in EVA_MODEL_FILES:

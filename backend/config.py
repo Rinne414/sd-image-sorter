@@ -60,6 +60,23 @@ CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
 
 
 # =============================================================================
+# Model Download Mirror
+# =============================================================================
+
+# HuggingFace endpoint override for users behind the GFW (mainland China).
+# Set to "https://hf-mirror.com" to use the hf-mirror proxy.
+# When set, the huggingface_hub library will download from this endpoint
+# instead of the default https://huggingface.co.
+# This is equivalent to setting the HF_ENDPOINT environment variable.
+HF_ENDPOINT: str = os.environ.get("HF_ENDPOINT", "")
+
+if HF_ENDPOINT:
+    # Propagate into the process env so huggingface_hub picks it up
+    # even if imported before config.
+    os.environ["HF_ENDPOINT"] = HF_ENDPOINT
+
+
+# =============================================================================
 # Model Directories
 # =============================================================================
 
