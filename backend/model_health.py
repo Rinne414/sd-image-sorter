@@ -167,20 +167,26 @@ def _infer_yolo_model_profile(class_names: List[str], filename: str) -> Dict[str
 def _build_yolo_capabilities(profile_id: str, filename: str, class_names: List[str]) -> Dict[str, Any]:
     filename_lower = filename.lower()
     class_count = len(class_names)
+    supports_mask_output = "seg" in filename_lower
 
     if profile_id == "privacy-censor":
         return {
             "class_scope": "fixed-privacy",
             "class_scope_label": f"{class_count or 5} built-in privacy classes",
             "input_mode_label": "Fixed privacy-part labels",
-            "output_mode_label": "Fast box-first censoring",
+            "output_mode_label": "Privacy-part segmentation masks" if supports_mask_output else "Fast box-first censoring",
             "supports_text_prompt": False,
-            "supports_mask_output": False,
+            "supports_mask_output": supports_mask_output,
             "recommended_user_level": "normal",
             "best_for": "Quick privacy-part censoring",
             "plain_english": (
                 "Best for normal users who want quick privacy-part auto-detection. "
-                "This route does not understand arbitrary text prompts."
+                + (
+                    "When the runtime preserves segmentation outputs, auto-censor can use the model masks directly. "
+                    if supports_mask_output
+                    else ""
+                )
+                + "This route does not understand arbitrary text prompts."
             ),
         }
 
@@ -361,9 +367,15 @@ def get_model_health() -> Dict[str, Any]:
         if not _module_available(module_name)
     ]
     cuda_available = False
+    torch_version = None
+    torch_cuda_build = None
+    uses_cpu_only_torch = False
     try:
         import torch
 
+        torch_version = getattr(torch, "__version__", None)
+        torch_cuda_build = getattr(getattr(torch, "version", None), "cuda", None)
+        uses_cpu_only_torch = torch_cuda_build is None
         cuda_available = bool(torch.cuda.is_available())
     except Exception:
         cuda_available = False
@@ -461,14 +473,25 @@ def get_model_health() -> Dict[str, Any]:
                 "checkpoint_path": sam3_checkpoint,
                 "missing_dependencies": sam3_missing,
                 "cuda_available": cuda_available,
+                "torch_version": torch_version,
+                "torch_cuda_build": torch_cuda_build,
                 "message": (
                     "SAM3 checkpoint and runtime dependencies are ready."
                     if sam3_checkpoint and not sam3_missing and cuda_available
                     else (
-                        "SAM3 files are installed, but this environment has no CUDA GPU. The current SAM3 runtime is GPU-only."
-                        if sam3_checkpoint and not sam3_missing and not cuda_available
-                        else "SAM3 still needs a checkpoint or runtime dependencies."
+                        "SAM3 files are installed, but this Python environment is using CPU-only PyTorch. Install a CUDA-enabled Torch build for this app."
+                        if sam3_checkpoint and not sam3_missing and not cuda_available and uses_cpu_only_torch
+                        else (
+                            "SAM3 files are installed, but this Python environment cannot access CUDA right now."
+                            if sam3_checkpoint and not sam3_missing and not cuda_available
+                            else "SAM3 still needs a checkpoint or runtime dependencies."
+                        )
                     )
+                ),
+                "runtime_note": (
+                    "SAM3 runs inside this app's own Python environment, so its GPU readiness depends on the Torch build installed here."
+                    if sam3_checkpoint
+                    else None
                 ),
                 "capabilities": {
                     "class_scope": "open-text",

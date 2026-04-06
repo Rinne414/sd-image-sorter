@@ -45,6 +45,8 @@ const CensorState = {
     showAdvancedLegacyModels: localStorage.getItem('censor_show_advanced_models') === '1',
     availableLegacyModels: [],
     backendModelStatus: null,
+    modelStatusLoading: false,
+    modelStatusError: '',
     outputFolder: localStorage.getItem('censor_output_folder') || '',
     confidence: 0.5,
     style: 'mosaic',
@@ -64,6 +66,8 @@ let boundHandlers = {
     spaceKeydown: null,
     spaceKeyup: null
 };
+
+let censorModelStatusPromise = null;
 
 function isZhCn() {
     return window.I18n?.getLang?.() === 'zh-CN';
@@ -155,8 +159,12 @@ function bindEvents() {
     });
 
     // Detection Modal handlers
-    $('#btn-open-detect-modal')?.addEventListener('click', () => {
+    $('#btn-open-detect-modal')?.addEventListener('click', async () => {
         $('#detect-modal')?.classList.add('visible');
+        if (!CensorState.backendModelStatus) {
+            renderCensorCapabilityPanel({ loading: true });
+            await loadCensorModelStatus();
+        }
         updateDetectionModelInputs();
         renderCensorCapabilityPanel();
     });
@@ -978,63 +986,86 @@ function saveCurrentCanvasToState(serializedState = null) {
 async function loadCensorModelStatus() {
     const banner = document.getElementById('censor-model-health');
     const simpleGuide = document.getElementById('censor-simple-guide');
-    try {
-        const result = await window.App.API.get('/api/censor/models');
-        CensorState.backendModelStatus = result;
-
-        const legacy = (result.models || []).find(model => model.id === 'legacy');
-        CensorState.availableLegacyModels = legacy?.files || [];
-        populateCensorModelSelect(legacy);
-        const modelTypeSelect = document.getElementById('censor-model-type');
-        if (modelTypeSelect && result.recommended_backend) {
-            modelTypeSelect.value = result.recommended_backend;
-        }
-        updateDetectionModelInputs();
-
-        if (!banner) return;
-
-        const classes = ['model-health-banner', 'model-health-banner-compact', 'is-visible'];
-        if (!result.recommended_backend) {
-            classes.push('model-health-banner-danger');
-        } else if (!(legacy?.available)) {
-            classes.push('model-health-banner-warning');
-        }
-
-        const readyNotes = (result.models || [])
-            .filter(model => model.available)
-            .map(model => model.name)
-            .join(' / ');
-        const recommended = result.recommended_backend
-            ? `Recommended mode: ${result.recommended_backend}.`
-            : 'No detection backend is fully ready yet.';
-        const defaultLegacy = legacy?.files?.find(file => file.path === legacy?.default_model_path);
-        const extraNotes = [];
-        if (defaultLegacy) {
-            extraNotes.push(`Legacy default: ${defaultLegacy.name} (${defaultLegacy.profile_label})`);
-        } else if (legacy?.default_model_path) {
-            extraNotes.push(`Legacy default: ${legacy.default_model_path}`);
-        }
-        if ((legacy?.general_model_count || 0) > 0) {
-            extraNotes.push(`${legacy.general_model_count} general YOLO model(s) installed for compatibility tests`);
-        }
-        const extra = extraNotes.length
-            ? `<br><small>${escapeHtml(extraNotes.join(' · '))}</small>`
-            : '';
-
-        banner.className = classes.join(' ');
-        banner.innerHTML = `<strong>Detection Ready:</strong> ${escapeHtml(readyNotes || 'None')} ${escapeHtml(recommended)}${extra}`;
-        if (simpleGuide) {
-            simpleGuide.textContent = legacy?.simple_user_advice || 'Keep the recommended mode and only touch custom paths if you know why.';
-        }
-        renderCensorCapabilityPanel();
-    } catch (e) {
-        if (!banner) return;
-        banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
-        banner.textContent = 'Model readiness could not be loaded right now.';
-        if (simpleGuide) {
-            simpleGuide.textContent = '';
-        }
+    if (CensorState.backendModelStatus) {
+        return CensorState.backendModelStatus;
     }
+    if (censorModelStatusPromise) {
+        return censorModelStatusPromise;
+    }
+
+    CensorState.modelStatusError = '';
+    CensorState.modelStatusLoading = true;
+    renderCensorCapabilityPanel({ loading: true });
+
+    censorModelStatusPromise = (async () => {
+        try {
+            const result = await window.App.API.get('/api/censor/models');
+            CensorState.backendModelStatus = result;
+
+            const legacy = (result.models || []).find(model => model.id === 'legacy');
+            CensorState.availableLegacyModels = legacy?.files || [];
+            populateCensorModelSelect(legacy);
+            const modelTypeSelect = document.getElementById('censor-model-type');
+            if (modelTypeSelect && result.recommended_backend) {
+                modelTypeSelect.value = result.recommended_backend;
+            }
+            updateDetectionModelInputs();
+
+            if (banner) {
+                const classes = ['model-health-banner', 'model-health-banner-compact', 'is-visible'];
+                if (!result.recommended_backend) {
+                    classes.push('model-health-banner-danger');
+                } else if (!(legacy?.available)) {
+                    classes.push('model-health-banner-warning');
+                }
+
+                const readyNotes = (result.models || [])
+                    .filter(model => model.available)
+                    .map(model => model.name)
+                    .join(' / ');
+                const recommended = result.recommended_backend
+                    ? `Recommended mode: ${result.recommended_backend}.`
+                    : 'No detection backend is fully ready yet.';
+                const defaultLegacy = legacy?.files?.find(file => file.path === legacy?.default_model_path);
+                const extraNotes = [];
+                if (defaultLegacy) {
+                    extraNotes.push(`Legacy default: ${defaultLegacy.name} (${defaultLegacy.profile_label})`);
+                } else if (legacy?.default_model_path) {
+                    extraNotes.push(`Legacy default: ${legacy.default_model_path}`);
+                }
+                if ((legacy?.general_model_count || 0) > 0) {
+                    extraNotes.push(`${legacy.general_model_count} general YOLO model(s) installed for compatibility tests`);
+                }
+                const extra = extraNotes.length
+                    ? `<br><small>${escapeHtml(extraNotes.join(' · '))}</small>`
+                    : '';
+
+                banner.className = classes.join(' ');
+                banner.innerHTML = `<strong>Detection Ready:</strong> ${escapeHtml(readyNotes || 'None')} ${escapeHtml(recommended)}${extra}`;
+            }
+            if (simpleGuide) {
+                simpleGuide.textContent = legacy?.simple_user_advice || 'Keep the recommended mode and only touch custom paths if you know why.';
+            }
+            renderCensorCapabilityPanel();
+            return result;
+        } catch (e) {
+            CensorState.modelStatusError = e?.message || 'Model readiness could not be loaded right now.';
+            if (banner) {
+                banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
+                banner.textContent = 'Model readiness could not be loaded right now.';
+            }
+            if (simpleGuide) {
+                simpleGuide.textContent = '';
+            }
+            renderCensorCapabilityPanel();
+            return null;
+        } finally {
+            CensorState.modelStatusLoading = false;
+            censorModelStatusPromise = null;
+        }
+    })();
+
+    return censorModelStatusPromise;
 }
 
 function getLegacyModelRecordByPath(path) {
@@ -1069,15 +1100,71 @@ function buildCapabilityCardHtml(title, badge, lines = [], note = '', { recommen
     `;
 }
 
-function renderCensorCapabilityPanel() {
+function renderCensorCapabilityPanel(options = {}) {
     const panel = document.getElementById('censor-capability-panel');
     const targetHelp = document.getElementById('censor-target-region-help');
     const promptHelp = document.getElementById('censor-text-prompt-help');
     const promptInput = document.getElementById('censor-text-prompt');
     const simpleGuide = document.getElementById('censor-simple-guide');
+    const segmentButton = document.getElementById('btn-segment-text-current');
+    const targetGroup = document.getElementById('censor-target-region-group');
     const targetChecks = Array.from(document.querySelectorAll('.target-region-check'));
 
     if (!panel) return;
+
+    const isLoading = Boolean(options.loading || CensorState.modelStatusLoading);
+    const loadError = String(CensorState.modelStatusError || '').trim();
+
+    if (!CensorState.backendModelStatus) {
+        panel.innerHTML = buildCapabilityCardHtml(
+            tText('Model readiness', '模型就绪状态'),
+            isLoading ? tText('Loading', '加载中') : tText('Unavailable', '暂不可用'),
+            isLoading
+                ? [
+                    tText('Checking local YOLO, NudeNet, and SAM3 availability...', '正在检查本地 YOLO、NudeNet 和 SAM3 的可用性...'),
+                    tText('The panel will fill in as soon as the backend responds.', '后端返回后，这里会马上补上详细能力说明。'),
+                ]
+                : [
+                    loadError || tText('Model readiness could not be loaded right now.', '暂时无法读取模型就绪状态。'),
+                    tText('You can reopen this dialog after the backend finishes loading.', '等后端加载完成后，重新打开这个窗口即可。'),
+                ],
+            ''
+        );
+
+        targetChecks.forEach(input => {
+            input.disabled = true;
+        });
+        if (targetGroup) {
+            targetGroup.style.display = '';
+        }
+        if (targetHelp) {
+            targetHelp.textContent = isLoading
+                ? tText('Quick privacy targets are loading.', '隐私快捷目标正在加载中。')
+                : tText('Quick privacy targets are temporarily unavailable.', '隐私快捷目标暂时不可用。');
+        }
+        if (promptHelp) {
+            promptHelp.textContent = isLoading
+                ? tText('Loading SAM3 readiness for the pro prompt tool.', '正在读取 SAM3 的可用状态。')
+                : tText('SAM3 readiness is temporarily unavailable.', 'SAM3 状态暂时无法读取。');
+        }
+        if (promptInput) {
+            promptInput.readOnly = false;
+            promptInput.removeAttribute('disabled');
+            promptInput.setAttribute('aria-disabled', 'false');
+        }
+        if (segmentButton) {
+            segmentButton.disabled = true;
+            segmentButton.title = isLoading
+                ? tText('Loading model readiness…', '正在加载模型状态…')
+                : tText('Model readiness is unavailable right now.', '当前无法读取模型状态。');
+        }
+        if (simpleGuide) {
+            simpleGuide.textContent = isLoading
+                ? tText('Loading the recommended detection route…', '正在加载推荐检测路线…')
+                : tText('Model readiness is temporarily unavailable.', '模型状态暂时不可用。');
+        }
+        return;
+    }
 
     const models = CensorState.backendModelStatus?.models || [];
     const legacy = models.find(model => model.id === 'legacy');
@@ -1137,27 +1224,34 @@ function renderCensorCapabilityPanel() {
 
     panel.innerHTML = cards.join('');
 
-    const quickFilterEnabled = (modelType === 'legacy' || modelType === 'both')
-        && selectedLegacy?.profile === 'privacy-censor';
+    const quickFilterEnabled = shouldUseQuickTargetFilters(modelType);
     targetChecks.forEach(input => {
         input.disabled = !quickFilterEnabled;
     });
+    if (targetGroup) {
+        targetGroup.style.display = quickFilterEnabled ? '' : 'none';
+    }
 
     if (targetHelp) {
-        if (quickFilterEnabled) {
+        if (modelType === 'both') {
             targetHelp.textContent = tText(
-                'These quick target filters are for the built-in privacy model and map to its fixed privacy classes.',
-                '这些快捷目标只会作用在内置隐私模型上，对应的是它自己的固定隐私类别。'
+                'These quick privacy targets work across Wenaka and NudeNet family labels. They do not control generic COCO classes.',
+                '这些快捷隐私目标会同时作用在 Wenaka 和 NudeNet 的隐私类别上，但不会控制通用 COCO 类别。'
             );
         } else if (modelType === 'nudenet') {
             targetHelp.textContent = tText(
-                'NudeNet uses its own built-in exposed/covered labels, so the quick privacy checkboxes are ignored here.',
-                'NudeNet 用的是自己内置的暴露/遮挡标签，所以这里的隐私复选框不会影响它。'
+                'NudeNet uses its own label system, but these quick privacy targets now map to the matching NudeNet families.',
+                'NudeNet 有自己的一套标签，但这些快捷隐私目标现在会映射到对应的 NudeNet 类别。'
+            );
+        } else if (quickFilterEnabled) {
+            targetHelp.textContent = tText(
+                'These quick privacy targets map to the fixed privacy classes inside the current local model.',
+                '这些快捷隐私目标会映射到当前本地模型里的固定隐私类别。'
             );
         } else {
             targetHelp.textContent = tText(
-                'The currently selected general model uses its own fixed classes. These quick privacy checkboxes do not change that model.',
-                '当前这个通用模型只认它自己的固定类别，这些隐私复选框不会改变它的识别范围。'
+                'The currently selected general segmentation model uses its own fixed object classes, so privacy quick-targets are hidden here.',
+                '当前这个通用分割模型只认自己的固定物体类别，所以这里不会显示隐私快捷目标。'
             );
         }
     }
@@ -1179,27 +1273,33 @@ function renderCensorCapabilityPanel() {
         promptInput.removeAttribute('disabled');
         promptInput.setAttribute('aria-disabled', 'false');
     }
+    if (segmentButton) {
+        segmentButton.disabled = !sam3?.available;
+        segmentButton.title = sam3?.available
+            ? ''
+            : (sam3?.message || tText('SAM3 is not available in this environment yet.', '当前环境暂时无法使用 SAM3。'));
+    }
 
     if (simpleGuide) {
         if (modelType === 'nudenet') {
             simpleGuide.textContent = tText(
-                'NudeNet is the simple path: no text prompt, no custom labels. Just click Detect Current or Detect All and it will return its built-in NSFW/body-part boxes.',
-                'NudeNet 是最省事的路线：不用填文本，也不用自定义类别。直接点“检测当前”或“检测全部”，它会返回自己内置的 NSFW/身体部位框。'
+                'NudeNet is the simple path: no text prompt, no custom labels. Use it when you want quick NSFW/body-region boxes.',
+                'NudeNet 是最省事的路线：不用填文本，也不用自定义类别。适合快速拿到 NSFW / 身体区域框。'
             );
         } else if (modelType === 'both') {
             simpleGuide.textContent = tText(
-                'Recommended for most people: run NudeNet together with the auto-picked privacy YOLO. The app will use the Wenaka privacy model when it is installed.',
-                '大多数人建议用这个：让 NudeNet 和自动挑选的隐私 YOLO 一起跑。只要装了 Wenaka 隐私模型，应用就会优先用它。'
+                'Recommended for most people: run NudeNet together with the auto-picked privacy model. If the local model has segmentation masks, the auto-censor path will use them.',
+                '大多数人建议用这个：让 NudeNet 和自动挑选的隐私模型一起跑。如果本地模型带 segmentation mask，自动打码会优先用 mask。'
             );
         } else if (selectedLegacy?.profile === 'privacy-censor') {
             simpleGuide.textContent = tText(
-                'This local YOLO file is the privacy-part route. It only understands its fixed privacy labels and is meant for fast censor boxes, not free-text prompts.',
-                '当前这个本地 YOLO 文件就是隐私部位路线。它只认固定隐私标签，适合快速打码框，不支持任意文本提示。'
+                'This local model is the privacy-part route. It only understands its fixed privacy labels, but if it exposes segmentation masks the auto-censor path will use them instead of raw rectangles.',
+                '当前这个本地模型就是隐私部位路线。它只认固定隐私标签；如果它本身提供 segmentation mask，自动打码会优先用 mask，而不是只用矩形框。'
             );
         } else if (selectedLegacy) {
             simpleGuide.textContent = tText(
-                `${selectedLegacy.name} is a general fixed-class model kept for advanced compatibility and segmentation tests. It is not the normal privacy workflow and not an open-text detector.`,
-                `${selectedLegacy.name} 是保留下来的通用固定类模型，只给高级兼容/分割测试用。它不是普通隐私打码主流程，也不是开放文本检测器。`
+                `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.`,
+                `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。它可以分割自己内置的物体类别，但不是开放文本隐私检测器。`
             );
         } else {
             simpleGuide.textContent = tText(
@@ -1338,6 +1438,18 @@ function getSelectedLegacyModelPath() {
         return manualPath;
     }
     return String(select?.value || '').trim();
+}
+
+function shouldUseQuickTargetFilters(modelType = document.getElementById('censor-model-type')?.value || 'legacy') {
+    const selectedLegacy = getSelectedLegacyModelRecord();
+    if (modelType === 'nudenet' || modelType === 'both') {
+        return true;
+    }
+    return modelType === 'legacy' && selectedLegacy?.profile === 'privacy-censor';
+}
+
+function getSelectedTargetClassesForDetection(modelType) {
+    return shouldUseQuickTargetFilters(modelType) ? [...CensorState.targetClasses] : null;
 }
 
 function captureCanvasState(canvas = null) {
@@ -1612,22 +1724,33 @@ async function runDetectionForImage(item, silent = false) {
     try {
         const modelTypeEl = document.getElementById('censor-model-type');
         const modelType = modelTypeEl ? modelTypeEl.value : 'legacy';
+        const targetClasses = getSelectedTargetClassesForDetection(modelType);
+
+        if (Array.isArray(targetClasses) && targetClasses.length === 0) {
+            item.regions = [];
+            item.currentDataUrl = null;
+            item.isProcessed = false;
+            if (!silent && item.id === CensorState.activeId) {
+                loadCanvasImage(item.id);
+                window.App.showToast(
+                    tText('Select at least one quick privacy target first', '请先勾选至少一个快捷隐私目标'),
+                    'warning'
+                );
+            }
+            return;
+        }
 
         const data = await window.App.API.post('/api/censor/detect', {
             image_id: item.id,
             model_path: getSelectedLegacyModelPath(),
             model_type: modelType,
-            confidence_threshold: CensorState.confidence
+            confidence_threshold: CensorState.confidence,
+            target_classes: targetClasses,
         });
 
         // Sort by confidence and take top 50 to avoid processing thousands
-        const sortedDetections = data.detections.sort((a, b) => b.confidence - a.confidence).slice(0, 50);
-        // Filter by target classes if needed, otherwise use all sorted detections
-        let regions = sortedDetections.filter(d => CensorState.targetClasses.includes(d.class));
-        // If no matches, check for class_id based filtering or use all
-        if (regions.length === 0 && sortedDetections.length > 0) {
-            regions = sortedDetections;
-        }
+        const sortedDetections = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence).slice(0, 50);
+        const regions = sortedDetections;
         item.regions = regions;
 
         // Apply to a temporary canvas to generate DataURL
@@ -1638,60 +1761,34 @@ async function runDetectionForImage(item, silent = false) {
         const ctx = cvs.getContext('2d');
         ctx.drawImage(img, 0, 0);
 
-        // Apply regions
-        ctx.save();
-        regions.forEach(r => {
-            const [x1, y1, x2, y2] = r.box;
-            const w = x2 - x1, h = y2 - y1;
-
-            if (CensorState.style === 'mosaic') {
-                const b = CensorState.blockSize;
-                for (let bx = x1; bx < x2; bx += b) {
-                    for (let by = y1; by < y2; by += b) {
-                        const bw = Math.min(b, x2 - bx);
-                        const bh = Math.min(b, y2 - by);
-                        const d = ctx.getImageData(bx, by, bw, bh);
-                        ctx.fillStyle = getAverageColor(d);
-                        ctx.fillRect(bx, by, bw, bh);
-                    }
-                }
-            } else if (CensorState.style === 'blur') {
-                // Apply blur
-                ctx.save();
-                ctx.beginPath();
-                ctx.rect(x1, y1, w, h);
-                ctx.clip();
-                ctx.filter = `blur(${CensorState.blockSize / 2}px)`;
-                ctx.drawImage(img, 0, 0);
-                ctx.restore();
-            } else if (CensorState.style === 'black_bar') {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(x1, y1, w, h);
-            } else if (CensorState.style === 'white_bar') {
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(x1, y1, w, h);
-            } else {
-                // Default to black bar
-                ctx.fillStyle = '#000';
-                ctx.fillRect(x1, y1, w, h);
-            }
-
-            // Debug: Stroke box
-            // ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-            // ctx.lineWidth = 2;
-            // ctx.strokeRect(x1, y1, w, h);
-        });
-        ctx.restore();
-
-        item.currentDataUrl = cvs.toDataURL('image/png');
-        item.isProcessed = true;
+        if (data.combined_mask) {
+            await renderRasterMaskEffectOntoCanvas(cvs, data.combined_mask);
+            item.currentDataUrl = cvs.toDataURL('image/png');
+            item.isProcessed = true;
+        } else if (regions.length > 0) {
+            applyBoxRegionsToCanvas(cvs, img, regions);
+            item.currentDataUrl = cvs.toDataURL('image/png');
+            item.isProcessed = true;
+        } else {
+            item.currentDataUrl = null;
+            item.isProcessed = false;
+        }
 
         if (!silent && item.id === CensorState.activeId) {
             loadCanvasImage(item.id);
             if (regions.length === 0) {
-                window.App.showToast('No relevant regions found (Try lowering confidence)', 'info');
+                window.App.showToast(
+                    tText('No matching regions were found. Try lowering confidence or changing the model.', '没有找到匹配区域。可以试着降低置信度，或换一条检测路线。'),
+                    'info'
+                );
             } else {
-                window.App.showToast(`Applied censorship to ${regions.length} regions`, 'success');
+                const usedMask = data.geometry_mode === 'mask' || data.geometry_mode === 'mixed';
+                window.App.showToast(
+                    usedMask
+                        ? tText(`Applied auto-censor mask to ${regions.length} matched region(s)`, `已对 ${regions.length} 个匹配区域应用自动打码 mask`)
+                        : tText(`Applied box-based auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用基于框的自动打码`),
+                    'success'
+                );
             }
         }
 
@@ -1701,14 +1798,51 @@ async function runDetectionForImage(item, silent = false) {
     }
 }
 
-async function applyRasterMaskToActiveCanvas(maskDataUrl) {
-    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    regions.forEach(r => {
+        const [x1, y1, x2, y2] = r.box;
+        const w = x2 - x1;
+        const h = y2 - y1;
+
+        if (CensorState.style === 'mosaic') {
+            const b = CensorState.blockSize;
+            for (let bx = x1; bx < x2; bx += b) {
+                for (let by = y1; by < y2; by += b) {
+                    const bw = Math.min(b, x2 - bx);
+                    const bh = Math.min(b, y2 - by);
+                    const d = ctx.getImageData(bx, by, bw, bh);
+                    ctx.fillStyle = getAverageColor(d);
+                    ctx.fillRect(bx, by, bw, bh);
+                }
+            }
+        } else if (CensorState.style === 'blur') {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x1, y1, w, h);
+            ctx.clip();
+            ctx.filter = `blur(${CensorState.blockSize / 2}px)`;
+            ctx.drawImage(baseImage, 0, 0);
+            ctx.restore();
+        } else if (CensorState.style === 'white_bar') {
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(x1, y1, w, h);
+        } else {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x1, y1, w, h);
+        }
+    });
+    ctx.restore();
+}
+
+async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl) {
     if (!canvas || !canvas.width || !canvas.height) {
         throw new Error('No editable canvas is ready');
     }
 
     const ctx = canvas.getContext('2d');
-    const snapshot = captureCanvasState(canvas) || CensorState.queue.find(i => i.id === CensorState.activeId)?.originalUrl;
+    const snapshot = captureCanvasState(canvas);
     if (!snapshot) {
         throw new Error('Could not capture the current canvas state');
     }
@@ -1751,6 +1885,15 @@ async function applyRasterMaskToActiveCanvas(maskDataUrl) {
     effectCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
 
     ctx.drawImage(effectCanvas, 0, 0);
+}
+
+async function applyRasterMaskToActiveCanvas(maskDataUrl) {
+    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!canvas || !canvas.width || !canvas.height) {
+        throw new Error('No editable canvas is ready');
+    }
+
+    await renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl);
     const committedState = pushUndoState();
     saveCurrentCanvasToState(committedState);
 
@@ -1758,6 +1901,7 @@ async function applyRasterMaskToActiveCanvas(maskDataUrl) {
     if (activeItem) {
         activeItem.isProcessed = true;
     }
+    renderQueue();
 }
 
 async function segmentCurrentImageByText() {

@@ -1403,6 +1403,45 @@
     gap: 10px;
 }
 
+.censor-detect-section {
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(12, 18, 30, 0.52);
+}
+
+.censor-detect-section-header {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.censor-detect-section-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.96);
+}
+
+.censor-detect-section-note {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.66);
+}
+
+.censor-detect-section-pro {
+    border-color: rgba(94, 234, 212, 0.28);
+    background: linear-gradient(180deg, rgba(10, 22, 34, 0.72), rgba(12, 18, 30, 0.52));
+}
+
+.censor-detect-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 10px;
+}
+
 .censor-capability-card {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 14px;

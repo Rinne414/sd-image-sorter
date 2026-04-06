@@ -199,8 +199,8 @@ window.I18nLang_en = {
     'censor.legacyYolo': 'Local YOLO Files',
     'censor.nudenet': 'NudeNet v3',
     'censor.installedYoloModel': 'Installed YOLO Model',
-    'censor.showAdvancedModels': 'Show advanced legacy models (YOLO26 / generic YOLOv8)',
-    'censor.advancedModelsHelp': 'Leave this off unless you are doing compatibility tests or know which fixed-class model you want.',
+    'censor.showAdvancedModels': 'Show advanced local seg models (YOLO26 / generic YOLOv8)',
+    'censor.advancedModelsHelp': 'Leave this off unless you intentionally want fixed-class segmentation experiments.',
     'censor.yoloModelPathHelp': 'Normal users can leave this empty. It is only for custom experiments.',
     'censor.both': 'Recommended: Both (NudeNet + privacy YOLO)',
     'censor.detect': 'Detect',
@@ -230,15 +230,21 @@ window.I18nLang_en = {
     'censor.autoDetectDesc': 'Configure AI detection and apply censoring automatically.',
     'censor.yoloModelPath': 'YOLO Model Path',
     'censor.confidenceThreshold': 'Confidence Threshold',
-    'censor.targetRegions': 'Target Regions',
+    'censor.targetRegions': 'Quick Privacy Targets',
     'censor.modelCapabilities': 'Model Capabilities',
-    'censor.targetRegionHelp': 'These quick target filters are mainly for the built-in privacy model.',
-    'censor.advancedPrecision': 'Advanced Precision (Pro)',
+    'censor.targetRegionHelp': 'These quick privacy targets work for Wenaka / NudeNet families. They do not control generic YOLO26 / YOLOv8 object classes.',
+    'censor.advancedPrecision': 'SAM3 Text Precision (Pro)',
     'censor.textPromptPlaceholder': 'e.g. exposed breasts, face, tattoo, hand',
-    'censor.textPromptHelp': 'You can type a prompt here any time. Execution needs a GPU-ready SAM3 runtime.',
+    'censor.textPromptHelp': 'Type a prompt here for SAM3. Execution still needs a CUDA-ready SAM3 runtime.',
     'censor.segmentText': 'Segment by Text',
     'censor.detectCurrentBtn': 'Detect Current',
     'censor.detectAll': 'Detect All',
+    'censor.quickAutoCensor': 'Quick Auto Censor',
+    'censor.quickAutoCensorHelp': 'Use Wenaka / NudeNet for the normal privacy workflow.',
+    'censor.advancedModelPicker': 'Advanced Local Model Picker',
+    'censor.advancedModelPickerHelp': 'Only use this when you intentionally want YOLO26 / generic YOLOv8 experiments.',
+    'censor.proSegmentation': 'Pro Segmentation',
+    'censor.proSegmentationHelp': 'Use SAM3 for text-guided precision masks when the runtime is ready.',
 
     // ========================
     // Similar Images View
@@ -433,7 +439,10 @@ window.I18nLang_en = {
     // ========================
     // Selection FAB
     // ========================
+    'selection.panelTitle': 'Batch Actions',
     'selection.count': '{count} items selected',
+    'selection.emptyHint': 'Selection mode is on. Pick images or use Select All.',
+    'selection.doneSelecting': 'Done Selecting',
     'selection.selectAll': 'Select All',
     'selection.exportPrompts': 'Export Prompts',
     'selection.exportTags': 'Export Tags',

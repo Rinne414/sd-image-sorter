@@ -162,6 +162,33 @@ async function findDetectableImage(request) {
   throw new Error('Could not find a detectable censor test image in the current library')
 }
 
+async function findSam3PromptMatch(request) {
+  const response = await request.get('/api/images?limit=8')
+  expect(response.ok()).toBeTruthy()
+  const payload = await response.json()
+  const prompts = ['person', 'face', 'hand', 'breasts']
+
+  for (const image of payload.images || []) {
+    for (const prompt of prompts) {
+      const segment = await request.post('/api/censor/segment-text', {
+        data: {
+          image_id: image.id,
+          text_prompt: prompt,
+        },
+      })
+      if (!segment.ok()) {
+        continue
+      }
+      const segmentPayload = await segment.json()
+      if (segmentPayload.mask) {
+        return { image, prompt }
+      }
+    }
+  }
+
+  throw new Error('Could not find a SAM3 text-prompt match in the current library')
+}
+
 test.beforeEach(async ({ page }) => {
   await resetAutoSeparateFixture()
   await resetManualSortFixture()
@@ -170,6 +197,25 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('sd-image-sorter-lang', 'en')
     localStorage.setItem('artist-guide-seen', 'true')
   })
+})
+
+test('gallery selection actions should stay in the left sidebar instead of floating over the grid', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  await page.locator('#btn-toggle-select').click()
+  const selectionPanel = page.locator('.filter-sidebar #selection-actions')
+  const sidebar = page.locator('.filter-sidebar')
+
+  await expect(selectionPanel).toBeVisible()
+  await expect(selectionPanel).toContainText('Selection mode is on')
+
+  const panelBox = await selectionPanel.boundingBox()
+  const sidebarBox = await sidebar.boundingBox()
+  expect(panelBox).not.toBeNull()
+  expect(sidebarBox).not.toBeNull()
+  expect(panelBox!.x).toBeGreaterThanOrEqual(sidebarBox!.x - 1)
+  expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1)
 })
 
 test('censor settings should open, explain model roles, and allow typing the pro prompt', async ({ page }) => {
@@ -190,6 +236,7 @@ test('censor settings should open, explain model roles, and allow typing the pro
   await promptInput.click()
   await promptInput.pressSequentially('face')
   await expect(promptInput).toHaveValue('face')
+  await expect(page.locator('#btn-segment-text-current')).toBeEnabled()
 
   await page.selectOption('#censor-model-type', 'nudenet')
   await expect(page.locator('#censor-simple-guide')).toContainText('NudeNet')
@@ -212,9 +259,41 @@ test('censor settings should open, explain model roles, and allow typing the pro
   expect(generalModelPath).toBeTruthy()
   await page.selectOption('#censor-model-type', 'legacy')
   await page.selectOption('#censor-model-file', String(generalModelPath))
-  await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class model')
-  await expect(page.locator('#censor-simple-guide')).toContainText('not an open-text detector')
+  await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class segmentation model')
+  await expect(page.locator('#censor-simple-guide')).toContainText('not an open-text privacy detector')
   await expect(page.locator('.target-region-check').first()).toBeDisabled()
+})
+
+test('sam3 text segmentation should work through the real UI when the runtime is ready', async ({ page, request }) => {
+  test.setTimeout(120000)
+
+  const { image, prompt } = await findSam3PromptMatch(request)
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  await setGallerySearch(page, image.filename)
+  await expect(page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`)).toBeVisible()
+
+  await page.locator('#btn-toggle-select').click()
+  await page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`).click()
+  await page.locator('#btn-send-to-censor').click()
+
+  await expect(page.locator('#view-censor.active')).toBeVisible()
+  await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(1, { timeout: 15000 })
+
+  await page.locator('#btn-open-detect-modal').click()
+  await expect(page.locator('#detect-modal.visible')).toBeVisible()
+
+  const promptInput = page.locator('#censor-text-prompt')
+  await promptInput.fill('')
+  await promptInput.pressSequentially(prompt)
+  await page.locator('#btn-segment-text-current').click()
+
+  await expect.poll(async () => {
+    return await page.locator('#censor-queue-list .queue-thumb-v2.processed').count()
+  }, { timeout: 60000 }).toBe(1)
+  await expect(page.locator('#toast-container')).toContainText('Applied SAM3 mask', { timeout: 10000 })
 })
 
 test('artist identify selected should work on a real image', async ({ page, request }) => {

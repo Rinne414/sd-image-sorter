@@ -235,6 +235,65 @@ class TestCensorRouterValidation:
         assert captured["model_path"].endswith("wenaka_yolov8s-seg.onnx")
         assert response.json()["detections"][0]["class"] == "breasts"
 
+    def test_detect_filters_target_classes_and_returns_combined_mask(self, test_client, monkeypatch, tmp_path):
+        from PIL import Image
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "censor-mask-test.png"
+        Image.new("RGB", (80, 80), color="blue").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="censor-mask-test.png",
+            metadata_json="{}",
+        )
+
+        class FakeDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                return [
+                    {
+                        "class": "breasts",
+                        "confidence": 0.92,
+                        "box": [0, 0, 24, 24],
+                        "polygon": [[0, 0], [24, 0], [24, 24], [0, 24]],
+                    },
+                    {
+                        "class": "anus",
+                        "confidence": 0.88,
+                        "box": [40, 40, 60, 60],
+                    },
+                ]
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", FakeDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={
+                "image_id": image_id,
+                "model_type": "legacy",
+                "confidence_threshold": 0.5,
+                "target_classes": ["anus"],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [d["class"] for d in data["detections"]] == ["anus"]
+        assert data["geometry_mode"] == "box"
+        assert data["combined_mask"].startswith("data:image/png;base64,")
+
     def test_censor_models_returns_recommended_backend(self, test_client):
         response = test_client.get("/api/censor/models")
 

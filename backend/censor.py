@@ -44,6 +44,7 @@ class CensorDetector:
         self.session = None
         self.runtime = None
         self.runtime_backend = None
+        self.supports_masks = False
         self.requested_classes = list(classes) if classes else None
         self.raw_classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
         self.classes = list(classes) if classes else list(CENSOR_DEFAULT_CLASSES)
@@ -123,6 +124,13 @@ class CensorDetector:
             expected_channels += 32
         return channel_dim == expected_channels
 
+    @staticmethod
+    def _onnx_has_segmentation_outputs(session) -> bool:
+        try:
+            return len(session.get_outputs()) > 1
+        except Exception:
+            return False
+
     def _load_with_ultralytics(self, model_path: str):
         from ultralytics import YOLO
 
@@ -131,6 +139,7 @@ class CensorDetector:
         self.runtime = model
         self.session = model
         self.runtime_backend = "ultralytics"
+        self.supports_masks = "seg" in os.path.basename(model_path).lower()
         self.input_size = YOLO_INPUT_SIZE
 
         names = self._names_from_mapping(getattr(model, "names", {}))
@@ -160,19 +169,30 @@ class CensorDetector:
 
         detections = []
         names = getattr(result, "names", getattr(self.runtime, "names", {}))
+        masks = getattr(result, "masks", None)
+        polygons = getattr(masks, "xy", None) if masks is not None else None
         for index in range(len(boxes)):
             class_id = int(boxes.cls[index].item())
             confidence = float(boxes.conf[index].item())
             x1, y1, x2, y2 = [int(round(value)) for value in boxes.xyxy[index].tolist()]
             class_name = self._canonicalize_class_name(self._lookup_runtime_name(names, class_id))
-            detections.append(
-                {
-                    "class": class_name,
-                    "class_id": class_id,
-                    "confidence": confidence,
-                    "box": [x1, y1, x2, y2],
-                }
-            )
+            detection = {
+                "class": class_name,
+                "class_id": class_id,
+                "confidence": confidence,
+                "box": [x1, y1, x2, y2],
+            }
+
+            if polygons is not None and index < len(polygons):
+                polygon = polygons[index].tolist()
+                if polygon:
+                    detection["polygon"] = [
+                        [float(point[0]), float(point[1])]
+                        for point in polygon
+                        if isinstance(point, (list, tuple)) and len(point) >= 2
+                    ]
+
+            detections.append(detection)
 
         return detections
         
@@ -224,6 +244,27 @@ class CensorDetector:
 
             self._load_onnx_metadata(session)
 
+            if self._onnx_has_segmentation_outputs(session):
+                try:
+                    logger.info(
+                        "Model %s exposes segmentation outputs. Switching to Ultralytics runtime so masks are preserved.",
+                        os.path.basename(self.model_path),
+                    )
+                    self._load_with_ultralytics(self.model_path)
+                    logger.info("Censor detector loaded via Ultralytics mask-preserving path: %s", os.path.basename(self.model_path))
+                    logger.info("Classes: %d", len(self.classes))
+                    return
+                except ImportError:
+                    logger.warning(
+                        "Ultralytics is unavailable, continuing with lightweight ONNX parser. Segmentation masks will not be preserved."
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Could not switch %s to Ultralytics runtime (%s). Continuing with lightweight ONNX parser.",
+                        os.path.basename(self.model_path),
+                        exc,
+                    )
+
             if not self._supports_lightweight_onnx(session):
                 logger.info(
                     "ONNX output layout for %s is not supported by the lightweight parser. Falling back to Ultralytics runtime.",
@@ -237,6 +278,7 @@ class CensorDetector:
             self.session = session
             self.runtime = None
             self.runtime_backend = "onnxruntime"
+            self.supports_masks = False
             logger.info("Censor detector loaded: %s", os.path.basename(self.model_path))
             logger.info("Input size: %s, Classes: %d", self.input_size, len(self.classes))
             

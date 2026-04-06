@@ -1124,9 +1124,9 @@ function syncSelectionModeButton() {
 
     const iconEl = toggleBtn.querySelector('span:first-child');
     const labelEl = toggleBtn.querySelector('span:last-child');
-    const selectedCount = AppState.selectedIds.size;
     const isSelecting = Boolean(AppState.selectionMode);
-    const countSuffix = isSelecting && selectedCount > 0 ? ` (${selectedCount})` : '';
+    const doneLabel = window.I18n?.t?.('selection.doneSelecting') || 'Done Selecting';
+    const idleLabel = window.I18n?.t?.('gallery.selectImages') || 'Select Images';
 
     toggleBtn.classList.toggle('active', isSelecting);
     toggleBtn.classList.toggle('selection-active', isSelecting);
@@ -1142,7 +1142,7 @@ function syncSelectionModeButton() {
     }
 
     if (labelEl) {
-        labelEl.textContent = isSelecting ? `Done Selecting${countSuffix}` : 'Select Images';
+        labelEl.textContent = isSelecting ? doneLabel : idleLabel;
     }
 }
 
@@ -1153,6 +1153,21 @@ function emitSelectionStateChanged() {
             selectedCount: AppState.selectedIds.size,
         }
     }));
+}
+
+function ensureSelectionPanelVisible(panel) {
+    const sidebar = document.querySelector('.filter-sidebar');
+    if (!panel || !sidebar) return;
+
+    const panelRect = panel.getBoundingClientRect();
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const padding = 10;
+
+    if (panelRect.bottom > sidebarRect.bottom - padding) {
+        sidebar.scrollTop += panelRect.bottom - sidebarRect.bottom + padding;
+    } else if (panelRect.top < sidebarRect.top + padding) {
+        sidebar.scrollTop -= sidebarRect.top + padding - panelRect.top;
+    }
 }
 
 function setSelectionMode(enabled, options = {}) {
@@ -2934,24 +2949,33 @@ function filterLibraryContent() {
 // renderModalActiveTags and renderModalActivePrompts are defined in the Filter Modal section below
 
 function updateSelectionUI() {
-    const fab = $('#selection-actions');
+    const panel = $('#selection-actions');
     const countEl = $('#selection-count');
     const grid = $('#gallery-grid');
     const hasSelection = AppState.selectedIds.size > 0;
-    const canRunBatchActions = AppState.selectionMode && hasSelection && AppState.currentView === 'gallery';
+    const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
+    const canRunBatchActions = selectionPanelVisible && hasSelection;
     const buttonIds = [
-        'btn-select-all',
         'btn-export-selected',
         'btn-export-tags-selected',
         'btn-batch-export-tags',
-        'btn-send-to-censor',
-        'btn-clear-selection'
+        'btn-send-to-censor'
     ];
 
     syncSelectionModeButton();
 
     if (grid) {
         grid.classList.toggle('selection-mode', !!AppState.selectionMode);
+    }
+
+    const selectAllBtn = $('#btn-select-all');
+    if (selectAllBtn) {
+        selectAllBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+    }
+
+    const clearSelectionBtn = $('#btn-clear-selection');
+    if (clearSelectionBtn) {
+        clearSelectionBtn.disabled = !selectionPanelVisible || !hasSelection;
     }
 
     buttonIds.forEach((id) => {
@@ -2961,11 +2985,16 @@ function updateSelectionUI() {
         }
     });
 
-    if (canRunBatchActions) {
-        fab.style.display = 'flex';
-        countEl.textContent = `${AppState.selectedIds.size} items selected`;
-    } else {
-        fab.style.display = 'none';
+    if (selectionPanelVisible && panel) {
+        panel.style.display = 'grid';
+        if (countEl) {
+            countEl.textContent = hasSelection
+                ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
+                : (window.I18n?.t?.('selection.emptyHint') || 'Selection mode is on. Pick images or use Select All.');
+        }
+        requestAnimationFrame(() => ensureSelectionPanelVisible(panel));
+    } else if (panel) {
+        panel.style.display = 'none';
     }
 }
 

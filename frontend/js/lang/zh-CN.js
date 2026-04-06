@@ -201,8 +201,8 @@ window.I18nLang_zhCN = {
     'censor.legacyYolo': '本地 YOLO 文件',
     'censor.nudenet': 'NudeNet v3',
     'censor.installedYoloModel': '已安装的 YOLO 模型',
-    'censor.showAdvancedModels': '显示高级 Legacy 模型（YOLO26 / 通用 YOLOv8）',
-    'censor.advancedModelsHelp': '除非你在做兼容测试，或明确知道自己要哪种固定类模型，否则保持关闭即可。',
+    'censor.showAdvancedModels': '显示高级本地分割模型（YOLO26 / 通用 YOLOv8）',
+    'censor.advancedModelsHelp': '除非你是明确要做固定类分割实验，否则保持关闭即可。',
     'censor.yoloModelPathHelp': '普通用户可以留空。这里只给自定义实验用。',
     'censor.both': '推荐：两者一起（NudeNet + 隐私 YOLO）',
     'censor.detect': '检测',
@@ -232,15 +232,21 @@ window.I18nLang_zhCN = {
     'censor.autoDetectDesc': '配置 AI 检测并自动应用遮挡。',
     'censor.yoloModelPath': 'YOLO 模型路径',
     'censor.confidenceThreshold': '置信度阈值',
-    'censor.targetRegions': '目标区域',
+    'censor.targetRegions': '快捷隐私目标',
     'censor.modelCapabilities': '模型能力说明',
-    'censor.targetRegionHelp': '这些快捷目标过滤主要给内置隐私模型使用。',
-    'censor.advancedPrecision': '高级精修（专业）',
+    'censor.targetRegionHelp': '这些快捷隐私目标会作用在 Wenaka / NudeNet 的隐私类别上，但不会控制通用 YOLO26 / YOLOv8 物体类。',
+    'censor.advancedPrecision': 'SAM3 文本精修（专业）',
     'censor.textPromptPlaceholder': '例如：exposed breasts、face、tattoo、hand',
-    'censor.textPromptHelp': '这里随时都可以输入提示词，但真正执行仍然需要可用的 GPU 版 SAM3 运行时。',
+    'censor.textPromptHelp': '这里输入的是给 SAM3 的文本提示；真正执行仍然需要可用的 CUDA 版 SAM3 运行时。',
     'censor.segmentText': '按文本分割',
     'censor.detectCurrentBtn': '检测当前',
     'censor.detectAll': '检测全部',
+    'censor.quickAutoCensor': '快速自动打码',
+    'censor.quickAutoCensorHelp': '普通隐私打码优先走 Wenaka / NudeNet 这条路线。',
+    'censor.advancedModelPicker': '高级本地模型选择',
+    'censor.advancedModelPickerHelp': '只有在你明确要做 YOLO26 / 通用 YOLOv8 实验时才需要这里。',
+    'censor.proSegmentation': '专业分割',
+    'censor.proSegmentationHelp': '当运行时就绪时，用 SAM3 做文本引导的精细 mask 分割。',
 
     // ========================
     // Similar Images View
@@ -435,7 +441,10 @@ window.I18nLang_zhCN = {
     // ========================
     // Selection FAB
     // ========================
+    'selection.panelTitle': '批量操作',
     'selection.count': '已选择 {count} 项',
+    'selection.emptyHint': '已进入选择模式。请选择图片，或直接点全选。',
+    'selection.doneSelecting': '完成选择',
     'selection.selectAll': '全选',
     'selection.exportPrompts': '导出提示词',
     'selection.exportTags': '导出标签',

@@ -2900,6 +2900,70 @@ body::before {
         max-width: 700px;
     }
 
+    .selection-panel {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 18px;
+        border: 1px solid rgba(255, 138, 61, 0.18);
+        background: rgba(10, 22, 31, 0.88);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.04),
+            0 10px 24px rgba(7, 14, 21, 0.16);
+        gap: 10px;
+    }
+
+    .selection-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .selection-panel-copy {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .selection-panel-title {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.58);
+    }
+
+    .selection-panel-count {
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--text-primary);
+    }
+
+    .selection-panel-clear {
+        flex-shrink: 0;
+    }
+
+    .selection-panel-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .selection-panel-actions .btn {
+        justify-content: flex-start;
+        align-items: flex-start;
+        min-width: 0;
+        min-height: 40px;
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.2;
+        white-space: normal;
+    }
+
+    .selection-panel-actions .btn span:last-child {
+        min-width: 0;
+    }
+
     .gallery-item.selected {
         outline: 2px solid var(--accent-primary);
         outline-offset: -2px;
@@ -3054,10 +3118,9 @@ body::before {
 
 /* Select Button Active State */
 #btn-toggle-select.active {
-    background: linear-gradient(135deg, var(--accent-primary), #7c3aed);
-    color: white;
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
-    animation: selectGlow 1.5s ease-in-out infinite;
+    color: var(--text-primary);
+    box-shadow: 0 10px 22px rgba(7, 14, 21, 0.18);
+    animation: none;
 }
 
 @keyframes selectGlow {
@@ -5229,6 +5292,20 @@ kbd {
         font-size: 12px;
     }
 
+    .selection-panel {
+        padding: 12px;
+        gap: 10px;
+    }
+
+    .selection-panel-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .selection-panel-actions {
+        grid-template-columns: 1fr;
+    }
+
     /* Toast notifications */
     .toast {
         left: 8px;
@@ -5972,8 +6049,9 @@ input[type="radio"],
     color: var(--text-primary);
 }
 
-/* ARIA live region styles (hidden but accessible) */
-[aria-live] {
+/* Hidden live region styles for screen-reader-only announcers */
+.sr-only[aria-live],
+#a11y-live-region[aria-live] {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -6000,8 +6078,10 @@ input[type="radio"],
 
 /* Selection mode indicator */
 #btn-toggle-select[aria-pressed="true"] {
-    background: var(--accent-success);
-    border-color: var(--accent-success);
+    background: linear-gradient(135deg, rgba(255, 138, 61, 0.22), rgba(45, 212, 191, 0.16));
+    border-color: rgba(45, 212, 191, 0.3);
+    color: var(--text-primary);
+    animation: none;
 }
 
 /* View mode button states */

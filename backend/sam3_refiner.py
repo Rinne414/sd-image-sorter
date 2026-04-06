@@ -9,6 +9,7 @@ It supports:
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import threading
@@ -29,6 +30,7 @@ _sam3_processor = None
 _sam3_device = None
 _sam3_lock = threading.Lock()
 _sam3_available = None
+_sam3_runtime_patch_applied = False
 
 
 def _check_sam3_available() -> bool:
@@ -41,11 +43,51 @@ def _check_sam3_available() -> bool:
             from sam3.model.sam3_image_processor import Sam3Processor  # noqa: F401
             _sam3_available = bool(torch.cuda.is_available())
             if not _sam3_available:
-                logger.warning("SAM3 runtime is installed, but CUDA is not available in this environment.")
+                if getattr(getattr(torch, "version", None), "cuda", None) is None:
+                    logger.warning("SAM3 runtime is installed, but this Python environment is using CPU-only PyTorch.")
+                else:
+                    logger.warning("SAM3 runtime is installed, but this Python environment cannot access CUDA right now.")
         except ImportError as exc:
             _sam3_available = False
             logger.warning("SAM3 runtime is unavailable: %s", exc)
     return bool(_sam3_available)
+
+
+def _patch_sam3_runtime_for_stable_inference() -> None:
+    """Patch SAM3 fused MLP inference to avoid bf16/float32 mismatches."""
+    global _sam3_runtime_patch_applied
+    if _sam3_runtime_patch_applied:
+        return
+
+    try:
+        import torch
+        import torch.nn.functional as F
+        import sam3.model.vitdet as sam3_vitdet  # type: ignore
+        import sam3.perflib.fused as sam3_fused  # type: ignore
+    except Exception as exc:
+        logger.warning("SAM3 runtime patch skipped: %s", exc)
+        return
+
+    def _safe_addmm_act(activation, linear, mat1):
+        if torch.is_grad_enabled():
+            raise ValueError("Expected grad to be disabled.")
+
+        weight = linear.weight.detach()
+        bias = linear.bias.detach() if linear.bias is not None else None
+        target_dtype = weight.dtype
+        mat1 = mat1.to(dtype=target_dtype)
+        output = F.linear(mat1, weight, bias)
+
+        if activation in [torch.nn.functional.relu, torch.nn.ReLU]:
+            return F.relu(output)
+        if activation in [torch.nn.functional.gelu, torch.nn.GELU]:
+            return F.gelu(output)
+        raise ValueError(f"Unexpected activation {activation}")
+
+    sam3_fused.addmm_act = _safe_addmm_act
+    sam3_vitdet.addmm_act = _safe_addmm_act
+    _sam3_runtime_patch_applied = True
+    logger.info("Applied SAM3 stable inference patch to avoid bf16/float32 mismatches.")
 
 
 def _resolve_checkpoint_path(checkpoint_path: Optional[str] = None) -> Optional[str]:
@@ -116,6 +158,7 @@ def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface
                 from sam3.model.sam3_image_processor import Sam3Processor  # type: ignore
                 import torch
 
+                _patch_sam3_runtime_for_stable_inference()
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 resolved_checkpoint = _resolve_checkpoint_path(checkpoint_path)
 
@@ -223,6 +266,17 @@ class SAM3Refiner:
             self.load()
         return self._processor
 
+    def _inference_context(self):
+        try:
+            import torch
+        except Exception:
+            return contextlib.nullcontext()
+
+        device = str(getattr(self.processor, "device", _sam3_device or "cuda"))
+        if device.startswith("cuda"):
+            return torch.amp.autocast(device_type="cuda", enabled=False)
+        return contextlib.nullcontext()
+
     def refine_box(
         self,
         image: Image.Image,
@@ -234,10 +288,11 @@ class SAM3Refiner:
             if prompt_box is None:
                 return None
 
-            state = self.processor.set_image(image.convert("RGB"))
-            if text_prompt:
-                state = self.processor.set_text_prompt(text_prompt, state)
-            state = self.processor.add_geometric_prompt(prompt_box, True, state)
+            with self._inference_context():
+                state = self.processor.set_image(image.convert("RGB"))
+                if text_prompt:
+                    state = self.processor.set_text_prompt(text_prompt, state)
+                state = self.processor.add_geometric_prompt(prompt_box, True, state)
             return _extract_best_mask(state)
         except Exception as exc:
             logger.error("SAM3 box refinement failed: %s", exc)
@@ -259,8 +314,9 @@ class SAM3Refiner:
 
     def segment_by_text(self, image: Image.Image, text_prompt: str) -> Optional[np.ndarray]:
         try:
-            state = self.processor.set_image(image.convert("RGB"))
-            state = self.processor.set_text_prompt(text_prompt, state)
+            with self._inference_context():
+                state = self.processor.set_image(image.convert("RGB"))
+                state = self.processor.set_text_prompt(text_prompt, state)
             return _extract_best_mask(state)
         except Exception as exc:
             logger.error("SAM3 text segmentation failed: %s", exc)

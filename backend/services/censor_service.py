@@ -14,7 +14,7 @@ from io import BytesIO
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
-from PIL import Image, PngImagePlugin
+from PIL import Image, ImageDraw, PngImagePlugin
 
 import database as db
 from model_health import get_default_legacy_model_path, get_model_health
@@ -29,6 +29,7 @@ class CensorDetectRequest(BaseModel):
     model_type: str = Field("legacy", pattern="^(legacy|nudenet|both)$")
     confidence_threshold: float = Field(0.5, ge=0.0, le=1.0)
     exposed_only: bool = True
+    target_classes: Optional[List[str]] = None
 
 
 class MaskRefineRequest(BaseModel):
@@ -98,6 +99,82 @@ class CensorService:
     def __init__(self):
         """Initialize the censor service."""
         self._detector = None
+
+    @staticmethod
+    def _normalize_target_family(label: str) -> str:
+        normalized = str(label or "").strip().lower().replace("-", "_").replace(" ", "_")
+        collapsed = normalized.replace("_", "")
+        if collapsed.startswith("malebreasts") or collapsed.startswith("breasts"):
+            return "breasts"
+        if collapsed.startswith("pussy") or collapsed.startswith("femalegenitalia"):
+            return "pussy"
+        if collapsed.startswith("dick") or collapsed.startswith("penis") or collapsed.startswith("malegenitalia"):
+            return "dick"
+        if collapsed.startswith("anus"):
+            return "anus"
+        if collapsed.startswith("cum") or collapsed.startswith("semen"):
+            return "cum"
+        return normalized
+
+    @classmethod
+    def _filter_detections_by_targets(
+        cls,
+        detections: List[Dict[str, Any]],
+        target_classes: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        if target_classes is None:
+            return detections
+
+        normalized_targets = {
+            cls._normalize_target_family(target)
+            for target in target_classes
+            if str(target or "").strip()
+        }
+        if not normalized_targets:
+            return []
+
+        filtered = []
+        for detection in detections:
+            detection_family = cls._normalize_target_family(detection.get("class", ""))
+            if detection_family in normalized_targets:
+                filtered.append(detection)
+        return filtered
+
+    @staticmethod
+    def _build_combined_mask_data_url(
+        image_size: tuple[int, int],
+        detections: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        if not detections:
+            return None
+
+        mask_image = Image.new("L", image_size, 0)
+        draw = ImageDraw.Draw(mask_image)
+
+        for detection in detections:
+            polygon = detection.get("polygon")
+            if isinstance(polygon, list):
+                points = [
+                    (float(point[0]), float(point[1]))
+                    for point in polygon
+                    if isinstance(point, (list, tuple)) and len(point) >= 2
+                ]
+                if len(points) >= 3:
+                    draw.polygon(points, fill=255)
+                    continue
+
+            box = detection.get("box")
+            if isinstance(box, list) and len(box) == 4:
+                x1, y1, x2, y2 = [int(float(value)) for value in box]
+                draw.rectangle([x1, y1, x2, y2], fill=255)
+
+        if mask_image.getbbox() is None:
+            return None
+
+        buffer = BytesIO()
+        mask_image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
 
     @staticmethod
     def _ensure_safe_existing_file(path: str, *, allowed_extensions: Optional[set] = None) -> str:
@@ -236,17 +313,34 @@ class CensorService:
 
                 detections = self._detector.detect(image_path, request.confidence_threshold)
 
-            # Strip numpy masks from response
+            filtered_detections = self._filter_detections_by_targets(detections, request.target_classes)
+
+            with Image.open(image_path) as image_for_mask:
+                combined_mask = self._build_combined_mask_data_url(image_for_mask.size, filtered_detections)
+
             clean_detections = []
-            for d in detections:
+            for d in filtered_detections:
                 clean = {k: v for k, v in d.items() if k != "mask"}
                 clean_detections.append(clean)
+
+            polygon_count = sum(1 for d in filtered_detections if d.get("polygon"))
+            if not filtered_detections:
+                geometry_mode = "none"
+            elif polygon_count == len(filtered_detections):
+                geometry_mode = "mask"
+            elif polygon_count > 0:
+                geometry_mode = "mixed"
+            else:
+                geometry_mode = "box"
 
             return {
                 "status": "ok",
                 "image_id": request.image_id,
                 "model_type": model_type,
                 "detections": clean_detections,
+                "selected_target_classes": request.target_classes or [],
+                "combined_mask": combined_mask,
+                "geometry_mode": geometry_mode,
             }
         except HTTPException:
             raise
