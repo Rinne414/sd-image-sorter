@@ -41,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger("sd-image-sorter")
 
 from PIL import Image as _PILImage
-_PILImage.MAX_IMAGE_PIXELS = 100_000_000  # ~10000x10000, prevents decompression bombs
+_PILImage.MAX_IMAGE_PIXELS = 178956970  # ~13400x13400, prevents decompression bombs
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError

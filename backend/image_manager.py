@@ -1,7 +1,6 @@
 """
 Image manager for file operations (scanning, moving, copying).
 """
-import itertools
 import logging
 import os
 import shutil
@@ -77,10 +76,7 @@ def scan_folder(
                     yield str(fp)
 
     # Two-pass: count then process.  Count is fast (stat only, no open).
-    MAX_SCAN_FILES = 500_000
-    image_files = list(itertools.islice(_iter_images(), MAX_SCAN_FILES + 1))
-    if len(image_files) > MAX_SCAN_FILES:
-        raise ScanError(f"Too many images. Limit is {MAX_SCAN_FILES}.", path=folder_path)
+    image_files = list(_iter_images())
     result["total"] = len(image_files)
 
     # Process each image
