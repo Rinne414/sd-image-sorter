@@ -3,6 +3,7 @@ WD14 Tagger using ONNX Runtime for image tagging.
 Supports automatic model download from HuggingFace and local model loading.
 """
 import csv
+import gc
 import io
 import os
 import json
@@ -89,6 +90,10 @@ class WD14Tagger:
         self._loaded = False
         self._resolved_model_path: Optional[str] = None
         self._resolved_tags_path: Optional[str] = None
+
+        # Session recreation counters (BSOD prevention for GPU mode)
+        self._images_since_session_create: int = 0
+        self._session_refresh_interval: int = 0
 
     def _build_session_options(self, gpu_enabled: bool) -> "ort.SessionOptions":
         """Build safer ONNX Runtime session options for the current hardware mode."""
@@ -361,6 +366,71 @@ class WD14Tagger:
         )
         self.use_gpu = False
     
+    def _recreate_session(self) -> None:
+        """
+        Destroy and rebuild the ONNX inference session to release VRAM.
+
+        ONNX Runtime does not expose a VRAM release API, so after extended GPU
+        inference the only way to reclaim leaked device memory is to delete the
+        session object entirely and create a fresh one.  This prevents the
+        accumulative VRAM leak that leads to Windows BSOD after ~300 images.
+        """
+        if not self._resolved_model_path or not self._resolved_tags_path:
+            logger.warning("Cannot recreate session: model paths not yet resolved.")
+            return
+
+        logger.info(
+            "Recreating ONNX session after %d images to release VRAM.",
+            self._images_since_session_create,
+        )
+
+        try:
+            if self.session is not None:
+                del self.session
+                self.session = None
+            gc.collect()
+
+            if self.use_gpu:
+                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            else:
+                providers = ['CPUExecutionProvider']
+
+            available_providers = ort.get_available_providers()
+            providers = [p for p in providers if p in available_providers]
+
+            session_uses_gpu = self.use_gpu and 'CUDAExecutionProvider' in providers
+            sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
+
+            self.session = self._create_session(
+                self._resolved_model_path,
+                self._resolved_tags_path,
+                sess_options,
+                providers,
+            )
+            self._images_since_session_create = 0
+            logger.info("ONNX session recreated successfully. Providers: %s", self.session.get_providers())
+        except Exception as exc:
+            logger.error("Failed to recreate ONNX session: %s", exc)
+            # Attempt CPU fallback if GPU recreation failed
+            if self.use_gpu:
+                try:
+                    self._fallback_to_cpu_session(exc)
+                    self._images_since_session_create = 0
+                except Exception as fallback_exc:
+                    logger.error("CPU fallback after session recreation failure also failed: %s", fallback_exc)
+                    raise
+
+    def set_session_refresh_interval(self, interval: int) -> None:
+        """
+        Set how many images to process before recreating the ONNX session.
+
+        Args:
+            interval: Number of images between session recreations.
+                      0 disables automatic recreation.
+        """
+        self._session_refresh_interval = max(0, interval)
+        logger.info("Session refresh interval set to %d", self._session_refresh_interval)
+
     def _preprocess(self, image: Image.Image) -> np.ndarray:
         """Preprocess image for inference."""
         # Get input size from model
@@ -475,6 +545,17 @@ class WD14Tagger:
         del input_data
         del output
         del probs
+
+        # Session refresh: increment counter and recreate if interval reached
+        self._images_since_session_create += 1
+        if (
+            self._session_refresh_interval > 0
+            and self._images_since_session_create >= self._session_refresh_interval
+        ):
+            try:
+                self._recreate_session()
+            except Exception as exc:
+                logger.error("Session recreation failed during tag(): %s", exc)
 
         return result
     

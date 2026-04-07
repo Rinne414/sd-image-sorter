@@ -6,6 +6,8 @@ Handles business logic for scanning, moving, batch operations, and manual sort s
 import logging
 import os
 import json
+import platform
+import string
 import threading
 import time
 from typing import Optional, List, Dict, Any
@@ -117,6 +119,11 @@ class FolderConfig(BaseModel):
             if path and len(path) > PATH_MAX_LENGTH:
                 raise ValueError(f'Path for key "{key}" exceeds max length of {PATH_MAX_LENGTH}')
         return v
+
+
+class BrowseFolderRequest(BaseModel):
+    """Request model for folder browsing."""
+    path: str = Field(default="", max_length=PATH_MAX_LENGTH)
 
 
 class SortingService:
@@ -1221,3 +1228,104 @@ class SortingService:
                 json.dump(data, f)
         except Exception as e:
             logger.warning("Failed to save session to disk: %s", e)
+
+    def browse_folder(self, path: str) -> Dict[str, Any]:
+        """
+        Browse a folder and list its subdirectories.
+
+        Args:
+            path: The folder path to browse. Empty string or "/" on Windows
+                  lists drive letters. On Linux, empty string lists "/".
+
+        Returns:
+            Dictionary with current path, parent path, and subdirectories.
+        """
+        # Special case: empty path or root-like paths -> list root/drives
+        if not path or path.strip() in ("", "/", "\\"):
+            if platform.system() == "Windows":
+                drives = []
+                for letter in string.ascii_uppercase:
+                    drive_path = f"{letter}:\\"
+                    if os.path.exists(drive_path):
+                        try:
+                            has_children = any(
+                                entry.is_dir()
+                                for entry in os.scandir(drive_path)
+                                if not entry.name.startswith(".")
+                            )
+                        except (PermissionError, OSError):
+                            has_children = False
+                        drives.append({
+                            "name": f"{letter}:\\",
+                            "path": drive_path,
+                            "has_children": has_children,
+                        })
+                return {
+                    "current": "",
+                    "parent": None,
+                    "subdirs": drives,
+                }
+            else:
+                # Linux/macOS: list "/"
+                path = "/"
+
+        # Validate the folder path (must exist)
+        is_valid, error = validate_folder_path(path)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=error or "Invalid folder path",
+            )
+
+        resolved = os.path.realpath(path)
+
+        # Determine parent
+        parent = os.path.dirname(resolved)
+        if parent == resolved:
+            # We are at root (e.g., "/" on Linux or "C:\" on Windows)
+            if platform.system() == "Windows":
+                parent_result: Optional[str] = ""  # signal to list drives
+            else:
+                parent_result = None  # no parent above "/"
+        else:
+            parent_result = parent
+
+        # List subdirectories
+        subdirs: List[Dict[str, Any]] = []
+        try:
+            with os.scandir(resolved) as entries:
+                for entry in entries:
+                    try:
+                        if not entry.is_dir():
+                            continue
+                        if entry.name.startswith("."):
+                            continue
+                        try:
+                            child_has_children = any(
+                                sub.is_dir()
+                                for sub in os.scandir(entry.path)
+                                if not sub.name.startswith(".")
+                            )
+                        except (PermissionError, OSError):
+                            child_has_children = False
+                        subdirs.append({
+                            "name": entry.name,
+                            "path": entry.path,
+                            "has_children": child_has_children,
+                        })
+                    except (PermissionError, OSError):
+                        continue
+        except (PermissionError, OSError) as exc:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Cannot read directory: {exc}",
+            )
+
+        # Sort alphabetically, case-insensitive
+        subdirs.sort(key=lambda d: d["name"].lower())
+
+        return {
+            "current": resolved,
+            "parent": parent_result,
+            "subdirs": subdirs,
+        }

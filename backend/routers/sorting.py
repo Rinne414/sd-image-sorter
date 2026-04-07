@@ -15,6 +15,7 @@ from services.sorting_service import (
     MoveRequest,
     BatchMoveRequest,
     FolderConfig,
+    BrowseFolderRequest,
 )
 
 
@@ -123,6 +124,87 @@ async def validate_path(
 ):
     """Validate a folder path for inline UI feedback."""
     return service.validate_path(request)
+
+
+@router.get(
+    "/system-info",
+    summary="Get system hardware info and tagger recommendations",
+    description="Detect system hardware (RAM, GPU, VRAM) and return recommended tagger configuration.",
+    responses={
+        200: {
+            "description": "System info and tagger recommendations",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "system_info": {
+                            "total_ram_gb": 32.0,
+                            "gpu_name": "NVIDIA GeForce RTX 3080",
+                            "gpu_vram_total_mb": 10240,
+                        },
+                        "recommendation": {
+                            "recommended_batch_size": 4,
+                            "recommended_use_gpu": True,
+                            "risk_level": "low",
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_system_info_endpoint():
+    """Get system hardware info and recommended tagger configuration."""
+    try:
+        from hardware_monitor import get_system_info, recommend_tagger_config
+
+        system_info = get_system_info()
+        recommendation = recommend_tagger_config(system_info)
+        return {
+            "system_info": system_info,
+            "recommendation": recommendation,
+        }
+    except Exception as e:
+        return {
+            "system_info": {"error": str(e)},
+            "recommendation": {
+                "recommended_batch_size": 2,
+                "recommended_use_gpu": False,
+                "recommended_session_refresh_interval": 0,
+                "risk_level": "medium",
+                "message": f"Hardware detection failed: {e}",
+            },
+        }
+
+
+@router.post(
+    "/browse-folder",
+    summary="Browse folder contents",
+    description="List subdirectories of a given folder path. Empty path lists drive letters (Windows) or root (Linux).",
+    responses={
+        200: {
+            "description": "Folder contents",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "current": "C:\\Users",
+                        "parent": "C:\\",
+                        "subdirs": [
+                            {"name": "Public", "path": "C:\\Users\\Public", "has_children": True}
+                        ]
+                    }
+                }
+            }
+        },
+        400: {"description": "Invalid folder path"},
+        403: {"description": "Cannot read directory"},
+    }
+)
+async def browse_folder(
+    request: BrowseFolderRequest,
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Browse a folder and list its subdirectories."""
+    return service.browse_folder(request.path)
 
 
 @router.post(

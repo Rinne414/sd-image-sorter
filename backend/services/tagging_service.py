@@ -103,6 +103,17 @@ def _tagging_worker_main(
             force_reload=True,
         )
 
+        # Set session refresh interval from hardware recommendation
+        try:
+            from hardware_monitor import recommend_tagger_config, get_system_info
+            hw_info = get_system_info()
+            hw_rec = recommend_tagger_config(hw_info)
+            refresh_interval = hw_rec.get("recommended_session_refresh_interval", 100 if effective_use_gpu else 0)
+            tagger.set_session_refresh_interval(refresh_interval)
+        except Exception:
+            # Fallback: default to 100 for GPU, 0 for CPU
+            tagger.set_session_refresh_interval(100 if effective_use_gpu else 0)
+
         if startup_notice:
             send("running", startup_notice)
 
@@ -145,6 +156,16 @@ def _tagging_worker_main(
 
                 try:
                     if os.path.exists(img["path"]):
+                        try:
+                            from hardware_monitor import check_memory_pressure
+                            pressure = check_memory_pressure()
+                            if pressure.get("should_restart_session"):
+                                tagger._recreate_session()
+                            if pressure.get("should_pause"):
+                                time.sleep(2)
+                                gc.collect()
+                        except Exception:
+                            pass  # hardware_monitor not available
                         result = tagger.tag(img["path"])
                         if effective_use_gpu and not gpu_fallback_announced and not getattr(tagger, "use_gpu", False):
                             gpu_fallback_announced = True
