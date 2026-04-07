@@ -471,6 +471,20 @@ function showToast(message, type = 'info') {
         document.body.appendChild(container);
     }
 
+
+    // Deduplicate: skip if identical message+type toast already visible
+    const existingToasts = container.querySelectorAll('.toast');
+    for (const existing of existingToasts) {
+        const existingMsg = existing.querySelector('.toast-message');
+        if (existingMsg && existingMsg.textContent === message && existing.classList.contains(type)) {
+            return; // Already showing
+        }
+    }
+    // Limit max visible toasts
+    while (container.children.length >= 5) {
+        container.firstChild.remove();
+    }
+
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.setAttribute('role', 'alert');

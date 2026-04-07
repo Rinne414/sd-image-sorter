@@ -318,7 +318,7 @@ body::before {
     margin-left: 6px;
     padding: 1px 6px;
     border-radius: 999px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     line-height: 1.4;
     text-transform: uppercase;
@@ -397,6 +397,7 @@ body::before {
     .btn-small {
         padding: 6px 12px;
         font-size: 12px;
+        min-height: 32px;
     }
 
     .btn-glow {
@@ -806,7 +807,7 @@ body::before {
     }
 
     .gen-count {
-        font-size: 10px;
+        font-size: 11px;
         padding: 2px 6px;
         background: rgba(0, 0, 0, 0.2);
         border-radius: 10px;
@@ -1027,7 +1028,7 @@ body::before {
         padding: 4px 8px;
         background: var(--accent-primary);
         border-radius: 6px;
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
     }
@@ -2462,7 +2463,7 @@ body::before {
     }
 
     .collapse-icon {
-        font-size: 10px;
+        font-size: 11px;
         transition: transform 0.2s;
     }
 
@@ -2582,7 +2583,7 @@ body::before {
     .prompt-node-header .node-role {
         padding: 1px 6px;
         border-radius: 4px;
-        font-size: 10px;
+        font-size: 11px;
         margin-left: 6px;
     }
 
@@ -2797,7 +2798,7 @@ body::before {
         border: none;
         color: var(--text-muted);
         cursor: pointer;
-        font-size: 10px;
+        font-size: 11px;
         padding: 4px;
         transition: transform var(--transition-normal);
     }
@@ -4100,7 +4101,7 @@ body::before {
 kbd {
     display: inline-block;
     padding: 2px 6px;
-    font-size: 10px;
+    font-size: 11px;
     font-family: 'Consolas', 'Monaco', monospace;
     font-weight: 600;
     background: rgba(255, 255, 255, 0.1);
@@ -5198,7 +5199,7 @@ kbd {
     /* Generator tabs scrollable */
     .gen-tab {
         padding: 4px 8px;
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .gen-count {
@@ -5233,6 +5234,7 @@ kbd {
     .btn-small {
         padding: 4px 8px;
         font-size: 11px;
+        min-height: 32px;
     }
 
     /* Modals */
@@ -5266,7 +5268,7 @@ kbd {
     }
 
     .tool-btn-v2 .tool-label {
-        font-size: 10px;
+        font-size: 11px;
     }
 
     .toolbar-select {
@@ -5869,12 +5871,6 @@ input[type="radio"],
 .checkbox-label {
     min-height: 44px;
     min-width: 44px;
-}
-
-/* Small buttons should maintain touch target via padding */
-.btn-small {
-    min-height: 32px;
-    padding: 8px 16px;
 }
 
 /* View buttons in gallery */
@@ -6591,4 +6587,13 @@ input[type="radio"],
         margin-bottom: 20px;
         line-height: 1.6;
     }
+}
+
+/* Prevent CJK label text from wrapping single characters */
+.filter-section-title,
+.filter-panel-label,
+h4[data-i18n],
+.stat-label,
+.form-group > label {
+    white-space: nowrap;
 }

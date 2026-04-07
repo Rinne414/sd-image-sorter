@@ -80,7 +80,7 @@
 .cat-header:hover { background: var(--bg-hover); }
 
 .cat-arrow {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
     width: 12px;
     flex-shrink: 0;
@@ -1130,7 +1130,7 @@
     }
 
     .cat-tag {
-        font-size: 10px;
+        font-size: 11px;
         padding: 2px 6px;
     }
 
