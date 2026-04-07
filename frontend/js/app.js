@@ -357,7 +357,8 @@ const API = {
             image_ids: options.imageIds || null,
             retag_all: options.retagAll || false,
             use_gpu: options.useGpu ?? true,
-            allow_unsafe_acceleration: options.allowUnsafeAcceleration ?? false
+            allow_unsafe_acceleration: options.allowUnsafeAcceleration ?? false,
+            batch_size: options.batchSize || null
         });
     },
 
@@ -2290,6 +2291,12 @@ async function startTagging() {
 
     options.retagAll = $('#tag-retag-all').checked;
     options.useGpu = useGpuCheckbox?.checked ?? true;
+
+    // Batch size from user selection (system-info panel)
+    const batchSelect = document.getElementById('tagger-batch-size');
+    if (batchSelect) {
+        options.batchSize = parseInt(batchSelect.value, 10) || 4;
+    }
 
     if (gpuLocked) {
         options.useGpu = false;

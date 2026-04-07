@@ -53,11 +53,16 @@ def get_system_info() -> Dict[str, Any]:
 
         if torch.cuda.is_available():
             info["gpu_name"] = torch.cuda.get_device_name(0)
-            total_mem = torch.cuda.get_device_properties(0).total_mem
-            info["gpu_vram_total_mb"] = round(total_mem / (1024 ** 2), 0)
-            # torch.cuda.mem_get_info returns (free, total)
-            free_mem, _ = torch.cuda.mem_get_info(0)
-            info["gpu_vram_available_mb"] = round(free_mem / (1024 ** 2), 0)
+            try:
+                props = torch.cuda.get_device_properties(0)
+                info["gpu_vram_total_mb"] = round(props.total_mem / (1024 ** 2), 0)
+            except Exception:
+                pass
+            try:
+                free_mem, _ = torch.cuda.mem_get_info(0)
+                info["gpu_vram_available_mb"] = round(free_mem / (1024 ** 2), 0)
+            except Exception:
+                pass
     except Exception as exc:
         logger.debug("torch.cuda GPU detection failed: %s", exc)
 
@@ -112,6 +117,8 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
 
     use_gpu = has_gpu and has_cuda_provider
 
+    ram_gb = system_info.get("total_ram_gb") or 8
+
     if use_gpu and vram_mb is not None:
         if vram_mb < 4000:
             batch_size = 1
@@ -122,7 +129,15 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
         else:
             batch_size = 8
     else:
-        batch_size = 2
+        # CPU mode: scale with available RAM
+        if ram_gb < 8:
+            batch_size = 1
+        elif ram_gb < 16:
+            batch_size = 2
+        elif ram_gb < 32:
+            batch_size = 4
+        else:
+            batch_size = 8
 
     session_refresh_interval = 100 if use_gpu else 0
 

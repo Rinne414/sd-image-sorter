@@ -235,6 +235,7 @@ class TagRequest(BaseModel):
     tags_path: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
     use_gpu: bool = True
     allow_unsafe_acceleration: bool = False
+    batch_size: Optional[int] = Field(default=None, ge=1, le=32)
 
 
 class TagImportRequest(BaseModel):

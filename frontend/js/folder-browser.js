@@ -168,9 +168,13 @@ async function loadSystemInfo() {
         else { parts.push('CPU only'); }
         if (sys.total_ram_gb) { parts.push(sys.total_ram_gb.toFixed(0) + 'GB RAM'); }
         if (sys.gpu_vram_total_mb) { parts.push((sys.gpu_vram_total_mb / 1024).toFixed(1) + 'GB VRAM'); }
-        if (rec.recommended_batch_size) { parts.push('Recommended batch: ' + rec.recommended_batch_size); }
         contentEl.innerHTML = '<small class="system-info-line">' + parts.join(' &middot; ') + '</small>';
         panel.style.display = '';
+        // Set recommended batch size in the dropdown
+        var batchSelect = document.getElementById('tagger-batch-size');
+        if (batchSelect && rec.recommended_batch_size) {
+            batchSelect.value = String(rec.recommended_batch_size);
+        }
     } catch (e) {
         // Silent fail - system info is optional
     }
