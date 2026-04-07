@@ -1,6 +1,12 @@
+/* ==========================================================================
+   UI Refresh Theme Override
+   Intentionally overrides CSS variables from styles.css to apply the refined
+   Manrope/Space Grotesk theme with updated color palette. Loaded after
+   styles.css in index.html so these :root values take precedence.
+   ========================================================================== */
 :root {
-    --font-body: 'Manrope', 'Inter', sans-serif;
-    --font-display: 'Space Grotesk', 'Orbitron', sans-serif;
+    --font-body: 'Manrope', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Space Grotesk', 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     --bg-dark: #09111d;
     --bg-card: rgba(13, 22, 37, 0.88);
     --bg-card-solid: #0e1a2d;

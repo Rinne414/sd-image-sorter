@@ -276,11 +276,22 @@ const VirtualGallery = {
         this.containerEl.style.minHeight = '';
         this.containerEl.style.gridTemplateColumns = '';
 
+        const MAX_WATERFALL_ITEMS = 200;
+        const itemsToRender = this.images.slice(0, MAX_WATERFALL_ITEMS);
+
         const fragment = document.createDocumentFragment();
-        this.images.forEach((image, index) => {
+        itemsToRender.forEach((image, index) => {
             fragment.appendChild(Gallery.createGalleryItem(image, index, true));
         });
         this.containerEl.appendChild(fragment);
+
+        if (this.images.length > MAX_WATERFALL_ITEMS) {
+            const notice = document.createElement('div');
+            notice.className = 'waterfall-limit-notice';
+            notice.textContent = 'Showing ' + MAX_WATERFALL_ITEMS + ' of ' + this.images.length + ' images. Switch to grid view for full virtual scrolling.';
+            notice.style.cssText = 'text-align:center;padding:24px 16px;color:var(--text-muted,#98aabf);font-size:14px;';
+            this.containerEl.appendChild(notice);
+        }
     },
 
     /**

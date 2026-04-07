@@ -68,7 +68,7 @@
 
 /* Sidebar Headers */
 .censor-section-title {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 14px;
     font-weight: 600;
     color: #e9d5ff;
@@ -466,7 +466,7 @@
     justify-content: center;
     z-index: 100;
     color: #a855f7;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     letter-spacing: 2px;
 }
 
@@ -479,7 +479,7 @@
     align-items: center;
     justify-content: center;
     color: rgba(255, 255, 255, 0.2);
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     gap: 16px;
     pointer-events: none;
     z-index: 5;
@@ -641,7 +641,7 @@
 
 .sidebar-title-v2,
 .properties-title {
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Orbitron', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 16px;
     font-weight: 700;
     color: #e9d5ff;

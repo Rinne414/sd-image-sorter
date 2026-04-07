@@ -296,7 +296,7 @@
     border: 1px solid rgba(184, 215, 233, 0.12);
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-family: 'Inter', sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 13px;
     padding: 12px;
     resize: none;

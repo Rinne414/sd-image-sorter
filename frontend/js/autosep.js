@@ -3,6 +3,8 @@
  * Handles batch filtering and moving of images
  */
 
+let _previewRequestId = 0;
+
 const AutoSepState = {
     matchCount: 0,
     previewImages: [],
@@ -174,6 +176,7 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
 // ============== Preview ==============
 
 async function updateAutoSepPreview() {
+    const requestId = ++_previewRequestId;
     const { $, API, AppState } = window.App;
 
     // Update summary display
@@ -219,6 +222,7 @@ async function updateAutoSepPreview() {
             limit: 1000
         });
 
+        if (requestId !== _previewRequestId) return; // Stale request, discard
         AutoSepState.matchCount = firstPage.total || 0;
         AutoSepState.previewImages = firstPage.images || [];
         AutoSepState.previewSignature = currentSignature;
@@ -228,86 +232,6 @@ async function updateAutoSepPreview() {
     } catch (error) {
         Logger.error('Failed to preview:', error);
     }
-}
-
-// ============== Execute ==============
-
-async function executeAutoSeparate() {
-    const { $, API, showToast, AppState, showGlobalLoading, hideGlobalLoading, showConfirm } = window.App;
-
-    const destEl = $('#autosep-destination');
-    const destination = destEl ? destEl.value.trim() : '';
-
-    if (!destination) {
-        showToast('Please enter a destination folder', 'error');
-        return;
-    }
-
-    const currentSignature = getAutoSepFilterSignature(AppState.filters);
-    if (AutoSepState.previewSignature !== currentSignature) {
-        showToast('Please preview the current filter results before moving images', 'info');
-        await updateAutoSepPreview();
-        return;
-    }
-
-    if (AutoSepState.matchCount === 0) {
-        showToast('No images match the current filters', 'error');
-        return;
-    }
-
-    const f = AppState.filters;
-
-    showConfirm(
-        'Confirm Auto-Separate',
-        `Move ${AutoSepState.matchCount} matching images to:\n${destination}\n\nReview the preview list above before continuing.`,
-        async () => {
-            showGlobalLoading(`Moving ${AutoSepState.matchCount} images...`);
-
-            try {
-                const dimensions = {
-                    minWidth: f.minWidth,
-                    maxWidth: f.maxWidth,
-                    minHeight: f.minHeight,
-                    maxHeight: f.maxHeight,
-                    aspectRatio: f.aspectRatio
-                };
-
-                const result = await API.batchMove(
-                    f.generators?.length > 0 ? f.generators : null,
-                    f.tags?.length > 0 ? f.tags : null,
-                    f.ratings?.length < 4 ? f.ratings : null,
-                    destination,
-                    f.checkpoints?.length > 0 ? f.checkpoints : null,
-                    f.loras?.length > 0 ? f.loras : null,
-                    f.prompts?.length > 0 ? f.prompts : null,
-                    dimensions,
-                    f.search?.trim() || null
-                );
-
-                if (result.count === 0) {
-                    showToast('No images were moved. Check that the destination path exists and filters match images.', 'error');
-                    return;
-                }
-
-                showToast(`Moved ${result.count} images to ${destination}`, 'success');
-
-                AutoSepState.matchCount = 0;
-                AutoSepState.previewImages = [];
-                AutoSepState.previewSignature = null;
-                $('#autosep-preview .stat-number').textContent = '0';
-                renderAutoSepPreviewList([], 0);
-
-                if (window.App && window.App.loadImages) {
-                    window.App.loadImages();
-                }
-
-            } catch (error) {
-                showToast(formatUserError(error, "Failed to move images"), "error");
-            } finally {
-                hideGlobalLoading();
-            }
-        }
-    );
 }
 
 function invalidateAutoSepPreview() {

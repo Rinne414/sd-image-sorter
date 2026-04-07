@@ -6,7 +6,15 @@
 
 // escapeHtml fallback — main definition is in app.js
 if (typeof escapeHtml === 'undefined') {
-    var escapeHtml = (value) => String(value ?? '');
+    var escapeHtml = function(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    };
 }
 
 const PromptLab = {
