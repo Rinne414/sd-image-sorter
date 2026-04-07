@@ -185,6 +185,13 @@ async function startSorting() {
 
     ManualSortState.folders = folders;
 
+    // Save destination folders for quick access later
+    Object.values(folders).forEach(path => {
+        if (window.App && window.App.addRecentFolder) {
+            window.App.addRecentFolder(path);
+        }
+    });
+
     // Get filters from unified AppState
     const f = AppState.filters;
     const generators = f.generators?.length > 0 ? f.generators : null;

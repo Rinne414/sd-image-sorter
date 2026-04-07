@@ -518,12 +518,14 @@ const OnboardingTour = (function() {
     }
 
     /**
-     * Initialize - no auto-start, no key binding.
-     * Tour is available via OnboardingTour.start() programmatically.
+     * Initialize - auto-start tour for first-time users.
+     * Tour is also available via OnboardingTour.start() programmatically.
      */
     function init() {
-        // Onboarding is started programmatically, not via keyboard shortcut.
-        // The '?' key is reserved for the keyboard shortcuts panel.
+        // Auto-start tour for first-time users
+        if (!isCompleted() && !wasDismissed()) {
+            setTimeout(() => start(), 800);
+        }
     }
 
     // Public API

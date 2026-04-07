@@ -457,6 +457,24 @@ function $$(selector) {
     return document.querySelectorAll(selector);
 }
 
+// Recent folders management
+const RECENT_FOLDERS_KEY = 'sd-image-sorter-recent-folders';
+const MAX_RECENT_FOLDERS = 5;
+
+function getRecentFolders() {
+    try {
+        const saved = localStorage.getItem(RECENT_FOLDERS_KEY);
+        return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+}
+
+function addRecentFolder(path) {
+    if (!path || typeof path !== 'string') return;
+    const folders = getRecentFolders().filter(f => f !== path);
+    const updated = [path, ...folders].slice(0, MAX_RECENT_FOLDERS);
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(updated));
+}
+
 function showToast(message, type = 'info') {
     let container = $('#toast-container');
 
@@ -660,6 +678,24 @@ function showModal(modalId) {
         // Store the element that had focus before opening modal
         _lastFocusedElement = document.activeElement;
         modal.classList.add('visible');
+
+        // Populate recent folders datalist when scan modal opens
+        if (modalId === 'scan-modal') {
+            const recentFolders = getRecentFolders();
+            const scanInput = document.getElementById('scan-folder-path');
+            if (scanInput && recentFolders.length > 0) {
+                let datalist = document.getElementById('recent-folders-list');
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = 'recent-folders-list';
+                    scanInput.parentNode.appendChild(datalist);
+                    scanInput.setAttribute('list', 'recent-folders-list');
+                }
+                datalist.innerHTML = recentFolders
+                    .map(f => '<option value="' + f.replace(/"/g, '&quot;') + '">')
+                    .join('');
+            }
+        }
 
         // Set up focus trap
         trapFocus(modal);
@@ -1985,6 +2021,7 @@ async function startScan() {
     const recursive = $('#scan-recursive')?.checked ?? true;
 
     try {
+        addRecentFolder(folderPath);
         await API.startScan(folderPath, recursive);
 
         const progressContainer = $('#scan-progress-container');
@@ -2038,6 +2075,20 @@ async function pollScanProgress(retryCount = 0) {
             promptsLibraryCache = null; // Invalidate cache after scan
             loadImages();
             loadStats();
+            // Auto-tag: if checkbox was on, trigger tagging with current settings
+            const autoTagCheckbox = document.getElementById('scan-auto-tag');
+            if (autoTagCheckbox && autoTagCheckbox.checked) {
+                setTimeout(() => {
+                    showModal('tag-modal');
+                    // Small delay to let modal render, then trigger start
+                    setTimeout(() => {
+                        const startBtn = document.getElementById('btn-start-tag');
+                        if (startBtn && !startBtn.disabled) {
+                            startBtn.click();
+                        }
+                    }, 300);
+                }, 500);
+            }
         } else if (progress.status === 'error') {
             showToast(progress.message || 'Scan failed', 'error');
             $('#scan-progress-container').style.display = 'none';
@@ -4275,6 +4326,8 @@ function buildAppContext() {
         applyPromptFilter,
         addToCensorQueue,
         _addToCensorQueue: null,
+        addRecentFolder,
+        getRecentFolders,
         $,
         $$
     };
