@@ -59,8 +59,10 @@ def get_system_info() -> Dict[str, Any]:
             except Exception:
                 pass
             try:
-                free_mem, _ = torch.cuda.mem_get_info(0)
+                free_mem, total_mem = torch.cuda.mem_get_info(0)
                 info["gpu_vram_available_mb"] = round(free_mem / (1024 ** 2), 0)
+                if info["gpu_vram_total_mb"] is None:
+                    info["gpu_vram_total_mb"] = round(total_mem / (1024 ** 2), 0)
             except Exception:
                 pass
     except Exception as exc:
@@ -110,7 +112,7 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     vram_mb = system_info.get("gpu_vram_total_mb")
     gpu_name = system_info.get("gpu_name")
-    has_gpu = gpu_name is not None and vram_mb is not None
+    has_gpu = gpu_name is not None
 
     onnx_providers = system_info.get("onnx_providers") or []
     has_cuda_provider = "CUDAExecutionProvider" in onnx_providers
