@@ -2,6 +2,8 @@
 WD14 Tagger using ONNX Runtime for image tagging.
 Supports automatic model download from HuggingFace and local model loading.
 """
+import csv
+import io
 import os
 import json
 import logging
@@ -264,15 +266,19 @@ class WD14Tagger:
         self.rating_indices = {}
         
         with open(tags_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            reader = csv.reader(f)
+            next(reader, None)  # Skip header
         
-        # Skip header, use enumeration index as the model output position
-        for row_idx, line in enumerate(lines[1:]):
-            parts = line.strip().split(",")
-            if len(parts) >= 3:
+            # Use enumeration index as the model output position
+            for row_idx, parts in enumerate(reader):
+                if not parts or len(parts) < 3:
+                    continue
                 # row_idx is the actual index into model output (0-indexed)
                 tag_name = parts[1]
-                category = int(parts[2])
+                try:
+                    category = int(parts[2])
+                except ValueError:
+                    continue
                 
                 self.tags.append(tag_name)
                 

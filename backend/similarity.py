@@ -205,8 +205,10 @@ class SimilarityIndex:
 
         If image_ids is None, embeds all images without embeddings.
         """
-        if self._progress["running"]:
-            return {"error": "Embedding already in progress"}
+        with _embed_lock:
+            if self._progress["running"]:
+                return {"error": "Embedding already in progress"}
+            self._progress["running"] = True
 
         self._progress = {
             "running": True,

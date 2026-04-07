@@ -35,6 +35,7 @@ class PromptGenerator:
         self._exclusion_rules: List[Dict[str, Any]] = self._normalize_builtin_exclusion_rules()
         self._user_exclusion_rules: List[Dict[str, Any]] = []
         self._user_tag_sets: List[Dict[str, Any]] = []
+        self._rng: random.Random = random.Random()
 
     @staticmethod
     def _make_pool_entries(tags: List[str], category: str) -> List[Dict[str, Any]]:
@@ -411,14 +412,10 @@ class PromptGenerator:
             config = {}
 
         # Set seed for reproducibility if provided
-        if config.get("seed") is not None:
-            random.seed(config["seed"])
+        self._rng = random.Random(config.get("seed"))
 
         if config.get("categories") or config.get("tag_sets"):
-            result = self._generate_from_manual_categories(config)
-            if config.get("seed") is not None:
-                random.seed()
-            return result
+            return self._generate_from_manual_categories(config)
 
         selected_tags = []
         active_tag_set = set()
@@ -452,7 +449,7 @@ class PromptGenerator:
         if character == "random" and "character" in self._tag_pool:
             char_tags = self._tag_pool["character"]
             if char_tags:
-                chosen = random.choice(char_tags)
+                chosen = self._rng.choice(char_tags)
                 selected_tags.append({"tag": chosen["tag"], "category": "character"})
                 active_tag_set.add(chosen["tag"])
         elif character and character != "none":
@@ -469,7 +466,7 @@ class PromptGenerator:
             if not nsfw:
                 available_sets = [s for s in all_sets if s["name"] not in ("Nude", "Lingerie")]
             if available_sets:
-                chosen_set = random.choice(available_sets)
+                chosen_set = self._rng.choice(available_sets)
                 self._apply_tag_set(chosen_set, selected_tags, active_tag_set)
         elif outfit and outfit != "none":
             matching_sets = [s for s in all_sets if s["name"] == outfit]
@@ -532,7 +529,7 @@ class PromptGenerator:
         if artist == "random" and "artist" in self._tag_pool:
             artist_tags = self._tag_pool["artist"]
             if artist_tags:
-                chosen = random.choice(artist_tags)
+                chosen = self._rng.choice(artist_tags)
                 selected_tags.append({"tag": chosen["tag"], "category": "artist"})
 
         style = config.get("style")
@@ -555,10 +552,6 @@ class PromptGenerator:
         if exclusions_applied:
             for ex in exclusions_applied:
                 warnings.append(f"Tag '{ex}' conflicts with other selected tags")
-
-        # Reset random seed
-        if config.get("seed") is not None:
-            random.seed()
 
         return {
             "positive_prompt": positive_prompt,
@@ -635,7 +628,7 @@ class PromptGenerator:
             weight = member.get("weight", 1.0)
             required = member.get("required", False)
 
-            if required or random.random() < weight:
+            if required or self._rng.random() < weight:
                 selected_tags.append({"tag": tag, "category": "outfit"})
                 active_set.add(tag)
 
@@ -663,7 +656,7 @@ class PromptGenerator:
             ]
             if available:
                 tags, weights = zip(*available)
-                return random.choices(tags, weights=weights, k=1)[0]
+                return self._rng.choices(tags, weights=weights, k=1)[0]
 
         # Fall back to tag pool
         if category in self._tag_pool:
@@ -674,7 +667,7 @@ class PromptGenerator:
             if available_tags:
                 # Weight by frequency in library
                 freq_weights = [t["count"] for t in available_tags]
-                chosen = random.choices(available_tags, weights=freq_weights, k=1)[0]
+                chosen = self._rng.choices(available_tags, weights=freq_weights, k=1)[0]
                 return chosen["tag"]
 
         return None
@@ -691,11 +684,11 @@ class PromptGenerator:
         ]
         available_hair = [h for h in hair_colors if h not in excluded]
         if available_hair:
-            features.append(random.choice(available_hair))
+            features.append(self._rng.choice(available_hair))
 
         # Pick a hair length
         hair_lengths = ["long_hair", "short_hair", "medium_hair", "very_long_hair"]
-        features.append(random.choice(hair_lengths))
+        features.append(self._rng.choice(hair_lengths))
 
         # Pick an eye color
         eye_colors = [
@@ -704,14 +697,14 @@ class PromptGenerator:
         ]
         available_eyes = [e for e in eye_colors if e not in excluded]
         if available_eyes:
-            features.append(random.choice(available_eyes))
+            features.append(self._rng.choice(available_eyes))
 
         # Maybe add breast size (50% chance, only for female characters)
-        if random.random() < 0.3:
+        if self._rng.random() < 0.3:
             sizes = ["large_breasts", "medium_breasts", "small_breasts", "flat_chest"]
             available_sizes = [s for s in sizes if s not in excluded]
             if available_sizes:
-                features.append(random.choice(available_sizes))
+                features.append(self._rng.choice(available_sizes))
 
         return features
 

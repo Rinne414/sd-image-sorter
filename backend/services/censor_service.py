@@ -85,7 +85,7 @@ class CensorSaveRequest(BaseModel):
 
 class CensorSaveDataRequest(BaseModel):
     """Request to save base64 image data directly."""
-    image_data: str = Field(..., max_length=100_000_000)  # ~75MB decoded
+    image_data: str = Field(..., max_length=30_000_000)  # ~22MB decoded
     filename: str = Field(..., min_length=1)
     output_folder: str = Field(..., min_length=1)
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")

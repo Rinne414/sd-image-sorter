@@ -6,7 +6,6 @@ scripts, and frontend diagnostics can all report the same truth.
 """
 from __future__ import annotations
 
-import ast
 import importlib
 import json
 import os
@@ -90,7 +89,10 @@ def _canonicalize_yolo_class_name(class_name: str) -> str:
 
 def _parse_class_mapping(raw_names: Any) -> List[str]:
     if isinstance(raw_names, str):
-        raw_names = ast.literal_eval(raw_names)
+        try:
+            raw_names = json.loads(raw_names)
+        except (json.JSONDecodeError, TypeError):
+            return []
     if isinstance(raw_names, dict):
         ordered = []
         for key in sorted(raw_names.keys(), key=lambda item: int(item) if str(item).isdigit() else str(item)):

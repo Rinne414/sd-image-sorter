@@ -189,16 +189,25 @@ def _sync_image_loras(
             (image_id, lora_name)
         )
 
+_pragmas_initialized = False
+_pragmas_lock = threading.Lock()
+
+
 def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory and performance optimizations."""
+    global _pragmas_initialized
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    # Performance optimizations
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+    # WAL mode and other persistent PRAGMAs only need to be set once per database
+    if not _pragmas_initialized:
+        with _pragmas_lock:
+            if not _pragmas_initialized:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA synchronous=NORMAL")
+                conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
+                _pragmas_initialized = True
     return conn
 
 

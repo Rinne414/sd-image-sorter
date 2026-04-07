@@ -219,7 +219,7 @@ async def get_thumbnail_async(source_path, size=256):
     if cached is not None:
         return (*cached, True)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     thumbnail_bytes, last_modified = await loop.run_in_executor(
         None, generate_and_cache_thumbnail, source_path, size
     )

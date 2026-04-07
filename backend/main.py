@@ -8,6 +8,7 @@ This is the main application entry point. Endpoints are organized into routers:
 - routers/sorting.py - Scanning, moving, and manual sorting
 - routers/censor.py - NSFW detection and censoring
 """
+import ipaddress
 import os
 import sys
 import asyncio
@@ -40,7 +41,7 @@ logging.basicConfig(
 logger = logging.getLogger("sd-image-sorter")
 
 from PIL import Image as _PILImage
-_PILImage.MAX_IMAGE_PIXELS = 178956970  # ~13400x13400, prevents decompression bombs
+_PILImage.MAX_IMAGE_PIXELS = 100_000_000  # ~10000x10000, prevents decompression bombs
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -256,18 +257,27 @@ For detailed documentation, see `docs/API.md`.
 )
 
 
-LOCALHOST_ALIASES = {"127.0.0.1", "localhost", "::1", "[::1]", "testclient"}
+LOCALHOST_ALIASES = {"127.0.0.1", "localhost", "::1", "[::1]"}
 RATE_LIMIT_WINDOW_SECONDS = 60
 RATE_LIMIT_MAX_REQUESTS = 1000
 RATE_LIMIT_EXEMPT_PATHS = {"/docs", "/redoc", "/openapi.json"}
 RATE_LIMIT_EXEMPT_PREFIXES = ("/static", "/api/image-file", "/api/image-thumbnail")
 _rate_limit_lock = threading.Lock()
 _rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
+_rate_limit_cleanup_time = [0.0]
+_RATE_LIMIT_CLEANUP_INTERVAL = 300  # 5 minutes
 
 
 def _is_loopback_host(host: Optional[str]) -> bool:
     """Return True when the host refers to the local machine."""
-    return host in LOCALHOST_ALIASES
+    if not host:
+        return False
+    if host in LOCALHOST_ALIASES:
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
 
 
 def _is_rate_limit_exempt(path: str) -> bool:
@@ -279,9 +289,9 @@ def _is_rate_limit_exempt(path: str) -> bool:
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=CORS_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Restrict to needed methods
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Accept", "X-Requested-With"],
 )
 
 
@@ -321,6 +331,13 @@ async def rate_limit_middleware(request: Request, call_next):
             )
         bucket.append(now)
 
+        # Periodically clean up stale rate limit buckets
+        if now - _rate_limit_cleanup_time[0] > _RATE_LIMIT_CLEANUP_INTERVAL:
+            _rate_limit_cleanup_time[0] = now
+            stale_keys = [k for k, v in _rate_limit_buckets.items() if not v]
+            for k in stale_keys:
+                del _rate_limit_buckets[k]
+
     return await call_next(request)
 
 
@@ -329,6 +346,8 @@ async def add_security_headers(request: Request, call_next):
     """Add security headers to all responses."""
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 

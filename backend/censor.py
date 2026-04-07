@@ -6,7 +6,8 @@ Requires a YOLOv8 ONNX model trained to detect body parts.
 Recommended model: https://civitai.com/models/1736285
 """
 
-import ast
+import json
+import threading
 import logging
 import os
 import numpy as np
@@ -99,7 +100,11 @@ class CensorDetector:
             raw_names = metadata.get("names")
             if not raw_names:
                 return
-            parsed = ast.literal_eval(raw_names) if isinstance(raw_names, str) else raw_names
+            try:
+                parsed = json.loads(raw_names) if isinstance(raw_names, str) else raw_names
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Invalid class name format in model metadata, using fallback")
+                parsed = raw_names if not isinstance(raw_names, str) else None
             names = self._names_from_mapping(parsed)
             if names:
                 self._set_classes(names)
@@ -634,6 +639,7 @@ class Censor:
 
 # Global detector instance (lazy loaded)
 _detector: Optional[CensorDetector] = None
+_detector_lock = threading.Lock()
 
 
 def get_detector(model_path: Optional[str] = None) -> CensorDetector:
@@ -641,8 +647,10 @@ def get_detector(model_path: Optional[str] = None) -> CensorDetector:
     global _detector
     
     if _detector is None or (model_path and _detector.model_path != model_path):
-        _detector = CensorDetector(model_path)
-        if model_path:
-            _detector.load()
+        with _detector_lock:
+            if _detector is None or (model_path and _detector.model_path != model_path):
+                _detector = CensorDetector(model_path)
+                if model_path:
+                    _detector.load()
     
     return _detector

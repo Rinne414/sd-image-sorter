@@ -1,6 +1,7 @@
 """
 Image manager for file operations (scanning, moving, copying).
 """
+import itertools
 import logging
 import os
 import shutil
@@ -13,6 +14,7 @@ from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import add_image, update_image_path, get_images, add_tags, update_image_metadata
 from metadata_parser import parse_image
 from exceptions import ScanError, FileOperationError, ImageNotFoundError
+from utils.path_validation import validate_folder_path
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,10 @@ def scan_folder(
                     yield str(fp)
 
     # Two-pass: count then process.  Count is fast (stat only, no open).
-    image_files = list(_iter_images())
+    MAX_SCAN_FILES = 500_000
+    image_files = list(itertools.islice(_iter_images(), MAX_SCAN_FILES + 1))
+    if len(image_files) > MAX_SCAN_FILES:
+        raise ScanError(f"Too many images. Limit is {MAX_SCAN_FILES}.", path=folder_path)
     result["total"] = len(image_files)
 
     # Process each image
@@ -156,6 +161,11 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
     try:
         destination_folder = os.path.abspath(destination_folder)
         image_path = os.path.abspath(image_path)
+
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
+        if not is_valid:
+            raise FileOperationError(f"Invalid destination: {error}", path=destination_folder, operation="move")
+
         os.makedirs(destination_folder, exist_ok=True)
 
         filename = os.path.basename(image_path)
@@ -214,6 +224,11 @@ def copy_image(image_path: str, destination_folder: str) -> str:
     try:
         destination_folder = os.path.abspath(destination_folder)
         image_path = os.path.abspath(image_path)
+
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
+        if not is_valid:
+            raise FileOperationError(f"Invalid destination: {error}", path=destination_folder, operation="copy")
+
         os.makedirs(destination_folder, exist_ok=True)
 
         filename = os.path.basename(image_path)

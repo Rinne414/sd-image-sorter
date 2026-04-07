@@ -101,7 +101,12 @@ def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
         zip_path = tmp_dir_path / "repo.zip"
         urllib.request.urlretrieve(zip_url, zip_path)
         with zipfile.ZipFile(zip_path, "r") as archive:
-            archive.extractall(tmp_dir_path / "extract")
+            extract_dir = tmp_dir_path / "extract"
+            for member in archive.namelist():
+                member_path = extract_dir / member
+                if not str(member_path.resolve()).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Zip contains path traversal: {member}")
+            archive.extractall(extract_dir)
 
         extracted_root = next((tmp_dir_path / "extract").iterdir())
         if target_dir.exists():
