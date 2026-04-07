@@ -2946,19 +2946,19 @@ body::before {
 
     .selection-panel-actions {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 6px;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
     }
 
     .selection-panel-actions .btn {
-        justify-content: flex-start;
-        align-items: flex-start;
-        min-width: 0;
         min-height: 40px;
-        padding: 8px 10px;
-        font-size: 12px;
-        line-height: 1.2;
-        white-space: normal;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 13px;
+        padding: 8px 12px;
+        white-space: nowrap;
     }
 
     .selection-panel-actions .btn span:last-child {
@@ -6592,8 +6592,9 @@ input[type="radio"],
 /* Prevent CJK label text from wrapping single characters */
 .filter-section-title,
 .filter-panel-label,
-h4[data-i18n],
 .stat-label,
-.form-group > label {
+.form-group > label,
+.tool-label,
+.censor-control-label {
     white-space: nowrap;
 }

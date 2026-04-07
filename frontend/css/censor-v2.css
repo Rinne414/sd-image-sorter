@@ -1000,11 +1000,10 @@
 }
 
 .queue-action-btn {
-    min-height: 28px;
-    padding: 4px 10px;
-    font-size: 11px;
-    line-height: 1.1;
-    white-space: nowrap;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 14px;
     flex-shrink: 0;
 }
 
