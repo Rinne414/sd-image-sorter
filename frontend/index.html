@@ -14,6 +14,75 @@
     <link rel="stylesheet" href="/static/css/new-views.css">
     <link rel="stylesheet" href="/static/css/ui-refresh.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Folder Browser Widget */
+        .folder-path-row { display: flex; gap: 8px; align-items: stretch; }
+        .folder-path-row .input-field { flex: 1; min-width: 0; }
+        .btn-browse {
+            padding: 8px 14px; background: rgba(255, 138, 61, 0.15);
+            border: 1px solid rgba(255, 138, 61, 0.3); border-radius: 8px;
+            color: var(--accent-primary); cursor: pointer; font-size: 0.85rem;
+            white-space: nowrap; transition: background 0.2s, border-color 0.2s;
+        }
+        .btn-browse:hover { background: rgba(255, 138, 61, 0.25); border-color: rgba(255, 138, 61, 0.5); }
+        .folder-browser {
+            position: relative; margin-top: 4px;
+            background: rgba(8, 18, 27, 0.95);
+            border: 1px solid rgba(184, 215, 233, 0.18); border-radius: 10px;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            overflow: hidden; max-height: 320px;
+            display: flex; flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        .folder-browser-header {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; border-bottom: 1px solid rgba(184, 215, 233, 0.1);
+            background: rgba(13, 27, 38, 0.6); min-height: 36px;
+        }
+        .folder-browser-path {
+            flex: 1; font-size: 0.78rem; color: var(--text-muted);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            direction: rtl; text-align: left;
+        }
+        .folder-browser-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(184, 215, 233, 0.12); border-radius: 6px;
+            color: var(--text-secondary); cursor: pointer;
+            padding: 4px 10px; font-size: 0.78rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .folder-browser-btn:hover { background: rgba(255, 138, 61, 0.15); color: var(--accent-primary); }
+        .folder-browser-btn:disabled { opacity: 0.4; cursor: default; }
+        .folder-browser-list { overflow-y: auto; flex: 1; padding: 4px 0; }
+        .folder-browser-list::-webkit-scrollbar { width: 6px; }
+        .folder-browser-list::-webkit-scrollbar-thumb { background: rgba(255, 138, 61, 0.3); border-radius: 3px; }
+        .folder-browser-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 7px 12px; cursor: pointer; font-size: 0.82rem;
+            color: var(--text-secondary); transition: background 0.12s, color 0.12s;
+            user-select: none;
+        }
+        .folder-browser-item:hover { background: rgba(255, 138, 61, 0.1); color: var(--text-primary); }
+        .folder-browser-item.selected { background: rgba(255, 138, 61, 0.18); color: var(--accent-primary); }
+        .folder-browser-item-icon { flex-shrink: 0; font-size: 0.9rem; width: 20px; text-align: center; }
+        .folder-browser-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .folder-browser-item-arrow { flex-shrink: 0; font-size: 0.7rem; color: var(--text-muted); opacity: 0.6; }
+        .folder-browser-footer {
+            display: flex; justify-content: flex-end; gap: 8px;
+            padding: 8px 12px; border-top: 1px solid rgba(184, 215, 233, 0.1);
+            background: rgba(13, 27, 38, 0.6);
+        }
+        .folder-browser-empty { padding: 20px 12px; text-align: center; color: var(--text-muted); font-size: 0.82rem; }
+        .folder-browser-loading { padding: 20px 12px; text-align: center; color: var(--text-muted); font-size: 0.82rem; }
+        .folder-browser-error { padding: 12px; text-align: center; color: var(--accent-danger); font-size: 0.82rem; }
+        /* System Info Panel */
+        .system-info-panel { margin-top: 4px; margin-bottom: 4px; }
+        .system-info-content {
+            padding: 6px 10px; background: rgba(13, 27, 38, 0.5);
+            border: 1px solid rgba(184, 215, 233, 0.08); border-radius: 6px;
+        }
+        .system-info-line { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+    </style>
 </head>
 
 <body>
@@ -1361,7 +1430,11 @@
                 <h3 id="scan-modal-title">Scan Folder</h3>
                 <div class="form-group">
                     <label for="scan-folder-path" id="scan-folder-path-label">Folder Path</label>
-                    <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
+                    <div class="folder-path-row">
+                        <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders">Browse</button>
+                    </div>
+                    <div id="folder-browser-container"></div>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
@@ -1422,6 +1495,10 @@
                     <input type="text" id="tag-tags-path" class="input-field"
                         placeholder="Path to selected_tags.csv (required)">
                     <small class="helper-text">Required when using custom model</small>
+                </div>
+
+                <div class="system-info-panel" id="system-info-panel" style="display:none">
+                    <div class="system-info-content" id="system-info-content"></div>
                 </div>
 
                 <div class="form-group">
@@ -1975,6 +2052,7 @@
     <script src="/static/js/guide.js"></script>
     <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/folder-browser.js"></script>
     <script src="/static/js/gallery.js"></script>
     <script src="/static/js/autosep.js"></script>
     <script src="/static/js/manual-sort.js"></script>

@@ -697,6 +697,11 @@ function showModal(modalId) {
             }
         }
 
+        // Load system hardware info when tag modal opens
+        if (modalId === 'tag-modal') {
+            if (typeof loadSystemInfo === 'function') loadSystemInfo();
+        }
+
         // Set up focus trap
         trapFocus(modal);
 
