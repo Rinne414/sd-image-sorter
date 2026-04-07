@@ -585,5 +585,60 @@ window.I18nLang_zhCN = {
     // ========================
     'lang.toggle': 'EN',
     'lang.current': '中文',
-    'lang.switchLabel': '切换语言'
+    'lang.switchLabel': '切换语言',
+
+    // ========================
+    // Scan Validation Feedback
+    // ========================
+    'scan.invalidChars': '路径包含无效字符',
+    'scan.checkingPath': '正在检查路径...',
+    'scan.folderFound': '文件夹已找到',
+    'scan.folderNotFound': '文件夹不存在',
+    'scan.waitingForUpdate': '扫描 · 等待首次更新...',
+    'scan.autoTagLabel': '扫描后自动打标',
+
+    // ========================
+    // Tagging Progress
+    // ========================
+    'tag.preparingGpu': '正在 GPU 上加载模型...',
+    'tag.preparingCpu': '正在 CPU 上加载模型...',
+    'tag.preparingMaxQuality': '正在以 CPU Safe Mode 加载 Max Quality 模型...',
+    'tag.running': '正在打标...',
+    'tag.startTagging': '开始打标',
+    'tag.cancelTagging': '取消打标',
+    'tag.cancellingAfterCurrent': '将在当前图片完成后取消...',
+
+    // ========================
+    // Embedding
+    // ========================
+    'embedding.preparing': '正在准备向量化...',
+    'embedding.noPending': '没有待处理的图片。',
+
+    // ========================
+    // Artist Identification (additional)
+    // ========================
+    'artist.loadStatsFailed': '加载统计失败',
+    'artist.runtimeUnavailable': '画师识别运行状态无法加载。',
+
+    // ========================
+    // Auto-Separate (additional)
+    // ========================
+    'autosep.previewEmptyInitial': '暂无预览。点击"预览结果"查看匹配的图片。',
+
+    // ========================
+    // Batch Rename (additional)
+    // ========================
+    'censor.renamePattern': '重命名模板',
+    'censor.renameTokensHelp': '可用标记：{original} = 原文件名, {n} = 编号, {n:04d} = 补零编号, {date} = 日期, {time} = 时间',
+    'censor.renamePreview': '预览',
+
+    // ========================
+    // System / Hardware
+    // ========================
+    'system.detectedHardware': '检测到的硬件',
+    'system.recommendedBatchSize': '推荐 Batch Size',
+    'system.gpuName': 'GPU',
+    'system.totalRam': '总内存',
+    'system.noGpuDetected': '未检测到 GPU'
+
 };

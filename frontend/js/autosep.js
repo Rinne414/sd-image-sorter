@@ -131,7 +131,7 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
     if (!images.length) {
         const empty = document.createElement('div');
         empty.className = 'autosep-preview-empty';
-        empty.textContent = 'No preview yet. Click "Preview Results" to inspect matching images.';
+        empty.textContent = window.I18n?.t?.('autosep.previewEmptyInitial') || 'No preview yet. Click "Preview Results" to inspect matching images.';
         container.appendChild(empty);
         return;
     }

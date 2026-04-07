@@ -583,5 +583,60 @@ window.I18nLang_en = {
     // ========================
     'lang.toggle': '\u4E2D\u6587',
     'lang.current': 'EN',
-    'lang.switchLabel': 'Switch language'
+    'lang.switchLabel': 'Switch language',
+
+    // ========================
+    // Scan Validation Feedback
+    // ========================
+    'scan.invalidChars': 'Path contains invalid characters',
+    'scan.checkingPath': 'Checking path...',
+    'scan.folderFound': 'Folder found',
+    'scan.folderNotFound': 'Folder not found',
+    'scan.waitingForUpdate': 'Scan · waiting for first update...',
+    'scan.autoTagLabel': 'Auto-tag after scan',
+
+    // ========================
+    // Tagging Progress
+    // ========================
+    'tag.preparingGpu': 'Preparing model on GPU...',
+    'tag.preparingCpu': 'Preparing model on CPU...',
+    'tag.preparingMaxQuality': 'Preparing Max Quality model in protected CPU Safe Mode...',
+    'tag.running': 'Tagging...',
+    'tag.startTagging': 'Start Tagging',
+    'tag.cancelTagging': 'Cancel Tagging',
+    'tag.cancellingAfterCurrent': 'Cancelling after current image...',
+
+    // ========================
+    // Embedding
+    // ========================
+    'embedding.preparing': 'Preparing embeddings...',
+    'embedding.noPending': 'No pending images to embed.',
+
+    // ========================
+    // Artist Identification (additional)
+    // ========================
+    'artist.loadStatsFailed': 'Failed to load stats',
+    'artist.runtimeUnavailable': 'Artist runtime status could not be loaded.',
+
+    // ========================
+    // Auto-Separate (additional)
+    // ========================
+    'autosep.previewEmptyInitial': 'No preview yet. Click "Preview Results" to inspect matching images.',
+
+    // ========================
+    // Batch Rename (additional)
+    // ========================
+    'censor.renamePattern': 'Rename Pattern',
+    'censor.renameTokensHelp': 'Tokens: {original} = original name, {n} = number, {n:04d} = padded, {date} = date, {time} = time',
+    'censor.renamePreview': 'Preview',
+
+    // ========================
+    // System / Hardware
+    // ========================
+    'system.detectedHardware': 'Detected Hardware',
+    'system.recommendedBatchSize': 'Recommended Batch Size',
+    'system.gpuName': 'GPU',
+    'system.totalRam': 'Total RAM',
+    'system.noGpuDetected': 'No GPU detected'
+
 };

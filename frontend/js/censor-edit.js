@@ -186,6 +186,7 @@ function bindEvents() {
     // Live preview for rename
     $('#rename-base')?.addEventListener('input', updateRenamePreview);
     $('#rename-start')?.addEventListener('input', updateRenamePreview);
+    $('#rename-pattern')?.addEventListener('input', updateRenamePreview);
 
     // Properties Panel
     $('#censor-model-path')?.addEventListener('change', (e) => {
@@ -1939,13 +1940,37 @@ async function segmentCurrentImageByText() {
 
 // ============== Batch Actions ==============
 
+function resolveRenamePattern(pattern, vars) {
+    return pattern.replace(/\{(\w+)(?::(\d+)d)?\}/g, function(match, key, pad) {
+        var value = vars[key];
+        if (value === undefined) return match;
+        if (pad && typeof value === 'number') {
+            return String(value).padStart(parseInt(pad, 10), '0');
+        }
+        if (key === 'n' && typeof value === 'number') {
+            return String(value).padStart(3, '0');
+        }
+        return String(value);
+    });
+}
+
 function updateRenamePreview() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
     const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
+    const patternEl = document.getElementById('rename-pattern');
+    const pattern = patternEl ? patternEl.value.trim() : '';
     const previewContainer = document.querySelector('.rename-preview');
 
     if (!previewContainer) return;
+
+    var now = new Date();
+    var dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    var timeStr = [
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+        String(now.getSeconds()).padStart(2, '0')
+    ].join('');
 
     // Generate preview items
     let previewHtml = '';
@@ -1962,11 +1987,23 @@ function updateRenamePreview() {
             } else {
                 filename = `original_name_${i + 1}.png`;
             }
+        } else if (pattern) {
+            const item = CensorState.queue[i];
+            const originalName = item
+                ? (item.originalFilename || item.filename || `image_${i + 1}`).replace(/\.[^/.]+$/, '')
+                : `image_${i + 1}`;
+            var resolved = resolveRenamePattern(pattern, {
+                original: originalName,
+                n: start + i,
+                date: dateStr,
+                time: timeStr
+            });
+            filename = resolved + '.png';
         } else {
             const num = String(start + i).padStart(3, '0');
             filename = `${base}_${num}.png`;
         }
-        previewHtml += `<div class="preview-item">${filename}</div>`;
+        previewHtml += `<div class="preview-item">${window.escapeHtml(filename)}</div>`;
     }
 
     if (CensorState.queue.length > 3 || sampleCount === 3) {
@@ -1980,7 +2017,17 @@ async function applyBatchRename() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
     const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
+    const patternEl = document.getElementById('rename-pattern');
+    const pattern = patternEl ? patternEl.value.trim() : '';
     // Note: Output folder is configured in Save Options modal, not here
+
+    var now = new Date();
+    var dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    var timeStr = [
+        String(now.getHours()).padStart(2, '0'),
+        String(now.getMinutes()).padStart(2, '0'),
+        String(now.getSeconds()).padStart(2, '0')
+    ].join('');
 
     CensorState.queue.forEach((item, i) => {
         if (useOriginal) {
@@ -1988,6 +2035,15 @@ async function applyBatchRename() {
             const originalName = item.originalFilename || item.filename || `image_${i + 1}`;
             const baseName = originalName.replace(/\.[^/.]+$/, ''); // Remove extension
             item.outputFilename = `${baseName}.png`;
+        } else if (pattern) {
+            const originalName = (item.originalFilename || item.filename || `image_${i + 1}`).replace(/\.[^/.]+$/, '');
+            var resolved = resolveRenamePattern(pattern, {
+                original: originalName,
+                n: start + i,
+                date: dateStr,
+                time: timeStr
+            });
+            item.outputFilename = resolved + '.png';
         } else {
             const num = String(start + i).padStart(3, '0');
             item.outputFilename = `${base}_${num}.png`;

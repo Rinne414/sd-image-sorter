@@ -1817,13 +1817,19 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Starting Number</label>
+                    <label data-i18n="rename.startingNumber">Starting Number</label>
                     <input type="number" id="rename-start" class="input-field" min="1" value="1">
-                    <small class="helper-text">Images will be numbered sequentially from this number</small>
+                    <small class="helper-text" data-i18n="rename.startingNumberHelper">Images will be numbered sequentially from this number</small>
                 </div>
 
                 <div class="form-group">
-                    <label>Preview</label>
+                    <label data-i18n="censor.renamePattern">Rename Pattern</label>
+                    <input type="text" id="rename-pattern" class="input-field" placeholder="{original}_{n:04d}">
+                    <small class="helper-text" data-i18n="censor.renameTokensHelp">Tokens: {original} = original name, {n} = number, {n:04d} = padded, {date} = date, {time} = time</small>
+                </div>
+
+                <div class="form-group">
+                    <label data-i18n="censor.renamePreview">Preview</label>
                     <div class="rename-preview">
                         <div class="preview-item">Image_001.png</div>
                         <div class="preview-item">Image_002.png</div>

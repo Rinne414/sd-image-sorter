@@ -78,7 +78,7 @@ const ArtistIdent = {
 
             const label = document.createElement('span');
             label.className = 'stat-label';
-            label.textContent = 'Failed to load stats';
+            label.textContent = this.tText('Failed to load stats', '加载统计失败');
 
             fallback.appendChild(label);
             statsEl.replaceChildren(fallback);
@@ -255,7 +255,7 @@ const ArtistIdent = {
             }`;
         } catch (e) {
             banner.className = 'model-health-banner is-visible model-health-banner-warning';
-            banner.textContent = 'Artist runtime status could not be loaded right now.';
+            banner.textContent = this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。');
         }
     },
 
