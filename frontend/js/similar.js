@@ -399,7 +399,9 @@ const SimilarImages = {
         resultsContainer.innerHTML = '<div class="spinner"></div>';
 
         try {
-            const result = await API.get(`/api/similarity/search/${imageId}?limit=20`);
+            const thresholdEl = document.getElementById('similar-search-threshold');
+            const threshold = thresholdEl ? parseFloat(thresholdEl.value) : 0.5;
+            const result = await API.get(`/api/similarity/search/${imageId}?limit=20&threshold=${threshold}`);
             if (requestToken !== this.activeSearchToken) return;
             this.searchResults = result.results || [];
             this.renderSearchResults();
@@ -444,7 +446,9 @@ const SimilarImages = {
             const formData = new FormData();
             formData.append('file', file);
 
-            const response = await fetch('/api/similarity/search-upload?limit=20', {
+            const thresholdEl = document.getElementById('similar-search-threshold');
+            const searchThreshold = thresholdEl ? parseFloat(thresholdEl.value) : 0.5;
+            const response = await fetch(`/api/similarity/search-upload?limit=20&threshold=${searchThreshold}`, {
                 method: 'POST',
                 body: formData,
             });
@@ -773,6 +777,13 @@ const SimilarImages = {
         const thresholdValue = document.getElementById('similar-dup-threshold-value');
         thresholdSlider?.addEventListener('input', () => {
             if (thresholdValue) thresholdValue.textContent = (parseFloat(thresholdSlider.value) * 100).toFixed(0) + '%';
+        });
+
+        // Search threshold slider
+        const searchThresholdSlider = document.getElementById('similar-search-threshold');
+        const searchThresholdValue = document.getElementById('similar-search-threshold-value');
+        searchThresholdSlider?.addEventListener('input', () => {
+            if (searchThresholdValue) searchThresholdValue.textContent = (parseFloat(searchThresholdSlider.value) * 100).toFixed(0) + '%';
         });
 
         // Tab switching within Similar view

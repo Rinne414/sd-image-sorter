@@ -258,6 +258,7 @@ window.I18nLang_en = {
     'similar.upload': 'Upload Image',
     'similar.findDuplicates': 'Find Duplicates',
     'similar.threshold': 'Similarity Threshold',
+    'similar.searchThreshold': 'Threshold:',
     'similar.searchEmpty': 'Enter an image ID or upload an image to find similar images.',
     'similar.duplicatesEmpty': 'Click "Find Duplicates" to scan for duplicate images.',
     'similar.needMoreEmbeddings': 'Need at least {count} embedded images before duplicate search is meaningful.',

@@ -980,7 +980,7 @@
 
                             <div class="form-group">
                                 <label><span data-i18n="censor.confidenceThreshold">Confidence Threshold</span>: <span id="censor-confidence-value">0.50</span></label>
-                                <input type="range" id="censor-confidence" min="0.1" max="0.9" step="0.05" value="0.5">
+                                <input type="range" id="censor-confidence" min="0.0" max="1.0" step="0.05" value="0.5">
                             </div>
 
                             <div class="form-group" id="censor-target-region-group">
@@ -1120,6 +1120,11 @@
                             <div class="similar-search-controls">
                                 <input type="number" id="similar-search-id" class="input" placeholder="Image ID" data-i18n-placeholder="similar.searchById">
                                 <button class="btn btn-primary" id="btn-similar-search" data-i18n="similar.searchById">Search by ID</button>
+                                <div class="similar-threshold-row" style="display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;">
+                                    <label for="similar-search-threshold" style="font-size:12px;white-space:nowrap;color:var(--text-muted,#8899aa);" data-i18n="similar.searchThreshold">Threshold:</label>
+                                    <input type="range" id="similar-search-threshold" min="0.0" max="1.0" step="0.05" value="0.50" style="flex:1;">
+                                    <span id="similar-search-threshold-value" style="font-size:12px;min-width:32px;">50%</span>
+                                </div>
                                 <div class="similar-upload-dropzone" id="similar-upload-dropzone" role="button" tabindex="0" aria-describedby="similar-upload-hint">
                                     <div class="similar-upload-copy">
                                         <span class="similar-upload-title">Drop an image here</span>
@@ -1138,7 +1143,7 @@
                         <div class="similar-panel" id="panel-similar-duplicates" style="display: none;">
                             <div class="dup-threshold-row">
                                 <label data-i18n="similar.threshold">Similarity Threshold:</label>
-                                <input type="range" id="similar-dup-threshold" min="0.80" max="0.99" step="0.01" value="0.95">
+                                <input type="range" id="similar-dup-threshold" min="0.50" max="0.99" step="0.01" value="0.95">
                                 <span id="similar-dup-threshold-value">95%</span>
                                 <button class="btn btn-primary" id="btn-similar-duplicates" data-i18n="similar.findDuplicates">Find Duplicates</button>
                             </div>
@@ -1506,7 +1511,9 @@
                             <option value="2">2</option>
                             <option value="4">4</option>
                             <option value="8">8</option>
-                            <option value="16">16 (fast, needs RAM)</option>
+                            <option value="10">10</option>
+                            <option value="16">16</option>
+                            <option value="32">32 (needs lots of RAM/VRAM)</option>
                         </select>
                         <small style="font-size:11px;color:var(--text-muted,#8899aa);">Higher = faster but uses more memory</small>
                     </div>
@@ -1515,7 +1522,7 @@
                 <div class="form-group">
                     <label>General Tag Threshold</label>
                     <div class="range-row">
-                        <input type="range" id="tag-threshold" min="0.1" max="0.9" step="0.05" value="0.35">
+                        <input type="range" id="tag-threshold" min="0.0" max="1.0" step="0.05" value="0.35">
                         <span class="range-value" id="tag-threshold-value">0.35</span>
                     </div>
                 </div>
@@ -1523,7 +1530,7 @@
                 <div class="form-group">
                     <label>Character Tag Threshold</label>
                     <div class="range-row">
-                        <input type="range" id="tag-character-threshold" min="0.1" max="0.99" step="0.05" value="0.85">
+                        <input type="range" id="tag-character-threshold" min="0.0" max="1.0" step="0.05" value="0.85">
                         <span class="range-value" id="tag-character-threshold-value">0.85</span>
                     </div>
                 </div>

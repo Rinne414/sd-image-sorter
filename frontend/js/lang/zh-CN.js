@@ -260,6 +260,7 @@ window.I18nLang_zhCN = {
     'similar.upload': '上传图片',
     'similar.findDuplicates': '查找重复',
     'similar.threshold': '相似度阈值',
+    'similar.searchThreshold': '阈值:',
     'similar.searchEmpty': '输入图片 ID 或上传图片来查找相似图片。',
     'similar.duplicatesEmpty': '点击「查找重复」扫描重复图片。',
     'similar.needMoreEmbeddings': '至少需要 {count} 张已建立 embedding 的图片，查重才有意义。',
