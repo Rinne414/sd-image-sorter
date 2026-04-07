@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.2.0-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.3.0-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -16,9 +16,9 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 ---
@@ -110,7 +110,7 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 
 ### Windows
 
-1. **[Download sd-image-sorter-v2.2.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-windows-portable.zip)** (~21 MB)
+1. **[Download sd-image-sorter-v2.3.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-windows-portable.zip)** (~21 MB)
 2. Extract to any folder
 3. Double-click **`run-portable.bat`**
 4. Browser opens `http://localhost:8487` — done
@@ -119,10 +119,10 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v2.2.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-linux-mac.tar.gz)** (~8 MB)
+1. **[Download sd-image-sorter-v2.3.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-linux-mac.tar.gz)** (~8 MB)
 2. Extract and run:
    ```bash
-   tar xzf sd-image-sorter-v2.2.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v2.3.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > Requires Python 3.9+. The script creates a virtualenv automatically.
@@ -215,9 +215,9 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
 </p>
 
 ---
@@ -300,7 +300,7 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ### Windows
 
-1. **[下载 sd-image-sorter-v2.2.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-windows-portable.zip)** (~21 MB)
+1. **[下载 sd-image-sorter-v2.3.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-windows-portable.zip)** (~21 MB)
 2. 解压到任意文件夹
 3. 双击 **`run-portable.bat`**
 4. 浏览器打开 `http://localhost:8487` — 搞定
@@ -309,10 +309,10 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ### Linux / macOS
 
-1. **[下载 sd-image-sorter-v2.2.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.2.0-linux-mac.tar.gz)** (~8 MB)
+1. **[下载 sd-image-sorter-v2.3.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.3.0-linux-mac.tar.gz)** (~8 MB)
 2. 解压并运行：
    ```bash
-   tar xzf sd-image-sorter-v2.2.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v2.3.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > 需要 Python 3.9+，脚本自动创建虚拟环境。
