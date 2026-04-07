@@ -465,7 +465,7 @@ function getRecentFolders() {
     try {
         const saved = localStorage.getItem(RECENT_FOLDERS_KEY);
         return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
+    } catch (e) { return []; }
 }
 
 function addRecentFolder(path) {
