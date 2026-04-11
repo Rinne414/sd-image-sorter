@@ -17,6 +17,7 @@ from services.censor_service import (
     CensorService,
     CensorDetectRequest,
     MaskRefineRequest,
+    BatchMaskRefineRequest,
     TextSegmentRequest,
     CensorApplyRequest,
     CensorSaveRequest,
@@ -168,6 +169,21 @@ async def refine_mask(
     Falls back gracefully if SAM3 is unavailable.
     """
     return service.refine_mask(request)
+
+
+@router.post("/batch-refine-mask")
+async def batch_refine_mask(
+    request: BatchMaskRefineRequest,
+    service: CensorService = Depends(get_censor_service),
+):
+    """
+    Run SAM3 mask refinement on multiple images/boxes sequentially.
+
+    Processes each item one-by-one through SAM3 (heavy model) but
+    presents as a single batch operation. Returns results and errors
+    for each item.
+    """
+    return service.batch_refine_mask(request)
 
 
 @router.post("/segment-text")

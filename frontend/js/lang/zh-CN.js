@@ -182,7 +182,7 @@ window.I18nLang_zhCN = {
     // Censor Edit View
     // ========================
     'censor.queue': '处理队列',
-    'censor.queueSubtitle': '点击编辑 \u2022 Ctrl/Shift 多选 \u2022 图片太多时用置顶/置底或 Alt+Home/End',
+    'censor.queueSubtitle': '点击编辑 \u2022 Ctrl/Shift 多选',
     'censor.moveTop': '置顶',
     'censor.moveUp': '上移',
     'censor.moveDown': '下移',
@@ -236,6 +236,12 @@ window.I18nLang_zhCN = {
     'censor.targetRegions': '快捷隐私目标',
     'censor.modelCapabilities': '模型能力说明',
     'censor.targetRegionHelp': '这些快捷隐私目标会作用在 Wenaka / NudeNet 的隐私类别上，但不会控制通用 YOLO26 / YOLOv8 物体类。',
+    'censor.regionBreasts': '胸部',
+    'censor.regionPussy': '阴部',
+    'censor.regionDick': '阴茎',
+    'censor.regionAnus': '肛门',
+    'censor.regionButtocks': '臀部',
+    'censor.regionCum': '精液',
     'censor.advancedPrecision': 'SAM3 文本精修（专业）',
     'censor.textPromptPlaceholder': '例如：exposed breasts、face、tattoo、hand',
     'censor.textPromptHelp': '这里输入的是给 SAM3 的文本提示；真正执行仍然需要可用的 CUDA 版 SAM3 运行时。',
@@ -377,6 +383,8 @@ window.I18nLang_zhCN = {
     'modal.tags': '标签',
     'modal.showMore': '显示更多',
     'modal.showLess': '收起',
+    'modal.aiCaption': 'AI 自然语言描述',
+    'modal.captionCopied': '描述已复制',
 
     // ========================
     // Scan Modal
@@ -392,8 +400,13 @@ window.I18nLang_zhCN = {
     // Tag Modal
     // ========================
     'modal.tagTitle': '使用 WD14 标记图片',
-    'modal.tagDescription': '使用 WD14 标记器自动为图片添加动漫/插画标签。',
+    'modal.tagDescription': '先选模型。只有使用 WD14 类模型时才需要调阈值。高级覆盖是可选项。',
     'modal.tagModel': '模型',
+    'modal.tagModelSnapshot': '模型摘要',
+    'modal.tagRuntimePlan': '运行方案',
+    'modal.tagAdvancedOverride': '高级覆盖',
+    'modal.tagAdvancedHint': '可选。大多数情况不需要改这里。',
+    'modal.tagRuntimeChunk': '运行块大小',
     'modal.tagBestQuality': '最佳质量',
     'modal.tagCustomModel': '自定义本地模型...',
     'modal.tagCustomModelPath': '自定义模型路径 (.onnx)',
@@ -402,6 +415,8 @@ window.I18nLang_zhCN = {
     'modal.tagTagsCsvHelper': '使用自定义模型时必须提供',
     'modal.tagGeneralThreshold': '通用标签阈值',
     'modal.tagCharacterThreshold': '角色标签阈值',
+    'modal.tagThresholdNotUsedTitle': '这个模型不使用 WD14 阈值。',
+    'modal.tagThresholdNotUsedBody': 'ToriiGate 会直接生成标签，这里没有需要手调的阈值，直接开始即可。',
     'modal.tagRetagAll': '重新标记已标记的图片？',
     'modal.tagUseGpu': '使用 GPU 加速（更快但占用更多显存）',
     'modal.tagUseGpuHelper': '取消勾选以仅使用 CPU（较慢但不会卡死系统）',
@@ -475,11 +490,17 @@ window.I18nLang_zhCN = {
     'rename.description': '为队列中的所有图片设置命名规则',
     'rename.useOriginal': '使用原始文件名',
     'rename.useOriginalHelper': '保留原始文件名而非顺序编号',
+    'rename.onlySelected': '只重命名已选中的队列项',
+    'rename.onlySelectedHelper': '如果没有选中任何项，就会重命名整个队列。',
     'rename.baseName': '基础名称',
+    'rename.baseNamePlaceholder': '图片',
     'rename.baseNameHelper': '所有图片的基础名称',
     'rename.startingNumber': '起始编号',
     'rename.startingNumberHelper': '图片将从此编号开始顺序编号',
     'rename.preview': '预览',
+    'rename.previewSummary': '预览前几项的重命名结果。',
+    'rename.currentName': '当前名称',
+    'rename.newName': '新名称',
     'rename.andSoOn': '...以此类推',
     'rename.cancel': '取消',
     'rename.apply': '应用重命名',
@@ -498,6 +519,7 @@ window.I18nLang_zhCN = {
     'save.metadataHelper': '选择如何处理图片元数据/EXIF 数据',
     'save.outputFormat': '输出格式',
     'save.formatPng': 'PNG（无损，文件较大）',
+    'save.formatJpg': 'JPG（文件更小，兼容性更好）',
     'save.formatWebp': 'WebP（文件较小，画质良好）',
     'save.formatHelper': '选择输出图片格式',
     'save.cancel': '取消',
@@ -547,6 +569,10 @@ window.I18nLang_zhCN = {
     'common.success': '成功',
     'common.copied': '已复制到剪贴板！',
     'common.images': '张图片',
+    'common.top': '置顶',
+    'common.up': '上移',
+    'common.down': '下移',
+    'common.bottom': '置底',
 
     // ========================
     // Toast Messages
@@ -640,6 +666,115 @@ window.I18nLang_zhCN = {
     'system.recommendedBatchSize': '推荐 Batch Size',
     'system.gpuName': 'GPU',
     'system.totalRam': '总内存',
-    'system.noGpuDetected': '未检测到 GPU'
+    'system.noGpuDetected': '未检测到 GPU',
+
+    // ========================
+    // Tagger Model Descriptions
+    // ========================
+    'tagger.descDefault': '均衡默认设置。速度、质量和稳定性都不错。',
+    'tagger.descSummaryFormat': '{summary} 质量{quality}/5 \u2022 速度{speed}/5 \u2022 稳定{stability}/5。{bestFor}{runtimeNote}',
+    'tagger.bestForPrefix': ' 最适合：{bestFor}。',
+
+    // Tagger Runtime Descriptions
+    'tagger.runtimeAdaptiveMax': '自适应最大吞吐模式已启用。优先使用 GPU 加速，不稳定时才回退。',
+    'tagger.runtimeCustomGpu': '自定义模型运行在 GPU 上。速度更快但不如 CPU Safe Mode 稳定。',
+    'tagger.runtimeCustomCpu': '自定义模型运行在 CPU Safe Mode。先完成一次稳定的运行，再尝试 GPU。',
+    'tagger.runtimeRiskyGpu': '高风险 GPU 覆盖已启用。这不是此模型的稳定默认配置。',
+    'tagger.runtimeAdaptiveGpu': '自适应 GPU 模式已启用。正在使用适合此硬件的推荐快速路径。',
+    'tagger.runtimeCpuSafe': 'CPU Safe Mode 已启用。速度较慢，但在显存紧张或其他 AI 工具正在运行时更安全。',
+
+    // Tagger Model Snapshot
+    'tagger.customSubtitle': '自定义本地 ONNX 模型。应用无法预先判断其架构或稳定性。',
+    'tagger.customBadge': '自定义',
+    'tagger.onnxOnlyBadge': '仅 ONNX',
+    'tagger.schemaUnknownBadge': '架构未知',
+    'tagger.customNote': '先从一次稳定的运行开始。之后再提高 chunk size。',
+    'tagger.defaultSummary': 'WD14 标注模型',
+    'tagger.defaultNote': '所选模型决定了质量、标签密度和硬件压力。',
+
+    // Tagger syncTaggerModelUi strings
+    'tagger.customModelHelp': '自定义 ONNX 模型。先用 CPU Safe Mode 开始。',
+    'tagger.highRiskSuffix': ' 此硬件被标记为长时间 GPU 运行的高风险设备，因此 CPU 是安全的默认选项。',
+    'tagger.recommendedChunkSuffix': ' 推荐 chunk：{chunk}。',
+    'tagger.catalogOnlyDetail': '此条目保留在目录中以展示计划中的集成，但当前标注运行时无法执行它。',
+    'tagger.toriiGateGpuDetail': 'ToriiGate 使用多模态 PyTorch CUDA 路径。WD14 阈值在此不适用。',
+    'tagger.toriiGateCpuDetail': 'ToriiGate 可以在 CPU 上运行，但比 CUDA 慢得多。WD14 阈值在此不适用。',
+    'tagger.customGpuAvailDetail': '最终 Provider 在创建自定义 ONNX 会话时决定。GPU 可用，但模型稳定性仍决定最终路径。',
+    'tagger.customCpuOnlyDetail': '当前 ONNX 运行时路径中 CUDAExecutionProvider 不可用，自定义模型将留在 CPU 上运行。',
+    'tagger.cudaAvailDetail': '此机器上 CUDAExecutionProvider 可用。如果会话加载正常，运行将保持在 GPU 上。',
+    'tagger.cpuOnlyDetail': '当前 ONNX 运行时探测未暴露 CUDAExecutionProvider，此次运行将留在 CPU 上。',
+    'tagger.chipCatalogOnly': '仅目录',
+    'tagger.chipGpuTarget': 'GPU 目标',
+    'tagger.chipCpuTarget': 'CPU 目标',
+    'tagger.chipVlmNeeded': '需要 VLM 后端',
+    'tagger.chipPytorchCuda': 'PyTorch CUDA',
+    'tagger.chipPytorchCpu': 'PyTorch CPU',
+    'tagger.chipCpuRuntime': 'CPU 运行时',
+
+    // Tagger GPU help strings
+    'tagger.gpuHelpToriiGateGpu': 'ToriiGate 正在使用多模态 PyTorch 后端（GPU）。请保持较小的 chunk size。',
+    'tagger.gpuHelpToriiGateCpu': 'ToriiGate 正在使用多模态 PyTorch 后端（CPU）。有效但比 CUDA 慢得多。',
+    'tagger.gpuHelpAdaptive': '此模型的自适应运行时已启用。优先使用 GPU 吞吐，不稳定时才回退。',
+    'tagger.gpuHelpCustomCpu': '自定义模型的 CPU Safe Mode 已启用。先完成一次稳定运行再切换。',
+    'tagger.gpuHelpHighRiskCpu': 'CPU Safe Mode 已启用，因为此硬件被标记为长时间 GPU 标注的高风险设备。',
+    'tagger.gpuHelpCpuSafe': 'CPU Safe Mode 已启用。在显存紧张或其他 AI 工具正在运行时使用此模式。',
+    'tagger.gpuHelpRiskyOverride': '高风险 GPU 覆盖已启用。运行前会要求确认。',
+    'tagger.gpuHelpAdaptiveNote': '自适应运行时已启用。{note}',
+    'tagger.gpuHelpRecommendedNote': '推荐 GPU 模式已启用。{note}',
+    'tagger.gpuHelpRecommendedDefault': '此模型的推荐 GPU 模式已启用。仅在需要额外稳定性时切换到 CPU Safe Mode。',
+
+    // Tagger advanced hint strings
+    'tagger.advHintStressTest': '可选。仅在压力测试时更改。',
+    'tagger.advHintHighRisk': '可选。此机器被标记为长时间 GPU 标注的高风险设备。',
+    'tagger.advHintCustom': '可选。等自定义模型完成一次稳定的 CPU 运行后再更改。',
+    'tagger.advHintRecommended': '可选。推荐模式已激活。',
+    'tagger.advHintDefault': '可选。仅在排查问题或调优时更改。',
+
+    // Tagger runtime chunk help strings
+    'tagger.chunkHelpRecommended': '推荐 chunk size：{chunk}。除非你在有意调优吞吐量，否则请保持不变。',
+    'tagger.chunkHelpAdaptive': '此模型已使用自适应运行时限制。仅在压力测试时更改 chunk size。',
+    'tagger.chunkHelpToriiGateGpu': 'ToriiGate 使用多模态 PyTorch 后端。保持较小的 chunk size，通常 1-2。',
+    'tagger.chunkHelpToriiGateCpu': 'ToriiGate 在 CPU 上应保持 chunk size 为 1。',
+    'tagger.chunkHelpOverGpu': '你选择了 {chosen}，高于推荐的 {recommended}。预期更高的显存压力和更大的崩溃风险。',
+    'tagger.chunkHelpOverCpu': '你选择了 {chosen}，高于推荐的 {recommended}。可能提升吞吐量，但会增加内存压力。',
+    'tagger.chunkHelpRiskyGpu': '此选项控制真正的 WD14 批处理（如果支持）。高风险 GPU 模式仍需确认。',
+    'tagger.chunkHelpCustom': '自定义模型可能支持也可能不支持真正的批处理。从推荐值开始。',
+    'tagger.chunkHelpHighRisk': '此机器被标记为长时间 GPU 标注的高风险设备。请保持推荐的 chunk size。',
+    'tagger.chunkHelpDefault': '此选项控制真正的 WD14 batch size（当所选模型支持动态批处理时）。',
+
+    // Tagger disabled model strings
+    'tagger.disabledNotRunnable': '{model} 在当前版本中无法运行。',
+    'tagger.disabledFallback': '目前请使用上方的 ONNX 标注器。',
+    'tagger.modelUnavailable': '此模型在当前应用运行时中不可用。',
+    'tagger.modelNotStartable': '此模型在当前版本中无法启动。',
+    'tagger.modelListedFuture': '此模型已列入未来集成计划，但在当前版本中无法运行。',
+
+    // Tagger status chip
+    'tagger.statusChipDefault': '自动运行时',
+
+    // Tagger toast messages
+    'tagger.toastMaxQualityCpuSafe': 'Max Quality 现在在应用内以 CPU Safe Mode 运行。',
+    'tagger.toastAutoSafeMode': '此模型已自动切换到 CPU Safe Mode 以避免崩溃。',
+
+    // Tagger confirm risky GPU run
+    'tagger.confirmCustomModel': '自定义模型',
+    'tagger.confirmModelFocus': '模型重点：{bestFor}。',
+    'tagger.confirmSpeedNotStability': '此配置优先追求最大速度，而非最大稳定性。',
+    'tagger.confirmCrashProne': '{model} 在 GPU 上是最容易崩溃的标注配置。',
+    'tagger.confirmRecommendCpu': '建议：先切换到 CPU Safe Mode。',
+    'tagger.confirmContinueRisky': '仍然继续使用高风险 GPU 模式？',
+    'tagger.confirmRiskyTitle': '高风险 GPU 标注运行',
+
+    // Tagger progress
+    'tagger.progressPreparing': '正在准备标注器...',
+    'tagger.progressTagging': '正在标注 {current}/{total}（{tagged} 已标注{errorSuffix}，约 {eta} 剩余）',
+    'tagger.progressTaggingNoEta': '正在标注 {current}/{total}（{tagged} 已标注{errorSuffix}）',
+    'tagger.progressErrorSuffix': '，{errors} 失败',
+    'tagger.progressCancelling': '正在取消... {current}/{total}',
+    'tagger.progressCancelled': '标注已取消',
+    'tagger.progressResuming': '正在恢复标注进度...',
+    'tagger.errorCheckingProgress': '检查标注进度时出错',
+    'tagger.cancellingAfterCurrent': '将在当前图片完成后取消...',
+    'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条取消或查看状态。'
 
 };

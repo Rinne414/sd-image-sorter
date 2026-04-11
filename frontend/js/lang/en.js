@@ -180,7 +180,7 @@ window.I18nLang_en = {
     // Censor Edit View
     // ========================
     'censor.queue': 'Processing Queue',
-    'censor.queueSubtitle': 'Click to edit \u2022 Ctrl/Shift multi-select \u2022 Use Top/Bottom or Alt+Home/End for big queues',
+    'censor.queueSubtitle': 'Click to edit \u2022 Ctrl/Shift multi-select',
     'censor.moveTop': 'Top',
     'censor.moveUp': 'Up',
     'censor.moveDown': 'Down',
@@ -234,6 +234,12 @@ window.I18nLang_en = {
     'censor.targetRegions': 'Quick Privacy Targets',
     'censor.modelCapabilities': 'Model Capabilities',
     'censor.targetRegionHelp': 'These quick privacy targets work for Wenaka / NudeNet families. They do not control generic YOLO26 / YOLOv8 object classes.',
+    'censor.regionBreasts': 'Breasts',
+    'censor.regionPussy': 'Pussy',
+    'censor.regionDick': 'Dick',
+    'censor.regionAnus': 'Anus',
+    'censor.regionButtocks': 'Buttocks',
+    'censor.regionCum': 'Cum',
     'censor.advancedPrecision': 'SAM3 Text Precision (Pro)',
     'censor.textPromptPlaceholder': 'e.g. exposed breasts, face, tattoo, hand',
     'censor.textPromptHelp': 'Type a prompt here for SAM3. Execution still needs a CUDA-ready SAM3 runtime.',
@@ -375,6 +381,8 @@ window.I18nLang_en = {
     'modal.tags': 'Tags',
     'modal.showMore': 'Show More',
     'modal.showLess': 'Show Less',
+    'modal.aiCaption': 'AI Caption',
+    'modal.captionCopied': 'Caption copied',
 
     // ========================
     // Scan Modal
@@ -390,8 +398,13 @@ window.I18nLang_en = {
     // Tag Modal
     // ========================
     'modal.tagTitle': 'Tag Images with WD14',
-    'modal.tagDescription': 'Uses WD14 tagger to automatically tag your images with anime/illustration tags.',
+    'modal.tagDescription': 'Choose a model, tune thresholds only when the model uses them, then start. Advanced override is optional.',
     'modal.tagModel': 'Model',
+    'modal.tagModelSnapshot': 'Model Snapshot',
+    'modal.tagRuntimePlan': 'Runtime Plan',
+    'modal.tagAdvancedOverride': 'Advanced Override',
+    'modal.tagAdvancedHint': 'Optional. Most runs do not need this.',
+    'modal.tagRuntimeChunk': 'Runtime chunk size',
     'modal.tagBestQuality': 'Best Quality',
     'modal.tagCustomModel': 'Custom Local Model...',
     'modal.tagCustomModelPath': 'Custom Model Path (.onnx)',
@@ -400,6 +413,8 @@ window.I18nLang_en = {
     'modal.tagTagsCsvHelper': 'Required when using custom model',
     'modal.tagGeneralThreshold': 'General Tag Threshold',
     'modal.tagCharacterThreshold': 'Character Tag Threshold',
+    'modal.tagThresholdNotUsedTitle': 'This model does not use WD14 thresholds.',
+    'modal.tagThresholdNotUsedBody': 'ToriiGate generates tags directly. There is nothing to tune here, so just start the run.',
     'modal.tagRetagAll': 'Re-tag already tagged images?',
     'modal.tagUseGpu': 'Use GPU acceleration (faster but uses more VRAM)',
     'modal.tagUseGpuHelper': 'Uncheck to use CPU only (slower but won\'t freeze system)',
@@ -473,11 +488,17 @@ window.I18nLang_en = {
     'rename.description': 'Set naming pattern for all queued images',
     'rename.useOriginal': 'Use Original Filename',
     'rename.useOriginalHelper': 'Keep original names instead of sequential numbering',
+    'rename.onlySelected': 'Rename selected queue items only',
+    'rename.onlySelectedHelper': 'If nothing is selected, the whole queue will be renamed.',
     'rename.baseName': 'Base Name',
+    'rename.baseNamePlaceholder': 'Image',
     'rename.baseNameHelper': 'Base name for all images',
     'rename.startingNumber': 'Starting Number',
     'rename.startingNumberHelper': 'Images will be numbered sequentially from this number',
     'rename.preview': 'Preview',
+    'rename.previewSummary': 'Previewing the first few files.',
+    'rename.currentName': 'Current',
+    'rename.newName': 'New name',
     'rename.andSoOn': '...and so on',
     'rename.cancel': 'Cancel',
     'rename.apply': 'Apply Rename',
@@ -496,6 +517,7 @@ window.I18nLang_en = {
     'save.metadataHelper': 'Choose how to handle image metadata/EXIF data',
     'save.outputFormat': 'Output Format',
     'save.formatPng': 'PNG (Lossless, larger file)',
+    'save.formatJpg': 'JPG (Smaller file, widely compatible)',
     'save.formatWebp': 'WebP (Smaller file, good quality)',
     'save.formatHelper': 'Choose the output image format',
     'save.cancel': 'Cancel',
@@ -545,6 +567,10 @@ window.I18nLang_en = {
     'common.success': 'Success',
     'common.copied': 'Copied to clipboard!',
     'common.images': 'images',
+    'common.top': 'Top',
+    'common.up': 'Up',
+    'common.down': 'Down',
+    'common.bottom': 'Bottom',
 
     // ========================
     // Toast Messages
@@ -638,6 +664,115 @@ window.I18nLang_en = {
     'system.recommendedBatchSize': 'Recommended Batch Size',
     'system.gpuName': 'GPU',
     'system.totalRam': 'Total RAM',
-    'system.noGpuDetected': 'No GPU detected'
+    'system.noGpuDetected': 'No GPU detected',
+
+    // ========================
+    // Tagger Model Descriptions
+    // ========================
+    'tagger.descDefault': 'Balanced default. Good speed, good quality, and solid stability.',
+    'tagger.descSummaryFormat': '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.{bestFor}{runtimeNote}',
+    'tagger.bestForPrefix': ' Best for: {bestFor}.',
+
+    // Tagger Runtime Descriptions
+    'tagger.runtimeAdaptiveMax': 'Adaptive max-throughput mode is active. The app pushes GPU speed first, then falls back only if the run becomes unstable.',
+    'tagger.runtimeCustomGpu': 'Custom model on GPU. Faster when it works, but less predictable than CPU Safe Mode.',
+    'tagger.runtimeCustomCpu': 'Custom model on CPU Safe Mode. Finish one stable run first, then try GPU only if needed.',
+    'tagger.runtimeRiskyGpu': 'Risky GPU override is active. This is not the stable default for this model.',
+    'tagger.runtimeAdaptiveGpu': 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.',
+    'tagger.runtimeCpuSafe': 'CPU Safe Mode is active. Slower, but safer when VRAM is tight or other AI tools are already running.',
+
+    // Tagger Model Snapshot
+    'tagger.customSubtitle': 'Custom local ONNX model. The app cannot infer its schema or stability in advance.',
+    'tagger.customBadge': 'Custom',
+    'tagger.onnxOnlyBadge': 'ONNX only',
+    'tagger.schemaUnknownBadge': 'Schema unknown',
+    'tagger.customNote': 'Start from one stable run first. Raise chunk size only after that.',
+    'tagger.defaultSummary': 'WD14 tagger model',
+    'tagger.defaultNote': 'The selected model decides quality, tag density, and hardware pressure.',
+
+    // Tagger syncTaggerModelUi strings
+    'tagger.customModelHelp': 'Custom ONNX model. Start with CPU Safe Mode first.',
+    'tagger.highRiskSuffix': ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.',
+    'tagger.recommendedChunkSuffix': ' Recommended chunk: {chunk}.',
+    'tagger.catalogOnlyDetail': 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.',
+    'tagger.toriiGateGpuDetail': 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.',
+    'tagger.toriiGateCpuDetail': 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.',
+    'tagger.customGpuAvailDetail': 'The final provider is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.',
+    'tagger.customCpuOnlyDetail': 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.',
+    'tagger.cudaAvailDetail': 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.',
+    'tagger.cpuOnlyDetail': 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.',
+    'tagger.chipCatalogOnly': 'Catalog Only',
+    'tagger.chipGpuTarget': 'GPU Target',
+    'tagger.chipCpuTarget': 'CPU Target',
+    'tagger.chipVlmNeeded': 'VLM Backend Needed',
+    'tagger.chipPytorchCuda': 'PyTorch CUDA',
+    'tagger.chipPytorchCpu': 'PyTorch CPU',
+    'tagger.chipCpuRuntime': 'CPU Runtime',
+
+    // Tagger GPU help strings
+    'tagger.gpuHelpToriiGateGpu': 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.',
+    'tagger.gpuHelpToriiGateCpu': 'ToriiGate is using the multimodal PyTorch backend on CPU. This is valid but much slower than CUDA.',
+    'tagger.gpuHelpAdaptive': 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.',
+    'tagger.gpuHelpCustomCpu': 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.',
+    'tagger.gpuHelpHighRiskCpu': 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.',
+    'tagger.gpuHelpCpuSafe': 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.',
+    'tagger.gpuHelpRiskyOverride': 'High-risk GPU override is active. You will be asked to confirm before this run starts.',
+    'tagger.gpuHelpAdaptiveNote': 'Adaptive runtime is active. {note}',
+    'tagger.gpuHelpRecommendedNote': 'Recommended GPU mode is active. {note}',
+    'tagger.gpuHelpRecommendedDefault': 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.',
+
+    // Tagger advanced hint strings
+    'tagger.advHintStressTest': 'Optional. Change this only if you are stress-testing.',
+    'tagger.advHintHighRisk': 'Optional. This machine is marked high-risk for long GPU tagging.',
+    'tagger.advHintCustom': 'Optional. Leave this alone until your custom model finishes one stable CPU run.',
+    'tagger.advHintRecommended': 'Optional. The recommended mode is already active.',
+    'tagger.advHintDefault': 'Optional. Change this only when troubleshooting or tuning.',
+
+    // Tagger runtime chunk help strings
+    'tagger.chunkHelpRecommended': 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.',
+    'tagger.chunkHelpAdaptive': 'This model already uses adaptive runtime limits. Only change chunk size if you are stress-testing.',
+    'tagger.chunkHelpToriiGateGpu': 'ToriiGate uses the multimodal PyTorch backend. Keep chunk size small, usually 1-2.',
+    'tagger.chunkHelpToriiGateCpu': 'ToriiGate on CPU should stay at chunk size 1.',
+    'tagger.chunkHelpOverGpu': 'You chose {chosen}, above the recommended {recommended}. Expect higher VRAM pressure and more crash risk.',
+    'tagger.chunkHelpOverCpu': 'You chose {chosen}, above the recommended {recommended}. This may help throughput, but it raises RAM pressure.',
+    'tagger.chunkHelpRiskyGpu': 'This controls true WD14 batching where supported. Risky GPU mode still needs confirmation.',
+    'tagger.chunkHelpCustom': 'Custom models may or may not support true batching. Start from the recommended value.',
+    'tagger.chunkHelpHighRisk': 'This machine is marked high-risk for long GPU tagging. Leave the recommended chunk size alone.',
+    'tagger.chunkHelpDefault': 'This controls the true WD14 batch size when the selected model supports dynamic batching.',
+
+    // Tagger disabled model strings
+    'tagger.disabledNotRunnable': '{model} is not runnable in the current build.',
+    'tagger.disabledFallback': 'Use one of the ONNX taggers above for now.',
+    'tagger.modelUnavailable': 'This model is currently unavailable in the app runtime.',
+    'tagger.modelNotStartable': 'This model cannot be started in the current build.',
+    'tagger.modelListedFuture': 'This model is listed for future integration but is not runnable in the current build.',
+
+    // Tagger status chip
+    'tagger.statusChipDefault': 'Auto Runtime',
+
+    // Tagger toast messages
+    'tagger.toastMaxQualityCpuSafe': 'Max Quality now runs in protected CPU Safe Mode inside the app.',
+    'tagger.toastAutoSafeMode': 'This model was switched to CPU Safe Mode to avoid crashes.',
+
+    // Tagger confirm risky GPU run
+    'tagger.confirmCustomModel': 'custom model',
+    'tagger.confirmModelFocus': 'Model focus: {bestFor}.',
+    'tagger.confirmSpeedNotStability': 'This setup is optimized for maximum speed, not maximum stability.',
+    'tagger.confirmCrashProne': '{model} on GPU is the most crash-prone tagger setup.',
+    'tagger.confirmRecommendCpu': 'Recommended: switch to CPU Safe Mode first.',
+    'tagger.confirmContinueRisky': 'Continue with risky GPU mode anyway?',
+    'tagger.confirmRiskyTitle': 'Risky GPU Tagger Run',
+
+    // Tagger progress
+    'tagger.progressPreparing': 'Preparing tagger...',
+    'tagger.progressTagging': '{current}/{total} ({tagged} tagged{errorSuffix}, ~{eta} remaining)',
+    'tagger.progressTaggingNoEta': '{current}/{total} ({tagged} tagged{errorSuffix})',
+    'tagger.progressErrorSuffix': ', {errors} failed',
+    'tagger.progressCancelling': 'Cancelling... {current}/{total}',
+    'tagger.progressCancelled': 'Tagging cancelled',
+    'tagger.progressResuming': 'Resuming tagging progress...',
+    'tagger.errorCheckingProgress': 'Error checking tag progress',
+    'tagger.cancellingAfterCurrent': 'Cancelling after current image...',
+    'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to cancel or check status.'
 
 };

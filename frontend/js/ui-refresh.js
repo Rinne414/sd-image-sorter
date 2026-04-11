@@ -327,7 +327,8 @@
             ]);
             this._setCheckboxTexts('#tag-modal', ['modal.tagRetagAll', 'modal.tagUseGpu']);
             this._setText('#tag-modal .form-group:last-of-type .helper-text', 'modal.tagUseGpuHelper');
-            this._setText('#tag-progress-text', 'modal.tagLoadingModel');
+            // Do NOT reset #tag-progress-text here — it is a live progress field
+            // controlled by pollTagProgress() and should not be overwritten by i18n refresh.
             this._setButton('#btn-export-tags', 'modal.tagExport', '📤', 'modal.tagExport');
             this._setButton('#btn-import-tags', 'modal.tagImport', '📥', 'modal.tagImport');
             this._setButton('#btn-cancel-tag', 'modal.tagCancel');

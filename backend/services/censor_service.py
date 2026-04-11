@@ -45,6 +45,12 @@ class TextSegmentRequest(BaseModel):
     text_prompt: str = Field(..., min_length=1)
 
 
+class BatchMaskRefineRequest(BaseModel):
+    """Request model for batch mask refinement via SAM3."""
+    items: List[MaskRefineRequest] = Field(..., min_length=1, max_length=500)
+    sam3_confidence: float = Field(0.5, ge=0.0, le=1.0)
+
+
 class CensorApplyRequest(BaseModel):
     """Request model for censor apply/preview."""
     image_id: int = Field(..., ge=1)
@@ -101,18 +107,66 @@ class CensorService:
         self._detector = None
 
     @staticmethod
+    def _encode_mask_image_as_data_url(mask_image: Image.Image) -> Optional[str]:
+        """Encode a mask as a transparent PNG so canvas compositing only affects masked pixels."""
+        normalized = mask_image.convert("L")
+        if normalized.getbbox() is None:
+            # Return 1x1 transparent PNG for empty masks instead of None
+            buf = BytesIO()
+            Image.new("L", (1, 1), 0).save(buf, format="PNG")
+            return f"data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}"
+
+        rgba_mask = Image.new("RGBA", normalized.size, (255, 255, 255, 0))
+        rgba_mask.putalpha(normalized)
+
+        buffer = BytesIO()
+        rgba_mask.save(buffer, format="PNG")
+        buffer.seek(0)
+        return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
+
+    @staticmethod
     def _normalize_target_family(label: str) -> str:
         normalized = str(label or "").strip().lower().replace("-", "_").replace(" ", "_")
         collapsed = normalized.replace("_", "")
-        if collapsed.startswith("malebreasts") or collapsed.startswith("breasts"):
+
+        _BUTTOCKS_ALIASES = {
+            "buttocks", "butt", "ass", "buttock",
+            "buttocksexposed", "buttockscovered", "buttexposed",
+        }
+        _BREASTS_ALIASES = {
+            "breasts", "breast", "malebreasts", "femalebreasts",
+            "malebreast", "femalebreast", "boob", "boobs", "tits", "tit",
+            "exposedbreasts", "coveredbreasts",
+            "femalebreastexposed", "femalebreastcovered",
+            "malebreastexposed", "malebreastcovered",
+            "breastexposed", "breastcovered",
+            "breastsexposed", "breastscovered",
+        }
+        _PUSSY_ALIASES = {
+            "pussy", "vagina", "vulva", "labia",
+            "femalegenitalia", "exposedgenitalia", "coveredgenitalia",
+            "femalegenitaliaexposed", "femalegenitaliacovered",
+            "pussyexposed",
+        }
+        _DICK_ALIASES = {
+            "dick", "penis", "cock",
+            "malegenitalia", "exposedpenis",
+            "malegenitaliaexposed", "penisexposed",
+        }
+        _ANUS_ALIASES = {"anus", "butthole", "anusexposed", "anuscovered"}
+        _CUM_ALIASES = {"cum", "semen"}
+
+        if collapsed in _BUTTOCKS_ALIASES:
+            return "buttocks"
+        if collapsed in _BREASTS_ALIASES:
             return "breasts"
-        if collapsed.startswith("pussy") or collapsed.startswith("femalegenitalia"):
+        if collapsed in _PUSSY_ALIASES:
             return "pussy"
-        if collapsed.startswith("dick") or collapsed.startswith("penis") or collapsed.startswith("malegenitalia"):
+        if collapsed in _DICK_ALIASES:
             return "dick"
-        if collapsed.startswith("anus"):
+        if collapsed in _ANUS_ALIASES:
             return "anus"
-        if collapsed.startswith("cum") or collapsed.startswith("semen"):
+        if collapsed in _CUM_ALIASES:
             return "cum"
         return normalized
 
@@ -144,6 +198,8 @@ class CensorService:
     def _build_combined_mask_data_url(
         image_size: tuple[int, int],
         detections: List[Dict[str, Any]],
+        *,
+        include_boxes: bool = False,
     ) -> Optional[str]:
         if not detections:
             return None
@@ -163,18 +219,24 @@ class CensorService:
                     draw.polygon(points, fill=255)
                     continue
 
-            box = detection.get("box")
-            if isinstance(box, list) and len(box) == 4:
-                x1, y1, x2, y2 = [int(float(value)) for value in box]
-                draw.rectangle([x1, y1, x2, y2], fill=255)
+            if include_boxes:
+                box = detection.get("box")
+                if isinstance(box, list) and len(box) == 4:
+                    x1, y1, x2, y2 = [int(float(value)) for value in box]
+                    draw.rectangle([x1, y1, x2, y2], fill=255)
 
-        if mask_image.getbbox() is None:
-            return None
+        return CensorService._encode_mask_image_as_data_url(mask_image)
 
-        buffer = BytesIO()
-        mask_image.save(buffer, format="PNG")
-        buffer.seek(0)
-        return f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}"
+    @staticmethod
+    def _has_polygon_geometry(detection: Dict[str, Any]) -> bool:
+        polygon = detection.get("polygon")
+        if not isinstance(polygon, list):
+            return False
+        points = [
+            point for point in polygon
+            if isinstance(point, (list, tuple)) and len(point) >= 2
+        ]
+        return len(points) >= 3
 
     @staticmethod
     def _ensure_safe_existing_file(path: str, *, allowed_extensions: Optional[set] = None) -> str:
@@ -315,15 +377,20 @@ class CensorService:
 
             filtered_detections = self._filter_detections_by_targets(detections, request.target_classes)
 
+            polygon_count = sum(1 for d in filtered_detections if self._has_polygon_geometry(d))
             with Image.open(image_path) as image_for_mask:
-                combined_mask = self._build_combined_mask_data_url(image_for_mask.size, filtered_detections)
+                combined_mask = self._build_combined_mask_data_url(
+                    image_for_mask.size,
+                    filtered_detections,
+                    include_boxes=polygon_count != len(filtered_detections),
+                )
 
             clean_detections = []
             for d in filtered_detections:
                 clean = {k: v for k, v in d.items() if k != "mask"}
+                if not self._has_polygon_geometry(clean):
+                    clean.pop("polygon", None)
                 clean_detections.append(clean)
-
-            polygon_count = sum(1 for d in filtered_detections if d.get("polygon"))
             if not filtered_detections:
                 geometry_mode = "none"
             elif polygon_count == len(filtered_detections):
@@ -532,15 +599,9 @@ class CensorService:
                     "box": request.box,
                 }
 
-            mask_image = Image.fromarray(mask * 255, mode="L")
-            buffer = BytesIO()
-            mask_image.save(buffer, format="PNG")
-            buffer.seek(0)
-            mask_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
             return {
                 "status": "ok",
-                "mask": f"data:image/png;base64,{mask_b64}",
+                "mask": self._encode_mask_image_as_data_url(Image.fromarray(mask * 255, mode="L")),
                 "box": request.box,
             }
         except RuntimeError as exc:
@@ -583,21 +644,85 @@ class CensorService:
                     "mask": None,
                 }
 
-            mask_image = Image.fromarray(mask * 255, mode="L")
-            buffer = BytesIO()
-            mask_image.save(buffer, format="PNG")
-            buffer.seek(0)
-            mask_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
             return {
                 "status": "ok",
-                "mask": f"data:image/png;base64,{mask_b64}",
+                "mask": self._encode_mask_image_as_data_url(Image.fromarray(mask * 255, mode="L")),
                 "text_prompt": request.text_prompt,
             }
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc))
         except Exception:
             raise HTTPException(status_code=500, detail="Text segmentation failed")
+
+    def batch_refine_mask(self, request: "BatchMaskRefineRequest") -> Dict[str, Any]:
+        """Run SAM3 mask refinement on multiple images/boxes sequentially."""
+        try:
+            from sam3_refiner import get_sam3_refiner
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="SAM3 module unavailable"
+            )
+
+        sam3_status = get_model_health()["censor"]["sam3"]
+        if not sam3_status["available"]:
+            raise HTTPException(
+                status_code=503,
+                detail=sam3_status["message"]
+            )
+
+        results: List[Dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
+        refiner = None
+
+        for idx, item in enumerate(request.items):
+            try:
+                image_data = db.get_image_by_id(item.image_id)
+                if not image_data:
+                    errors.append({"index": idx, "image_id": item.image_id, "error": "Image not found"})
+                    continue
+
+                image_path = self._ensure_safe_existing_file(image_data["path"])
+                image = Image.open(image_path).convert("RGB")
+
+                if refiner is None:
+                    refiner = get_sam3_refiner()
+
+                mask = refiner.refine_box(
+                    image,
+                    item.box,
+                    text_prompt=item.text_prompt,
+                )
+
+                if mask is None:
+                    results.append({
+                        "index": idx,
+                        "image_id": item.image_id,
+                        "status": "fallback",
+                        "message": "SAM3 could not refine this box. Using bounding box.",
+                        "mask": None,
+                        "box": item.box,
+                    })
+                else:
+                    results.append({
+                        "index": idx,
+                        "image_id": item.image_id,
+                        "status": "ok",
+                        "mask": self._encode_mask_image_as_data_url(Image.fromarray(mask * 255, mode="L")),
+                        "box": item.box,
+                    })
+            except Exception as exc:
+                logger.warning("Batch SAM3 refinement failed for item %d (image %d): %s", idx, item.image_id, exc)
+                errors.append({"index": idx, "image_id": item.image_id, "error": str(exc)})
+
+        return {
+            "status": "ok",
+            "total": len(request.items),
+            "completed": len(results),
+            "failed": len(errors),
+            "results": results,
+            "errors": errors,
+        }
 
     def list_models(self) -> Dict[str, Any]:
         """List available detection backends and their status."""

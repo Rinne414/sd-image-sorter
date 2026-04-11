@@ -25,10 +25,13 @@ from config import (
     get_artist_model_dir,
     get_clip_model_dir,
     get_nudenet_model_dir,
+    get_toriigate_model_dir,
     get_sam3_model_dir,
     get_wd14_model_dir,
     get_yolo_model_dir,
 )
+
+from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
 
 def _module_available(module_name: str) -> bool:
@@ -60,31 +63,6 @@ def _list_model_files(directory: Path, extensions: Iterable[str]) -> List[Dict[s
             }
         )
     return files
-
-
-def _canonicalize_yolo_class_name(class_name: str) -> str:
-    normalized = str(class_name or "").strip().lower().replace("_", " ").replace("-", " ")
-    collapsed = normalized.replace(" ", "")
-    aliases = {
-        "breast": "breasts",
-        "breasts": "breasts",
-        "boob": "breasts",
-        "boobs": "breasts",
-        "tits": "breasts",
-        "tit": "breasts",
-        "vagina": "pussy",
-        "vulva": "pussy",
-        "pussy": "pussy",
-        "labia": "pussy",
-        "penis": "dick",
-        "dick": "dick",
-        "cock": "dick",
-        "cum": "cum",
-        "semen": "cum",
-        "anus": "anus",
-        "butthole": "anus",
-    }
-    return aliases.get(collapsed, normalized)
 
 
 def _parse_class_mapping(raw_names: Any) -> List[str]:
@@ -140,6 +118,7 @@ def _infer_yolo_model_profile(class_names: List[str], filename: str) -> Dict[str
     canonical = [_canonicalize_yolo_class_name(name) for name in class_names]
     canonical_set = {name.replace(" ", "") for name in canonical}
     privacy_keywords = {"anus", "cum", "dick", "breasts", "pussy"}
+    filename_lower = filename.lower()
 
     if privacy_keywords.intersection(canonical_set):
         return {
@@ -149,7 +128,14 @@ def _infer_yolo_model_profile(class_names: List[str], filename: str) -> Dict[str
             "message": "Specialized for privacy-part detection and censor workflows.",
         }
 
-    filename_lower = filename.lower()
+    if "wenaka" in filename_lower:
+        return {
+            "id": "privacy-censor",
+            "label": "Privacy-part detector",
+            "recommended_for_censor": True,
+            "message": "Wenaka is treated as a privacy-part detector even when ONNX metadata is incomplete.",
+        }
+
     if "yolo26" in filename_lower or "yolov8" in filename_lower:
         return {
             "id": "general-object",
@@ -356,6 +342,7 @@ def get_model_health() -> Dict[str, Any]:
     default_tagger_dir = Path(get_wd14_model_dir()) / DEFAULT_TAGGER_MODEL
     default_tagger_model = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["model_file"]
     default_tagger_tags = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["tags_file"]
+    toriigate_dir = Path(get_toriigate_model_dir()) / "toriigate-0.5"
     legacy_model_path = get_default_legacy_model_path()
     nudenet_model = Path(get_nudenet_model_dir()) / "320n.onnx"
     sam3_checkpoint = get_sam3_checkpoint_path()
@@ -420,6 +407,22 @@ def get_model_health() -> Dict[str, Any]:
                 }
                 for model_name, config in TAGGER_MODELS.items()
             ],
+        },
+        "toriigate": {
+            "available": (
+                (toriigate_dir / "config.json").exists()
+                and (toriigate_dir / "model.safetensors").exists()
+                and _module_available("transformers")
+                and _module_available("torch")
+            ),
+            "model_name": "toriigate-0.5",
+            "model_dir": str(toriigate_dir.resolve()),
+            "requires_gpu": True,
+            "message": (
+                "ToriiGate runtime files are ready."
+                if (toriigate_dir / "config.json").exists() and (toriigate_dir / "model.safetensors").exists()
+                else "ToriiGate files are not downloaded yet. The first run will need a large model download."
+            ),
         },
         "clip": {
             "available": bool(clip_model_path),
@@ -539,6 +542,11 @@ def format_model_health_report(health: Optional[Dict[str, Any]] = None) -> str:
     lines.append(
         f"[{'OK' if wd14['available'] else 'WARN'}] WD14 default ({wd14['default_model']}): "
         f"{'ready' if wd14['available'] else 'missing files'}"
+    )
+
+    toriigate = health["toriigate"]
+    lines.append(
+        f"[{'OK' if toriigate['available'] else 'WARN'}] ToriiGate: {toriigate['message']}"
     )
 
     clip = health["clip"]

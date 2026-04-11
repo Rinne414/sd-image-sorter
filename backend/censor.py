@@ -29,12 +29,51 @@ logger = logging.getLogger(__name__)
 ort = None
 
 
+# Shared canonical class name mapping used by both the detector and model_health
+_CLASS_NAME_ALIASES = {
+    "breast": "breasts",
+    "breasts": "breasts",
+    "boob": "breasts",
+    "boobs": "breasts",
+    "tits": "breasts",
+    "tit": "breasts",
+    "vagina": "pussy",
+    "vulva": "pussy",
+    "pussy": "pussy",
+    "labia": "pussy",
+    "penis": "dick",
+    "dick": "dick",
+    "cock": "dick",
+    "cum": "cum",
+    "semen": "cum",
+    "anus": "anus",
+    "butthole": "anus",
+}
+
+
+def canonicalize_class_name(class_name: str) -> str:
+    """Normalize a YOLO class name to a canonical form.
+
+    This is the single source of truth for class name aliasing.
+    Used by CensorDetector and model_health.
+    """
+    normalized = str(class_name or "").strip().lower().replace("_", " ").replace("-", " ")
+    collapsed = normalized.replace(" ", "")
+    return _CLASS_NAME_ALIASES.get(collapsed, normalized)
+
+
 def _ensure_ort():
     """Lazily import onnxruntime."""
     global ort
     if ort is None:
         import onnxruntime as ort_module  # type: ignore
         ort = ort_module
+        preload = getattr(ort, "preload_dlls", None)
+        if callable(preload):
+            try:
+                preload()
+            except Exception as exc:
+                logger.debug("onnxruntime.preload_dlls() was not usable: %s", exc)
 
 
 class CensorDetector:
@@ -53,28 +92,7 @@ class CensorDetector:
 
     @staticmethod
     def _canonicalize_class_name(class_name: str) -> str:
-        normalized = str(class_name or "").strip().lower().replace("_", " ").replace("-", " ")
-        collapsed = normalized.replace(" ", "")
-        aliases = {
-            "breast": "breasts",
-            "breasts": "breasts",
-            "boob": "breasts",
-            "boobs": "breasts",
-            "tits": "breasts",
-            "tit": "breasts",
-            "vagina": "pussy",
-            "vulva": "pussy",
-            "pussy": "pussy",
-            "labia": "pussy",
-            "penis": "dick",
-            "dick": "dick",
-            "cock": "dick",
-            "cum": "cum",
-            "semen": "cum",
-            "anus": "anus",
-            "butthole": "anus",
-        }
-        return aliases.get(collapsed, normalized)
+        return canonicalize_class_name(class_name)
 
     def _set_classes(self, class_names: List[str]):
         cleaned = [str(name).strip() for name in class_names if str(name).strip()]
@@ -137,6 +155,7 @@ class CensorDetector:
             return False
 
     def _load_with_ultralytics(self, model_path: str):
+        os.environ["YOLO_AUTOINSTALL"] = "false"
         from ultralytics import YOLO
 
         logger.info("Loading model with Ultralytics runtime: %s", model_path)
@@ -163,7 +182,16 @@ class CensorDetector:
         if self.runtime is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        results = self.runtime.predict(image_source, conf=conf_threshold, device="cpu", verbose=False)
+        device = "cpu"
+        try:
+            import torch  # type: ignore
+            if torch.cuda.is_available():
+                device = 0
+        except Exception as exc:
+            logger.debug("torch/CUDA not available for censor: %s", exc)
+            device = "cpu"
+
+        results = self.runtime.predict(image_source, conf=conf_threshold, device=device, verbose=False)
         if not results:
             return []
 

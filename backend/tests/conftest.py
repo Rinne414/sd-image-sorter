@@ -53,13 +53,17 @@ def test_db(test_db_path: Path):
     original_path = db.DATABASE_PATH
     db.DATABASE_PATH = str(test_db_path)
 
+    # Reset pragma initialization so the new DB gets proper PRAGMAs
+    db._pragmas_initialized = set()
+
     # Re-initialize the test database
     db.init_db()
 
     yield db
 
-    # Restore original path
+    # Restore original path and reset pragmas for next test
     db.DATABASE_PATH = original_path
+    db._pragmas_initialized = set()
 
 
 @pytest.fixture
@@ -198,10 +202,11 @@ def test_client(test_db):
 
     # Import main app - this will initialize the database
     # We need to patch before importing
-    with patch.dict(os.environ, {"TESTING": "1"}):
+    with patch.dict(os.environ, {"SD_SORTER_TESTING": "1", "TESTING": "1"}):
         # Patch database path before importing main
         original_path = db.DATABASE_PATH
         db.DATABASE_PATH = str(test_db.DATABASE_PATH).replace("images.db", "test_client_images.db")
+        db._pragmas_initialized = set()
         db.init_db()
 
         from main import app
@@ -231,6 +236,7 @@ def test_client(test_db):
 
         # Cleanup
         db.DATABASE_PATH = original_path
+        db._pragmas_initialized = set()
 
 
 # ============================================================================

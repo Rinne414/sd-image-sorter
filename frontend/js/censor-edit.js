@@ -51,10 +51,15 @@ const CensorState = {
     confidence: 0.5,
     style: 'mosaic',
     blockSize: 16,
-    targetClasses: ['breasts', 'pussy', 'dick', 'anus'], // Matches Wenaka YOLO model classes
+    targetClasses: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'], // Covers the main privacy classes used by Wenaka + NudeNet
     metadataOption: 'keep', // 'keep', 'minimal', or 'strip'
-    outputFormat: 'png' // 'png', 'jpg', or 'webp'
+    outputFormat: 'png', // 'png', 'jpg', or 'webp'
+    sam3Confidence: 0.5 // SAM3 confidence threshold
 };
+
+if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    window.__CENSOR_STATE__ = CensorState;
+}
 
 // Track bound handlers for cleanup to prevent memory leaks
 let boundHandlers = {
@@ -83,6 +88,11 @@ function isEditableTarget(target) {
     if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
     if (target.getAttribute('contenteditable') === 'true') return true;
     return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
+function isCensorViewActive() {
+    const censorView = document.getElementById('view-censor');
+    return Boolean(censorView && censorView.classList.contains('active'));
 }
 
 function cleanupGlobalListeners() {
@@ -154,6 +164,11 @@ function bindEvents() {
 
     $('#btn-run-auto-censor')?.addEventListener('click', runAutoCensorBatch);
     $('#btn-batch-rename')?.addEventListener('click', () => {
+        const onlySelectedCheckbox = document.getElementById('rename-only-selected');
+        if (onlySelectedCheckbox) {
+            onlySelectedCheckbox.checked = getOrderedSelectedQueueIds().length > 0;
+        }
+        refreshRenameSelectionUi();
         updateRenamePreview();
         $('#rename-modal').classList.add('visible');
     });
@@ -187,6 +202,10 @@ function bindEvents() {
     $('#rename-base')?.addEventListener('input', updateRenamePreview);
     $('#rename-start')?.addEventListener('input', updateRenamePreview);
     $('#rename-pattern')?.addEventListener('input', updateRenamePreview);
+    $('#rename-only-selected')?.addEventListener('change', () => {
+        refreshRenameSelectionUi();
+        updateRenamePreview();
+    });
 
     // Properties Panel
     $('#censor-model-path')?.addEventListener('change', (e) => {
@@ -225,7 +244,13 @@ function bindEvents() {
 
     $('#censor-confidence')?.addEventListener('input', (e) => {
         CensorState.confidence = parseFloat(e.target.value);
-        $('#censor-confidence-value').textContent = CensorState.confidence.toFixed(2);
+        const display = CensorState.confidence.toFixed(2);
+        const modalVal = $('#censor-confidence-value');
+        const sidebarVal = $('#censor-confidence-value-sidebar');
+        if (modalVal) modalVal.textContent = display;
+        if (sidebarVal) sidebarVal.textContent = display;
+        const sidebarSlider = $('#censor-confidence-sidebar');
+        if (sidebarSlider) sidebarSlider.value = e.target.value;
     });
 
     $('#censor-model-type')?.addEventListener('change', () => {
@@ -331,6 +356,89 @@ function bindEvents() {
         runDetectionForAll();
     });
 
+    // Sidebar "Detect All" button
+    $('#btn-auto-detect-all-sidebar')?.addEventListener('click', () => {
+        runDetectionForAll();
+    });
+
+    // SAM3 Batch Refine button
+    $('#btn-sam3-batch-refine')?.addEventListener('click', async () => {
+        $('#detect-modal')?.classList.remove('visible');
+        await runSam3BatchRefine();
+    });
+
+    // SAM3 confidence sliders (sync sidebar and modal)
+    $('#sam3-confidence')?.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        CensorState.sam3Confidence = val;
+        const display = val.toFixed(2);
+        const sidebarVal = $('#sam3-confidence-value');
+        const modalVal = $('#sam3-confidence-modal-value');
+        if (sidebarVal) sidebarVal.textContent = display;
+        if (modalVal) modalVal.textContent = display;
+        const modalSlider = $('#sam3-confidence-modal');
+        if (modalSlider && modalSlider !== e.target) modalSlider.value = val;
+    });
+
+    $('#sam3-confidence-modal')?.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        CensorState.sam3Confidence = val;
+        const display = val.toFixed(2);
+        const sidebarVal = $('#sam3-confidence-value');
+        const modalVal = $('#sam3-confidence-modal-value');
+        if (sidebarVal) sidebarVal.textContent = display;
+        if (modalVal) modalVal.textContent = display;
+        const sidebarSlider = $('#sam3-confidence');
+        if (sidebarSlider && sidebarSlider !== e.target) sidebarSlider.value = val;
+    });
+
+    // Sidebar confidence slider (sync with modal)
+    $('#censor-confidence-sidebar')?.addEventListener('input', (e) => {
+        CensorState.confidence = parseFloat(e.target.value);
+        const display = CensorState.confidence.toFixed(2);
+        const sidebarVal = $('#censor-confidence-value-sidebar');
+        const modalVal = $('#censor-confidence-value');
+        if (sidebarVal) sidebarVal.textContent = display;
+        if (modalVal) modalVal.textContent = display;
+        const modalSlider = $('#censor-confidence');
+        if (modalSlider) modalSlider.value = e.target.value;
+    });
+
+    // Queue management buttons
+    $('#btn-queue-select-all')?.addEventListener('click', () => {
+        CensorState.selectedItems = new Set(CensorState.queue.map(item => item.id));
+        CensorState.lastSelectedIndex = CensorState.queue.length - 1;
+        updateQueueSelection();
+        window.App.showToast(tText('Selected the whole queue', '已选中整个队列'), 'info');
+    });
+
+    $('#btn-queue-deselect-all')?.addEventListener('click', () => {
+        CensorState.selectedItems.clear();
+        CensorState.lastSelectedIndex = -1;
+        updateQueueSelection();
+    });
+
+    // Queue filter toggle
+    $('#btn-queue-filter')?.addEventListener('click', () => {
+        const filterRow = $('#queue-filter-row');
+        if (filterRow) {
+            const isVisible = filterRow.style.display !== 'none';
+            filterRow.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                const filterInput = $('#queue-filter-input');
+                if (filterInput) filterInput.focus();
+            }
+        }
+    });
+
+    $('#queue-filter-input')?.addEventListener('input', (e) => {
+        const filterText = String(e.target.value || '').toLowerCase().trim();
+        document.querySelectorAll('.queue-thumb-v2').forEach(thumb => {
+            const itemTitle = String(thumb.title || '').toLowerCase();
+            thumb.style.display = (!filterText || itemTitle.includes(filterText)) ? '' : 'none';
+        });
+    });
+
     $('#btn-segment-text-current')?.addEventListener('click', async () => {
         $('#detect-modal')?.classList.remove('visible');
         await segmentCurrentImageByText();
@@ -376,6 +484,7 @@ function bindEvents() {
         const startGroup = document.getElementById('rename-start')?.parentElement;
         if (customGroup) customGroup.style.display = e.target.checked ? 'none' : 'block';
         if (startGroup) startGroup.style.display = e.target.checked ? 'none' : 'block';
+        refreshRenameSelectionUi();
         updateRenamePreview();
     });
 
@@ -656,6 +765,11 @@ function scrollQueueItemIntoView(itemId) {
 }
 
 function moveQueueSelection(direction) {
+    const disabledButton = document.getElementById(`btn-queue-move-${direction}`);
+    if (disabledButton?.disabled) {
+        return;
+    }
+
     const selectedIds = getOrderedSelectedQueueIds();
     if (!selectedIds.length) {
         window.App.showToast(
@@ -1137,6 +1251,7 @@ function renderCensorCapabilityPanel(options = {}) {
         });
         if (targetGroup) {
             targetGroup.style.display = '';
+            targetGroup.classList.add('is-disabled');
         }
         if (targetHelp) {
             targetHelp.textContent = isLoading
@@ -1173,6 +1288,7 @@ function renderCensorCapabilityPanel(options = {}) {
     const sam3 = models.find(model => model.id === 'sam3');
     const selectedLegacy = getSelectedLegacyModelRecord();
     const modelType = document.getElementById('censor-model-type')?.value || 'legacy';
+    const quickAutoFallback = getQuickAutoCensorFallbackConfig();
 
     const cards = [];
     if (selectedLegacy) {
@@ -1226,11 +1342,13 @@ function renderCensorCapabilityPanel(options = {}) {
     panel.innerHTML = cards.join('');
 
     const quickFilterEnabled = shouldUseQuickTargetFilters(modelType);
+    const quickFilterDisabled = shouldDisableQuickTargetFilters(modelType);
     targetChecks.forEach(input => {
-        input.disabled = !quickFilterEnabled;
+        input.disabled = quickFilterDisabled;
     });
     if (targetGroup) {
-        targetGroup.style.display = quickFilterEnabled ? '' : 'none';
+        targetGroup.style.display = '';
+        targetGroup.classList.toggle('is-disabled', quickFilterDisabled);
     }
 
     if (targetHelp) {
@@ -1245,14 +1363,21 @@ function renderCensorCapabilityPanel(options = {}) {
                 'NudeNet 有自己的一套标签，但这些快捷隐私目标现在会映射到对应的 NudeNet 类别。'
             );
         } else if (quickFilterEnabled) {
-            targetHelp.textContent = tText(
-                'These quick privacy targets map to the fixed privacy classes inside the current local model.',
-                '这些快捷隐私目标会映射到当前本地模型里的固定隐私类别。'
-            );
+            if (modelType === 'legacy' && selectedLegacy?.profile !== 'privacy-censor' && quickAutoFallback.canAutoRestore) {
+                targetHelp.textContent = tText(
+                    'These quick privacy targets stay active. When you run Quick Auto Censor, the app will switch back to the recommended privacy detector instead of using this general YOLO test model.',
+                    '这些快捷隐私目标会继续生效。等你真正运行快捷自动打码时，应用会自动切回推荐的隐私检测路线，而不会继续使用当前这个通用 YOLO 测试模型。'
+                );
+            } else {
+                targetHelp.textContent = tText(
+                    'These quick privacy targets map to the fixed privacy classes inside the current local model.',
+                    '这些快捷隐私目标会映射到当前本地模型里的固定隐私类别。'
+                );
+            }
         } else {
             targetHelp.textContent = tText(
-                'The currently selected general segmentation model uses its own fixed object classes, so privacy quick-targets are hidden here.',
-                '当前这个通用分割模型只认自己的固定物体类别，所以这里不会显示隐私快捷目标。'
+                'These quick privacy targets stay visible so you can see the normal workflow, but the current general segmentation model cannot map them. Switch back to the recommended privacy model or Both if you want clickable privacy presets.',
+                '这些快捷隐私目标会继续显示，方便你看见正常工作流；但当前这个通用分割模型无法映射它们。想要可点击的隐私预设，请切回推荐隐私模型或“两者一起”。'
             );
         }
     }
@@ -1298,10 +1423,15 @@ function renderCensorCapabilityPanel(options = {}) {
                 '当前这个本地模型就是隐私部位路线。它只认固定隐私标签；如果它本身提供 segmentation mask，自动打码会优先用 mask，而不是只用矩形框。'
             );
         } else if (selectedLegacy) {
-            simpleGuide.textContent = tText(
-                `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.`,
-                `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。它可以分割自己内置的物体类别，但不是开放文本隐私检测器。`
-            );
+            simpleGuide.textContent = quickAutoFallback.canAutoRestore
+                ? tText(
+                    `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. Quick Auto Censor will automatically switch back to the recommended privacy route before it runs.`,
+                    `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。真正运行快捷自动打码前，应用会自动切回推荐的隐私检测路线。`
+                )
+                : tText(
+                    `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.`,
+                    `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。它可以分割自己内置的物体类别，但不是开放文本隐私检测器。`
+                );
         } else {
             simpleGuide.textContent = tText(
                 'Keep the recommended mode and leave custom paths blank unless you are doing advanced model experiments.',
@@ -1351,8 +1481,8 @@ function syncAdvancedLegacyModelUi(legacyModel) {
             `下方已显示 ${generalCount} 个高级固定类 YOLO 模型。它们是给兼容/分割测试用的，不是普通隐私打码主流程。`
         )
         : tText(
-            `${generalCount} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler.`,
-            `为了让普通流程更简单，已隐藏 ${generalCount} 个高级固定类 YOLO 模型。`
+            `${generalCount} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler. Leave this off unless you intentionally want advanced fixed-class YOLO compatibility tests.`,
+            `为了让普通流程更简单，已隐藏 ${generalCount} 个高级固定类 YOLO 模型。除非你是故意要做高级固定类 YOLO 兼容测试，否则不要打开。`
         );
 }
 
@@ -1428,7 +1558,69 @@ function updateDetectionModelInputs() {
 
     if (modelFileGroup) modelFileGroup.style.display = needsLegacyPath ? '' : 'none';
     if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath && showAdvancedInputs ? '' : 'none';
+
+    // Show/hide SAM3 confidence slider in sidebar based on SAM3 availability
+    const sam3Group = document.getElementById('sam3-confidence-group');
+    if (sam3Group) {
+        const sam3Model = (CensorState.backendModelStatus?.models || []).find(m => m.id === 'sam3');
+        sam3Group.style.display = sam3Model?.available ? '' : 'none';
+    }
+
     renderCensorCapabilityPanel();
+}
+
+function getLegacyBackendStatus() {
+    return (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy') || null;
+}
+
+function getQuickAutoCensorFallbackConfig() {
+    const legacy = getLegacyBackendStatus();
+    const nudenet = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'nudenet') || null;
+    const privacyPath = String(
+        legacy?.default_model_path
+        || legacy?.files?.find(file => file?.recommended_for_censor)?.path
+        || ''
+    ).trim();
+
+    let fallbackModelType = String(CensorState.backendModelStatus?.recommended_backend || '').trim();
+    if (!fallbackModelType) {
+        if (nudenet?.available && privacyPath) {
+            fallbackModelType = 'both';
+        } else if (nudenet?.available) {
+            fallbackModelType = 'nudenet';
+        } else if (privacyPath) {
+            fallbackModelType = 'legacy';
+        }
+    }
+
+    return {
+        legacy,
+        nudenet,
+        privacyPath,
+        fallbackModelType,
+        canAutoRestore: Boolean(fallbackModelType || privacyPath),
+    };
+}
+
+function setPreferredLegacyModelPath(nextPath = '') {
+    const normalized = String(nextPath || '').trim();
+    const modelPathInput = document.getElementById('censor-model-path');
+    const select = document.getElementById('censor-model-file');
+
+    if (modelPathInput) {
+        modelPathInput.value = '';
+    }
+
+    if (select) {
+        const optionExists = Array.from(select.options).some(option => option.value === normalized);
+        select.value = optionExists ? normalized : '';
+    }
+
+    CensorState.modelPath = normalized;
+    localStorage.setItem('censor_model_path', normalized);
+
+    const legacy = getLegacyBackendStatus();
+    updateSelectedLegacyModelHelp(legacy);
 }
 
 function getSelectedLegacyModelPath() {
@@ -1446,11 +1638,105 @@ function shouldUseQuickTargetFilters(modelType = document.getElementById('censor
     if (modelType === 'nudenet' || modelType === 'both') {
         return true;
     }
-    return modelType === 'legacy' && selectedLegacy?.profile === 'privacy-censor';
+    if (modelType === 'legacy' && selectedLegacy?.profile === 'privacy-censor') {
+        return true;
+    }
+    if (modelType === 'legacy') {
+        return getQuickAutoCensorFallbackConfig().canAutoRestore;
+    }
+    return false;
+}
+
+function shouldDisableQuickTargetFilters(modelType = document.getElementById('censor-model-type')?.value || 'legacy') {
+    const selectedLegacy = getSelectedLegacyModelRecord();
+    if (modelType === 'nudenet' || modelType === 'both') {
+        return false;
+    }
+    if (modelType === 'legacy' && selectedLegacy?.profile === 'privacy-censor') {
+        return false;
+    }
+    return !getQuickAutoCensorFallbackConfig().canAutoRestore;
 }
 
 function getSelectedTargetClassesForDetection(modelType) {
     return shouldUseQuickTargetFilters(modelType) ? [...CensorState.targetClasses] : null;
+}
+
+async function resolveQuickAutoCensorExecutionPlan(options = {}) {
+    const { silent = false } = options;
+    const { showToast } = window.App;
+
+    if (!CensorState.backendModelStatus) {
+        await loadCensorModelStatus();
+    }
+
+    const modelTypeSelect = document.getElementById('censor-model-type');
+    let modelType = modelTypeSelect?.value || 'legacy';
+    let selectedLegacy = getSelectedLegacyModelRecord();
+    const { fallbackModelType, privacyPath, canAutoRestore } = getQuickAutoCensorFallbackConfig();
+
+    let switchMessage = '';
+
+    if ((modelType === 'legacy' || modelType === 'both') && selectedLegacy?.profile !== 'privacy-censor') {
+        if (!canAutoRestore) {
+            return {
+                ok: false,
+                message: tText(
+                    'Quick Auto Censor needs a real privacy detector, but this machine does not have one ready yet.',
+                    '快捷自动打码需要真正的隐私检测模型，但这台机器当前还没有可用的隐私检测路线。'
+                ),
+            };
+        }
+
+        if (modelType === 'legacy' && fallbackModelType) {
+            modelType = fallbackModelType;
+            if (modelTypeSelect) {
+                modelTypeSelect.value = modelType;
+            }
+        }
+
+        if (privacyPath) {
+            setPreferredLegacyModelPath(privacyPath);
+        }
+
+        updateDetectionModelInputs();
+        selectedLegacy = getSelectedLegacyModelRecord();
+
+        const routeLabel = modelType === 'both'
+            ? tText('Both mode', '两者一起')
+            : (modelType === 'nudenet'
+                ? 'NudeNet'
+                : tText('the privacy-part detector', '隐私部位检测模型'));
+
+        switchMessage = tText(
+            `Quick Auto Censor switched back to ${routeLabel} so the general YOLO test model will not blur unrelated parts of the image.`,
+            `快捷自动打码已自动切回 ${routeLabel}，避免继续用通用 YOLO 测试模型去误糊图片里的无关区域。`
+        );
+
+        if (!silent && switchMessage) {
+            showToast(switchMessage, 'warning');
+        }
+    }
+
+    const targetClasses = getSelectedTargetClassesForDetection(modelType);
+    if (Array.isArray(targetClasses) && targetClasses.length === 0) {
+        return {
+            ok: false,
+            message: tText(
+                'Select at least one quick privacy target first.',
+                '请先勾选至少一个快捷隐私目标。'
+            ),
+        };
+    }
+
+    return {
+        ok: true,
+        modelType,
+        modelPath: getSelectedLegacyModelPath(),
+        targetClasses,
+        switchMessage,
+        selectedLegacy,
+    };
 }
 
 function captureCanvasState(canvas = null) {
@@ -1519,6 +1805,8 @@ function onCanvasMouseDown(e) {
 }
 
 function onCanvasMouseMove(e) {
+    if (!isCensorViewActive()) return;
+
     // Update cursor overlay position (relative to screen/wrapper)
     updateCursorOverlay(e);
 
@@ -1539,6 +1827,8 @@ function onCanvasMouseMove(e) {
 }
 
 function onCanvasMouseUp() {
+    if (!isCensorViewActive()) return;
+
     const wasDrawing = CensorState.isDrawing;
     CensorState.isDrawing = false;
 
@@ -1697,6 +1987,17 @@ function performClone(ctx, x, y, size) {
 
 async function runAutoCensorBatch() {
     const { showToast } = window.App;
+    if (CensorState.queue.length === 0) {
+        showToast(tText('Queue is empty', '队列为空'), 'error');
+        return;
+    }
+
+    const executionPlan = await resolveQuickAutoCensorExecutionPlan();
+    if (!executionPlan?.ok) {
+        showToast(executionPlan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'), 'warning');
+        return;
+    }
+
     const tracker = window.App.createProgressTracker();
 
     showLoading(true, 'Auto Censor · preparing queue...');
@@ -1711,30 +2012,32 @@ async function runAutoCensorBatch() {
             defaultMessage: 'Running auto-censor...',
             primaryLabel: 'Auto Censor'
         }));
-        await runDetectionForImage(item, true); // true = silent/no-refresh
+        await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
     }
 
     showLoading(false);
     renderQueue();
     // Reload canvas if active item was updated
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    showToast('Batch processing complete', 'success');
+    showToast(
+        executionPlan.switchMessage
+            ? tText('Batch processing complete. The app auto-restored the privacy detector before running.', '批量处理完成。开始前应用已自动恢复为隐私检测路线。')
+            : tText('Batch processing complete', '批量处理完成'),
+        'success'
+    );
 }
 
-async function runDetectionForImage(item, silent = false) {
+async function runDetectionForImage(item, silent = false, executionPlan = null) {
     try {
-        const modelTypeEl = document.getElementById('censor-model-type');
-        const modelType = modelTypeEl ? modelTypeEl.value : 'legacy';
-        const targetClasses = getSelectedTargetClassesForDetection(modelType);
-
-        if (Array.isArray(targetClasses) && targetClasses.length === 0) {
+        const plan = executionPlan || await resolveQuickAutoCensorExecutionPlan({ silent });
+        if (!plan?.ok) {
             item.regions = [];
             item.currentDataUrl = null;
             item.isProcessed = false;
             if (!silent && item.id === CensorState.activeId) {
                 loadCanvasImage(item.id);
                 window.App.showToast(
-                    tText('Select at least one quick privacy target first', '请先勾选至少一个快捷隐私目标'),
+                    plan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'),
                     'warning'
                 );
             }
@@ -1743,10 +2046,10 @@ async function runDetectionForImage(item, silent = false) {
 
         const data = await window.App.API.post('/api/censor/detect', {
             image_id: item.id,
-            model_path: getSelectedLegacyModelPath(),
-            model_type: modelType,
+            model_path: plan.modelPath,
+            model_type: plan.modelType,
             confidence_threshold: CensorState.confidence,
-            target_classes: targetClasses,
+            target_classes: plan.targetClasses,
         });
 
         // Sort by confidence and take top 50 to avoid processing thousands
@@ -1762,12 +2065,18 @@ async function runDetectionForImage(item, silent = false) {
         const ctx = cvs.getContext('2d');
         ctx.drawImage(img, 0, 0);
 
-        if (data.combined_mask) {
+        const { maskRegions, boxRegions } = splitDetectionGeometry(regions);
+        const shouldUseMask = Boolean(data.combined_mask) && maskRegions.length > 0;
+        const shouldUseBoxes = boxRegions.length > 0;
+
+        if (shouldUseMask) {
             await renderRasterMaskEffectOntoCanvas(cvs, data.combined_mask);
-            item.currentDataUrl = cvs.toDataURL('image/png');
-            item.isProcessed = true;
-        } else if (regions.length > 0) {
-            applyBoxRegionsToCanvas(cvs, img, regions);
+        }
+        if (shouldUseBoxes) {
+            applyBoxRegionsToCanvas(cvs, img, boxRegions);
+        }
+
+        if (shouldUseMask || shouldUseBoxes) {
             item.currentDataUrl = cvs.toDataURL('image/png');
             item.isProcessed = true;
         } else {
@@ -1783,11 +2092,13 @@ async function runDetectionForImage(item, silent = false) {
                     'info'
                 );
             } else {
-                const usedMask = data.geometry_mode === 'mask' || data.geometry_mode === 'mixed';
+                const usedMask = shouldUseMask;
                 window.App.showToast(
-                    usedMask
-                        ? tText(`Applied auto-censor mask to ${regions.length} matched region(s)`, `已对 ${regions.length} 个匹配区域应用自动打码 mask`)
-                        : tText(`Applied box-based auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用基于框的自动打码`),
+                    usedMask && shouldUseBoxes
+                        ? tText(`Applied mixed auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用混合自动打码`)
+                        : (usedMask
+                            ? tText(`Applied auto-censor mask to ${regions.length} matched region(s)`, `已对 ${regions.length} 个匹配区域应用自动打码 mask`)
+                            : tText(`Applied box-based auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用基于框的自动打码`)),
                     'success'
                 );
             }
@@ -1803,6 +2114,7 @@ function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
     const ctx = canvas.getContext('2d');
     ctx.save();
     regions.forEach(r => {
+        if (!Array.isArray(r?.box) || r.box.length !== 4) return;
         const [x1, y1, x2, y2] = r.box;
         const w = x2 - x1;
         const h = y2 - y1;
@@ -1837,6 +2149,49 @@ function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
     ctx.restore();
 }
 
+async function normalizeMaskDataUrl(maskDataUrl) {
+    const maskImage = await loadImage(maskDataUrl);
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = maskImage.naturalWidth || maskImage.width;
+    maskCanvas.height = maskImage.naturalHeight || maskImage.height;
+    const maskCtx = maskCanvas.getContext('2d');
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    maskCtx.drawImage(maskImage, 0, 0, maskCanvas.width, maskCanvas.height);
+
+    const imageData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height);
+    const pixels = imageData.data;
+    for (let index = 0; index < pixels.length; index += 4) {
+        const alpha = pixels[index + 3];
+        const luminance = Math.max(pixels[index], pixels[index + 1], pixels[index + 2]);
+        const hasVisibleAlpha = alpha > 0;
+        const hasOpaqueRgbWithoutAlpha = !hasVisibleAlpha && luminance > 0;
+        const nextAlpha = hasVisibleAlpha ? alpha : (hasOpaqueRgbWithoutAlpha ? luminance : 0);
+        pixels[index] = 255;
+        pixels[index + 1] = 255;
+        pixels[index + 2] = 255;
+        pixels[index + 3] = nextAlpha;
+    }
+    maskCtx.putImageData(imageData, 0, 0);
+    return loadImage(maskCanvas.toDataURL('image/png'));
+}
+
+function splitDetectionGeometry(regions = []) {
+    const maskRegions = [];
+    const boxRegions = [];
+
+    regions.forEach(region => {
+        const polygon = Array.isArray(region?.polygon) ? region.polygon : [];
+        const validPointCount = polygon.filter(point => Array.isArray(point) && point.length >= 2).length;
+        if (validPointCount >= 3) {
+            maskRegions.push(region);
+        } else if (Array.isArray(region?.box) && region.box.length === 4) {
+            boxRegions.push(region);
+        }
+    });
+
+    return { maskRegions, boxRegions };
+}
+
 async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl) {
     if (!canvas || !canvas.width || !canvas.height) {
         throw new Error('No editable canvas is ready');
@@ -1850,7 +2205,7 @@ async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl) {
 
     const [baseImage, maskImage] = await Promise.all([
         loadImage(snapshot),
-        loadImage(maskDataUrl),
+        normalizeMaskDataUrl(maskDataUrl),
     ]);
 
     const effectCanvas = document.createElement('canvas');
@@ -1954,15 +2309,87 @@ function resolveRenamePattern(pattern, vars) {
     });
 }
 
+function getRenameTargetItems() {
+    const onlySelected = document.getElementById('rename-only-selected')?.checked || false;
+    const selectedIds = getOrderedSelectedQueueIds();
+    if (onlySelected && selectedIds.length) {
+        const selectedSet = new Set(selectedIds);
+        return CensorState.queue.filter(item => selectedSet.has(item.id));
+    }
+    return CensorState.queue.slice();
+}
+
+function buildRenameFilename(item, index, options = {}) {
+    const useOriginal = Boolean(options.useOriginal);
+    const base = options.base || 'Image';
+    const start = Number(options.start || 1);
+    const pattern = String(options.pattern || '').trim();
+    const dateStr = options.dateStr || '';
+    const timeStr = options.timeStr || '';
+
+    if (useOriginal) {
+        const originalName = item?.originalFilename || item?.filename || `image_${index + 1}`;
+        const baseName = originalName.replace(/\.[^/.]+$/, '');
+        return `${baseName}.png`;
+    }
+
+    if (pattern) {
+        const originalName = item
+            ? (item.originalFilename || item.filename || `image_${index + 1}`).replace(/\.[^/.]+$/, '')
+            : `image_${index + 1}`;
+        var resolved = resolveRenamePattern(pattern, {
+            original: originalName,
+            n: start + index,
+            date: dateStr,
+            time: timeStr
+        });
+        return resolved + '.png';
+    }
+
+    const num = String(start + index).padStart(3, '0');
+    return `${base}_${num}.png`;
+}
+
+function refreshRenameSelectionUi() {
+    const checkbox = document.getElementById('rename-only-selected');
+    const help = document.getElementById('rename-selection-help');
+    if (!checkbox || !help) return;
+
+    const selectedCount = getOrderedSelectedQueueIds().length;
+    checkbox.disabled = selectedCount === 0;
+    if (selectedCount === 0) {
+        checkbox.checked = false;
+        help.textContent = tText(
+            'Nothing is selected right now, so the whole queue will be renamed.',
+            '当前没有选中队列项目，所以会对整个队列重命名。'
+        );
+        return;
+    }
+
+    help.textContent = checkbox.checked
+        ? tText(
+            `Only the ${selectedCount} selected queue item(s) will be renamed. The rest stay untouched.`,
+            `只会重命名当前选中的 ${selectedCount} 个队列项目，其余项目保持不变。`
+        )
+        : tText(
+            `You have ${selectedCount} selected item(s), but this preview is still targeting the whole queue.`,
+            `你当前选中了 ${selectedCount} 个队列项目，但现在这个预览仍然会作用于整个队列。`
+        );
+}
+
 function updateRenamePreview() {
     const useOriginal = document.getElementById('rename-use-original')?.checked || false;
     const base = document.getElementById('rename-base')?.value || 'Image';
     const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
     const patternEl = document.getElementById('rename-pattern');
     const pattern = patternEl ? patternEl.value.trim() : '';
-    const previewContainer = document.querySelector('.rename-preview');
+    const previewSummary = document.getElementById('rename-preview-summary');
+    const previewList = document.getElementById('rename-preview-list');
+    const previewAlert = document.getElementById('rename-preview-alert');
+    const escape = window.escapeHtml;
+    if (!escape) { console.error('escapeHtml not available'); return; }
 
-    if (!previewContainer) return;
+    if (!previewSummary || !previewList || !previewAlert) return;
 
     var now = new Date();
     var dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -1972,45 +2399,76 @@ function updateRenamePreview() {
         String(now.getSeconds()).padStart(2, '0')
     ].join('');
 
-    // Generate preview items
-    let previewHtml = '';
-    const sampleCount = Math.min(3, CensorState.queue.length || 3);
+    const targets = getRenameTargetItems();
+    const previewItems = targets.length ? targets : CensorState.queue.slice(0, 1);
+    const rows = previewItems.map((item, index) => ({
+        item,
+        currentName: item?.outputFilename || item?.originalFilename || item?.filename || `image_${index + 1}.png`,
+        newName: buildRenameFilename(item, index, {
+            useOriginal,
+            base,
+            start,
+            pattern,
+            dateStr,
+            timeStr
+        })
+    }));
 
-    for (let i = 0; i < sampleCount; i++) {
-        let filename;
-        if (useOriginal) {
-            const item = CensorState.queue[i];
-            if (item) {
-                const originalName = item.originalFilename || item.filename || `image_${i + 1}`;
-                const baseName = originalName.replace(/\.[^/.]+$/, '');
-                filename = `${baseName}.png`;
-            } else {
-                filename = `original_name_${i + 1}.png`;
-            }
-        } else if (pattern) {
-            const item = CensorState.queue[i];
-            const originalName = item
-                ? (item.originalFilename || item.filename || `image_${i + 1}`).replace(/\.[^/.]+$/, '')
-                : `image_${i + 1}`;
-            var resolved = resolveRenamePattern(pattern, {
-                original: originalName,
-                n: start + i,
-                date: dateStr,
-                time: timeStr
-            });
-            filename = resolved + '.png';
-        } else {
-            const num = String(start + i).padStart(3, '0');
-            filename = `${base}_${num}.png`;
-        }
-        previewHtml += `<div class="preview-item">${window.escapeHtml(filename)}</div>`;
+    const duplicateMap = rows.reduce((acc, row) => {
+        const key = row.newName.toLowerCase();
+        acc.set(key, (acc.get(key) || 0) + 1);
+        return acc;
+    }, new Map());
+    const duplicateCount = Array.from(duplicateMap.values()).filter(count => count > 1).length;
+
+    const visibleRows = rows.slice(0, 8);
+    const rowHtml = visibleRows.map((row) => {
+        const isDuplicate = (duplicateMap.get(row.newName.toLowerCase()) || 0) > 1;
+        return `
+            <div class="rename-preview-row${isDuplicate ? ' is-duplicate' : ''}">
+                <span>${escape(row.currentName)}</span>
+                <span>${escape(row.newName)}</span>
+            </div>
+        `;
+    }).join('');
+
+    previewList.innerHTML = `
+        <div class="rename-preview-row rename-preview-row-head">
+            <span>${escape(tText('Current', '当前文件名'))}</span>
+            <span>${escape(tText('New name', '新文件名'))}</span>
+        </div>
+        ${rowHtml || `
+            <div class="rename-preview-row">
+                <span>${escape(tText('No queue items yet', '当前还没有队列项目'))}</span>
+                <span>${escape(tText('Preview will appear here', '预览会显示在这里'))}</span>
+            </div>
+        `}
+    `;
+
+    const selectedCount = getOrderedSelectedQueueIds().length;
+    const previewScope = document.getElementById('rename-only-selected')?.checked && selectedCount > 0
+        ? tText(`Previewing ${targets.length} selected item(s).`, `当前预览 ${targets.length} 个已选项目。`)
+        : tText(`Previewing ${targets.length} queue item(s).`, `当前预览 ${targets.length} 个队列项目。`);
+    const extensionNote = tText(
+        ' Final export extension still follows Save Options.',
+        ' 最终导出的扩展名仍然以保存设置为准。'
+    );
+    const hiddenCount = Math.max(0, rows.length - visibleRows.length);
+    const hiddenNote = hiddenCount > 0
+        ? tText(` Showing the first ${visibleRows.length}; ${hiddenCount} more are hidden.`, `这里只显示前 ${visibleRows.length} 条，另外还有 ${hiddenCount} 条已折叠。`)
+        : '';
+    previewSummary.textContent = `${previewScope}${hiddenNote}${extensionNote}`;
+
+    if (duplicateCount > 0) {
+        previewAlert.className = 'rename-preview-alert is-warning';
+        previewAlert.textContent = tText(
+            `Duplicate output names detected in this preview (${duplicateCount} conflict group${duplicateCount > 1 ? 's' : ''}). Fix the pattern before applying.`,
+            `当前预览里检测到重复输出文件名（${duplicateCount} 组冲突）。请先修改命名规则，再执行重命名。`
+        );
+    } else {
+        previewAlert.className = 'rename-preview-alert';
+        previewAlert.textContent = '';
     }
-
-    if (CensorState.queue.length > 3 || sampleCount === 3) {
-        previewHtml += '<div class="preview-hint">...and so on</div>';
-    }
-
-    previewContainer.innerHTML = previewHtml;
 }
 
 async function applyBatchRename() {
@@ -2019,7 +2477,12 @@ async function applyBatchRename() {
     const start = parseInt(document.getElementById('rename-start')?.value, 10) || 1;
     const patternEl = document.getElementById('rename-pattern');
     const pattern = patternEl ? patternEl.value.trim() : '';
-    // Note: Output folder is configured in Save Options modal, not here
+    const targets = getRenameTargetItems();
+
+    if (!targets.length) {
+        window.App.showToast(tText('No queue items to rename', '当前没有可重命名的队列项目'), 'error');
+        return;
+    }
 
     var now = new Date();
     var dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -2028,26 +2491,28 @@ async function applyBatchRename() {
         String(now.getMinutes()).padStart(2, '0'),
         String(now.getSeconds()).padStart(2, '0')
     ].join('');
+    const plannedNames = targets.map((item, index) => buildRenameFilename(item, index, {
+        useOriginal,
+        base,
+        start,
+        pattern,
+        dateStr,
+        timeStr
+    }));
+    const duplicateNames = plannedNames.filter((name, index) => {
+        const lower = name.toLowerCase();
+        return plannedNames.findIndex(candidate => candidate.toLowerCase() === lower) !== index;
+    });
+    if (duplicateNames.length > 0) {
+        window.App.showToast(
+            tText('Rename blocked because the preview still contains duplicate output names.', '当前重命名已被拦截，因为预览里还有重复输出文件名。'),
+            'error'
+        );
+        return;
+    }
 
-    CensorState.queue.forEach((item, i) => {
-        if (useOriginal) {
-            // Use original filename (keeping extension as .png)
-            const originalName = item.originalFilename || item.filename || `image_${i + 1}`;
-            const baseName = originalName.replace(/\.[^/.]+$/, ''); // Remove extension
-            item.outputFilename = `${baseName}.png`;
-        } else if (pattern) {
-            const originalName = (item.originalFilename || item.filename || `image_${i + 1}`).replace(/\.[^/.]+$/, '');
-            var resolved = resolveRenamePattern(pattern, {
-                original: originalName,
-                n: start + i,
-                date: dateStr,
-                time: timeStr
-            });
-            item.outputFilename = resolved + '.png';
-        } else {
-            const num = String(start + i).padStart(3, '0');
-            item.outputFilename = `${base}_${num}.png`;
-        }
+    targets.forEach((item, index) => {
+        item.outputFilename = plannedNames[index];
     });
 
     renderQueue();
@@ -2059,7 +2524,13 @@ async function applyBatchRename() {
         if (item) document.getElementById('censor-filename').textContent = item.outputFilename;
     }
 
-    window.App.showToast(`Renamed ${CensorState.queue.length} images`, 'success');
+    window.App.showToast(
+        tText(
+            `Renamed ${targets.length} image(s)`,
+            `已重命名 ${targets.length} 张图片`
+        ),
+        'success'
+    );
 }
 
 function openSaveOptionsPopup() {
@@ -2292,8 +2763,7 @@ function handleKeydown(e) {
     if (isEditableTarget(e.target)) return;
 
     // Only handle keys when censor view is active
-    const censorView = document.getElementById('view-censor');
-    if (!censorView || !censorView.classList.contains('active')) return;
+    if (!isCensorViewActive()) return;
 
     const key = e.key.toLowerCase();
     const code = e.code;
@@ -2520,7 +2990,13 @@ function toggleShowChanges() {
 async function runDetectionForAll() {
     const { showToast } = window.App;
     if (CensorState.queue.length === 0) {
-        showToast('Queue is empty', 'error');
+        showToast(tText('Queue is empty', '队列为空'), 'error');
+        return;
+    }
+
+    const executionPlan = await resolveQuickAutoCensorExecutionPlan();
+    if (!executionPlan?.ok) {
+        showToast(executionPlan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'), 'warning');
         return;
     }
 
@@ -2539,7 +3015,7 @@ async function runDetectionForAll() {
                 defaultMessage: 'Running detection...',
                 primaryLabel: 'Detect All'
             }));
-            await runDetectionForImage(item, true);
+            await runDetectionForImage(item, true, executionPlan);
             count++;
         } catch (e) {
             Logger.error('Detection error for', item.id, e);
@@ -2549,7 +3025,94 @@ async function runDetectionForAll() {
     showLoading(false);
     renderQueue();
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    showToast(`Detection complete: ${count}/${CensorState.queue.length} images processed`, 'success');
+    showToast(
+        executionPlan.switchMessage
+            ? tText(`Detection complete: ${count}/${CensorState.queue.length} images processed. The app auto-restored the privacy detector first.`, `检测完成：${count}/${CensorState.queue.length} 张图片已处理。开始前应用已自动恢复为隐私检测路线。`)
+            : tText(`Detection complete: ${count}/${CensorState.queue.length} images processed`, `检测完成：已处理 ${count}/${CensorState.queue.length} 张图片`),
+        'success'
+    );
+}
+
+
+async function runSam3BatchRefine() {
+    const { showToast } = window.App;
+    if (CensorState.queue.length === 0) {
+        showToast(tText('Queue is empty', '队列为空'), 'error');
+        return;
+    }
+
+    // Build batch items from queue items that have detection regions with boxes
+    const batchItems = [];
+    for (const item of CensorState.queue) {
+        if (!Array.isArray(item.regions) || item.regions.length === 0) continue;
+        for (const region of item.regions) {
+            if (Array.isArray(region.box) && region.box.length === 4) {
+                batchItems.push({
+                    image_id: item.id,
+                    box: region.box,
+                    text_prompt: null,
+                });
+            }
+        }
+    }
+
+    if (batchItems.length === 0) {
+        showToast(
+            tText('No detection boxes found. Run detection first, then use SAM3 to refine the masks.', '没有找到检测框。请先运行检测，然后用 SAM3 精化 mask。'),
+            'warning'
+        );
+        return;
+    }
+
+    showLoading(true, `SAM3 Batch Refine · 0/${batchItems.length}`);
+
+    try {
+        const result = await window.App.API.post('/api/censor/batch-refine-mask', {
+            items: batchItems,
+            sam3_confidence: CensorState.sam3Confidence,
+        });
+
+        showLoading(false);
+
+        if (result.completed > 0) {
+            // Apply refined masks back to queue items
+            for (const refined of result.results) {
+                if (refined.status !== 'ok' || !refined.mask) continue;
+                const item = CensorState.queue.find(i => i.id === refined.image_id);
+                if (!item) continue;
+
+                // Apply mask to this item's canvas
+                try {
+                    const img = await loadImage(item.currentDataUrl || item.originalUrl);
+                    const cvs = document.createElement('canvas');
+                    cvs.width = img.width;
+                    cvs.height = img.height;
+                    const ctx = cvs.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    await renderRasterMaskEffectOntoCanvas(cvs, refined.mask);
+                    item.currentDataUrl = cvs.toDataURL('image/png');
+                    item.isProcessed = true;
+                } catch (maskErr) {
+                    Logger.error('Failed to apply SAM3 mask for item', refined.image_id, maskErr);
+                }
+            }
+
+            renderQueue();
+            if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
+        }
+
+        showToast(
+            tText(
+                `SAM3 Batch Refine complete: ${result.completed} refined, ${result.failed} failed out of ${result.total} boxes`,
+                `SAM3 批量精化完成：${result.completed} 成功，${result.failed} 失败，共 ${result.total} 个框`
+            ),
+            result.failed > 0 ? 'warning' : 'success'
+        );
+    } catch (e) {
+        showLoading(false);
+        Logger.error('SAM3 Batch Refine error:', e);
+        showToast(formatUserError(e, 'SAM3 Batch Refine failed'), 'error');
+    }
 }
 
 
@@ -2614,8 +3177,10 @@ function initPanControls() {
     const wrapper = document.querySelector('.censor-canvas-wrapper-v2');
     if (!wrapper) return;
 
-    // Space key to enable pan mode - store for cleanup
+    // Keep these listeners bound once and guard by active view so re-entering the
+    // tab does not stack duplicate handlers or duplicate toasts/actions.
     boundHandlers.spaceKeydown = (e) => {
+        if (!isCensorViewActive()) return;
         if (e.code === 'Space' && !isEditableTarget(document.activeElement)) {
             spacePressed = true;
             wrapper.style.cursor = 'grab';
@@ -2625,6 +3190,7 @@ function initPanControls() {
     document.addEventListener('keydown', boundHandlers.spaceKeydown);
 
     boundHandlers.spaceKeyup = (e) => {
+        if (!isCensorViewActive()) return;
         if (e.code === 'Space') {
             spacePressed = false;
             if (!isPanning) {
@@ -2666,10 +3232,23 @@ function initPanControls() {
 }
 
 
-// Cleanup function that also resets init flag so events can be re-bound if view is re-entered
+// View exit cleanup should only reset transient interaction state. All event
+// listeners stay bound once to avoid duplicate bindings when re-entering.
 function cleanupCensorViewFull() {
-    cleanupGlobalListeners();
-    censorEventsInitialized = false;
+    CensorState.isDrawing = false;
+    CensorState.isErasing = false;
+    isPanning = false;
+    spacePressed = false;
+
+    const wrapper = document.querySelector('.censor-canvas-wrapper-v2');
+    if (wrapper) {
+        wrapper.style.cursor = '';
+    }
+
+    const cursorOverlay = document.getElementById('cursor-overlay');
+    if (cursorOverlay) {
+        cursorOverlay.style.display = 'none';
+    }
 }
 
 // Export

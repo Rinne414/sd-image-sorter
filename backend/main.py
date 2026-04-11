@@ -272,6 +272,8 @@ def _is_loopback_host(host: Optional[str]) -> bool:
     """Return True when the host refers to the local machine."""
     if not host:
         return False
+    if host == "testclient" and os.environ.get("SD_SORTER_TESTING") == "1":
+        return True
     if host in LOCALHOST_ALIASES:
         return True
     try:

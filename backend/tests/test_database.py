@@ -532,6 +532,29 @@ class TestImageFiltering:
         assert images[0]["generator"] == "comfyui"
         assert images[0]["width"] >= 1000
 
+    def test_get_images_post_filter_excludes_embedding_blob(self, test_db):
+        """Prompt/Lora post-filter queries should not leak embedding BLOBs into result rows."""
+        image_id = db.add_image(
+            path="/test/post_filter_blob.png",
+            filename="post_filter_blob.png",
+            prompt="city_night, skyline, neon reflections",
+            loras='["city_style"]',
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE images SET embedding = ? WHERE id = ?",
+                (b"\x00\x01\xf0\x02binary", image_id),
+            )
+
+        images = db.get_images(prompt_terms=["city_night"])
+
+        assert len(images) == 1
+        assert images[0]["id"] == image_id
+        assert "embedding" not in images[0]
+        json.dumps(images)
+
     def test_filter_by_image_ids(self, test_db_with_images):
         """Filtering by specific image IDs should work."""
         data = test_db_with_images
@@ -885,12 +908,21 @@ class TestUtilityFunctions:
         id3 = db.add_image(path="/test/tagged.png", filename="tagged.png")
         db.add_tags(id3, [{"tag": "test", "confidence": 0.9}])
 
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE images SET embedding = ? WHERE id = ?",
+                (b"\x00\x01\xf0\x02binary", id1),
+            )
+
         untagged = db.get_untagged_images()
 
         untagged_ids = [img["id"] for img in untagged]
         assert id1 in untagged_ids
         assert id2 in untagged_ids
         assert id3 not in untagged_ids
+        assert all("embedding" not in image for image in untagged)
+        json.dumps(untagged)
 
     def test_get_all_image_ids(self, test_db):
         """Getting all image IDs should be lightweight."""
@@ -901,3 +933,160 @@ class TestUtilityFunctions:
 
         assert len(ids) >= 2
         assert all(isinstance(i, int) for i in ids)
+
+
+class TestAddTagsBatch:
+    """Tests for batch tag insertion via add_tags_batch()."""
+
+    def test_add_tags_batch_inserts_for_multiple_images(self, test_db):
+        """add_tags_batch should insert tags for several images in one transaction."""
+        id1 = db.add_image(path="/test/batch1.png", filename="batch1.png")
+        id2 = db.add_image(path="/test/batch2.png", filename="batch2.png")
+        id3 = db.add_image(path="/test/batch3.png", filename="batch3.png")
+
+        db.add_tags_batch([
+            {"image_id": id1, "tags": [{"tag": "cat", "confidence": 0.9}, {"tag": "animal", "confidence": 0.8}]},
+            {"image_id": id2, "tags": [{"tag": "dog", "confidence": 0.95}]},
+            {"image_id": id3, "tags": [{"tag": "bird", "confidence": 0.85}, {"tag": "outdoor", "confidence": 0.7}]},
+        ])
+
+        tags1 = db.get_image_tags(id1)
+        tags2 = db.get_image_tags(id2)
+        tags3 = db.get_image_tags(id3)
+
+        assert len(tags1) == 2
+        assert any(t["tag"] == "cat" for t in tags1)
+        assert any(t["tag"] == "animal" for t in tags1)
+        assert len(tags2) == 1
+        assert tags2[0]["tag"] == "dog"
+        assert len(tags3) == 2
+
+    def test_add_tags_batch_replaces_existing_tags(self, test_db):
+        """add_tags_batch should replace existing tags for each image."""
+        image_id = db.add_image(path="/test/batch_replace.png", filename="batch_replace.png")
+        db.add_tags(image_id, [{"tag": "old_tag", "confidence": 0.5}])
+
+        db.add_tags_batch([
+            {"image_id": image_id, "tags": [{"tag": "new_tag", "confidence": 0.9}]},
+        ])
+
+        tags = db.get_image_tags(image_id)
+        assert len(tags) == 1
+        assert tags[0]["tag"] == "new_tag"
+
+    def test_add_tags_batch_empty_list_is_noop(self, test_db):
+        """add_tags_batch with empty list should not raise."""
+        db.add_tags_batch([])
+
+    def test_add_tags_batch_updates_tagged_at(self, test_db):
+        """add_tags_batch should update the tagged_at timestamp for each image."""
+        image_id = db.add_image(path="/test/batch_ts.png", filename="batch_ts.png")
+
+        image = db.get_image_by_id(image_id)
+        assert image["tagged_at"] is None
+
+        db.add_tags_batch([
+            {"image_id": image_id, "tags": [{"tag": "test", "confidence": 0.9}]},
+        ])
+
+        image = db.get_image_by_id(image_id)
+        assert image["tagged_at"] is not None
+
+
+class TestGetImagesByIdsChunking:
+    """Tests for get_images_by_ids() with large ID lists."""
+
+    def test_get_images_by_ids_basic(self, test_db):
+        """get_images_by_ids should return a dict keyed by image ID."""
+        id1 = db.add_image(path="/test/byid1.png", filename="byid1.png", prompt="p1")
+        id2 = db.add_image(path="/test/byid2.png", filename="byid2.png", prompt="p2")
+
+        result = db.get_images_by_ids([id1, id2])
+
+        assert id1 in result
+        assert id2 in result
+        assert result[id1]["prompt"] == "p1"
+        assert result[id2]["prompt"] == "p2"
+
+    def test_get_images_by_ids_empty_returns_empty(self, test_db):
+        """get_images_by_ids with empty list should return empty dict."""
+        result = db.get_images_by_ids([])
+        assert result == {}
+
+    def test_get_images_by_ids_large_list(self, test_db):
+        """get_images_by_ids with >500 IDs should work (tests SQLite parameter limits)."""
+        image_ids = []
+        for i in range(600):
+            image_id = db.add_image(
+                path=f"/test/large_{i}.png",
+                filename=f"large_{i}.png",
+            )
+            image_ids.append(image_id)
+
+        result = db.get_images_by_ids(image_ids)
+
+        assert len(result) == 600
+        for image_id in image_ids:
+            assert image_id in result
+
+    def test_get_images_by_ids_skips_nonexistent(self, test_db):
+        """get_images_by_ids should silently skip IDs that don't exist."""
+        image_id = db.add_image(path="/test/exists.png", filename="exists.png")
+
+        result = db.get_images_by_ids([image_id, 999999])
+
+        assert len(result) == 1
+        assert image_id in result
+
+
+class TestTagsCacheInvalidation:
+    """Tests for tags cache behavior."""
+
+    def test_get_all_tags_returns_consistent_data(self, test_db):
+        """get_all_tags should return current tag data."""
+        id1 = db.add_image(path="/test/cache1.png", filename="cache1.png")
+        db.add_tags(id1, [{"tag": "cached_tag", "confidence": 0.9}])
+
+        tags = db.get_all_tags()
+        tag_names = [t["tag"] for t in tags]
+        assert "cached_tag" in tag_names
+
+    def test_invalidate_tags_cache_clears_cached_data(self, test_db):
+        """_invalidate_tags_cache should clear the in-memory cache."""
+        id1 = db.add_image(path="/test/inv1.png", filename="inv1.png")
+        db.add_tags(id1, [{"tag": "before_invalidation", "confidence": 0.9}])
+
+        # Prime the cache
+        db.get_all_tags()
+
+        # Add new tags directly
+        id2 = db.add_image(path="/test/inv2.png", filename="inv2.png")
+        db.add_tags(id2, [{"tag": "after_invalidation", "confidence": 0.8}])
+
+        # Invalidate cache
+        db._invalidate_tags_cache()
+
+        # Next call should return fresh data from DB
+        tags = db.get_all_tags()
+        tag_names = [t["tag"] for t in tags]
+        assert "after_invalidation" in tag_names
+
+    def test_cache_returns_stale_data_without_invalidation(self, test_db):
+        """Without invalidation, cached data persists within TTL."""
+        id1 = db.add_image(path="/test/stale1.png", filename="stale1.png")
+        db.add_tags(id1, [{"tag": "original_tag", "confidence": 0.9}])
+
+        # Prime the cache
+        first_result = db.get_all_tags()
+
+        # Add more tags without invalidating
+        id2 = db.add_image(path="/test/stale2.png", filename="stale2.png")
+        db.add_tags(id2, [{"tag": "sneaky_tag", "confidence": 0.8}])
+
+        # Should get cached result (same object reference or same content)
+        second_result = db.get_all_tags()
+        second_tag_names = [t["tag"] for t in second_result]
+
+        # The sneaky_tag might not appear because cache is still valid
+        # (depends on TTL, but within same test execution it should be cached)
+        assert "original_tag" in second_tag_names

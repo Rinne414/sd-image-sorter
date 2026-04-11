@@ -18,6 +18,7 @@ export default defineConfig({
   ],
   use: {
     baseURL: process.env.BASE_URL || 'http://127.0.0.1:8001',
+    storageState: './storage/onboarding-complete.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

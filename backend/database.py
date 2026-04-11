@@ -189,25 +189,25 @@ def _sync_image_loras(
             (image_id, lora_name)
         )
 
-_pragmas_initialized = False
+_pragmas_initialized: set = set()
 _pragmas_lock = threading.Lock()
 
 
 def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory and performance optimizations."""
-    global _pragmas_initialized
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout=5000")
-    # WAL mode and other persistent PRAGMAs only need to be set once per database
-    if not _pragmas_initialized:
+    # WAL mode and other persistent PRAGMAs only need to be set once per database path
+    db_path = os.path.abspath(DATABASE_PATH)
+    if db_path not in _pragmas_initialized:
         with _pragmas_lock:
-            if not _pragmas_initialized:
+            if db_path not in _pragmas_initialized:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA synchronous=NORMAL")
                 conn.execute("PRAGMA cache_size=-64000")  # 64MB cache
-                _pragmas_initialized = True
+                _pragmas_initialized.add(db_path)
     return conn
 
 
@@ -260,6 +260,8 @@ def init_db() -> None:
             cursor.execute("ALTER TABLE images ADD COLUMN loras TEXT")
         if 'embedding' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN embedding BLOB")
+        if 'ai_caption' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN ai_caption TEXT")
 
         # Collections table (Favorites MVP uses a built-in collection)
         cursor.execute("""
@@ -396,8 +398,6 @@ def init_db() -> None:
         """)
 
         # Create indexes for fast searching
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id ON tags(image_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_generator ON images(generator)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_tag ON tag_categories(tag)")
@@ -417,6 +417,18 @@ def init_db() -> None:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag_image ON tags(tag, image_id)")
         # Optimized index for rating and tag_count queries (covers common correlated subqueries)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id_tag ON tags(image_id, tag)")
+
+        # UNIQUE constraint on tags to prevent duplicates
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_unique_image_tag ON tags(image_id, tag)")
+
+        # Filename index for name sorting performance
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename)")
+
+        # Remove redundant simple indexes superseded by composite ones
+        # idx_tags_tag is redundant with idx_tags_tag_image(tag, image_id)
+        # idx_tags_image_id is redundant with idx_tags_image_id_tag(image_id, tag)
+        cursor.execute("DROP INDEX IF EXISTS idx_tags_tag")
+        cursor.execute("DROP INDEX IF EXISTS idx_tags_image_id")
 
         # Junction table for normalized lora names (for efficient lora filtering)
         # This avoids LIKE queries on the loras column which requires full table scans
@@ -570,32 +582,35 @@ def add_tags(image_id: int, tags: List[Dict[str, Any]]) -> None:
             "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
             (image_id,)
         )
+    _invalidate_tags_cache()
 
 
 def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
     """Add tags for multiple images in a single transaction.
-    
+
     More efficient than calling add_tags() repeatedly for batch tagging operations.
     Uses a single database connection and commits once at the end.
-    
+
     Args:
         image_tags_list: List of dicts, each with:
             - image_id: int
             - tags: List[Dict] with 'tag' and 'confidence' keys
+            - ai_caption: Optional[str] - natural language caption from VLM models
     """
     if not image_tags_list:
         return
-    
+
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         for item in image_tags_list:
             image_id = item["image_id"]
             tags = item["tags"]
-            
+            ai_caption = item.get("ai_caption")
+
             # Clear existing tags
             cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
-            
+
             # Batch insert new tags
             tag_values = [
                 (image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
@@ -607,14 +622,21 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
                     "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
                     tag_values
                 )
-            
-            # Update tagged timestamp
-            cursor.execute(
-                "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (image_id,)
-            )
+
+            # Update tagged timestamp and caption
+            if ai_caption:
+                cursor.execute(
+                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ? WHERE id = ?",
+                    (ai_caption, image_id)
+                )
+            else:
+                cursor.execute(
+                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (image_id,)
+                )
         
         # Single commit at the end (automatic with context manager)
+    _invalidate_tags_cache()
 
 
 # =============================================================================
@@ -626,6 +648,27 @@ VALID_SORT_OPTIONS = {
     "prompt_length", "tag_count", "rating", "character_count",
     "random", "file_size", "file_size_asc",
 }
+
+# Canonical column lists for image queries.
+# All functions selecting image rows should reference these constants
+# so column additions only need to change one place.
+_IMAGE_COLUMNS_FULL = (
+    "i.id, i.path, i.filename, i.generator, i.prompt, i.negative_prompt, i.metadata_json, "
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.created_at, i.indexed_at, i.tagged_at, i.ai_caption"
+)
+_IMAGE_COLUMNS_WITH_PROMPT = (
+    "i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, "
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"
+)
+_IMAGE_COLUMNS_LIGHTWEIGHT = (
+    "i.id, i.filename, i.path, i.generator, i.width, i.height, "
+    "i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"
+)
+# Bare-table version (no alias prefix) for single-table queries
+_IMAGE_COLUMNS_BARE = (
+    "id, path, filename, generator, prompt, negative_prompt, metadata_json, "
+    "width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at, ai_caption"
+)
 
 
 def _build_base_query(sort_by: str, select_cols: str) -> str:
@@ -771,8 +814,8 @@ def _apply_lora_filter(conditions: List[str], params: List[Any],
                        loras: Optional[List[str]]) -> tuple:
     """Apply LoRA filtering (OR logic - image has ANY of the selected loras).
 
-    Matches on lora name in loras column, metadata_json, or prompt.
-    Uses same normalization as library: strip weight notation and lowercase.
+    Uses the image_loras junction table for efficient indexed lookups
+    instead of LIKE scans on TEXT columns.
 
     Args:
         conditions: Current WHERE conditions list
@@ -787,12 +830,10 @@ def _apply_lora_filter(conditions: List[str], params: List[Any],
 
     lora_conditions = []
     for lora in loras:
-        # Strip weight notation (name:0.8 -> name) and lowercase
         lora_normalized = normalize_lora_name(lora)
-        # Match lora name in loras column, metadata_json, or prompt
-        lora_conditions.append("(LOWER(i.loras) LIKE ? ESCAPE '\\' OR LOWER(i.metadata_json) LIKE ? ESCAPE '\\' OR LOWER(i.prompt) LIKE ? ESCAPE '\\')")
-        params.append(f"%{escape_like_pattern(lora_normalized)}%")
-        params.append(f"%{escape_like_pattern(lora_normalized)}%")
+        lora_conditions.append(
+            "EXISTS (SELECT 1 FROM image_loras il WHERE il.image_id = i.id AND LOWER(il.lora_name) LIKE ? ESCAPE '\\')"
+        )
         params.append(f"%{escape_like_pattern(lora_normalized)}%")
 
     conditions.append(f"({' OR '.join(lora_conditions)})")
@@ -1086,17 +1127,12 @@ def get_images(
         needs_post_filter = bool(prompt_terms) or bool(loras)
         # Include prompt fields when searching or post-filtering
         needs_prompt_fields = bool(search_query) or needs_post_filter
-        select_lightweight = """i.id, i.filename, i.path, i.generator, i.width, i.height,
-                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
-        select_with_prompt = """i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, i.width, i.height,
-                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
-        select_full = "i.*"
         if needs_post_filter:
-            select_cols = select_full
+            select_cols = _IMAGE_COLUMNS_FULL
         elif needs_prompt_fields:
-            select_cols = select_with_prompt
+            select_cols = _IMAGE_COLUMNS_WITH_PROMPT
         else:
-            select_cols = select_lightweight
+            select_cols = _IMAGE_COLUMNS_LIGHTWEIGHT
 
         # Build base query with sorting subqueries
         query = _build_base_query(sort_by, select_cols)
@@ -1448,10 +1484,7 @@ def get_images_paginated(
 
         # Determine if post-filtering is needed
         needs_post_filter = bool(prompt_terms) or bool(loras)
-        select_lightweight = """i.id, i.filename, i.path, i.generator, i.width, i.height,
-                       i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"""
-        select_full = "i.*"
-        select_cols = select_full if needs_post_filter else select_lightweight
+        select_cols = _IMAGE_COLUMNS_FULL if needs_post_filter else _IMAGE_COLUMNS_LIGHTWEIGHT
 
         # Build base query with sorting subqueries
         query = _build_base_query(sort_by, select_cols)
@@ -1627,12 +1660,7 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            """
-            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
-                   width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at
-            FROM images
-            WHERE id = ?
-            """,
+            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE id = ?",
             (image_id,),
         )
         row = cursor.fetchone()
@@ -1641,6 +1669,8 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
 
 def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
     """Get multiple images by IDs in a single query (avoids N+1).
+
+    Chunks into batches of 500 to stay under SQLite's 999-variable limit.
 
     Args:
         image_ids: List of image IDs to fetch
@@ -1651,19 +1681,22 @@ def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
     if not image_ids:
         return {}
 
+    result: Dict[int, Dict[str, Any]] = {}
+    batch_size = 500
+
     with get_db() as conn:
         cursor = conn.cursor()
-        placeholders = ",".join("?" * len(image_ids))
-        cursor.execute(
-            f"""
-            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
-                   width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at
-            FROM images
-            WHERE id IN ({placeholders})
-            """,
-            image_ids
-        )
-        return {row['id']: dict(row) for row in cursor.fetchall()}
+        for i in range(0, len(image_ids), batch_size):
+            batch = image_ids[i:i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            cursor.execute(
+                f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE id IN ({placeholders})",
+                batch
+            )
+            for row in cursor.fetchall():
+                result[row['id']] = dict(row)
+
+    return result
 
 
 def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
@@ -1729,7 +1762,7 @@ def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM images WHERE tagged_at IS NULL LIMIT ?",
+            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE tagged_at IS NULL LIMIT ?",
             (limit,)
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -1941,6 +1974,7 @@ def delete_image(image_id: int):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
+    _invalidate_tags_cache()
 
 
 def get_image_count() -> int:

@@ -28,6 +28,33 @@ THRESHOLD_MAX = 1.0
 PATH_MAX_LENGTH = 4096
 BATCH_EXPORT_LIMIT = 10000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
+TRUE_BATCH_MODEL_MAX = 32
+CPU_CHUNK_MAX = 64
+TORIIGATE_GPU_CHUNK_MAX = 2
+
+
+def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
+    """Summarize adaptive runtime adjustments for the progress UI."""
+    backoff_steps = runtime_info.get("backoff_steps") or []
+    if not backoff_steps:
+        return ""
+
+    parts = []
+    for step in backoff_steps:
+        mode = step.get("mode")
+        from_size = step.get("from")
+        to_size = step.get("to")
+        if mode == "gpu_backoff":
+            parts.append(f"GPU batch {from_size}->{to_size}")
+        elif mode == "cpu_fallback":
+            parts.append(f"GPU batch {from_size}->CPU Safe Mode")
+
+    final_chunk_size = runtime_info.get("final_chunk_size")
+    if runtime_info.get("used_cpu_fallback"):
+        parts.append("continued on CPU")
+    elif final_chunk_size:
+        parts.append(f"current chunk {final_chunk_size}")
+    return ", ".join(parts)
 
 
 def _build_tag_progress_state(
@@ -58,20 +85,25 @@ def _tagging_worker_main(
     """Run the heavy tagger work in a child process so GPU/provider crashes do not kill the API."""
     import database as worker_db
     from tagger import get_tagger
+    from toriigate_tagger import get_toriigate_tagger
 
     request = TagRequest.model_validate(runtime_plan_payload.get("request", {}))
     effective_model_name = runtime_plan_payload.get("model_name") or (request.model_name or DEFAULT_TAGGER_MODEL).strip()
+    model_config = TAGGER_MODELS.get(effective_model_name, {})
+    runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
     effective_use_gpu = bool(runtime_plan_payload.get("effective_use_gpu", request.use_gpu))
     startup_notice = str(runtime_plan_payload.get("startup_notice", "") or "")
     batch_size = max(1, int(runtime_plan_payload.get("fetch_batch_size", 100)))
     commit_interval = max(1, int(runtime_plan_payload.get("commit_interval", 50)))
     gc_interval = max(1, int(runtime_plan_payload.get("gc_interval", 50)))
-    cpu_pause_seconds = max(0.0, float(runtime_plan_payload.get("cpu_pause_seconds", 0.1 if not effective_use_gpu else 0.0)))
+    cpu_pause_seconds = max(0.0, float(runtime_plan_payload.get("cpu_pause_seconds", 0.0)))
+    session_refresh_interval = max(0, int(runtime_plan_payload.get("session_refresh_interval", 0)))
     total_processed = 0
     total_tagged = 0
     total_errors = 0
     total = 0
     gpu_fallback_announced = False
+    tagging_start_time = 0.0
 
     def send(status: str, message: str, current: Optional[int] = None, total_override: Optional[int] = None) -> None:
         progress_queue.put(
@@ -85,6 +117,23 @@ def _tagging_worker_main(
             )
         )
 
+    def send_with_eta(base_message: str) -> None:
+        """Send a progress message with ETA calculation when in tagging phase."""
+        if tagging_start_time > 0 and total_processed > 0 and total > 0:
+            elapsed = time.time() - tagging_start_time
+            rate = total_processed / max(elapsed, 0.001)
+            remaining = total - total_processed
+            eta_seconds = remaining / max(rate, 0.001)
+            if eta_seconds < 60:
+                eta_str = f"{int(eta_seconds)}s"
+            elif eta_seconds < 3600:
+                eta_str = f"{int(eta_seconds // 60)}m {int(eta_seconds % 60)}s"
+            else:
+                eta_str = f"{int(eta_seconds // 3600)}h {int((eta_seconds % 3600) // 60)}m"
+            send("running", f"{base_message} (ETA: {eta_str})")
+        else:
+            send("running", base_message)
+
     try:
         if request.model_path:
             send("running", "Loading custom model...")
@@ -93,7 +142,8 @@ def _tagging_worker_main(
         else:
             send("running", "Loading model on CPU...")
 
-        tagger = get_tagger(
+        tagger_getter = get_toriigate_tagger if runtime_backend == "toriigate" else get_tagger
+        tagger = tagger_getter(
             model_name=effective_model_name,
             model_path=request.model_path,
             tags_path=request.tags_path,
@@ -103,16 +153,12 @@ def _tagging_worker_main(
             force_reload=True,
         )
 
-        # Set session refresh interval from hardware recommendation
-        try:
-            from hardware_monitor import recommend_tagger_config, get_system_info
-            hw_info = get_system_info()
-            hw_rec = recommend_tagger_config(hw_info)
-            refresh_interval = hw_rec.get("recommended_session_refresh_interval", 100 if effective_use_gpu else 0)
-            tagger.set_session_refresh_interval(refresh_interval)
-        except Exception:
-            # Fallback: default to 100 for GPU, 0 for CPU
-            tagger.set_session_refresh_interval(100 if effective_use_gpu else 0)
+        # Eagerly load the model so progress transitions from "loading" to "tagging"
+        if hasattr(tagger, "load"):
+            tagger.load()
+
+        if hasattr(tagger, "set_session_refresh_interval"):
+            tagger.set_session_refresh_interval(session_refresh_interval)
 
         if startup_notice:
             send("running", startup_notice)
@@ -134,7 +180,8 @@ def _tagging_worker_main(
             all_ids = worker_db.get_untagged_image_ids()
 
         total = len(all_ids)
-        send("running", f"Tagging {total} images...", current=0, total_override=total)
+        send("running", f"Model loaded. Tagging {total} images...", current=0, total_override=total)
+        tagging_start_time = time.time()
         tags_batch: List[Dict[str, Any]] = []
 
         for batch_start in range(0, total, batch_size):
@@ -145,60 +192,114 @@ def _tagging_worker_main(
             batch_images_map = worker_db.get_images_by_ids(batch_ids)
             batch_images = [img for img in batch_images_map.values() if img]
 
+            existing_images: List[Dict[str, Any]] = []
+            batch_paths: List[str] = []
+
             for img in batch_images:
-                if cancel_event.is_set():
-                    break
+                if os.path.exists(img["path"]):
+                    existing_images.append(img)
+                    batch_paths.append(img["path"])
+                else:
+                    total_errors += 1
+                    total_processed += 1
+                    logger.error("Image file missing during tagging: %s", img["path"])
+                    send_with_eta(
+                        f"Processed {total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''})",
+                    )
 
-                send(
-                    "running",
-                    f"Tagging: {img['filename']} ({total_processed}/{total})",
-                )
-
+            if existing_images:
+                processed_in_batch = 0
                 try:
-                    if os.path.exists(img["path"]):
-                        try:
-                            from hardware_monitor import check_memory_pressure
-                            pressure = check_memory_pressure()
-                            if pressure.get("should_restart_session"):
-                                tagger._recreate_session()
-                            if pressure.get("should_pause"):
-                                time.sleep(2)
-                                gc.collect()
-                        except Exception:
-                            pass  # hardware_monitor not available
-                        result = tagger.tag(img["path"])
-                        if effective_use_gpu and not gpu_fallback_announced and not getattr(tagger, "use_gpu", False):
-                            gpu_fallback_announced = True
-                            send(
-                                "running",
-                                "GPU became unstable during inference. Continuing in CPU Safe Mode...",
-                            )
-                        tags_batch.append({
-                            "image_id": img["id"],
-                            "tags": result["all_tags"]
-                        })
-                        total_tagged += 1
+                    # Elastic batch sizing: check memory and reduce batch if under pressure
+                    try:
+                        from hardware_monitor import check_memory_pressure
+                        pressure = check_memory_pressure()
+                        if pressure.get("should_restart_session"):
+                            tagger._recreate_session()
+                        ram_avail = pressure.get("ram_available_gb")
+                        if pressure.get("should_pause"):
+                            logger.warning("Memory pressure critical (RAM: %.1fGB). Pausing 2s and reducing batch.", ram_avail or 0)
+                            time.sleep(2)
+                            gc.collect()
+                            batch_size = max(1, batch_size // 2)
+                        elif ram_avail is not None and ram_avail < 2.0 and batch_size > 2:
+                            logger.info("Low RAM (%.1fGB available). Reducing batch size %d -> %d.", ram_avail, batch_size, max(2, batch_size // 2))
+                            batch_size = max(2, batch_size // 2)
+                    except Exception:
+                        pass  # hardware_monitor not available
+
+                    # Show which images are being tagged
+                    first_name = os.path.basename(existing_images[0]["path"])
+                    if len(existing_images) > 1:
+                        last_name = os.path.basename(existing_images[-1]["path"])
+                        send(
+                            "running",
+                            f"Tagging {total_processed + 1}-{total_processed + len(existing_images)}/{total}: {first_name} ... {last_name}",
+                        )
+                    else:
+                        send(
+                            "running",
+                            f"Tagging {total_processed + 1}/{total}: {first_name}",
+                        )
+                    batch_results, runtime_info = tagger.tag_batch(
+                        batch_paths,
+                        preferred_batch_size=batch_size,
+                        min_batch_size=1,
+                        return_runtime_info=True,
+                    )
+
+                    runtime_adjustment_message = _format_runtime_adjustment_message(runtime_info)
+                    if runtime_adjustment_message:
+                        send("running", f"Adaptive runtime: {runtime_adjustment_message}")
+
+                    if effective_use_gpu and not gpu_fallback_announced and not getattr(tagger, "use_gpu", False):
+                        gpu_fallback_announced = True
+                        send(
+                            "running",
+                            "GPU became unstable during inference. Continuing in CPU Safe Mode...",
+                        )
+
+                    for img, result in zip(existing_images, batch_results):
+                        if cancel_event.is_set():
+                            break
+
+                        if result.get("error"):
+                            total_errors += 1
+                            logger.error("Error tagging %s: %s", img["path"], result["error"])
+                        else:
+                            entry = {
+                                "image_id": img["id"],
+                                "tags": result["all_tags"],
+                            }
+                            if result.get("raw_text"):
+                                entry["ai_caption"] = result["raw_text"]
+                            tags_batch.append(entry)
+                            total_tagged += 1
+
+                        total_processed += 1
+                        processed_in_batch += 1
+                        current_filename = os.path.basename(img["path"])
+                        send_with_eta(
+                            f"{total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''}) - {current_filename}",
+                        )
 
                         if len(tags_batch) >= commit_interval:
                             worker_db.add_tags_batch(tags_batch)
                             tags_batch = []
-                    else:
-                        total_errors += 1
-                        logger.error("Image file missing during tagging: %s", img["path"])
+
+                        if total_processed % gc_interval == 0:
+                            gc.collect()
+                            if cpu_pause_seconds > 0:
+                                time.sleep(cpu_pause_seconds)
                 except Exception as error:
-                    logger.error("Error tagging %s: %s", img["path"], error)
-                    total_errors += 1
-
-                total_processed += 1
-                send(
-                    "running",
-                    f"Processed {total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''})",
-                )
-
-                if total_processed % gc_interval == 0:
-                    gc.collect()
-                    if cpu_pause_seconds > 0:
-                        time.sleep(cpu_pause_seconds)
+                    logger.error("Error tagging batch starting at %s: %s", batch_start, error)
+                    remaining = len(existing_images) - processed_in_batch
+                    total_errors += remaining
+                    total_processed += remaining
+                    send(
+                        "running",
+                        f"Processed {total_processed}/{total} ({total_tagged} tagged, {total_errors} failed)",
+                    )
 
             if tags_batch:
                 worker_db.add_tags_batch(tags_batch)
@@ -235,7 +336,7 @@ class TagRequest(BaseModel):
     tags_path: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
     use_gpu: bool = True
     allow_unsafe_acceleration: bool = False
-    batch_size: Optional[int] = Field(default=None, ge=1, le=32)
+    batch_size: Optional[int] = Field(default=None, ge=1, le=128)
 
 
 class TagImportRequest(BaseModel):
@@ -254,9 +355,6 @@ class BatchTagExportRequest(BaseModel):
 
 class TaggingService:
     """Service for AI tagging and tag management."""
-
-    HIGH_RISK_GPU_MODELS = {"wd-eva02-large-tagger-v3"}
-    GPU_LOCKED_MODELS = {"wd-eva02-large-tagger-v3"}
 
     def __init__(self):
         """Initialize the tagging service."""
@@ -307,7 +405,36 @@ class TaggingService:
             current = self._progress.get("current", 0)
             total = self._progress.get("total", 0)
             self._progress["message"] = f"Cancelling... ({current}/{total})"
-            return {"status": "cancelling", "message": "Cancellation requested"}
+
+            worker = self._worker_process
+
+        # If the worker is alive, give it a short grace period then forcefully terminate
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=3.0)
+            if worker.is_alive():
+                logger.warning("Tagger worker did not stop cooperatively, terminating process.")
+                try:
+                    worker.terminate()
+                    worker.join(timeout=5.0)
+                except Exception as exc:
+                    logger.error("Error terminating tagger worker: %s", exc)
+                    try:
+                        worker.kill()
+                    except Exception:
+                        pass
+                with self._lock:
+                    self._progress = _build_tag_progress_state(
+                        "cancelled",
+                        current=current,
+                        total=total,
+                        tagged=self._progress.get("tagged", 0),
+                        errors=self._progress.get("errors", 0),
+                        message=f"Tagging forcefully cancelled at {current}/{total}.",
+                    )
+                    self._worker_process = None
+                    self._worker_cancel_event = None
+
+        return {"status": "cancelling", "message": "Cancellation requested"}
 
     def get_all_tags(self, limit: int = 500) -> Dict[str, Any]:
         """Get all unique tags with occurrence counts."""
@@ -553,54 +680,92 @@ class TaggingService:
                 detail=f"Unknown tagger model: {model_name}",
             )
 
-        if request.use_gpu and not request.allow_unsafe_acceleration:
-            if request.model_path or model_name in self.HIGH_RISK_GPU_MODELS:
-                if model_name in self.GPU_LOCKED_MODELS and not request.model_path:
-                    return
+        if not request.model_path:
+            model_config = TAGGER_MODELS.get(model_name, {})
+            if model_config.get("disabled"):
                 raise HTTPException(
                     status_code=409,
-                    detail=(
-                        "This tagger setup is the most crash-prone on GPU. "
-                        "Use CPU Safe Mode first, or confirm the risky GPU run explicitly."
-                    ),
+                    detail=model_config.get("disabled_reason") or f"Model {model_name} is not available in the current build.",
                 )
 
     def _build_runtime_plan(self, request: TagRequest) -> Dict[str, Any]:
-        """Translate a public tag request into a safer internal runtime plan."""
+        """Translate a public tag request into a high-throughput runtime plan with adaptive safety."""
+        from hardware_monitor import get_system_info, recommend_tagger_config
+
         model_name = self._resolve_model_name(request)
-        gpu_locked = bool(not request.model_path and model_name in self.GPU_LOCKED_MODELS)
+        model_config = TAGGER_MODELS.get(model_name, {})
+        runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
         effective_use_gpu = bool(request.use_gpu)
         startup_notice = ""
-        fetch_batch_size = 100
-        commit_interval = 50
-        gc_interval = 50
-        cpu_pause_seconds = 0.1 if not effective_use_gpu else 0.0
+        fetch_batch_size = 16 if effective_use_gpu else 8
+        commit_interval = fetch_batch_size
+        gc_interval = max(4, fetch_batch_size)
+        cpu_pause_seconds = 0.0
+        session_refresh_interval = 180 if effective_use_gpu else 0
+        requested_chunk_size = int(request.batch_size) if request.batch_size else None
 
-        if gpu_locked:
+        system_info = get_system_info()
+        hardware_rec = recommend_tagger_config(system_info, model_name=model_name, use_gpu=effective_use_gpu)
+
+        if runtime_backend == "toriigate":
             if effective_use_gpu:
+                fetch_batch_size = 2 if (hardware_rec.get("recommended_use_gpu") and (system_info.get("gpu_vram_total_mb") or 0) >= 16000) else 1
+                session_refresh_interval = 0
                 startup_notice = (
-                    "Max Quality is running in protected CPU Safe Mode to keep the app stable."
+                    "ToriiGate runs through the multimodal caption backend. "
+                    "GPU is strongly recommended, and runtime chunk size stays intentionally small to avoid VRAM spikes."
                 )
-            effective_use_gpu = False
-            fetch_batch_size = 24
-            commit_interval = 10
-            gc_interval = 8
-            cpu_pause_seconds = 0.02
-        elif request.model_path:
-            fetch_batch_size = 32
-            commit_interval = 12
-            gc_interval = 10
-            cpu_pause_seconds = 0.02 if not effective_use_gpu else 0.0
-        elif not effective_use_gpu:
-            fetch_batch_size = 64
-            commit_interval = 25
-            gc_interval = 20
-            cpu_pause_seconds = 0.03
+            else:
+                fetch_batch_size = 1
+                cpu_pause_seconds = 0.0
+                session_refresh_interval = 0
+                startup_notice = (
+                    "ToriiGate is running on CPU. This is valid but much slower than the CUDA path."
+                )
+        elif effective_use_gpu:
+            fetch_batch_size = int(hardware_rec.get("recommended_batch_size") or fetch_batch_size)
+            session_refresh_interval = int(hardware_rec.get("recommended_session_refresh_interval") or session_refresh_interval)
+        else:
+            fetch_batch_size = min(CPU_CHUNK_MAX, max(4, int(hardware_rec.get("recommended_cpu_chunk_size") or 12)))
+            cpu_pause_seconds = 0.01 if fetch_batch_size >= 24 else 0.0
+
+        if request.model_path:
+            fetch_batch_size = min(fetch_batch_size, TRUE_BATCH_MODEL_MAX if effective_use_gpu else CPU_CHUNK_MAX)
+        elif runtime_backend == "toriigate":
+            fetch_batch_size = min(fetch_batch_size, TORIIGATE_GPU_CHUNK_MAX if effective_use_gpu else 1)
+
+        if requested_chunk_size:
+            if runtime_backend == "toriigate":
+                chunk_cap = TORIIGATE_GPU_CHUNK_MAX if effective_use_gpu else 1
+            else:
+                chunk_cap = TRUE_BATCH_MODEL_MAX if effective_use_gpu else CPU_CHUNK_MAX
+            applied_chunk_size = max(1, min(requested_chunk_size, chunk_cap))
+            if applied_chunk_size != requested_chunk_size:
+                clamp_notice = (
+                    f"Requested runtime chunk size {requested_chunk_size} was reduced to {applied_chunk_size} "
+                    "to stay inside the supported runtime range."
+                )
+                startup_notice = f"{startup_notice} {clamp_notice}".strip()
+
+            fetch_batch_size = applied_chunk_size
+        elif runtime_backend == "toriigate":
+            startup_notice = startup_notice or (
+                "ToriiGate uses the multimodal caption runtime. The app keeps the queue chunk small so long runs stay stable."
+            )
+        elif effective_use_gpu:
+            startup_notice = (
+                "Auto runtime is using the highest batched throughput this hardware profile should hold for long runs."
+            )
+        else:
+            startup_notice = "CPU mode is using a larger worker chunk because true multi-image GPU batching is not active."
+
+        commit_interval = max(1, min(fetch_batch_size, 10))
+        gc_interval = max(4, min(fetch_batch_size, 8))
 
         runtime_request = request.model_copy(
             update={
                 "use_gpu": effective_use_gpu,
-                "allow_unsafe_acceleration": False if gpu_locked else request.allow_unsafe_acceleration,
+                "allow_unsafe_acceleration": request.allow_unsafe_acceleration,
             }
         )
 
@@ -608,12 +773,13 @@ class TaggingService:
             "request": runtime_request.model_dump(mode="python"),
             "model_name": model_name,
             "effective_use_gpu": effective_use_gpu,
-            "gpu_locked": gpu_locked,
+            "gpu_locked": False,
             "startup_notice": startup_notice,
             "fetch_batch_size": fetch_batch_size,
             "commit_interval": commit_interval,
             "gc_interval": gc_interval,
             "cpu_pause_seconds": cpu_pause_seconds,
+            "session_refresh_interval": session_refresh_interval,
         }
 
     def _apply_worker_progress(self, payload: Dict[str, Any]) -> None:

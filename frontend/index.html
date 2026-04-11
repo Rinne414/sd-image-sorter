@@ -232,6 +232,16 @@
             </div>
         </nav>
 
+        <!-- Background Tagging Progress Bar (visible when tagging runs in background) -->
+        <div id="bg-tag-progress" class="bg-tag-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill" id="bg-tag-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
+            <button class="bg-tag-progress-btn" id="bg-tag-cancel" title="Cancel tagging">Cancel</button>
+            <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal">Details</button>
+        </div>
+
         <!-- Main Content Area -->
         <main id="main-content" class="main-content" role="main" tabindex="-1">
             <!-- Gallery View -->
@@ -761,12 +771,22 @@
                         <div class="sidebar-header-v2">
                               <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
                               <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Click to edit • Ctrl/Shift multi-select • Use Top/Bottom or Alt+Home/End for big queues</p>
-                            <div class="queue-actions-row">
+                            <div class="queue-selection-count-row">
                                 <span class="queue-selection-count" id="queue-selection-count"></span>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-top" title="Move to top" type="button">⤒</button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-up" title="Move up" type="button">↑</button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-down" title="Move down" type="button">↓</button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-bottom" title="Move to bottom" type="button">⤓</button>
+                            </div>
+                            <div class="queue-actions-row" style="margin-bottom: 6px;">
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-select-all" title="Select All" type="button" aria-label="Select all queue items">✓ <span data-i18n="censor.selectAll">All</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-deselect-all" title="Deselect All" type="button" aria-label="Deselect all queue items">✕ <span data-i18n="censor.deselectAll">None</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-filter" title="Filter queue" type="button" aria-label="Filter queue"><span>🔍</span></button>
+                            </div>
+                            <div class="queue-filter-row" id="queue-filter-row" style="display: none; margin-bottom: 6px;">
+                                <input type="text" id="queue-filter-input" class="input-field" placeholder="Filter by filename..." style="width: 100%; padding: 6px 8px; font-size: 12px;">
+                            </div>
+                            <div class="queue-actions-row">
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-top" title="Move to top" type="button" aria-label="Move selection to top">⤒ <span data-i18n="common.top">Top</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-up" title="Move up" type="button" aria-label="Move selection up">↑ <span data-i18n="common.up">Up</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-down" title="Move down" type="button" aria-label="Move selection down">↓ <span data-i18n="common.down">Down</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-bottom" title="Move to bottom" type="button" aria-label="Move selection to bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
                             </div>
                         </div>
 
@@ -883,22 +903,44 @@
                             <div class="section-content" id="section-detection" style="padding-top: 8px;">
                                 <div class="model-health-banner model-health-banner-compact" id="censor-model-health"></div>
                                 <div class="helper-text" id="censor-simple-guide" style="margin: 8px 0 10px;"></div>
+
+                                <!-- Unified Model Toggles -->
                                 <div class="prop-group-v2" style="margin-bottom: 8px;">
                                     <label data-i18n="censor.detectionModel">Detection Model</label>
                                     <select id="censor-model-type" class="toolbar-select" style="width: 100%; padding: 6px 8px;">
-                                        <option value="legacy" data-i18n="censor.legacyYolo">Legacy YOLO (Default)</option>
+                                        <option value="legacy" data-i18n="censor.legacyYolo">Wenaka YOLO (Local)</option>
                                         <option value="nudenet" data-i18n="censor.nudenet">NudeNet v3</option>
-                                        <option value="both" data-i18n="censor.both">Both (NudeNet + Legacy)</option>
+                                        <option value="both" data-i18n="censor.both">Both (NudeNet + Wenaka)</option>
                                     </select>
                                 </div>
-                                <div class="sidebar-action-row-v2">
-                                    <button class="btn-side-v2" id="btn-open-detect-modal"
-                                        title="Configure detection settings">
-                                        <span class="btn-icon">⚙️</span> <span data-i18n="common.settings">Settings</span>
-                                    </button>
+
+                                <!-- Confidence Threshold (inline in sidebar) -->
+                                <div class="prop-group-v2" style="margin-bottom: 8px;">
+                                    <label><span data-i18n="censor.confidenceThreshold">Confidence</span>: <span id="censor-confidence-value-sidebar">0.50</span></label>
+                                    <input type="range" id="censor-confidence-sidebar" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
+                                </div>
+
+                                <!-- SAM3 Confidence (shown when SAM3 available) -->
+                                <div class="prop-group-v2" id="sam3-confidence-group" style="margin-bottom: 8px; display: none;">
+                                    <label><span data-i18n="censor.sam3Confidence">SAM3 Threshold</span>: <span id="sam3-confidence-value">0.50</span></label>
+                                    <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
+                                </div>
+
+                                <!-- Action buttons: Detect Current + Detect All + Settings -->
+                                <div class="sidebar-action-row-v2" style="grid-template-columns: 1fr;">
                                     <button class="btn-side-v2 primary" id="btn-auto-detect-current"
                                         title="Run AI detection on current image (D)" style="white-space: nowrap;">
                                         <span class="btn-icon">🎯</span> <span data-i18n="censor.detectCurrentBtn">Detect Current</span> <kbd>D</kbd>
+                                    </button>
+                                    <button class="btn-side-v2 primary" id="btn-auto-detect-all-sidebar"
+                                        title="Run AI detection on all queue images">
+                                        <span class="btn-icon">⚡</span> <span data-i18n="censor.detectAll">Detect All</span>
+                                    </button>
+                                </div>
+                                <div class="sidebar-action-row-v2" style="grid-template-columns: 1fr; margin-top: 6px;">
+                                    <button class="btn-side-v2" id="btn-open-detect-modal"
+                                        title="Configure detection settings">
+                                        <span class="btn-icon">⚙️</span> <span data-i18n="censor.advancedSettings">Advanced Settings</span>
                                     </button>
                                 </div>
                             </div>
@@ -1000,12 +1042,22 @@
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="dick" checked>
                                         <span class="checkbox-custom"></span>
-                                        <span class="checkbox-text" data-i18n="censor.regionDick">Dick</span>
+                                        <span class="checkbox-text" data-i18n="censor.regionDick">Dick / Penis</span>
                                     </label>
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="anus" checked>
                                         <span class="checkbox-custom"></span>
                                         <span class="checkbox-text" data-i18n="censor.regionAnus">Anus</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" class="target-region-check" value="buttocks" checked>
+                                        <span class="checkbox-custom"></span>
+                                        <span class="checkbox-text" data-i18n="censor.regionButtocks">Buttocks</span>
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" class="target-region-check" value="penis" checked>
+                                        <span class="checkbox-custom"></span>
+                                        <span class="checkbox-text" data-i18n="censor.regionPenis">Penis (NudeNet)</span>
                                     </label>
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="cum">
@@ -1062,22 +1114,32 @@
 
                         <div class="censor-detect-section censor-detect-section-pro" id="censor-pro-segmentation-group">
                             <div class="censor-detect-section-header">
-                                <h4 class="censor-detect-section-title" data-i18n="censor.proSegmentation">Pro Segmentation</h4>
-                                <p class="censor-detect-section-note" data-i18n="censor.proSegmentationHelp">Use SAM3 for text-guided precision masks when the runtime is ready.</p>
+                                <h4 class="censor-detect-section-title" data-i18n="censor.proSegmentation">Pro Segmentation (SAM3)</h4>
+                                <p class="censor-detect-section-note" data-i18n="censor.proSegmentationHelp">Use SAM3 for text-guided precision masks when the runtime is ready. SAM3 can refine individual boxes or follow a text prompt.</p>
                             </div>
 
                             <div class="form-group">
-                                <label data-i18n="censor.advancedPrecision">Advanced Precision (Pro)</label>
+                                <label><span data-i18n="censor.sam3Confidence">SAM3 Confidence Threshold</span>: <span id="sam3-confidence-modal-value">0.50</span></label>
+                                <input type="range" id="sam3-confidence-modal" min="0.0" max="1.0" step="0.05" value="0.5">
+                                <small class="helper-text" data-i18n="censor.sam3ConfidenceHelp">Controls SAM3 segmentation confidence. Lower values capture more area, higher values are more precise.</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label data-i18n="censor.advancedPrecision">Text Prompt Segmentation</label>
                                 <input type="text" id="censor-text-prompt" class="input-field"
                                     placeholder="e.g. exposed breasts, face, tattoo, hand" data-i18n-placeholder="censor.textPromptPlaceholder">
                                 <small class="helper-text" id="censor-text-prompt-help" data-i18n="censor.textPromptHelp">Uses SAM3 text-prompt segmentation on the current image when the GPU runtime is ready.</small>
                             </div>
 
                             <div class="modal-actions censor-detect-actions">
-                                <button class="btn btn-secondary" id="btn-segment-text-current" style="width: 100%;">
+                                <button class="btn btn-secondary" id="btn-segment-text-current" style="flex: 1;">
                                     ✨ <span data-i18n="censor.segmentText">Segment by Text</span>
                                 </button>
+                                <button class="btn btn-primary" id="btn-sam3-batch-refine" style="flex: 1;">
+                                    ⚡ <span data-i18n="censor.sam3BatchRefine">SAM3 Refine All</span>
+                                </button>
                             </div>
+                            <small class="helper-text" data-i18n="censor.sam3MultiBoxHelp">SAM3 processes one image at a time. "Refine All" iterates through queued detections sequentially.</small>
                         </div>
                     </div>
                 </div>
@@ -1424,6 +1486,13 @@
                         </div>
                         <div id="modal-tags-list" class="tags-list"></div>
                     </div>
+                    <div class="modal-caption" id="modal-caption-section" style="display: none;">
+                        <div class="modal-tags-header">
+                            <h4 data-i18n="modal.aiCaption">AI Caption</h4>
+                            <button class="btn btn-ghost btn-small" id="btn-copy-caption" title="Copy caption">Copy</button>
+                        </div>
+                        <p id="modal-caption-text" class="modal-caption-content" style="white-space: pre-wrap; font-style: italic; color: var(--text-secondary); line-height: 1.6;"></p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1471,12 +1540,12 @@
         <!-- Tag Modal -->
         <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
-            <div class="modal-content modal-medium">
-                <h3 id="tag-modal-title">Tag Images with WD14</h3>
-                <p class="modal-description">Uses WD14 tagger to automatically tag your images with anime/illustration tags.</p>
+            <div class="modal-content modal-large tagger-modal-shell">
+                <h3 id="tag-modal-title" data-i18n="modal.tagTitle">Tag Images with WD14</h3>
+                <p class="modal-description" data-i18n="modal.tagDescription">Uses WD14 tagger to automatically tag your images with anime/illustration tags.</p>
 
                 <div class="form-group">
-                    <label for="tag-model-select" id="tag-model-select-label">Model</label>
+                    <label for="tag-model-select" id="tag-model-select-label" data-i18n="modal.tagModel">Model</label>
                     <select id="tag-model-select" class="input-field" aria-describedby="tag-model-select-label">
                         <option value="wd-swinv2-tagger-v3" selected>wd-swinv2-tagger-v3</option>
                         <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
@@ -1502,66 +1571,103 @@
                     <small class="helper-text">Required when using custom model</small>
                 </div>
 
-                <div class="system-info-panel" id="system-info-panel" style="display:none">
-                    <div class="system-info-content" id="system-info-content"></div>
-                    <div class="system-info-batch" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
-                        <label for="tagger-batch-size" style="font-size:12px;color:var(--text-muted,#8899aa);white-space:nowrap;">Batch size:</label>
-                        <select id="tagger-batch-size" style="padding:2px 6px;font-size:12px;background:var(--bg-card,#1a2332);color:var(--text-primary,#e2e8f0);border:1px solid rgba(255,255,255,0.1);border-radius:4px;">
-                            <option value="1">1 (safest)</option>
-                            <option value="2">2</option>
-                            <option value="4">4</option>
-                            <option value="8">8</option>
-                            <option value="10">10</option>
-                            <option value="16">16</option>
-                            <option value="32">32 (needs lots of RAM/VRAM)</option>
-                        </select>
-                        <small style="font-size:11px;color:var(--text-muted,#8899aa);">Higher = faster but uses more memory</small>
+                <div class="tagger-intel-grid">
+                    <div class="system-info-panel" id="system-info-panel" style="display:none">
+                        <div class="system-info-content">
+                            <div class="system-info-chip-row">
+                                <span class="system-info-chip" id="tag-hardware-chip">Detecting hardware...</span>
+                                <span class="system-info-chip" id="tag-risk-chip">Risk unknown</span>
+                                <span class="system-info-chip" id="tag-provider-chip">Provider unknown</span>
+                            </div>
+                            <div class="system-info-line" id="system-info-content">Detecting hardware...</div>
+                            <div class="system-info-line system-info-line-strong" id="tag-system-recommendation">Loading the recommended runtime...</div>
+                            <div class="system-info-line" id="tag-batch-recommendation">Recommended runtime chunk size will appear here.</div>
+                        </div>
+                    </div>
+
+                    <div class="tagger-model-panel" id="tagger-model-panel" role="status" aria-live="polite">
+                        <div class="tagger-model-panel-title" data-i18n="modal.tagModelSnapshot">Model Snapshot</div>
+                        <div class="tagger-model-panel-subtitle" id="tag-model-subtitle">Balanced default. Good speed, good quality, and less likely to freeze your PC.</div>
+                        <div class="tagger-model-badges" id="tag-model-badges"></div>
+                        <div class="tagger-model-note" id="tag-model-note">The selected model decides quality, tag density, and hardware pressure.</div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>General Tag Threshold</label>
-                    <div class="range-row">
-                        <input type="range" id="tag-threshold" min="0.0" max="1.0" step="0.05" value="0.35">
-                        <span class="range-value" id="tag-threshold-value">0.35</span>
+                <div class="tag-threshold-section" id="tag-threshold-section">
+                    <div class="form-group">
+                        <label data-i18n="modal.tagGeneralThreshold">General Tag Threshold</label>
+                        <div class="range-row">
+                            <input type="range" id="tag-threshold" min="0.0" max="1.0" step="0.01" value="0.35">
+                            <span class="range-value" id="tag-threshold-value">0.35</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label data-i18n="modal.tagCharacterThreshold">Character Tag Threshold</label>
+                        <div class="range-row">
+                            <input type="range" id="tag-character-threshold" min="0.0" max="1.0" step="0.01" value="0.85">
+                            <span class="range-value" id="tag-character-threshold-value">0.85</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Character Tag Threshold</label>
-                    <div class="range-row">
-                        <input type="range" id="tag-character-threshold" min="0.0" max="1.0" step="0.05" value="0.85">
-                        <span class="range-value" id="tag-character-threshold-value">0.85</span>
-                    </div>
+                <div class="tag-threshold-note" id="tag-threshold-note" hidden>
+                    <div class="tag-threshold-note-title" data-i18n="modal.tagThresholdNotUsedTitle">This model does not use WD14 thresholds.</div>
+                    <div class="tag-threshold-note-body" data-i18n="modal.tagThresholdNotUsedBody">ToriiGate generates tags directly. There is nothing to tune here, so just start the run.</div>
                 </div>
 
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="tag-retag-all">
                         <span class="checkbox-custom"></span>
-                        <span class="checkbox-text">Re-tag already tagged images?</span>
+                        <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag already tagged images?</span>
                     </label>
                 </div>
 
                 <div class="form-group">
                     <div class="tag-runtime-card" role="status" aria-live="polite">
-                        <div class="tag-runtime-eyebrow">Recommended Runtime</div>
+                        <div class="tag-runtime-eyebrow" data-i18n="modal.tagRuntimePlan">Runtime Plan</div>
+                        <div class="tag-runtime-chip-row">
+                            <span class="tag-runtime-chip" id="tag-runtime-mode-chip">Auto Runtime</span>
+                            <span class="tag-runtime-chip" id="tag-runtime-provider-chip">Provider Unknown</span>
+                            <span class="tag-runtime-chip" id="tag-runtime-chunk-chip">Chunk --</span>
+                        </div>
                         <p class="tag-runtime-summary" id="tag-runtime-summary">The app will automatically use the recommended runtime mode for this model.</p>
+                        <p class="tag-runtime-detail" id="tag-runtime-detail">The final provider is decided when the model session is created.</p>
                     </div>
                     <details class="tag-runtime-advanced" id="tag-runtime-advanced">
                         <summary class="tag-runtime-advanced-summary">
-                            <span>Advanced Runtime Override</span>
-                            <span class="tag-runtime-advanced-hint" id="tag-runtime-advanced-hint">Only change this if you already know your setup is stable.</span>
+                            <span data-i18n="modal.tagAdvancedOverride">Advanced Override</span>
+                            <span class="tag-runtime-advanced-hint" id="tag-runtime-advanced-hint" data-i18n="modal.tagAdvancedHint">Optional. Most runs do not need this.</span>
                         </summary>
                         <div class="tag-runtime-advanced-body">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="tag-use-gpu" checked>
                                 <span class="checkbox-custom"></span>
-                                <span class="checkbox-text">Run this tagging job on GPU</span>
+                                <span class="checkbox-text" data-i18n="modal.tagUseGpu">Run this tagging job on GPU</span>
                             </label>
                             <small class="helper-text" id="tag-gpu-help" aria-live="polite">Recommended runtime mode is active. You usually do not need to change anything here.</small>
+                            <div class="tag-runtime-chunk-row">
+                                <label for="tagger-batch-size" id="tagger-batch-size-label" data-i18n="modal.tagRuntimeChunk">Runtime chunk size</label>
+                                <select id="tagger-batch-size" class="input-field" aria-describedby="tagger-batch-size-label tag-batch-help">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="4">4</option>
+                                    <option value="8">8</option>
+                                    <option value="16">16</option>
+                                    <option value="24">24</option>
+                                    <option value="32">32</option>
+                                    <option value="48">48</option>
+                                    <option value="64">64</option>
+                                </select>
+                                <small class="helper-text" id="tag-batch-help">This affects how many files the worker pulls per cycle. It is not true multi-image ONNX batching.</small>
+                            </div>
                         </div>
                     </details>
+                    <div class="tagger-disabled-notice" id="tagger-disabled-notice" hidden>
+                        <div class="tagger-disabled-title" id="tagger-disabled-title">This catalog entry is not runnable in the current build.</div>
+                        <div class="tagger-disabled-body" id="tagger-disabled-body">Use one of the ONNX taggers above for now.</div>
+                    </div>
                 </div>
 
                 <div class="progress-container" id="tag-progress-container" style="display: none;">
@@ -1571,14 +1677,12 @@
                     <span class="progress-text" id="tag-progress-text">Loading model...</span>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-export-tags-json" title="Export all tags to JSON file">📤 Export
-                        Tags</button>
-                    <button class="btn btn-ghost" id="btn-import-tags" title="Import tags from JSON file">📥 Import
-                        Tags</button>
+                    <button class="btn btn-ghost" id="btn-export-tags-json" title="Export all tags to JSON file">📤 <span data-i18n="modal.tagExport">Export Tags</span></button>
+                    <button class="btn btn-ghost" id="btn-import-tags" title="Import tags from JSON file">📥 <span data-i18n="modal.tagImport">Import Tags</span></button>
                     <input type="file" id="import-tags-file" accept=".json" style="display: none;">
                     <div style="flex: 1;"></div>
-                    <button class="btn btn-ghost" id="btn-cancel-tag">Close</button>
-                    <button class="btn btn-primary" id="btn-start-tag">Start Tagging</button>
+                    <button class="btn btn-ghost" id="btn-cancel-tag" data-i18n="modal.tagCancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-tag" data-i18n="modal.tagStart">Start Tagging</button>
                 </div>
             </div>
         </div>
@@ -1883,51 +1987,70 @@
         <!-- Rename Modal (for Censor Edit) -->
         <div class="modal" id="rename-modal">
             <div class="modal-backdrop"></div>
-            <div class="modal-content modal-medium">
+            <div class="modal-content modal-large rename-modal-shell">
                 <button class="modal-close" id="btn-close-rename">✕</button>
-                <h3>📝 Batch Rename Images</h3>
-                <p class="modal-description">Set naming pattern for all queued images</p>
+                <h3>📝 <span data-i18n="rename.title">Batch Rename Images</span></h3>
+                <p class="modal-description" data-i18n="rename.description">Set naming pattern for all queued images</p>
 
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="rename-use-original">
-                        <span class="checkbox-custom"></span>
-                        <span class="checkbox-text">Use Original Filename</span>
-                    </label>
-                    <small class="helper-text">Keep original names instead of sequential numbering</small>
+                <div class="rename-form-grid">
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="rename-use-original">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="rename.useOriginal">Use Original Filename</span>
+                        </label>
+                        <small class="helper-text" data-i18n="rename.useOriginalHelper">Keep original names instead of sequential numbering</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="rename-only-selected">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="rename.onlySelected">Rename selected queue items only</span>
+                        </label>
+                        <small class="helper-text" id="rename-selection-help" data-i18n="rename.onlySelectedHelper">If nothing is selected, the whole queue will be renamed.</small>
+                    </div>
+
+                    <div class="form-group" id="rename-custom-group">
+                        <label data-i18n="rename.baseName">Base Name</label>
+                        <input type="text" id="rename-base" class="input-field" placeholder="Image" value="Image" data-i18n-placeholder="rename.baseNamePlaceholder">
+                        <small class="helper-text" data-i18n="rename.baseNameHelper">Base name for all images</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label data-i18n="rename.startingNumber">Starting Number</label>
+                        <input type="number" id="rename-start" class="input-field" min="1" value="1">
+                        <small class="helper-text" data-i18n="rename.startingNumberHelper">Images will be numbered sequentially from this number</small>
+                    </div>
+
+                    <div class="form-group rename-pattern-group">
+                        <label data-i18n="censor.renamePattern">Rename Pattern</label>
+                        <input type="text" id="rename-pattern" class="input-field" placeholder="{original}_{n:04d}">
+                        <small class="helper-text" data-i18n="censor.renameTokensHelp">Tokens: {original} = original name, {n} = number, {n:04d} = padded, {date} = date, {time} = time</small>
+                    </div>
                 </div>
 
-                <div class="form-group" id="rename-custom-group">
-                    <label>Base Name</label>
-                    <input type="text" id="rename-base" class="input-field" placeholder="Image" value="Image">
-                    <small class="helper-text">Base name for all images</small>
-                </div>
-
-                <div class="form-group">
-                    <label data-i18n="rename.startingNumber">Starting Number</label>
-                    <input type="number" id="rename-start" class="input-field" min="1" value="1">
-                    <small class="helper-text" data-i18n="rename.startingNumberHelper">Images will be numbered sequentially from this number</small>
-                </div>
-
-                <div class="form-group">
-                    <label data-i18n="censor.renamePattern">Rename Pattern</label>
-                    <input type="text" id="rename-pattern" class="input-field" placeholder="{original}_{n:04d}">
-                    <small class="helper-text" data-i18n="censor.renameTokensHelp">Tokens: {original} = original name, {n} = number, {n:04d} = padded, {date} = date, {time} = time</small>
-                </div>
-
-                <div class="form-group">
+                <div class="form-group rename-preview-group">
                     <label data-i18n="censor.renamePreview">Preview</label>
                     <div class="rename-preview">
-                        <div class="preview-item">Image_001.png</div>
-                        <div class="preview-item">Image_002.png</div>
-                        <div class="preview-item">Image_003.png</div>
-                        <div class="preview-hint">...and so on</div>
+                        <div class="rename-preview-summary" id="rename-preview-summary" data-i18n="rename.previewSummary">Previewing the first few files.</div>
+                        <div class="rename-preview-list" id="rename-preview-list">
+                            <div class="rename-preview-row rename-preview-row-head">
+                                <span data-i18n="rename.currentName">Current</span>
+                                <span data-i18n="rename.newName">New name</span>
+                            </div>
+                            <div class="rename-preview-row">
+                                <span>image-001.png</span>
+                                <span>Image_001.png</span>
+                            </div>
+                        </div>
+                        <div class="rename-preview-alert" id="rename-preview-alert"></div>
                     </div>
                 </div>
 
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-rename">Cancel</button>
-                    <button class="btn btn-primary" id="btn-apply-rename">Apply Rename</button>
+                    <button class="btn btn-ghost" id="btn-cancel-rename" data-i18n="rename.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-apply-rename" data-i18n="rename.apply">Apply Rename</button>
                 </div>
             </div>
         </div>
@@ -1935,40 +2058,42 @@
         <!-- Save Options Modal (for Censor Edit) -->
         <div class="modal" id="save-options-modal">
             <div class="modal-backdrop"></div>
-            <div class="modal-content modal-medium">
+            <div class="modal-content modal-large save-options-modal-shell">
                 <button class="modal-close" id="btn-close-save-options">✕</button>
-                <h3>💾 Save Options</h3>
-                <p class="modal-description">Configure output settings before saving all images</p>
+                <h3>💾 <span data-i18n="save.title">Save Options</span></h3>
+                <p class="modal-description" data-i18n="save.description">Configure output settings before saving all images</p>
 
-                <div class="form-group">
-                    <label>Output Folder</label>
-                    <input type="text" id="save-output-folder" class="input-field" placeholder="D:\censored_output">
-                    <small class="helper-text">Folder where processed images will be saved</small>
-                </div>
+                <div class="save-options-grid">
+                    <div class="form-group save-options-folder-group">
+                        <label data-i18n="save.outputFolder">Output Folder</label>
+                        <input type="text" id="save-output-folder" class="input-field" placeholder="D:\censored_output">
+                        <small class="helper-text" data-i18n="save.outputFolderHelper">Folder where processed images will be saved</small>
+                    </div>
 
-                <div class="form-group">
-                    <label>Metadata Handling</label>
-                    <select id="save-metadata-option" class="input-field">
-                        <option value="strip">Strip All Metadata (Recommended for sharing)</option>
-                        <option value="keep">Keep Original Metadata</option>
-                        <option value="minimal">Keep Only Color Profile / DPI</option>
-                    </select>
-                    <small class="helper-text">Choose how to handle image metadata/EXIF data</small>
-                </div>
+                    <div class="form-group">
+                        <label data-i18n="save.metadataHandling">Metadata Handling</label>
+                        <select id="save-metadata-option" class="input-field">
+                            <option value="strip" data-i18n="save.metadataStrip">Strip All Metadata (Recommended for sharing)</option>
+                            <option value="keep" data-i18n="save.metadataKeep">Keep Original Metadata</option>
+                            <option value="minimal" data-i18n="save.metadataMinimal">Keep Only Color Profile / DPI</option>
+                        </select>
+                        <small class="helper-text" data-i18n="save.metadataHelper">Choose how to handle image metadata/EXIF data</small>
+                    </div>
 
-                <div class="form-group">
-                    <label>Output Format</label>
-                    <select id="save-format-option" class="input-field">
-                        <option value="png">PNG (Lossless, larger file)</option>
-                        <option value="jpg">JPG (Smaller file, widely compatible)</option>
-                        <option value="webp">WebP (Smaller file, good quality)</option>
-                    </select>
-                    <small class="helper-text">Choose the output image format</small>
+                    <div class="form-group">
+                        <label data-i18n="save.outputFormat">Output Format</label>
+                        <select id="save-format-option" class="input-field">
+                            <option value="png" data-i18n="save.formatPng">PNG (Lossless, larger file)</option>
+                            <option value="jpg" data-i18n="save.formatJpg">JPG (Smaller file, widely compatible)</option>
+                            <option value="webp" data-i18n="save.formatWebp">WebP (Smaller file, good quality)</option>
+                        </select>
+                        <small class="helper-text" data-i18n="save.formatHelper">Choose the output image format</small>
+                    </div>
                 </div>
 
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-save-options">Cancel</button>
-                    <button class="btn btn-primary" id="btn-confirm-save-options">💾 Save All Images</button>
+                    <button class="btn btn-ghost" id="btn-cancel-save-options" data-i18n="save.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-confirm-save-options">💾 <span data-i18n="save.saveAll">Save All Images</span></button>
                 </div>
             </div>
         </div>

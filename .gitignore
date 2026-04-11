@@ -105,6 +105,35 @@ reference/
 # Internal planning docs
 .plans/
 
+# Claude Code internal
+.claude/
+
+# Node.js (E2E testing infrastructure, root level)
+node_modules/
+package.json
+package-lock.json
+
+# ToriiGate model files (auto-downloaded, very large)
+models/toriigate/
+
+# Playwright persistent state
+tests/e2e/storage/
+
+# Dev-only scripts (not for distribution)
+backend/fix_db_ratings.py
+backend/test_censor_logic.py
+backend/test_functionality.py
+backend/test_images_thumbnail.py
+backend/test_metadata_parser_params.py
+backend/verify_sorting.py
+
+# Internal docs (generated, not for public repo)
+docs/API.md
+docs/DELETION_LOG.md
+docs/IMPROVEMENT_PLAN.md
+docs/SECURITY_ARCHITECTURE.md
+docs/architecture.md
+
 # Windows temp files
 nul
 

@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test'
 
+const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
+
 async function getGalleryScrollState(page) {
   return page.evaluate(() => {
     const grid = document.getElementById('gallery-grid')
@@ -374,6 +376,41 @@ test.describe('Smoke Tests', () => {
     }
   })
 
+  test('should list camie, pixai, and ToriiGate in the tagger modal', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+
+    const camieOption = page.locator('#tag-model-select option[value="camie-tagger-v2"]')
+    const pixaiOption = page.locator('#tag-model-select option[value="pixai-tagger-v0.9"]')
+    const toriiGateOption = page.locator('#tag-model-select option[value="toriigate-0.5"]')
+
+    await expect(camieOption).toHaveCount(1)
+    await expect(pixaiOption).toHaveCount(1)
+    await expect(toriiGateOption).toHaveCount(1)
+    await expect(pixaiOption).toBeEnabled()
+    await expect(toriiGateOption).toBeEnabled()
+
+    await page.locator('#tag-model-select').selectOption('camie-tagger-v2')
+    await expect(page.locator('#tag-model-help')).toContainText(/newer danbooru-era tag space|modern tag coverage|tagger\.desc|Q\d\/5/i)
+    await expect(page.locator('#tag-threshold')).toHaveValue('0.62')
+    await expect(page.locator('#tag-character-threshold')).toHaveValue('0.78')
+
+    await page.locator('#tag-model-select').selectOption('pixai-tagger-v0.9')
+    await expect(page.locator('#tag-model-help')).toContainText(/pixai v0.9 onnx export|newer tag space|rating fallback|tagger\.desc|Q\d\/5/i)
+    await expect(page.locator('#tag-threshold')).toHaveValue('0.3')
+    await expect(page.locator('#tag-character-threshold')).toHaveValue('0.85')
+
+    await page.locator('#tag-model-select').selectOption('toriigate-0.5')
+    await expect(page.locator('#tag-model-help')).toContainText(/multimodal caption tagger|VLM|tagger\.desc/i)
+    await expect(page.locator('#tag-threshold-section')).toBeHidden()
+    await expect(page.locator('#tag-threshold-note')).toBeVisible()
+    await expect(page.locator('#tag-threshold-note')).toContainText(/does not use WD14 thresholds|generates tags directly/i)
+    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/PyTorch/i)
+  })
+
   test('should keep canonical WD model names in the tagger modal', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -386,37 +423,96 @@ test.describe('Smoke Tests', () => {
     expect(optionTexts.some((text) => text.includes('wd-eva02-large-tagger-v3'))).toBeTruthy()
     expect(optionTexts.some((text) => /Best Quality/i.test(text))).toBeFalsy()
     await expect(page.locator('#tag-model-select')).toHaveValue('wd-swinv2-tagger-v3')
-    await expect(page.locator('#tag-use-gpu')).toBeChecked()
+    await expect(page.locator('#system-info-panel')).toBeVisible()
+    await expect(page.locator('#system-info-content')).toBeVisible()
+    await expect(page.locator('#tagger-model-panel')).toBeVisible()
+    await expect(page.locator('#tag-model-badges')).toBeVisible()
+    await expect(page.locator('#tag-runtime-mode-chip')).toBeVisible()
+    await expect(page.locator('#tag-runtime-provider-chip')).toBeVisible()
+    await expect(page.locator('#tag-runtime-chunk-chip')).toBeVisible()
+    await expect(page.locator('#tag-batch-recommendation')).toContainText(/Recommended chunk size|chunkHelp/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended chunk|CPU Safe Mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
   })
 
-  test('should switch risky tagger models to CPU safe mode by default', async ({ page }) => {
+  test('should keep risky tagger models in adaptive runtime mode by default', async ({ page }) => {
+    await page.route('**/api/system-info', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          system_info: {
+            total_ram_gb: 64,
+            available_ram_gb: 48,
+            gpu_name: 'NVIDIA GeForce RTX 4090',
+            gpu_vram_total_mb: 24576,
+            gpu_vram_available_mb: 22000,
+            onnx_providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+          },
+          recommendation: {
+            recommended_batch_size: 12,
+            recommended_cpu_chunk_size: 32,
+            recommended_use_gpu: true,
+            recommended_session_refresh_interval: 180,
+            risk_level: 'low',
+            message: 'Sufficient VRAM for aggressive batched GPU inference.',
+          },
+        }),
+      })
+    })
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-tag').click()
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
 
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/fastest stable path/i)
-    await expect(page.locator('#tag-runtime-advanced')).not.toHaveAttribute('open', /open/)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended chunk|Adaptive GPU mode|recommended fast path|tagger\.runtime|tagger\.chunkHelp/i)
 
     await page.locator('#tag-model-select').selectOption('wd-eva02-large-tagger-v3')
 
-    await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
-    await expect(page.locator('#tag-use-gpu')).toBeDisabled()
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/Protected CPU Safe Mode/i)
-    await expect(page.locator('#tag-model-help')).toContainText(/Protected CPU Safe Mode/i)
-    await expect(page.locator('#tag-gpu-help')).toContainText(/Protected CPU Safe Mode/i)
+    await expect(page.locator('#tag-use-gpu')).toBeChecked()
+    await expect(page.locator('#tag-use-gpu')).toBeEnabled()
+    await expect(page.locator('#tag-provider-chip')).toContainText(/CUDA/i)
+    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Adaptive GPU mode|recommended fast path|Recommended chunk|tagger\.runtime|tagger\.chunkHelp/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Q\d\/5/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/Adaptive runtime is active|gpuHelp/i)
 
     await page.locator('#tag-model-select').selectOption('custom')
     await expect(page.locator('#custom-model-group')).toBeVisible()
     await expect(page.locator('#custom-tags-group')).toBeVisible()
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode for the custom model/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode|tagger\.runtime|Custom model/i)
     await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
     await expect(page.locator('#tag-use-gpu')).toBeEnabled()
   })
 
-  test('should keep Max Quality tagging on protected CPU Safe Mode when started', async ({ page }) => {
+  test('should require confirmation before starting Max Quality on risky GPU runtime', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
+
+    await page.route('**/api/system-info', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          system_info: {
+            total_ram_gb: 64,
+            available_ram_gb: 48,
+            gpu_name: 'NVIDIA GeForce RTX 4090',
+            gpu_vram_total_mb: 24576,
+            gpu_vram_available_mb: 22000,
+            onnx_providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+          },
+          recommendation: {
+            recommended_batch_size: 12,
+            recommended_cpu_chunk_size: 32,
+            recommended_use_gpu: true,
+            recommended_session_refresh_interval: 180,
+            risk_level: 'low',
+            message: 'Sufficient VRAM for aggressive batched GPU inference.',
+          },
+        }),
+      })
+    })
 
     await page.route('**/api/tag/start', async (route) => {
       capturedPayload = route.request().postDataJSON()
@@ -450,7 +546,8 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#tag-model-select').selectOption('wd-eva02-large-tagger-v3')
     await page.locator('#btn-start-tag').click()
-    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
 
     await expect.poll(() => capturedPayload, {
       message: 'Expected the Max Quality tag start payload',
@@ -458,8 +555,8 @@ test.describe('Smoke Tests', () => {
 
     expect(capturedPayload).toMatchObject({
       model_name: 'wd-eva02-large-tagger-v3',
-      use_gpu: false,
-      allow_unsafe_acceleration: false,
+      use_gpu: true,
+      allow_unsafe_acceleration: true,
     })
   })
 
@@ -503,7 +600,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU|gpuHelpRiskyOverride|CPU Safe Mode|gpuHelpCustomCpu/i)
 
     await page.locator('#btn-start-tag').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
@@ -561,7 +658,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU|gpuHelpRiskyOverride|CPU Safe Mode|gpuHelpCustomCpu/i)
 
     await page.locator('#btn-start-tag').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
@@ -588,7 +685,9 @@ test.describe('Smoke Tests', () => {
     await expect(selectionFab).toBeHidden()
 
     await page.locator('#btn-toggle-select').click()
-    await expect(selectionFab).toBeHidden()
+    await expect(selectionFab).toBeVisible()
+    await expect(page.locator('#btn-export-selected')).toBeDisabled()
+    await expect(page.locator('#btn-send-to-censor')).toBeDisabled()
 
     const firstGalleryItem = page.locator('#gallery-grid .gallery-item').first()
     await expect(firstGalleryItem).toBeVisible()
@@ -1735,16 +1834,345 @@ test.describe('Smoke Tests', () => {
     await page.locator('.nav-tabs [data-view="censor"]').click()
     await expect(page.locator('#view-censor.active')).toBeVisible()
 
-    await expect(page.locator('#censor-simple-guide')).toContainText('Keep mode on Both')
+    await expect(page.locator('#censor-simple-guide')).toContainText('Recommended for most people')
     await page.locator('#btn-open-detect-modal').click()
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
-    await expect(page.locator('#censor-capability-panel')).toContainText('5 built-in privacy classes')
+    await expect(page.locator('#censor-capability-panel')).toContainText('Built-in NSFW body-part classes')
     await expect(page.locator('#censor-capability-panel')).toContainText('Prompt-guided segmentation')
     await expect(page.locator('#censor-text-prompt')).toBeEnabled()
 
-    await page.selectOption('#censor-model-file', 'C:/models/yolo26s-seg.onnx')
-    await expect(page.locator('.target-region-check').first()).toBeDisabled()
-    await expect(page.locator('#censor-target-region-help')).toContainText('general model')
+    await page.selectOption('#censor-model-type', 'legacy')
+    const advancedModelsToggle = page.locator('label.checkbox-label', {
+      has: page.locator('#censor-show-advanced-models'),
+    })
+    await advancedModelsToggle.scrollIntoViewIfNeeded()
+    await advancedModelsToggle.click()
+    await expect(page.locator('#censor-show-advanced-models')).toBeChecked()
+    let advancedLegacyModelPath = ''
+    await expect.poll(async () => {
+      const optionValues = await page.locator('#censor-model-file option').evaluateAll((options) =>
+        options
+          .map((option) => ({
+            text: option.textContent || '',
+            value: (option as HTMLOptionElement).value || '',
+          }))
+          .filter((option) => /yolo26s-seg\.onnx/i.test(option.text) || /yolo26s-seg\.onnx/i.test(option.value))
+          .map((option) => option.value)
+      )
+      advancedLegacyModelPath = optionValues[0] || ''
+      return advancedLegacyModelPath
+    }, { timeout: 10000 }).not.toBe('')
+    await page.selectOption('#censor-model-file', advancedLegacyModelPath)
+    await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class segmentation model')
+    await expect(page.locator('.target-region-check').first()).toBeEnabled()
+    await expect(page.locator('#censor-target-region-help')).toContainText(/switch back to the recommended privacy detector|Wenaka \/ NudeNet families|自动切回推荐的隐私检测路线/i)
+  })
+
+  test('quick auto censor should auto-restore the privacy detector when a general legacy model is selected', async ({ page }) => {
+    let detectPayload: any = null
+
+    await page.route('**/api/censor/models', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          recommended_backend: 'both',
+          models: [
+            {
+              id: 'legacy',
+              name: 'Legacy YOLO',
+              available: true,
+              recommended: true,
+              default_model_path: 'C:/models/wenaka_yolov8s-seg.onnx',
+              simple_user_advice: 'Keep mode on Both and leave the model path blank.',
+              files: [
+                {
+                  name: 'wenaka_yolov8s-seg.onnx',
+                  path: 'C:/models/wenaka_yolov8s-seg.onnx',
+                  size_mb: 45.7,
+                  profile: 'privacy-censor',
+                  profile_label: 'Privacy-part detector',
+                  recommended_for_censor: true,
+                  message: 'Specialized for privacy-part detection and censor workflows.',
+                  capabilities: {
+                    input_mode_label: 'Fixed privacy-part labels',
+                    output_mode_label: 'Fast box-first censoring',
+                    class_scope_label: '5 built-in privacy classes',
+                    supports_text_prompt: false,
+                    plain_english: 'Best for normal users who want quick privacy-part auto-detection.',
+                  },
+                },
+                {
+                  name: 'yolo26s-seg.onnx',
+                  path: 'C:/models/yolo26s-seg.onnx',
+                  size_mb: 40.0,
+                  profile: 'general-object',
+                  profile_label: 'General object segmentation',
+                  recommended_for_censor: false,
+                  message: 'General segmentation test model.',
+                  capabilities: {
+                    input_mode_label: 'Fixed built-in object classes',
+                    output_mode_label: 'General object segmentation tests',
+                    class_scope_label: '80 built-in object classes',
+                    supports_text_prompt: false,
+                    plain_english: 'Useful for advanced compatibility checks, not free-text prompting.',
+                  },
+                },
+              ],
+              privacy_model_count: 1,
+              general_model_count: 1,
+            },
+            {
+              id: 'nudenet',
+              name: 'NudeNet v3',
+              available: true,
+              recommended: true,
+              message: 'NudeNet model ready.',
+              capabilities: {
+                input_mode_label: 'No manual prompt input',
+                output_mode_label: 'Detection boxes',
+                class_scope_label: 'Built-in NSFW body-part classes',
+                supports_text_prompt: false,
+                plain_english: 'Good default for NSFW region detection.',
+              },
+            },
+            {
+              id: 'sam3',
+              name: 'SAM 3',
+              available: true,
+              recommended: true,
+              message: 'SAM3 checkpoint and runtime dependencies are ready.',
+              capabilities: {
+                input_mode_label: 'Text prompt or box prompt',
+                output_mode_label: 'Pixel-accurate masks',
+                class_scope_label: 'Prompt-guided segmentation',
+                supports_text_prompt: true,
+                plain_english: 'This is the precise tool for pro users.',
+              },
+            },
+          ],
+        },
+      })
+    })
+
+    await page.route('**/api/censor/detect', async (route) => {
+      detectPayload = JSON.parse(route.request().postData() || '{}')
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          image_id: detectPayload.image_id,
+          model_type: detectPayload.model_type,
+          detections: [
+            {
+              box: [8, 8, 28, 28],
+              class: 'breasts',
+              confidence: 0.92,
+            },
+          ],
+          combined_mask: null,
+          geometry_mode: 'box',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item').first().click()
+    await expect(page.locator('#btn-send-to-censor')).toBeEnabled()
+    await page.locator('#btn-send-to-censor').click()
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(1, { timeout: 15000 })
+
+    await page.locator('#btn-open-detect-modal').click()
+    await expect(page.locator('#detect-modal.visible')).toBeVisible()
+
+    await page.selectOption('#censor-model-type', 'legacy')
+    const advancedModelsToggle = page.locator('label.checkbox-label', {
+      has: page.locator('#censor-show-advanced-models'),
+    })
+    await advancedModelsToggle.scrollIntoViewIfNeeded()
+    await advancedModelsToggle.click()
+    await expect(page.locator('#censor-show-advanced-models')).toBeChecked()
+
+    let advancedLegacyModelPath = ''
+    await expect.poll(async () => {
+      const optionValues = await page.locator('#censor-model-file option').evaluateAll((options) =>
+        options
+          .map((option) => ({
+            text: option.textContent || '',
+            value: (option as HTMLOptionElement).value || '',
+          }))
+          .filter((option) => /yolo26s-seg\.onnx/i.test(option.text) || /yolo26s-seg\.onnx/i.test(option.value))
+          .map((option) => option.value)
+      )
+      advancedLegacyModelPath = optionValues[0] || ''
+      return advancedLegacyModelPath
+    }, { timeout: 10000 }).not.toBe('')
+
+    await page.selectOption('#censor-model-file', advancedLegacyModelPath)
+    await expect(page.locator('.target-region-check').first()).toBeEnabled()
+
+    await page.locator('#btn-auto-detect-current-modal').click()
+
+    await expect.poll(() => detectPayload, { timeout: 10000 }).not.toBeNull()
+    expect(detectPayload.model_type).toBe('both')
+    expect(detectPayload.model_path).toBe('C:/models/wenaka_yolov8s-seg.onnx')
+    expect(detectPayload.target_classes).toEqual(['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'])
+    await expect(page.locator('#toast-container')).toContainText(/switch(ed)? back to both mode|自动切回.*两者一起/i)
+  })
+
+  test('quick auto censor mixed geometry should affect only matched regions instead of the whole image', async ({ page }) => {
+    let detectPayload: any = null
+    const fulfillImage = async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: MOCK_IMAGE_SVG,
+      })
+    }
+
+    await page.route('**/api/image-thumbnail/*', fulfillImage)
+    await page.route('**/api/image-file/*', fulfillImage)
+
+    await page.route('**/api/censor/models', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          recommended_backend: 'both',
+          models: [
+            {
+              id: 'legacy',
+              name: 'Legacy YOLO',
+              available: true,
+              recommended: true,
+              default_model_path: 'C:/models/wenaka_yolov8s-seg.onnx',
+              files: [
+                {
+                  name: 'wenaka_yolov8s-seg.onnx',
+                  path: 'C:/models/wenaka_yolov8s-seg.onnx',
+                  profile: 'privacy-censor',
+                  profile_label: 'Privacy-part detector',
+                  recommended_for_censor: true,
+                  capabilities: {
+                    supports_text_prompt: false,
+                  },
+                },
+              ],
+              privacy_model_count: 1,
+              general_model_count: 0,
+            },
+            {
+              id: 'nudenet',
+              name: 'NudeNet v3',
+              available: true,
+              recommended: true,
+              capabilities: {
+                supports_text_prompt: false,
+              },
+            },
+            {
+              id: 'sam3',
+              name: 'SAM 3',
+              available: false,
+              recommended: false,
+              capabilities: {
+                supports_text_prompt: true,
+              },
+            },
+          ],
+        },
+      })
+    })
+
+    await page.route('**/api/censor/detect', async (route) => {
+      detectPayload = JSON.parse(route.request().postData() || '{}')
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          image_id: detectPayload.image_id,
+          model_type: detectPayload.model_type,
+          detections: [
+            {
+              box: [8, 8, 28, 28],
+              polygon: [[8, 8], [28, 8], [28, 28], [8, 28]],
+              class: 'breasts',
+              confidence: 0.95,
+            },
+            {
+              box: [40, 40, 56, 56],
+              class: 'anus',
+              confidence: 0.88,
+            },
+          ],
+          combined_mask: MIXED_MASK_DATA_URL,
+          geometry_mode: 'mixed',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item').first().click()
+    await expect(page.locator('#btn-send-to-censor')).toBeEnabled()
+    await page.locator('#btn-send-to-censor').click()
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(1, { timeout: 15000 })
+    await page.selectOption('#censor-style', 'black_bar')
+
+    const readCensorPixels = async () => page.evaluate(async () => {
+      const activeItem = (window as any).__CENSOR_STATE__?.queue?.[0]
+      const src = activeItem?.currentDataUrl || activeItem?.originalUrl
+      if (!src) return null
+
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image()
+        image.onload = () => resolve(image)
+        image.onerror = () => reject(new Error('Failed to load censor preview image'))
+        image.src = src
+      })
+
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth || img.width
+      canvas.height = img.naturalHeight || img.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(img, 0, 0)
+      const sample = (x: number, y: number) => Array.from(ctx.getImageData(x, y, 1, 1).data)
+      return {
+        unaffected: sample(2, 2),
+        maskRegion: sample(12, 12),
+        boxRegion: sample(48, 48),
+      }
+    })
+
+    const before = await readCensorPixels()
+
+    await page.locator('#btn-open-detect-modal').click()
+    await expect(page.locator('#detect-modal.visible')).toBeVisible()
+    await page.locator('#btn-auto-detect-current-modal').click()
+    await expect.poll(() => detectPayload, { timeout: 10000 }).not.toBeNull()
+    await expect(page.locator('#toast-container')).toContainText(/mixed auto-censor|混合自动打码|auto-censor mask|基于框的自动打码/i)
+
+    await expect.poll(async () => {
+      const queuePayload = await page.evaluate(() => {
+        const queue = (window as any).__CENSOR_STATE__?.queue || null
+        return queue && queue[0] ? Boolean(queue[0].currentDataUrl) : null
+      })
+      return queuePayload
+    }, { timeout: 10000 }).toBeTruthy()
+
+    const after = await readCensorPixels()
+
+    expect(before).not.toBeNull()
+    expect(after).not.toBeNull()
+    expect(after!.unaffected).toEqual(before!.unaffected)
+    expect(after!.maskRegion).not.toEqual(before!.maskRegion)
+    expect(after!.boxRegion).not.toEqual(before!.boxRegion)
   })
 
   test('should keep the filter modal readable across responsive widths', async ({ page }) => {

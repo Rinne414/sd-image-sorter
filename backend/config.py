@@ -115,6 +115,10 @@ NUDENET_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_NUDENET_MODEL_DIR",
     str(PROJECT_ROOT / "models" / "nudenet")
 )
+TORIIGATE_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR",
+    str(PROJECT_ROOT / "models" / "toriigate")
+)
 
 
 # =============================================================================
@@ -169,6 +173,39 @@ TAGGER_MODELS: dict = {
         "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv"
+    },
+    "camie-tagger-v2": {
+        "repo_id": "Camais03/camie-tagger-v2",
+        "model_file": "camie-tagger-v2.onnx",
+        "tags_file": "camie-tagger-v2-metadata.json",
+        "metadata_format": "camie_v2",
+        "input_layout": "nchw",
+        "input_normalization": "imagenet",
+        "pad_color": [124, 116, 104],
+        "default_threshold": 0.62,
+        "default_character_threshold": 0.78,
+        "supports_rating": True
+    },
+    "pixai-tagger-v0.9": {
+        "repo_id": "deepghs/pixai-tagger-v0.9-onnx",
+        "model_file": "model.onnx",
+        "tags_file": "selected_tags.csv",
+        "input_layout": "nchw",
+        "input_normalization": "minus_one_to_one",
+        "resize_mode": "stretch",
+        "default_threshold": 0.30,
+        "default_character_threshold": 0.85,
+        "supports_rating": False,
+        "rating_fallback_mode": "derive_from_tags"
+    },
+    "toriigate-0.5": {
+        "repo_id": "Minthy/ToriiGate-0.5",
+        "model_file": "config.json",
+        "tags_file": "",
+        "runtime_backend": "toriigate",
+        "default_threshold": 1.0,
+        "default_character_threshold": 1.0,
+        "supports_rating": True,
     }
 }
 
@@ -435,6 +472,13 @@ def get_nudenet_model_dir() -> str:
     return str(model_dir)
 
 
+def get_toriigate_model_dir() -> str:
+    """Get the ToriiGate model directory, creating it if necessary."""
+    model_dir = Path(TORIIGATE_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
 def ensure_directories():
     """
     Ensure all required directories exist.
@@ -454,6 +498,7 @@ def ensure_directories():
     get_artist_model_dir()
     get_sam3_model_dir()
     get_nudenet_model_dir()
+    get_toriigate_model_dir()
 
     # Cache directory
     Path(DEFAULT_CACHE_DIR).mkdir(parents=True, exist_ok=True)

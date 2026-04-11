@@ -235,6 +235,57 @@ class TestCensorRouterValidation:
         assert captured["model_path"].endswith("wenaka_yolov8s-seg.onnx")
         assert response.json()["detections"][0]["class"] == "breasts"
 
+    def test_combined_mask_uses_transparent_alpha_png(self):
+        from io import BytesIO
+        from PIL import Image
+        from services.censor_service import CensorService
+        import base64
+
+        data_url = CensorService._build_combined_mask_data_url(
+            (32, 32),
+            [{"class": "breasts", "box": [4, 4, 20, 20], "polygon": [[4, 4], [20, 4], [20, 20], [4, 20]]}],
+        )
+
+        assert data_url and data_url.startswith("data:image/png;base64,")
+        encoded = data_url.split(",", 1)[1]
+        image = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
+        assert image.getpixel((0, 0))[3] == 0
+        assert image.getpixel((10, 10))[3] == 255
+
+    def test_combined_mask_can_include_box_only_regions(self):
+        from io import BytesIO
+        from PIL import Image
+        from services.censor_service import CensorService
+        import base64
+
+        data_url = CensorService._build_combined_mask_data_url(
+            (32, 32),
+            [{"class": "anus", "box": [4, 4, 20, 20]}],
+            include_boxes=True,
+        )
+
+        assert data_url and data_url.startswith("data:image/png;base64,")
+        encoded = data_url.split(",", 1)[1]
+        image = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
+        assert image.getpixel((0, 0))[3] == 0
+        assert image.getpixel((10, 10))[3] == 255
+
+    def test_filter_detections_matches_buttocks_family_aliases(self):
+        from services.censor_service import CensorService
+
+        detections = [
+            {"class": "buttocks_exposed", "box": [0, 0, 10, 10]},
+            {"class": "female_breast_exposed", "box": [0, 0, 10, 10]},
+            {"class": "face", "box": [0, 0, 10, 10]},
+        ]
+
+        filtered = CensorService._filter_detections_by_targets(detections, ["buttocks", "breasts"])
+
+        classes = [item["class"] for item in filtered]
+        assert "buttocks_exposed" in classes
+        assert "female_breast_exposed" in classes
+        assert "face" not in classes
+
     def test_detect_filters_target_classes_and_returns_combined_mask(self, test_client, monkeypatch, tmp_path):
         from PIL import Image
         import censor as censor_module

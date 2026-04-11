@@ -18,7 +18,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
-DEFAULT_VERSION = "2.1.0"
+DEFAULT_VERSION = "2.4.0"
 DEFAULT_SPLIT_SIZE_MB = 1900
 
 # Python embeddable package URL template (Windows amd64)
@@ -37,6 +37,7 @@ EXCLUDED_PREFIXES = (
     ".git",
     ".tmp",
     ".plans",
+    ".claude",
     ".vscode",
     "artifacts",
     "backend/venv",
@@ -45,6 +46,7 @@ EXCLUDED_PREFIXES = (
     "backend/test-path",
     "backend/tests",
     "backend/test_",
+    "node_modules",
     "tests",
     "test-results",
     "reference",
@@ -80,11 +82,17 @@ EXCLUDED_FILES = {
     "backend/pytest.ini",
     "backend/verify_sorting.py",
     "backend/fix_db_ratings.py",
+    "backend/test_censor_logic.py",
+    "backend/test_functionality.py",
+    "backend/test_images_thumbnail.py",
+    "backend/test_metadata_parser_params.py",
     "AGENTS.md",
     "CLAUDE.md",
     "THIRD_PARTY_MODELS.md",
     "SECURITY.md",
     "CHANGELOG.md",
+    "package.json",
+    "package-lock.json",
     "docs/DELETION_LOG.md",
     "docs/IMPROVEMENT_PLAN.md",
     "docs/SECURITY_ARCHITECTURE.md",

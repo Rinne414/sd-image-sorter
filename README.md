@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.3.0-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.4.0-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -53,9 +53,15 @@ Point it at any folder. The app scans your images, **auto-detects the generator*
 
 Built-in **WD14 Tagger** (anime/illustration-focused) automatically labels every image with descriptive tags like `1girl`, `blue_hair`, `school_uniform`, `outdoors` — plus character recognition and content rating.
 
-- **5 model choices**: EVA02-Large (best quality), SwinV2 (best speed/quality balance), ConvNeXt, ViT, ViT-Large
+- **8 runnable taggers**: EVA02-Large, SwinV2, ConvNeXt, ViT, ViT-Large, Camie v2, PixAI v0.9, ToriiGate 0.5
+- **Newer tag spaces**: Camie v2 and PixAI v0.9 improve coverage beyond the older WD tag databases
+- **Experimental VLM backend**: ToriiGate 0.5 runs through a separate Transformers-based multimodal backend instead of the WD14 ONNX runtime
+- **Large first-run download warning**: ToriiGate is much larger than the WD14 models, so the first download is significantly heavier
 - **Dual thresholds**: tune general tag sensitivity separately from character tag sensitivity
 - **Content rating**: auto-classifies General / Sensitive / Questionable / Explicit
+- **AI captions**: ToriiGate generates natural-language descriptions alongside tags — viewable in the image detail modal
+- **Background tagging**: close the tagger modal and keep browsing — a progress bar in the navbar tracks the job, with pause/cancel controls
+- **Elastic batch sizing**: the app monitors your RAM/VRAM in real time and adjusts batch size to prevent crashes
 - Models auto-download from HuggingFace on first use
 
 ### 📁 Sorting — Organize at game speed
@@ -116,6 +122,8 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 4. Browser opens `http://localhost:8487` — done
 
 > Python 3.11 is bundled. AI models auto-download on first use (~500 MB).
+>
+> For **GPU tagging on Windows**, your system still needs the NVIDIA driver plus the CUDA / cuDNN / MSVC runtime pieces required by `onnxruntime-gpu`. If those dependencies are missing, the app now falls back cleanly to CPU and the tagger modal will show that in the runtime status chips.
 
 ### Linux / macOS
 
@@ -154,8 +162,9 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 | Feature | RAM | GPU |
 |:--------|:----|:----|
 | Gallery · Filters · Sort · Prompt Lab | 4 GB | — |
-| WD14 tagging (SwinV2) | 8 GB | Optional |
-| WD14 tagging (EVA02-Large) | 16 GB | Optional |
+| WD14 tagging (SwinV2 / ConvNeXt / ViT family) | 8 GB | Optional |
+| WD14 tagging (EVA02 / Camie / PixAI) | 16 GB | Recommended |
+| ToriiGate 0.5 multimodal tagging | 24 GB | **CUDA strongly recommended** |
 | Censor detection | 8 GB | Optional |
 | Similar images (CLIP) | 8 GB | — |
 | Artist ID (Kaloscope) | 16 GB | Recommended |
@@ -168,6 +177,8 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 |:------|:-----|:--------|
 | wd-swinv2-tagger-v3 | ~446 MB | AI Tagging (default) |
 | wd-eva02-large-tagger-v3 | ~1.2 GB | AI Tagging (best quality) |
+| camie-tagger-v2 | ~1.3 GB | AI Tagging (newer tag space) |
+| pixai-tagger-v0.9 | ~1.2 GB | AI Tagging (newer tag space) |
 | clip-ViT-B-32-vision | ~335 MB | Similar Images |
 | wenaka_yolov8s-seg | ~46 MB | Censor detection |
 | NudeNet 320n | ~12 MB | Censor detection |
@@ -244,9 +255,15 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 内置 **WD14 Tagger**（动漫/插画专用），自动为每张图打上描述标签：`1girl`、`blue_hair`、`school_uniform`、`outdoors` — 还能识别角色和内容分级。
 
-- **5 种模型**：EVA02-Large（最高精度）、SwinV2（最佳性价比）、ConvNeXt、ViT、ViT-Large
+- **8 个可运行打标模型**：EVA02-Large、SwinV2、ConvNeXt、ViT、ViT-Large、Camie v2、PixAI v0.9、ToriiGate 0.5
+- **更新的标签空间**：Camie v2 和 PixAI v0.9 比老 WD 标签库更现代
+- **实验性 VLM 后端**：ToriiGate 0.5 通过单独的 Transformers 多模态后端运行，不走 WD14 ONNX 运行链
+- **首次下载很大**：ToriiGate 体积远大于 WD14 系模型，首次下载会明显更重
 - **双阈值**：通用标签和角色标签分开调节灵敏度
 - **内容评级**：自动分类 General / Sensitive / Questionable / Explicit
+- **AI 描述**：ToriiGate 在打标签的同时生成自然语言描述，可在图片详情弹窗查看
+- **后台打标**：关闭打标弹窗继续浏览，导航栏进度条实时跟踪任务，支持暂停/取消
+- **弹性 batch**：程序实时监控 RAM/VRAM 使用量，自动调节 batch size 防止崩溃
 - 模型首次使用时从 HuggingFace 自动下载
 
 ### 📁 排序 — 打游戏一样快
@@ -306,6 +323,8 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 4. 浏览器打开 `http://localhost:8487` — 搞定
 
 > 内置 Python 3.11，无需安装。AI 模型首次使用自动下载（约 500 MB）。
+>
+> 如果你想在 **Windows 上用 GPU 打标**，系统仍然需要满足 `onnxruntime-gpu` 的 CUDA / cuDNN / MSVC 运行时要求。缺少这些依赖时，程序现在会稳定回退到 CPU，并在 Tagger 弹窗里明确显示当前 runtime 状态。
 
 ### Linux / macOS
 
@@ -344,8 +363,9 @@ HF_ENDPOINT=https://hf-mirror.com
 | 功能 | 内存 | GPU |
 |:-----|:-----|:----|
 | 画廊 · 筛选 · 排序 · 提示词 | 4 GB | — |
-| WD14 打标 (SwinV2) | 8 GB | 可选 |
-| WD14 打标 (EVA02) | 16 GB | 可选 |
+| WD14 打标（SwinV2 / ConvNeXt / ViT 系） | 8 GB | 可选 |
+| WD14 打标（EVA02 / Camie / PixAI） | 16 GB | 建议 |
+| ToriiGate 0.5 多模态打标 | 24 GB | **强烈建议 CUDA** |
 | 打码检测 | 8 GB | 可选 |
 | 相似图片 (CLIP) | 8 GB | — |
 | 画师识别 | 16 GB | 建议 |
@@ -358,6 +378,8 @@ HF_ENDPOINT=https://hf-mirror.com
 |:-----|:-----|:-----|
 | wd-swinv2-tagger-v3 | ~446 MB | AI 打标（默认） |
 | wd-eva02-large-tagger-v3 | ~1.2 GB | AI 打标（最高质量） |
+| camie-tagger-v2 | ~1.3 GB | AI 打标（更新标签空间） |
+| pixai-tagger-v0.9 | ~1.2 GB | AI 打标（更新标签空间） |
 | clip-ViT-B-32-vision | ~335 MB | 相似图片 |
 | wenaka_yolov8s-seg | ~46 MB | 打码检测 |
 | NudeNet 320n | ~12 MB | 打码检测 |

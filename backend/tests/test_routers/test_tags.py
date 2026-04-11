@@ -68,6 +68,34 @@ class TestGetGenerators:
         assert len(data["generators"]) >= 1
 
 
+class TestTaggerModels:
+    """Tests for GET /api/tagger/models endpoint."""
+
+    def test_get_tagger_models_exposes_camie_and_pixai_metadata(self, test_client):
+        response = test_client.get("/api/tagger/models")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "models" in data
+        assert "default" in data
+
+        models = {model["name"]: model for model in data["models"]}
+
+        assert "camie-tagger-v2" in models
+        assert models["camie-tagger-v2"]["default_threshold"] == 0.62
+        assert models["camie-tagger-v2"]["default_character_threshold"] == 0.78
+        assert models["camie-tagger-v2"]["disabled"] is False
+
+        assert "pixai-tagger-v0.9" in models
+        assert models["pixai-tagger-v0.9"]["default_threshold"] == 0.3
+        assert models["pixai-tagger-v0.9"]["default_character_threshold"] == 0.85
+        assert models["pixai-tagger-v0.9"]["disabled"] is False
+
+        assert "toriigate-0.5" in models
+        assert models["toriigate-0.5"]["disabled"] is False
+        assert models["toriigate-0.5"]["gpu_confirmation_required"] is True
+
+
 class TestTagsLibrary:
     """Tests for GET /api/tags/library endpoint."""
 
@@ -413,12 +441,12 @@ class TestTaggingPipeline:
         models_by_name = {model["name"]: model for model in data["models"]}
         assert models_by_name["wd-swinv2-tagger-v3"]["recommended"] is True
         assert models_by_name["wd-swinv2-tagger-v3"]["gpu_default"] is True
-        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_locked"] is True
-        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is False
+        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_locked"] is False
+        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is True
         assert models_by_name["wd-eva02-large-tagger-v3"]["memory"] == "High"
 
-    def test_build_runtime_plan_locks_max_quality_model_to_cpu_safe_mode(self):
-        """Max Quality should keep the high-quality model while forcing a safer runtime plan."""
+    def test_build_runtime_plan_keeps_max_quality_model_on_adaptive_gpu_when_requested(self):
+        """Max Quality should now use adaptive GPU throughput instead of a forced CPU lock."""
         from services.tagging_service import TaggingService, TagRequest
 
         service = TaggingService()
@@ -426,32 +454,15 @@ class TestTaggingPipeline:
             TagRequest(
                 model_name="wd-eva02-large-tagger-v3",
                 use_gpu=True,
-                allow_unsafe_acceleration=True,
             )
         )
 
-        assert plan["gpu_locked"] is True
-        assert plan["effective_use_gpu"] is False
-        assert plan["request"]["use_gpu"] is False
-        assert plan["request"]["allow_unsafe_acceleration"] is False
-        assert plan["fetch_batch_size"] <= 24
-        assert plan["commit_interval"] <= 10
-        assert "protected CPU Safe Mode" in plan["startup_notice"]
-
-    def test_start_tagging_blocks_high_risk_custom_gpu_without_confirmation(self, test_client):
-        """Custom GPU tagging should still require explicit confirmation."""
-        response = test_client.post(
-            "/api/tag/start",
-            json={
-                "model_path": "C:/models/custom-model.onnx",
-                "tags_path": "C:/models/selected_tags.csv",
-                "use_gpu": True,
-            }
-        )
-
-        assert response.status_code == 409
-        data = response.json()
-        assert "CPU Safe Mode" in data["error"]
+        assert plan["gpu_locked"] is False
+        assert plan["effective_use_gpu"] is True
+        assert plan["request"]["use_gpu"] is True
+        assert plan["fetch_batch_size"] >= 1
+        assert plan["commit_interval"] >= 1
+        assert "highest batched throughput" in plan["startup_notice"]
 
     def test_start_tagging_rejects_non_onnx_custom_model(self, test_client):
         """Custom tagger path should reject unsupported model formats early."""
@@ -468,8 +479,41 @@ class TestTaggingPipeline:
         data = response.json()
         assert ".onnx" in data["error"]
 
-    def test_start_tagging_allows_confirmed_high_risk_custom_gpu_combo(self, test_client):
-        """Explicit confirmation should allow the risky combo to proceed."""
+    def test_start_tagging_allows_toriigate_builtin_model(self, test_client):
+        from routers import tags as tags_router
+
+        tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
+
+        with patch.object(tags_router.TaggingService, "_run_tagging_job", return_value=None):
+            response = test_client.post(
+                "/api/tag/start",
+                json={
+                    "model_name": "toriigate-0.5",
+                    "use_gpu": True,
+                }
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "started"
+
+    def test_start_tagging_rejects_non_onnx_custom_model_with_path(self, test_client):
+        """Custom tagger path with tags_path should also reject unsupported model formats."""
+        response = test_client.post(
+            "/api/tag/start",
+            json={
+                "model_path": "C:/models/custom-model.safetensors",
+                "tags_path": "C:/models/selected_tags.csv",
+                "use_gpu": False,
+            }
+        )
+
+        assert response.status_code == 400
+        data = response.json()
+        assert ".onnx" in data["error"]
+
+    def test_start_tagging_allows_custom_gpu_combo_without_backend_block(self, test_client):
+        """Backend should no longer hard-block custom GPU runs; the frontend owns the warning UX."""
         from routers import tags as tags_router
 
         tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
@@ -481,7 +525,6 @@ class TestTaggingPipeline:
                     "model_path": "C:/models/custom-model.onnx",
                     "tags_path": "C:/models/selected_tags.csv",
                     "use_gpu": True,
-                    "allow_unsafe_acceleration": True,
                 }
             )
 

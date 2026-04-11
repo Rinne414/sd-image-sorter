@@ -37,6 +37,12 @@ function throttle(func, limit) {
     };
 }
 
+// i18n helper for tagger strings (top-level, available to all tagger functions)
+function tText(key, fallback) {
+    const val = window.I18n?.t?.(key);
+    return (val && val !== key) ? val : (fallback || key);
+}
+
 // ============== Request Manager (Cancellation Support) ==============
 
 const RequestManager = {
@@ -730,7 +736,24 @@ function showModal(modalId) {
 function hideModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
+        // Quick exit animation (non-blocking — remove class immediately for E2E compatibility)
+        const content = modal.querySelector('.modal-content');
+        if (content) {
+            content.style.transition = 'opacity 120ms ease, transform 120ms ease';
+            content.style.opacity = '0';
+            content.style.transform = 'scale(0.97)';
+        }
+        // Remove visible immediately so Playwright/tests can detect closure
         modal.classList.remove('visible');
+
+        // Clean up animation styles after transition
+        if (content) {
+            setTimeout(() => {
+                content.style.transition = '';
+                content.style.opacity = '';
+                content.style.transform = '';
+            }, 130);
+        }
 
         // Remove escape key handler
         if (modal._escapeHandler) {
@@ -967,6 +990,9 @@ const TAGGER_MODEL_ALIASES = {
     'balanced': 'wd-swinv2-tagger-v3',
     'fast': 'wd-vit-tagger-v3',
     'lightweight': 'wd-vit-tagger-v3',
+    'camie': 'camie-tagger-v2',
+    'camie v2': 'camie-tagger-v2',
+    'pixai': 'pixai-tagger-v0.9',
 };
 
 let _taggerModelCatalog = [];
@@ -986,6 +1012,12 @@ function getTaggerModelMeta(modelName) {
     return _taggerModelCatalogMap.get(normalizedName) || null;
 }
 
+function isToriiGateTaggerModel(modelName, options = {}) {
+    const { isCustom = false } = options;
+    if (isCustom) return false;
+    return normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3') === 'toriigate-0.5';
+}
+
 function isGpuLockedTaggerModel(modelName, options = {}) {
     const { isCustom = false } = options;
     if (isCustom) return false;
@@ -995,6 +1027,29 @@ function isGpuLockedTaggerModel(modelName, options = {}) {
 }
 
 function isRiskyTaggerGpuSelection(modelName, options = {}) {
+    const {
+        isCustom = false,
+        useGpu = false,
+        recommendedGpu = null,
+        treatConfirmationRequiredAsRisky = false
+    } = options;
+    if (!useGpu) return false;
+    if (isCustom) return true;
+    if (isGpuLockedTaggerModel(modelName, { isCustom })) return false;
+
+    const meta = getTaggerModelMeta(modelName);
+    if (treatConfirmationRequiredAsRisky && meta?.gpu_confirmation_required) {
+        return true;
+    }
+
+    if (typeof recommendedGpu === 'boolean') {
+        return useGpu && !recommendedGpu;
+    }
+
+    return false;
+}
+
+function requiresTaggerGpuLaunchConfirmation(modelName, options = {}) {
     const { isCustom = false, useGpu = false } = options;
     if (!useGpu) return false;
     if (isCustom) return true;
@@ -1006,16 +1061,24 @@ function isRiskyTaggerGpuSelection(modelName, options = {}) {
 
 function describeTaggerModel(meta) {
     if (!meta) {
-        return 'Balanced default. Good speed, good quality, and less likely to freeze your PC.';
+        return tText('tagger.descDefault', 'Balanced default. Good speed, good quality, and solid stability.');
     }
 
-    const summary = meta.description || meta.summary || 'WD14 tagger model';
-    const bestFor = meta.best_for ? ` Best for: ${meta.best_for}.` : '';
+    const summary = meta.description || meta.summary || tText('tagger.defaultSummary', 'WD14 tagger model');
+    const bestFor = meta.best_for
+        ? tText('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
+        : '';
     const quality = Number(meta.quality_score || 0);
     const speed = Number(meta.speed_score || 0);
     const stability = Number(meta.stability_score || 0);
     const runtimeNote = meta.runtime_note ? ` ${meta.runtime_note}` : '';
-    return `${summary} Quality ${quality}/5 | Speed ${speed}/5 | Stability ${stability}/5.${bestFor}${runtimeNote}`;
+    return tText('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.{bestFor}{runtimeNote}')
+        .replace('{summary}', summary)
+        .replace('{quality}', quality)
+        .replace('{speed}', speed)
+        .replace('{stability}', stability)
+        .replace('{bestFor}', bestFor)
+        .replace('{runtimeNote}', runtimeNote);
 }
 
 function describeTaggerRuntime(options = {}) {
@@ -1028,26 +1091,234 @@ function describeTaggerRuntime(options = {}) {
     } = options;
 
     if (gpuLocked) {
-        return 'Recommended mode is active: Protected CPU Safe Mode. You keep the highest-quality model, while the app blocks the crash-prone GPU path.';
+        return tText('tagger.runtimeAdaptiveMax', 'Adaptive max-throughput mode is active. The app pushes GPU speed first, then falls back only if the run becomes unstable.');
     }
 
     if (isCustom) {
         if (gpuEnabled) {
-            return 'Advanced override is active: custom model on GPU. This may be faster, but it is much more crash-prone than CPU Safe Mode.';
+            return tText('tagger.runtimeCustomGpu', 'Custom model on GPU. Faster when it works, but less predictable than CPU Safe Mode.');
         }
-        return 'Recommended mode is active: CPU Safe Mode for the custom model. Finish one stable CPU run first, then open Advanced Runtime only if you really need GPU.';
+        return tText('tagger.runtimeCustomCpu', 'Custom model on CPU Safe Mode. Finish one stable run first, then try GPU only if needed.');
     }
 
     if (riskyGpu) {
-        return 'Advanced override is active: risky GPU acceleration. This is not the recommended stable path for this model.';
+        return tText('tagger.runtimeRiskyGpu', 'Risky GPU override is active. This is not the stable default for this model.');
     }
 
     if (gpuEnabled) {
-        const focus = meta?.best_for ? ` Best for: ${meta.best_for}.` : '';
-        return `Recommended mode is active: balanced GPU acceleration. The app is already using the fastest stable path for this model.${focus}`;
+        const focus = meta?.best_for
+            ? tText('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
+            : '';
+        return `${tText('tagger.runtimeAdaptiveGpu', 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.')}${focus}`;
     }
 
-    return 'Advanced override is active: CPU Safe Mode. Slower, but safer when VRAM is tight or other AI tools are already running.';
+    return tText('tagger.runtimeCpuSafe', 'CPU Safe Mode is active. Slower, but safer when VRAM is tight or other AI tools are already running.');
+}
+
+function getTaggerHardwareRecommendation() {
+    return window.__taggerSystemInfo?.recommendation || null;
+}
+
+function getRecommendedTaggerChunkSize() {
+    const recommendation = getTaggerHardwareRecommendation();
+    const size = Number(recommendation?.recommended_batch_size || 4);
+    return Number.isFinite(size) && size > 0 ? size : 4;
+}
+
+function getTaggerProviderState() {
+    const systemInfo = window.__taggerSystemInfo?.system_info || {};
+    const providers = Array.isArray(systemInfo.onnx_providers)
+        ? systemInfo.onnx_providers.map((provider) => String(provider))
+        : [];
+    const hasCuda = providers.includes('CUDAExecutionProvider');
+    const hasTensorRt = providers.includes('TensorrtExecutionProvider');
+    const label = hasCuda
+        ? (hasTensorRt ? 'TensorRT + CUDA Ready' : 'CUDA Ready')
+        : 'CPU Runtime Only';
+    const tone = hasCuda ? 'is-safe' : 'is-warning';
+
+    return {
+        providers,
+        hasCuda,
+        hasTensorRt,
+        label,
+        tone,
+    };
+}
+
+function setTaggerStatusChip(element, text, tone = '') {
+    if (!element) return;
+    element.textContent = text;
+    const baseClass = element.classList.contains('system-info-chip') ? 'system-info-chip' : 'tag-runtime-chip';
+    const safeTone = VALID_TONES.has(tone) ? tone : '';
+    element.className = safeTone ? `${baseClass} ${safeTone}` : baseClass;
+    // Ensure ARIA live region so screen readers announce chip changes
+    if (!element.getAttribute('aria-live')) {
+        element.setAttribute('aria-live', 'polite');
+    }
+}
+
+const VALID_TONES = new Set(['', 'is-highlight', 'is-warning', 'is-danger', 'is-safe', 'is-info']);
+
+function renderTaggerModelSnapshot(meta, options = {}) {
+    const {
+        isCustom = false,
+        modelDisabled = false,
+    } = options;
+    const subtitleEl = $('#tag-model-subtitle');
+    const badgesEl = $('#tag-model-badges');
+    const noteEl = $('#tag-model-note');
+    if (!subtitleEl || !badgesEl || !noteEl) return;
+
+    if (isCustom) {
+        subtitleEl.textContent = tText('tagger.customSubtitle', 'Custom local ONNX model. The app cannot infer its schema or stability in advance.');
+        badgesEl.innerHTML = [
+            `<span class="tagger-model-badge is-warning">${escapeHtml(tText('tagger.customBadge', 'Custom'))}</span>`,
+            `<span class="tagger-model-badge">${escapeHtml(tText('tagger.onnxOnlyBadge', 'ONNX only'))}</span>`,
+            `<span class="tagger-model-badge">${escapeHtml(tText('tagger.schemaUnknownBadge', 'Schema unknown'))}</span>`,
+        ].join('');
+        noteEl.textContent = tText('tagger.customNote', 'Start from one stable run first. Raise chunk size only after that.');
+        return;
+    }
+
+    const summary = meta?.description || meta?.summary || tText('tagger.defaultSummary', 'WD14 tagger model');
+    subtitleEl.textContent = summary;
+
+    const badges = [];
+    if (meta?.recommended) badges.push({ text: 'Recommended', tone: 'is-highlight' });
+    if (meta?.speed) badges.push({ text: `Speed ${meta.speed}` });
+    if (meta?.memory) badges.push({ text: `Memory ${meta.memory}`, tone: /high/i.test(meta.memory) ? 'is-warning' : '' });
+    if (meta?.best_for) badges.push({ text: meta.best_for, tone: 'is-highlight' });
+    if (modelDisabled) badges.push({ text: tText('tagger.chipCatalogOnly', 'Catalog Only'), tone: 'is-warning' });
+
+    badgesEl.innerHTML = badges
+        .map((badge) => {
+            const safeTone = VALID_TONES.has(badge.tone) ? badge.tone : '';
+            return `<span class="tagger-model-badge${safeTone ? ` ${safeTone}` : ''}">${escapeHtml(badge.text)}</span>`;
+        })
+        .join('');
+
+    noteEl.textContent = meta?.disabled_reason || meta?.runtime_note || meta?.safe_mode_note || tText('tagger.defaultNote', 'The selected model decides quality, tag density, and hardware pressure.');
+}
+
+function applyTaggerModelThresholdDefaults(meta) {
+    const thresholdInput = $('#tag-threshold');
+    const thresholdValue = $('#tag-threshold-value');
+    const characterThresholdInput = $('#tag-character-threshold');
+    const characterThresholdValue = $('#tag-character-threshold-value');
+    if (!thresholdInput || !characterThresholdInput) return;
+
+    const generalThreshold = Number(meta?.default_threshold);
+    const characterThreshold = Number(meta?.default_character_threshold);
+
+    if (Number.isFinite(generalThreshold) && generalThreshold > 0) {
+        thresholdInput.value = String(generalThreshold);
+        if (thresholdValue) thresholdValue.textContent = thresholdInput.value;
+    }
+
+    if (Number.isFinite(characterThreshold) && characterThreshold > 0) {
+        characterThresholdInput.value = String(characterThreshold);
+        if (characterThresholdValue) characterThresholdValue.textContent = characterThresholdInput.value;
+    }
+}
+
+function syncTaggerThresholdUi(options = {}) {
+    const { isToriiGate = false } = options;
+    const thresholdSection = $('#tag-threshold-section');
+    const thresholdNote = $('#tag-threshold-note');
+    const thresholdInput = $('#tag-threshold');
+    const characterThresholdInput = $('#tag-character-threshold');
+    const thresholdValue = $('#tag-threshold-value');
+    const characterThresholdValue = $('#tag-character-threshold-value');
+    if (!thresholdInput || !characterThresholdInput) return;
+
+    if (thresholdSection) {
+        thresholdSection.hidden = isToriiGate;
+        thresholdSection.setAttribute('aria-hidden', String(isToriiGate));
+    }
+    if (thresholdNote) {
+        thresholdNote.hidden = !isToriiGate;
+    }
+
+    thresholdInput.disabled = isToriiGate;
+    characterThresholdInput.disabled = isToriiGate;
+    thresholdInput.setAttribute('aria-disabled', String(isToriiGate));
+    characterThresholdInput.setAttribute('aria-disabled', String(isToriiGate));
+    if (thresholdValue) thresholdValue.textContent = thresholdInput.value;
+    if (characterThresholdValue) characterThresholdValue.textContent = characterThresholdInput.value;
+}
+
+function syncTaggerRuntimeChunkUi(options = {}) {
+    const {
+        gpuEnabled = false,
+        gpuLocked = false,
+        riskyGpu = false,
+        isCustom = false,
+        isToriiGate = false
+    } = options;
+
+    const batchSelect = $('#tagger-batch-size');
+    const batchHelp = $('#tag-batch-help');
+    const batchRecommendation = $('#tag-batch-recommendation');
+    const chunkChip = $('#tag-runtime-chunk-chip');
+    if (!batchSelect || !batchHelp) return;
+
+    const recommendedChunk = getRecommendedTaggerChunkSize();
+    if (batchSelect.dataset.userChosen !== '1') {
+        batchSelect.value = String(recommendedChunk);
+    }
+
+    const selectedChunk = parseInt(batchSelect.value, 10) || recommendedChunk;
+    const recommendation = getTaggerHardwareRecommendation();
+    const riskLevel = String(recommendation?.risk_level || 'medium').toLowerCase();
+
+    if (batchRecommendation) {
+        batchRecommendation.textContent = tText('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
+    }
+
+    if (chunkChip) {
+        setTaggerStatusChip(
+            chunkChip,
+            `Chunk ${selectedChunk}`,
+            selectedChunk > recommendedChunk ? 'is-warning' : 'is-safe'
+        );
+    }
+
+    if (gpuLocked) {
+        batchHelp.textContent = tText('tagger.chunkHelpAdaptive', 'This model already uses adaptive runtime limits. Only change chunk size if you are stress-testing.');
+        return;
+    }
+
+    if (isToriiGate) {
+        batchHelp.textContent = gpuEnabled
+            ? tText('tagger.chunkHelpToriiGateGpu', 'ToriiGate uses the multimodal PyTorch backend. Keep chunk size small, usually 1-2.')
+            : tText('tagger.chunkHelpToriiGateCpu', 'ToriiGate on CPU should stay at chunk size 1.');
+        return;
+    }
+
+    if (selectedChunk > recommendedChunk) {
+        batchHelp.textContent = gpuEnabled
+            ? tText('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect higher VRAM pressure and more crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
+            : tText('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. This may help throughput, but it raises RAM pressure.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
+        return;
+    }
+
+    if (riskyGpu) {
+        batchHelp.textContent = tText('tagger.chunkHelpRiskyGpu', 'This controls true WD14 batching where supported. Risky GPU mode still needs confirmation.');
+        return;
+    }
+
+    if (isCustom) {
+        batchHelp.textContent = tText('tagger.chunkHelpCustom', 'Custom models may or may not support true batching. Start from the recommended value.');
+        return;
+    }
+
+    if (riskLevel === 'high') {
+        batchHelp.textContent = tText('tagger.chunkHelpHighRisk', 'This machine is marked high-risk for long GPU tagging. Leave the recommended chunk size alone.');
+        return;
+    }
+
+    batchHelp.textContent = tText('tagger.chunkHelpDefault', 'This controls the true WD14 batch size when the selected model supports dynamic batching.');
 }
 
 function syncTaggerModelUi(options = {}) {
@@ -1057,31 +1328,55 @@ function syncTaggerModelUi(options = {}) {
     const modelHelp = $('#tag-model-help');
     const gpuHelp = $('#tag-gpu-help');
     const runtimeSummary = $('#tag-runtime-summary');
+    const runtimeDetail = $('#tag-runtime-detail');
+    const runtimeModeChip = $('#tag-runtime-mode-chip');
+    const runtimeProviderChip = $('#tag-runtime-provider-chip');
     const runtimeAdvanced = $('#tag-runtime-advanced');
     const runtimeAdvancedHint = $('#tag-runtime-advanced-hint');
     const customModelGroup = $('#custom-model-group');
     const customTagsGroup = $('#custom-tags-group');
+    const disabledNotice = $('#tagger-disabled-notice');
+    const disabledTitle = $('#tagger-disabled-title');
+    const disabledBody = $('#tagger-disabled-body');
     if (!modelSelect) return;
 
     const rawValue = modelSelect.value || '';
     const isCustom = rawValue === 'custom';
     const normalizedModel = normalizeTaggerModelName(rawValue, 'wd-swinv2-tagger-v3');
     const meta = getTaggerModelMeta(normalizedModel);
+    const isToriiGate = isToriiGateTaggerModel(normalizedModel, { isCustom });
     const gpuLocked = isGpuLockedTaggerModel(normalizedModel, { isCustom });
+    const hardwareRecommendation = getTaggerHardwareRecommendation();
+    const providerState = getTaggerProviderState();
+    const hardwareRisk = String(hardwareRecommendation?.risk_level || '').toLowerCase();
+    const hardwarePrefersGpu = hardwareRecommendation
+        ? Boolean(hardwareRecommendation.recommended_use_gpu)
+        : true;
+    const hardwareHighRisk = hardwareRisk === 'high';
     const taggingIsRunning = $('#btn-start-tag')?.disabled === true;
+    const modelDisabled = !isCustom && Boolean(meta?.disabled);
+    const modelPrefersGpu = isCustom ? false : Boolean(meta?.gpu_default ?? true);
+    const recommendedGpu = gpuLocked
+        ? false
+        : (modelPrefersGpu && hardwarePrefersGpu);
 
     if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
     if (customTagsGroup) customTagsGroup.style.display = isCustom ? 'block' : 'none';
+    renderTaggerModelSnapshot(meta, { isCustom, modelDisabled });
+    syncTaggerThresholdUi({ isToriiGate });
+
+    if (applyModelDefaults && meta && !isCustom) {
+        applyTaggerModelThresholdDefaults(meta);
+    }
 
     if (useGpu && (applyModelDefaults || gpuLocked)) {
-        const recommendedGpu = gpuLocked ? false : (isCustom ? false : Boolean(meta?.gpu_default ?? true));
         const changedToSafeMode = useGpu.checked && !recommendedGpu;
         useGpu.checked = recommendedGpu;
         if (changedToSafeMode && toastOnAutoSafe) {
             showToast(
                 gpuLocked
-                    ? 'Max Quality now runs in protected CPU Safe Mode inside the app.'
-                    : 'This model was switched to CPU Safe Mode to avoid crashes.',
+                    ? tText('tagger.toastMaxQualityCpuSafe', 'Max Quality now runs in protected CPU Safe Mode inside the app.')
+                    : tText('tagger.toastAutoSafeMode', 'This model was switched to CPU Safe Mode to avoid crashes.'),
                 'warning'
             );
         }
@@ -1092,77 +1387,165 @@ function syncTaggerModelUi(options = {}) {
     }
 
     if (useGpu) {
-        useGpu.disabled = taggingIsRunning ? true : gpuLocked;
+        useGpu.disabled = taggingIsRunning ? true : (gpuLocked || modelDisabled);
         useGpu.setAttribute('aria-disabled', String(useGpu.disabled));
     }
 
     if (modelHelp) {
-        modelHelp.textContent = isCustom
-            ? 'Custom ONNX model. Start with CPU Safe Mode first, then try GPU only after one stable run.'
-            : describeTaggerModel(meta);
+        if (isCustom) {
+            modelHelp.textContent = tText('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+        } else if (modelDisabled) {
+            modelHelp.textContent = meta?.disabled_reason || tText('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
+        } else {
+            modelHelp.textContent = describeTaggerModel(meta);
+        }
     }
 
     const gpuEnabled = useGpu?.checked ?? false;
-    const riskyGpu = isRiskyTaggerGpuSelection(normalizedModel, { isCustom, useGpu: gpuEnabled });
+    const riskyGpu = modelDisabled ? false : isRiskyTaggerGpuSelection(normalizedModel, {
+        isCustom,
+        useGpu: gpuEnabled,
+        recommendedGpu
+    });
 
     if (runtimeSummary) {
-        runtimeSummary.textContent = describeTaggerRuntime({
+        let summary = modelDisabled
+            ? (meta?.disabled_reason || tText('tagger.modelUnavailable', 'This model is currently unavailable in the app runtime.'))
+            : describeTaggerRuntime({
             isCustom,
             gpuLocked,
             gpuEnabled,
             riskyGpu,
             meta
         });
+        const recommendedChunk = getRecommendedTaggerChunkSize();
+        if (hardwareHighRisk && !gpuLocked && !gpuEnabled) {
+            summary += tText('tagger.highRiskSuffix', ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.');
+        }
+        summary += tText('tagger.recommendedChunkSuffix', ' Recommended chunk: {chunk}.').replace('{chunk}', recommendedChunk);
+        runtimeSummary.textContent = summary;
+    }
+
+    if (runtimeDetail) {
+        if (modelDisabled) {
+            runtimeDetail.textContent = tText('tagger.catalogOnlyDetail', 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.');
+        } else if (isToriiGate) {
+            runtimeDetail.textContent = gpuEnabled
+                ? tText('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
+                : tText('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.');
+        } else if (isCustom) {
+            runtimeDetail.textContent = providerState.hasCuda
+                ? tText('tagger.customGpuAvailDetail', 'The final provider is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.')
+                : tText('tagger.customCpuOnlyDetail', 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.');
+        } else if (providerState.hasCuda) {
+            runtimeDetail.textContent = tText('tagger.cudaAvailDetail', 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.');
+        } else {
+            runtimeDetail.textContent = tText('tagger.cpuOnlyDetail', 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.');
+        }
+    }
+
+    if (runtimeModeChip) {
+        setTaggerStatusChip(
+            runtimeModeChip,
+            modelDisabled ? tText('tagger.chipCatalogOnly', 'Catalog Only') : (gpuEnabled ? tText('tagger.chipGpuTarget', 'GPU Target') : tText('tagger.chipCpuTarget', 'CPU Target')),
+            modelDisabled ? 'is-danger' : (gpuEnabled ? 'is-safe' : 'is-warning')
+        );
+    }
+
+    if (runtimeProviderChip) {
+        const providerLabel = modelDisabled
+            ? tText('tagger.chipVlmNeeded', 'VLM Backend Needed')
+            : (isToriiGate
+                ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? tText('tagger.chipPytorchCuda', 'PyTorch CUDA') : tText('tagger.chipPytorchCpu', 'PyTorch CPU'))
+                : (providerState.hasCuda ? providerState.label : tText('tagger.chipCpuRuntime', 'CPU Runtime')));
+        const providerTone = modelDisabled
+            ? 'is-danger'
+            : (isToriiGate
+                ? (gpuEnabled ? 'is-safe' : 'is-warning')
+                : providerState.tone);
+        setTaggerStatusChip(runtimeProviderChip, providerLabel, providerTone);
+    }
+
+    if (disabledNotice && disabledTitle && disabledBody) {
+        if (modelDisabled) {
+            disabledNotice.hidden = false;
+            disabledTitle.textContent = tText('tagger.disabledNotRunnable', '{model} is not runnable in the current build.').replace('{model}', normalizedModel);
+            disabledBody.textContent = meta?.disabled_reason || tText('tagger.disabledFallback', 'Use one of the ONNX taggers above for now.');
+        } else {
+            disabledNotice.hidden = true;
+        }
     }
 
     if (runtimeAdvancedHint) {
         if (gpuLocked) {
-            runtimeAdvancedHint.textContent = 'Max Quality does not allow a GPU override inside the app.';
+            runtimeAdvancedHint.textContent = tText('tagger.advHintStressTest', 'Optional. Change this only if you are stress-testing.');
+        } else if (hardwareHighRisk && !gpuEnabled) {
+            runtimeAdvancedHint.textContent = tText('tagger.advHintHighRisk', 'Optional. This machine is marked high-risk for long GPU tagging.');
         } else if (isCustom) {
-            runtimeAdvancedHint.textContent = 'Leave this alone unless your custom model already finished one stable CPU run.';
+            runtimeAdvancedHint.textContent = tText('tagger.advHintCustom', 'Optional. Leave this alone until your custom model finishes one stable CPU run.');
         } else if (gpuEnabled && !riskyGpu) {
-            runtimeAdvancedHint.textContent = 'The recommended mode is already active. Most users never need to touch this.';
+            runtimeAdvancedHint.textContent = tText('tagger.advHintRecommended', 'Optional. The recommended mode is already active.');
         } else {
-            runtimeAdvancedHint.textContent = 'Only change this if you need to troubleshoot or already know your setup is stable.';
+            runtimeAdvancedHint.textContent = tText('tagger.advHintDefault', 'Optional. Change this only when troubleshooting or tuning.');
         }
     }
 
     if (gpuHelp) {
-        if (gpuLocked) {
-            gpuHelp.textContent = 'Protected CPU Safe Mode is locked on for Max Quality. GPU override stays unavailable here on purpose.';
+        if (modelDisabled) {
+            gpuHelp.textContent = meta?.disabled_reason || tText('tagger.modelNotStartable', 'This model cannot be started in the current build.');
+        } else if (isToriiGate) {
+            gpuHelp.textContent = gpuEnabled
+                ? tText('tagger.gpuHelpToriiGateGpu', 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.')
+                : tText('tagger.gpuHelpToriiGateCpu', 'ToriiGate is using the multimodal PyTorch backend on CPU. This is valid but much slower than CUDA.');
+        } else if (gpuLocked) {
+            gpuHelp.textContent = tText('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.');
         } else if (!gpuEnabled) {
             gpuHelp.textContent = isCustom
-                ? 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.'
-                : 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.';
+                ? tText('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.')
+                : (hardwareHighRisk
+                    ? tText('tagger.gpuHelpHighRiskCpu', 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.')
+                    : tText('tagger.gpuHelpCpuSafe', 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.'));
         } else if (riskyGpu) {
-            gpuHelp.textContent = 'High-risk GPU override is active. You will be asked to confirm before this run starts.';
+            gpuHelp.textContent = tText('tagger.gpuHelpRiskyOverride', 'High-risk GPU override is active. You will be asked to confirm before this run starts.');
+        } else if (meta?.gpu_confirmation_required) {
+            gpuHelp.textContent = meta?.safe_mode_note
+                ? tText('tagger.gpuHelpAdaptiveNote', 'Adaptive runtime is active. {note}').replace('{note}', meta.safe_mode_note)
+                : tText('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model.');
         } else if (meta?.safe_mode_note) {
-            gpuHelp.textContent = `Recommended GPU mode is active. ${meta.safe_mode_note}`;
+            gpuHelp.textContent = tText('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}').replace('{note}', meta.safe_mode_note);
         } else {
-            gpuHelp.textContent = 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.';
+            gpuHelp.textContent = tText('tagger.gpuHelpRecommendedDefault', 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.');
         }
     }
+
+    syncTaggerRuntimeChunkUi({
+        gpuEnabled,
+        gpuLocked,
+        riskyGpu,
+        isCustom,
+        isToriiGate
+    });
 }
 
 function confirmUnsafeTaggerGpuRun(modelName, meta = null) {
     const displayName = modelName === 'custom'
-        ? 'custom model'
+        ? tText('tagger.confirmCustomModel', 'custom model')
         : normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3');
     const summary = meta?.best_for
-        ? `Model focus: ${meta.best_for}.`
-        : 'This setup is optimized for maximum speed, not maximum stability.';
+        ? tText('tagger.confirmModelFocus', 'Model focus: {bestFor}.').replace('{bestFor}', meta.best_for)
+        : tText('tagger.confirmSpeedNotStability', 'This setup is optimized for maximum speed, not maximum stability.');
     const message = [
-        `${displayName} on GPU is the most crash-prone tagger setup.`,
+        tText('tagger.confirmCrashProne', '{model} on GPU is the most crash-prone tagger setup.').replace('{model}', displayName),
         '',
         summary,
-        'Recommended: switch to CPU Safe Mode first.',
-        'Continue with risky GPU mode anyway?'
+        tText('tagger.confirmRecommendCpu', 'Recommended: switch to CPU Safe Mode first.'),
+        tText('tagger.confirmContinueRisky', 'Continue with risky GPU mode anyway?')
     ].join('\n');
 
     return new Promise((resolve) => {
         if (typeof showConfirm === 'function') {
             showConfirm(
-                'Risky GPU Tagger Run',
+                tText('tagger.confirmRiskyTitle', 'Risky GPU Tagger Run'),
                 message,
                 () => resolve(true),
                 () => resolve(false)
@@ -1398,6 +1781,11 @@ function initEventListeners() {
     $('#tag-use-gpu')?.addEventListener('change', () => {
         syncTaggerModelUi({ applyModelDefaults: false });
     });
+    $('#tagger-batch-size')?.addEventListener('change', (event) => {
+        event.target.dataset.userChosen = '1';
+        syncTaggerModelUi({ applyModelDefaults: false });
+    });
+    syncTaggerModelUi({ applyModelDefaults: true });
 
     // Image modal
     $('#modal-close').addEventListener('click', () => hideModal('image-modal'));
@@ -2215,7 +2603,12 @@ async function loadTaggerModels() {
             const name = model.name || model.path || 'unknown-model';
             const bestFor = model.best_for ? ` - ${model.best_for}` : '';
             const recommended = model.recommended ? ' (Recommended)' : '';
-            return `<option value="${escapeHtml(name)}" title="${escapeHtml(`${name}${bestFor}`)}">${escapeHtml(name)}${recommended}</option>`;
+            const disabled = model.disabled ? ' (Unavailable)' : '';
+            const disabledAttr = model.disabled ? ' disabled aria-disabled="true"' : '';
+            const title = model.disabled && model.disabled_reason
+                ? `${name}${bestFor} - ${model.disabled_reason}`
+                : `${name}${bestFor}`;
+            return `<option value="${escapeHtml(name)}" title="${escapeHtml(title)}"${disabledAttr}>${escapeHtml(name)}${recommended}${disabled}</option>`;
         });
         options.push('<option value="custom">Custom Local Model...</option>');
 
@@ -2250,6 +2643,7 @@ async function exportTagLibraryJson() {
 }
 
 async function startTagging() {
+    const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
     const threshold = parseFloat($('#tag-threshold')?.value) || 0.35;
     const characterThreshold = parseFloat($('#tag-character-threshold')?.value) || 0.85;
     const modelSelectRaw = $('#tag-model-select')?.value || '';
@@ -2259,6 +2653,10 @@ async function startTagging() {
     );
     const isCustomModel = modelSelectRaw === 'custom';
     const modelMeta = getTaggerModelMeta(modelSelect);
+    if (!isCustomModel && modelMeta?.disabled) {
+        showToast(modelMeta.disabled_reason || 'This tagger model is not available in the current build.', 'warning');
+        return;
+    }
     const useGpuCheckbox = $('#tag-use-gpu');
     const gpuLocked = isGpuLockedTaggerModel(modelSelect, { isCustom: isCustomModel });
 
@@ -2292,11 +2690,12 @@ async function startTagging() {
     options.retagAll = $('#tag-retag-all').checked;
     options.useGpu = useGpuCheckbox?.checked ?? true;
 
-    // Batch size from user selection (system-info panel)
+    // Advanced runtime chunk size now maps to the backend's true WD14 batch size
+    // where the selected model supports dynamic batching.
     const batchSelect = document.getElementById('tagger-batch-size');
-    if (batchSelect) {
-        options.batchSize = parseInt(batchSelect.value, 10) || 4;
-    }
+    options.batchSize = batchSelect
+        ? Math.min(128, parseInt(batchSelect.value, 10) || getRecommendedTaggerChunkSize())
+        : Math.min(128, getRecommendedTaggerChunkSize());
 
     if (gpuLocked) {
         options.useGpu = false;
@@ -2305,7 +2704,7 @@ async function startTagging() {
             useGpuCheckbox.checked = false;
         }
         syncTaggerModelUi({ applyModelDefaults: false });
-    } else if (isRiskyTaggerGpuSelection(modelSelect, { isCustom: isCustomModel, useGpu: options.useGpu })) {
+    } else if (requiresTaggerGpuLaunchConfirmation(modelSelect, { isCustom: isCustomModel, useGpu: options.useGpu })) {
         const continueWithGpu = await confirmUnsafeTaggerGpuRun(modelSelectRaw || modelSelect, modelMeta);
         if (continueWithGpu) {
             options.allowUnsafeAcceleration = true;
@@ -2331,8 +2730,10 @@ async function startTagging() {
         $('#tag-progress-container').style.display = 'block';
         $('#tag-progress-fill').style.width = '0%';
         $('#tag-progress-text').textContent = gpuLocked
-            ? 'Preparing Max Quality model in protected CPU Safe Mode...'
-            : (options.useGpu ? 'Preparing model on GPU...' : 'Preparing model on CPU...');
+            ? t('tag.preparingMaxQuality', 'Preparing Max Quality model in protected CPU Safe Mode...')
+            : (options.useGpu
+                ? t('tag.preparingGpu', 'Preparing model on GPU...')
+                : t('tag.preparingCpu', 'Preparing model on CPU...'));
         setTaggingUiState(true);
 
         pollTagProgress();
@@ -2347,16 +2748,14 @@ async function cancelTagging() {
     const progress = await API.getTagProgress().catch(() => null);
     if (!progress || !['running', 'cancelling'].includes(progress.status)) {
         hideModal('tag-modal');
+        _hideBgTagProgress();
         return;
     }
 
-    try {
-        await API.cancelTagging();
-        $('#tag-progress-text').textContent = 'Cancelling after current image...';
-        setTaggingUiState(true, { idleLabel: 'Close' });
-    } catch (error) {
-        showToast(formatUserError(error, 'Failed to cancel tagging'), 'error');
-    }
+    // If tagging is running, minimize to background instead of cancelling.
+    // The user can cancel from the background progress bar.
+    hideModal('tag-modal');
+    showToast(tText('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to cancel or check status.'), 'info');
 }
 
 // UI-03: Track tagging progress timing for ETA estimation
@@ -2378,8 +2777,12 @@ async function pollTagProgress() {
 
         $('#tag-progress-fill').style.width = percent + '%';
 
-        // Build progress text with ETA
-        let progressText = progress.message || 'Preparing tagger...';
+        // Build progress text with phase awareness and ETA
+        const errorSuffix = errors > 0
+            ? tText('tagger.progressErrorSuffix', ', {errors} failed').replace('{errors}', errors)
+            : '';
+        let progressText = progress.message || tText('tagger.progressPreparing', 'Preparing tagger...');
+
         if (total > 0 && current > 0) {
             // Initialize start time on first progress
             if (!_tagStartTime) {
@@ -2411,35 +2814,58 @@ async function pollTagProgress() {
                         const etaSecs = Math.floor(etaSeconds % 60);
 
                         // Format ETA string
-                        let etaStr = '';
-                        if (etaMinutes > 0) {
-                            etaStr = `${etaMinutes}m ${etaSecs}s`;
-                        } else {
-                            etaStr = `${etaSecs}s`;
-                        }
+                        const etaStr = etaMinutes > 0 ? `${etaMinutes}m ${etaSecs}s` : `${etaSecs}s`;
 
                         // Update progress text with ETA
-                        progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''}, ~${etaStr} remaining)`;
+                        progressText = tText('tagger.progressTagging', '{current}/{total} ({tagged} tagged{errorSuffix}, ~{eta} remaining)')
+                            .replace('{current}', current)
+                            .replace('{total}', total)
+                            .replace('{tagged}', tagged)
+                            .replace('{errorSuffix}', errorSuffix)
+                            .replace('{eta}', etaStr);
                     } else {
-                        progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''})`;
+                        progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                            .replace('{current}', current)
+                            .replace('{total}', total)
+                            .replace('{tagged}', tagged)
+                            .replace('{errorSuffix}', errorSuffix);
                     }
                 } else {
-                    progressText = `${current}/${total} (${tagged} tagged${errors > 0 ? `, ${errors} failed` : ''})`;
+                    progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                        .replace('{current}', current)
+                        .replace('{total}', total)
+                        .replace('{tagged}', tagged)
+                        .replace('{errorSuffix}', errorSuffix);
                 }
             } else {
-                progressText = `${progress.message || 'Tagging'} ${current}/${total}`;
+                // Early progress: show message + counts while ETA is being calculated
+                progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                    .replace('{current}', current)
+                    .replace('{total}', total)
+                    .replace('{tagged}', tagged)
+                    .replace('{errorSuffix}', errorSuffix);
             }
         }
+        // When total === 0 or current === 0, we are still in "loading model" phase.
+        // The backend sends a message like "Preparing tagger..." during model load.
+        // progressText already holds progress.message from above, which is the correct phase text.
 
         if (progress.status === 'cancelling') {
-            progressText = progress.message || `Cancelling... ${current}/${Math.max(total, current)}`;
+            progressText = progress.message || tText('tagger.progressCancelling', 'Cancelling... {current}/{total}')
+                .replace('{current}', current)
+                .replace('{total}', Math.max(total, current));
         }
 
         $('#tag-progress-text').textContent = progressText;
 
+        // Update background progress bar (always, even if modal is closed)
+        _updateBgTagProgress(percent, progressText, progress.status);
+
         if (progress.status === 'done') {
             _tagPollingActive = false;
             clearTagProgressTimer();
+            _hideBgTagProgress();
+            _showCompletionFlash();
             showToast(progress.message, errors > 0 ? 'warning' : 'success');
             hideModal('tag-modal');
             $('#tag-progress-container').style.display = 'none';
@@ -2453,7 +2879,8 @@ async function pollTagProgress() {
         } else if (progress.status === 'cancelled') {
             _tagPollingActive = false;
             clearTagProgressTimer();
-            showToast(progress.message || 'Tagging cancelled', 'info');
+            _hideBgTagProgress();
+            showToast(progress.message || tText('tagger.progressCancelled', 'Tagging cancelled'), 'info');
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
             _tagStartTime = null;
@@ -2465,6 +2892,7 @@ async function pollTagProgress() {
         } else if (progress.status === 'error') {
             _tagPollingActive = false;
             clearTagProgressTimer();
+            _hideBgTagProgress();
             showToast(progress.message, 'error');
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
@@ -2477,7 +2905,8 @@ async function pollTagProgress() {
     } catch (error) {
         _tagPollingActive = false;
         clearTagProgressTimer();
-        showToast('Error checking tag progress', 'error');
+        _hideBgTagProgress();
+        showToast(tText('tagger.errorCheckingProgress', 'Error checking tag progress'), 'error');
         $('#tag-progress-container').style.display = 'none';
         setTaggingUiState(false);
         // Reset timing state on error
@@ -2486,18 +2915,72 @@ async function pollTagProgress() {
     }
 }
 
+// ============== Background Tagging Progress Bar ==============
+
+function _updateBgTagProgress(percent, text, status) {
+    const bar = $('#bg-tag-progress');
+    if (!bar) return;
+    if (!_tagPollingActive || status === 'idle' || status === 'done') {
+        bar.style.display = 'none';
+        return;
+    }
+    bar.style.display = 'flex';
+    const fill = $('#bg-tag-progress-fill');
+    const textEl = $('#bg-tag-progress-text');
+    if (fill) fill.style.width = percent + '%';
+    if (textEl) textEl.textContent = text;
+}
+
+function _hideBgTagProgress() {
+    const bar = $('#bg-tag-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _showCompletionFlash() {
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;inset:0;background:rgba(34,197,94,0.08);pointer-events:none;z-index:9999;animation:completionFlash 600ms ease-out forwards;';
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 700);
+}
+
+function _initBgTagProgressButtons() {
+    const cancelBtn = $('#bg-tag-cancel');
+    const openBtn = $('#bg-tag-open');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', async () => {
+            try {
+                await API.cancelTagging();
+                showToast(tText('tagger.cancellingAfterCurrent', 'Cancelling after current image...'), 'info');
+            } catch (err) {
+                showToast(formatUserError(err, 'Failed to cancel'), 'error');
+            }
+        });
+    }
+    if (openBtn) {
+        openBtn.addEventListener('click', () => {
+            showModal('tag-modal');
+        });
+    }
+}
+
 async function resumeTaggingProgress() {
     try {
         const progress = await API.getTagProgress();
         if (!['running', 'cancelling'].includes(progress?.status)) {
+            _hideBgTagProgress();
             return;
         }
 
         _tagPollingActive = true;
         clearTagProgressTimer();
         $('#tag-progress-container').style.display = 'block';
-        $('#tag-progress-text').textContent = progress.message || 'Resuming tagging progress...';
+        $('#tag-progress-text').textContent = progress.message || tText('tagger.progressResuming', 'Resuming tagging progress...');
         setTaggingUiState(true, { idleLabel: 'Close' });
+        // Show background progress bar (tag modal may not be open)
+        const current = progress.processed || progress.current || 0;
+        const total = progress.total || 0;
+        const percent = total > 0 ? (current / total) * 100 : 0;
+        _updateBgTagProgress(percent, progress.message || 'Resuming...', progress.status);
         pollTagProgress();
     } catch (error) {
         Logger.warn('Failed to resume tagging progress:', error);
@@ -4247,6 +4730,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateSelectionUI();
     resumeScanProgress();
     resumeTaggingProgress();
+    _initBgTagProgressButtons();
 
     // Initialize gallery keyboard navigation for accessibility
     if (window.Gallery && typeof window.Gallery.initKeyboardNavigation === 'function') {

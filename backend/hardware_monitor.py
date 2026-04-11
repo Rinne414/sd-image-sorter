@@ -1,4 +1,4 @@
-"""Hardware detection and memory monitoring for safe AI model inference."""
+"""Hardware detection and memory monitoring for adaptive AI model inference."""
 import logging
 import platform
 from typing import Any, Dict, Optional
@@ -24,6 +24,7 @@ def get_system_info() -> Dict[str, Any]:
         "gpu_name": None,
         "gpu_vram_total_mb": None,
         "gpu_vram_available_mb": None,
+        "torch_cuda_available": False,
         "cpu_count": None,
         "os_platform": platform.system(),
         "onnx_providers": [],
@@ -52,6 +53,7 @@ def get_system_info() -> Dict[str, Any]:
         import torch
 
         if torch.cuda.is_available():
+            info["torch_cuda_available"] = True
             info["gpu_name"] = torch.cuda.get_device_name(0)
             try:
                 props = torch.cuda.get_device_properties(0)
@@ -96,7 +98,11 @@ def get_system_info() -> Dict[str, Any]:
     return info
 
 
-def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
+def recommend_tagger_config(
+    system_info: Dict[str, Any],
+    model_name: Optional[str] = None,
+    use_gpu: Optional[bool] = None,
+) -> Dict[str, Any]:
     """
     Recommend tagger configuration based on detected hardware.
 
@@ -117,37 +123,53 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
     onnx_providers = system_info.get("onnx_providers") or []
     has_cuda_provider = "CUDAExecutionProvider" in onnx_providers
 
-    use_gpu = has_gpu and has_cuda_provider
+    if use_gpu is None:
+        use_gpu = has_gpu and has_cuda_provider
+    else:
+        use_gpu = bool(use_gpu and has_gpu and has_cuda_provider)
 
     ram_gb = system_info.get("total_ram_gb") or 8
+    available_ram_gb = system_info.get("available_ram_gb") or ram_gb
+    available_vram_mb = system_info.get("gpu_vram_available_mb") or vram_mb
+    model_key = str(model_name or "").strip().lower()
+    is_heavy_model = "eva02" in model_key or "large" in model_key
 
     if use_gpu and vram_mb is not None:
-        if vram_mb < 4000:
-            batch_size = 1
+        if available_vram_mb is not None and available_vram_mb < 2500:
+            batch_size = 2
+        elif vram_mb < 4000:
+            batch_size = 4
         elif vram_mb < 8000:
-            batch_size = 2
+            batch_size = 8
         elif vram_mb < 12000:
-            batch_size = 4
+            batch_size = 12
+        elif vram_mb < 16000:
+            batch_size = 16
+        elif vram_mb < 24000:
+            batch_size = 24
         else:
-            batch_size = 8
+            batch_size = 32
+        if is_heavy_model:
+            batch_size = max(2, min(batch_size, 12 if (vram_mb or 0) < 16000 else 16))
     else:
-        # CPU mode: scale with available RAM
-        if ram_gb < 8:
-            batch_size = 1
-        elif ram_gb < 16:
+        # CPU mode: conservative batch sizes to prevent OOM crashes.
+        # CPU ONNX inference is memory-hungry; keep batches small.
+        if available_ram_gb < 8:
             batch_size = 2
-        elif ram_gb < 32:
+        elif available_ram_gb < 16:
             batch_size = 4
-        else:
+        elif available_ram_gb < 32:
             batch_size = 8
+        else:
+            batch_size = 12
 
-    session_refresh_interval = 100 if use_gpu else 0
+    session_refresh_interval = 180 if use_gpu else 0
 
     # Determine risk level
     if use_gpu:
-        if vram_mb is not None and vram_mb < 4000:
+        if (vram_mb is not None and vram_mb < 4000) or (available_vram_mb is not None and available_vram_mb < 2000):
             risk_level = "high"
-        elif vram_mb is not None and vram_mb < 8000:
+        elif (vram_mb is not None and vram_mb < 8000) or (available_vram_mb is not None and available_vram_mb < 4000):
             risk_level = "medium"
         else:
             risk_level = "low"
@@ -159,11 +181,11 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
     if use_gpu:
         parts.append(f"GPU detected: {gpu_name} ({int(vram_mb)}MB VRAM).")
         if risk_level == "high":
-            parts.append("Low VRAM detected. Batch size limited to 1 and session refresh enabled to prevent crashes.")
+            parts.append("VRAM headroom is tight right now. Auto runtime lowered the true batch size and kept session refresh enabled.")
         elif risk_level == "medium":
-            parts.append("Moderate VRAM. Session refresh enabled for stability.")
+            parts.append("Moderate VRAM headroom. Auto runtime is using a balanced true batch size.")
         else:
-            parts.append("Sufficient VRAM for GPU inference.")
+            parts.append("Sufficient VRAM for aggressive batched GPU inference.")
     else:
         if has_gpu and not has_cuda_provider:
             parts.append(f"GPU detected ({gpu_name}) but CUDAExecutionProvider not available in ONNX Runtime.")
@@ -174,6 +196,7 @@ def recommend_tagger_config(system_info: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "recommended_batch_size": batch_size,
+        "recommended_cpu_chunk_size": min(32, max(4, batch_size)),
         "recommended_use_gpu": use_gpu,
         "recommended_session_refresh_interval": session_refresh_interval,
         "risk_level": risk_level,

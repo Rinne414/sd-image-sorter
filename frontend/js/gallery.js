@@ -2099,6 +2099,21 @@ const Gallery = {
             .join(', ');
     },
 
+    _renderModalCaption(image) {
+        const section = document.querySelector('#modal-caption-section');
+        const textEl = document.querySelector('#modal-caption-text');
+        if (!section || !textEl) return;
+
+        const caption = image?.ai_caption;
+        if (caption && caption.trim()) {
+            textEl.textContent = caption.trim();
+            section.style.display = '';
+        } else {
+            section.style.display = 'none';
+            textEl.textContent = '';
+        }
+    },
+
     _buildCopyAllText(image, parsedData, tags, promptView = null) {
         const loras = (() => {
             try {
@@ -2177,7 +2192,7 @@ ${String(value)}`)
         document.querySelector('#modal-tags-list').style.color = 'var(--text-muted)';
         $('#btn-toggle-prompt-format').disabled = true;
         $('#btn-toggle-prompt-format').textContent = this._t('modal.viewAsSD', null, 'View as SD');
-        ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-img2img-section', '#modal-nodes-section'].forEach(selector => {
+        ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-img2img-section', '#modal-nodes-section', '#modal-caption-section'].forEach(selector => {
             const element = document.querySelector(selector);
             if (element) {
                 element.style.display = 'none';
@@ -2244,6 +2259,13 @@ ${String(value)}`)
         $('#btn-copy-prompt').onclick = () => copyToClipboard((getPromptView().promptText || ''), this._t('modal.promptCopied', null, 'Prompt copied'));
         $('#btn-copy-negative').onclick = () => copyToClipboard((getPromptView().negativeText || ''), this._t('modal.negativeCopied', null, 'Negative prompt copied'));
         $('#btn-copy-tags').onclick = () => copyToClipboard((this._lastModalTags || []).map(tag => tag.tag).join(', '), this._t('modal.tagsCopied', null, 'Tags copied'));
+        const btnCopyCaption = document.querySelector('#btn-copy-caption');
+        if (btnCopyCaption) {
+            btnCopyCaption.onclick = () => copyToClipboard(
+                document.querySelector('#modal-caption-text')?.textContent || '',
+                this._t('modal.captionCopied', null, 'Caption copied')
+            );
+        }
         $('#btn-copy-params').onclick = () => copyToClipboard(
             this._serializeGenerationParams(this._lastModalImage, this._lastParsedData),
             this._t('modal.paramsCopied', null, 'Params copied')
@@ -2286,6 +2308,7 @@ ${String(value)}`)
 
         this._renderModalSections(image, parsedData);
         this._renderModalTags(tags);
+        this._renderModalCaption(image);
         this._applyModalPromptView(this._buildPromptView(image, parsedData, 'original'));
         $('#modal-loading-state').style.display = 'none';
         $('#btn-toggle-all-tags').textContent = this._t('modal.showMore', null, 'Show More');
