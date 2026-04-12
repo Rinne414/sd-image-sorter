@@ -13,7 +13,7 @@ Then:
 1. Extract it to any normal folder.
 2. Double-click `run-portable.bat`.
 3. Wait for dependency install on first run.
-4. Open `http://localhost:8000`.
+4. Open `http://localhost:8487`.
 
 This package includes an embedded Python runtime — **no system Python install needed**.
 

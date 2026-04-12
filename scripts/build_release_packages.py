@@ -30,7 +30,6 @@ DOC_FILES = {
     "models/README.md",
     "models/yolo/README.md",
     "models/artist/README.md",
-    "docs/RELEASE_PACKS.md",
 }
 
 EXCLUDED_PREFIXES = (
@@ -49,6 +48,8 @@ EXCLUDED_PREFIXES = (
     "node_modules",
     "tests",
     "test-results",
+    "docs",
+    "tmp",
     "reference",
     "testimage",
     "example",
@@ -98,6 +99,11 @@ EXCLUDED_FILES = {
     "docs/SECURITY_ARCHITECTURE.md",
     "docs/architecture.md",
     "docs/API.md",
+    "run-portable.bat",
+}
+
+ALLOWED_HIDDEN_FILES = {
+    ".env.example",
 }
 
 CORE_MODEL_FILES = (
@@ -164,6 +170,8 @@ def find_seven_zip() -> Path | None:
 
 def should_skip_path(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
+    if any(part.startswith(".") for part in relative_path.parts) and rel not in ALLOWED_HIDDEN_FILES:
+        return True
     if rel in EXCLUDED_FILES:
         return True
     if any(rel == prefix or rel.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES):
@@ -277,6 +285,95 @@ def download_file(url: str, dest: Path) -> None:
     print(f"[release] Downloaded to {dest} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
+def write_portable_launcher(stage_dir: Path) -> Path:
+    """Write the Windows portable launcher with deterministic CRLF endings."""
+    portable_bat = stage_dir / "run-portable.bat"
+    with portable_bat.open("w", encoding="utf-8", newline="\r\n") as handle:
+        handle.write(
+            "@echo off\n"
+            "setlocal enabledelayedexpansion\n"
+            "\n"
+            "echo ==========================================\n"
+            "echo    SD Image Sorter - Portable Launch\n"
+            "echo ==========================================\n"
+            "echo.\n"
+            "\n"
+            "cd /d \"%~dp0\"\n"
+            "\n"
+            "set \"PYTHON_DIR=%~dp0python\"\n"
+            "set \"PYTHON_CMD=%PYTHON_DIR%\\python.exe\"\n"
+            "\n"
+            "if not exist \"%PYTHON_CMD%\" (\n"
+            "    echo [ERROR] Embedded Python not found at %PYTHON_CMD%\n"
+            "    echo         Please re-download the portable package.\n"
+            "    pause\n"
+            "    exit /b 1\n"
+            ")\n"
+            "\n"
+            "REM -- Put embedded Python and its Scripts on PATH so DLLs and\n"
+            "REM    compiled extensions (numpy, pillow, onnxruntime) resolve.\n"
+            "set \"PATH=%PYTHON_DIR%;%PYTHON_DIR%\\Scripts;%PYTHON_DIR%\\Lib\\site-packages;%PATH%\"\n"
+            "\n"
+            "echo [OK] Using embedded Python: %PYTHON_CMD%\n"
+            "\n"
+            "REM -- Install pip if not present\n"
+            "if not exist \"%PYTHON_DIR%\\Scripts\\pip.exe\" (\n"
+            "    echo [INFO] Installing pip...\n"
+            "    \"%PYTHON_CMD%\" \"%PYTHON_DIR%\\get-pip.py\" --no-warn-script-location\n"
+            "    if errorlevel 1 (\n"
+            "        echo [ERROR] Failed to install pip.\n"
+            "        pause\n"
+            "        exit /b 1\n"
+            "    )\n"
+            ")\n"
+            "\n"
+            "REM -- Install dependencies\n"
+            "if not exist \"backend\\.requirements_hash\" (\n"
+            "    set NEED_INSTALL=1\n"
+            ") else (\n"
+            "    set NEED_INSTALL=0\n"
+            "    \"%PYTHON_CMD%\" -c \"import fastapi, PIL\" >nul 2>&1\n"
+            "    if errorlevel 1 (\n"
+            "        echo [INFO] Embedded packages look incomplete. Reinstalling dependencies...\n"
+            "        set NEED_INSTALL=1\n"
+            "    )\n"
+            ")\n"
+            "\n"
+            "if !NEED_INSTALL! EQU 1 (\n"
+            "    echo [INFO] Installing dependencies - first run may take a few minutes...\n"
+            "    \"%PYTHON_DIR%\\Scripts\\pip.exe\" install -r backend\\requirements.txt --no-warn-script-location\n"
+            "    if errorlevel 1 (\n"
+            "        echo [ERROR] Failed to install dependencies.\n"
+            "        pause\n"
+            "        exit /b 1\n"
+            "    )\n"
+            "    echo installed > backend\\.requirements_hash\n"
+            "    echo [OK] Dependencies installed.\n"
+            ")\n"
+            "\n"
+            "echo.\n"
+            "echo ==========================================\n"
+            "echo   SD Image Sorter is starting!\n"
+            "echo.\n"
+            "echo   Open browser: http://localhost:8487\n"
+            "echo   Press Ctrl+C to stop the server.\n"
+            "echo ==========================================\n"
+            "echo.\n"
+            "\n"
+            "start \"\" http://localhost:8487\n"
+            "\n"
+            "cd backend\n"
+            "\"%~dp0python\\python.exe\" main.py\n"
+            "\n"
+            "echo.\n"
+            "echo ==========================================\n"
+            "echo   Server stopped. Error output above.\n"
+            "echo ==========================================\n"
+            "pause\n"
+        )
+    return portable_bat
+
+
 def prepare_embedded_python(stage_dir: Path) -> None:
     """Download and prepare an embedded Python for portable distribution."""
     python_dir = stage_dir / "python"
@@ -309,86 +406,8 @@ def prepare_embedded_python(stage_dir: Path) -> None:
     if not get_pip.exists():
         download_file(GET_PIP_URL, get_pip)
 
-    # Write a portable run.bat that uses the embedded Python
-    portable_bat = stage_dir / "run-portable.bat"
-    portable_bat.write_text(
-        '@echo off\r\n'
-        'setlocal enabledelayedexpansion\r\n'
-        '\r\n'
-        'echo ==========================================\r\n'
-        'echo    SD Image Sorter - Portable Launch\r\n'
-        'echo ==========================================\r\n'
-        'echo.\r\n'
-        '\r\n'
-        'cd /d "%~dp0"\r\n'
-        '\r\n'
-        'set "PYTHON_DIR=%~dp0python"\r\n'
-        'set "PYTHON_CMD=%PYTHON_DIR%\\python.exe"\r\n'
-        '\r\n'
-        'if not exist "%PYTHON_CMD%" (\r\n'
-        '    echo [ERROR] Embedded Python not found at %PYTHON_CMD%\r\n'
-        '    echo         Please re-download the portable package.\r\n'
-        '    pause\r\n'
-        '    exit /b 1\r\n'
-        ')\r\n'
-        '\r\n'
-        'REM -- Put embedded Python and its Scripts on PATH so DLLs and\r\n'
-        'REM    compiled extensions (numpy, pillow, onnxruntime) resolve.\r\n'
-        'set "PATH=%PYTHON_DIR%;%PYTHON_DIR%\\Scripts;%PYTHON_DIR%\\Lib\\site-packages;%PATH%"\r\n'
-        '\r\n'
-        'echo [OK] Using embedded Python: %PYTHON_CMD%\r\n'
-        '\r\n'
-        'REM -- Install pip if not present\r\n'
-        'if not exist "%PYTHON_DIR%\\Scripts\\pip.exe" (\r\n'
-        '    echo [INFO] Installing pip...\r\n'
-        '    "%PYTHON_CMD%" "%PYTHON_DIR%\\get-pip.py" --no-warn-script-location\r\n'
-        '    if errorlevel 1 (\r\n'
-        '        echo [ERROR] Failed to install pip.\r\n'
-        '        pause\r\n'
-        '        exit /b 1\r\n'
-        '    )\r\n'
-        ')\r\n'
-        '\r\n'
-        'REM -- Install dependencies\r\n'
-        'if not exist "backend\\.requirements_hash" (\r\n'
-        '    set NEED_INSTALL=1\r\n'
-        ') else (\r\n'
-        '    set NEED_INSTALL=0\r\n'
-        ')\r\n'
-        '\r\n'
-        'if !NEED_INSTALL! EQU 1 (\r\n'
-        '    echo [INFO] Installing dependencies (first run, may take a few minutes)...\r\n'
-        '    "%PYTHON_DIR%\\Scripts\\pip.exe" install -r backend\\requirements.txt --no-warn-script-location\r\n'
-        '    if errorlevel 1 (\r\n'
-        '        echo [ERROR] Failed to install dependencies.\r\n'
-        '        pause\r\n'
-        '        exit /b 1\r\n'
-        '    )\r\n'
-        '    echo installed > backend\\.requirements_hash\r\n'
-        '    echo [OK] Dependencies installed.\r\n'
-        ')\r\n'
-        '\r\n'
-        'echo.\r\n'
-        'echo ==========================================\r\n'
-        'echo   SD Image Sorter is starting!\r\n'
-        'echo.\r\n'
-        'echo   Open browser: http://localhost:8487\r\n'
-        'echo   Press Ctrl+C to stop the server.\r\n'
-        'echo ==========================================\r\n'
-        'echo.\r\n'
-        '\r\n'
-        'start "" http://localhost:8487\r\n'
-        '\r\n'
-        'cd backend\r\n'
-        '"%~dp0python\\python.exe" main.py\r\n'
-        '\r\n'
-        'echo.\r\n'
-        'echo ==========================================\r\n'
-        'echo   Server stopped. Error output above.\r\n'
-        'echo ==========================================\r\n'
-        'pause\r\n',
-        encoding="utf-8",
-    )
+    # Keep exact CRLF endings for cmd.exe; newline translation can corrupt batch files.
+    write_portable_launcher(stage_dir)
 
 
 def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) -> Path:
