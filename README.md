@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.4.0-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.5.0-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -16,9 +16,9 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 ---
@@ -60,7 +60,7 @@ Built-in **WD14 Tagger** (anime/illustration-focused) automatically labels every
 - **Dual thresholds**: tune general tag sensitivity separately from character tag sensitivity
 - **Content rating**: auto-classifies General / Sensitive / Questionable / Explicit
 - **AI captions**: ToriiGate generates natural-language descriptions alongside tags — viewable in the image detail modal
-- **Background tagging**: close the tagger modal and keep browsing — a progress bar in the navbar tracks the job, with pause/cancel controls
+- **Background tagging**: close the tagger modal and keep browsing — a floating progress pill in the bottom-right corner tracks the job, with stop and details controls
 - **Elastic batch sizing**: the app monitors your RAM/VRAM in real time and adjusts batch size to prevent crashes
 - Models auto-download from HuggingFace on first use
 
@@ -80,6 +80,7 @@ A full canvas-based editor for privacy masking. The AI detects sensitive regions
 - **Manual tools**: variable-size brush, pen, eraser (restore original pixels), clone stamp
 - **SAM3 integration**: text-prompt guided segmentation for surgical precision (requires CUDA GPU)
 - **Batch workflow**: queue multiple images → detect all → review → batch save with custom naming and optional metadata stripping
+- **Queue Manager**: full-screen modal for large batches — search by filename, drag-and-drop reorder, multi-select, move-to-position
 
 ### 🔍 Similar Images — Find duplicates and visual matches
 
@@ -116,7 +117,7 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 
 ### Windows
 
-1. **[Download sd-image-sorter-v2.4.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-windows-portable.zip)** (~21 MB)
+1. **[Download sd-image-sorter-v2.5.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-windows-portable.zip)** (~21 MB)
 2. Extract to any folder
 3. Double-click **`run-portable.bat`**
 4. Browser opens `http://localhost:8487` — done
@@ -127,10 +128,10 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v2.4.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-linux-mac.tar.gz)** (~8 MB)
+1. **[Download sd-image-sorter-v2.5.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-linux-mac.tar.gz)** (~8 MB)
 2. Extract and run:
    ```bash
-   tar xzf sd-image-sorter-v2.4.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v2.5.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > Requires Python 3.9+. The script creates a virtualenv automatically.
@@ -226,9 +227,9 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
 </p>
 
 ---
@@ -262,7 +263,7 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 - **双阈值**：通用标签和角色标签分开调节灵敏度
 - **内容评级**：自动分类 General / Sensitive / Questionable / Explicit
 - **AI 描述**：ToriiGate 在打标签的同时生成自然语言描述，可在图片详情弹窗查看
-- **后台打标**：关闭打标弹窗继续浏览，导航栏进度条实时跟踪任务，支持暂停/取消
+- **后台打标**：关闭打标弹窗继续浏览，右下角浮动进度条实时跟踪任务，支持停止/查看详情
 - **弹性 batch**：程序实时监控 RAM/VRAM 使用量，自动调节 batch size 防止崩溃
 - 模型首次使用时从 HuggingFace 自动下载
 
@@ -282,6 +283,7 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 - **手动工具**：可调大小画笔、铅笔、橡皮擦（恢复原图像素）、仿制图章
 - **SAM3**：文本提示引导的精准分割（需要 CUDA GPU）
 - **批量流程**：加入队列 → 全部检测 → 逐张审核 → 批量保存，支持自定义命名和元数据剥离
+- **队列管理器**：大批量专用全屏弹窗 — 按文件名搜索、拖拽排序、多选、移到指定位置
 
 ### 🔍 相似图片 — 找重复、找相似
 
@@ -317,7 +319,7 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ### Windows
 
-1. **[下载 sd-image-sorter-v2.4.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-windows-portable.zip)** (~21 MB)
+1. **[下载 sd-image-sorter-v2.5.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-windows-portable.zip)** (~21 MB)
 2. 解压到任意文件夹
 3. 双击 **`run-portable.bat`**
 4. 浏览器打开 `http://localhost:8487` — 搞定
@@ -328,10 +330,10 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ### Linux / macOS
 
-1. **[下载 sd-image-sorter-v2.4.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.4.0-linux-mac.tar.gz)** (~8 MB)
+1. **[下载 sd-image-sorter-v2.5.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.5.0-linux-mac.tar.gz)** (~8 MB)
 2. 解压并运行：
    ```bash
-   tar xzf sd-image-sorter-v2.4.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v2.5.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > 需要 Python 3.9+，脚本自动创建虚拟环境。

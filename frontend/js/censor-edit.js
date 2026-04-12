@@ -54,7 +54,11 @@ const CensorState = {
     targetClasses: ['breasts', 'pussy', 'dick', 'penis', 'anus', 'buttocks'], // Covers the main privacy classes used by Wenaka + NudeNet
     metadataOption: 'keep', // 'keep', 'minimal', or 'strip'
     outputFormat: 'png', // 'png', 'jpg', or 'webp'
-    sam3Confidence: 0.5 // SAM3 confidence threshold
+    sam3Confidence: 0.5, // SAM3 confidence threshold
+
+    // Queue Manager
+    queueManagerSearch: '',
+    queueManagerShowSelectedOnly: false,
 };
 
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
@@ -80,6 +84,11 @@ function isZhCn() {
 
 function tText(enText, zhText) {
     return isZhCn() ? zhText : enText;
+}
+
+function tKey(key, enText, zhText = enText) {
+    const translated = window.I18n?.t?.(key);
+    return translated && translated !== key ? translated : tText(enText, zhText);
 }
 
 function isEditableTarget(target) {
@@ -439,6 +448,37 @@ function bindEvents() {
         });
     });
 
+    $('#btn-open-queue-manager')?.addEventListener('click', openQueueManager);
+    $('#btn-close-queue-manager')?.addEventListener('click', closeQueueManager);
+    $('#btn-close-queue-manager-footer')?.addEventListener('click', closeQueueManager);
+    $('#btn-queue-manager-select-all')?.addEventListener('click', () => {
+        CensorState.selectedItems = new Set(CensorState.queue.map(item => item.id));
+        CensorState.lastSelectedIndex = CensorState.queue.length - 1;
+        updateQueueSelection();
+    });
+    $('#btn-queue-manager-deselect-all')?.addEventListener('click', () => {
+        CensorState.selectedItems.clear();
+        CensorState.lastSelectedIndex = -1;
+        updateQueueSelection();
+    });
+    $('#queue-manager-search')?.addEventListener('input', (e) => {
+        CensorState.queueManagerSearch = String(e.target.value || '');
+        renderQueueManager();
+    });
+    $('#queue-manager-show-selected')?.addEventListener('change', (e) => {
+        CensorState.queueManagerShowSelectedOnly = Boolean(e.target.checked);
+        renderQueueManager();
+    });
+    $('#btn-queue-manager-move-top')?.addEventListener('click', () => moveQueueSelection('top'));
+    $('#btn-queue-manager-move-up')?.addEventListener('click', () => moveQueueSelection('up'));
+    $('#btn-queue-manager-move-down')?.addEventListener('click', () => moveQueueSelection('down'));
+    $('#btn-queue-manager-move-bottom')?.addEventListener('click', () => moveQueueSelection('bottom'));
+    $('#btn-queue-manager-move-position')?.addEventListener('click', () => {
+        const input = document.getElementById('queue-manager-position');
+        const rawValue = Number.parseInt(String(input?.value || ''), 10);
+        moveQueueSelectionToPosition(rawValue);
+    });
+
     $('#btn-segment-text-current')?.addEventListener('click', async () => {
         $('#detect-modal')?.classList.remove('visible');
         await segmentCurrentImageByText();
@@ -589,8 +629,8 @@ function renderQueue() {
         list.innerHTML = `
             <div class="queue-empty-state-v2">
                 <span class="empty-icon">📷</span>
-                <p>No images selected</p>
-                <small>Select from Gallery</small>
+                <p>${escapeHtml(tText('No images selected', '未选择图片'))}</p>
+                <small>${escapeHtml(tText('Select from Gallery', '从图库中选择'))}</small>
             </div>
         `;
         updateQueueSelection();
@@ -714,6 +754,244 @@ function initDragAndDrop() {
     // Basic setup handled in renderQueue listeners
 }
 
+function getQueueManagerItems() {
+    const search = String(CensorState.queueManagerSearch || '').trim().toLowerCase();
+    return CensorState.queue.filter((item) => {
+        if (CensorState.queueManagerShowSelectedOnly && !CensorState.selectedItems.has(item.id)) {
+            return false;
+        }
+        if (!search) return true;
+        const haystack = `${item.outputFilename || ''} ${item.originalFilename || ''}`.toLowerCase();
+        return haystack.includes(search);
+    });
+}
+
+function openQueueManager() {
+    CensorState.queueManagerSearch = '';
+    CensorState.queueManagerShowSelectedOnly = false;
+    const searchInput = document.getElementById('queue-manager-search');
+    const selectedToggle = document.getElementById('queue-manager-show-selected');
+    if (searchInput) searchInput.value = '';
+    if (selectedToggle) selectedToggle.checked = false;
+    renderQueueManager();
+    if (typeof showModal === 'function') {
+        showModal('queue-manager-modal');
+    } else {
+        document.getElementById('queue-manager-modal')?.classList.add('visible');
+    }
+    setTimeout(() => searchInput?.focus(), 140);
+}
+
+function closeQueueManager() {
+    if (typeof hideModal === 'function') {
+        hideModal('queue-manager-modal');
+    } else {
+        document.getElementById('queue-manager-modal')?.classList.remove('visible');
+    }
+}
+
+function formatQueueManagerSummary(visibleCount) {
+    return tKey(
+        'censor.queueManagerSummary',
+        '{selected} selected • {visible}/{total} visible',
+        '已选 {selected} 项 • 当前显示 {visible}/{total}'
+    )
+        .replace('{selected}', CensorState.selectedItems.size)
+        .replace('{visible}', visibleCount)
+        .replace('{total}', CensorState.queue.length);
+}
+
+function getQueueManagerStatusBadges(item) {
+    const badges = [];
+    if (item.id === CensorState.activeId) {
+        badges.push(`<span class="queue-manager-badge is-active">${escapeHtml(tKey('common.current', 'Current', '当前'))}</span>`);
+    }
+    if (CensorState.selectedItems.has(item.id)) {
+        badges.push(`<span class="queue-manager-badge is-selected">${escapeHtml(tKey('common.selected', 'Selected', '已选中'))}</span>`);
+    }
+    if (item.isProcessed) {
+        badges.push(`<span class="queue-manager-badge is-processed">${escapeHtml(tKey('common.processed', 'Processed', '已处理'))}</span>`);
+    }
+    if (!badges.length) {
+        badges.push(`<span class="queue-manager-badge">${escapeHtml(tKey('common.ready', 'Ready', '就绪'))}</span>`);
+    }
+    return badges.join('');
+}
+
+function renderQueueManager() {
+    const list = document.getElementById('queue-manager-list');
+    const summary = document.getElementById('queue-manager-summary');
+    const positionInput = document.getElementById('queue-manager-position');
+    if (!list || !summary) return;
+
+    const items = getQueueManagerItems();
+    summary.textContent = formatQueueManagerSummary(items.length);
+
+    if (positionInput && CensorState.selectedItems.size > 0) {
+        const firstSelectedIndex = CensorState.queue.findIndex((item) => CensorState.selectedItems.has(item.id));
+        if (firstSelectedIndex >= 0) {
+            positionInput.value = String(firstSelectedIndex + 1);
+        }
+    }
+
+    if (!items.length) {
+        list.innerHTML = `<div class="queue-manager-empty">${escapeHtml(tKey('censor.queueManagerEmpty', 'No queue items match the current filter.', '当前筛选下没有匹配的队列项。'))}</div>`;
+        return;
+    }
+
+    list.innerHTML = items.map((item) => {
+        const index = CensorState.queue.findIndex((entry) => entry.id === item.id);
+        const classes = [
+            'queue-manager-row',
+            item.id === CensorState.activeId ? 'is-active' : '',
+            CensorState.selectedItems.has(item.id) ? 'is-selected' : '',
+        ].filter(Boolean).join(' ');
+        return `
+            <div class="${classes}" data-id="${item.id}" data-index="${index}" draggable="true">
+                <div class="queue-manager-index">${index + 1}</div>
+                <img class="queue-manager-thumb" src="${escapeHtml(item.currentDataUrl || item.originalUrl)}" alt="${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}">
+                <div class="queue-manager-file">
+                    <div class="queue-manager-file-name">${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}</div>
+                    <div class="queue-manager-file-sub">${escapeHtml(item.originalFilename || '')}</div>
+                </div>
+                <div class="queue-manager-status">${getQueueManagerStatusBadges(item)}</div>
+            </div>
+        `;
+    }).join('');
+
+    list.querySelectorAll('.queue-manager-row').forEach((row) => {
+        row.addEventListener('click', (event) => {
+            const clickedId = Number.parseInt(row.dataset.id, 10);
+            const clickedIndex = Number.parseInt(row.dataset.index, 10);
+
+            if (event.ctrlKey || event.metaKey) {
+                if (CensorState.selectedItems.has(clickedId)) {
+                    CensorState.selectedItems.delete(clickedId);
+                } else {
+                    CensorState.selectedItems.add(clickedId);
+                }
+                CensorState.lastSelectedIndex = clickedIndex;
+            } else if (event.shiftKey && CensorState.lastSelectedIndex >= 0) {
+                const start = Math.min(CensorState.lastSelectedIndex, clickedIndex);
+                const end = Math.max(CensorState.lastSelectedIndex, clickedIndex);
+                CensorState.selectedItems.clear();
+                for (let i = start; i <= end; i++) {
+                    if (CensorState.queue[i]) {
+                        CensorState.selectedItems.add(CensorState.queue[i].id);
+                    }
+                }
+            } else {
+                CensorState.selectedItems.clear();
+                CensorState.selectedItems.add(clickedId);
+                CensorState.lastSelectedIndex = clickedIndex;
+            }
+
+            updateQueueSelection();
+        });
+
+        row.addEventListener('dblclick', async () => {
+            const clickedId = Number.parseInt(row.dataset.id, 10);
+            const item = CensorState.queue.find((entry) => entry.id === clickedId);
+            await loadCanvasImage(clickedId);
+            closeQueueManager();
+            window.App.showToast(
+                tKey('censor.queueManagerLoaded', 'Loaded {filename} into the editor.', '已把 {filename} 载入编辑器。').replace('{filename}', item?.outputFilename || item?.originalFilename || String(clickedId)),
+                'success'
+            );
+        });
+
+        row.addEventListener('dragstart', handleQueueManagerDragStart);
+        row.addEventListener('dragend', handleQueueManagerDragEnd);
+        row.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+        row.addEventListener('drop', handleQueueManagerDrop);
+    });
+}
+
+function moveQueueSelectionToPosition(targetPosition) {
+    const selectedIds = getOrderedSelectedQueueIds();
+    if (!selectedIds.length) {
+        window.App.showToast(
+            tText('Select at least one queue item first', '请先选中至少一个队列项目'),
+            'warning'
+        );
+        return;
+    }
+
+    const selectedSet = new Set(selectedIds);
+    const selectedItems = CensorState.queue.filter((item) => selectedSet.has(item.id));
+    const remainingItems = CensorState.queue.filter((item) => !selectedSet.has(item.id));
+    const normalizedPosition = Math.min(
+        Math.max((Number.isFinite(targetPosition) ? targetPosition : 1) - 1, 0),
+        remainingItems.length
+    );
+
+    const nextQueue = [
+        ...remainingItems.slice(0, normalizedPosition),
+        ...selectedItems,
+        ...remainingItems.slice(normalizedPosition),
+    ];
+
+    const changed = nextQueue.some((item, index) => item.id !== CensorState.queue[index]?.id);
+    if (!changed) return;
+
+    CensorState.queue = nextQueue;
+    CensorState.lastSelectedIndex = CensorState.queue.findIndex((item) => item.id === selectedIds[0]);
+    renderQueue();
+    scrollQueueItemIntoView(selectedIds[0]);
+}
+
+function reorderQueueByDraggedTarget(draggedId, targetId) {
+    if (!draggedId || !targetId || draggedId === targetId) return false;
+
+    const moveAsGroup = CensorState.selectedItems.size > 1 && CensorState.selectedItems.has(draggedId);
+    const movingIds = moveAsGroup ? getOrderedSelectedQueueIds() : [draggedId];
+    const movingSet = new Set(movingIds);
+    const movingItems = CensorState.queue.filter((item) => movingSet.has(item.id));
+    const remainingItems = CensorState.queue.filter((item) => !movingSet.has(item.id));
+    let insertIndex = remainingItems.findIndex((item) => item.id === targetId);
+    if (insertIndex < 0) insertIndex = remainingItems.length;
+
+    const nextQueue = [
+        ...remainingItems.slice(0, insertIndex),
+        ...movingItems,
+        ...remainingItems.slice(insertIndex),
+    ];
+
+    const changed = nextQueue.some((item, index) => item.id !== CensorState.queue[index]?.id);
+    if (!changed) return false;
+
+    CensorState.queue = nextQueue;
+    CensorState.lastSelectedIndex = CensorState.queue.findIndex((item) => item.id === movingIds[0]);
+    renderQueue();
+    scrollQueueItemIntoView(movingIds[0]);
+    return true;
+}
+
+function handleQueueManagerDragStart(e) {
+    const draggedId = this.dataset.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedId);
+    this.classList.add('dragging');
+}
+
+function handleQueueManagerDragEnd() {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.queue-manager-row').forEach((row) => row.classList.remove('drag-over'));
+}
+
+function handleQueueManagerDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = Number.parseInt(e.dataTransfer.getData('text/plain'), 10);
+    const targetId = Number.parseInt(this.dataset.id, 10);
+    this.classList.remove('drag-over');
+    reorderQueueByDraggedTarget(draggedId, targetId);
+}
+
 function updateQueueSelection() {
     // Update visual selection state on all queue thumbnails
     document.querySelectorAll('.queue-thumb-v2').forEach(img => {
@@ -736,6 +1014,7 @@ function updateQueueSelection() {
     }
 
     updateQueueActionState();
+    renderQueueManager();
 }
 
 function updateQueueActionState() {
@@ -746,6 +1025,11 @@ function updateQueueActionState() {
         'btn-queue-move-up',
         'btn-queue-move-down',
         'btn-queue-move-bottom',
+        'btn-queue-manager-move-top',
+        'btn-queue-manager-move-up',
+        'btn-queue-manager-move-down',
+        'btn-queue-manager-move-bottom',
+        'btn-queue-manager-move-position',
     ].forEach(id => {
         const button = document.getElementById(id);
         if (!button) return;
@@ -883,44 +1167,9 @@ function handleDrop(e) {
     const targetItem = e.target.closest('.queue-thumb-v2');
     if (!targetItem) return false;
 
-    const targetIndex = parseInt(targetItem.dataset.index, 10);
     const draggedId = e.dataTransfer.getData('text/plain');
-
-    // Check if we're moving multiple selected items
-    if (CensorState.selectedItems.size > 1 && CensorState.selectedItems.has(parseInt(draggedId, 10))) {
-        // Move all selected items as a group
-        const selectedIds = [...CensorState.selectedItems];
-        const selectedItems = CensorState.queue.filter(item => selectedIds.includes(item.id));
-
-        // Find the target item's ID for stable positioning after removal
-        const targetId = CensorState.queue[targetIndex]?.id;
-
-        // Remove selected items from queue
-        CensorState.queue = CensorState.queue.filter(item => !selectedIds.includes(item.id));
-
-        // Find adjusted target index using the target item's ID (stable reference)
-        let adjustedTarget = CensorState.queue.findIndex(item => item.id === targetId);
-        if (adjustedTarget === -1) {
-            adjustedTarget = CensorState.queue.length; // Target was in selection, append to end
-        }
-
-        // Insert selected items at target position
-        CensorState.queue.splice(adjustedTarget, 0, ...selectedItems);
-
-        renderQueue();
-        scrollQueueItemIntoView(selectedItems[0]?.id);
-    } else {
-        // Single item move (original logic)
-        const currentIndex = CensorState.queue.findIndex(item => item.id.toString() === draggedId);
-
-        if (currentIndex !== -1 && currentIndex !== targetIndex) {
-            const item = CensorState.queue[currentIndex];
-            CensorState.queue.splice(currentIndex, 1);
-            CensorState.queue.splice(targetIndex, 0, item);
-            renderQueue();
-            scrollQueueItemIntoView(item.id);
-        }
-    }
+    const targetId = Number.parseInt(targetItem.dataset.id, 10);
+    reorderQueueByDraggedTarget(Number.parseInt(draggedId, 10), targetId);
 
     document.querySelectorAll('.queue-thumb-v2').forEach(el => {
         el.classList.remove('dragging', 'drag-over');
@@ -2742,16 +2991,34 @@ function pushUndo() {
 }
 
 
-function undo() {
+async function undo() {
     // Keep at least 1 item in the stack (the initial/base state)
     if (CensorState.undoStack.length <= 1) return;
     CensorState.undoStack.pop(); // Discard current state
     const prev = CensorState.undoStack[CensorState.undoStack.length - 1]; // Peek at previous
+    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    try {
+        if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
+            const response = await fetch(prev);
+            const blob = await response.blob();
+            const bitmap = await createImageBitmap(blob);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+            saveCurrentCanvasToState(prev);
+            return;
+        }
+    } catch (error) {
+        Logger.warn('Falling back to Image() undo restore:', error);
+    }
+
     const img = new Image();
     img.onload = () => {
-        const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         saveCurrentCanvasToState(prev);

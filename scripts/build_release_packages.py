@@ -18,7 +18,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
-DEFAULT_VERSION = "2.4.0"
+DEFAULT_VERSION = "2.5.0"
 DEFAULT_SPLIT_SIZE_MB = 1900
 
 # Python embeddable package URL template (Windows amd64)

@@ -187,6 +187,21 @@ window.I18nLang_zhCN = {
     'censor.moveUp': '上移',
     'censor.moveDown': '下移',
     'censor.moveBottom': '置底',
+    'censor.selectAll': '全选',
+    'censor.deselectAll': '清空选择',
+    'censor.queueManager': '队列管理',
+    'censor.queueManagerDescription': '批量很多时，用大窗口来选择、搜索和重排队列。',
+    'censor.queueManagerSearch': '搜索文件名...',
+    'censor.queueManagerShowSelected': '只看已选中项',
+    'censor.queueFilterPlaceholder': '按文件名筛选...',
+    'censor.queueColumnIndex': '#',
+    'censor.queueColumnPreview': '预览',
+    'censor.queueColumnFilename': '文件名',
+    'censor.queueColumnStatus': '状态',
+    'censor.moveToPosition': '移动到位置',
+    'censor.queueManagerSummary': '已选 {selected} 项 • 当前显示 {visible}/{total}',
+    'censor.queueManagerEmpty': '当前筛选下没有匹配的队列项。',
+    'censor.queueManagerLoaded': '已把 {filename} 载入编辑器。',
     'censor.noImages': '未选择图片',
     'censor.selectFromGallery': '从图库中选择',
     'censor.brush': '画笔',
@@ -250,6 +265,7 @@ window.I18nLang_zhCN = {
     'censor.detectAll': '检测全部',
     'censor.quickAutoCensor': '快速自动打码',
     'censor.quickAutoCensorHelp': '普通隐私打码优先走 Wenaka / NudeNet 这条路线。',
+    'censor.advancedSettings': '高级设置',
     'censor.advancedModelPicker': '高级本地模型选择',
     'censor.advancedModelPickerHelp': '只有在你明确要做 YOLO26 / 通用 YOLOv8 实验时才需要这里。',
     'censor.proSegmentation': '专业分割',
@@ -559,6 +575,12 @@ window.I18nLang_zhCN = {
     'common.none': '无',
     'common.browse': '浏览',
     'common.close': '关闭',
+    'common.filter': '筛选',
+    'common.move': '移动',
+    'common.current': '当前',
+    'common.selected': '已选中',
+    'common.processed': '已处理',
+    'common.ready': '就绪',
     'common.save': '保存',
     'common.delete': '删除',
     'common.export': '导出',
@@ -573,6 +595,17 @@ window.I18nLang_zhCN = {
     'common.up': '上移',
     'common.down': '下移',
     'common.bottom': '置底',
+
+    // Folder Browser
+    'folderBrowser.loading': '正在加载文件夹...',
+    'folderBrowser.empty': '没有找到子文件夹',
+    'folderBrowser.computer': '此电脑',
+    'folderBrowser.up': '上一级',
+    'folderBrowser.upTitle': '返回上一级文件夹',
+    'folderBrowser.cancel': '取消',
+    'folderBrowser.close': '关闭',
+    'folderBrowser.select': '选择当前文件夹',
+    'folderBrowser.errorPrefix': '错误：',
 
     // ========================
     // Toast Messages
@@ -775,6 +808,11 @@ window.I18nLang_zhCN = {
     'tagger.progressResuming': '正在恢复标注进度...',
     'tagger.errorCheckingProgress': '检查标注进度时出错',
     'tagger.cancellingAfterCurrent': '将在当前图片完成后取消...',
-    'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条停止或查看详情。'
+    'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条停止或查看详情。',
+    'tagger.runInBackground': '转到后台运行',
+    'tagger.bgStop': '停止',
+    'tagger.bgStopTitle': '停止打标',
+    'tagger.bgDetails': '详情',
+    'tagger.bgDetailsTitle': '打开打标窗口'
 
 };

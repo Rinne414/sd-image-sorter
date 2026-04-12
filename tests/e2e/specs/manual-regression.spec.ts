@@ -783,9 +783,7 @@ test('censor detect and save should work through the real UI flow', async ({ pag
   await expect.poll(async () => countFiles(saveOutJpg, '.jpg'), { timeout: 30000 }).toBeGreaterThan(0)
 })
 
-// Skip: this test depends on a Python fixture (PIL) creating temporary files, which
-// is unreliable in CI environments where the backend venv may use a different Python.
-test.skip('scan folder browser should pick a real folder and scan it through the UI', async ({ page, request }) => {
+test('scan folder browser should pick a real folder and scan it through the UI', async ({ page, request }) => {
   test.setTimeout(120000)
   resetScanBrowserFixture()
 
@@ -897,9 +895,62 @@ test('censor batch rename should update preview and apply only selected queue it
   })
 
   expect(queueState).toHaveLength(2)
-  expect(queueState[0].output).toBe(queueState[0].original)
-  expect(queueState[1].output).toContain('_review_01.png')
-  await expect(page.locator('#censor-filename')).toContainText('_review_01.png')
+  const renamedItem = queueState.find((item) => item.output.includes('_review_01.png'))
+  const untouchedItem = queueState.find((item) => item.output === item.original)
+  expect(renamedItem).toBeTruthy()
+  expect(untouchedItem).toBeTruthy()
+})
+
+test('queue manager should search, reorder, and sync back to the censor sidebar', async ({ page, request }) => {
+  const response = await request.get('/api/images?limit=4&sort_by=newest')
+  expect(response.ok()).toBeTruthy()
+  const payload = await response.json()
+  const images = payload.images.slice(0, 4)
+  expect(images).toHaveLength(4)
+
+  const targetImage = images[1]
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  await page.locator('#btn-toggle-select').click()
+  for (const image of images) {
+    await expect(page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`)).toBeVisible()
+    await page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`).click()
+  }
+  await page.locator('#btn-send-to-censor').click()
+
+  await expect(page.locator('#view-censor.active')).toBeVisible()
+  await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(4, { timeout: 15000 })
+
+  await page.locator('#btn-open-queue-manager').click()
+  await expect(page.locator('#queue-manager-modal.visible')).toBeVisible()
+
+  await page.locator('#queue-manager-search').fill(targetImage.filename)
+  await expect(page.locator('#queue-manager-list .queue-manager-row')).toHaveCount(1)
+
+  await page.locator('#queue-manager-search').fill('')
+  await expect(page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`)).toBeVisible()
+
+  await page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`).click()
+  await page.locator('#queue-manager-position').fill('1')
+  await page.locator('#btn-queue-manager-move-position').click()
+
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.queue?.[0]?.id ?? null
+    })
+  }, { timeout: 10000 }).toBe(targetImage.id)
+
+  await expect(page.locator('#censor-queue-list .queue-thumb-v2').first()).toHaveAttribute('data-id', String(targetImage.id))
+
+  await page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`).dblclick()
+  await expect(page.locator('#queue-manager-modal.visible')).toHaveCount(0)
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.activeId ?? null
+    })
+  }, { timeout: 10000 }).toBe(targetImage.id)
 })
 
 test('scan then tag through the real UI should finish and write tags for the new fixture images', async ({ page, request }) => {

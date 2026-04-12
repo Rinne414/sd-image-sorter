@@ -185,6 +185,21 @@ window.I18nLang_en = {
     'censor.moveUp': 'Up',
     'censor.moveDown': 'Down',
     'censor.moveBottom': 'Bottom',
+    'censor.selectAll': 'All',
+    'censor.deselectAll': 'None',
+    'censor.queueManager': 'Queue Manager',
+    'censor.queueManagerDescription': 'Use the large queue window for selecting, searching, and reordering big batches.',
+    'censor.queueManagerSearch': 'Search filenames...',
+    'censor.queueManagerShowSelected': 'Show selected only',
+    'censor.queueFilterPlaceholder': 'Filter by filename...',
+    'censor.queueColumnIndex': '#',
+    'censor.queueColumnPreview': 'Preview',
+    'censor.queueColumnFilename': 'Filename',
+    'censor.queueColumnStatus': 'Status',
+    'censor.moveToPosition': 'Move To Position',
+    'censor.queueManagerSummary': '{selected} selected • {visible}/{total} visible',
+    'censor.queueManagerEmpty': 'No queue items match the current filter.',
+    'censor.queueManagerLoaded': 'Loaded {filename} into the editor.',
     'censor.noImages': 'No images selected',
     'censor.selectFromGallery': 'Select from Gallery',
     'censor.brush': 'Brush',
@@ -248,6 +263,7 @@ window.I18nLang_en = {
     'censor.detectAll': 'Detect All',
     'censor.quickAutoCensor': 'Quick Auto Censor',
     'censor.quickAutoCensorHelp': 'Use Wenaka / NudeNet for the normal privacy workflow.',
+    'censor.advancedSettings': 'Advanced Settings',
     'censor.advancedModelPicker': 'Advanced Local Model Picker',
     'censor.advancedModelPickerHelp': 'Only use this when you intentionally want YOLO26 / generic YOLOv8 experiments.',
     'censor.proSegmentation': 'Pro Segmentation',
@@ -557,6 +573,12 @@ window.I18nLang_en = {
     'common.none': 'None',
     'common.browse': 'Browse',
     'common.close': 'Close',
+    'common.filter': 'Filter',
+    'common.move': 'Move',
+    'common.current': 'Current',
+    'common.selected': 'Selected',
+    'common.processed': 'Processed',
+    'common.ready': 'Ready',
     'common.save': 'Save',
     'common.delete': 'Delete',
     'common.export': 'Export',
@@ -571,6 +593,17 @@ window.I18nLang_en = {
     'common.up': 'Up',
     'common.down': 'Down',
     'common.bottom': 'Bottom',
+
+    // Folder Browser
+    'folderBrowser.loading': 'Loading folders...',
+    'folderBrowser.empty': 'No subfolders found',
+    'folderBrowser.computer': 'Computer',
+    'folderBrowser.up': 'Up',
+    'folderBrowser.upTitle': 'Go to parent folder',
+    'folderBrowser.cancel': 'Cancel',
+    'folderBrowser.close': 'Close',
+    'folderBrowser.select': 'Select This Folder',
+    'folderBrowser.errorPrefix': 'Error: ',
 
     // ========================
     // Toast Messages
@@ -773,6 +806,11 @@ window.I18nLang_en = {
     'tagger.progressResuming': 'Resuming tagging progress...',
     'tagger.errorCheckingProgress': 'Error checking tag progress',
     'tagger.cancellingAfterCurrent': 'Cancelling after current image...',
-    'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to stop or check details.'
+    'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to stop or check details.',
+    'tagger.runInBackground': 'Run in Background',
+    'tagger.bgStop': 'Stop',
+    'tagger.bgStopTitle': 'Stop tagging',
+    'tagger.bgDetails': 'Details',
+    'tagger.bgDetailsTitle': 'Open tagger modal'
 
 };

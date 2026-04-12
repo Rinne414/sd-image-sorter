@@ -1,4 +1,4 @@
-/**
+﻿/**
  * SD Image Sorter - Main Application
  * Core app logic and API communication
  */
@@ -37,8 +37,8 @@ function throttle(func, limit) {
     };
 }
 
-// i18n helper for tagger strings (top-level, available to all tagger functions)
-function tText(key, fallback) {
+// i18n helper for app-level dynamic strings.
+function appT(key, fallback) {
     const val = window.I18n?.t?.(key);
     return (val && val !== key) ? val : (fallback || key);
 }
@@ -706,6 +706,8 @@ function showModal(modalId) {
 
         // Load system hardware info when tag modal opens
         if (modalId === 'tag-modal') {
+            _tagMinimizedToBackground = false;
+            _hideBgTagProgress();
             if (typeof loadSystemInfo === 'function') loadSystemInfo();
         }
 
@@ -716,7 +718,11 @@ function showModal(modalId) {
         const escapeHandler = (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
-                hideModal(modalId);
+                if (modalId === 'tag-modal') {
+                    minimizeTaggingToBackground();
+                } else {
+                    hideModal(modalId);
+                }
                 document.removeEventListener('keydown', escapeHandler);
             }
         };
@@ -1061,18 +1067,18 @@ function requiresTaggerGpuLaunchConfirmation(modelName, options = {}) {
 
 function describeTaggerModel(meta) {
     if (!meta) {
-        return tText('tagger.descDefault', 'Balanced default. Good speed, good quality, and solid stability.');
+        return appT('tagger.descDefault', 'Balanced default. Good speed, good quality, and solid stability.');
     }
 
-    const summary = meta.description || meta.summary || tText('tagger.defaultSummary', 'WD14 tagger model');
+    const summary = meta.description || meta.summary || appT('tagger.defaultSummary', 'WD14 tagger model');
     const bestFor = meta.best_for
-        ? tText('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
+        ? appT('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
         : '';
     const quality = Number(meta.quality_score || 0);
     const speed = Number(meta.speed_score || 0);
     const stability = Number(meta.stability_score || 0);
     const runtimeNote = meta.runtime_note ? ` ${meta.runtime_note}` : '';
-    return tText('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.{bestFor}{runtimeNote}')
+    return appT('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.{bestFor}{runtimeNote}')
         .replace('{summary}', summary)
         .replace('{quality}', quality)
         .replace('{speed}', speed)
@@ -1091,28 +1097,28 @@ function describeTaggerRuntime(options = {}) {
     } = options;
 
     if (gpuLocked) {
-        return tText('tagger.runtimeAdaptiveMax', 'Adaptive max-throughput mode is active. The app pushes GPU speed first, then falls back only if the run becomes unstable.');
+        return appT('tagger.runtimeAdaptiveMax', 'Adaptive max-throughput mode is active. The app pushes GPU speed first, then falls back only if the run becomes unstable.');
     }
 
     if (isCustom) {
         if (gpuEnabled) {
-            return tText('tagger.runtimeCustomGpu', 'Custom model on GPU. Faster when it works, but less predictable than CPU Safe Mode.');
+            return appT('tagger.runtimeCustomGpu', 'Custom model on GPU. Faster when it works, but less predictable than CPU Safe Mode.');
         }
-        return tText('tagger.runtimeCustomCpu', 'Custom model on CPU Safe Mode. Finish one stable run first, then try GPU only if needed.');
+        return appT('tagger.runtimeCustomCpu', 'Custom model on CPU Safe Mode. Finish one stable run first, then try GPU only if needed.');
     }
 
     if (riskyGpu) {
-        return tText('tagger.runtimeRiskyGpu', 'Risky GPU override is active. This is not the stable default for this model.');
+        return appT('tagger.runtimeRiskyGpu', 'Risky GPU override is active. This is not the stable default for this model.');
     }
 
     if (gpuEnabled) {
         const focus = meta?.best_for
-            ? tText('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
+            ? appT('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
             : '';
-        return `${tText('tagger.runtimeAdaptiveGpu', 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.')}${focus}`;
+        return `${appT('tagger.runtimeAdaptiveGpu', 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.')}${focus}`;
     }
 
-    return tText('tagger.runtimeCpuSafe', 'CPU Safe Mode is active. Slower, but safer when VRAM is tight or other AI tools are already running.');
+    return appT('tagger.runtimeCpuSafe', 'CPU Safe Mode is active. Slower, but safer when VRAM is tight or other AI tools are already running.');
 }
 
 function getTaggerHardwareRecommendation() {
@@ -1171,17 +1177,17 @@ function renderTaggerModelSnapshot(meta, options = {}) {
     if (!subtitleEl || !badgesEl || !noteEl) return;
 
     if (isCustom) {
-        subtitleEl.textContent = tText('tagger.customSubtitle', 'Custom local ONNX model. The app cannot infer its schema or stability in advance.');
+        subtitleEl.textContent = appT('tagger.customSubtitle', 'Custom local ONNX model. The app cannot infer its schema or stability in advance.');
         badgesEl.innerHTML = [
-            `<span class="tagger-model-badge is-warning">${escapeHtml(tText('tagger.customBadge', 'Custom'))}</span>`,
-            `<span class="tagger-model-badge">${escapeHtml(tText('tagger.onnxOnlyBadge', 'ONNX only'))}</span>`,
-            `<span class="tagger-model-badge">${escapeHtml(tText('tagger.schemaUnknownBadge', 'Schema unknown'))}</span>`,
+            `<span class="tagger-model-badge is-warning">${escapeHtml(appT('tagger.customBadge', 'Custom'))}</span>`,
+            `<span class="tagger-model-badge">${escapeHtml(appT('tagger.onnxOnlyBadge', 'ONNX only'))}</span>`,
+            `<span class="tagger-model-badge">${escapeHtml(appT('tagger.schemaUnknownBadge', 'Schema unknown'))}</span>`,
         ].join('');
-        noteEl.textContent = tText('tagger.customNote', 'Start from one stable run first. Raise chunk size only after that.');
+        noteEl.textContent = appT('tagger.customNote', 'Start from one stable run first. Raise chunk size only after that.');
         return;
     }
 
-    const summary = meta?.description || meta?.summary || tText('tagger.defaultSummary', 'WD14 tagger model');
+    const summary = meta?.description || meta?.summary || appT('tagger.defaultSummary', 'WD14 tagger model');
     subtitleEl.textContent = summary;
 
     const badges = [];
@@ -1189,7 +1195,7 @@ function renderTaggerModelSnapshot(meta, options = {}) {
     if (meta?.speed) badges.push({ text: `Speed ${meta.speed}` });
     if (meta?.memory) badges.push({ text: `Memory ${meta.memory}`, tone: /high/i.test(meta.memory) ? 'is-warning' : '' });
     if (meta?.best_for) badges.push({ text: meta.best_for, tone: 'is-highlight' });
-    if (modelDisabled) badges.push({ text: tText('tagger.chipCatalogOnly', 'Catalog Only'), tone: 'is-warning' });
+    if (modelDisabled) badges.push({ text: appT('tagger.chipCatalogOnly', 'Catalog Only'), tone: 'is-warning' });
 
     badgesEl.innerHTML = badges
         .map((badge) => {
@@ -1198,7 +1204,7 @@ function renderTaggerModelSnapshot(meta, options = {}) {
         })
         .join('');
 
-    noteEl.textContent = meta?.disabled_reason || meta?.runtime_note || meta?.safe_mode_note || tText('tagger.defaultNote', 'The selected model decides quality, tag density, and hardware pressure.');
+    noteEl.textContent = meta?.disabled_reason || meta?.runtime_note || meta?.safe_mode_note || appT('tagger.defaultNote', 'The selected model decides quality, tag density, and hardware pressure.');
 }
 
 function applyTaggerModelThresholdDefaults(meta) {
@@ -1273,7 +1279,7 @@ function syncTaggerRuntimeChunkUi(options = {}) {
     const riskLevel = String(recommendation?.risk_level || 'medium').toLowerCase();
 
     if (batchRecommendation) {
-        batchRecommendation.textContent = tText('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
+        batchRecommendation.textContent = appT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
     }
 
     if (chunkChip) {
@@ -1285,40 +1291,40 @@ function syncTaggerRuntimeChunkUi(options = {}) {
     }
 
     if (gpuLocked) {
-        batchHelp.textContent = tText('tagger.chunkHelpAdaptive', 'This model already uses adaptive runtime limits. Only change chunk size if you are stress-testing.');
+        batchHelp.textContent = appT('tagger.chunkHelpAdaptive', 'This model already uses adaptive runtime limits. Only change chunk size if you are stress-testing.');
         return;
     }
 
     if (isToriiGate) {
         batchHelp.textContent = gpuEnabled
-            ? tText('tagger.chunkHelpToriiGateGpu', 'ToriiGate uses the multimodal PyTorch backend. Keep chunk size small, usually 1-2.')
-            : tText('tagger.chunkHelpToriiGateCpu', 'ToriiGate on CPU should stay at chunk size 1.');
+            ? appT('tagger.chunkHelpToriiGateGpu', 'ToriiGate uses the multimodal PyTorch backend. Keep chunk size small, usually 1-2.')
+            : appT('tagger.chunkHelpToriiGateCpu', 'ToriiGate on CPU should stay at chunk size 1.');
         return;
     }
 
     if (selectedChunk > recommendedChunk) {
         batchHelp.textContent = gpuEnabled
-            ? tText('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect higher VRAM pressure and more crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
-            : tText('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. This may help throughput, but it raises RAM pressure.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
+            ? appT('tagger.chunkHelpOverGpu', 'You chose {chosen}, above the recommended {recommended}. Expect higher VRAM pressure and more crash risk.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk)
+            : appT('tagger.chunkHelpOverCpu', 'You chose {chosen}, above the recommended {recommended}. This may help throughput, but it raises RAM pressure.').replace('{chosen}', selectedChunk).replace('{recommended}', recommendedChunk);
         return;
     }
 
     if (riskyGpu) {
-        batchHelp.textContent = tText('tagger.chunkHelpRiskyGpu', 'This controls true WD14 batching where supported. Risky GPU mode still needs confirmation.');
+        batchHelp.textContent = appT('tagger.chunkHelpRiskyGpu', 'This controls true WD14 batching where supported. Risky GPU mode still needs confirmation.');
         return;
     }
 
     if (isCustom) {
-        batchHelp.textContent = tText('tagger.chunkHelpCustom', 'Custom models may or may not support true batching. Start from the recommended value.');
+        batchHelp.textContent = appT('tagger.chunkHelpCustom', 'Custom models may or may not support true batching. Start from the recommended value.');
         return;
     }
 
     if (riskLevel === 'high') {
-        batchHelp.textContent = tText('tagger.chunkHelpHighRisk', 'This machine is marked high-risk for long GPU tagging. Leave the recommended chunk size alone.');
+        batchHelp.textContent = appT('tagger.chunkHelpHighRisk', 'This machine is marked high-risk for long GPU tagging. Leave the recommended chunk size alone.');
         return;
     }
 
-    batchHelp.textContent = tText('tagger.chunkHelpDefault', 'This controls the true WD14 batch size when the selected model supports dynamic batching.');
+    batchHelp.textContent = appT('tagger.chunkHelpDefault', 'This controls the true WD14 batch size when the selected model supports dynamic batching.');
 }
 
 function syncTaggerModelUi(options = {}) {
@@ -1375,8 +1381,8 @@ function syncTaggerModelUi(options = {}) {
         if (changedToSafeMode && toastOnAutoSafe) {
             showToast(
                 gpuLocked
-                    ? tText('tagger.toastMaxQualityCpuSafe', 'Max Quality now runs in protected CPU Safe Mode inside the app.')
-                    : tText('tagger.toastAutoSafeMode', 'This model was switched to CPU Safe Mode to avoid crashes.'),
+                    ? appT('tagger.toastMaxQualityCpuSafe', 'Max Quality now runs in protected CPU Safe Mode inside the app.')
+                    : appT('tagger.toastAutoSafeMode', 'This model was switched to CPU Safe Mode to avoid crashes.'),
                 'warning'
             );
         }
@@ -1393,9 +1399,9 @@ function syncTaggerModelUi(options = {}) {
 
     if (modelHelp) {
         if (isCustom) {
-            modelHelp.textContent = tText('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+            modelHelp.textContent = appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
         } else if (modelDisabled) {
-            modelHelp.textContent = meta?.disabled_reason || tText('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
+            modelHelp.textContent = meta?.disabled_reason || appT('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
         } else {
             modelHelp.textContent = describeTaggerModel(meta);
         }
@@ -1410,7 +1416,7 @@ function syncTaggerModelUi(options = {}) {
 
     if (runtimeSummary) {
         let summary = modelDisabled
-            ? (meta?.disabled_reason || tText('tagger.modelUnavailable', 'This model is currently unavailable in the app runtime.'))
+            ? (meta?.disabled_reason || appT('tagger.modelUnavailable', 'This model is currently unavailable in the app runtime.'))
             : describeTaggerRuntime({
             isCustom,
             gpuLocked,
@@ -1420,44 +1426,44 @@ function syncTaggerModelUi(options = {}) {
         });
         const recommendedChunk = getRecommendedTaggerChunkSize();
         if (hardwareHighRisk && !gpuLocked && !gpuEnabled) {
-            summary += tText('tagger.highRiskSuffix', ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.');
+            summary += appT('tagger.highRiskSuffix', ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.');
         }
-        summary += tText('tagger.recommendedChunkSuffix', ' Recommended chunk: {chunk}.').replace('{chunk}', recommendedChunk);
+        summary += appT('tagger.recommendedChunkSuffix', ' Recommended chunk: {chunk}.').replace('{chunk}', recommendedChunk);
         runtimeSummary.textContent = summary;
     }
 
     if (runtimeDetail) {
         if (modelDisabled) {
-            runtimeDetail.textContent = tText('tagger.catalogOnlyDetail', 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.');
+            runtimeDetail.textContent = appT('tagger.catalogOnlyDetail', 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.');
         } else if (isToriiGate) {
             runtimeDetail.textContent = gpuEnabled
-                ? tText('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
-                : tText('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.');
+                ? appT('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
+                : appT('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.');
         } else if (isCustom) {
             runtimeDetail.textContent = providerState.hasCuda
-                ? tText('tagger.customGpuAvailDetail', 'The final provider is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.')
-                : tText('tagger.customCpuOnlyDetail', 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.');
+                ? appT('tagger.customGpuAvailDetail', 'The final provider is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.')
+                : appT('tagger.customCpuOnlyDetail', 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.');
         } else if (providerState.hasCuda) {
-            runtimeDetail.textContent = tText('tagger.cudaAvailDetail', 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.');
+            runtimeDetail.textContent = appT('tagger.cudaAvailDetail', 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.');
         } else {
-            runtimeDetail.textContent = tText('tagger.cpuOnlyDetail', 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.');
+            runtimeDetail.textContent = appT('tagger.cpuOnlyDetail', 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.');
         }
     }
 
     if (runtimeModeChip) {
         setTaggerStatusChip(
             runtimeModeChip,
-            modelDisabled ? tText('tagger.chipCatalogOnly', 'Catalog Only') : (gpuEnabled ? tText('tagger.chipGpuTarget', 'GPU Target') : tText('tagger.chipCpuTarget', 'CPU Target')),
+            modelDisabled ? appT('tagger.chipCatalogOnly', 'Catalog Only') : (gpuEnabled ? appT('tagger.chipGpuTarget', 'GPU Target') : appT('tagger.chipCpuTarget', 'CPU Target')),
             modelDisabled ? 'is-danger' : (gpuEnabled ? 'is-safe' : 'is-warning')
         );
     }
 
     if (runtimeProviderChip) {
         const providerLabel = modelDisabled
-            ? tText('tagger.chipVlmNeeded', 'VLM Backend Needed')
+            ? appT('tagger.chipVlmNeeded', 'VLM Backend Needed')
             : (isToriiGate
-                ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? tText('tagger.chipPytorchCuda', 'PyTorch CUDA') : tText('tagger.chipPytorchCpu', 'PyTorch CPU'))
-                : (providerState.hasCuda ? providerState.label : tText('tagger.chipCpuRuntime', 'CPU Runtime')));
+                ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? appT('tagger.chipPytorchCuda', 'PyTorch CUDA') : appT('tagger.chipPytorchCpu', 'PyTorch CPU'))
+                : (providerState.hasCuda ? providerState.label : appT('tagger.chipCpuRuntime', 'CPU Runtime')));
         const providerTone = modelDisabled
             ? 'is-danger'
             : (isToriiGate
@@ -1469,8 +1475,8 @@ function syncTaggerModelUi(options = {}) {
     if (disabledNotice && disabledTitle && disabledBody) {
         if (modelDisabled) {
             disabledNotice.hidden = false;
-            disabledTitle.textContent = tText('tagger.disabledNotRunnable', '{model} is not runnable in the current build.').replace('{model}', normalizedModel);
-            disabledBody.textContent = meta?.disabled_reason || tText('tagger.disabledFallback', 'Use one of the ONNX taggers above for now.');
+            disabledTitle.textContent = appT('tagger.disabledNotRunnable', '{model} is not runnable in the current build.').replace('{model}', normalizedModel);
+            disabledBody.textContent = meta?.disabled_reason || appT('tagger.disabledFallback', 'Use one of the ONNX taggers above for now.');
         } else {
             disabledNotice.hidden = true;
         }
@@ -1478,43 +1484,43 @@ function syncTaggerModelUi(options = {}) {
 
     if (runtimeAdvancedHint) {
         if (gpuLocked) {
-            runtimeAdvancedHint.textContent = tText('tagger.advHintStressTest', 'Optional. Change this only if you are stress-testing.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintStressTest', 'Optional. Change this only if you are stress-testing.');
         } else if (hardwareHighRisk && !gpuEnabled) {
-            runtimeAdvancedHint.textContent = tText('tagger.advHintHighRisk', 'Optional. This machine is marked high-risk for long GPU tagging.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintHighRisk', 'Optional. This machine is marked high-risk for long GPU tagging.');
         } else if (isCustom) {
-            runtimeAdvancedHint.textContent = tText('tagger.advHintCustom', 'Optional. Leave this alone until your custom model finishes one stable CPU run.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintCustom', 'Optional. Leave this alone until your custom model finishes one stable CPU run.');
         } else if (gpuEnabled && !riskyGpu) {
-            runtimeAdvancedHint.textContent = tText('tagger.advHintRecommended', 'Optional. The recommended mode is already active.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintRecommended', 'Optional. The recommended mode is already active.');
         } else {
-            runtimeAdvancedHint.textContent = tText('tagger.advHintDefault', 'Optional. Change this only when troubleshooting or tuning.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintDefault', 'Optional. Change this only when troubleshooting or tuning.');
         }
     }
 
     if (gpuHelp) {
         if (modelDisabled) {
-            gpuHelp.textContent = meta?.disabled_reason || tText('tagger.modelNotStartable', 'This model cannot be started in the current build.');
+            gpuHelp.textContent = meta?.disabled_reason || appT('tagger.modelNotStartable', 'This model cannot be started in the current build.');
         } else if (isToriiGate) {
             gpuHelp.textContent = gpuEnabled
-                ? tText('tagger.gpuHelpToriiGateGpu', 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.')
-                : tText('tagger.gpuHelpToriiGateCpu', 'ToriiGate is using the multimodal PyTorch backend on CPU. This is valid but much slower than CUDA.');
+                ? appT('tagger.gpuHelpToriiGateGpu', 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.')
+                : appT('tagger.gpuHelpToriiGateCpu', 'ToriiGate is using the multimodal PyTorch backend on CPU. This is valid but much slower than CUDA.');
         } else if (gpuLocked) {
-            gpuHelp.textContent = tText('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.');
+            gpuHelp.textContent = appT('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.');
         } else if (!gpuEnabled) {
             gpuHelp.textContent = isCustom
-                ? tText('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.')
+                ? appT('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.')
                 : (hardwareHighRisk
-                    ? tText('tagger.gpuHelpHighRiskCpu', 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.')
-                    : tText('tagger.gpuHelpCpuSafe', 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.'));
+                    ? appT('tagger.gpuHelpHighRiskCpu', 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.')
+                    : appT('tagger.gpuHelpCpuSafe', 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.'));
         } else if (riskyGpu) {
-            gpuHelp.textContent = tText('tagger.gpuHelpRiskyOverride', 'High-risk GPU override is active. You will be asked to confirm before this run starts.');
+            gpuHelp.textContent = appT('tagger.gpuHelpRiskyOverride', 'High-risk GPU override is active. You will be asked to confirm before this run starts.');
         } else if (meta?.gpu_confirmation_required) {
             gpuHelp.textContent = meta?.safe_mode_note
-                ? tText('tagger.gpuHelpAdaptiveNote', 'Adaptive runtime is active. {note}').replace('{note}', meta.safe_mode_note)
-                : tText('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model.');
+                ? appT('tagger.gpuHelpAdaptiveNote', 'Adaptive runtime is active. {note}').replace('{note}', meta.safe_mode_note)
+                : appT('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model.');
         } else if (meta?.safe_mode_note) {
-            gpuHelp.textContent = tText('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}').replace('{note}', meta.safe_mode_note);
+            gpuHelp.textContent = appT('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}').replace('{note}', meta.safe_mode_note);
         } else {
-            gpuHelp.textContent = tText('tagger.gpuHelpRecommendedDefault', 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.');
+            gpuHelp.textContent = appT('tagger.gpuHelpRecommendedDefault', 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.');
         }
     }
 
@@ -1529,23 +1535,23 @@ function syncTaggerModelUi(options = {}) {
 
 function confirmUnsafeTaggerGpuRun(modelName, meta = null) {
     const displayName = modelName === 'custom'
-        ? tText('tagger.confirmCustomModel', 'custom model')
+        ? appT('tagger.confirmCustomModel', 'custom model')
         : normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3');
     const summary = meta?.best_for
-        ? tText('tagger.confirmModelFocus', 'Model focus: {bestFor}.').replace('{bestFor}', meta.best_for)
-        : tText('tagger.confirmSpeedNotStability', 'This setup is optimized for maximum speed, not maximum stability.');
+        ? appT('tagger.confirmModelFocus', 'Model focus: {bestFor}.').replace('{bestFor}', meta.best_for)
+        : appT('tagger.confirmSpeedNotStability', 'This setup is optimized for maximum speed, not maximum stability.');
     const message = [
-        tText('tagger.confirmCrashProne', '{model} on GPU is the most crash-prone tagger setup.').replace('{model}', displayName),
+        appT('tagger.confirmCrashProne', '{model} on GPU is the most crash-prone tagger setup.').replace('{model}', displayName),
         '',
         summary,
-        tText('tagger.confirmRecommendCpu', 'Recommended: switch to CPU Safe Mode first.'),
-        tText('tagger.confirmContinueRisky', 'Continue with risky GPU mode anyway?')
+        appT('tagger.confirmRecommendCpu', 'Recommended: switch to CPU Safe Mode first.'),
+        appT('tagger.confirmContinueRisky', 'Continue with risky GPU mode anyway?')
     ].join('\n');
 
     return new Promise((resolve) => {
         if (typeof showConfirm === 'function') {
             showConfirm(
-                tText('tagger.confirmRiskyTitle', 'Risky GPU Tagger Run'),
+                appT('tagger.confirmRiskyTitle', 'Risky GPU Tagger Run'),
                 message,
                 () => resolve(true),
                 () => resolve(false)
@@ -1739,6 +1745,12 @@ function initEventListeners() {
 
     // Scan button
     $('#btn-scan').addEventListener('click', () => showModal('scan-modal'));
+    $('#btn-browse-folder')?.addEventListener('click', () => {
+        const input = $('#scan-folder-path');
+        if (input && typeof window.showFolderBrowser === 'function') {
+            window.showFolderBrowser(input);
+        }
+    });
 
     // Tag button
     $('#btn-tag').addEventListener('click', () => showModal('tag-modal'));
@@ -1749,10 +1761,10 @@ function initEventListeners() {
             const modal = backdrop.parentElement;
             // For tag-modal, use cancelTagging logic to minimize to background
             if (modal && modal.id === 'tag-modal') {
-                cancelTagging();
+                minimizeTaggingToBackground();
                 return;
             }
-            if (modal) modal.classList.remove('visible');
+            if (modal) hideModal(modal.id);
         });
     });
 
@@ -1761,7 +1773,7 @@ function initEventListeners() {
     $('#btn-start-scan').addEventListener('click', startScan);
 
     // Tag modal X close button — minimize to background if tagging
-    $('#btn-close-tag-modal')?.addEventListener('click', () => cancelTagging());
+    $('#btn-close-tag-modal')?.addEventListener('click', () => minimizeTaggingToBackground());
     // UI-02: Inline validation for scan folder path
     const scanFolderPathInput = $('#scan-folder-path');
     if (scanFolderPathInput) {
@@ -1771,7 +1783,7 @@ function initEventListeners() {
     }
 
     // Tag modal
-    $('#btn-cancel-tag').addEventListener('click', cancelTagging);
+    $('#btn-cancel-tag').addEventListener('click', minimizeTaggingToBackground);
     $('#btn-start-tag').addEventListener('click', startTagging);
     $('#btn-export-tags-json')?.addEventListener('click', exportTagLibraryJson);
 
@@ -2544,6 +2556,11 @@ async function resumeScanProgress() {
 
 let _tagProgressTimer = null;
 let _tagPollingActive = false;
+let _tagMinimizedToBackground = false;
+let _tagLastProgressPercent = 0;
+let _tagLastProgressText = '';
+let _tagLastCurrent = 0;
+let _tagLastTotal = 0;
 let _scanProgressTracker = createProgressTracker();
 
 function clearTagProgressTimer() {
@@ -2556,6 +2573,54 @@ function clearTagProgressTimer() {
 function scheduleTagProgressPoll(delay = 500) {
     clearTagProgressTimer();
     _tagProgressTimer = setTimeout(() => pollTagProgress(), delay);
+}
+
+function resetTagUiProgressState() {
+    _tagMinimizedToBackground = false;
+    _tagLastProgressPercent = 0;
+    _tagLastProgressText = '';
+    _tagLastCurrent = 0;
+    _tagLastTotal = 0;
+}
+
+function minimizeTaggingToBackground() {
+    if (!_tagPollingActive) {
+        hideModal('tag-modal');
+        _hideBgTagProgress();
+        return;
+    }
+
+    _tagMinimizedToBackground = true;
+    hideModal('tag-modal');
+    _updateBgTagProgress(
+        _tagLastProgressPercent,
+        _tagLastProgressText || appT('tagger.progressPreparing', 'Preparing tagger...'),
+        'running'
+    );
+    showToast(appT('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to stop or check details.'), 'info');
+}
+
+async function requestStopTagging() {
+    if (!_tagPollingActive) {
+        hideModal('tag-modal');
+        _hideBgTagProgress();
+        return;
+    }
+
+    try {
+        await API.cancelTagging();
+        _tagMinimizedToBackground = true;
+        _updateBgTagProgress(
+            _tagLastProgressPercent,
+            appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
+                .replace('{current}', String(_tagLastCurrent))
+                .replace('{total}', String(_tagLastTotal)),
+            'cancelling'
+        );
+        showToast(appT('tagger.cancellingAfterCurrent', 'Cancelling after current image...'), 'info');
+    } catch (err) {
+        showToast(formatUserError(err, 'Failed to cancel'), 'error');
+    }
 }
 
 function setTaggingUiState(isRunning, options = {}) {
@@ -2573,12 +2638,16 @@ function setTaggingUiState(isRunning, options = {}) {
 
     if (startBtn) {
         startBtn.disabled = isRunning;
-        startBtn.textContent = isRunning ? 'Tagging...' : 'Start Tagging';
+        startBtn.textContent = isRunning
+            ? appT('tag.running', 'Tagging...')
+            : appT('tag.startTagging', 'Start Tagging');
     }
 
     if (cancelBtn) {
         cancelBtn.disabled = false;
-        cancelBtn.textContent = isRunning ? 'Cancel Tagging' : (options.idleLabel || 'Close');
+        cancelBtn.textContent = isRunning
+            ? appT('tagger.runInBackground', 'Run in Background')
+            : (options.idleLabel || appT('common.close', 'Close'));
     }
 
     [modelSelect, thresholdInput, characterThresholdInput, retagAll, useGpu, modelPath, tagsPath, exportBtn, importBtn].forEach((element) => {
@@ -2734,15 +2803,18 @@ async function startTagging() {
         _tagStartTime = null;
         _tagProgressHistory = [];
         _tagPollingActive = true;
+        resetTagUiProgressState();
         clearTagProgressTimer();
 
         $('#tag-progress-container').style.display = 'block';
         $('#tag-progress-fill').style.width = '0%';
-        $('#tag-progress-text').textContent = gpuLocked
+        _tagLastProgressPercent = 0;
+        _tagLastProgressText = gpuLocked
             ? t('tag.preparingMaxQuality', 'Preparing Max Quality model in protected CPU Safe Mode...')
             : (options.useGpu
                 ? t('tag.preparingGpu', 'Preparing model on GPU...')
                 : t('tag.preparingCpu', 'Preparing model on CPU...'));
+        $('#tag-progress-text').textContent = _tagLastProgressText;
         setTaggingUiState(true);
 
         pollTagProgress();
@@ -2751,31 +2823,6 @@ async function startTagging() {
         clearTagProgressTimer();
         showToast(formatUserError(error, "Failed to start tagging"), "error");
     }
-}
-
-async function cancelTagging() {
-    // Use local _tagPollingActive flag — no async race with the server
-    if (!_tagPollingActive) {
-        hideModal('tag-modal');
-        _hideBgTagProgress();
-        return;
-    }
-
-    // Tagging is in progress — minimize to background, not cancel.
-    hideModal('tag-modal');
-
-    // Show the bg progress bar immediately, copying text from the modal progress
-    const bar = $('#bg-tag-progress');
-    if (bar) {
-        bar.style.display = 'flex';
-        const textEl = $('#bg-tag-progress-text');
-        if (textEl) {
-            const modalText = $('#tag-progress-text')?.textContent;
-            textEl.textContent = modalText || tText('tagger.progressPreparing', 'Preparing tagger...');
-        }
-    }
-
-    showToast(tText('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to stop or check details.'), 'info');
 }
 
 // UI-03: Track tagging progress timing for ETA estimation
@@ -2792,6 +2839,8 @@ async function pollTagProgress() {
         const current = (progress.processed ?? progress.current ?? 0);
         const total = progress.total || 0;
         const percent = total > 0 ? (current / total) * 100 : 0;
+        _tagLastCurrent = current;
+        _tagLastTotal = total;
         const tagged = Number(progress.tagged || 0);
         const errors = Number(progress.errors || 0);
 
@@ -2799,9 +2848,9 @@ async function pollTagProgress() {
 
         // Build progress text with phase awareness and ETA
         const errorSuffix = errors > 0
-            ? tText('tagger.progressErrorSuffix', ', {errors} failed').replace('{errors}', errors)
+            ? appT('tagger.progressErrorSuffix', ', {errors} failed').replace('{errors}', errors)
             : '';
-        let progressText = progress.message || tText('tagger.progressPreparing', 'Preparing tagger...');
+        let progressText = progress.message || appT('tagger.progressPreparing', 'Preparing tagger...');
 
         if (total > 0 && current > 0) {
             // Initialize start time on first progress
@@ -2837,21 +2886,21 @@ async function pollTagProgress() {
                         const etaStr = etaMinutes > 0 ? `${etaMinutes}m ${etaSecs}s` : `${etaSecs}s`;
 
                         // Update progress text with ETA
-                        progressText = tText('tagger.progressTagging', '{current}/{total} ({tagged} tagged{errorSuffix}, ~{eta} remaining)')
+                        progressText = appT('tagger.progressTagging', '{current}/{total} ({tagged} tagged{errorSuffix}, ~{eta} remaining)')
                             .replace('{current}', current)
                             .replace('{total}', total)
                             .replace('{tagged}', tagged)
                             .replace('{errorSuffix}', errorSuffix)
                             .replace('{eta}', etaStr);
                     } else {
-                        progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                        progressText = appT('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
                             .replace('{current}', current)
                             .replace('{total}', total)
                             .replace('{tagged}', tagged)
                             .replace('{errorSuffix}', errorSuffix);
                     }
                 } else {
-                    progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                    progressText = appT('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
                         .replace('{current}', current)
                         .replace('{total}', total)
                         .replace('{tagged}', tagged)
@@ -2859,7 +2908,7 @@ async function pollTagProgress() {
                 }
             } else {
                 // Early progress: show message + counts while ETA is being calculated
-                progressText = tText('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
+                progressText = appT('tagger.progressTaggingNoEta', '{current}/{total} ({tagged} tagged{errorSuffix})')
                     .replace('{current}', current)
                     .replace('{total}', total)
                     .replace('{tagged}', tagged)
@@ -2871,12 +2920,14 @@ async function pollTagProgress() {
         // progressText already holds progress.message from above, which is the correct phase text.
 
         if (progress.status === 'cancelling') {
-            progressText = progress.message || tText('tagger.progressCancelling', 'Cancelling... {current}/{total}')
+            progressText = progress.message || appT('tagger.progressCancelling', 'Cancelling... {current}/{total}')
                 .replace('{current}', current)
                 .replace('{total}', Math.max(total, current));
         }
 
         $('#tag-progress-text').textContent = progressText;
+        _tagLastProgressPercent = percent;
+        _tagLastProgressText = progressText;
 
         // Update background progress bar (always, even if modal is closed)
         _updateBgTagProgress(percent, progressText, progress.status);
@@ -2890,6 +2941,7 @@ async function pollTagProgress() {
             hideModal('tag-modal');
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
+            resetTagUiProgressState();
             promptsLibraryCache = null; // Invalidate cache after tagging
             // Reset timing state
             _tagStartTime = null;
@@ -2900,9 +2952,10 @@ async function pollTagProgress() {
             _tagPollingActive = false;
             clearTagProgressTimer();
             _hideBgTagProgress();
-            showToast(progress.message || tText('tagger.progressCancelled', 'Tagging cancelled'), 'info');
+            showToast(progress.message || appT('tagger.progressCancelled', 'Tagging cancelled'), 'info');
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
+            resetTagUiProgressState();
             _tagStartTime = null;
             _tagProgressHistory = [];
         } else if (progress.status === 'running') {
@@ -2916,6 +2969,7 @@ async function pollTagProgress() {
             showToast(progress.message, 'error');
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
+            resetTagUiProgressState();
             // Reset timing state
             _tagStartTime = null;
             _tagProgressHistory = [];
@@ -2926,9 +2980,10 @@ async function pollTagProgress() {
         _tagPollingActive = false;
         clearTagProgressTimer();
         _hideBgTagProgress();
-        showToast(tText('tagger.errorCheckingProgress', 'Error checking tag progress'), 'error');
+        showToast(appT('tagger.errorCheckingProgress', 'Error checking tag progress'), 'error');
         $('#tag-progress-container').style.display = 'none';
         setTaggingUiState(false);
+        resetTagUiProgressState();
         // Reset timing state on error
         _tagStartTime = null;
         _tagProgressHistory = [];
@@ -2940,14 +2995,14 @@ async function pollTagProgress() {
 function _updateBgTagProgress(percent, text, status) {
     const bar = $('#bg-tag-progress');
     if (!bar) return;
-    if (!_tagPollingActive || status === 'idle' || status === 'done') {
+    if (!_tagPollingActive || ['idle', 'done', 'cancelled', 'error'].includes(status)) {
         bar.style.display = 'none';
         return;
     }
-    // Show bg bar only when the tag modal is NOT visible (avoid doubling)
     const tagModal = $('#tag-modal');
     const modalOpen = tagModal && tagModal.classList.contains('visible');
-    bar.style.display = modalOpen ? 'none' : 'flex';
+    const shouldShow = _tagMinimizedToBackground || !modalOpen;
+    bar.style.display = shouldShow ? 'flex' : 'none';
     const fill = $('#bg-tag-progress-fill');
     const textEl = $('#bg-tag-progress-text');
     if (fill) fill.style.width = percent + '%';
@@ -2971,16 +3026,12 @@ function _initBgTagProgressButtons() {
     const openBtn = $('#bg-tag-open');
     if (cancelBtn) {
         cancelBtn.addEventListener('click', async () => {
-            try {
-                await API.cancelTagging();
-                showToast(tText('tagger.cancellingAfterCurrent', 'Cancelling after current image...'), 'info');
-            } catch (err) {
-                showToast(formatUserError(err, 'Failed to cancel'), 'error');
-            }
+            await requestStopTagging();
         });
     }
     if (openBtn) {
         openBtn.addEventListener('click', () => {
+            _tagMinimizedToBackground = false;
             showModal('tag-modal');
         });
     }
@@ -2995,15 +3046,19 @@ async function resumeTaggingProgress() {
         }
 
         _tagPollingActive = true;
+        _tagMinimizedToBackground = !($('#tag-modal')?.classList.contains('visible'));
         clearTagProgressTimer();
         $('#tag-progress-container').style.display = 'block';
-        $('#tag-progress-text').textContent = progress.message || tText('tagger.progressResuming', 'Resuming tagging progress...');
-        setTaggingUiState(true, { idleLabel: 'Close' });
+        _tagLastProgressPercent = 0;
+        _tagLastProgressText = progress.message || appT('tagger.progressResuming', 'Resuming tagging progress...');
+        $('#tag-progress-text').textContent = _tagLastProgressText;
+        setTaggingUiState(true, { idleLabel: appT('common.close', 'Close') });
         // Show background progress bar (tag modal may not be open)
         const current = progress.processed || progress.current || 0;
         const total = progress.total || 0;
         const percent = total > 0 ? (current / total) * 100 : 0;
-        _updateBgTagProgress(percent, progress.message || 'Resuming...', progress.status);
+        _tagLastProgressPercent = percent;
+        _updateBgTagProgress(percent, _tagLastProgressText, progress.status);
         pollTagProgress();
     } catch (error) {
         Logger.warn('Failed to resume tagging progress:', error);
@@ -4867,3 +4922,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+

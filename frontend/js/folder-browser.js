@@ -6,6 +6,11 @@
 
 // ============== Folder Browser ==============
 
+function fbT(key, fallback) {
+    const translated = window.I18n?.t?.(key);
+    return translated && translated !== key ? translated : fallback;
+}
+
 /**
  * Fetch folder contents from the backend browse-folder API.
  * @param {string} path - Folder path to browse (empty string for root/drives)
@@ -34,14 +39,23 @@ let _folderBrowserState = null;
 async function showFolderBrowser(inputElement) {
     const container = document.getElementById('folder-browser-container');
     if (!container) return;
-    if (_folderBrowserState) { hideFolderBrowser(); return; }
+    const requestedPath = inputElement.value.trim() || '';
+    if (_folderBrowserState && _folderBrowserState.inputElement === inputElement) {
+        _folderBrowserState.currentPath = requestedPath || _folderBrowserState.currentPath || '';
+        _folderBrowserState.selectedPath = _folderBrowserState.currentPath;
+        await _renderFolderBrowser(container, _folderBrowserState.currentPath);
+        return;
+    }
     _folderBrowserState = {
         inputElement: inputElement,
-        currentPath: inputElement.value.trim() || '',
+        currentPath: requestedPath,
         selectedPath: null
     };
     await _renderFolderBrowser(container, _folderBrowserState.currentPath);
 }
+
+window.showFolderBrowser = showFolderBrowser;
+window.hideFolderBrowser = hideFolderBrowser;
 
 /** Hide and destroy the folder browser panel. */
 function hideFolderBrowser() {
@@ -56,16 +70,16 @@ function hideFolderBrowser() {
  * @param {string} path - Path to browse
  */
 async function _renderFolderBrowser(container, path) {
-    container.innerHTML = '<div class="folder-browser"><div class="folder-browser-loading">Loading folders...</div></div>';
+    container.innerHTML = `<div class="folder-browser"><div class="folder-browser-loading">${escapeHtml(fbT('folderBrowser.loading', 'Loading folders...'))}</div></div>`;
     try {
         const data = await fetchFolderContents(path);
         _folderBrowserState.currentPath = data.current;
         _folderBrowserState.selectedPath = data.current;
         const parentDisabled = data.parent == null ? ' disabled' : '';
-        const currentDisplay = data.current || 'Computer';
+        const currentDisplay = data.current || fbT('folderBrowser.computer', 'Computer');
         let listHtml = '';
         if (data.subdirs.length === 0) {
-            listHtml = '<div class="folder-browser-empty">No subfolders found</div>';
+            listHtml = `<div class="folder-browser-empty">${escapeHtml(fbT('folderBrowser.empty', 'No subfolders found'))}</div>`;
         } else {
             listHtml = data.subdirs.map(function(dir) {
                 const arrow = dir.has_children ? '<span class="folder-browser-item-arrow">&#9654;</span>' : '';
@@ -78,12 +92,12 @@ async function _renderFolderBrowser(container, path) {
         container.innerHTML = '<div class="folder-browser">' +
             '<div class="folder-browser-header">' +
             '<button type="button" class="folder-browser-btn" id="folder-browser-up"' + parentDisabled +
-            ' title="Go to parent folder" aria-label="Go to parent folder">&uarr; Up</button>' +
+            ' title="' + escapeHtml(fbT('folderBrowser.upTitle', 'Go to parent folder')) + '" aria-label="' + escapeHtml(fbT('folderBrowser.upTitle', 'Go to parent folder')) + '">&uarr; ' + escapeHtml(fbT('folderBrowser.up', 'Up')) + '</button>' +
             '<span class="folder-browser-path" title="' + escapeHtml(currentDisplay) + '">' + escapeHtml(currentDisplay) + '</span></div>' +
             '<div class="folder-browser-list">' + listHtml + '</div>' +
             '<div class="folder-browser-footer">' +
-            '<button type="button" class="folder-browser-btn" id="folder-browser-cancel">Cancel</button>' +
-            '<button type="button" class="folder-browser-btn" id="folder-browser-select" style="background:rgba(255,138,61,0.2);color:var(--accent-primary);">Select This Folder</button>' +
+            '<button type="button" class="folder-browser-btn" id="folder-browser-cancel">' + escapeHtml(fbT('folderBrowser.cancel', 'Cancel')) + '</button>' +
+            '<button type="button" class="folder-browser-btn" id="folder-browser-select" style="background:rgba(255,138,61,0.2);color:var(--accent-primary);">' + escapeHtml(fbT('folderBrowser.select', 'Select This Folder')) + '</button>' +
             '</div></div>';
         _attachFolderBrowserEvents(container, data);
     } catch (err) {
@@ -92,9 +106,9 @@ async function _renderFolderBrowser(container, path) {
             catch (rootErr) { /* fall through */ }
         }
         container.innerHTML = '<div class="folder-browser">' +
-            '<div class="folder-browser-error">Error: ' + escapeHtml(err.message) + '</div>' +
+            '<div class="folder-browser-error">' + escapeHtml(fbT('folderBrowser.errorPrefix', 'Error: ')) + escapeHtml(err.message) + '</div>' +
             '<div class="folder-browser-footer">' +
-            '<button type="button" class="folder-browser-btn" id="folder-browser-cancel">Close</button></div></div>';
+            '<button type="button" class="folder-browser-btn" id="folder-browser-cancel">' + escapeHtml(fbT('folderBrowser.close', 'Close')) + '</button></div></div>';
         const cancelBtn = container.querySelector('#folder-browser-cancel');
         if (cancelBtn) cancelBtn.addEventListener('click', hideFolderBrowser);
     }
@@ -174,10 +188,10 @@ async function loadSystemInfo() {
         const hasTensorRt = providers.indexOf('TensorrtExecutionProvider') !== -1;
         const parts = [];
         if (sys.gpu_name) { parts.push(String(sys.gpu_name)); }
-        else { parts.push('CPU only'); }
+        else { parts.push(fbT('system.noGpuDetected', 'No GPU detected')); }
         if (sys.total_ram_gb) { parts.push(sys.total_ram_gb.toFixed(0) + 'GB RAM'); }
         if (sys.gpu_vram_total_mb) { parts.push((sys.gpu_vram_total_mb / 1024).toFixed(1) + 'GB VRAM'); }
-        contentEl.textContent = parts.join(' · ') || 'Hardware detection is available for this machine.';
+        contentEl.textContent = parts.join(' · ') || fbT('system.detectedHardware', 'Detected Hardware');
         panel.style.display = '';
 
         if (hardwareChip) {
@@ -207,7 +221,7 @@ async function loadSystemInfo() {
 
         if (batchEl) {
             const recommendedChunk = rec.recommended_batch_size || 4;
-            batchEl.textContent = 'Recommended runtime chunk size: ' + recommendedChunk + '. The backend now uses real WD14 multi-image batching when the model supports it.';
+            batchEl.textContent = fbT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
         }
 
         // Set recommended runtime chunk size in the advanced dropdown
@@ -227,14 +241,24 @@ async function loadSystemInfo() {
 
 // ============== Init on DOMContentLoaded ==============
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Browse folder button
+function bindFolderBrowserButton() {
     const btnBrowse = document.getElementById('btn-browse-folder');
-    if (btnBrowse) {
+    if (btnBrowse && btnBrowse.dataset.browserBound !== '1') {
+        btnBrowse.dataset.browserBound = '1';
         btnBrowse.addEventListener('click', function() {
             const pathInput = document.getElementById('scan-folder-path');
             if (pathInput) showFolderBrowser(pathInput);
         });
     }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindFolderBrowserButton);
+} else {
+    bindFolderBrowserButton();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    bindFolderBrowserButton();
 });
 

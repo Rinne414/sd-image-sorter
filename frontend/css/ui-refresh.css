@@ -2888,6 +2888,211 @@ html.lang-zh #view-censor .queue-action-btn span {
     font-size: 13px;
 }
 
+#view-censor .queue-filter-row .input-field {
+    width: 100% !important;
+}
+
+.queue-manager-shell {
+    width: min(1400px, calc(100vw - 48px));
+    max-width: 1400px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.queue-manager-toolbar,
+.queue-manager-action-bar {
+    display: grid;
+    gap: 12px;
+    align-items: center;
+}
+
+.queue-manager-toolbar {
+    grid-template-columns: minmax(260px, 1.4fr) auto auto auto;
+}
+
+.queue-manager-toggle {
+    margin: 0;
+    min-height: 46px;
+}
+
+.queue-manager-action-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(240px, 320px);
+}
+
+.queue-manager-position-box {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+}
+
+.queue-manager-position-box > label {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.queue-manager-position-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.queue-manager-summary {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.queue-manager-table {
+    min-height: 0;
+    border-radius: 18px;
+    border: 1px solid rgba(191, 219, 254, 0.1);
+    background: rgba(7, 14, 25, 0.56);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.queue-manager-head,
+.queue-manager-row {
+    display: grid;
+    grid-template-columns: 72px 96px minmax(0, 1fr) 180px;
+    gap: 12px;
+    align-items: center;
+}
+
+.queue-manager-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 14px 16px;
+    background: rgba(10, 18, 30, 0.96);
+    border-bottom: 1px solid rgba(191, 219, 254, 0.1);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.queue-manager-list {
+    min-height: 240px;
+    max-height: calc(88vh - 320px);
+    overflow-y: auto;
+}
+
+.queue-manager-row {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(191, 219, 254, 0.06);
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.queue-manager-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.queue-manager-row.is-active {
+    background: rgba(20, 184, 166, 0.12);
+}
+
+.queue-manager-row.is-selected {
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.42);
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.queue-manager-row.dragging {
+    opacity: 0.55;
+}
+
+.queue-manager-row.drag-over {
+    border-top: 2px solid rgba(20, 184, 166, 0.8);
+}
+
+.queue-manager-index {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.queue-manager-thumb {
+    width: 96px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid rgba(191, 219, 254, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.queue-manager-file {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.queue-manager-file-name {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.queue-manager-file-sub {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.queue-manager-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.queue-manager-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(191, 219, 254, 0.12);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.queue-manager-badge.is-active {
+    background: rgba(20, 184, 166, 0.16);
+    border-color: rgba(20, 184, 166, 0.3);
+    color: #c9fff5;
+}
+
+.queue-manager-badge.is-selected {
+    background: rgba(245, 158, 11, 0.14);
+    border-color: rgba(245, 158, 11, 0.28);
+    color: #ffe0a6;
+}
+
+.queue-manager-badge.is-processed {
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.28);
+    color: #c9f7d8;
+}
+
+.queue-manager-empty {
+    padding: 32px 20px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.6;
+}
+
 #view-censor .sidebar-action-row-v2 {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -2971,6 +3176,21 @@ html.lang-zh #view-censor .queue-action-btn span {
     #view-censor .queue-actions-row {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .queue-manager-toolbar,
+    .queue-manager-action-bar {
+        grid-template-columns: 1fr;
+    }
+
+    .queue-manager-head,
+    .queue-manager-row {
+        grid-template-columns: 60px 84px minmax(0, 1fr);
+    }
+
+    .queue-manager-head span:last-child,
+    .queue-manager-row > .queue-manager-status {
+        grid-column: 1 / -1;
+    }
 }
 
 /* ==========================================================================
@@ -2978,27 +3198,34 @@ html.lang-zh #view-censor .queue-action-btn span {
    ========================================================================== */
 .bg-tag-progress {
     position: fixed;
-    top: var(--nav-height, 72px);
-    left: 0;
-    right: 0;
-    display: flex;
+    top: auto;
+    bottom: 16px;
+    right: 16px;
+    left: auto;
+    width: min(430px, calc(100vw - 32px));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+        "progress progress progress"
+        "text stop details";
     align-items: center;
     gap: 10px;
-    padding: 8px 16px;
-    background: rgba(20, 20, 30, 0.97);
+    padding: 12px 14px;
+    background: rgba(10, 18, 30, 0.96);
     backdrop-filter: blur(8px);
-    border-bottom: 2px solid rgba(255, 138, 61, 0.5);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 138, 61, 0.1);
+    border: 1px solid rgba(255, 138, 61, 0.32);
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(2, 6, 23, 0.34), inset 0 0 0 1px rgba(255, 138, 61, 0.08);
     font-size: 0.85rem;
-    z-index: 999;
+    z-index: 1200;
 }
 .bg-tag-progress-inner {
-    flex: 1;
+    grid-area: progress;
     height: 8px;
     background: rgba(255, 255, 255, 0.12);
     border-radius: 4px;
     overflow: hidden;
-    min-width: 120px;
+    min-width: 0;
 }
 .bg-tag-progress-fill {
     height: 100%;
@@ -3009,26 +3236,36 @@ html.lang-zh #view-censor .queue-action-btn span {
     box-shadow: 0 0 8px rgba(255, 138, 61, 0.4);
 }
 .bg-tag-progress-text {
+    grid-area: text;
     color: var(--text-primary, #e0e0e6);
-    white-space: nowrap;
+    white-space: normal;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 50%;
+    max-width: none;
     font-weight: 500;
+    line-height: 1.45;
+    min-width: 0;
 }
 .bg-tag-progress-btn {
     background: rgba(255, 255, 255, 0.08);
     color: var(--text-primary, #e0e0e6);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 3px 10px;
+    border-radius: 10px;
+    padding: 7px 12px;
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: 0.8rem;
+    font-weight: 700;
     white-space: nowrap;
     transition: background 0.15s;
 }
 .bg-tag-progress-btn:hover {
     background: rgba(255, 255, 255, 0.15);
+}
+.bg-tag-stop-btn {
+    grid-area: stop;
+}
+.bg-tag-progress-btn:not(.bg-tag-stop-btn) {
+    grid-area: details;
 }
 .bg-tag-stop-btn {
     background: rgba(239, 68, 68, 0.15);
@@ -3037,4 +3274,14 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 .bg-tag-stop-btn:hover {
     background: rgba(239, 68, 68, 0.3);
+}
+
+@media (max-width: 900px) {
+    .bg-tag-progress {
+        top: auto;
+        bottom: 14px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+    }
 }

@@ -238,8 +238,8 @@
                 <div class="bg-tag-progress-fill" id="bg-tag-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging">⏹ Stop</button>
-            <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal">Details</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle">⏹ <span data-i18n="tagger.bgStop">Stop</span></button>
+            <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal" data-i18n-title="tagger.bgDetailsTitle"><span data-i18n="tagger.bgDetails">Details</span></button>
         </div>
 
         <!-- Main Content Area -->
@@ -770,17 +770,18 @@
                     <aside class="censor-sidebar-v2 left">
                         <div class="sidebar-header-v2">
                               <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
-                              <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Click to edit • Ctrl/Shift multi-select • Use Top/Bottom or Alt+Home/End for big queues</p>
+                              <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Click to edit • Ctrl/Shift multi-select</p>
                             <div class="queue-selection-count-row">
                                 <span class="queue-selection-count" id="queue-selection-count"></span>
                             </div>
                             <div class="queue-actions-row" style="margin-bottom: 6px;">
                                 <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-select-all" title="Select All" type="button" aria-label="Select all queue items">✓ <span data-i18n="censor.selectAll">All</span></button>
                                 <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-deselect-all" title="Deselect All" type="button" aria-label="Deselect all queue items">✕ <span data-i18n="censor.deselectAll">None</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-filter" title="Filter queue" type="button" aria-label="Filter queue"><span>🔍</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-filter" title="Filter queue" type="button" aria-label="Filter queue">🔍 <span data-i18n="common.filter">Filter</span></button>
+                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-open-queue-manager" title="Open queue manager" type="button" aria-label="Open queue manager">🗂️ <span data-i18n="censor.queueManager">Queue Manager</span></button>
                             </div>
                             <div class="queue-filter-row" id="queue-filter-row" style="display: none; margin-bottom: 6px;">
-                                <input type="text" id="queue-filter-input" class="input-field" placeholder="Filter by filename..." style="width: 100%; padding: 6px 8px; font-size: 12px;">
+                                <input type="text" id="queue-filter-input" class="input-field" placeholder="Filter by filename..." data-i18n-placeholder="censor.queueFilterPlaceholder" style="width: 100%; padding: 6px 8px; font-size: 12px;">
                             </div>
                             <div class="queue-actions-row">
                                 <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-top" title="Move to top" type="button" aria-label="Move selection to top">⤒ <span data-i18n="common.top">Top</span></button>
@@ -1506,7 +1507,7 @@
                     <label for="scan-folder-path" id="scan-folder-path-label">Folder Path</label>
                     <div class="folder-path-row">
                         <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
-                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" onmousedown="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); }" onclick="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); } return false;">Browse</button>
                     </div>
                     <div id="folder-browser-container"></div>
                 </div>
@@ -2095,6 +2096,57 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-cancel-save-options" data-i18n="save.cancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-confirm-save-options">💾 <span data-i18n="save.saveAll">Save All Images</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Queue Manager Modal -->
+        <div class="modal" id="queue-manager-modal">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-large queue-manager-shell">
+                <button class="modal-close" id="btn-close-queue-manager">✕</button>
+                <h3>🗂️ <span data-i18n="censor.queueManager">Queue Manager</span></h3>
+                <p class="modal-description" data-i18n="censor.queueManagerDescription">Use the large queue window for selecting, searching, and reordering big batches.</p>
+
+                <div class="queue-manager-toolbar">
+                    <input type="text" id="queue-manager-search" class="input-field" placeholder="Search filenames..." data-i18n-placeholder="censor.queueManagerSearch">
+                    <label class="checkbox-label queue-manager-toggle">
+                        <input type="checkbox" id="queue-manager-show-selected">
+                        <span class="checkbox-custom"></span>
+                        <span class="checkbox-text" data-i18n="censor.queueManagerShowSelected">Show selected only</span>
+                    </label>
+                    <button class="btn btn-secondary" id="btn-queue-manager-select-all">✓ <span data-i18n="censor.selectAll">All</span></button>
+                    <button class="btn btn-secondary" id="btn-queue-manager-deselect-all">✕ <span data-i18n="censor.deselectAll">None</span></button>
+                </div>
+
+                <div class="queue-manager-action-bar">
+                    <button class="btn btn-secondary" id="btn-queue-manager-move-top">⤒ <span data-i18n="common.top">Top</span></button>
+                    <button class="btn btn-secondary" id="btn-queue-manager-move-up">↑ <span data-i18n="common.up">Up</span></button>
+                    <button class="btn btn-secondary" id="btn-queue-manager-move-down">↓ <span data-i18n="common.down">Down</span></button>
+                    <button class="btn btn-secondary" id="btn-queue-manager-move-bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
+                    <div class="queue-manager-position-box">
+                        <label for="queue-manager-position" data-i18n="censor.moveToPosition">Move To Position</label>
+                        <div class="queue-manager-position-row">
+                            <input type="number" id="queue-manager-position" class="input-field" min="1" value="1">
+                            <button class="btn btn-primary" id="btn-queue-manager-move-position" data-i18n="common.move">Move</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="queue-manager-summary" id="queue-manager-summary" aria-live="polite"></div>
+
+                <div class="queue-manager-table">
+                    <div class="queue-manager-head">
+                        <span data-i18n="censor.queueColumnIndex">#</span>
+                        <span data-i18n="censor.queueColumnPreview">Preview</span>
+                        <span data-i18n="censor.queueColumnFilename">Filename</span>
+                        <span data-i18n="censor.queueColumnStatus">Status</span>
+                    </div>
+                    <div class="queue-manager-list" id="queue-manager-list"></div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-close-queue-manager-footer" data-i18n="common.close">Close</button>
                 </div>
             </div>
         </div>

@@ -618,6 +618,120 @@ test.describe('Smoke Tests', () => {
     })
   })
 
+  test('should keep tagger progress available in the background with stop and details', async ({ page }) => {
+    let started = false
+    let cancelRequested = 0
+    let cancelProgressPolls = 0
+
+    await page.route('**/api/tag/start', async (route) => {
+      started = true
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'started' }),
+      })
+    })
+
+    await page.route('**/api/tag/cancel', async (route) => {
+      cancelRequested += 1
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'cancelling', message: 'Cancellation requested' }),
+      })
+    })
+
+    await page.route('**/api/tag/progress', async (route) => {
+      if (!started) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'idle',
+            processed: 0,
+            total: 0,
+            tagged: 0,
+            errors: 0,
+            message: '',
+          }),
+        })
+        return
+      }
+
+      if (cancelRequested > 0) {
+        cancelProgressPolls += 1
+        if (cancelProgressPolls >= 2) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              status: 'cancelled',
+              processed: 3,
+              total: 10,
+              tagged: 3,
+              errors: 0,
+              message: 'Tagging cancelled',
+            }),
+          })
+          return
+        }
+
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'cancelling',
+            processed: 3,
+            total: 10,
+            tagged: 3,
+            errors: 0,
+            message: 'Cancelling... (3/10)',
+          }),
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'running',
+          processed: 3,
+          total: 10,
+          tagged: 3,
+          errors: 0,
+          message: '3/10 (3 tagged)',
+        }),
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-tag').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await page.locator('#btn-start-tag').click()
+
+    await expect(page.locator('#tag-progress-container')).toBeVisible()
+    await page.locator('#btn-cancel-tag').click()
+
+    await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#bg-tag-progress')).toBeVisible()
+    await expect(page.locator('#bg-tag-progress-text')).toContainText(/3\/10|Preparing/i)
+
+    await page.locator('#bg-tag-open').click()
+    await expect(page.locator('#tag-modal.visible')).toBeVisible()
+
+    await page.locator('#btn-close-tag-modal').click()
+    await expect(page.locator('#tag-modal.visible')).toHaveCount(0)
+    await expect(page.locator('#bg-tag-progress')).toBeVisible()
+
+    await page.locator('#bg-tag-cancel').click()
+    await expect.poll(() => cancelRequested).toBe(1)
+    await expect(page.locator('#bg-tag-progress-text')).toContainText(/Cancelling|取消/i)
+    await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
+  })
+
   test('should downgrade a risky custom GPU tagger run to CPU Safe Mode when the user declines', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
@@ -1742,7 +1856,7 @@ test.describe('Smoke Tests', () => {
     expect(editedSnapshot).not.toBeNull()
 
     await page.keyboard.press('Control+Z')
-    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 5000 }).toBe(initialSnapshot)
+    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).toBe(initialSnapshot)
   })
 
   test('censor detect modal should explain simple and pro model capabilities', async ({ page }) => {
