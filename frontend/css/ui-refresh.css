@@ -2977,15 +2977,19 @@ html.lang-zh #view-censor .queue-action-btn span {
    Background Tagging Progress Bar
    ========================================================================== */
 .bg-tag-progress {
+    position: fixed;
+    top: var(--nav-height, 72px);
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 6px 16px;
-    background: rgba(30, 32, 44, 0.92);
+    background: rgba(30, 32, 44, 0.95);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     font-size: 0.82rem;
-    z-index: 100;
+    z-index: 999;
 }
 .bg-tag-progress-inner {
     flex: 1;
