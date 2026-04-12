@@ -292,11 +292,16 @@ def prepare_embedded_python(stage_dir: Path) -> None:
     with zipfile.ZipFile(embed_zip, "r") as zf:
         zf.extractall(python_dir)
 
-    # Enable pip: uncomment "import site" in python3XX._pth
+    # Enable pip and add Lib\site-packages to the search path in python3XX._pth.
+    # Embedded Python only searches paths listed in the ._pth file; without the
+    # explicit site-packages entry, pip-installed packages are invisible.
     pth_files = list(python_dir.glob("python*._pth"))
     for pth_file in pth_files:
         content = pth_file.read_text(encoding="utf-8")
         content = content.replace("#import site", "import site")
+        # Ensure Lib\site-packages is on the search path
+        if "Lib\\site-packages" not in content and "Lib/site-packages" not in content:
+            content = content.rstrip("\r\n") + "\nLib\\site-packages\n"
         pth_file.write_text(content, encoding="utf-8")
 
     # Download get-pip.py
@@ -317,7 +322,8 @@ def prepare_embedded_python(stage_dir: Path) -> None:
         '\r\n'
         'cd /d "%~dp0"\r\n'
         '\r\n'
-        'set "PYTHON_CMD=%~dp0python\\python.exe"\r\n'
+        'set "PYTHON_DIR=%~dp0python"\r\n'
+        'set "PYTHON_CMD=%PYTHON_DIR%\\python.exe"\r\n'
         '\r\n'
         'if not exist "%PYTHON_CMD%" (\r\n'
         '    echo [ERROR] Embedded Python not found at %PYTHON_CMD%\r\n'
@@ -326,12 +332,16 @@ def prepare_embedded_python(stage_dir: Path) -> None:
         '    exit /b 1\r\n'
         ')\r\n'
         '\r\n'
+        'REM -- Put embedded Python and its Scripts on PATH so DLLs and\r\n'
+        'REM    compiled extensions (numpy, pillow, onnxruntime) resolve.\r\n'
+        'set "PATH=%PYTHON_DIR%;%PYTHON_DIR%\\Scripts;%PYTHON_DIR%\\Lib\\site-packages;%PATH%"\r\n'
+        '\r\n'
         'echo [OK] Using embedded Python: %PYTHON_CMD%\r\n'
         '\r\n'
         'REM -- Install pip if not present\r\n'
-        'if not exist "%~dp0python\\Scripts\\pip.exe" (\r\n'
+        'if not exist "%PYTHON_DIR%\\Scripts\\pip.exe" (\r\n'
         '    echo [INFO] Installing pip...\r\n'
-        '    "%PYTHON_CMD%" "%~dp0python\\get-pip.py" --no-warn-script-location\r\n'
+        '    "%PYTHON_CMD%" "%PYTHON_DIR%\\get-pip.py" --no-warn-script-location\r\n'
         '    if errorlevel 1 (\r\n'
         '        echo [ERROR] Failed to install pip.\r\n'
         '        pause\r\n'
@@ -348,7 +358,7 @@ def prepare_embedded_python(stage_dir: Path) -> None:
         '\r\n'
         'if !NEED_INSTALL! EQU 1 (\r\n'
         '    echo [INFO] Installing dependencies (first run, may take a few minutes)...\r\n'
-        '    "%~dp0python\\Scripts\\pip.exe" install -r backend\\requirements.txt --no-warn-script-location\r\n'
+        '    "%PYTHON_DIR%\\Scripts\\pip.exe" install -r backend\\requirements.txt --no-warn-script-location\r\n'
         '    if errorlevel 1 (\r\n'
         '        echo [ERROR] Failed to install dependencies.\r\n'
         '        pause\r\n'
@@ -373,7 +383,9 @@ def prepare_embedded_python(stage_dir: Path) -> None:
         '"%~dp0python\\python.exe" main.py\r\n'
         '\r\n'
         'echo.\r\n'
-        'echo Server stopped.\r\n'
+        'echo ==========================================\r\n'
+        'echo   Server stopped. Error output above.\r\n'
+        'echo ==========================================\r\n'
         'pause\r\n',
         encoding="utf-8",
     )
