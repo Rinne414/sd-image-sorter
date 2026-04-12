@@ -2754,28 +2754,25 @@ async function startTagging() {
 }
 
 async function cancelTagging() {
-    const progress = await API.getTagProgress().catch(() => null);
-    if (!progress || !['running', 'cancelling'].includes(progress.status)) {
+    // Use local _tagPollingActive flag — no async race with the server
+    if (!_tagPollingActive) {
         hideModal('tag-modal');
         _hideBgTagProgress();
         return;
     }
 
-    // If tagging is running, minimize to background instead of cancelling.
-    // The user can cancel from the background progress bar.
+    // Tagging is in progress — minimize to background, not cancel.
     hideModal('tag-modal');
 
-    // Immediately show the background progress bar so user sees it right away
-    const current = progress.processed ?? progress.current ?? 0;
-    const total = progress.total || 0;
-    const percent = total > 0 ? (current / total) * 100 : 0;
+    // Show the bg progress bar immediately, copying text from the modal progress
     const bar = $('#bg-tag-progress');
     if (bar) {
         bar.style.display = 'flex';
-        const fill = $('#bg-tag-progress-fill');
         const textEl = $('#bg-tag-progress-text');
-        if (fill) fill.style.width = percent + '%';
-        if (textEl) textEl.textContent = progress.message || `${current}/${total}`;
+        if (textEl) {
+            const modalText = $('#tag-progress-text')?.textContent;
+            textEl.textContent = modalText || tText('tagger.progressPreparing', 'Preparing tagger...');
+        }
     }
 
     showToast(tText('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to stop or check details.'), 'info');
