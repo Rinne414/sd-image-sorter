@@ -3023,3 +3023,11 @@ html.lang-zh #view-censor .queue-action-btn span {
 .bg-tag-progress-btn:hover {
     background: rgba(255, 255, 255, 0.15);
 }
+.bg-tag-stop-btn {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+.bg-tag-stop-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+}

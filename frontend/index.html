@@ -238,7 +238,7 @@
                 <div class="bg-tag-progress-fill" id="bg-tag-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
-            <button class="bg-tag-progress-btn" id="bg-tag-cancel" title="Cancel tagging">Cancel</button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging">⏹ Stop</button>
             <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal">Details</button>
         </div>
 
@@ -1541,6 +1541,7 @@
         <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large tagger-modal-shell">
+                <button class="modal-close" id="btn-close-tag-modal" aria-label="Close">✕</button>
                 <h3 id="tag-modal-title" data-i18n="modal.tagTitle">Tag Images with WD14</h3>
                 <p class="modal-description" data-i18n="modal.tagDescription">Uses WD14 tagger to automatically tag your images with anime/illustration tags.</p>
 

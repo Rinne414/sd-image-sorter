@@ -773,6 +773,6 @@ window.I18nLang_en = {
     'tagger.progressResuming': 'Resuming tagging progress...',
     'tagger.errorCheckingProgress': 'Error checking tag progress',
     'tagger.cancellingAfterCurrent': 'Cancelling after current image...',
-    'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to cancel or check status.'
+    'tagger.minimizedToBackground': 'Tagging continues in the background. Use the progress bar to stop or check details.'
 
 };

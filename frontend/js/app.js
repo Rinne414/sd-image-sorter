@@ -1746,13 +1746,22 @@ function initEventListeners() {
     // Modal backdrops
     $$('.modal-backdrop').forEach(backdrop => {
         backdrop.addEventListener('click', () => {
-            backdrop.parentElement.classList.remove('visible');
+            const modal = backdrop.parentElement;
+            // For tag-modal, use cancelTagging logic to minimize to background
+            if (modal && modal.id === 'tag-modal') {
+                cancelTagging();
+                return;
+            }
+            if (modal) modal.classList.remove('visible');
         });
     });
 
     // Scan modal
     $('#btn-cancel-scan').addEventListener('click', () => hideModal('scan-modal'));
     $('#btn-start-scan').addEventListener('click', startScan);
+
+    // Tag modal X close button — minimize to background if tagging
+    $('#btn-close-tag-modal')?.addEventListener('click', () => cancelTagging());
     // UI-02: Inline validation for scan folder path
     const scanFolderPathInput = $('#scan-folder-path');
     if (scanFolderPathInput) {

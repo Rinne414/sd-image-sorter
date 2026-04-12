@@ -775,6 +775,6 @@ window.I18nLang_zhCN = {
     'tagger.progressResuming': '正在恢复标注进度...',
     'tagger.errorCheckingProgress': '检查标注进度时出错',
     'tagger.cancellingAfterCurrent': '将在当前图片完成后取消...',
-    'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条取消或查看状态。'
+    'tagger.minimizedToBackground': '标注在后台继续运行。可以通过顶部进度条停止或查看详情。'
 
 };
