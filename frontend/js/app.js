@@ -2764,7 +2764,21 @@ async function cancelTagging() {
     // If tagging is running, minimize to background instead of cancelling.
     // The user can cancel from the background progress bar.
     hideModal('tag-modal');
-    showToast(tText('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to cancel or check status.'), 'info');
+
+    // Immediately show the background progress bar so user sees it right away
+    const current = progress.processed ?? progress.current ?? 0;
+    const total = progress.total || 0;
+    const percent = total > 0 ? (current / total) * 100 : 0;
+    const bar = $('#bg-tag-progress');
+    if (bar) {
+        bar.style.display = 'flex';
+        const fill = $('#bg-tag-progress-fill');
+        const textEl = $('#bg-tag-progress-text');
+        if (fill) fill.style.width = percent + '%';
+        if (textEl) textEl.textContent = progress.message || `${current}/${total}`;
+    }
+
+    showToast(tText('tagger.minimizedToBackground', 'Tagging continues in the background. Use the progress bar to stop or check details.'), 'info');
 }
 
 // UI-03: Track tagging progress timing for ETA estimation
@@ -2933,7 +2947,10 @@ function _updateBgTagProgress(percent, text, status) {
         bar.style.display = 'none';
         return;
     }
-    bar.style.display = 'flex';
+    // Show bg bar only when the tag modal is NOT visible (avoid doubling)
+    const tagModal = $('#tag-modal');
+    const modalOpen = tagModal && tagModal.classList.contains('visible');
+    bar.style.display = modalOpen ? 'none' : 'flex';
     const fill = $('#bg-tag-progress-fill');
     const textEl = $('#bg-tag-progress-text');
     if (fill) fill.style.width = percent + '%';
