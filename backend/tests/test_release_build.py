@@ -25,6 +25,8 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
 
     assert b"\r\r\n" not in launcher_bytes
     assert b"setlocal enabledelayedexpansion\r\n" in launcher_bytes
+    assert b"set \"PIP_CMD=!PYTHON_DIR!\\Scripts\\pip.exe\"" in launcher_bytes
+    assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL" in launcher_bytes
     assert b"Installing dependencies - first run may take a few minutes" in launcher_bytes
     assert launcher_bytes.endswith(b"pause\r\n")
