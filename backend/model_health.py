@@ -454,12 +454,17 @@ def get_model_health() -> Dict[str, Any]:
                 ),
             },
             "nudenet": {
-                "available": nudenet_model.exists() and _module_available("nudenet"),
+                "available": _module_available("nudenet"),
+                "model_downloaded": nudenet_model.exists(),
                 "model_path": str(nudenet_model.resolve()) if nudenet_model.exists() else None,
                 "message": (
-                    "NudeNet model ready."
-                    if nudenet_model.exists()
-                    else "NudeNet local model file is missing."
+                    "NudeNet runtime is ready."
+                    if _module_available("nudenet") and nudenet_model.exists()
+                    else (
+                        "NudeNet runtime is installed. The detector can still prepare/download its model on first use."
+                        if _module_available("nudenet")
+                        else "NudeNet runtime is not installed yet."
+                    )
                 ),
                 "capabilities": {
                     "class_scope": "fixed-nudenet",

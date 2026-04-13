@@ -981,7 +981,7 @@ textarea:focus,
 
 .gallery-model-manager-fab {
     position: fixed;
-    right: 24px;
+    left: 24px;
     bottom: 24px;
     z-index: 35;
     display: inline-flex;
@@ -1043,6 +1043,10 @@ textarea:focus,
     border-color: rgba(34, 197, 94, 0.32);
 }
 
+.model-card.is-downloaded {
+    border-color: rgba(59, 130, 246, 0.28);
+}
+
 .model-card.is-missing {
     border-color: rgba(245, 158, 11, 0.28);
 }
@@ -1078,6 +1082,11 @@ textarea:focus,
 .model-card-status.is-ready {
     background: rgba(34, 197, 94, 0.14);
     color: #bbf7d0;
+}
+
+.model-card-status.is-downloaded {
+    background: rgba(59, 130, 246, 0.14);
+    color: #bfdbfe;
 }
 
 .model-card-status.is-missing {

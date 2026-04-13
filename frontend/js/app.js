@@ -1877,7 +1877,7 @@ function initEventListeners() {
     });
 
     // View mode buttons
-    $$('.view-btn').forEach(btn => {
+    $$('.view-btn[data-size]').forEach(btn => {
         btn.addEventListener('click', () => {
             setGalleryViewMode(btn.dataset.size);
         });
@@ -4206,13 +4206,18 @@ function renderModelManager(models = []) {
     const gridEl = $('#model-manager-grid');
     if (!summaryEl || !gridEl) return;
 
-    const readyCount = models.filter(model => model.available).length;
-    const missingCount = models.length - readyCount;
+    const readyCount = models.filter(model => model.status === 'ready').length;
+    const downloadedCount = models.filter(model => model.status === 'downloaded').length;
+    const missingCount = models.filter(model => model.status === 'missing').length;
 
     summaryEl.innerHTML = `
         <div class="model-manager-stat">
             <strong>${readyCount}</strong>
             <span>${escapeHtml(appT('models.ready', 'Ready now'))}</span>
+        </div>
+        <div class="model-manager-stat">
+            <strong>${downloadedCount}</strong>
+            <span>${escapeHtml(appT('models.downloaded', 'Downloaded only'))}</span>
         </div>
         <div class="model-manager-stat">
             <strong>${missingCount}</strong>
@@ -4226,12 +4231,22 @@ function renderModelManager(models = []) {
 
     gridEl.innerHTML = models.map((model) => {
         const safeId = escapeHtml(model.id);
-        const statusClass = model.available ? 'is-ready' : 'is-missing';
+        const status = model.status || (model.available ? 'ready' : 'missing');
+        const statusClass = status === 'ready' ? 'is-ready' : (status === 'downloaded' ? 'is-downloaded' : 'is-missing');
+        const statusLabel = status === 'ready'
+            ? appT('models.readyBadge', 'Ready')
+            : (status === 'downloaded' ? appT('models.downloadedBadge', 'Downloaded') : appT('models.missingBadge', 'Missing'));
         const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
             <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
         `).join('') : '';
         const variantOptions = Array.isArray(model.variants) ? model.variants.map((variant) => `
             <option value="${escapeHtml(variant)}">${escapeHtml(variant)}</option>
+        `).join('') : '';
+        const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
+            ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
+            : '';
+        const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => `
+            <a class="btn btn-ghost btn-small" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || 'Open Source')}</a>
         `).join('') : '';
 
         return `
@@ -4241,11 +4256,12 @@ function renderModelManager(models = []) {
                         <div class="model-card-group">${escapeHtml(model.group || 'Model')}</div>
                         <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
                     </div>
-                    <span class="model-card-status ${statusClass}">${escapeHtml(model.available ? 'Ready' : 'Missing')}</span>
+                    <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="model-card-message">${escapeHtml(model.message || '')}</div>
                 ${model.path ? `<div class="model-card-path">Current path:<code>${escapeHtml(model.path)}</code></div>` : ''}
                 ${model.runtime_path ? `<div class="model-card-path">Runtime:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
+                ${installedVariants}
                 ${sourceOptions ? `
                     <label class="model-card-hint">
                         Source
@@ -4259,7 +4275,8 @@ function renderModelManager(models = []) {
                     </label>
                 ` : ''}
                 <div class="model-card-actions">
-                    ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(model.available ? 'Recheck / Repair' : 'Prepare / Download')}</button>` : ''}
+                    ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
+                    ${externalLinks}
                 </div>
             </article>
         `;
