@@ -204,13 +204,18 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 
 ---
 
-## 🙏 Credits
+## 🙏 Special Thanks
 
-[Antigravity](https://github.com/peter119lee) — core development &nbsp;·&nbsp;
-[Wenaka2004](https://github.com/Wenaka2004/auto-censor) — censor inspiration & [YOLO model](https://civitai.com/models/1736285) &nbsp;·&nbsp;
-[Spawner1145](https://github.com/spawner1145/comfyui-lsnet) — LSNet artist ID &nbsp;·&nbsp;
-[SmilingWolf](https://huggingface.co/SmilingWolf) — WD14 models &nbsp;·&nbsp;
-[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) — prompt reader inspiration
+This project wouldn't be possible without these amazing contributors and their inspiring work:
+
+| Contributor | Contribution |
+|:------------|:-------------|
+| **[Antigravity](https://github.com/peter119lee)** & **Claude Opus 4.6** | 💻 Core development & AI-assisted coding |
+| **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 Auto-censor concept inspiration |
+| **Wenaka2004** | 🎯 [YOLO detection model](https://civitai.com/models/1736285) |
+| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**, **DraconicDragon**, **heathcliff01** | 🔮 LSNet / Kaloscope artist identification |
+| **[SmilingWolf](https://huggingface.co/SmilingWolf)** | 🏷️ WD14 Tagger models |
+| **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | 📖 Prompt reader concept inspiration |
 
 📄 [MIT License](LICENSE)
 
@@ -406,13 +411,18 @@ HF_ENDPOINT=https://hf-mirror.com
 
 ---
 
-## 🙏 Credits
+## 🙏 特别感谢
 
-[Antigravity](https://github.com/peter119lee) — core development &nbsp;·&nbsp;
-[Wenaka2004](https://github.com/Wenaka2004/auto-censor) — censor inspiration & [YOLO model](https://civitai.com/models/1736285) &nbsp;·&nbsp;
-[Spawner1145](https://github.com/spawner1145/comfyui-lsnet) — LSNet artist ID &nbsp;·&nbsp;
-[SmilingWolf](https://huggingface.co/SmilingWolf) — WD14 models &nbsp;·&nbsp;
-[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) — prompt reader inspiration
+没有以下贡献者和他们的杰出工作，这个项目不可能实现：
+
+| 贡献者 | 贡献 |
+|:-------|:-----|
+| **[Antigravity](https://github.com/peter119lee)** & **Claude Opus 4.6** | 💻 核心开发 & AI 辅助编程 |
+| **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 自动打码概念启发 |
+| **Wenaka2004** | 🎯 [YOLO 检测模型](https://civitai.com/models/1736285) |
+| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**、**DraconicDragon**、**heathcliff01** | 🔮 LSNet / Kaloscope 画师识别 |
+| **[SmilingWolf](https://huggingface.co/SmilingWolf)** | 🏷️ WD14 Tagger 模型 |
+| **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | 📖 提示词读取概念启发 |
 
 📄 [MIT License](LICENSE)
 
