@@ -184,9 +184,9 @@
 /* Queue Thumbnails - Modern Grid */
 .censor-queue-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    padding: 4px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 2px;
     overflow-y: auto;
     flex: 1;
     align-content: start;
@@ -197,8 +197,8 @@
     aspect-ratio: 1;
     width: 100%;
     object-fit: cover;
-    border-radius: var(--radius-xl);
-    border: 2px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     background: #000;
@@ -636,7 +636,7 @@
 
 .sidebar-header-v2,
 .properties-header {
-    margin-bottom: 20px;
+    margin-bottom: 12px;
 }
 
 .sidebar-title-v2,
@@ -657,16 +657,16 @@
 
 /* Property Sections */
 .property-section {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     background: rgba(0, 0, 0, 0.2);
-    border-radius: var(--radius-xl);
+    border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     overflow: hidden;
 }
 
 .property-section.collapsible .section-header {
     cursor: pointer;
-    padding: 12px 16px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -705,20 +705,20 @@
 }
 
 .property-section .section-content {
-    padding: 0 16px 16px 16px;
+    padding: 0 12px 12px 12px;
     transition: max-height 0.3s, opacity 0.2s, padding 0.2s;
 }
 
 .property-section.collapsed .section-content {
     max-height: 0;
     opacity: 0;
-    padding: 0 16px;
+    padding: 0 12px;
     overflow: hidden;
 }
 
 /* Modern Inputs V2 */
 .prop-group-v2 {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .prop-group-v2:last-child {
@@ -984,13 +984,13 @@
     flex-wrap: nowrap;
     align-items: center;
     gap: 4px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     overflow-x: auto;
 }
 
 .queue-selection-count {
-    min-height: 28px;
-    padding: 4px 10px;
+    min-height: 24px;
+    padding: 2px 8px;
     border-radius: 999px;
     background: rgba(168, 85, 247, 0.14);
     color: #f3e8ff;
@@ -1000,10 +1000,10 @@
 }
 
 .queue-action-btn {
-    min-width: 32px;
-    min-height: 32px;
+    min-width: 30px;
+    min-height: 30px;
     padding: 4px 8px;
-    font-size: 14px;
+    font-size: 13px;
     flex-shrink: 0;
 }
 
@@ -1013,13 +1013,13 @@
     max-height: 90vh;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
 }
 
 .queue-manager-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
 }
 
@@ -1036,8 +1036,8 @@
 }
 
 .queue-manager-selection-panel {
-    padding: 14px;
-    border-radius: 18px;
+    padding: 10px;
+    border-radius: 14px;
     border: 1px solid rgba(184, 215, 233, 0.08);
     background: rgba(255, 255, 255, 0.03);
     display: grid;
@@ -1081,17 +1081,17 @@
 
 .queue-manager-selection-strip {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     overflow-x: auto;
-    padding-bottom: 2px;
+    padding-bottom: 0;
 }
 
 .queue-manager-selection-empty {
-    min-height: 92px;
+    min-height: 72px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 18px;
+    padding: 12px;
     border-radius: 14px;
     border: 1px dashed rgba(184, 215, 233, 0.15);
     color: var(--text-muted);
@@ -1101,13 +1101,13 @@
 }
 
 .queue-manager-selection-chip {
-    width: 112px;
-    min-width: 112px;
+    width: 92px;
+    min-width: 92px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px;
-    border-radius: 16px;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 12px;
     border: 1px solid rgba(184, 215, 233, 0.08);
     background: rgba(10, 18, 28, 0.62);
     color: var(--text-primary);
@@ -1149,9 +1149,9 @@
 .queue-manager-action-bar {
     display: grid;
     grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.8fr);
-    gap: 12px;
-    padding: 14px;
-    border-radius: 18px;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 14px;
     border: 1px solid rgba(184, 215, 233, 0.08);
     background: rgba(255, 255, 255, 0.03);
 }
@@ -1193,7 +1193,7 @@
 
 .queue-manager-table {
     display: grid;
-    gap: 10px;
+    gap: 8px;
 }
 
 .queue-manager-head {
@@ -1201,7 +1201,7 @@
     grid-template-columns: 80px 104px minmax(0, 1fr) 150px;
     gap: 12px;
     align-items: center;
-    padding: 0 8px;
+    padding: 0 4px;
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 700;
@@ -1211,7 +1211,7 @@
 
 .queue-manager-list {
     display: grid;
-    gap: 10px;
+    gap: 8px;
     max-height: min(58vh, 680px);
     overflow: auto;
     padding-right: 4px;
@@ -1234,10 +1234,10 @@
 .queue-manager-row {
     display: grid;
     grid-template-columns: 80px 104px minmax(0, 1fr) 150px;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
-    padding: 10px 12px;
-    border-radius: 18px;
+    padding: 8px 10px;
+    border-radius: 14px;
     border: 1px solid rgba(184, 215, 233, 0.08);
     background: rgba(8, 15, 24, 0.72);
     cursor: pointer;
@@ -1275,7 +1275,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 10px;
+    padding: 6px 8px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-secondary);
@@ -1285,7 +1285,7 @@
 }
 
 .queue-manager-thumb-shell {
-    width: 104px;
+    width: 96px;
     aspect-ratio: 1.15 / 1;
     overflow: hidden;
     border-radius: 14px;

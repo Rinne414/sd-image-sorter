@@ -27,6 +27,13 @@ const ArtistIdent = {
         return Number.isFinite(rawValue) ? rawValue : this.thresholdDefaults.value;
     },
 
+    syncThresholdDisplay() {
+        const thresholdSlider = document.getElementById('artist-threshold');
+        const thresholdValue = document.getElementById('artist-threshold-value');
+        if (!thresholdSlider || !thresholdValue) return;
+        thresholdValue.textContent = this.getThresholdValue().toFixed(2);
+    },
+
     getArtistStat(artist) {
         return this.stats?.artist_stats?.[artist] || { count: 0, avg_confidence: 0, max_confidence: 0 };
     },
@@ -226,11 +233,7 @@ const ArtistIdent = {
     },
 
     _syncControls() {
-        const thresholdSlider = document.getElementById('artist-threshold');
-        const thresholdValue = document.getElementById('artist-threshold-value');
-        if (thresholdSlider && thresholdValue) {
-            thresholdValue.textContent = Number(thresholdSlider.value).toFixed(2);
-        }
+        this.syncThresholdDisplay();
 
         const modelSource = document.getElementById('artist-model-source');
         const localModelGroup = document.getElementById('artist-local-model-group');
@@ -770,10 +773,7 @@ const ArtistIdent = {
 
         document.addEventListener('input', (event) => {
             if (event.target?.id === 'artist-threshold') {
-                const thresholdValue = document.getElementById('artist-threshold-value');
-                if (thresholdValue) {
-                    thresholdValue.textContent = Number(event.target.value).toFixed(2);
-                }
+                this.syncThresholdDisplay();
             }
         });
 

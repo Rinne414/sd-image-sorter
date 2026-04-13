@@ -161,6 +161,50 @@ STYLE_TAGS = {
     "depth_of_field", "motion_blur", "bokeh", "lens_flare",
 }
 
+NSFW_BODY_KEYWORDS = {
+    "nipple", "nipples", "penis", "pussy", "vagina", "vaginal", "anus", "ass",
+    "butt", "buttocks", "cleavage", "testicles", "stomach", "midriff", "sideboob",
+    "breast", "boob", "boobs", "navel", "crotch", "groin", "cameltoe", "clitoris",
+    "veins", "toe", "toes", "soles", "toenails", "fingernails", "nails", "tattoo",
+}
+
+OUTFIT_DETAIL_KEYWORDS = {
+    "sleeve", "sleeves", "shoulder", "off_shoulder", "open_clothes", "torn_clothes",
+    "see-through", "see_through", "detached_sleeves", "wide_sleeves", "frills", "jewelry",
+    "hairband", "hairclip", "headwear", "footwear", "thigh_strap", "nail_polish",
+    "alternate_costume", "costume", "plaid", "detached", "clothes_lift", "clothes_pull",
+    "japanese_clothes", "camisole", "fishnets", "loafers", "strap_slip", "clothing_cutout", "clothing_aside",
+}
+
+BACKGROUND_OBJECT_KEYWORDS = {
+    "bed", "pillow", "window", "couch", "curtain", "curtains", "chair", "desk",
+    "lamp", "food", "water", "flower", "flowers", "room", "sheet", "bed_sheet",
+    "cloud", "plant", "petals", "tiles", "bag", "cup", "cellphone", "smartphone", "headphones",
+}
+
+ACTION_DETAIL_KEYWORDS = {
+    "sex", "hetero", "threesome", "girl_on_top", "ejaculation", "cum", "cumdrip",
+    "cum_on_body", "cum_in_pussy", "cum_in_mouth", "cum_overflow", "projectile_cum",
+    "after_sex", "after_vaginal", "clothed_sex", "group_sex", "paizuri", "bound",
+    "bondage", "restrained", "bdsm", "weapon", "condom", "sex_toy", "breast_press",
+    "bent_over", "lifted_by_self", "arm_support", "arm_up", "hand_on_own_hip",
+    "female_masturbation", "gag", "gagged", "rope", "leash", "presenting_foot", "mouth_hold", "looking_at_another",
+}
+
+EXPRESSION_DETAIL_KEYWORDS = {
+    "sweat", "saliva", "parted_lips", "trembling", "wet", "fang", "heart", "blurry",
+    "pov_crotch", "mismatched_pupils", "symbol-shaped_pupils",
+}
+
+META_DETAIL_KEYWORDS = {
+    "censored", "uncensored", "bar_censor", "virtual_youtuber",
+}
+
+CHARACTER_DETAIL_KEYWORDS = {
+    "loli", "fox_girl", "cat_girl", "dragon_girl", "dark-skinned_male", "furina_(genshin_impact)",
+    "yuri", "hetero", "interracial",
+}
+
 # Outfit tag patterns (checked by substring matching)
 OUTFIT_KEYWORDS = [
     "uniform", "dress", "shirt", "blouse", "jacket", "coat",
@@ -246,6 +290,27 @@ def categorize_tag(tag: str) -> str:
 
     if tokens.intersection({"holding", "grabbing", "touching", "kissing", "licking", "biting", "reading", "writing", "drinking", "eating", "swimming"}):
         return "action"
+
+    if any(keyword in tag_lower for keyword in NSFW_BODY_KEYWORDS):
+        return "body"
+
+    if any(keyword in tag_lower for keyword in OUTFIT_DETAIL_KEYWORDS):
+        return "outfit"
+
+    if any(keyword in tag_lower for keyword in BACKGROUND_OBJECT_KEYWORDS):
+        return "background"
+
+    if any(keyword in tag_lower for keyword in ACTION_DETAIL_KEYWORDS):
+        return "action"
+
+    if any(keyword in tag_lower for keyword in EXPRESSION_DETAIL_KEYWORDS):
+        return "expression"
+
+    if any(keyword in tag_lower for keyword in META_DETAIL_KEYWORDS):
+        return "meta"
+
+    if any(keyword in tag_lower for keyword in CHARACTER_DETAIL_KEYWORDS):
+        return "character"
 
     # Outfit detection via keyword matching
     for keyword in OUTFIT_KEYWORDS:

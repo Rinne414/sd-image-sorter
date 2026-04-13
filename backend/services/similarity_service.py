@@ -15,6 +15,7 @@ from similarity import (
     SimilarityImageNotFoundError,
     SimilarityInsufficientEmbeddingsError,
     SimilarityInvalidImageError,
+    ensure_clip_model_ready,
     get_similarity_index,
 )
 
@@ -40,6 +41,11 @@ class SimilarityService:
                 "status": "already_running",
                 "progress": progress,
             }
+
+        try:
+            ensure_clip_model_ready()
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         def _run_embed():
             index.embed_batch(image_ids)

@@ -425,13 +425,19 @@ def get_model_health() -> Dict[str, Any]:
             ),
         },
         "clip": {
-            "available": bool(clip_model_path),
+            "available": bool(clip_model_path) and _module_available("fastembed"),
+            "model_downloaded": bool(clip_model_path),
+            "runtime_available": _module_available("fastembed"),
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
             "message": (
                 "Local CLIP model ready."
-                if clip_model_path
-                else "Local CLIP model is missing. Similar search will need a first-run download."
+                if clip_model_path and _module_available("fastembed")
+                else (
+                    "CLIP model files are downloaded, but the FastEmbed runtime is missing."
+                    if clip_model_path
+                    else "Local CLIP model is missing. Similar search will need a first-run download."
+                )
             ),
         },
         "censor": {
