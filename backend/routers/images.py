@@ -129,7 +129,7 @@ async def get_images(
     ),
     sort_by: str = Query(
         default="newest",
-        description="Sort order: newest, oldest, name_asc, name_desc, generator, prompt_length, tag_count, rating, character_count, random, file_size",
+        description="Sort order: newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc",
         examples=["newest"],
     ),
     limit: int = Query(

@@ -644,8 +644,9 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
 # =============================================================================
 
 VALID_SORT_OPTIONS = {
-    "newest", "oldest", "name_asc", "name_desc", "generator",
-    "prompt_length", "tag_count", "rating", "character_count",
+    "newest", "oldest", "name_asc", "name_desc", "generator", "generator_desc",
+    "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
+    "rating", "rating_desc", "character_count", "character_count_asc",
     "random", "file_size", "file_size_asc",
 }
 
@@ -684,15 +685,15 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
     if sort_by not in VALID_SORT_OPTIONS:
         sort_by = "newest"
 
-    if sort_by == "tag_count":
+    if sort_by in ("tag_count", "tag_count_asc"):
         return f"""SELECT DISTINCT {select_cols},
                    (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
                    FROM images i"""
-    elif sort_by == "character_count":
+    elif sort_by in ("character_count", "character_count_asc"):
         return f"""SELECT DISTINCT {select_cols},
                    (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id AND t.tag LIKE '%character%') as char_count
                    FROM images i"""
-    elif sort_by == "rating":
+    elif sort_by in ("rating", "rating_desc"):
         # Priority: explicit > questionable > sensitive > general > unrated
         return f"""SELECT DISTINCT {select_cols},
                    CASE
@@ -990,10 +991,15 @@ def _get_order_clause(sort_by: str) -> str:
         "name_asc": "i.filename ASC, i.id ASC",
         "name_desc": "i.filename DESC, i.id DESC",
         "generator": "i.generator ASC, i.created_at DESC, i.id DESC",
+        "generator_desc": "i.generator DESC, i.created_at DESC, i.id DESC",
         "prompt_length": "LENGTH(COALESCE(i.prompt, '')) DESC, i.id DESC",
+        "prompt_length_asc": "LENGTH(COALESCE(i.prompt, '')) ASC, i.id ASC",
         "tag_count": "tag_count DESC, i.id DESC",
+        "tag_count_asc": "tag_count ASC, i.id ASC",
         "rating": "rating_order ASC, i.id ASC",
+        "rating_desc": "rating_order DESC, i.id DESC",
         "character_count": "char_count DESC, i.id DESC",
+        "character_count_asc": "char_count ASC, i.id ASC",
         "random": "RANDOM()",
         "file_size": "i.file_size DESC, i.id DESC",
         "file_size_asc": "i.file_size ASC, i.id ASC",
@@ -1110,7 +1116,7 @@ def get_images(
         loras: Filter by lora names (AND logic - image must have ALL loras)
         search_query: Search in prompt text
         artist: Filter by artist name (from artist_predictions table)
-        sort_by: Sorting method (newest, oldest, name_asc, name_desc, generator, prompt_length, tag_count, rating, character_count, random, file_size)
+        sort_by: Sorting method (newest, oldest, name_asc, name_desc, generator, generator_desc, prompt_length, prompt_length_asc, tag_count, tag_count_asc, rating, rating_desc, character_count, character_count_asc, random, file_size, file_size_asc)
         min_width, max_width, min_height, max_height: Dimension filters
         aspect_ratio: Filter by aspect ratio ('square', 'landscape', 'portrait')
     
@@ -1317,22 +1323,7 @@ def get_filtered_image_ids(
         needs_post_filter = bool(prompt_terms) or bool(loras)
 
         # Build base query selecting only IDs
-        if sort_by == "tag_count":
-            query = """SELECT DISTINCT i.id,
-                       (SELECT COUNT(*) FROM tags t WHERE t.image_id = i.id) as tag_count
-                       FROM images i"""
-        elif sort_by == "rating":
-            query = """SELECT DISTINCT i.id,
-                       CASE
-                           WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'explicit') THEN 1
-                           WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'questionable') THEN 2
-                           WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'sensitive') THEN 3
-                           WHEN EXISTS (SELECT 1 FROM tags t WHERE t.image_id = i.id AND t.tag = 'general') THEN 4
-                           ELSE 5
-                       END as rating_order
-                       FROM images i"""
-        else:
-            query = "SELECT DISTINCT i.id FROM images i"
+        query = _build_base_query(sort_by, "i.id")
 
         conditions: List[str] = []
         params: List[Any] = []

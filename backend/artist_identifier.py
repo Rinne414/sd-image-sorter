@@ -53,6 +53,7 @@ _processor = None
 _model_lock = threading.Lock()
 ARTIST_THRESHOLD_DEFAULT = 0.03
 _model_source = None
+HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 
 
 def _is_kaloscope_model_id(model_id: Optional[str]) -> bool:
@@ -94,6 +95,51 @@ def _get_artist_model_root() -> Path:
     return target
 
 
+def _candidate_hf_endpoints() -> List[str]:
+    candidates: List[str] = []
+    configured = str(os.environ.get("HF_ENDPOINT", "") or "").strip().rstrip("/")
+    if configured:
+        candidates.append(configured)
+    candidates.append("")
+    candidates.append(HF_MIRROR_ENDPOINT)
+
+    deduped: List[str] = []
+    seen = set()
+    for endpoint in candidates:
+        key = endpoint or "__default__"
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(endpoint)
+    return deduped
+
+
+def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
+    from huggingface_hub import hf_hub_download
+
+    last_error: Optional[Exception] = None
+    for endpoint in _candidate_hf_endpoints():
+        try:
+            kwargs = {
+                "repo_id": repo_id,
+                "filename": filename,
+                "local_dir": local_dir,
+            }
+            if endpoint:
+                kwargs["endpoint"] = endpoint
+                logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
+            else:
+                logger.info("Downloading %s from %s via HuggingFace", filename, repo_id)
+            return hf_hub_download(**kwargs)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+
+    if last_error is None:
+        raise RuntimeError(f"Failed to download {filename} from {repo_id}")
+    raise last_error
+
+
 def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="kaloscope-runtime-") as tmp_dir:
@@ -128,8 +174,6 @@ def _ensure_comfyui_lsnet_runtime() -> str:
 
 
 def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
-    from huggingface_hub import hf_hub_download
-
     local_dir = _get_artist_model_root() / "kaloscope2.0"
     local_checkpoint = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
     local_mapping = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
@@ -137,16 +181,35 @@ def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
     if local_checkpoint.exists() and local_mapping.exists():
         return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
-    checkpoint_path = hf_hub_download(
+    checkpoint_path = _hf_download_with_fallback(
         ARTIST_HF_MODEL_ID,
-        filename=ARTIST_KALOSCOPE_CHECKPOINT,
-        local_dir=str(local_dir),
+        ARTIST_KALOSCOPE_CHECKPOINT,
+        str(local_dir),
     )
-    class_mapping_path = hf_hub_download(
+    class_mapping_path = _hf_download_with_fallback(
         ARTIST_HF_MODEL_ID,
-        filename=ARTIST_KALOSCOPE_CLASS_MAPPING,
-        local_dir=str(local_dir),
+        ARTIST_KALOSCOPE_CLASS_MAPPING,
+        str(local_dir),
     )
+    return checkpoint_path, class_mapping_path
+
+
+def _ensure_kaloscope_modelscope_files() -> Tuple[str, str]:
+    from modelscope import snapshot_download  # type: ignore
+
+    if not ARTIST_MODELSCOPE_MODEL_ID:
+        raise RuntimeError(
+            "No compatible ModelScope artist model is configured. "
+            "Use HuggingFace/hf-mirror or set SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL."
+        )
+
+    cache_dir = _get_artist_model_root() / "kaloscope2.0-modelscope"
+    model_dir = snapshot_download(ARTIST_MODELSCOPE_MODEL_ID, cache_dir=str(cache_dir))
+
+    checkpoint_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CHECKPOINT)
+    class_mapping_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CLASS_MAPPING)
+    if not os.path.exists(checkpoint_path) or not os.path.exists(class_mapping_path):
+        raise RuntimeError("Configured ModelScope artist model does not match the expected Kaloscope file layout.")
     return checkpoint_path, class_mapping_path
 
 
@@ -170,6 +233,39 @@ def _has_lsnet_runtime() -> bool:
         return True
     except ImportError:
         return False
+
+
+def prepare_artist_assets(preferred_source: str = "auto") -> Dict[str, str]:
+    """Ensure runtime + artist files exist, trying mirrors/fallbacks when needed."""
+    runtime_path = _resolve_lsnet_runtime_path() or _ensure_comfyui_lsnet_runtime()
+    errors: List[str] = []
+
+    source_order: List[str]
+    preferred = str(preferred_source or "auto").strip().lower()
+    if preferred == "modelscope":
+        source_order = ["modelscope", "huggingface"]
+    elif preferred == "huggingface":
+        source_order = ["huggingface", "modelscope"]
+    else:
+        source_order = ["huggingface", "modelscope"]
+
+    for source in source_order:
+        try:
+            if source == "modelscope":
+                checkpoint_path, class_mapping_path = _ensure_kaloscope_modelscope_files()
+            else:
+                checkpoint_path, class_mapping_path = _ensure_kaloscope_hf_files()
+            return {
+                "runtime_path": runtime_path,
+                "checkpoint_path": checkpoint_path,
+                "class_mapping_path": class_mapping_path,
+                "source": source,
+            }
+        except Exception as exc:
+            errors.append(f"{source}: {exc}")
+            logger.warning("Artist asset preparation failed via %s: %s", source, exc)
+
+    raise RuntimeError("Artist assets could not be prepared. " + " | ".join(errors))
 
 # Default artist list (common anime artists)
 # This is a sample list - actual model will have its own labels
@@ -919,7 +1015,9 @@ class ArtistIdentifier:
 
             logger.info(f"Loading from HuggingFace: {model_name}")
             if _is_kaloscope_model_id(model_name):
-                checkpoint_path, class_mapping_path = _ensure_kaloscope_hf_files()
+                prepared = prepare_artist_assets("auto")
+                checkpoint_path = prepared["checkpoint_path"]
+                class_mapping_path = prepared["class_mapping_path"]
                 self._initialize_kaloscope(checkpoint_path, class_mapping_path)
             else:
                 from transformers import AutoImageProcessor, AutoModelForImageClassification
@@ -944,23 +1042,9 @@ class ArtistIdentifier:
     def _load_from_modelscope(self):
         """Load model from ModelScope."""
         try:
-            from modelscope import snapshot_download  # type: ignore
-
-            if not ARTIST_MODELSCOPE_MODEL_ID:
-                raise RuntimeError(
-                    "No compatible ModelScope artist model is configured. "
-                    "Use HuggingFace or set SD_IMAGE_SORTER_ARTIST_MODELSCOPE_MODEL."
-                )
-
-            model_dir = snapshot_download(ARTIST_MODELSCOPE_MODEL_ID)
-
             logger.info("Loading from ModelScope")
-            checkpoint_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CHECKPOINT)
-            class_mapping_path = os.path.join(model_dir, ARTIST_KALOSCOPE_CLASS_MAPPING)
-            if os.path.exists(checkpoint_path) and os.path.exists(class_mapping_path):
-                self._initialize_kaloscope(checkpoint_path, class_mapping_path)
-            else:
-                raise RuntimeError("Configured ModelScope artist model does not match the expected Kaloscope file layout.")
+            prepared = prepare_artist_assets("modelscope")
+            self._initialize_kaloscope(prepared["checkpoint_path"], prepared["class_mapping_path"])
             self._load_error = None
         except Exception as e:
             logger.warning(f"ModelScope load failed: {e}")

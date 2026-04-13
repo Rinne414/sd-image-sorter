@@ -27,6 +27,15 @@ const ArtistIdent = {
         return Number.isFinite(rawValue) ? rawValue : this.thresholdDefaults.value;
     },
 
+    getArtistStat(artist) {
+        return this.stats?.artist_stats?.[artist] || { count: 0, avg_confidence: 0, max_confidence: 0 };
+    },
+
+    formatConfidencePercent(value) {
+        const numeric = Number(value || 0);
+        return `${(numeric * 100).toFixed(1)}%`;
+    },
+
     init() {
         this.bindEvents();
         this._syncControls();
@@ -48,10 +57,10 @@ const ArtistIdent = {
             this.stats = result;
 
             const cards = [
-                ['Total Images', Number(result.total_images) || 0],
-                ['Identified', Number(result.identified_images) || 0],
-                ['Undefined', Number(result.undefined_count) || 0],
-                ['Artists Found', Object.keys(result.artist_counts || {}).length],
+                [this.tText('Total Images', '总图片数'), Number(result.total_images) || 0],
+                [this.tText('Identified', '已识别'), Number(result.identified_images) || 0],
+                [this.tText('Undefined', '未定义'), Number(result.undefined_count) || 0],
+                [this.tText('Artists Found', '发现画师'), Object.keys(result.artist_counts || {}).length],
             ].map(([label, value]) => {
                 const card = document.createElement('div');
                 card.className = 'stat-card';
@@ -127,21 +136,48 @@ const ArtistIdent = {
         const escapeHtml = this._escapeHtml.bind(this);
         const maxCount = entries[0][1];
 
-        grid.innerHTML = entries.map(([artist, count]) => {
+        grid.innerHTML = entries.map(([artist, count], index) => {
             const encodedArtist = encodeURIComponent(String(artist ?? ''));
             const displayName = escapeHtml(this.formatArtistName(artist));
             const initials = escapeHtml(this.getInitials(artist));
             const countLabel = escapeHtml(String(count));
             const width = Math.max(0, Math.min(100, (count / maxCount) * 100));
+            const stat = this.getArtistStat(artist);
+            const avgConfidence = escapeHtml(this.formatConfidencePercent(stat.avg_confidence));
+            const maxConfidence = escapeHtml(this.formatConfidencePercent(stat.max_confidence));
+            const rankLabel = escapeHtml(`#${index + 1}`);
+
+            if (normalizedViewMode === 'list') {
+                return `
+                <div class="artist-card artist-card-list" data-artist="${encodedArtist}" role="button" tabindex="0" aria-pressed="false">
+                    <div class="artist-rank">${rankLabel}</div>
+                    <div class="artist-avatar">${initials}</div>
+                    <div class="artist-info">
+                        <span class="artist-name">${displayName}</span>
+                        <span class="artist-count">${countLabel} images</span>
+                    </div>
+                    <div class="artist-metrics">
+                        <span class="artist-metric"><strong>${escapeHtml(this.tText('Avg', '平均'))}</strong> ${avgConfidence}</span>
+                        <span class="artist-metric"><strong>${escapeHtml(this.tText('Peak', '最高'))}</strong> ${maxConfidence}</span>
+                    </div>
+                    <div class="artist-progress artist-progress-list" aria-hidden="true">
+                        <span class="artist-bar" style="width: ${width}%"></span>
+                    </div>
+                </div>
+            `;
+            }
 
             return `
-            <div class="artist-card${normalizedViewMode === 'list' ? ' artist-card-list' : ''}" data-artist="${encodedArtist}" role="button" tabindex="0" aria-pressed="false">
+            <div class="artist-card" data-artist="${encodedArtist}" role="button" tabindex="0" aria-pressed="false">
                 <div class="artist-avatar">${initials}</div>
                 <div class="artist-info">
                     <span class="artist-name">${displayName}</span>
                     <span class="artist-count">${countLabel} images</span>
+                    <span class="artist-confidence-summary">${escapeHtml(this.tText('Avg', '平均'))} ${avgConfidence} · ${escapeHtml(this.tText('Peak', '最高'))} ${maxConfidence}</span>
                 </div>
-                <div class="artist-bar" style="width: ${width}%"></div>
+                <div class="artist-progress" aria-hidden="true">
+                    <span class="artist-bar" style="width: ${width}%"></span>
+                </div>
             </div>
         `;
         }).join('');
@@ -362,23 +398,39 @@ const ArtistIdent = {
         try {
             // Get count from stats
             const count = this.stats.artist_counts?.[safeArtist] || 0;
+            const stat = this.getArtistStat(safeArtist);
             const artistLabel = escapeHtml(this.formatArtistName(safeArtist));
             const countLabel = escapeHtml(String(count));
+            const avgConfidence = escapeHtml(this.formatConfidencePercent(stat.avg_confidence));
+            const maxConfidence = escapeHtml(this.formatConfidencePercent(stat.max_confidence));
+            const detailResponse = await window.App.API.get(`/api/artists/images/${encodeURIComponent(safeArtist)}?limit=18`);
+            const previewCards = (detailResponse.images || []).map((image) => `
+                <button class="artist-image-card" data-image-id="${image.image_id}" type="button" title="${escapeHtml(image.filename)}">
+                    <img src="${window.App.API.getThumbnailUrl(image.image_id, 256)}" alt="${escapeHtml(image.filename)}" loading="lazy">
+                    <span class="artist-image-confidence">${escapeHtml(String(image.confidence_percent))}%</span>
+                    <span class="artist-image-name">${escapeHtml(image.filename)}</span>
+                </button>
+            `).join('');
 
             detailContent.innerHTML = `
                 <h4>${artistLabel}</h4>
-                <p class="artist-stats-detail">${countLabel} images identified</p>
+                <p class="artist-stats-detail">${countLabel} ${escapeHtml(this.tText('images identified', '张图匹配到该画师'))}</p>
+                <p class="artist-stats-detail">${escapeHtml(this.tText('Average confidence', '平均置信度'))} ${avgConfidence}</p>
+                <p class="artist-stats-detail">${escapeHtml(this.tText('Peak confidence', '最高置信度'))} ${maxConfidence}</p>
             `;
 
             // Show action button
             imagesPreview.innerHTML = `
                 <div class="preview-placeholder">
                     <button class="btn btn-primary btn-small" id="btn-filter-by-artist">
-                        🔍 View ${countLabel} images in Gallery
+                        🔍 ${escapeHtml(this.tText(`View ${countLabel} images in Gallery`, `在图库中查看这 ${countLabel} 张图`))}
                     </button>
                     <button class="btn btn-ghost btn-small" id="btn-clear-artist-filter" style="margin-top: 8px;">
-                        ✕ Clear Artist Filter
+                        ✕ ${escapeHtml(this.tText('Clear Artist Filter', '清除画师筛选'))}
                     </button>
+                </div>
+                <div class="artist-images-grid">
+                    ${previewCards || `<div class="empty-state"><p>${this.tText('No preview images available yet.', '暂时还没有可预览的图片。')}</p></div>`}
                 </div>
             `;
 
@@ -390,6 +442,15 @@ const ArtistIdent = {
             // Bind clear filter button
             document.getElementById('btn-clear-artist-filter')?.addEventListener('click', () => {
                 this.clearArtistFilter();
+            });
+
+            imagesPreview.querySelectorAll('.artist-image-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const imageId = Number(card.dataset.imageId);
+                    if (Number.isFinite(imageId) && window.Gallery?.openPreview) {
+                        window.Gallery.openPreview(imageId);
+                    }
+                });
             });
 
         } catch (e) {
@@ -451,7 +512,7 @@ const ArtistIdent = {
                 this.progressTracker = window.App.createProgressTracker();
             }
 
-            progressText.textContent = total > 0
+            const progressLabel = total > 0
                 ? window.App.buildProgressText({
                     progress,
                     completed,
@@ -461,6 +522,8 @@ const ArtistIdent = {
                     primaryLabel: 'Artist ID'
                 })
                 : (progress.message || 'Preparing artist identification...');
+            const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
+            progressText.textContent = `${progressLabel}${currentItem}`;
         }
     },
 
@@ -593,7 +656,7 @@ const ArtistIdent = {
                     const percent = Math.round(completed / progress.total * 100);
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
-                        progressText.textContent = window.App.buildProgressText({
+                        const progressLabel = window.App.buildProgressText({
                             progress,
                             completed,
                             total: Number(progress.total || 0),
@@ -601,6 +664,8 @@ const ArtistIdent = {
                             defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
                             primaryLabel: 'Artist ID'
                         });
+                        const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
+                        progressText.textContent = `${progressLabel}${currentItem}`;
                     }
                 }
 

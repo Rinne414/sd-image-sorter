@@ -591,6 +591,34 @@ class TestArtistsRouterValidation:
         assert "available" in data
         assert "message" in data
 
+    def test_artist_stats_include_artist_confidence_summary(self, test_client, test_db):
+        image_id = test_db.add_image(path="/tmp/artist-test.png", filename="artist-test.png", metadata_json="{}")
+        with test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (image_id, "sample_artist", 0.42, "[]"),
+            )
+
+        response = test_client.get("/api/artists/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "artist_stats" in data
+        assert data["artist_stats"]["sample_artist"]["avg_confidence"] == 0.42
+        assert data["artist_stats"]["sample_artist"]["max_confidence"] == 0.42
+
+    def test_model_manager_status_endpoint_lists_core_models(self, test_client):
+        response = test_client.get("/api/models/status")
+
+        assert response.status_code == 200
+        data = response.json()
+        model_ids = {item["id"] for item in data["models"]}
+        assert {"wd14", "clip", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
+
 
 class TestPromptGenerator:
     def test_generate_uses_manual_promptlab_categories_without_random_fallbacks(self):

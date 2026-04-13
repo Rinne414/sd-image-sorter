@@ -143,6 +143,53 @@ const AppState = {
     }
 };
 
+// Sort direction pairs: base sort value -> reversed sort value
+const SORT_PAIRS = {
+    newest: 'oldest',
+    name_asc: 'name_desc',
+    generator: 'generator_desc',
+    prompt_length: 'prompt_length_asc',
+    tag_count: 'tag_count_asc',
+    rating: 'rating_desc',
+    character_count: 'character_count_asc',
+    file_size: 'file_size_asc',
+};
+// Build full bidirectional reverse map
+const SORT_REVERSE_MAP = {};
+for (const [a, b] of Object.entries(SORT_PAIRS)) {
+    SORT_REVERSE_MAP[a] = b;
+    SORT_REVERSE_MAP[b] = a;
+}
+SORT_REVERSE_MAP.random = 'random';
+
+/** Get the base (non-reversed) sort value for dropdown display */
+function getBaseSortValue(sortBy) {
+    for (const [base, rev] of Object.entries(SORT_PAIRS)) {
+        if (sortBy === rev) return base;
+    }
+    return sortBy;
+}
+
+/** Check if the current sort is in reversed direction */
+function isSortReversed(sortBy) {
+    return Object.values(SORT_PAIRS).includes(sortBy);
+}
+
+/** Sync the sort dropdown and reverse button with current AppState.filters.sortBy */
+function updateSortReverseButton() {
+    const sortBy = AppState.filters.sortBy;
+    const reversed = isSortReversed(sortBy);
+    const btn = $('#sort-reverse-btn');
+    const dropdown = $('#gallery-sort');
+    if (btn) {
+        btn.classList.toggle('active', reversed);
+        btn.setAttribute('aria-pressed', String(reversed));
+    }
+    if (dropdown) {
+        dropdown.value = getBaseSortValue(sortBy);
+    }
+}
+
 function supportsCursorPagination(sortBy = AppState.filters.sortBy) {
     return sortBy === 'newest' || sortBy === 'oldest';
 }
@@ -341,6 +388,18 @@ const API = {
     // Stats
     async getStats() {
         return this.get('/api/stats');
+    },
+
+    async getModelStatus() {
+        return this.get('/api/models/status');
+    },
+
+    async prepareModel(modelId, options = {}) {
+        return this.post('/api/models/prepare', {
+            model_id: modelId,
+            source: options.source || null,
+            variant: options.variant || null,
+        });
     },
 
     // Scan
@@ -1855,7 +1914,22 @@ function initEventListeners() {
     // Gallery sort dropdown
     $('#gallery-sort').addEventListener('change', (e) => {
         AppState.filters.sortBy = e.target.value;
+        updateSortReverseButton();
         loadImages();
+    });
+
+    $('#btn-open-model-manager')?.addEventListener('click', openModelManager);
+    $('#model-manager-close')?.addEventListener('click', () => hideModal('model-manager-modal'));
+
+    // Sort reverse button
+    $('#sort-reverse-btn').addEventListener('click', () => {
+        const current = AppState.filters.sortBy;
+        const reversed = SORT_REVERSE_MAP[current];
+        if (reversed && reversed !== current) {
+            AppState.filters.sortBy = reversed;
+            updateSortReverseButton();
+            loadImages();
+        }
     });
 
 
@@ -4108,6 +4182,111 @@ function renderModalActivePrompts() {
     updateFilterModalSummary();
 }
 
+// ============== Model Manager ==============
+
+async function openModelManager() {
+    const summaryEl = $('#model-manager-summary');
+    const gridEl = $('#model-manager-grid');
+    if (summaryEl) summaryEl.innerHTML = '<div class="model-manager-stat"><strong>Loading</strong><span>Checking local model inventory…</span></div>';
+    if (gridEl) gridEl.innerHTML = '';
+    showModal('model-manager-modal');
+
+    try {
+        const result = await API.getModelStatus();
+        renderModelManager(result.models || []);
+    } catch (error) {
+        if (summaryEl) {
+            summaryEl.innerHTML = `<div class="model-manager-stat"><strong>Failed</strong><span>${escapeHtml(error.message || 'Could not load model inventory.')}</span></div>`;
+        }
+    }
+}
+
+function renderModelManager(models = []) {
+    const summaryEl = $('#model-manager-summary');
+    const gridEl = $('#model-manager-grid');
+    if (!summaryEl || !gridEl) return;
+
+    const readyCount = models.filter(model => model.available).length;
+    const missingCount = models.length - readyCount;
+
+    summaryEl.innerHTML = `
+        <div class="model-manager-stat">
+            <strong>${readyCount}</strong>
+            <span>${escapeHtml(appT('models.ready', 'Ready now'))}</span>
+        </div>
+        <div class="model-manager-stat">
+            <strong>${missingCount}</strong>
+            <span>${escapeHtml(appT('models.missing', 'Need attention'))}</span>
+        </div>
+        <div class="model-manager-stat">
+            <strong>${models.length}</strong>
+            <span>${escapeHtml(appT('models.total', 'Tracked runtimes'))}</span>
+        </div>
+    `;
+
+    gridEl.innerHTML = models.map((model) => {
+        const safeId = escapeHtml(model.id);
+        const statusClass = model.available ? 'is-ready' : 'is-missing';
+        const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
+            <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
+        `).join('') : '';
+        const variantOptions = Array.isArray(model.variants) ? model.variants.map((variant) => `
+            <option value="${escapeHtml(variant)}">${escapeHtml(variant)}</option>
+        `).join('') : '';
+
+        return `
+            <article class="model-card ${statusClass}" data-model-id="${safeId}">
+                <div class="model-card-header">
+                    <div>
+                        <div class="model-card-group">${escapeHtml(model.group || 'Model')}</div>
+                        <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
+                    </div>
+                    <span class="model-card-status ${statusClass}">${escapeHtml(model.available ? 'Ready' : 'Missing')}</span>
+                </div>
+                <div class="model-card-message">${escapeHtml(model.message || '')}</div>
+                ${model.path ? `<div class="model-card-path">Current path:<code>${escapeHtml(model.path)}</code></div>` : ''}
+                ${model.runtime_path ? `<div class="model-card-path">Runtime:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
+                ${sourceOptions ? `
+                    <label class="model-card-hint">
+                        Source
+                        <select class="input-field model-source-select" data-model-id="${safeId}">${sourceOptions}</select>
+                    </label>
+                ` : ''}
+                ${variantOptions ? `
+                    <label class="model-card-hint">
+                        Variant
+                        <select class="input-field model-variant-select" data-model-id="${safeId}">${variantOptions}</select>
+                    </label>
+                ` : ''}
+                <div class="model-card-actions">
+                    ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(model.available ? 'Recheck / Repair' : 'Prepare / Download')}</button>` : ''}
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    gridEl.querySelectorAll('.btn-prepare-model').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const modelId = button.dataset.modelId;
+            const source = gridEl.querySelector(`.model-source-select[data-model-id="${CSS.escape(modelId)}"]`)?.value || null;
+            const variant = gridEl.querySelector(`.model-variant-select[data-model-id="${CSS.escape(modelId)}"]`)?.value || null;
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Working...';
+            try {
+                const result = await API.prepareModel(modelId, { source, variant });
+                showToast(result.message || `${modelId} is ready.`, 'success');
+                const refreshed = await API.getModelStatus();
+                renderModelManager(refreshed.models || []);
+            } catch (error) {
+                showToast(formatUserError(error, 'Model preparation failed'), 'error');
+                button.disabled = false;
+                button.textContent = originalLabel;
+            }
+        });
+    });
+}
+
 async function loadModalFilterLists() {
     const cpList = $('#modal-checkpoint-list');
     const loraList = $('#modal-lora-list');
@@ -4458,6 +4637,7 @@ function resetAllFilters() {
     if (filterMinHeight) filterMinHeight.value = '';
     if (filterMaxHeight) filterMaxHeight.value = '';
     $$('input[name="aspect-ratio"]').forEach(r => r.checked = r.value === '');
+    updateSortReverseButton();
     updateFilterModalSummary();
 
     // Hide artist filter row
@@ -4802,6 +4982,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadTaggerModels();
     setTaggingUiState(false);
     setGalleryViewMode(AppState.viewMode);
+    updateSortReverseButton();
     switchView('gallery');
     loadStats();
     updateFilterSummary();

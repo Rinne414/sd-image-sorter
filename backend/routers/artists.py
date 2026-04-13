@@ -8,7 +8,7 @@ import threading
 import logging
 import time
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import (
@@ -99,6 +99,22 @@ class StatsResponse(BaseModel):
     identified_images: int
     undefined_count: int
     artist_counts: dict
+    artist_stats: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+
+
+class ArtistImageResponse(BaseModel):
+    image_id: int
+    filename: str
+    artist: str
+    confidence: float
+    confidence_percent: float
+    path: str
+
+
+class ArtistImageListResponse(BaseModel):
+    artist: str
+    total: int
+    images: List[ArtistImageResponse]
 
 
 # ============== Background Task State ==============
@@ -514,21 +530,83 @@ async def get_stats():
 
         # Artist counts
         cursor.execute("""
-            SELECT artist, COUNT(*) as count
+            SELECT artist, COUNT(*) as count, AVG(confidence) as avg_confidence, MAX(confidence) as max_confidence
             FROM artist_predictions
             WHERE artist != 'undefined'
             GROUP BY artist
             ORDER BY count DESC
             LIMIT 50
         """)
-        artist_counts = {row[0]: row[1] for row in cursor.fetchall()}
+        artist_counts = {}
+        artist_stats: Dict[str, Dict[str, float]] = {}
+        for row in cursor.fetchall():
+            artist = row[0]
+            artist_counts[artist] = row[1]
+            artist_stats[artist] = {
+                "count": float(row[1]),
+                "avg_confidence": float(row[2] or 0.0),
+                "max_confidence": float(row[3] or 0.0),
+            }
 
     return StatsResponse(
         total_images=total_images,
         identified_images=identified_images,
         undefined_count=undefined_count,
         artist_counts=artist_counts,
+        artist_stats=artist_stats,
     )
+
+
+@router.get("/images/{artist_name}", response_model=ArtistImageListResponse)
+async def get_artist_images(
+    artist_name: str,
+    limit: int = Query(default=24, ge=1, le=200),
+):
+    """Return images identified for a specific artist ordered by confidence."""
+    import database as db
+
+    safe_artist = str(artist_name or "").strip()
+    if not safe_artist:
+        raise HTTPException(status_code=400, detail="Artist name is required")
+
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM artist_predictions ap
+            WHERE ap.artist = ?
+            """,
+            (safe_artist,),
+        )
+        total = int(cursor.fetchone()[0] or 0)
+
+        cursor.execute(
+            """
+            SELECT i.id, i.filename, i.path, ap.artist, ap.confidence
+            FROM artist_predictions ap
+            INNER JOIN images i ON i.id = ap.image_id
+            WHERE ap.artist = ?
+            ORDER BY ap.confidence DESC, i.created_at DESC, i.id DESC
+            LIMIT ?
+            """,
+            (safe_artist, limit),
+        )
+        rows = cursor.fetchall()
+
+    images = [
+        ArtistImageResponse(
+            image_id=int(row[0]),
+            filename=str(row[1] or ""),
+            path=str(row[2] or ""),
+            artist=str(row[3] or ""),
+            confidence=float(row[4] or 0.0),
+            confidence_percent=round(float(row[4] or 0.0) * 100, 1),
+        )
+        for row in rows
+    ]
+
+    return ArtistImageListResponse(artist=safe_artist, total=total, images=images)
 
 
 @router.get("/list")

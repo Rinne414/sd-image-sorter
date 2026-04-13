@@ -221,6 +221,32 @@ def categorize_tag(tag: str) -> str:
     if tag_lower.startswith("artist:") or tag_lower.startswith("artist_"):
         return "artist"
 
+    tokens = {token for token in re.split(r"[_\-\s]+", tag_lower) if token}
+
+    if re.match(r"^(year|era)_\d{4}$", tag_lower) or tokens.intersection({"year", "version", "resolution", "filesize", "ratio"}):
+        return "meta"
+
+    if tag_lower.endswith("_focus") or tag_lower.endswith("_view") or tag_lower.endswith("_shot") or tag_lower.startswith("from_"):
+        return "angle"
+
+    if tag_lower.endswith("_style") or tag_lower.endswith("style") or "lineart" in tag_lower or "render" in tag_lower:
+        return "style"
+
+    if tokens.intersection({"smile", "blush", "wink", "grin", "laughing", "crying", "expressionless", "seductive", "embarrassed", "surprised"}):
+        return "expression"
+
+    if tokens.intersection({"standing", "sitting", "kneeling", "lying", "leaning", "pose", "stretching", "jumping", "walking", "running", "hugging", "dancing"}):
+        return "pose"
+
+    if tokens.intersection({"outdoors", "indoors", "beach", "ocean", "sea", "sky", "forest", "night", "day", "sunset", "sunrise", "room", "bedroom", "bathroom", "classroom", "city", "street", "park", "garden", "field"}):
+        return "background"
+
+    if tokens.intersection({"hair", "eyes", "breasts", "chest", "thighs", "legs", "skin", "ears", "tail", "wings", "horns", "fangs", "teeth", "navel", "belly", "feet", "armpits"}):
+        return "body"
+
+    if tokens.intersection({"holding", "grabbing", "touching", "kissing", "licking", "biting", "reading", "writing", "drinking", "eating", "swimming"}):
+        return "action"
+
     # Outfit detection via keyword matching
     for keyword in OUTFIT_KEYWORDS:
         if keyword in tag_lower:

@@ -790,7 +790,10 @@ function updateCombo() {
 function updateComboDisplay() {
     const { $ } = window.App;
     const comboEl = $('#combo-display');
+    if (!comboEl) return;
+
     const comboNum = comboEl.querySelector('.combo-number');
+    if (!comboNum) return;
 
     if (ManualSortState.combo >= 3) {
         comboEl.classList.add('visible');

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # Will be imported lazily
 ort = None
 hf_hub = None
+HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 
 
 def _ensure_imports():
@@ -254,10 +255,10 @@ class WD14Tagger:
 
             try:
                 assert hf_hub is not None
-                model_path = hf_hub.hf_hub_download(
+                model_path = self._download_with_fallback(
                     repo_id=repo_id,
                     filename=config["model_file"],
-                    local_dir=os.path.join(self.model_dir, self.model_name)
+                    local_dir=os.path.join(self.model_dir, self.model_name),
                 )
 
                 # Validate after download
@@ -270,13 +271,46 @@ class WD14Tagger:
         if not os.path.exists(tags_path):
             logger.info("Downloading tags file...")
             assert hf_hub is not None
-            tags_path = hf_hub.hf_hub_download(
+            tags_path = self._download_with_fallback(
                 repo_id=repo_id,
                 filename=config["tags_file"],
-                local_dir=os.path.join(self.model_dir, self.model_name)
+                local_dir=os.path.join(self.model_dir, self.model_name),
             )
-        
+
         return model_path, tags_path
+
+    def _download_with_fallback(self, repo_id: str, filename: str, local_dir: str) -> str:
+        assert hf_hub is not None
+        configured = str(os.environ.get("HF_ENDPOINT", "") or "").strip().rstrip("/")
+        endpoints = []
+        if configured:
+            endpoints.append(configured)
+        endpoints.extend(["", HF_MIRROR_ENDPOINT])
+
+        seen = set()
+        last_error: Optional[Exception] = None
+        for endpoint in endpoints:
+            key = endpoint or "__default__"
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                kwargs = {
+                    "repo_id": repo_id,
+                    "filename": filename,
+                    "local_dir": local_dir,
+                }
+                if endpoint:
+                    kwargs["endpoint"] = endpoint
+                    logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
+                return hf_hub.hf_hub_download(**kwargs)
+            except Exception as exc:
+                last_error = exc
+                logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+
+        if last_error is None:
+            raise RuntimeError(f"Failed to download {filename} from {repo_id}")
+        raise last_error
     
     def _load_tags(self, tags_path: str):
         """Load tag metadata for classic WD CSV files, PixAI CSV exports, or Camie JSON metadata."""

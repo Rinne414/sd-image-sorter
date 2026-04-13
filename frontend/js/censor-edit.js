@@ -793,12 +793,21 @@ function closeQueueManager() {
 function formatQueueManagerSummary(visibleCount) {
     return tKey(
         'censor.queueManagerSummary',
-        '{selected} selected • {visible}/{total} visible',
-        '已选 {selected} 项 • 当前显示 {visible}/{total}'
+        '{selected} selected • {visible}/{total} visible • drag rows or use the move bar below',
+        '已选 {selected} 项 • 当前显示 {visible}/{total} • 可拖拽行或使用下方移动栏'
     )
         .replace('{selected}', CensorState.selectedItems.size)
         .replace('{visible}', visibleCount)
         .replace('{total}', CensorState.queue.length);
+}
+
+function getQueueManagerThumbnailSrc(item) {
+    const api = window.App?.API;
+    if (item?.currentDataUrl) return item.currentDataUrl;
+    if (item?.id && typeof api?.getThumbnailUrl === 'function') {
+        return api.getThumbnailUrl(item.id, 320);
+    }
+    return item?.originalUrl || '';
 }
 
 function getQueueManagerStatusBadges(item) {
@@ -806,16 +815,59 @@ function getQueueManagerStatusBadges(item) {
     if (item.id === CensorState.activeId) {
         badges.push(`<span class="queue-manager-badge is-active">${escapeHtml(tKey('common.current', 'Current', '当前'))}</span>`);
     }
-    if (CensorState.selectedItems.has(item.id)) {
-        badges.push(`<span class="queue-manager-badge is-selected">${escapeHtml(tKey('common.selected', 'Selected', '已选中'))}</span>`);
-    }
     if (item.isProcessed) {
         badges.push(`<span class="queue-manager-badge is-processed">${escapeHtml(tKey('common.processed', 'Processed', '已处理'))}</span>`);
     }
-    if (!badges.length) {
-        badges.push(`<span class="queue-manager-badge">${escapeHtml(tKey('common.ready', 'Ready', '就绪'))}</span>`);
-    }
     return badges.join('');
+}
+
+function renderQueueManagerSelectionStrip(items = []) {
+    const strip = document.getElementById('queue-manager-selection-strip');
+    const countEl = document.getElementById('queue-manager-selection-count');
+    const selectedItems = Array.isArray(items) ? items : [];
+
+    if (countEl) {
+        countEl.textContent = selectedItems.length > 0
+            ? tText(`${selectedItems.length} selected`, `已选 ${selectedItems.length} 项`)
+            : tText('No selection', '未选择');
+        countEl.classList.toggle('is-empty', selectedItems.length === 0);
+    }
+
+    if (!strip) return;
+
+    if (!selectedItems.length) {
+        strip.innerHTML = `
+            <div class="queue-manager-selection-empty">
+                ${escapeHtml(tText('Pick one or more thumbnails to enable batch moves.', '选择一个或多个缩略图后即可批量移动。'))}
+            </div>
+        `;
+        return;
+    }
+
+    strip.innerHTML = selectedItems.slice(0, 8).map((item) => {
+        const thumbSrc = escapeHtml(getQueueManagerThumbnailSrc(item));
+        const label = escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`);
+        return `
+            <button class="queue-manager-selection-chip" type="button" data-id="${item.id}" title="${label}">
+                <img class="queue-manager-selection-chip-thumb" src="${thumbSrc}" alt="${label}" loading="lazy" decoding="async">
+                <span class="queue-manager-selection-chip-label">${label}</span>
+            </button>
+        `;
+    }).join('');
+
+    if (selectedItems.length > 8) {
+        const overflow = document.createElement('div');
+        overflow.className = 'queue-manager-selection-chip queue-manager-selection-chip-overflow';
+        overflow.textContent = `+${selectedItems.length - 8}`;
+        strip.appendChild(overflow);
+    }
+
+    strip.querySelectorAll('.queue-manager-selection-chip[data-id]').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const itemId = Number.parseInt(chip.dataset.id, 10);
+            scrollQueueItemIntoView(itemId);
+        });
+    });
 }
 
 function renderQueueManager() {
@@ -826,6 +878,7 @@ function renderQueueManager() {
 
     const items = getQueueManagerItems();
     summary.textContent = formatQueueManagerSummary(items.length);
+    renderQueueManagerSelectionStrip(getOrderedSelectedQueueIds().map((id) => CensorState.queue.find((item) => item.id === id)).filter(Boolean));
 
     if (positionInput && CensorState.selectedItems.size > 0) {
         const firstSelectedIndex = CensorState.queue.findIndex((item) => CensorState.selectedItems.has(item.id));
@@ -849,7 +902,9 @@ function renderQueueManager() {
         return `
             <div class="${classes}" data-id="${item.id}" data-index="${index}" draggable="true">
                 <div class="queue-manager-index">${index + 1}</div>
-                <img class="queue-manager-thumb" src="${escapeHtml(item.currentDataUrl || item.originalUrl)}" alt="${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}">
+                <div class="queue-manager-thumb-shell">
+                    <img class="queue-manager-thumb" src="${escapeHtml(getQueueManagerThumbnailSrc(item))}" alt="${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}" loading="lazy" decoding="async">
+                </div>
                 <div class="queue-manager-file">
                     <div class="queue-manager-file-name">${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}</div>
                     <div class="queue-manager-file-sub">${escapeHtml(item.originalFilename || '')}</div>
@@ -2036,6 +2091,7 @@ function onCanvasMouseDown(e) {
     if (!CensorState.activeId) return;
     // Don't start drawing if space is held (pan mode)
     if (spacePressed) return;
+    document.getElementById('canvas-wrapper')?.focus();
     CensorState.isDrawing = true;
 
     const { x, y } = getCanvasCoordinates(e);

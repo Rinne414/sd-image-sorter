@@ -110,22 +110,18 @@
 
             <div class="nav-tabs" role="tablist" aria-label="Application views">
                 <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
-                    <span class="tab-step" aria-hidden="true">1</span>
                     <span class="tab-icon" aria-hidden="true">🖼️</span>
                     <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                 </button>
                 <button class="nav-tab" data-view="autosep" role="tab" aria-selected="false" aria-controls="view-autosep">
-                    <span class="tab-step" aria-hidden="true">2</span>
                     <span class="tab-icon" aria-hidden="true">📁</span>
                     <span class="tab-text" data-i18n="nav.autosep">Auto-Separate</span>
                 </button>
                 <button class="nav-tab" data-view="manual" role="tab" aria-selected="false" aria-controls="view-manual">
-                    <span class="tab-step" aria-hidden="true">3</span>
                     <span class="tab-icon" aria-hidden="true">🎮</span>
                     <span class="tab-text" data-i18n="nav.manual">Manual Sort</span>
                 </button>
                 <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
-                    <span class="tab-step" aria-hidden="true">4</span>
                     <span class="tab-icon" aria-hidden="true">🔳</span>
                     <span class="tab-text" data-i18n="nav.censor">Censored Edit</span>
                 </button>
@@ -352,19 +348,19 @@
                         </div>
                         <div class="view-options">
                             <select id="gallery-sort" class="sort-dropdown" aria-label="Sort images">
-                                <option value="newest">Newest</option>
-                                <option value="oldest">Oldest</option>
-                                <option value="name_asc">Name (A-Z)</option>
-                                <option value="name_desc">Name (Z-A)</option>
+                                <option value="newest">Date</option>
+                                <option value="name_asc">Name</option>
                                 <option value="generator">Generator</option>
                                 <option value="prompt_length">Prompt Length</option>
-                                <option value="tag_count">Most Tags</option>
-                                <option value="rating">Rating (NSFW first)</option>
+                                <option value="tag_count">Tags</option>
+                                <option value="rating">Rating</option>
                                 <option value="character_count">Characters</option>
-                                <option value="file_size">Largest File</option>
-                                <option value="file_size_asc">Smallest File</option>
+                                <option value="file_size">File Size</option>
                                 <option value="random">Random</option>
                             </select>
+                            <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
+                                <span aria-hidden="true">↕</span>
+                            </button>
                             <div class="divider-v" aria-hidden="true"></div>
                             <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true">
                                 <span>◼◼</span>
@@ -474,6 +470,10 @@
                         <div class="spinner" aria-hidden="true"></div>
                         <span>Loading images...</span>
                     </div>
+                    <button id="btn-open-model-manager" class="gallery-model-manager-fab" type="button" aria-label="Open model manager">
+                        <span aria-hidden="true">🧰</span>
+                        <span data-i18n="models.manager">Models</span>
+                    </button>
                 </div>
             </section>
 
@@ -659,20 +659,16 @@
                             </div>
 
                             <!-- Center Image Stack -->
-                            <div class="sort-image-container">
-                                <div class="image-stack" id="image-stack">
-                                    <div class="current-image-wrapper">
-                                        <img id="current-image" src="" alt="Current image">
-                                        <div class="image-overlay">
-                                            <div class="image-tags" id="current-image-tags"></div>
-                                        </div>
+                        <div class="sort-image-container">
+                            <div class="image-stack" id="image-stack">
+                                <div class="current-image-wrapper">
+                                    <img id="current-image" src="" alt="Current image">
+                                    <div class="image-overlay">
+                                        <div class="image-tags" id="current-image-tags"></div>
                                     </div>
                                 </div>
-                                <div class="combo-display" id="combo-display">
-                                    <span class="combo-number">0</span>
-                                    <span class="combo-text">COMBO</span>
-                                </div>
                             </div>
+                        </div>
 
                             <!-- Right Folder -->
                             <div class="sort-folder sort-folder-right" data-key="d">
@@ -709,27 +705,11 @@
 
                         <!-- Enhanced Progress Bar -->
                         <div class="sort-progress-enhanced">
-                            <div class="progress-stats-row">
-                                <div class="progress-stat">
-                                    <span class="progress-stat-value" id="sort-sorted-count">0</span>
-                                    <span class="progress-stat-label" data-i18n="manual.sorted">Sorted</span>
-                                </div>
-                                <div class="progress-stat">
-                                    <span class="progress-stat-value" id="sort-skipped-count">0</span>
-                                    <span class="progress-stat-label" data-i18n="manual.skipped">Skipped</span>
-                                </div>
-                                <div class="progress-stat progress-stat-main">
-                                    <span class="progress-stat-value" id="sort-percent">0%</span>
-                                    <span class="progress-stat-label" data-i18n="manual.progress">Progress</span>
-                                </div>
-                                <div class="progress-stat">
-                                    <span class="progress-stat-value" id="sort-remaining-count">0</span>
-                                    <span class="progress-stat-label" data-i18n="manual.remaining">Remaining</span>
-                                </div>
-                                <div class="progress-stat">
-                                    <span class="progress-stat-value" id="sort-speed">0/s</span>
-                                    <span class="progress-stat-label" data-i18n="manual.speed">Speed</span>
-                                </div>
+                            <div class="progress-summary-line">
+                                <span class="progress-summary-item"><strong id="sort-sorted-count">0</strong> <span data-i18n="manual.sorted">Sorted</span></span>
+                                <span class="progress-summary-item"><strong id="sort-skipped-count">0</strong> <span data-i18n="manual.skipped">Skipped</span></span>
+                                <span class="progress-summary-item"><strong id="sort-remaining-count">0</strong> <span data-i18n="manual.remaining">Remaining</span></span>
+                                <span class="progress-hint" data-i18n="manual.progressHint">SPACE to skip • Z to undo • ESC to exit</span>
                             </div>
                             <div class="progress-bar-segmented">
                                 <div class="progress-fill-sorted" id="sort-progress-sorted"></div>
@@ -740,19 +720,7 @@
                             </div>
                             <div class="progress-info">
                                 <span id="sort-progress-text">0 / 0</span>
-                                <span class="progress-hint" data-i18n="manual.progressHint">SPACE to skip • Z to undo • ESC to exit</span>
                             </div>
-                        </div>
-
-                        <!-- Keyboard Legend -->
-                        <div class="wasd-legend">
-                            <div class="wasd-legend-title" data-i18n="manual.keyboardOps">Keyboard Controls</div>
-                            <div class="wasd-legend-row"><kbd>W</kbd><span data-i18n="manual.keyW">Top folder</span></div>
-                            <div class="wasd-legend-row"><kbd>A</kbd><span data-i18n="manual.keyA">Left folder</span></div>
-                            <div class="wasd-legend-row"><kbd>S</kbd><span data-i18n="manual.keyS">Bottom folder</span></div>
-                            <div class="wasd-legend-row"><kbd>D</kbd><span data-i18n="manual.keyD">Right folder</span></div>
-                            <div class="wasd-legend-row"><kbd>Z</kbd><span data-i18n="manual.keyZ">Undo last</span></div>
-                            <div class="wasd-legend-row"><kbd>Space</kbd><span data-i18n="manual.keySpace">Skip</span></div>
                         </div>
 
                         <!-- Exit Button -->
@@ -845,7 +813,7 @@
                             </button>
                         </div>
 
-                        <div class="censor-canvas-wrapper-v2" id="canvas-wrapper">
+                        <div class="censor-canvas-wrapper-v2" id="canvas-wrapper" tabindex="0">
                             <div id="canvas-container"
                                 style="position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;">
                                 <canvas id="censor-canvas" style="position: absolute;"></canvas>
@@ -1396,6 +1364,23 @@
 
         </main>
 
+        <div class="modal" id="model-manager-modal" role="dialog" aria-modal="true" aria-labelledby="model-manager-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-large">
+                <button class="modal-close" id="model-manager-close" aria-label="Close model manager">
+                    <span aria-hidden="true">✕</span>
+                </button>
+                <div class="modal-header">
+                    <div>
+                        <h2 id="model-manager-title">Model Manager</h2>
+                        <p class="modal-description">Check which runtimes are ready, see where they live, and trigger first-run preparation.</p>
+                    </div>
+                </div>
+                <div class="model-manager-summary" id="model-manager-summary"></div>
+                <div class="model-manager-grid" id="model-manager-grid"></div>
+            </div>
+        </div>
+
         <!-- Image Preview Modal -->
         <div class="modal" id="image-modal" role="dialog" aria-modal="true" aria-labelledby="modal-filename">
             <div class="modal-backdrop" aria-hidden="true"></div>
@@ -1898,7 +1883,8 @@
                                 </label>
                             </div>
 
-                            <div class="aspect-choice-grid" id="dimensions-heading">
+                            <h5 id="dimensions-heading" data-i18n="filter.aspect">Aspect Ratio</h5>
+                            <div class="aspect-choice-grid" role="group" aria-labelledby="dimensions-heading">
                                 <label class="filter-choice">
                                     <input type="radio" name="aspect-ratio" value="" checked>
                                     <span class="filter-choice-card">
@@ -2110,20 +2096,37 @@
 
                 <div class="queue-manager-toolbar">
                     <input type="text" id="queue-manager-search" class="input-field" placeholder="Search filenames..." data-i18n-placeholder="censor.queueManagerSearch">
+                    <button class="btn btn-secondary" id="btn-queue-manager-select-all">✓ <span data-i18n="censor.selectAll">All</span></button>
+                    <button class="btn btn-secondary" id="btn-queue-manager-deselect-all">✕ <span data-i18n="censor.deselectAll">None</span></button>
                     <label class="checkbox-label queue-manager-toggle">
                         <input type="checkbox" id="queue-manager-show-selected">
                         <span class="checkbox-custom"></span>
                         <span class="checkbox-text" data-i18n="censor.queueManagerShowSelected">Show selected only</span>
                     </label>
-                    <button class="btn btn-secondary" id="btn-queue-manager-select-all">✓ <span data-i18n="censor.selectAll">All</span></button>
-                    <button class="btn btn-secondary" id="btn-queue-manager-deselect-all">✕ <span data-i18n="censor.deselectAll">None</span></button>
+                </div>
+
+                <div class="queue-manager-selection-panel">
+                    <div class="queue-manager-selection-header">
+                        <div>
+                            <div class="queue-manager-selection-title">Selected items</div>
+                            <div class="queue-manager-selection-note">Select multiple thumbnails, then move them as a single block.</div>
+                        </div>
+                        <div class="queue-manager-selection-count" id="queue-manager-selection-count">0 selected</div>
+                    </div>
+                    <div class="queue-manager-selection-strip" id="queue-manager-selection-strip"></div>
                 </div>
 
                 <div class="queue-manager-action-bar">
-                    <button class="btn btn-secondary" id="btn-queue-manager-move-top">⤒ <span data-i18n="common.top">Top</span></button>
-                    <button class="btn btn-secondary" id="btn-queue-manager-move-up">↑ <span data-i18n="common.up">Up</span></button>
-                    <button class="btn btn-secondary" id="btn-queue-manager-move-down">↓ <span data-i18n="common.down">Down</span></button>
-                    <button class="btn btn-secondary" id="btn-queue-manager-move-bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
+                    <div class="queue-manager-move-group">
+                        <div class="queue-manager-action-title">Move selected</div>
+                        <div class="queue-manager-action-note">The selected images stay together in the order you picked them.</div>
+                        <div class="queue-manager-action-buttons">
+                            <button class="btn btn-secondary" id="btn-queue-manager-move-top">⤒ <span data-i18n="common.top">Top</span></button>
+                            <button class="btn btn-secondary" id="btn-queue-manager-move-up">↑ <span data-i18n="common.up">Up</span></button>
+                            <button class="btn btn-secondary" id="btn-queue-manager-move-down">↓ <span data-i18n="common.down">Down</span></button>
+                            <button class="btn btn-secondary" id="btn-queue-manager-move-bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
+                        </div>
+                    </div>
                     <div class="queue-manager-position-box">
                         <label for="queue-manager-position" data-i18n="censor.moveToPosition">Move To Position</label>
                         <div class="queue-manager-position-row">

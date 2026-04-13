@@ -113,6 +113,12 @@ def _get_embed_model():
     return _embed_model
 
 
+def ensure_clip_model_ready() -> Optional[str]:
+    """Trigger FastEmbed model initialization/download and return the local model path if available."""
+    _get_embed_model()
+    return get_clip_local_model_path()
+
+
 def embedding_to_bytes(embedding: np.ndarray) -> bytes:
     """Convert a numpy embedding to bytes for SQLite storage."""
     return embedding.astype(np.float32).tobytes()
