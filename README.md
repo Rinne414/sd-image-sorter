@@ -21,6 +21,10 @@
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/gallery_hero.png" alt="SD Image Sorter — Gallery View" width="900">
+</p>
+
 ---
 
 ### Ever feel like this?
@@ -28,14 +32,6 @@
 > *Thousands of AI images scattered everywhere. Some have metadata, some don't. You can't search by prompt, can't filter by model, can't find that one image you made last week...*
 
 **SD Image Sorter** fixes all of that — and more.
-
-| Gallery View | Manual Sort | Censor Edit |
-|:------------:|:-----------:|:-----------:|
-| ![Gallery](docs/screenshots/gallery_view.png) | ![Manual Sort](docs/screenshots/manual_sort.png) | ![Censor Edit](docs/screenshots/censor_edit.png) |
-
-| Gallery Navigation | Manual Sort Flow |
-|:------------------:|:----------------:|
-| ![Gallery Demo](docs/screenshots/gallery_demo.gif) | ![Manual Sort Demo](docs/screenshots/manual_sort_demo.gif) |
 
 ---
 
@@ -210,7 +206,7 @@ This project wouldn't be possible without these amazing contributors and their i
 
 | Contributor | Contribution |
 |:------------|:-------------|
-| **[Antigravity](https://github.com/peter119lee)** & **Claude Opus 4.6** | 💻 Core development & AI-assisted coding |
+| **[Antigravity](https://github.com/peter119lee)** & **Claude Code** · **Claude Opus 4.6** · **Codex** · **GPT-5.4** · **Gemini 3.1 Pro** | 💻 Core development & AI-assisted coding |
 | **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 Auto-censor concept inspiration |
 | **Wenaka2004** | 🎯 [YOLO detection model](https://civitai.com/models/1736285) |
 | **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**, **DraconicDragon**, **heathcliff01** | 🔮 LSNet / Kaloscope artist identification |
@@ -235,6 +231,10 @@ This project wouldn't be possible without these amazing contributors and their i
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/gallery_hero.png" alt="SD Image Sorter — 画廊视图" width="900">
 </p>
 
 ---
@@ -417,7 +417,7 @@ HF_ENDPOINT=https://hf-mirror.com
 
 | 贡献者 | 贡献 |
 |:-------|:-----|
-| **[Antigravity](https://github.com/peter119lee)** & **Claude Opus 4.6** | 💻 核心开发 & AI 辅助编程 |
+| **[Antigravity](https://github.com/peter119lee)** & **Claude Code** · **Claude Opus 4.6** · **Codex** · **GPT-5.4** · **Gemini 3.1 Pro** | 💻 核心开发 & AI 辅助编程 |
 | **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 自动打码概念启发 |
 | **Wenaka2004** | 🎯 [YOLO 检测模型](https://civitai.com/models/1736285) |
 | **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**、**DraconicDragon**、**heathcliff01** | 🔮 LSNet / Kaloscope 画师识别 |
