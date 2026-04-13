@@ -163,7 +163,11 @@ class SimilarityService:
     def get_model_status(self) -> dict:
         """Expose the local CLIP model readiness for the frontend."""
         clip = get_model_health()["clip"]
+        runtime_loaded = clip.get("runtime_loaded", False)
+        effective_available = clip["available"] or runtime_loaded
         return {
             "status": "ok",
             **clip,
+            "available": effective_available,
+            "message": clip["message"] if not runtime_loaded or clip["available"] else "CLIP model is loaded and ready.",
         }

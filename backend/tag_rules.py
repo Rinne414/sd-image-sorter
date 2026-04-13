@@ -4,8 +4,13 @@ Tag categorization rules and built-in mappings for SD Image Sorter.
 Provides automatic tag categorization, tag sets (outfit groups),
 and exclusion rules for intelligent prompt generation.
 """
+import csv
+import logging
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # Tag Category Mappings
@@ -21,6 +26,15 @@ META_TAGS = {
     "1other", "androgynous", "male_focus", "female_focus",
     "comic", "4koma", "multiple_views", "highres", "absurdres",
     "tall_image", "wide_image", "portrait", "landscape",
+    "signature", "artist_name", "twitter_username", "pixiv_username",
+    "watermark", "username", "web_address", "url",
+    "english_text", "japanese_text", "chinese_text", "korean_text", "text_focus",
+    "speech_bubble", "thought_bubble", "spoken_heart", "spoken_ellipsis",
+    "character_name", "copyright_name", "dated", "commission",
+    "character_sheet", "reference_sheet", "concept_art",
+    "check_translation", "translated", "partially_translated",
+    "commentary", "commentary_request", "paid_reward_available",
+    "cover", "cover_page", "novel_cover", "album_cover",
 }
 
 # Quality / booster tags
@@ -49,7 +63,8 @@ EXPRESSION_TAGS = {
     "expressionless", "serious", "seductive_smile", "evil_smile",
     "tongue", "tongue_out", "drooling", "nosebleed",
     "happy", "sad", "sleepy", "tired", "drunk",
-    ":d", ":o", ":3", "^^", ";)", "xd",
+    ":d", ":o", ":3", "^^", ";)", "xd", "^_^", ">_<", "o_o", "@_@",
+    "v-shaped_eyebrows", "raised_eyebrow", "furrowed_brow",
 }
 
 # Pose tags
@@ -59,7 +74,7 @@ POSE_TAGS = {
     "spread_legs", "crossed_legs", "indian_style", "seiza", "wariza",
     "arms_up", "arms_behind_back", "arms_behind_head", "arms_crossed",
     "hand_on_hip", "hand_on_own_chest", "hands_on_hips",
-    "hand_up", "reaching", "pointing", "peace_sign", "v",
+    "hand_up", "hands_up", "reaching", "pointing", "peace_sign", "v",
     "walking", "running", "jumping", "falling", "floating",
     "stretching", "dancing", "fighting_stance", "action",
     "on_back", "on_stomach", "on_side", "fetal_position",
@@ -67,6 +82,7 @@ POSE_TAGS = {
     "back-to-back", "facing_another", "facing_away",
     "hugging", "carrying", "piggyback", "princess_carry",
     "cowgirl_position", "missionary", "doggy_style",
+    "head_tilt", "head_rest", "chin_rest", "turned_head",
 }
 
 # Camera angle tags
@@ -79,6 +95,7 @@ ANGLE_TAGS = {
     "dynamic_angle", "foreshortening", "fisheye",
     "face_focus", "ass_focus", "breast_focus",
     "feet_focus", "navel_focus", "hand_focus",
+    "profile", "back",
 }
 
 # Body feature tags
@@ -125,6 +142,7 @@ ACTION_TAGS = {
     "sex", "oral", "penetration", "masturbation",
     "fellatio", "cunnilingus", "handjob", "footjob",
     "grabbing", "groping", "licking", "biting",
+    "hug", "embrace", "bleeding", "blood",
 }
 
 # Background / setting tags
@@ -166,6 +184,8 @@ NSFW_BODY_KEYWORDS = {
     "butt", "buttocks", "cleavage", "testicles", "stomach", "midriff", "sideboob",
     "breast", "boob", "boobs", "navel", "crotch", "groin", "cameltoe", "clitoris",
     "veins", "toe", "toes", "soles", "toenails", "fingernails", "nails", "tattoo",
+    "eyelash", "eyelashes", "lip", "lips", "mole", "freckle", "scar", "birthmark",
+    "abs", "collarbone", "armpit", "thigh_gap", "dimples", "cheek",
 }
 
 OUTFIT_DETAIL_KEYWORDS = {
@@ -174,12 +194,20 @@ OUTFIT_DETAIL_KEYWORDS = {
     "hairband", "hairclip", "headwear", "footwear", "thigh_strap", "nail_polish",
     "alternate_costume", "costume", "plaid", "detached", "clothes_lift", "clothes_pull",
     "japanese_clothes", "camisole", "fishnets", "loafers", "strap_slip", "clothing_cutout", "clothing_aside",
+    "strapless", "fur_trim", "striped_clothes", "polka_dot", "lace_trim",
+    "frilled", "pleated", "layered", "corset", "sash", "obi", "ascot",
+    "neckerchief", "wrist_cuff", "cuffs", "armlet", "pauldron", "gauntlet",
+    "epaulette", "holster", "sheath", "zettai_ryouiki",
+    "hood", "hood_up", "hood_down", "hooded",
 }
 
 BACKGROUND_OBJECT_KEYWORDS = {
     "bed", "pillow", "window", "couch", "curtain", "curtains", "chair", "desk",
     "lamp", "food", "water", "flower", "flowers", "room", "sheet", "bed_sheet",
     "cloud", "plant", "petals", "tiles", "bag", "cup", "cellphone", "smartphone", "headphones",
+    "tree", "grass", "fence", "wall", "door", "table", "bench", "stairs",
+    "bridge", "fountain", "statue", "candle", "lantern", "chandelier",
+    "vehicle", "train", "bicycle", "motorcycle",
 }
 
 ACTION_DETAIL_KEYWORDS = {
@@ -189,6 +217,9 @@ ACTION_DETAIL_KEYWORDS = {
     "bondage", "restrained", "bdsm", "weapon", "condom", "sex_toy", "breast_press",
     "bent_over", "lifted_by_self", "arm_support", "arm_up", "hand_on_own_hip",
     "female_masturbation", "gag", "gagged", "rope", "leash", "presenting_foot", "mouth_hold", "looking_at_another",
+    "sword", "gun", "rifle", "pistol", "knife", "dagger", "axe", "bow_(weapon)",
+    "staff", "wand", "shield", "spear", "hammer",
+    "smoking", "playing", "typing", "drawing", "painting", "waving",
 }
 
 EXPRESSION_DETAIL_KEYWORDS = {
@@ -198,11 +229,43 @@ EXPRESSION_DETAIL_KEYWORDS = {
 
 META_DETAIL_KEYWORDS = {
     "censored", "uncensored", "bar_censor", "virtual_youtuber",
+    "text", "username", "watermark", "signature", "symbol",
+    "spoken", "dated", "commentary", "translation",
 }
 
 CHARACTER_DETAIL_KEYWORDS = {
     "loli", "fox_girl", "cat_girl", "dragon_girl", "dark-skinned_male", "furina_(genshin_impact)",
     "yuri", "hetero", "interracial",
+    "dark-skinned_female", "animal_ear_fluff",
+    "cosplay", "siblings", "couple", "family", "twins",
+}
+
+# Hairstyle patterns — tags about hair arrangement → body
+HAIRSTYLE_KEYWORDS = {
+    "bun", "updo", "side_up", "two_side_up", "one_side_up", "low_twintails",
+    "high_ponytail", "low_ponytail", "double_bun", "half_updo", "chignon",
+    "ringlets", "dreadlocks", "afro", "mohawk", "undercut", "shaved",
+    "hair_over_shoulder", "hair_between_eyes", "hair_intakes", "forehead",
+    "hair_ribbon", "hair_flower", "hair_tubes", "hair_rings",
+    "makeup", "eyeshadow", "lipstick", "blush_stickers", "skindentation",
+}
+
+# Object / prop keywords → background
+OBJECT_PROP_KEYWORDS = {
+    "book", "bell", "fruit", "rose", "bird", "cat", "dog", "horse",
+    "fish", "butterfly", "snake", "rabbit", "fox", "wolf",
+    "cake", "candy", "ice_cream", "wine", "tea", "coffee",
+    "umbrella", "fan", "mirror", "clock", "flag", "guitar", "piano",
+    "ball", "balloon", "ribbon", "chains", "cuffs",
+}
+
+# Effect / rendering keywords → style
+EFFECT_KEYWORDS = {
+    "sparkle", "sparks", "glow", "glowing", "bloom", "chromatic_aberration",
+    "halftone", "gradient", "shadow", "silhouette", "backlighting",
+    "rim_lighting", "ambient", "particle", "dust", "smoke",
+    "fire", "ice", "lightning", "magic", "aura", "energy",
+    "border", "frame", "vignette",
 }
 
 # Outfit tag patterns (checked by substring matching)
@@ -227,7 +290,70 @@ OUTFIT_KEYWORDS = [
     "towel", "sarong", "robe", "pajamas",
     "belt", "suspenders", "garter", "wristband", "bracelet",
     "earrings", "ring", "anklet", "piercing",
+    "mask", "bandage", "headgear", "headpiece",
+    "turtleneck", "highleg", "halterneck", "miniskirt",
+    "micro_bikini", "side-tie", "string_bikini",
 ]
+
+# ============================================================
+# WD14 Character Tag Cache
+# ============================================================
+# Loaded lazily from selected_tags.csv files (category 4 = character)
+
+_wd14_character_tags: Optional[Set[str]] = None
+
+
+def _load_wd14_character_tags() -> Set[str]:
+    """Load character tag names from all available WD14 selected_tags.csv files."""
+    global _wd14_character_tags
+    if _wd14_character_tags is not None:
+        return _wd14_character_tags
+
+    tags: Set[str] = set()
+    try:
+        from config import get_wd14_model_dir
+        wd14_root = Path(get_wd14_model_dir())
+    except Exception:
+        # config might not be importable in all contexts; try relative path
+        wd14_root = Path(__file__).resolve().parent.parent / "models" / "wd14-tagger"
+
+    if not wd14_root.exists():
+        _wd14_character_tags = tags
+        return tags
+
+    for csv_path in wd14_root.glob("*/selected_tags.csv"):
+        try:
+            with csv_path.open("r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("category") == "4":
+                        tag_name = row.get("name", "").strip()
+                        if tag_name:
+                            tags.add(tag_name.lower().replace(" ", "_"))
+        except Exception as exc:
+            logger.debug("Failed to load character tags from %s: %s", csv_path, exc)
+
+    logger.info("Loaded %d character tags from WD14 model files", len(tags))
+    _wd14_character_tags = tags
+    return tags
+
+
+# Known franchise suffixes — tags matching `name_(franchise)` are characters
+_FRANCHISE_SUFFIXES = {
+    "kancolle", "kantai_collection", "fate", "genshin_impact", "honkai",
+    "blue_archive", "umamusume", "azur_lane", "arknights", "touhou",
+    "vocaloid", "pokemon", "naruto", "one_piece", "dragon_ball",
+    "final_fantasy", "ff14", "ff7", "ff10", "idolmaster", "love_live",
+    "bang_dream", "hololive", "nijisanji", "virtual_youtuber",
+    "sword_art_online", "attack_on_titan", "demon_slayer", "jujutsu_kaisen",
+    "spy_x_family", "re:zero", "konosuba", "overlord", "elden_ring",
+    "original", "commission", "original_character",
+}
+
+# Pattern: name_(franchise) — very strong character signal
+_FRANCHISE_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_]*\((" + "|".join(re.escape(f) for f in sorted(_FRANCHISE_SUFFIXES)) + r")\)$"
+)
 
 
 def categorize_tag(tag: str) -> str:
@@ -265,6 +391,24 @@ def categorize_tag(tag: str) -> str:
     if tag_lower.startswith("artist:") or tag_lower.startswith("artist_"):
         return "artist"
 
+    # WD14-based character detection (loaded from selected_tags.csv) — checked
+    # early because substring-based keyword matching below can false-positive
+    # on character names (e.g. "hat" matching "hatsune_miku").
+    wd14_chars = _load_wd14_character_tags()
+    if wd14_chars and tag_lower in wd14_chars:
+        return "character"
+
+    # Franchise-suffix heuristic: name_(franchise) → character
+    compact = tag_lower.replace("_(", "(").replace(")_", ")")
+    if _FRANCHISE_PATTERN.match(compact):
+        return "character"
+
+    paren_match = re.search(r"\(([^)]+)\)$", tag_lower)
+    if paren_match:
+        franchise = paren_match.group(1).replace(" ", "_")
+        if franchise in _FRANCHISE_SUFFIXES:
+            return "character"
+
     tokens = {token for token in re.split(r"[_\-\s]+", tag_lower) if token}
 
     if re.match(r"^(year|era)_\d{4}$", tag_lower) or tokens.intersection({"year", "version", "resolution", "filesize", "ratio"}):
@@ -279,7 +423,7 @@ def categorize_tag(tag: str) -> str:
     if tokens.intersection({"smile", "blush", "wink", "grin", "laughing", "crying", "expressionless", "seductive", "embarrassed", "surprised"}):
         return "expression"
 
-    if tokens.intersection({"standing", "sitting", "kneeling", "lying", "leaning", "pose", "stretching", "jumping", "walking", "running", "hugging", "dancing"}):
+    if tokens.intersection({"standing", "sitting", "kneeling", "lying", "leaning", "pose", "stretching", "jumping", "walking", "running", "hugging", "dancing", "squatting", "crouching", "floating", "tilt", "bent", "crossed"}):
         return "pose"
 
     if tokens.intersection({"outdoors", "indoors", "beach", "ocean", "sea", "sky", "forest", "night", "day", "sunset", "sunrise", "room", "bedroom", "bathroom", "classroom", "city", "street", "park", "garden", "field"}):
@@ -320,6 +464,22 @@ def categorize_tag(tag: str) -> str:
     # Hair/eye color tags that might not be in the BODY set
     if "_hair" in tag_lower or "_eyes" in tag_lower:
         return "body"
+
+    # Hairstyle and body-detail patterns
+    if any(keyword in tag_lower for keyword in HAIRSTYLE_KEYWORDS):
+        return "body"
+
+    # Object/prop keywords → background
+    if any(keyword in tag_lower for keyword in OBJECT_PROP_KEYWORDS):
+        return "background"
+
+    # Effect/rendering keywords → style
+    if any(keyword in tag_lower for keyword in EFFECT_KEYWORDS):
+        return "style"
+
+    # Meta heuristic: tags about image structure/annotations
+    if tag_lower.startswith("no_") or tag_lower.startswith("non-") or tag_lower.endswith("_request"):
+        return "meta"
 
     return "unknown"
 

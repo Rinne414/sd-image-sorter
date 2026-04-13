@@ -34,6 +34,15 @@ from config import (
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
 
+def _clip_model_loaded() -> bool:
+    """Check whether the FastEmbed CLIP model singleton is already loaded in memory."""
+    try:
+        from similarity import _embed_model
+        return _embed_model is not None
+    except Exception:
+        return False
+
+
 def _module_available(module_name: str) -> bool:
     try:
         with warnings.catch_warnings():
@@ -245,12 +254,31 @@ def _list_yolo_model_files(directory: Path) -> List[Dict[str, Any]]:
 
 
 def get_clip_local_model_path() -> Optional[str]:
-    """Return the local FastEmbed-compatible CLIP model directory if present."""
+    """Return the local FastEmbed-compatible CLIP model directory if present.
+
+    Checks the canonical slug path first, then falls back to scanning
+    subdirectories of the clip model dir for any ``model.onnx`` file
+    (covers FastEmbed cache layout differences across versions).
+    """
     clip_root = Path(get_clip_model_dir())
+
+    # 1) Canonical slug path (most common)
     repo_slug = CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")
     candidate = clip_root / repo_slug
     if (candidate / "model.onnx").exists():
         return str(candidate.resolve())
+
+    # 2) Scan one or two levels deep for model.onnx inside clip_root
+    #    FastEmbed may use slightly different directory naming across versions.
+    for depth_pattern in ("*/model.onnx", "*/*/model.onnx"):
+        matches = sorted(clip_root.glob(depth_pattern))
+        for match in matches:
+            model_dir = match.parent
+            # Skip obvious temp/cache directories
+            if model_dir.name.startswith(".") or model_dir.name == "tmp":
+                continue
+            return str(model_dir.resolve())
+
     return None
 
 
@@ -428,6 +456,7 @@ def get_model_health() -> Dict[str, Any]:
             "available": bool(clip_model_path) and _module_available("fastembed"),
             "model_downloaded": bool(clip_model_path),
             "runtime_available": _module_available("fastembed"),
+            "runtime_loaded": _clip_model_loaded(),
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
             "message": (

@@ -4295,6 +4295,8 @@ function renderModelManager(models = []) {
                 showToast(result.message || `${modelId} is ready.`, 'success');
                 const refreshed = await API.getModelStatus();
                 renderModelManager(refreshed.models || []);
+                // Notify other tabs (e.g. Similar Images) that a model changed
+                document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
             } catch (error) {
                 showToast(formatUserError(error, 'Model preparation failed'), 'error');
                 button.disabled = false;

@@ -798,6 +798,15 @@ const SimilarImages = {
                 });
             });
         });
+
+        // Refresh model status when a model is prepared/downloaded from Model Manager
+        document.addEventListener('model-status-changed', (event) => {
+            const modelId = event.detail?.modelId;
+            if (!modelId || modelId === 'clip') {
+                this.loadModelStatus();
+                this.loadStats();
+            }
+        });
     }
 };
 

@@ -115,8 +115,21 @@ def _get_embed_model():
 
 def ensure_clip_model_ready() -> Optional[str]:
     """Trigger FastEmbed model initialization/download and return the local model path if available."""
-    _get_embed_model()
-    return get_clip_local_model_path()
+    model = _get_embed_model()
+    # Try the standard health-check path first
+    local_path = get_clip_local_model_path()
+    if local_path:
+        return local_path
+    # FastEmbed loaded successfully but the file isn't at the canonical path.
+    # Try to extract the actual model directory from the loaded model object.
+    try:
+        model_dir = getattr(model, "model_dir", None) or getattr(model.model, "_model_dir", None)
+        if model_dir:
+            return str(model_dir)
+    except Exception:
+        pass
+    # Model is loaded in memory — return a sentinel so callers know it works
+    return "fastembed:in-memory"
 
 
 def embedding_to_bytes(embedding: np.ndarray) -> bytes:

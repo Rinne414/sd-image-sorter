@@ -241,7 +241,7 @@ A local web application for managing, tagging, sorting, and censoring Stable Dif
 
 For detailed documentation, see `docs/API.md`.
     """,
-    version="2.6.2",
+    version="2.6.3",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
