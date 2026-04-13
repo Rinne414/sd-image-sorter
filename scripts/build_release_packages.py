@@ -46,6 +46,7 @@ EXCLUDED_PREFIXES = (
     "backend/tests",
     "backend/test_",
     "node_modules",
+    "python",
     "tests",
     "test-results",
     "docs",
