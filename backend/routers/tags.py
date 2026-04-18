@@ -201,7 +201,7 @@ tag_progress = _TagProgressProxy()
     }
 )
 async def get_all_tags(
-    limit: int = Query(default=500, ge=1, le=10000, description="Maximum tags to return"),
+    limit: int = Query(default=500, ge=1, le=100000, description="Maximum tags to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get all unique tags with occurrence counts."""
@@ -260,7 +260,7 @@ async def get_generators(
 )
 async def get_tags_library(
     sort_by: str = Query(default="frequency", description="Sort order: 'frequency' or 'alphabetical'"),
-    limit: int = Query(default=1000, ge=1, le=10000, description="Maximum tags to return"),
+    limit: int = Query(default=1000, ge=1, le=100000, description="Maximum tags to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get tags library with frequency and sorting options."""
@@ -269,7 +269,7 @@ async def get_tags_library(
 
 @router.get("/prompts/library")
 async def get_prompts_library(
-    limit: int = Query(default=500, ge=1, le=10000, description="Maximum prompt tokens to return"),
+    limit: int = Query(default=500, ge=1, le=100000, description="Maximum prompt tokens to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique prompt tokens from images with frequency counts."""
@@ -306,7 +306,7 @@ Names are normalized by stripping weight notation and file extensions.
     }
 )
 async def get_loras_library(
-    limit: int = Query(default=500, ge=1, le=10000, description="Maximum LoRAs to return"),
+    limit: int = Query(default=500, ge=1, le=100000, description="Maximum LoRAs to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique LoRAs from images with frequency counts."""

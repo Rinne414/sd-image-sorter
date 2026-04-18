@@ -7,6 +7,11 @@ const ArtistIdent = {
     isIdentifying: false,
     progress: { current: 0, total: 0 },
     selectedArtist: null,
+    selectedArtistPageSize: 120,
+    selectedArtistOffset: 0,
+    selectedArtistHasMore: false,
+    selectedArtistImages: [],
+    artistRequestToken: 0,
     viewMode: 'grid',
     stats: {},
     diagnostics: null,
@@ -379,10 +384,19 @@ const ArtistIdent = {
     },
 
 
-    async selectArtist(artist) {
+    async selectArtist(artist, { append = false } = {}) {
         const safeArtist = String(artist ?? '');
         const escapeHtml = this._escapeHtml.bind(this);
+        const isSameArtist = this.selectedArtist === safeArtist;
+        if (!append || !isSameArtist) {
+            this.selectedArtistOffset = 0;
+            this.selectedArtistHasMore = false;
+            this.selectedArtistImages = [];
+        }
         this.selectedArtist = safeArtist;
+        this.artistRequestToken += 1;
+        const requestToken = this.artistRequestToken;
+        const requestOffset = append && isSameArtist ? this.selectedArtistOffset : 0;
 
         // Highlight selected card
         document.querySelectorAll('.artist-card').forEach(card => {
@@ -406,12 +420,29 @@ const ArtistIdent = {
             const countLabel = escapeHtml(String(count));
             const avgConfidence = escapeHtml(this.formatConfidencePercent(stat.avg_confidence));
             const maxConfidence = escapeHtml(this.formatConfidencePercent(stat.max_confidence));
-            const detailResponse = await window.App.API.get(`/api/artists/images/${encodeURIComponent(safeArtist)}?limit=18`);
-            const previewCards = (detailResponse.images || []).map((image) => `
-                <button class="artist-image-card" data-image-id="${image.image_id}" type="button" title="${escapeHtml(image.filename)}">
+            const detailResponse = await window.App.API.get(
+                `/api/artists/images/${encodeURIComponent(safeArtist)}?limit=${this.selectedArtistPageSize}&offset=${requestOffset}`
+            );
+            if (requestToken !== this.artistRequestToken) return;
+
+            const pageImages = Array.isArray(detailResponse.images) ? detailResponse.images : [];
+            this.selectedArtistImages = append
+                ? [...this.selectedArtistImages, ...pageImages]
+                : pageImages;
+            this.selectedArtistOffset = requestOffset + pageImages.length;
+            this.selectedArtistHasMore = Boolean(detailResponse.has_more);
+
+            const previewCards = this.selectedArtistImages.map((image) => `
+                <button class="artist-image-card" data-image-id="${image.image_id}" data-filename="${escapeHtml(image.filename)}" type="button" title="${escapeHtml(image.filename)}">
                     <img src="${window.App.API.getThumbnailUrl(image.image_id, 256)}" alt="${escapeHtml(image.filename)}" loading="lazy">
                     <span class="artist-image-confidence">${escapeHtml(String(image.confidence_percent))}%</span>
                     <span class="artist-image-name">${escapeHtml(image.filename)}</span>
+                    <span class="artist-image-actions">
+                        <span class="artist-image-action" data-action="preview">${escapeHtml(this.tText('Preview', '预览'))}</span>
+                        <span class="artist-image-action" data-action="reader">${escapeHtml(this.tText('Reader', 'Reader'))}</span>
+                        <span class="artist-image-action" data-action="edit">${escapeHtml(this.tText('Edit', '编辑'))}</span>
+                        <span class="artist-image-action" data-action="build">${escapeHtml(this.tText('Build', 'Build'))}</span>
+                    </span>
                 </button>
             `).join('');
 
@@ -448,16 +479,38 @@ const ArtistIdent = {
             });
 
             imagesPreview.querySelectorAll('.artist-image-card').forEach(card => {
-                card.addEventListener('click', () => {
+                card.addEventListener('click', (event) => {
                     const imageId = Number(card.dataset.imageId);
-                    if (Number.isFinite(imageId) && window.Gallery?.openPreview) {
+                    const filename = String(card.dataset.filename || '');
+                    if (!Number.isFinite(imageId)) return;
+
+                    const action = event.target?.dataset?.action;
+                    if (action === 'reader') {
+                        window.App?.openReaderFromImage?.(imageId, filename);
+                        return;
+                    }
+                    if (action === 'edit') {
+                        window.App?.addToCensorQueue?.([imageId]);
+                        return;
+                    }
+                    if (action === 'build') {
+                        window.App?.openPromptBuildFromImage?.(imageId);
+                        return;
+                    }
+
+                    if (window.Gallery?.openPreview) {
                         window.Gallery.openPreview(imageId);
                     }
                 });
             });
 
+            const loadMoreBtn = document.getElementById('btn-artist-load-more');
+            if (loadMoreBtn) {
+                loadMoreBtn.style.display = this.selectedArtistHasMore ? 'inline-flex' : 'none';
+            }
+
         } catch (e) {
-            detailContent.innerHTML = `<p class="error">Failed to load artist details</p>`;
+            detailContent.innerHTML = `<p class="error">${this.tText('Failed to load artist details', '加载画师详情失败')}</p>`;
         }
     },
 
@@ -476,7 +529,10 @@ const ArtistIdent = {
             window.App.loadImages();
         }
 
-        window.App.showToast(`Filtering by artist: ${this.formatArtistName(artist)}`, 'success');
+        window.App.showToast(
+            this.tText(`Filtering by artist: ${this.formatArtistName(artist)}`, `正在按画师筛选：${this.formatArtistName(artist)}`),
+            'success'
+        );
     },
 
     clearArtistFilter() {
@@ -493,7 +549,7 @@ const ArtistIdent = {
             window.App.loadImages();
         }
 
-        window.App.showToast('Artist filter cleared', 'info');
+        window.App.showToast(this.tText('Artist filter cleared', '已清除画师筛选'), 'info');
     },
 
     // ============== Identification ==============
@@ -695,12 +751,12 @@ const ArtistIdent = {
         const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
 
         if (normalizedSelectedIds.size === 0) {
-            showToast('No images selected', 'warning');
+            showToast(this.tText('No images selected', '没有选中图片'), 'warning');
             return;
         }
 
         if (this.isIdentifying) {
-            showToast('Identification already in progress', 'warning');
+            showToast(this.tText('Identification already in progress', '识别任务已在进行中'), 'warning');
             return;
         }
 
@@ -756,7 +812,7 @@ const ArtistIdent = {
             async () => {
                 try {
                     await API.delete('/api/artists/clear');
-                    showToast('All predictions cleared', 'success');
+                    showToast(this.tText('All predictions cleared', '已清除所有预测'), 'success');
                     this.loadStats();
                 } catch (e) {
                     showToast(formatUserError(e, "Failed to clear data"), "error");
@@ -788,7 +844,7 @@ const ArtistIdent = {
 
         document.addEventListener('click', (event) => {
             const actionButton = event.target?.closest?.(
-                '#btn-identify-all, #btn-identify-selected, #btn-refresh-artist-stats, #btn-clear-artist-data'
+                '#btn-identify-all, #btn-identify-selected, #btn-refresh-artist-stats, #btn-clear-artist-data, #btn-artist-load-more'
             );
             const id = actionButton?.id;
             switch (id) {
@@ -803,6 +859,11 @@ const ArtistIdent = {
                     return;
                 case 'btn-clear-artist-data':
                     this.clearAllData();
+                    return;
+                case 'btn-artist-load-more':
+                    if (this.selectedArtist && this.selectedArtistHasMore) {
+                        this.selectArtist(this.selectedArtist, { append: true });
+                    }
                     return;
                 default:
                     break;
@@ -833,19 +894,21 @@ const ArtistIdent = {
         const view = document.getElementById('view-artist');
         if (!view) return;
 
+        const t = (key) => (window.I18n ? window.I18n.t(key) : key);
         const overlay = window.App.createGuideOverlay({
             id: 'artist-first-use-guide',
             storageKey: 'artist-guide-seen',
-            title: '🎨 Artist Identification',
-            description: 'Identify the artist/style of your images using AI classification.',
+            title: t('guide.artistTitle'),
+            description: t('guide.artistDescription'),
             steps: [
-                { title: 'Configure', text: 'Select model source and start with a low threshold like 0.03' },
-                { title: 'Runtime', text: 'Check the runtime banner first. If it says ready, you can run Kaloscope directly.' },
-                { title: 'Identify', text: 'Click "Identify All Images" to analyze your library' },
-                { title: 'Explore', text: 'Browse identified artists and their images' },
-                { title: 'Filter', text: 'Use artist names to filter in Gallery' },
+                { title: t('guide.artistStep1Title'), text: t('guide.artistStep1Text') },
+                { title: t('guide.artistStep2Title'), text: t('guide.artistStep2Text') },
+                { title: t('guide.artistStep3Title'), text: t('guide.artistStep3Text') },
+                { title: t('guide.artistStep4Title'), text: t('guide.artistStep4Text') },
+                { title: t('guide.artistStep5Title'), text: t('guide.artistStep5Text') },
             ],
-            note: 'Kaloscope usually needs a low threshold such as 0.02-0.08. Higher values often turn everything into "undefined".',
+            note: t('guide.artistNote'),
+            closeLabel: t('guide.closeLabel'),
             maxWidth: '480px',
         });
 

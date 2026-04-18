@@ -14,7 +14,7 @@
     padding: 18px;
     width: min(100%, 1680px);
     margin: 0 auto;
-    align-items: start;
+    align-items: stretch;
 }
 
 .promptlab-browser,
@@ -402,7 +402,7 @@
     min-height: calc(100vh - var(--nav-height) - 32px);
     padding: 18px;
     gap: 18px;
-    width: min(100%, 1680px);
+    width: min(100%, 1400px);
     margin: 0 auto;
 }
 
@@ -560,7 +560,7 @@
     padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
 }
 
 .similar-score {
@@ -575,6 +575,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.similar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.similar-actions .btn {
+    flex: 1 1 auto;
 }
 
 .duplicate-pair {
@@ -615,6 +625,11 @@
     max-width: 150px;
     margin-left: auto;
     margin-right: auto;
+}
+
+.dup-image .similar-actions {
+    justify-content: center;
+    margin-top: 6px;
 }
 
 .dup-score {
@@ -712,7 +727,7 @@
     min-height: calc(100vh - var(--nav-height) - 32px);
     padding: 18px;
     gap: 18px;
-    width: min(100%, 1680px);
+    width: min(100%, 1400px);
     margin: 0 auto;
 }
 
@@ -1095,6 +1110,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.artist-image-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.artist-image-action {
+    font-size: 10px;
+    line-height: 1;
+    padding: 4px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
 }
 
 .preview-placeholder {

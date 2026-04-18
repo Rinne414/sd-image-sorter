@@ -143,8 +143,15 @@ else
     echo
 fi
 
-echo "[Info] Checking local model readiness..."
-backend/venv/bin/python backend/model_health.py
+echo "[Info] Checking ONNX Runtime package state..."
+backend/venv/bin/python backend/repair_onnxruntime.py --auto || {
+    echo "[WARN] Could not auto-repair ONNX Runtime package state."
+    echo "       The app can still start, but WD14 tagging may stay on CPU."
+}
+echo
+
+echo "[Info] Checking startup readiness..."
+backend/venv/bin/python backend/model_health.py --startup
 echo
 
 if [ "$FIRST_RUN" -eq 1 ]; then

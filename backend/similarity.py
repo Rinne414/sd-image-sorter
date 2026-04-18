@@ -5,6 +5,7 @@ Generates 512-dim CLIP embeddings per image and stores them in SQLite.
 Supports finding similar images by ID, by upload, and finding duplicates.
 """
 import io
+import heapq
 import logging
 import os
 import tempfile
@@ -348,8 +349,12 @@ class SimilarityIndex:
         }
 
     def search_by_id(
-        self, image_id: int, limit: int = SIMILARITY_DEFAULT_LIMIT, threshold: float = SIMILARITY_DEFAULT_THRESHOLD
-    ) -> List[Dict[str, Any]]:
+        self,
+        image_id: int,
+        limit: int = SIMILARITY_DEFAULT_LIMIT,
+        threshold: float = SIMILARITY_DEFAULT_THRESHOLD,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
         """Find images similar to a given image ID."""
         with self.db.get_db() as conn:
             cursor = conn.cursor()
@@ -371,11 +376,23 @@ class SimilarityIndex:
             )
             candidates = cursor.fetchall()
 
-        return self._rank_candidates(query_emb, candidates, limit, threshold)
+        ranked = self._rank_candidates(query_emb, candidates, threshold)
+        page, total, has_more = self._paginate_ranked_results(ranked, limit, offset)
+        return {
+            "results": page,
+            "total": total,
+            "has_more": has_more,
+            "offset": offset,
+            "limit": limit,
+        }
 
     def search_by_upload(
-        self, image_data: bytes, limit: int = SIMILARITY_DEFAULT_LIMIT, threshold: float = SIMILARITY_DEFAULT_THRESHOLD
-    ) -> List[Dict[str, Any]]:
+        self,
+        image_data: bytes,
+        limit: int = SIMILARITY_DEFAULT_LIMIT,
+        threshold: float = SIMILARITY_DEFAULT_THRESHOLD,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
         """Find images similar to an uploaded image."""
         try:
             pil_image = Image.open(io.BytesIO(image_data))
@@ -394,11 +411,22 @@ class SimilarityIndex:
             )
             candidates = cursor.fetchall()
 
-        return self._rank_candidates(query_emb, candidates, limit, threshold)
+        ranked = self._rank_candidates(query_emb, candidates, threshold)
+        page, total, has_more = self._paginate_ranked_results(ranked, limit, offset)
+        return {
+            "results": page,
+            "total": total,
+            "has_more": has_more,
+            "offset": offset,
+            "limit": limit,
+        }
 
     def find_duplicates(
-        self, threshold: float = DUPLICATE_THRESHOLD, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+        self,
+        threshold: float = DUPLICATE_THRESHOLD,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
         """Find near-duplicate image pairs above similarity threshold."""
         with self.db.get_db() as conn:
             cursor = conn.cursor()
@@ -421,9 +449,14 @@ class SimilarityIndex:
         norms[norms == 0] = 1
         normalized = embeddings / norms
 
-        # Find pairs above threshold using matrix multiplication
-        # Process in chunks to avoid memory issues
-        duplicates = []
+        # Find the globally best duplicates above threshold using a bounded heap.
+        # This avoids the old "stop when limit is reached" behavior that could
+        # silently hide better matches later in the scan.
+        total_matches = 0
+        top_matches_heap: List[Tuple[float, int, int, Dict[str, Any]]] = []
+        page_limit = max(1, limit)
+        page_offset = max(0, offset)
+        keep_count = page_limit + page_offset + 1
         chunk_size = DUPLICATE_CHUNK_SIZE
 
         for i in range(0, len(rows), chunk_size):
@@ -442,7 +475,8 @@ class SimilarityIndex:
 
                         sim = float(sim_matrix[ci, cj])
                         if sim >= threshold:
-                            duplicates.append({
+                            total_matches += 1
+                            pair = {
                                 "image_a": {
                                     "id": ids[actual_i],
                                     "path": paths[actual_i],
@@ -454,22 +488,35 @@ class SimilarityIndex:
                                     "filename": filenames[actual_j],
                                 },
                                 "similarity": round(sim, 4),
-                            })
+                            }
 
-                            if len(duplicates) >= limit:
-                                return sorted(
-                                    duplicates,
-                                    key=lambda x: x["similarity"],
-                                    reverse=True,
-                                )
+                            if len(top_matches_heap) < keep_count:
+                                heapq.heappush(top_matches_heap, (sim, ids[actual_i], ids[actual_j], pair))
+                            elif sim > top_matches_heap[0][0]:
+                                heapq.heapreplace(top_matches_heap, (sim, ids[actual_i], ids[actual_j], pair))
 
-        return sorted(duplicates, key=lambda x: x["similarity"], reverse=True)
+        ranked_duplicates = [
+            pair for _similarity, _id_a, _id_b, pair in sorted(
+                top_matches_heap,
+                key=lambda item: item[0],
+                reverse=True,
+            )
+        ]
+        page = ranked_duplicates[page_offset:page_offset + page_limit]
+        has_more = total_matches > (page_offset + len(page))
+        return {
+            "duplicates": page,
+            "total": total_matches,
+            "has_more": has_more,
+            "offset": page_offset,
+            "limit": page_limit,
+            "threshold": threshold,
+        }
 
     def _rank_candidates(
         self,
         query_emb: np.ndarray,
         candidates: list,
-        limit: int,
         threshold: float,
     ) -> List[Dict[str, Any]]:
         """Rank candidate images by similarity to query embedding."""
@@ -499,7 +546,21 @@ class SimilarityIndex:
                 })
 
         results.sort(key=lambda x: x["similarity"], reverse=True)
-        return results[:limit]
+        return results
+
+    def _paginate_ranked_results(
+        self,
+        ranked_results: List[Dict[str, Any]],
+        limit: int,
+        offset: int,
+    ) -> Tuple[List[Dict[str, Any]], int, bool]:
+        """Slice an already-ranked result list and report pagination metadata."""
+        page_limit = max(1, limit)
+        page_offset = max(0, offset)
+        total = len(ranked_results)
+        page = ranked_results[page_offset:page_offset + page_limit]
+        has_more = total > (page_offset + len(page))
+        return page, total, has_more
 
 
 # Singleton

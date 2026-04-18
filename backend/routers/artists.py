@@ -114,6 +114,9 @@ class ArtistImageResponse(BaseModel):
 class ArtistImageListResponse(BaseModel):
     artist: str
     total: int
+    limit: int
+    offset: int
+    has_more: bool
     images: List[ArtistImageResponse]
 
 
@@ -535,7 +538,6 @@ async def get_stats():
             WHERE artist != 'undefined'
             GROUP BY artist
             ORDER BY count DESC
-            LIMIT 50
         """)
         artist_counts = {}
         artist_stats: Dict[str, Dict[str, float]] = {}
@@ -560,7 +562,8 @@ async def get_stats():
 @router.get("/images/{artist_name}", response_model=ArtistImageListResponse)
 async def get_artist_images(
     artist_name: str,
-    limit: int = Query(default=24, ge=1, le=200),
+    limit: int = Query(default=120, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
 ):
     """Return images identified for a specific artist ordered by confidence."""
     import database as db
@@ -589,8 +592,9 @@ async def get_artist_images(
             WHERE ap.artist = ?
             ORDER BY ap.confidence DESC, i.created_at DESC, i.id DESC
             LIMIT ?
+            OFFSET ?
             """,
-            (safe_artist, limit),
+            (safe_artist, limit, offset),
         )
         rows = cursor.fetchall()
 
@@ -606,7 +610,14 @@ async def get_artist_images(
         for row in rows
     ]
 
-    return ArtistImageListResponse(artist=safe_artist, total=total, images=images)
+    return ArtistImageListResponse(
+        artist=safe_artist,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=(offset + len(images)) < total,
+        images=images,
+    )
 
 
 @router.get("/list")

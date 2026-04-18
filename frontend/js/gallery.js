@@ -87,6 +87,15 @@ const Gallery = {
     currentPreviewIndex: -1,
     currentPreviewRequestId: 0,
     showAllTags: false,
+    modalSectionState: {
+        prompt: false,
+        negative: false,
+        params: false,
+        loras: false,
+        nodes: false,
+        color: true,
+    },
+    _histogramMode: 'rgb',
 
     // Virtual scrolling state
     virtualList: null,
@@ -581,8 +590,12 @@ const Gallery = {
 
         if (!isLarge) {
             const imageTag = isWaterfall
-                ? `<img src="${initialUrl}" alt="${safeFilename}" loading="lazy" decoding="async"${highResAttr}>`
-                : `<img ${imgAttributes} alt="${safeFilename}"${highResAttr}>`;
+                ? `<img src="${initialUrl}" alt="${safeFilename}" loading="lazy" decoding="async" draggable="false"${highResAttr}>`
+                : `<img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>`;
+
+            const aestheticBadge = image.aesthetic_score != null
+                ? `<span class="gallery-item-aesthetic" title="Aesthetic: ${Number(image.aesthetic_score).toFixed(1)}">${Number(image.aesthetic_score).toFixed(1)}</span>`
+                : '';
 
             return `
                 ${imageTag}
@@ -590,6 +603,7 @@ const Gallery = {
                     <span class="gallery-item-generator" style="background: ${generatorColor}">
                         ${this._escapeHtml(image.generator)}
                     </span>
+                    ${aestheticBadge}
                 </div>
             `;
         }
@@ -597,13 +611,28 @@ const Gallery = {
         const rating = this._formatLargeCardRating(image);
         const ratingLabel = rating === 'unrated' ? 'Unrated' : rating.charAt(0).toUpperCase() + rating.slice(1);
         const checkpoint = String(image?.checkpoint || '').trim() || 'No checkpoint';
+        const checkpointLabel = checkpoint
+            ? checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt|pt|pth|bin)$/i, '') || checkpoint
+            : 'No checkpoint';
         const sizeLabel = image.width && image.height ? `${image.width}x${image.height}` : 'Unknown size';
         const aspectLabel = this._formatLargeCardAspect(image);
         const promptPreview = this._truncateLargeCardPrompt(image.prompt);
+        const pathMeta = (() => {
+            if (!image.path) return '';
+            const dir = image.path.replace(/\\/g, '/').split('/');
+            dir.pop(); // remove filename
+            const last = dir.pop(); // get parent folder
+            const parent = last || '';
+            const fullDir = dir.length ? `${dir.join('/')}/${parent}` : parent;
+            return {
+                parent,
+                fullDir,
+            };
+        })();
 
         return `
             <div class="gallery-item-media">
-                <img ${imgAttributes} alt="${safeFilename}"${highResAttr}>
+                <img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>
             </div>
             <div class="gallery-item-large-meta">
                 <div class="gallery-item-large-top">
@@ -617,12 +646,19 @@ const Gallery = {
                 <div class="gallery-item-title" title="${safeFilename}">
                     ${safeFilename}
                 </div>
+                ${pathMeta?.parent ? `
+                    <div class="gallery-item-subfolder" title="${this._escapeHtml(image.path || '')}">
+                        <span class="gallery-item-subfolder-label">${this._t('modal.folder', null, 'Folder')}</span>
+                        <span class="gallery-item-subfolder-name">${this._escapeHtml(pathMeta.parent)}</span>
+                    </div>
+                ` : ''}
+                ${pathMeta?.fullDir ? `<div class="gallery-item-path" title="${this._escapeHtml(image.path || '')}">${this._escapeHtml(pathMeta.fullDir)}</div>` : ''}
                 <div class="gallery-item-subline">
                     <span>${this._escapeHtml(sizeLabel)}</span>
                     <span>${this._escapeHtml(aspectLabel)}</span>
                 </div>
                 <div class="gallery-item-checkpoint" title="${this._escapeHtml(checkpoint)}">
-                    ${this._escapeHtml(checkpoint)}
+                    ${this._escapeHtml(checkpointLabel)}
                 </div>
                 <div class="gallery-item-prompt" title="${this._escapeHtml(promptPreview)}">
                     ${this._escapeHtml(promptPreview)}
@@ -733,6 +769,11 @@ const Gallery = {
             }
         });
 
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._showContextMenu(e, image);
+        });
+
         item.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
@@ -745,14 +786,15 @@ const Gallery = {
         });
 
         item.addEventListener('dragstart', (e) => {
-            const API = getRequiredGalleryAPI();
-            const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
+            // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata
+            const imgUrl = `/api/image-file/${image.id}`;
             const absoluteUrl = new URL(imgUrl, window.location.origin).href;
+            const originalFilename = image.filename || `image_${image.id}.png`;
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
             e.dataTransfer.setData('text/plain', absoluteUrl);
-            const mimeType = image.filename.toLowerCase().endsWith('.png') ? 'image/png' :
-                image.filename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-            e.dataTransfer.setData('DownloadURL', `${mimeType}:${image.filename}:${absoluteUrl}`);
+            const mimeType = originalFilename.toLowerCase().endsWith('.png') ? 'image/png' :
+                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+            e.dataTransfer.setData('DownloadURL', `${mimeType}:${originalFilename}:${absoluteUrl}`);
             const img = item.querySelector('img');
             if (img && img.src) {
                 e.dataTransfer.setDragImage(img, 50, 50);
@@ -1103,12 +1145,23 @@ const Gallery = {
             false
         );
 
+        // Prevent the browser from dragging the rendered thumbnail/webp directly.
+        // We always want the gallery card drag payload to point at the original file URL.
+        item.querySelectorAll('img').forEach((img) => {
+            img.draggable = false;
+        });
+
         item.addEventListener('click', () => {
             if (AppState.selectionMode) {
                 this.toggleSelection(image.id);
             } else {
                 this.openPreview(image.id);
             }
+        });
+
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this._showContextMenu(e, image);
         });
 
         // Keyboard navigation: Enter/Space to open preview or toggle selection
@@ -1124,14 +1177,15 @@ const Gallery = {
         });
 
         item.addEventListener('dragstart', (e) => {
-            const API = getRequiredGalleryAPI();
-            const imgUrl = API?.getImageUrl?.(image.id) ?? `/api/image-file/${image.id}`;
+            // Use full image URL (not thumbnail) so ComfyUI gets the original with workflow metadata
+            const imgUrl = `/api/image-file/${image.id}`;
             const absoluteUrl = new URL(imgUrl, window.location.origin).href;
+            const originalFilename = image.filename || `image_${image.id}.png`;
             e.dataTransfer.setData('text/uri-list', absoluteUrl);
             e.dataTransfer.setData('text/plain', absoluteUrl);
-            const mimeType = image.filename.toLowerCase().endsWith('.png') ? 'image/png' :
-                image.filename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-            e.dataTransfer.setData('DownloadURL', `${mimeType}:${image.filename}:${absoluteUrl}`);
+            const mimeType = originalFilename.toLowerCase().endsWith('.png') ? 'image/png' :
+                originalFilename.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+            e.dataTransfer.setData('DownloadURL', `${mimeType}:${originalFilename}:${absoluteUrl}`);
             const img = item.querySelector('img');
             if (img && img.src) {
                 e.dataTransfer.setDragImage(img, 50, 50);
@@ -1857,8 +1911,36 @@ const Gallery = {
         if (image.checkpoint) {
             cpItem.style.display = '';
             cpText.textContent = image.checkpoint;
+            // Make checkpoint clickable to filter
+            cpText.classList.add('modal-checkpoint-clickable');
+            cpText.style.cursor = 'pointer';
+            cpText.onclick = () => {
+                const AppState = window.App?.AppState;
+                if (AppState && image.checkpoint) {
+                    if (!AppState.filters.checkpoints.includes(image.checkpoint)) {
+                        AppState.filters.checkpoints = [...AppState.filters.checkpoints, image.checkpoint];
+                    }
+                    const closeModal = window.App?.closeModal || window.closeModal;
+                    closeModal?.('image-modal');
+                    window.App?.updateFilterSummary?.();
+                    window.App?.loadImages?.();
+                }
+            };
         } else {
             cpItem.style.display = 'none';
+        }
+
+        // --- Aesthetic Score ---
+        const aeItem = $('#modal-aesthetic-item');
+        const aeText = $('#modal-aesthetic-score');
+        if (aeItem && aeText) {
+            if (image.aesthetic_score != null) {
+                aeItem.style.display = '';
+                aeText.textContent = `${Number(image.aesthetic_score).toFixed(2)} / 10`;
+                aeText.style.color = image.aesthetic_score >= 6 ? '#22c55e' : image.aesthetic_score >= 4 ? '#f59e0b' : '#ef4444';
+            } else {
+                aeItem.style.display = 'none';
+            }
         }
 
         // --- img2img Badge ---
@@ -1911,7 +1993,23 @@ const Gallery = {
         }
         if (Array.isArray(loras) && loras.length > 0) {
             lorasSection.style.display = '';
-            lorasList.innerHTML = loras.map(l => `<span class="lora-pill">${window.escapeHtml(l)}</span>`).join('');
+            lorasList.innerHTML = loras.map(l => `<span class="lora-pill modal-lora-clickable" data-lora="${window.escapeHtml(l)}">${window.escapeHtml(l)}</span>`).join('');
+            // Attach click handlers to filter by LoRA
+            lorasList.querySelectorAll('.modal-lora-clickable').forEach(el => {
+                el.addEventListener('click', () => {
+                    const lora = el.dataset.lora;
+                    const AppState = window.App?.AppState;
+                    if (AppState && lora) {
+                        if (!AppState.filters.loras.includes(lora)) {
+                            AppState.filters.loras = [...AppState.filters.loras, lora];
+                        }
+                        const closeModal = window.App?.closeModal || window.closeModal;
+                        closeModal?.('image-modal');
+                        window.App?.updateFilterSummary?.();
+                        window.App?.loadImages?.();
+                    }
+                });
+            });
         } else {
             lorasSection.style.display = 'none';
             lorasList.innerHTML = '';
@@ -2027,6 +2125,7 @@ const Gallery = {
 
             const target = document.getElementById(targetId);
             if (!target) return;
+            const collapseKey = toggle.dataset.collapseKey;
 
             const icon = toggle.querySelector('.collapse-icon');
             const isCollapsed = target.style.display === 'none';
@@ -2035,11 +2134,39 @@ const Gallery = {
                 target.style.display = '';
                 if (icon) icon.textContent = '▼';
                 toggle.classList.remove('section-collapsed');
+                if (collapseKey) this.modalSectionState[collapseKey] = true;
             } else {
                 target.style.display = 'none';
                 if (icon) icon.textContent = '▶';
                 toggle.classList.add('section-collapsed');
+                if (collapseKey) this.modalSectionState[collapseKey] = false;
             }
+        });
+
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('.modal-color-mode-btn');
+            if (!button) return;
+            this._histogramMode = button.dataset.histogramMode || 'rgb';
+            document.querySelectorAll('.modal-color-mode-btn').forEach((node) => {
+                node.classList.toggle('active', node === button);
+            });
+            const imgEl = document.getElementById('modal-image');
+            if (imgEl) this._extractColorDistribution(imgEl);
+        });
+    },
+
+    _applyModalSectionStates() {
+        document.querySelectorAll('#image-modal .section-toggle').forEach((toggle) => {
+            const targetId = toggle.dataset.target;
+            const collapseKey = toggle.dataset.collapseKey;
+            if (!targetId || !collapseKey) return;
+            const target = document.getElementById(targetId);
+            if (!target) return;
+            const expanded = this.modalSectionState[collapseKey] !== false;
+            target.style.display = expanded ? '' : 'none';
+            toggle.classList.toggle('section-collapsed', !expanded);
+            const icon = toggle.querySelector('.collapse-icon');
+            if (icon) icon.textContent = expanded ? '▼' : '▶';
         });
     },
 
@@ -2138,6 +2265,7 @@ const Gallery = {
 
         const sections = [
             ['Filename', image?.filename],
+            ['Path', image?.path],
             ['Generator', image?.generator],
             ['Size', image?.width && image?.height ? `${image.width}x${image.height}` : null],
             ['Prompt', currentPromptView?.promptText ?? image?.prompt],
@@ -2158,6 +2286,13 @@ ${String(value)}`)
     async openPreview(imageId) {
         const { $, showModal, formatSize, showToast } = getGalleryAppContext();
         const API = getRequiredGalleryAPI();
+
+        // Reset zoom/pan transform when opening a new preview (including adjacent navigation)
+        const modalImgReset = $('#modal-image');
+        if (modalImgReset) {
+            modalImgReset.style.transform = '';
+            modalImgReset.style.cursor = 'default';
+        }
 
         this._initSectionToggles();
         const summaryImage = this.images.find(image => image.id === imageId) || window.App?.AppState?.images?.find(image => image.id === imageId);
@@ -2200,6 +2335,8 @@ ${String(value)}`)
         });
         document.querySelector('#modal-key-params').style.display = 'none';
         document.querySelector('#modal-checkpoint-item').style.display = 'none';
+        const aeItemReset = document.querySelector('#modal-aesthetic-item');
+        if (aeItemReset) aeItemReset.style.display = 'none';
         document.querySelector('#modal-img2img-badge').style.display = 'none';
         document.querySelector('#modal-loras-list').innerHTML = '';
         document.querySelector('#modal-characters-list').innerHTML = '';
@@ -2271,8 +2408,95 @@ ${String(value)}`)
             this._t('modal.paramsCopied', null, 'Params copied')
         );
         $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), this._t('modal.allCopied', null, 'All metadata copied'));
+        $('#btn-open-folder').onclick = async () => {
+            const image = this._lastModalImage;
+            if (!image?.id) return;
+            try {
+                const API = getRequiredGalleryAPI();
+                await API.openFolder(image.id);
+            } catch (error) {
+                showToast?.(this._t('modal.openFolderFailed', null, 'Failed to open folder'), 'error');
+            }
+        };
 
         showModal?.('image-modal');
+
+        // Zoom/pan for modal image
+        {
+            const modalImg = $('#modal-image');
+            let scale = 1;
+            let translateX = 0;
+            let translateY = 0;
+            let isPanning = false;
+            let startX = 0;
+            let startY = 0;
+
+            const resetZoom = () => {
+                scale = 1;
+                translateX = 0;
+                translateY = 0;
+                modalImg.style.transform = '';
+                modalImg.style.cursor = 'default';
+            };
+
+            // Remove previous listeners by replacing the element reference
+            // (use a fresh set of closures each time openPreview is called)
+            if (this._zoomWheelHandler) {
+                modalImg.removeEventListener('wheel', this._zoomWheelHandler);
+            }
+            if (this._zoomMousedownHandler) {
+                modalImg.removeEventListener('mousedown', this._zoomMousedownHandler);
+            }
+            if (this._zoomDblclickHandler) {
+                modalImg.removeEventListener('dblclick', this._zoomDblclickHandler);
+            }
+            if (this._zoomMousemoveHandler) {
+                document.removeEventListener('mousemove', this._zoomMousemoveHandler);
+            }
+            if (this._zoomMouseupHandler) {
+                document.removeEventListener('mouseup', this._zoomMouseupHandler);
+            }
+
+            this._zoomWheelHandler = (e) => {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                scale = Math.max(0.5, Math.min(scale * delta, 10));
+                if (Math.abs(scale - 1) < 0.05) { resetZoom(); return; }
+                modalImg.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+                modalImg.style.cursor = scale > 1 ? 'grab' : 'default';
+            };
+
+            this._zoomMousedownHandler = (e) => {
+                if (scale <= 1) return;
+                isPanning = true;
+                startX = e.clientX - translateX;
+                startY = e.clientY - translateY;
+                modalImg.style.cursor = 'grabbing';
+                e.preventDefault();
+            };
+
+            this._zoomMousemoveHandler = (e) => {
+                if (!isPanning) return;
+                translateX = e.clientX - startX;
+                translateY = e.clientY - startY;
+                modalImg.style.transform = `scale(${scale}) translate(${translateX}px, ${translateY}px)`;
+            };
+
+            this._zoomMouseupHandler = () => {
+                if (isPanning) {
+                    isPanning = false;
+                    modalImg.style.cursor = scale > 1 ? 'grab' : 'default';
+                }
+            };
+
+            this._zoomDblclickHandler = resetZoom;
+
+            modalImg.addEventListener('wheel', this._zoomWheelHandler, { passive: false });
+            modalImg.addEventListener('mousedown', this._zoomMousedownHandler);
+            document.addEventListener('mousemove', this._zoomMousemoveHandler);
+            document.addEventListener('mouseup', this._zoomMouseupHandler);
+            modalImg.addEventListener('dblclick', this._zoomDblclickHandler);
+        }
 
         try {
             const result = await API.getImage(imageId);
@@ -2298,6 +2522,22 @@ ${String(value)}`)
         }
 
         $('#modal-filename').textContent = image.filename;
+        const pathEl = $('#modal-file-path');
+        const subfolderEl = $('#modal-file-subfolder');
+        if (pathEl) {
+            const normalizedPath = String(image.path || '');
+            const pathParts = normalizedPath.replace(/\\/g, '/').split('/');
+            pathParts.pop();
+            const parentFolder = pathParts.pop() || '';
+            pathEl.textContent = normalizedPath;
+            pathEl.title = image.path || '';
+            if (subfolderEl) {
+                subfolderEl.textContent = parentFolder || '';
+                subfolderEl.title = parentFolder || '';
+                subfolderEl.style.display = parentFolder ? '' : 'none';
+            }
+            pathEl.closest('.modal-path-row')?.style.setProperty('display', image.path ? '' : 'none');
+        }
         $('#modal-generator').textContent = image.generator.toUpperCase();
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
         $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');
@@ -2310,8 +2550,147 @@ ${String(value)}`)
         this._renderModalTags(tags);
         this._renderModalCaption(image);
         this._applyModalPromptView(this._buildPromptView(image, parsedData, 'original'));
+        this._applyModalSectionStates();
         $('#modal-loading-state').style.display = 'none';
         $('#btn-toggle-all-tags').textContent = this._t('modal.showMore', null, 'Show More');
+
+        // Extract and display color distribution
+        this._extractColorDistribution($('#modal-image'));
+    },
+
+    _extractColorDistribution(imgEl) {
+        const container = document.getElementById('modal-color-distribution');
+        const histCanvas = document.getElementById('modal-color-histogram-canvas');
+        const paletteEl = document.getElementById('modal-color-palette');
+        if (!container || !histCanvas || !paletteEl || !imgEl) return;
+
+        const extract = () => {
+            try {
+                // Sample the image at a reasonable size
+                const sampleCanvas = document.createElement('canvas');
+                const sampleSize = 128;
+                sampleCanvas.width = sampleSize;
+                sampleCanvas.height = sampleSize;
+                const sampleCtx = sampleCanvas.getContext('2d');
+                sampleCtx.drawImage(imgEl, 0, 0, sampleSize, sampleSize);
+                const data = sampleCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+                const totalPixels = sampleSize * sampleSize;
+
+                // === RGB Histogram ===
+                const rHist = new Uint32Array(256);
+                const gHist = new Uint32Array(256);
+                const bHist = new Uint32Array(256);
+                const lHist = new Uint32Array(256); // luminance
+
+                // Color palette buckets
+                const buckets = {};
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    rHist[r]++;
+                    gHist[g]++;
+                    bHist[b]++;
+                    lHist[Math.round(0.299 * r + 0.587 * g + 0.114 * b)]++;
+
+                    // Bucket for palette
+                    const br = Math.round(r / 32) * 32;
+                    const bg = Math.round(g / 32) * 32;
+                    const bb = Math.round(b / 32) * 32;
+                    const key = `${br},${bg},${bb}`;
+                    if (!buckets[key]) buckets[key] = { count: 0, sumR: 0, sumG: 0, sumB: 0 };
+                    buckets[key].count++;
+                    buckets[key].sumR += r;
+                    buckets[key].sumG += g;
+                    buckets[key].sumB += b;
+                }
+
+                // Draw histogram on canvas
+                const rect = histCanvas.parentElement.getBoundingClientRect();
+                const w = Math.max(256, Math.floor(rect.width * (window.devicePixelRatio || 1)));
+                const h = Math.max(60, Math.floor(80 * (window.devicePixelRatio || 1)));
+                histCanvas.width = w;
+                histCanvas.height = h;
+                const ctx = histCanvas.getContext('2d');
+                ctx.clearRect(0, 0, w, h);
+
+                // Find max value for normalization (skip 0 and 255 to avoid clipping spikes)
+                let maxVal = 1;
+                for (let i = 1; i < 255; i++) {
+                    maxVal = Math.max(maxVal, rHist[i], gHist[i], bHist[i]);
+                }
+
+                const drawChannel = (hist, color) => {
+                    ctx.beginPath();
+                    ctx.moveTo(0, h);
+                    for (let i = 0; i < 256; i++) {
+                        const x = (i / 255) * w;
+                        const barH = Math.min(h, (hist[i] / maxVal) * h * 0.92);
+                        ctx.lineTo(x, h - barH);
+                    }
+                    ctx.lineTo(w, h);
+                    ctx.closePath();
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                };
+
+                const mode = this._histogramMode || 'rgb';
+                if (mode === 'luma') {
+                    drawChannel(lHist, 'rgba(255,255,255,0.2)');
+                } else if (mode === 'split') {
+                    const drawLine = (hist, color, bandIndex) => {
+                        const bandHeight = h / 3;
+                        const bandTop = bandHeight * bandIndex;
+                        ctx.beginPath();
+                        ctx.moveTo(0, bandTop + bandHeight);
+                        for (let i = 0; i < 256; i++) {
+                            const x = (i / 255) * w;
+                            const barH = Math.min(bandHeight, (hist[i] / maxVal) * bandHeight * 0.92);
+                            ctx.lineTo(x, bandTop + bandHeight - barH);
+                        }
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    };
+                    drawLine(rHist, 'rgba(239,68,68,0.95)', 0);
+                    drawLine(gHist, 'rgba(52,211,153,0.95)', 1);
+                    drawLine(bHist, 'rgba(66,133,244,0.95)', 2);
+                } else {
+                    drawChannel(lHist, 'rgba(255,255,255,0.08)');
+                    drawChannel(bHist, 'rgba(66,133,244,0.35)');
+                    drawChannel(gHist, 'rgba(52,211,153,0.35)');
+                    drawChannel(rHist, 'rgba(239,68,68,0.35)');
+                }
+
+                // === Color Palette ===
+                const sorted = Object.values(buckets)
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 9);
+                const paletteTotal = sorted.reduce((s, b) => s + b.count, 0);
+
+                paletteEl.innerHTML = sorted.map(b => {
+                    const avgR = Math.round(b.sumR / b.count);
+                    const avgG = Math.round(b.sumG / b.count);
+                    const avgB = Math.round(b.sumB / b.count);
+                    const hex = '#' + [avgR, avgG, avgB].map(v => v.toString(16).padStart(2, '0')).join('');
+                    const pct = ((b.count / paletteTotal) * 100).toFixed(1);
+                    return `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Click to copy ${hex}">
+                        <span class="swatch-dot" style="background:${hex}"></span>
+                        <span>${hex}</span>
+                        <span style="opacity:0.5">${pct}%</span>
+                    </div>`;
+                }).join('');
+
+                container.style.display = '';
+            } catch (e) {
+                container.style.display = 'none';
+            }
+        };
+
+        if (imgEl.complete && imgEl.naturalWidth > 0) {
+            extract();
+        } else {
+            imgEl.addEventListener('load', extract, { once: true });
+        }
     },
 
     openAdjacentPreview(direction) {
@@ -2319,6 +2698,77 @@ ${String(value)}`)
         const nextIndex = this.currentPreviewIndex + direction;
         if (nextIndex < 0 || nextIndex >= this.images.length) return;
         this.openPreview(this.images[nextIndex].id);
+    },
+
+    /**
+     * Show a context menu on right-click for a gallery item
+     * @param {MouseEvent} e - The contextmenu event
+     * @param {Object} image - The image data object
+     */
+    _showContextMenu(e, image) {
+        // Remove existing menu
+        document.querySelector('.gallery-context-menu')?.remove();
+        const t = (key, fallback, params) => window.I18n?.t?.(key, params) || fallback;
+
+        const menu = document.createElement('div');
+        menu.className = 'gallery-context-menu';
+        menu.style.left = `${e.clientX}px`;
+        menu.style.top = `${e.clientY}px`;
+
+        const items = [
+            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: '\u{1F4C2}', action: () => {
+                window.App?.API?.openFolder?.(image.id);
+            }},
+            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: '\u{1F4CB}', action: () => {
+                navigator.clipboard.writeText(image.path || '');
+                window.App?.showToast?.(t('gallery.pathCopied', 'Path copied'), 'success');
+            }},
+            { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
+                if (image.checkpoint && window.App?.AppState) {
+                    const f = window.App.AppState.filters;
+                    if (!f.checkpoints.includes(image.checkpoint)) {
+                        f.checkpoints = [...f.checkpoints, image.checkpoint];
+                    }
+                    window.App.updateFilterSummary?.();
+                    window.App.loadImages?.();
+                }
+            }},
+            { label: t('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
+                if (typeof window.App?.addToCensorQueue === 'function') {
+                    window.App.addToCensorQueue([image.id]);
+                } else if (typeof window.App?._addToCensorQueue === 'function') {
+                    window.App._addToCensorQueue([image.id]);
+                } else {
+                    window.App?.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
+                }
+            }},
+        ];
+
+        menu.innerHTML = items.map(i =>
+            `<div class="context-menu-item">${i.icon} ${i.label}</div>`
+        ).join('');
+
+        items.forEach((item, idx) => {
+            menu.children[idx].addEventListener('click', () => {
+                item.action();
+                menu.remove();
+            });
+        });
+
+        document.body.appendChild(menu);
+
+        // Adjust position if menu overflows viewport
+        const menuRect = menu.getBoundingClientRect();
+        if (menuRect.right > window.innerWidth) {
+            menu.style.left = `${window.innerWidth - menuRect.width - 8}px`;
+        }
+        if (menuRect.bottom > window.innerHeight) {
+            menu.style.top = `${window.innerHeight - menuRect.height - 8}px`;
+        }
+
+        // Close on click outside
+        const closeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
     },
 
     // Cleanup when switching views

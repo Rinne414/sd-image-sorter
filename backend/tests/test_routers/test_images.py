@@ -126,7 +126,7 @@ class TestGetImages:
 
     def test_sort_by_options(self, test_client, test_db_with_images):
         """Various sort options should work."""
-        sort_options = ["newest", "oldest", "name_asc", "name_desc", "file_size"]
+        sort_options = ["newest", "oldest", "name_asc", "name_desc", "file_size", "aesthetic", "aesthetic_asc"]
 
         for sort_by in sort_options:
             response = test_client.get(f"/api/images?sort_by={sort_by}")
@@ -253,6 +253,28 @@ class TestThumbnailGeneration:
 
         assert response.status_code == 404
 
+
+class TestAestheticEndpoints:
+    """Tests for aesthetic scoring endpoints wired into the image router stack."""
+
+    def test_score_all_returns_total_for_unscored_images(self, test_client, test_db):
+        """Starting background scoring should report how many images need scores."""
+        import database as db
+
+        first_id = db.add_image(path="/tmp/aesthetic-1.png", filename="aesthetic-1.png", metadata_json="{}")
+        second_id = db.add_image(path="/tmp/aesthetic-2.png", filename="aesthetic-2.png", metadata_json="{}")
+
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (6.5, first_id))
+
+        with patch('aesthetic.is_available', return_value=True):
+            response = test_client.post("/api/aesthetic/score-all")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "started"
+        assert data["total"] == 1
+
     def test_thumbnail_size_parameter(self, test_client, test_db_with_images, tmp_path):
         """Thumbnail size parameter should affect output."""
         import database as db
@@ -355,6 +377,54 @@ class TestReparseImage:
 
         # File doesn't exist, should fail with 404
         assert response.status_code == 404
+
+
+class TestUtilityImageEndpoints:
+    """Tests for upload parsing and file explorer helpers."""
+
+    def test_parse_uploaded_image_returns_metadata(self, test_client, mock_comfyui_image):
+        with open(mock_comfyui_image, "rb") as handle:
+            response = test_client.post(
+                "/api/parse-image",
+                files={"file": ("comfyui_image.png", handle, "image/png")},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["generator"] == "comfyui"
+        assert data["checkpoint"]
+        assert isinstance(data["loras"], list)
+        assert data["width"] == 1024
+        assert data["height"] == 768
+
+    def test_open_folder_selects_existing_image(self, test_client, tmp_path, monkeypatch):
+        import database as db
+        from PIL import Image
+        from routers import images as images_router
+
+        image_path = tmp_path / "open-folder-test.png"
+        Image.new("RGB", (32, 32), color="purple").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        calls = []
+        monkeypatch.setattr(images_router.sys, "platform", "win32")
+        monkeypatch.setattr(images_router.subprocess, "Popen", lambda args: calls.append(args) or MagicMock())
+
+        response = test_client.post("/api/open-folder", json={"image_id": image_id})
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        assert calls
+        assert calls[0][0] == "explorer"
+
+    def test_open_folder_requires_image_id(self, test_client):
+        response = test_client.post("/api/open-folder", json={})
+
+        assert response.status_code == 400
 
 
 class TestEdgeCases:

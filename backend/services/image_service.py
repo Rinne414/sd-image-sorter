@@ -40,6 +40,7 @@ VALID_SORT_OPTIONS = [
     "newest", "oldest", "name_asc", "name_desc", "generator", "generator_desc",
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
+    "aesthetic", "aesthetic_asc",
     "random", "file_size", "file_size_asc"
 ]
 VALID_ASPECT_RATIOS = ["square", "landscape", "portrait"]
@@ -103,6 +104,8 @@ class ImageService:
         max_height: Optional[int] = None,
         prompts: Optional[str] = None,
         aspect_ratio: Optional[str] = None,
+        min_aesthetic: Optional[float] = None,
+        max_aesthetic: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -197,6 +200,8 @@ class ImageService:
                 min_height=min_height,
                 max_height=max_height,
                 aspect_ratio=aspect_ratio,
+                min_aesthetic=min_aesthetic,
+                max_aesthetic=max_aesthetic,
             )
             result["next_offset"] = None
             return result
@@ -219,6 +224,8 @@ class ImageService:
             min_height=min_height,
             max_height=max_height,
             aspect_ratio=aspect_ratio,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
         )
 
         has_more = len(images) > limit
@@ -239,6 +246,8 @@ class ImageService:
             min_height=min_height,
             max_height=max_height,
             aspect_ratio=aspect_ratio,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
         )
 
         return {
@@ -353,7 +362,22 @@ class ImageService:
             raise HTTPException(status_code=404, detail="Image not found")
 
         file_path = self.resolve_image_source_path(image_id, image["path"])
-        return FileResponse(file_path)
+        filename = image.get("filename") or os.path.basename(file_path)
+        ext = os.path.splitext(filename)[1].lower()
+        media_types = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".bmp": "image/bmp",
+            ".gif": "image/gif",
+        }
+        return FileResponse(
+            file_path,
+            media_type=media_types.get(ext),
+            filename=filename,
+            content_disposition_type="inline",
+        )
 
     async def get_image_thumbnail(
         self,

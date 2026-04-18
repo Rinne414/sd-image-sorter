@@ -148,8 +148,16 @@ if !NEED_INSTALL! EQU 1 (
     echo.
 )
 
-echo [Info] Checking local model readiness...
-backend\venv\Scripts\python.exe backend\model_health.py
+echo [Info] Checking Windows ONNX Runtime package state...
+backend\venv\Scripts\python.exe backend\repair_onnxruntime.py --auto
+if errorlevel 1 (
+    echo [WARN] Could not auto-repair ONNX Runtime package state.
+    echo        The app can still start, but WD14 tagging may stay on CPU.
+)
+echo.
+
+echo [Info] Checking startup readiness...
+backend\venv\Scripts\python.exe backend\model_health.py --startup
 echo.
 
 echo.

@@ -48,39 +48,40 @@
                     icon: '📁',
                     title: 'Auto-Separate',
                     purpose: [
-                        'Move every image that matches your current filters into a destination folder in one batch operation.',
+                        'Move every image that matches the Auto-Separate filters into a destination folder in one batch operation, without touching the Gallery or Manual Sort filter state.',
                     ],
                     steps: [
-                        'Set the filters you want to target, then open this tab.',
+                        'Open the filter editor here and build the exact Auto-Separate rule set you want.',
+                        'Save a config when this move pattern is something you will reuse later.',
                         'Enter a destination folder and run "Preview Results" first.',
-                        'Review the preview count and example images so you do not move the wrong set.',
-                        'Run "Move Images" only after the preview matches your intent.',
+                        'Review the preview count, sample images, and destination before you move anything.',
                     ],
                     features: [
-                        'Reuses the same filter system as Gallery, so you do not need to rebuild criteria.',
+                        'Keeps its own filter state, so this tab no longer pollutes Gallery or Manual Sort.',
+                        'Saved configs remember both filters and destination presets for repeated cleanup jobs.',
                         'Preview list shows examples before files are moved.',
-                        'Works well for separating generators, ratings, models, prompts, and dimensions.',
+                        'Supports generator, rating, tags, prompts, checkpoints, LoRAs, dimensions, and aesthetic score filters.',
                     ],
                     tips: [
-                        'Preview before every large move. It is the fastest way to catch a bad filter combination.',
-                        'Chinese folder paths are supported by the backend, but keep destination names short enough that Windows path length does not become the real limit.',
+                        'Preview before every large move. It is still the fastest way to catch a bad filter combination.',
+                        'Keep one config per repeated workflow, such as "high-score NAI portraits" or "webui leftovers to archive".',
                     ],
                 },
                 manual: {
                     icon: '🎮',
                     title: 'Manual Sort',
                     purpose: [
-                        'Rapidly triage images into up to four target folders with keyboard-driven sorting.',
+                        'Rapidly triage images into up to four target folders with keyboard-driven sorting, while keeping a dedicated Manual Sort filter state.',
                     ],
                     steps: [
                         'Configure the folders for W, A, S, and D before starting.',
-                        'Optionally narrow the working set with filters so the session only contains the images you care about.',
+                        'Use the Manual Sort filters when you only want to review one slice of the library.',
                         'Start the session and use W/A/S/D to move, Space to skip, and Z to undo.',
                         'Watch the minimap and progress cards to track what is processed, skipped, or still pending.',
                     ],
                     features: [
                         'Four-way folder mapping for fast keep/delete/best/needs-work style workflows.',
-                        'Undo support so a single bad key press does not ruin the session.',
+                        'Undo and redo support so a single bad key press does not ruin the session.',
                         'Resume banner for unfinished sessions.',
                         'Status strip, minimap, and shortcut card for high-speed operation.',
                     ],
@@ -137,23 +138,23 @@
                     icon: '🧪',
                     title: 'Prompt Lab',
                     purpose: [
-                        'Assemble prompts from categories, reusable tag sets, locked slots, and presets.',
+                        'Turn your own library data into usable prompt drafts, recipes, comparisons, and reusable Random/Build starting points.',
                     ],
                     steps: [
-                        'Browse categories on the left and click tags to add them to prompt slots.',
-                        'Adjust weight sliders and lock any slot you want to preserve during randomization.',
-                        'Use tag sets to apply a prepared combination quickly.',
-                        'Generate, validate, copy, or send the result straight into Gallery prompt filtering.',
+                        'Start in Stats when you want to learn what tags, checkpoints, and examples are actually working in your library.',
+                        'Use Compare when you want to extract common prompt structure from two images.',
+                        'Use Build when you want a direct draft from an example image, recipe, or comparison result.',
+                        'Use Random when you want the category builder, but seeded with useful data from your own library.',
                     ],
                     features: [
-                        'Slot-based prompt building instead of one big text box.',
-                        'Randomization that respects locks and category weights.',
-                        'Preset save/load flow for reusable prompt structures.',
-                        'Prompt validation and direct reuse in Gallery.',
+                        'Stats can jump straight into Gallery, Build, Reader, and Random.',
+                        'Compare can build a draft from common prompt tokens instead of only showing a diff.',
+                        'Build supports loading from images, scored examples, and recipe suggestions.',
+                        'Random can now absorb top tags and recipe insights from your own library.',
                     ],
                     tips: [
-                        'If prompts start overflowing the output area in Chinese, switch to a narrower tag selection set instead of forcing everything into one prompt.',
-                        'Use presets for structure and randomize for variation. That keeps results controlled without becoming repetitive.',
+                        'Treat Stats as a decision surface, not just a dashboard. If a card has an action button, use it.',
+                        'Use Build for exact drafts and Random for variation. Switching between them is now part of the intended workflow.',
                     ],
                 },
                 artist: {
@@ -218,39 +219,40 @@
                     icon: '📁',
                     title: '自动分类',
                     purpose: [
-                        '把所有符合当前筛选条件的图片一次性移动到目标文件夹。',
+                        '把所有符合自动分类筛选条件的图片一次性移动到目标文件夹，而且不会再污染图库或手动排序的筛选状态。',
                     ],
                     steps: [
-                        '先设定要命中的筛选条件，再进入这个标签页。',
+                        '先在这里打开筛选器，建立这次自动分类真正要用的规则。',
+                        '如果这是会重复使用的移动规则，先把它保存成配置。',
                         '填写目标文件夹后，先运行“预览结果”。',
-                        '确认数量和示例图片都正确，再执行真正的移动。',
-                        '只有在预览结果完全符合预期时，再点击“移动图片”。',
+                        '确认数量、样例图片和目标路径都正确，再执行真正的移动。',
                     ],
                     features: [
-                        '直接复用图库筛选系统，不需要重复设置规则。',
+                        '现在有独立筛选状态，不需要担心自动分类把图库筛选弄乱。',
+                        '已保存配置会同时记住筛选条件和目标路径。',
                         '正式移动前会先展示样例图片与统计数量。',
-                        '适合按生成器、分级、模型、提示词和尺寸做批量整理。',
+                        '支持生成器、分级、标签、提示词、模型、尺寸和美学分数筛选。',
                     ],
                     tips: [
-                        '每次大批量移动前都先预览，这是发现误筛最快的方法。',
-                        '后端对中文路径是安全的，但 Windows 仍然有路径长度限制，所以目标文件夹不要无限叠层级。',
+                        '每次大批量移动前都先预览，这仍然是发现误筛最快的方法。',
+                        '把重复工作保存成配置，比如“高分 NAI 立绘”或“WebUI 待归档”，后面会省很多时间。',
                     ],
                 },
                 manual: {
                     icon: '🎮',
                     title: '手动排序',
                     purpose: [
-                        '使用键盘把图片快速分流到最多四个目标文件夹里。',
+                        '使用键盘把图片快速分流到最多四个目标文件夹里，同时保留独立的手动排序筛选状态。',
                     ],
                     steps: [
                         '开始前先设置 W、A、S、D 对应的文件夹。',
-                        '可以先用筛选器缩小工作集，只处理这一轮真正想看的图片。',
+                        '需要的话，先用手动排序筛选器缩小工作集，只处理这一轮真正想看的图片。',
                         '开始排序后，使用 W/A/S/D 移动，Space 跳过，Z 撤销。',
                         '结合缩略图小地图和进度统计，随时掌握哪些已经处理、哪些还没处理。',
                     ],
                     features: [
                         '四方向文件夹映射，适合保留、删除、精选、待复查这类高速分类流程。',
-                        '支持撤销，避免一次误按毁掉整轮排序。',
+                        '支持撤销和重做，避免一次误按毁掉整轮排序。',
                         '检测到未完成会话时可直接恢复。',
                         '状态栏、小地图与快捷键卡片适合长时间高频操作。',
                     ],
@@ -307,23 +309,23 @@
                     icon: '🧪',
                     title: '提示词工坊',
                     purpose: [
-                        '通过分类标签、标签集合、锁定槽位和预设来组合提示词。',
+                        '把你自己的图库数据转成可直接使用的提示词草稿、配方、对比结果，以及可复用的 Random / Build 起手模板。',
                     ],
                     steps: [
-                        '在左侧浏览分类，点击标签把它们加入中间的提示词槽位。',
-                        '调整权重，并锁定随机化时不希望变化的槽位。',
-                        '需要快速套用组合时，直接使用标签集合。',
-                        '生成、校验、复制，或者直接把结果送回图库做提示词筛选。',
+                        '想先看规律时，从 Stats 开始，看看你的标签、模型和高分样例到底在做什么。',
+                        '想抽出两张图的共同核心时，用 Compare。',
+                        '想做精确草稿时，用 Build，从图片、配方或 Compare 结果直接起步。',
+                        '想做变化版本时，用 Random，并把 Stats 里的洞察直接塞进去。',
                     ],
                     features: [
-                        '用槽位结构来搭提示词，而不是只靠一个大文本框。',
-                        '随机化会遵守锁定状态和分类权重。',
-                        '可以把当前结构保存成预设，反复复用。',
-                        '可直接校验冲突，并回送图库继续筛图。',
+                        'Stats 里的卡片现在可以直接送去 Gallery、Build、Reader 和 Random。',
+                        'Compare 不只是看 diff，还能直接拿共同 token 建草稿。',
+                        'Build 可以直接吃图片、高分样例和配方建议。',
+                        'Random 可以直接吸收你图库里的高价值标签和配方。',
                     ],
                     tips: [
-                        '如果中文模式下输出区看起来太拥挤，不要硬塞更多标签，先收敛分类组合。',
-                        '最佳做法是“预设负责结构，随机化负责变化”，这样稳定又不会太重复。',
+                        '把 Stats 当成决策面板，而不是统计墙。只要卡片上有动作按钮，就说明这块数据可以直接拿来做下一步。',
+                        'Build 适合精确草稿，Random 适合做变化版本，这两个模式现在本来就应该来回切换使用。',
                     ],
                 },
                 artist: {
@@ -354,8 +356,8 @@
 
     const TAB_ANCHORS = {
         gallery: '#view-gallery .gallery-header',
-        autosep: '#view-autosep .panel-title',
-        manual: '#view-manual .setup-title',
+        autosep: null,
+        manual: null,
         censor: '#view-censor .censor-toolbar-v2',
         similar: '#view-similar .similar-header',
         promptlab: '#view-promptlab .promptlab-builder-header',
@@ -369,9 +371,16 @@
         _openTab: null,
 
         getCurrentTab() {
-            return window.App?.AppState?.currentView
+            const currentView = window.App?.AppState?.currentView
                 || document.querySelector('.view.active')?.id?.replace(/^view-/, '')
                 || 'gallery';
+
+            if (currentView === 'sorting') {
+                const activeSub = document.querySelector('.sorting-sub-tab.active')?.getAttribute('data-sorting-sub');
+                return activeSub === 'manual' ? 'manual' : 'autosep';
+            }
+
+            return currentView;
         },
 
         _lang() {
@@ -668,6 +677,7 @@
             }
 
             Object.entries(TAB_ANCHORS).forEach(([tabName, selector]) => {
+                if (!selector) return;
                 if (document.querySelector(`[data-guide-tab="${tabName}"]`)) return;
 
                 const anchor = document.querySelector(selector);

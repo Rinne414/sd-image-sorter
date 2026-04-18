@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from services.tagging_service import TagRequest, TaggingService  # noqa: E402
 from services.tagging_service import _format_runtime_adjustment_message  # noqa: E402
+from hardware_monitor import recommend_tagger_config  # noqa: E402
 
 
 def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
@@ -76,3 +77,19 @@ def test_runtime_plan_uses_small_gpu_chunks_for_toriigate():
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["fetch_batch_size"] == 2
     assert "multimodal caption backend" in runtime_plan["startup_notice"]
+
+
+def test_hardware_recommendation_prefers_gpu_for_toriigate_with_torch_cuda_only():
+    recommendation = recommend_tagger_config(
+        {
+            "gpu_name": "NVIDIA GeForce RTX 4090",
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 20000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        },
+        model_name="toriigate-0.5",
+    )
+
+    assert recommendation["recommended_use_gpu"] is True
+    assert recommendation["risk_level"] == "low"

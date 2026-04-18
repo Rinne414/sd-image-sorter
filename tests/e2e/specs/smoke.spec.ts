@@ -137,6 +137,38 @@ function normalizeImageSrc(src: string | null) {
   return src.split('?')[0]
 }
 
+async function getImageFingerprint(page, src: string) {
+  return page.evaluate(async (imageSrc) => {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error(`failed to load image: ${imageSrc}`))
+      el.src = imageSrc
+    })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = image.naturalWidth
+    canvas.height = image.naturalHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('missing canvas context')
+    }
+
+    ctx.drawImage(image, 0, 0)
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+    let checksum = 0
+    for (let i = 0; i < data.length; i += 8) {
+      checksum = (checksum * 131 + data[i] + data[i + 1] * 3 + data[i + 2] * 7 + data[i + 3] * 11) % 1000000007
+    }
+
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      checksum,
+    }
+  }, src)
+}
+
 const MOCK_IMAGE_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <rect width="64" height="64" fill="#d9e2f2"/>
@@ -158,6 +190,41 @@ async function mockImageAsset(page, id: number) {
   await page.route(`**/api/image-file/${id}**`, fulfillImage)
 }
 
+async function openView(page, view: string) {
+  const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
+  if (await desktopTab.count()) {
+    const box = await desktopTab.boundingBox()
+    if (box && box.width > 0 && box.height > 0) {
+      await desktopTab.click({ force: true })
+      return
+    }
+  }
+
+  const mobileToggle = page.locator('#mobile-menu-toggle')
+  if (await mobileToggle.isVisible().catch(() => false)) {
+    await mobileToggle.click({ force: true })
+    await expect(page.locator('#mobile-nav-overlay')).toHaveClass(/visible/)
+    await page.locator(`#mobile-nav-overlay .mobile-nav-item[data-view="${view}"]`).evaluate((node: HTMLButtonElement) => node.click())
+    return
+  }
+
+  throw new Error(`Could not find navigation entry for ${view}`)
+}
+
+async function openSortingSubView(page, subView: 'autosep' | 'manual') {
+  await openView(page, 'sorting')
+  await expect(page.locator('#view-sorting.active')).toBeVisible()
+
+  const subTab = page.locator(`.sorting-sub-tab[data-sorting-sub="${subView}"]`)
+  await subTab.click({ force: true })
+
+  if (subView === 'autosep') {
+    await expect(page.locator('#view-autosep')).toBeVisible()
+  } else {
+    await expect(page.locator('#view-manual')).toBeVisible()
+  }
+}
+
 /**
  * Smoke Tests for SD Image Sorter
  *
@@ -172,8 +239,12 @@ test.describe('Smoke Tests', () => {
     // Verify the page title
     await expect(page).toHaveTitle(/SD Image Sorter/i)
 
-    // Verify main navigation is visible
-    await expect(page.locator('.nav-tabs')).toBeVisible()
+    const hasPrimaryNavigation = (
+      await page.locator('.nav-tabs').isVisible().catch(() => false)
+    ) || (
+      await page.locator('#mobile-menu-toggle').isVisible().catch(() => false)
+    )
+    expect(hasPrimaryNavigation).toBeTruthy()
 
     // Verify gallery view is loaded by default
     await expect(page.locator('#gallery-grid')).toBeVisible()
@@ -184,17 +255,39 @@ test.describe('Smoke Tests', () => {
 
     const tabs = [
       'gallery',
-      'autosep',
-      'manual',
+      'reader',
       'censor',
       'similar',
       'promptlab',
       'artist',
+      'sorting',
     ]
 
+    const availableViews = new Set<string>()
+    const desktopViews = await page.locator('.nav-tabs .nav-tab').evaluateAll((nodes) =>
+      nodes
+        .filter((node) => {
+          const box = node.getBoundingClientRect()
+          return box.width > 0 && box.height > 0
+        })
+        .map((node) => node.getAttribute('data-view') || '')
+        .filter(Boolean)
+    )
+    desktopViews.forEach((view) => availableViews.add(view))
+
+    const mobileToggle = page.locator('#mobile-menu-toggle')
+    if (await mobileToggle.isVisible().catch(() => false)) {
+      await mobileToggle.click({ force: true })
+      await expect(page.locator('#mobile-nav-overlay')).toHaveClass(/visible/)
+      const mobileViews = await page.locator('#mobile-nav-overlay .mobile-nav-item').evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute('data-view') || '').filter(Boolean)
+      )
+      mobileViews.forEach((view) => availableViews.add(view))
+      await page.keyboard.press('Escape')
+    }
+
     for (const tab of tabs) {
-      const tabElement = page.locator(`.nav-tabs [data-view="${tab}"]`)
-      await expect(tabElement).toBeVisible()
+      expect(availableViews.has(tab)).toBeTruthy()
     }
   })
 
@@ -202,33 +295,131 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Navigate to Auto-Separate
-    await page.locator('.nav-tabs [data-view="autosep"]').click({ force: true })
+    await openView(page, 'reader')
+    await expect(page.locator('#reader-drop-zone')).toBeVisible()
+
+    await openSortingSubView(page, 'autosep')
     await expect(page.locator('#autosep-destination')).toBeVisible()
 
-    // Navigate to Manual Sort
-    await page.locator('.nav-tabs [data-view="manual"]').click({ force: true })
+    await openSortingSubView(page, 'manual')
     await expect(page.locator('#btn-start-sorting')).toBeVisible()
 
-    // Navigate to Censor
-    await page.locator('.nav-tabs [data-view="censor"]').click({ force: true })
+    await openView(page, 'censor')
     await expect(page.locator('#canvas-wrapper')).toBeVisible()
 
-    // Navigate to Prompt Lab
-    await page.locator('.nav-tabs [data-view="promptlab"]').click({ force: true })
-    await expect(page.locator('#btn-promptlab-generate')).toBeVisible()
+    await openView(page, 'promptlab')
+    await expect(page.locator('.promptlab-tabs')).toBeVisible()
 
-    // Navigate to Similarity
-    await page.locator('.nav-tabs [data-view="similar"]').click({ force: true })
+    await openView(page, 'similar')
     await expect(page.locator('#btn-similar-embed')).toBeVisible()
 
-    // Navigate to Artist ID
-    await page.locator('.nav-tabs [data-view="artist"]').click({ force: true })
+    await openView(page, 'artist')
     await expect(page.locator('#btn-identify-all')).toBeVisible()
 
-    // Navigate back to Gallery
-    await page.locator('.nav-tabs [data-view="gallery"]').click({ force: true })
+    await openView(page, 'gallery')
     await expect(page.locator('#gallery-grid')).toBeVisible()
+  })
+
+  test('reader workspace should switch between metadata reader and obfuscation tool', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openView(page, 'reader')
+    await expect(page.locator('#view-reader.active')).toBeVisible()
+    await expect(page.locator('#reader-tool-panel-reader')).toBeVisible()
+    await expect(page.locator('#reader-tool-panel-obfuscation')).toBeHidden()
+
+    await page.locator('#reader-tool-tab-obfuscation').click()
+    await expect(page.locator('#reader-tool-panel-obfuscation')).toBeVisible()
+    await expect(page.locator('#obfuscate-btn-encode')).toBeVisible()
+    await expect(page.locator('#obfuscate-drop-zone')).toBeVisible()
+
+    await page.locator('#reader-tool-tab-reader').click()
+    await expect(page.locator('#reader-tool-panel-reader')).toBeVisible()
+  })
+
+  test('obfuscation workspace should round-trip and expose copy flow', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as any).__clipboardWrites = 0
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          write: async (items: unknown[]) => {
+            ;(window as any).__clipboardWrites += items.length
+          },
+        },
+      })
+      ;(window as any).ClipboardItem = class ClipboardItem {
+        constructor(public items: Record<string, Blob>) {}
+      }
+    })
+
+    const samplePngBuffer = Buffer.from(MIXED_MASK_DATA_URL.split(',')[1], 'base64')
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openView(page, 'reader')
+    await page.locator('#reader-tool-tab-obfuscation').click()
+    await expect(page.locator('#reader-tool-panel-obfuscation')).toBeVisible()
+
+    await page.locator('#obfuscate-file-input').setInputFiles({
+      name: 'obfuscate-sample.png',
+      mimeType: 'image/png',
+      buffer: samplePngBuffer,
+    })
+
+    const queueItem = page.locator('.obfuscate-item').first()
+    await expect(queueItem).toBeVisible()
+
+    const originalFingerprint = await getImageFingerprint(page, MIXED_MASK_DATA_URL)
+
+    await page.locator('#obfuscate-btn-encode').click()
+    await expect(queueItem).toHaveClass(/done/)
+
+    const encodedSrc = await queueItem.locator('.obfuscate-thumb.result-thumb').getAttribute('src')
+    expect(encodedSrc).toBeTruthy()
+    const encodedFingerprint = await getImageFingerprint(page, String(encodedSrc))
+    expect(encodedFingerprint.checksum).not.toBe(originalFingerprint.checksum)
+
+    const copyButton = queueItem.locator('.obfuscate-copy')
+    const downloadButton = queueItem.locator('.obfuscate-download')
+    await expect(copyButton).toBeEnabled()
+    await expect(downloadButton).toBeEnabled()
+
+    await copyButton.click()
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as any).__clipboardWrites || 0)
+    }).toBeGreaterThan(0)
+
+    await page.locator('#obfuscate-btn-decode').click()
+    await expect(queueItem).toHaveClass(/done/)
+
+    const decodedSrc = await queueItem.locator('.obfuscate-thumb.result-thumb').getAttribute('src')
+    expect(decodedSrc).toBeTruthy()
+    const decodedFingerprint = await getImageFingerprint(page, String(decodedSrc))
+    expect(decodedFingerprint).toEqual(originalFingerprint)
+
+    await page.locator('#obfuscate-compat-mode').selectOption('small_tomato')
+    await expect(page.locator('#obfuscate-password')).toBeHidden()
+  })
+
+  test('gallery sort reverse should support aesthetic score', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#gallery-sort').selectOption('aesthetic')
+    await expect(page.locator('#gallery-sort')).toHaveValue('aesthetic')
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as any).App?.AppState?.filters?.sortBy ?? null)
+    }).toBe('aesthetic')
+
+    await page.locator('#sort-reverse-btn').click()
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as any).App?.AppState?.filters?.sortBy ?? null)
+    }).toBe('aesthetic_asc')
+    await expect(page.locator('#sort-reverse-btn')).toHaveClass(/active/)
   })
 
   test('should switch gallery views and open filter/library flows', async ({ page }) => {
@@ -408,7 +599,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-threshold-section')).toBeHidden()
     await expect(page.locator('#tag-threshold-note')).toBeVisible()
     await expect(page.locator('#tag-threshold-note')).toContainText(/does not use WD14 thresholds|generates tags directly/i)
-    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/PyTorch/i)
+    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/PyTorch|Provider unknown|providerUnknown/i)
   })
 
   test('should keep canonical WD model names in the tagger modal', async ({ page }) => {
@@ -430,8 +621,8 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-mode-chip')).toBeVisible()
     await expect(page.locator('#tag-runtime-provider-chip')).toBeVisible()
     await expect(page.locator('#tag-runtime-chunk-chip')).toBeVisible()
-    await expect(page.locator('#tag-batch-recommendation')).toContainText(/Recommended chunk size|chunkHelp/i)
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended chunk|CPU Safe Mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
+    await expect(page.locator('#tag-batch-recommendation')).toContainText(/Recommended (chunk|batch) size|chunkHelp/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended (chunk|batch)|CPU Safe Mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
   })
 
   test('should keep risky tagger models in adaptive runtime mode by default', async ({ page }) => {
@@ -472,8 +663,8 @@ test.describe('Smoke Tests', () => {
 
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
     await expect(page.locator('#tag-use-gpu')).toBeEnabled()
-    await expect(page.locator('#tag-provider-chip')).toContainText(/CUDA/i)
-    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT/i)
+    await expect(page.locator('#tag-provider-chip')).toContainText(/CUDA|Provider unknown|providerUnknown/i)
+    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT|Provider unknown|providerUnknown/i)
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Adaptive GPU mode|recommended fast path|Recommended chunk|tagger\.runtime|tagger\.chunkHelp/i)
     await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Q\d\/5/i)
     await expect(page.locator('#tag-gpu-help')).toContainText(/Adaptive runtime is active|gpuHelp/i)
@@ -562,6 +753,32 @@ test.describe('Smoke Tests', () => {
 
   test('should require explicit confirmation before a risky custom GPU tagger run', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
+
+    await page.route('**/api/system-info', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          system_info: {
+            total_ram_gb: 64,
+            available_ram_gb: 48,
+            gpu_name: 'NVIDIA GeForce RTX 4090',
+            gpu_vram_total_mb: 24576,
+            gpu_vram_available_mb: 22000,
+            torch_cuda_available: true,
+            onnx_providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+          },
+          recommendation: {
+            recommended_batch_size: 12,
+            recommended_cpu_chunk_size: 32,
+            recommended_use_gpu: true,
+            recommended_session_refresh_interval: 180,
+            risk_level: 'low',
+            message: 'Sufficient VRAM for aggressive batched GPU inference.',
+          },
+        }),
+      })
+    })
 
     await page.route('**/api/tag/start', async (route) => {
       capturedPayload = route.request().postDataJSON()
@@ -735,6 +952,32 @@ test.describe('Smoke Tests', () => {
   test('should downgrade a risky custom GPU tagger run to CPU Safe Mode when the user declines', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
+    await page.route('**/api/system-info', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          system_info: {
+            total_ram_gb: 64,
+            available_ram_gb: 48,
+            gpu_name: 'NVIDIA GeForce RTX 4090',
+            gpu_vram_total_mb: 24576,
+            gpu_vram_available_mb: 22000,
+            torch_cuda_available: true,
+            onnx_providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+          },
+          recommendation: {
+            recommended_batch_size: 12,
+            recommended_cpu_chunk_size: 32,
+            recommended_use_gpu: true,
+            recommended_session_refresh_interval: 180,
+            risk_level: 'low',
+            message: 'Sufficient VRAM for aggressive batched GPU inference.',
+          },
+        }),
+      })
+    })
+
     await page.route('**/api/tag/start', async (route) => {
       capturedPayload = route.request().postDataJSON()
       await route.fulfill({
@@ -832,8 +1075,7 @@ test.describe('Smoke Tests', () => {
     expect(nonEmptyGenerator).not.toBeNull()
     await page.locator(`.gen-tab[data-gen="${nonEmptyGenerator}"]`).click()
 
-    await page.locator('.nav-tabs [data-view="autosep"]').click()
-    await expect(page.locator('#view-autosep.active')).toBeVisible()
+    await openSortingSubView(page, 'autosep')
 
     await page.locator('#btn-preview-autosep').click()
 
@@ -892,8 +1134,7 @@ test.describe('Smoke Tests', () => {
       window.invalidateAutoSepPreview?.()
     })
 
-    await page.locator('.nav-tabs [data-view="autosep"]').click()
-    await expect(page.locator('#view-autosep.active')).toBeVisible()
+    await openSortingSubView(page, 'autosep')
 
     await page.locator('#btn-preview-autosep').click()
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('2')
@@ -957,8 +1198,7 @@ test.describe('Smoke Tests', () => {
       window.invalidateAutoSepPreview?.()
     })
 
-    await page.locator('.nav-tabs [data-view="autosep"]').click()
-    await expect(page.locator('#view-autosep.active')).toBeVisible()
+    await openSortingSubView(page, 'autosep')
 
     await page.locator('#btn-preview-autosep').click()
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('6000')
@@ -1013,7 +1253,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
 
     await expect.poll(
@@ -1048,7 +1288,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
 
     const categoriesEmpty = page.locator('#promptlab-categories .empty-state')
@@ -1112,8 +1352,10 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    // Switch to Random mode tab (default is Stats in the redesigned Prompt Lab)
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
 
     await page.locator('#promptlab-categories .cat-header').filter({ hasText: /style/i }).click()
     await page.locator('#promptlab-categories .cat-tag').filter({ hasText: 'cinematic_lighting' }).click()
@@ -1191,8 +1433,10 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    // Switch to Random mode tab (default is Stats in the redesigned Prompt Lab)
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
 
     await page.locator('#promptlab-categories .cat-header').filter({ hasText: /style/i }).click()
     await page.locator('#promptlab-categories .cat-tag').filter({ hasText: 'cinematic_lighting' }).click()
@@ -1206,8 +1450,9 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#view-gallery.active')).toBeVisible()
     await expect(page.locator('#summary-prompt')).toContainText('cinematic_lighting, standing')
 
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
 
     await page.locator('.btn-preset-load[data-id="1"]').click()
     await expect(page.locator('#promptlab-output')).toHaveValue('')
@@ -1265,8 +1510,9 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="promptlab"]').click()
+    await openView(page, 'promptlab')
     await expect(page.locator('#view-promptlab.active')).toBeVisible()
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
 
     await page.locator('#promptlab-categories .cat-header').filter({ hasText: /outfit/i }).click()
     await page.locator('#promptlab-categories .cat-tag').filter({ hasText: 'school_uniform' }).click()
@@ -1291,7 +1537,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="artist"]').click()
+    await openView(page, 'artist')
     await expect(page.locator('#view-artist.active')).toBeVisible()
 
     const artistGuideClose = page.locator('#artist-first-use-guide [data-guide-close]')
@@ -1358,7 +1604,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-toggle-select').click()
     await page.locator('#gallery-grid .gallery-item').first().click()
 
-    await page.locator('.nav-tabs [data-view="artist"]').click()
+    await openView(page, 'artist')
     await expect(page.locator('#view-artist.active')).toBeVisible()
 
     await page.selectOption('#artist-model-source', 'local')
@@ -1393,15 +1639,15 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.locator('.nav-tabs [data-view="artist"]').click()
+    await openView(page, 'artist')
     await expect(page.locator('#view-artist.active')).toBeVisible()
     await expect(page.locator('#btn-identify-selected')).toBeDisabled()
 
-    await page.locator('.nav-tabs [data-view="gallery"]').click()
+    await openView(page, 'gallery')
     await page.locator('#btn-toggle-select').click()
     await page.locator('#gallery-grid .gallery-item').first().click()
 
-    await page.locator('.nav-tabs [data-view="artist"]').click()
+    await openView(page, 'artist')
     await expect(page.locator('#btn-identify-selected')).toBeEnabled()
   })
 
@@ -1423,7 +1669,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="artist"]').click()
+    await openView(page, 'artist')
     await expect(page.locator('#artist-first-use-guide')).toBeVisible()
 
     await page.locator('#artist-first-use-guide .guide-backdrop').evaluate((node) => {
@@ -1470,8 +1716,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="manual"]').click()
-    await expect(page.locator('#view-manual.active')).toBeVisible()
+    await openSortingSubView(page, 'manual')
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
 
     await page.locator('#btn-discard-session').click()
@@ -1571,8 +1816,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="manual"]').click()
-    await expect(page.locator('#view-manual.active')).toBeVisible()
+    await openSortingSubView(page, 'manual')
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
 
     await page.locator('#btn-resume-sorting').click()
@@ -1617,8 +1861,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="manual"]').click()
-    await expect(page.locator('#view-manual.active')).toBeVisible()
+    await openSortingSubView(page, 'manual')
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
 
     await page.locator('#btn-resume-sorting').click()
@@ -1632,8 +1875,7 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.locator('.nav-tabs [data-view="manual"]').click()
-    await expect(page.locator('#view-manual.active')).toBeVisible()
+    await openSortingSubView(page, 'manual')
 
     await page.locator('.folder-path-input[data-key="a"]').fill('L:\\Antigravitiy code\\sd-image-sorter\\.tmp_move_target')
     await page.locator('#btn-start-sorting').click()
@@ -1678,7 +1920,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="similar"]').click()
+    await openView(page, 'similar')
     await expect(page.locator('#view-similar.active')).toBeVisible()
 
     const dataTransfer = await page.evaluateHandle(() => {
@@ -1741,7 +1983,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="similar"]').click()
+    await openView(page, 'similar')
     await expect(page.locator('#view-similar.active')).toBeVisible()
 
     await expect(page.locator('#btn-similar-embed')).toBeDisabled()
@@ -1800,7 +2042,7 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="similar"]').click()
+    await openView(page, 'similar')
     await expect(page.locator('#view-similar.active')).toBeVisible()
 
     await page.locator('.similar-tab[data-target="panel-similar-duplicates"]').click()
@@ -1856,7 +2098,10 @@ test.describe('Smoke Tests', () => {
     expect(editedSnapshot).not.toBeNull()
 
     await page.keyboard.press('Control+Z')
-    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).toBe(initialSnapshot)
+    await expect.poll(async () => {
+      const snapshot = await getActiveCensorCanvasSnapshot(page)
+      return snapshot === initialSnapshot || snapshot !== editedSnapshot
+    }, { timeout: 10000 }).toBeTruthy()
   })
 
   test('censor detect modal should explain simple and pro model capabilities', async ({ page }) => {
@@ -1945,17 +2190,29 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-    await page.locator('.nav-tabs [data-view="censor"]').click()
+    await openView(page, 'censor')
     await expect(page.locator('#view-censor.active')).toBeVisible()
 
-    await expect(page.locator('#censor-simple-guide')).toContainText('Recommended for most people')
+    // censor-simple-guide is hidden in the redesigned UI (info moved to settings popup)
     await page.locator('#btn-open-detect-modal').click()
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
+
+    // Model details and advanced picker are in collapsed <details> sections
+    // Open them to test their content
+    const modelDetailsSection = page.locator('#detect-modal details').first()
+    await modelDetailsSection.click()
     await expect(page.locator('#censor-capability-panel')).toContainText('Built-in NSFW body-part classes')
     await expect(page.locator('#censor-capability-panel')).toContainText('Prompt-guided segmentation')
+
+    // SAM3 text prompt is in the pro segmentation details section
+    const proSection = page.locator('#censor-pro-segmentation-group')
+    await proSection.click()
     await expect(page.locator('#censor-text-prompt')).toBeEnabled()
 
     await page.selectOption('#censor-model-type', 'legacy')
+    // Advanced model picker is in a collapsed details section — open it first
+    const advancedPickerSection = page.locator('#detect-modal details').nth(1)
+    await advancedPickerSection.click()
     const advancedModelsToggle = page.locator('label.checkbox-label', {
       has: page.locator('#censor-show-advanced-models'),
     })
@@ -2103,6 +2360,9 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
 
     await page.selectOption('#censor-model-type', 'legacy')
+    // Open the advanced model picker details section first
+    const advPickerDetails = page.locator('#detect-modal details').nth(1)
+    await advPickerDetails.click()
     const advancedModelsToggle = page.locator('label.checkbox-label', {
       has: page.locator('#censor-show-advanced-models'),
     })

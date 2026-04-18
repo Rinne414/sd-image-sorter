@@ -4,12 +4,22 @@ Handles image retrieval, filtering, and file serving.
 
 Refactored to use Service Layer pattern with dependency injection.
 """
+import logging
+import os
+import subprocess
+import sys
+import tempfile
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 
+import database as db
+from metadata_parser import parse_image
 from services.image_service import ImageService
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api", tags=["images"])
@@ -188,6 +198,18 @@ async def get_images(
         description="Filter by aspect ratio: square, landscape, portrait",
         examples=["landscape"],
     ),
+    min_aesthetic: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=10,
+        description="Minimum aesthetic score (0-10)",
+    ),
+    max_aesthetic: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=10,
+        description="Maximum aesthetic score (0-10)",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -209,6 +231,8 @@ async def get_images(
         max_height=max_height,
         prompts=prompts,
         aspect_ratio=aspect_ratio,
+        min_aesthetic=min_aesthetic,
+        max_aesthetic=max_aesthetic,
     )
 
 
@@ -353,3 +377,142 @@ async def cleanup_thumbnail_cache(
 ):
     """Remove cached thumbnails older than max_age_days."""
     return service.cleanup_thumbnail_cache(max_age_days)
+
+
+@router.post(
+    "/open-folder",
+    summary="Open image in file explorer",
+    description="""
+Open the containing folder of an image in the OS file explorer, with the file selected.
+
+Supports Windows (explorer), Linux (xdg-open), and macOS (open -R).
+    """,
+    responses={
+        200: {
+            "description": "Folder opened successfully",
+            "content": {"application/json": {"example": {"success": True, "path": "/path/to/image.png"}}}
+        },
+        404: {
+            "description": "Image not found or file missing",
+            "content": {"application/json": {"example": {"detail": "Image not found"}}}
+        },
+        500: {
+            "description": "Failed to open folder",
+            "content": {"application/json": {"example": {"detail": "Failed to open folder: ..."}}}
+        }
+    }
+)
+async def open_folder(body: dict):
+    """Open the containing folder of an image in the OS file explorer."""
+    image_id = body.get("image_id")
+    if image_id is None:
+        raise HTTPException(status_code=400, detail="image_id is required")
+
+    image = db.get_image_by_id(image_id)
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    file_path = image.get("path", "")
+    if not file_path or not os.path.isfile(file_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Image file not found on disk"
+        )
+
+    try:
+        normalized_path = os.path.normpath(file_path)
+
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", normalized_path])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", normalized_path])
+        else:
+            # Linux: open the parent directory
+            parent_dir = os.path.dirname(normalized_path)
+            subprocess.Popen(["xdg-open", parent_dir])
+
+        return {"success": True, "path": normalized_path}
+    except Exception as e:
+        logger.error("Failed to open folder for image %s: %s", image_id, e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to open folder: {e}"
+        )
+
+
+@router.post(
+    "/parse-image",
+    summary="Parse uploaded image metadata",
+    description="""
+Accept an image file upload and return parsed SD metadata without saving to the database.
+
+Useful for inspecting metadata of images that are not yet in the library.
+Returns generator type, prompt, negative prompt, checkpoint, LoRAs, generation
+parameters, image dimensions, and file size.
+    """,
+    responses={
+        200: {
+            "description": "Parsed metadata",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "generator": "comfyui",
+                        "prompt": "1girl, solo, masterpiece",
+                        "negative_prompt": "lowres, bad anatomy",
+                        "checkpoint": "sd_xl_base_1.0.safetensors",
+                        "loras": ["detail_tweaker"],
+                        "width": 1024,
+                        "height": 1536,
+                        "file_size": 2048576,
+                        "metadata": {}
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "No file uploaded",
+            "content": {"application/json": {"example": {"detail": "No file uploaded"}}}
+        },
+        500: {
+            "description": "Failed to parse image",
+            "content": {"application/json": {"example": {"detail": "Failed to parse image metadata: ..."}}}
+        }
+    }
+)
+async def parse_uploaded_image(file: UploadFile = File(...)):
+    """Parse metadata from an uploaded image file without saving to database."""
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    # Determine suffix from uploaded filename
+    _, ext = os.path.splitext(file.filename)
+    if not ext:
+        ext = ".png"
+
+    tmp_path = None
+    try:
+        # Save upload to a temporary file
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=ext
+        ) as tmp:
+            tmp_path = tmp.name
+            contents = await file.read()
+            tmp.write(contents)
+
+        # Parse metadata using the existing parser
+        result = parse_image(tmp_path)
+
+        return result
+    except Exception as e:
+        logger.error("Failed to parse uploaded image %s: %s", file.filename, e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to parse image metadata: {e}"
+        )
+    finally:
+        # Clean up temp file
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass

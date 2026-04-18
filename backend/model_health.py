@@ -30,6 +30,7 @@ from config import (
     get_wd14_model_dir,
     get_yolo_model_dir,
 )
+from hardware_monitor import get_system_info, recommend_tagger_config
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
@@ -629,15 +630,181 @@ def format_model_health_report(health: Optional[Dict[str, Any]] = None) -> str:
     return "\n".join(lines)
 
 
+def get_startup_readiness(
+    health: Optional[Dict[str, Any]] = None,
+    system_info: Optional[Dict[str, Any]] = None,
+    recommendation: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build a user-facing startup readiness summary for launchers."""
+    health = health or get_model_health()
+    system_info = system_info or get_system_info()
+    recommendation = recommendation or recommend_tagger_config(system_info)
+
+    providers = [str(provider) for provider in (system_info.get("onnx_providers") or [])]
+    gpu_name = system_info.get("gpu_name")
+    ram_gb = system_info.get("total_ram_gb")
+    vram_mb = system_info.get("gpu_vram_total_mb")
+    recommended_chunk = int(recommendation.get("recommended_batch_size") or 8)
+    recommended_gpu = bool(recommendation.get("recommended_use_gpu"))
+
+    wd14 = health["wd14"]
+    clip = health["clip"]
+    legacy = health["censor"]["legacy"]
+    nudenet = health["censor"]["nudenet"]
+    artist = health["artist"]
+    sam3 = health["censor"]["sam3"]
+
+    hardware_parts = []
+    if gpu_name:
+        hardware_parts.append(gpu_name)
+    if ram_gb:
+        hardware_parts.append(f"{ram_gb:.0f}GB RAM")
+    if vram_mb:
+        hardware_parts.append(f"{vram_mb / 1024:.1f}GB VRAM")
+
+    provider_parts = []
+    if "TensorrtExecutionProvider" in providers:
+        provider_parts.append("TensorRT")
+    if "CUDAExecutionProvider" in providers:
+        provider_parts.append("CUDA")
+    if "DmlExecutionProvider" in providers:
+        provider_parts.append("DirectML")
+    if system_info.get("torch_cuda_available"):
+        provider_parts.append("PyTorch CUDA")
+    if "CPUExecutionProvider" in providers:
+        provider_parts.append("CPU")
+
+    if wd14["available"]:
+        if recommended_gpu:
+            tagger_status = {
+                "level": "ready",
+                "headline": "WD14 tagging: GPU ready",
+                "detail": f"Recommended GPU mode is available. Suggested chunk size: {recommended_chunk}.",
+            }
+        else:
+            tagger_status = {
+                "level": "warn",
+                "headline": "WD14 tagging: CPU fallback",
+                "detail": recommendation.get("message") or "GPU runtime is not ready, so tagging will stay on CPU.",
+            }
+    else:
+        tagger_status = {
+            "level": "warn",
+            "headline": "WD14 tagging: model files missing",
+            "detail": "The default WD14 files are not ready yet.",
+        }
+
+    if clip["available"]:
+        similarity_status = {
+            "level": "ready",
+            "headline": "Similar search: ready",
+            "detail": "Local CLIP model and runtime are available.",
+        }
+    else:
+        similarity_status = {
+            "level": "warn",
+            "headline": "Similar search: setup needed",
+            "detail": clip["message"],
+        }
+
+    if legacy["available"] or nudenet["available"]:
+        detail_parts = []
+        if legacy["available"]:
+            detail_parts.append("Privacy YOLO ready")
+        if nudenet["available"]:
+            detail_parts.append("NudeNet ready")
+        censor_status = {
+            "level": "ready",
+            "headline": "Censor tools: ready",
+            "detail": " · ".join(detail_parts),
+        }
+    else:
+        censor_status = {
+            "level": "warn",
+            "headline": "Censor tools: partial",
+            "detail": "Neither Privacy YOLO nor NudeNet is ready yet.",
+        }
+
+    artist_status = {
+        "level": "ready" if artist["available"] else "warn",
+        "headline": "Artist ID: ready" if artist["available"] else "Artist ID: setup needed",
+        "detail": artist["message"],
+    }
+
+    sam3_status = {
+        "level": "ready" if sam3["available"] else "warn",
+        "headline": "SAM3 Pro masks: ready" if sam3["available"] else "SAM3 Pro masks: setup needed",
+        "detail": sam3["message"],
+    }
+
+    return {
+        "hardware": {
+            "summary": " · ".join(hardware_parts) if hardware_parts else "No dedicated GPU detected",
+            "providers": provider_parts,
+            "onnxruntime_conflict": bool(system_info.get("onnxruntime_conflict")),
+            "recommendation_message": recommendation.get("message") or "",
+        },
+        "features": {
+            "tagger": tagger_status,
+            "similarity": similarity_status,
+            "censor": censor_status,
+            "artist": artist_status,
+            "sam3": sam3_status,
+        },
+    }
+
+
+def format_startup_readiness_report(
+    readiness: Optional[Dict[str, Any]] = None,
+    health: Optional[Dict[str, Any]] = None,
+    system_info: Optional[Dict[str, Any]] = None,
+    recommendation: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Format a concise launcher-friendly startup report."""
+    readiness = readiness or get_startup_readiness(
+        health=health,
+        system_info=system_info,
+        recommendation=recommendation,
+    )
+
+    hardware = readiness["hardware"]
+    features = readiness["features"]
+    lines = ["Startup Readiness"]
+    lines.append(f"Hardware: {hardware['summary']}")
+    if hardware.get("providers"):
+        lines.append("Providers: " + ", ".join(hardware["providers"]))
+    if hardware.get("onnxruntime_conflict"):
+        lines.append("[WARN] ONNX Runtime packages are conflicting. The launcher should repair this automatically.")
+
+    for feature_key in ("tagger", "similarity", "censor", "artist", "sam3"):
+        feature = features[feature_key]
+        marker = "OK" if feature["level"] == "ready" else "WARN"
+        lines.append(f"[{marker}] {feature['headline']}")
+        if feature.get("detail"):
+            lines.append(f"      {feature['detail']}")
+
+    if hardware.get("recommendation_message"):
+        lines.append("Runtime note: " + hardware["recommendation_message"])
+
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Print SD Image Sorter model readiness")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
+    parser.add_argument("--startup", action="store_true", help="Print launcher-friendly startup readiness summary")
     args = parser.parse_args()
 
     health = get_model_health()
-    if args.json:
+    if args.startup:
+        readiness = get_startup_readiness(health=health)
+        if args.json:
+            print(json.dumps(readiness, indent=2, ensure_ascii=False))
+        else:
+            print(format_startup_readiness_report(readiness=readiness))
+    elif args.json:
         print(json.dumps(health, indent=2, ensure_ascii=False))
     else:
         print(format_model_health_report(health))

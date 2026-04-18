@@ -120,6 +120,33 @@ class TestPromptsRouter:
         data = response.json()
         assert data == {"valid": True, "violations": [], "suggestions": []}
 
+    def test_prompt_stats_recipe_show_more_is_not_capped_by_checkpoint_limit(self, test_client, test_db):
+        checkpoints = ["pl_recipe_alpha", "pl_recipe_beta", "pl_recipe_gamma"]
+        for index, checkpoint in enumerate(checkpoints):
+            image_id = test_db.add_image(
+                path=f"/tmp/{checkpoint}.png",
+                filename=f"{checkpoint}.png",
+                metadata_json="{}",
+                checkpoint=checkpoint,
+                prompt=f"{checkpoint}_token, cinematic_lighting",
+            )
+            with test_db.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                    (image_id, f"{checkpoint}_tag", 0.95 - index * 0.01),
+                )
+
+        response = test_client.get("/api/prompts/stats?checkpoint_limit=1&leader_limit=1&recipe_limit=2&tag_limit=2")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["checkpoint_recipes"]) == 2
+        assert data["checkpoint_recipes_total"] == 3
+        assert data["checkpoint_recipes_has_more"] is True
+        assert data["top_checkpoints_total"] == 3
+        assert data["top_checkpoints_has_more"] is True
+
 
 class TestCensorRouterValidation:
     @pytest.mark.parametrize(
@@ -355,6 +382,69 @@ class TestCensorRouterValidation:
 
 
 class TestSimilarityRouterValidation:
+    def test_search_similar_returns_pagination_metadata(self, test_client):
+        from routers import similarity as similarity_router
+
+        class FakeService:
+            def search_similar(self, image_id, limit, threshold, offset):
+                assert image_id == 77
+                assert limit == 2
+                assert offset == 2
+                assert threshold == 0.6
+                return {
+                    "query_image_id": image_id,
+                    "results": [{"id": 101, "filename": "match.png", "similarity": 0.91}],
+                    "count": 1,
+                    "total": 5,
+                    "has_more": True,
+                    "offset": offset,
+                    "limit": limit,
+                }
+
+        similarity_router.set_similarity_service(FakeService())
+        try:
+            response = test_client.get("/api/similarity/search/77?limit=2&offset=2&threshold=0.6")
+        finally:
+            similarity_router.set_similarity_service(None)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 5
+        assert data["has_more"] is True
+        assert data["offset"] == 2
+        assert data["limit"] == 2
+
+    def test_duplicates_return_pagination_metadata(self, test_client):
+        from routers import similarity as similarity_router
+
+        class FakeService:
+            def find_duplicates(self, threshold, limit, offset):
+                assert threshold == 0.97
+                assert limit == 3
+                assert offset == 3
+                return {
+                    "duplicates": [{"image_a": {"id": 1}, "image_b": {"id": 2}, "similarity": 0.99}],
+                    "count": 1,
+                    "total": 7,
+                    "has_more": True,
+                    "offset": offset,
+                    "limit": limit,
+                    "threshold": threshold,
+                }
+
+        similarity_router.set_similarity_service(FakeService())
+        try:
+            response = test_client.get("/api/similarity/duplicates?threshold=0.97&limit=3&offset=3")
+        finally:
+            similarity_router.set_similarity_service(None)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 7
+        assert data["has_more"] is True
+        assert data["offset"] == 3
+        assert data["limit"] == 3
+
     def test_search_similar_rejects_invalid_limit(self, test_client):
         response = test_client.get("/api/similarity/search/1?limit=0")
 
@@ -610,6 +700,40 @@ class TestArtistsRouterValidation:
         assert "artist_stats" in data
         assert data["artist_stats"]["sample_artist"]["avg_confidence"] == 0.42
         assert data["artist_stats"]["sample_artist"]["max_confidence"] == 0.42
+
+    def test_artist_images_support_offset_pagination(self, test_client, test_db):
+        image_ids = [
+            test_db.add_image(path=f"/tmp/artist-page-{index}.png", filename=f"artist-page-{index}.png", metadata_json="{}")
+            for index in range(3)
+        ]
+        confidences = [0.9, 0.8, 0.7]
+        with test_db.get_db() as conn:
+            cursor = conn.cursor()
+            for image_id, confidence in zip(image_ids, confidences):
+                cursor.execute(
+                    """
+                    INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (image_id, "paged_artist", confidence, "[]"),
+                )
+
+        first_page = test_client.get("/api/artists/images/paged_artist?limit=2&offset=0")
+        second_page = test_client.get("/api/artists/images/paged_artist?limit=2&offset=2")
+
+        assert first_page.status_code == 200
+        assert second_page.status_code == 200
+
+        first_data = first_page.json()
+        second_data = second_page.json()
+        assert first_data["total"] == 3
+        assert first_data["has_more"] is True
+        assert first_data["offset"] == 0
+        assert len(first_data["images"]) == 2
+        assert second_data["total"] == 3
+        assert second_data["has_more"] is False
+        assert second_data["offset"] == 2
+        assert len(second_data["images"]) == 1
 
     def test_model_manager_status_endpoint_lists_core_models(self, test_client):
         response = test_client.get("/api/models/status")

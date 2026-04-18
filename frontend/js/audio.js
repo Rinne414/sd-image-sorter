@@ -8,7 +8,7 @@ class AudioManagerClass {
     constructor() {
         this.ctx = null;
         this.sounds = {};
-        this.enabled = true;
+        this.enabled = localStorage.getItem('sort-audio-enabled') !== 'false';
         this.volume = 0.5;
         this.initialized = false;
     }
@@ -230,15 +230,18 @@ class AudioManagerClass {
 
     toggle() {
         this.enabled = !this.enabled;
+        localStorage.setItem('sort-audio-enabled', this.enabled);
         return this.enabled;
     }
 
     enable() {
         this.enabled = true;
+        localStorage.setItem('sort-audio-enabled', 'true');
     }
 
     disable() {
         this.enabled = false;
+        localStorage.setItem('sort-audio-enabled', 'false');
     }
 }
 

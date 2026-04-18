@@ -184,19 +184,37 @@ async function loadSystemInfo() {
         const sys = data.system_info || {};
         const rec = data.recommendation || {};
         const providers = Array.isArray(sys.onnx_providers) ? sys.onnx_providers.map(String) : [];
+        const gpuDevices = Array.isArray(sys.gpu_devices) ? sys.gpu_devices : [];
         const hasCuda = providers.indexOf('CUDAExecutionProvider') !== -1;
+        const hasDml = providers.indexOf('DmlExecutionProvider') !== -1;
         const hasTensorRt = providers.indexOf('TensorrtExecutionProvider') !== -1;
+        const hasTorchCuda = Boolean(sys.torch_cuda_available);
         const parts = [];
-        if (sys.gpu_name) { parts.push(String(sys.gpu_name)); }
-        else { parts.push(fbT('system.noGpuDetected', 'No GPU detected')); }
+        const gpuNames = gpuDevices
+            .map((device) => String(device?.name || '').trim())
+            .filter(Boolean);
+        const primaryGpuName = String(sys.gpu_name || gpuNames[0] || '').trim();
+        if (primaryGpuName) {
+            const uniqueGpuNames = Array.from(new Set([primaryGpuName, ...gpuNames]));
+            parts.push(uniqueGpuNames.join(' / '));
+        } else {
+            parts.push(fbT('system.noGpuDetected', 'No GPU detected'));
+        }
         if (sys.total_ram_gb) { parts.push(sys.total_ram_gb.toFixed(0) + 'GB RAM'); }
         if (sys.gpu_vram_total_mb) { parts.push((sys.gpu_vram_total_mb / 1024).toFixed(1) + 'GB VRAM'); }
-        contentEl.textContent = parts.join(' · ') || fbT('system.detectedHardware', 'Detected Hardware');
+        if (contentEl) {
+            contentEl.removeAttribute('data-i18n');
+            contentEl.textContent = parts.join(' · ') || fbT('system.detectedHardware', 'Detected Hardware');
+        }
         panel.style.display = '';
 
         if (hardwareChip) {
-            hardwareChip.textContent = rec.recommended_use_gpu ? 'GPU available' : 'CPU safe';
-            hardwareChip.className = 'system-info-chip ' + (rec.recommended_use_gpu ? 'is-safe' : 'is-warning');
+            hardwareChip.removeAttribute('data-i18n');
+            const gpuDetected = Boolean(primaryGpuName);
+            hardwareChip.textContent = gpuDetected
+                ? fbT('tagger.gpuAvailable', 'GPU available')
+                : fbT('tagger.cpuSafe', 'CPU safe');
+            hardwareChip.className = 'system-info-chip ' + (gpuDetected ? 'is-safe' : 'is-warning');
         }
 
         if (riskChip) {
@@ -204,23 +222,40 @@ async function loadSystemInfo() {
             const riskClass = riskLevel === 'high'
                 ? 'is-danger'
                 : (riskLevel === 'medium' ? 'is-warning' : 'is-safe');
-            riskChip.textContent = 'Risk: ' + riskLevel;
+            const riskKey = 'tagger.risk' + riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1);
+            riskChip.removeAttribute('data-i18n');
+            riskChip.textContent = fbT('tagger.riskPrefix', 'Risk: ') + fbT(riskKey, riskLevel);
             riskChip.className = 'system-info-chip ' + riskClass;
         }
 
         if (providerChip) {
-            providerChip.textContent = hasCuda
-                ? (hasTensorRt ? 'TensorRT + CUDA ready' : 'CUDA ready')
-                : 'CPU runtime';
-            providerChip.className = 'system-info-chip ' + (hasCuda ? 'is-safe' : 'is-warning');
+            providerChip.removeAttribute('data-i18n');
+            if (hasTensorRt) {
+                providerChip.textContent = fbT('tagger.tensorrtReady', 'TensorRT + CUDA ready');
+                providerChip.className = 'system-info-chip is-safe';
+            } else if (hasCuda) {
+                providerChip.textContent = fbT('tagger.cudaReady', 'CUDA ready');
+                providerChip.className = 'system-info-chip is-safe';
+            } else if (hasDml) {
+                providerChip.textContent = fbT('tagger.directmlReady', 'DirectML ready');
+                providerChip.className = 'system-info-chip is-warning';
+            } else if (hasTorchCuda) {
+                providerChip.textContent = fbT('tagger.pytorchCudaOnly', 'PyTorch CUDA only');
+                providerChip.className = 'system-info-chip is-warning';
+            } else {
+                providerChip.textContent = fbT('tagger.cpuRuntime', 'CPU runtime');
+                providerChip.className = 'system-info-chip is-warning';
+            }
         }
 
         if (recEl) {
+            recEl.removeAttribute('data-i18n');
             recEl.textContent = rec.message || 'The app will use the recommended runtime for your hardware.';
         }
 
         if (batchEl) {
-            const recommendedChunk = rec.recommended_batch_size || 4;
+            batchEl.removeAttribute('data-i18n');
+            const recommendedChunk = rec.recommended_batch_size || 8;
             batchEl.textContent = fbT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.').replace('{chunk}', recommendedChunk);
         }
 

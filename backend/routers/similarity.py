@@ -106,12 +106,13 @@ greater visual/semantic similarity.
 )
 async def search_similar(
     image_id: int,
-    limit: int = Query(default=20, ge=1, le=100, description="Maximum results (1-100)"),
+    limit: int = Query(default=100, ge=1, le=1000, description="Maximum results (1-1000)"),
+    offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold (0.0-1.0)"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to a given image ID."""
-    return service.search_similar(image_id, limit, threshold)
+    return service.search_similar(image_id, limit, threshold, offset)
 
 
 @router.post(
@@ -142,12 +143,13 @@ and searches the database for similar images.
 )
 async def search_by_upload(
     file: UploadFile = File(..., description="Image file to search for similar images"),
-    limit: int = Query(default=20, ge=1, le=100, description="Maximum results (1-100)"),
+    limit: int = Query(default=100, ge=1, le=1000, description="Maximum results (1-1000)"),
+    offset: int = Query(default=0, ge=0, description="Number of ranked results to skip for pagination"),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0, description="Minimum similarity threshold"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to an uploaded image."""
-    return await service.search_by_upload(file, limit, threshold)
+    return await service.search_by_upload(file, limit, threshold, offset)
 
 
 @router.get(
@@ -188,11 +190,12 @@ duplicate or near-duplicate images.
 )
 async def find_duplicates(
     threshold: float = Query(default=0.95, ge=0.5, le=1.0, description="Similarity threshold (0.5-1.0)"),
-    limit: int = Query(default=100, ge=1, le=1000, description="Maximum pairs to return (1-1000)"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Maximum pairs to return (1-5000)"),
+    offset: int = Query(default=0, ge=0, description="Number of ranked duplicate pairs to skip for pagination"),
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find near-duplicate image pairs above similarity threshold."""
-    return service.find_duplicates(threshold, limit)
+    return service.find_duplicates(threshold, limit, offset)
 
 
 @router.get("/stats")

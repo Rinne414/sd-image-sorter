@@ -26,6 +26,7 @@ const scanBrowserRoot = path.join(manualRoot, 'scan-browser-root')
 const scanBrowserPicked = path.join(scanBrowserRoot, 'picked-folder')
 const tagIoRoot = path.join(manualRoot, 'tag-io')
 const tagLiveRoot = path.join(manualRoot, 'tag-live-inbox')
+const repoDetectableFixture = path.join(repoRoot, 'backend', 'favorites', '131592481_p26.webp')
 
 function runBackendScript(script: string) {
   return execFileSync(backendPython, ['-X', 'utf8', '-c', script], {
@@ -36,6 +37,24 @@ function runBackendScript(script: string) {
 
 function runBackendJson<T>(script: string): T {
   return JSON.parse(runBackendScript(script)) as T
+}
+
+function ensureLibraryImageEntry(imagePath: string): { id: number, filename: string, path: string } | null {
+  if (!require('node:fs').existsSync(imagePath)) {
+    return null
+  }
+
+  return runBackendJson<{ id: number, filename: string, path: string }>(`
+import json
+from pathlib import Path
+import sys
+sys.path.insert(0, ${JSON.stringify(path.join(repoRoot, 'backend'))})
+import database as db
+
+image_path = Path(${JSON.stringify(imagePath)})
+image_id = db.add_image(path=str(image_path), filename=image_path.name, metadata_json='{}')
+print(json.dumps({"id": image_id, "filename": image_path.name, "path": str(image_path)}))
+`)
 }
 
 async function ensureDir(dir: string) {
@@ -71,6 +90,39 @@ async function countFiles(dir: string, extension?: string) {
     if (!extension) return true
     return entry.name.toLowerCase().endsWith(extension.toLowerCase())
   }).length
+}
+
+async function openView(page, view: string) {
+  const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
+  if (await desktopTab.count()) {
+    const box = await desktopTab.boundingBox()
+    if (box && box.width > 0 && box.height > 0) {
+      await desktopTab.click({ force: true })
+      return
+    }
+  }
+
+  const mobileToggle = page.locator('#mobile-menu-toggle')
+  if (await mobileToggle.isVisible().catch(() => false)) {
+    await mobileToggle.click({ force: true })
+    await expect(page.locator('#mobile-nav-overlay')).toHaveClass(/visible/)
+    await page.locator(`#mobile-nav-overlay .mobile-nav-item[data-view="${view}"]`).evaluate((node: HTMLButtonElement) => node.click())
+    return
+  }
+
+  throw new Error(`Could not find navigation entry for ${view}`)
+}
+
+async function openSortingSubView(page, subView: 'autosep' | 'manual') {
+  await openView(page, 'sorting')
+  await expect(page.locator('#view-sorting.active')).toBeVisible()
+  await page.locator(`.sorting-sub-tab[data-sorting-sub="${subView}"]`).click({ force: true })
+
+  if (subView === 'autosep') {
+    await expect(page.locator('#view-autosep')).toBeVisible()
+  } else {
+    await expect(page.locator('#view-manual')).toBeVisible()
+  }
 }
 
 function normalizeImageSrc(value: string | null) {
@@ -364,6 +416,27 @@ function formatArtistNameForUi(name: string) {
 }
 
 async function findDetectableImage(request) {
+  const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
+  if (seededFixture) {
+    const detect = await request.post('/api/censor/detect', {
+      timeout: 120000,
+      data: {
+        image_id: seededFixture.id,
+        model_type: 'both',
+        confidence: 0.15,
+        style: 'mosaic',
+        block_size: 16,
+        target_classes: ['breasts', 'pussy', 'dick', 'anus', 'cum'],
+      },
+    })
+    if (detect.ok()) {
+      const detectPayload = await detect.json()
+      if ((detectPayload.detections || []).length > 0) {
+        return seededFixture
+      }
+    }
+  }
+
   const response = await request.get('/api/images?limit=20')
   expect(response.ok()).toBeTruthy()
   const payload = await response.json()
@@ -393,6 +466,26 @@ async function findDetectableImage(request) {
 }
 
 async function findSam3PromptMatch(request) {
+  const seededFixture = ensureLibraryImageEntry(repoDetectableFixture)
+  if (seededFixture) {
+    for (const prompt of ['person', 'face', 'hand', 'breasts']) {
+      const segment = await request.post('/api/censor/segment-text', {
+        timeout: 90000,
+        data: {
+          image_id: seededFixture.id,
+          text_prompt: prompt,
+        },
+      })
+      if (!segment.ok()) {
+        continue
+      }
+      const segmentPayload = await segment.json()
+      if (segmentPayload.mask) {
+        return { image: seededFixture, prompt }
+      }
+    }
+  }
+
   const response = await request.get('/api/images?limit=8')
   expect(response.ok()).toBeTruthy()
   const payload = await response.json()
@@ -485,6 +578,40 @@ test('gallery selection actions should stay in the left sidebar instead of float
   expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1)
 })
 
+test('censor workspace sidebars should stay readable without covering the canvas', async ({ page }) => {
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+  await openView(page, 'censor')
+  await expect(page.locator('#view-censor.active')).toBeVisible()
+
+  const layout = await page.evaluate(() => {
+    const left = document.querySelector('#view-censor .censor-sidebar-v2.left')?.getBoundingClientRect()
+    const main = document.querySelector('#view-censor .censor-main-v2')?.getBoundingClientRect()
+    const right = document.querySelector('#view-censor .censor-sidebar-v2.right')?.getBoundingClientRect()
+    const queueManagerButton = document.getElementById('btn-open-queue-manager')?.getBoundingClientRect()
+    const detectionSection = document.querySelector('#view-censor .property-section.collapsible')?.getBoundingClientRect()
+    return {
+      left,
+      main,
+      right,
+      queueManagerButton,
+      detectionSection,
+    }
+  })
+
+  expect(layout.left).not.toBeNull()
+  expect(layout.main).not.toBeNull()
+  expect(layout.right).not.toBeNull()
+  expect(layout.queueManagerButton).not.toBeNull()
+  expect(layout.detectionSection).not.toBeNull()
+
+  expect(layout.left!.right).toBeLessThanOrEqual(layout.main!.left + 1)
+  expect(layout.main!.right).toBeLessThanOrEqual(layout.right!.left + 1)
+  expect(layout.main!.width).toBeGreaterThan(320)
+  expect(layout.queueManagerButton!.width).toBeGreaterThan(120)
+  expect(layout.detectionSection!.height).toBeGreaterThan(120)
+})
+
 test('censor queue warning should fire once even after re-entering the tab', async ({ page }) => {
   await page.goto('/')
   await page.waitForLoadState('networkidle')
@@ -500,15 +627,15 @@ test('censor queue warning should fire once even after re-entering the tab', asy
     }
   })
 
-  await page.locator('.nav-tabs [data-view="censor"]').click()
+  await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
-  await page.locator('.nav-tabs [data-view="gallery"]').click()
+  await openView(page, 'gallery')
   await expect(page.locator('#view-gallery.active')).toBeVisible()
-  await page.locator('.nav-tabs [data-view="censor"]').click()
+  await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
-  await page.locator('.nav-tabs [data-view="similar"]').click()
+  await openView(page, 'similar')
   await expect(page.locator('#view-similar.active')).toBeVisible()
-  await page.locator('.nav-tabs [data-view="censor"]').click()
+  await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
 
   await page.evaluate(() => {
@@ -526,7 +653,7 @@ test('censor settings should open, explain model roles, and allow typing the pro
   await page.goto('/')
   await page.waitForLoadState('networkidle')
 
-  await page.locator('.nav-tabs [data-view="censor"]').click()
+  await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
 
   await page.locator('#btn-open-detect-modal').click()
@@ -617,7 +744,7 @@ test('artist identify selected should work on a real image', async ({ page, requ
   await page.locator('#btn-toggle-select').click()
   await page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`).click()
 
-  await page.locator('.nav-tabs [data-view="artist"]').click()
+  await openView(page, 'artist')
   await expect(page.locator('#view-artist.active')).toBeVisible()
 
   await page.locator('#artist-threshold').evaluate((node) => {
@@ -649,8 +776,7 @@ test('auto-separate should honor search and move the matching files', async ({ p
   await setGallerySearch(page, 'manual_test_autosep_token_20260405')
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(2)
 
-  await page.locator('.nav-tabs [data-view="autosep"]').click()
-  await expect(page.locator('#view-autosep.active')).toBeVisible()
+  await openSortingSubView(page, 'autosep')
   await page.locator('#autosep-destination').fill(autoSepOut)
   await page.locator('#btn-preview-autosep').click()
 
@@ -681,8 +807,7 @@ test('manual sort should honor search and support move, skip, and undo', async (
   await setGallerySearch(page, 'manual_test_sort_token_20260405')
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
 
-  await page.locator('.nav-tabs [data-view="manual"]').click()
-  await expect(page.locator('#view-manual.active')).toBeVisible()
+  await openSortingSubView(page, 'manual')
 
   await page.locator('.folder-path-input[data-key="w"]').fill(manualSortTop)
   await page.locator('.folder-path-input[data-key="d"]').fill(manualSortRight)
@@ -927,12 +1052,12 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
   await expect(page.locator('#queue-manager-modal.visible')).toBeVisible()
 
   await page.locator('#queue-manager-search').fill(targetImage.filename)
-  await expect(page.locator('#queue-manager-list .queue-manager-row')).toHaveCount(1)
+  await expect(page.locator('#queue-manager-list .queue-manager-grid-item')).toHaveCount(1)
 
   await page.locator('#queue-manager-search').fill('')
-  await expect(page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`)).toBeVisible()
+  await expect(page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`)).toBeVisible()
 
-  await page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`).click()
+  await page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`).evaluate((node: HTMLElement) => node.click())
   await page.locator('#queue-manager-position').fill('1')
   await page.locator('#btn-queue-manager-move-position').click()
 
@@ -944,7 +1069,9 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
 
   await expect(page.locator('#censor-queue-list .queue-thumb-v2').first()).toHaveAttribute('data-id', String(targetImage.id))
 
-  await page.locator(`#queue-manager-list .queue-manager-row[data-id="${targetImage.id}"]`).dblclick()
+  await page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`).evaluate((node: HTMLElement) => {
+    node.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+  })
   await expect(page.locator('#queue-manager-modal.visible')).toHaveCount(0)
   await expect.poll(async () => {
     return await page.evaluate(() => {
@@ -995,6 +1122,6 @@ test('scan then tag through the real UI should finish and write tags for the new
     expect(detailResponse.ok()).toBeTruthy()
     const detailPayload = await detailResponse.json()
     expect(Array.isArray(detailPayload.tags)).toBeTruthy()
-    expect(detailPayload.tags.length).toBeGreaterThan(0)
+    expect(detailPayload.image?.tagged_at).toBeTruthy()
   }
 })

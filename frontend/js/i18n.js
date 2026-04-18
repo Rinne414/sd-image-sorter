@@ -83,6 +83,9 @@
 
             this._applyLangClass();
             this.applyToDOM();
+            if (window.App?.syncGallerySortLabels) {
+                window.App.syncGallerySortLabels();
+            }
 
             // Update <html lang> attribute
             document.documentElement.lang = lang === 'zh-CN' ? 'zh-CN' : 'en';

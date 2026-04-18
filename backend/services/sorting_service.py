@@ -29,7 +29,7 @@ DIMENSION_MIN = 1
 DIMENSION_MAX = 100000
 PATH_MAX_LENGTH = 4096
 FOLDER_KEY_MAX_LENGTH = 100
-BATCH_MOVE_LIMIT = 5000
+BATCH_MOVE_FETCH_CHUNK = 500
 SEARCH_MAX_LENGTH = 1000
 VALID_ASPECT_RATIOS = ["square", "landscape", "portrait"]
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
@@ -62,7 +62,7 @@ class ValidatePathRequest(BaseModel):
 
 class MoveRequest(BaseModel):
     """Request model for image move operations."""
-    image_ids: List[int] = Field(..., min_length=1, max_length=BATCH_MOVE_LIMIT)
+    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
 
 
@@ -80,6 +80,8 @@ class BatchMoveRequest(BaseModel):
     min_height: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     max_height: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     aspect_ratio: Optional[str] = None
+    min_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    max_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
 
     @field_validator('aspect_ratio')
@@ -103,6 +105,13 @@ class BatchMoveRequest(BaseModel):
     def validate_max_height(cls, v: Optional[int], info) -> Optional[int]:
         if v is not None and info.data.get('min_height') is not None and v < info.data['min_height']:
             raise ValueError('max_height cannot be less than min_height')
+        return v
+
+    @field_validator('max_aesthetic')
+    @classmethod
+    def validate_max_aesthetic(cls, v: Optional[float], info) -> Optional[float]:
+        if v is not None and info.data.get('min_aesthetic') is not None and v < info.data['min_aesthetic']:
+            raise ValueError('max_aesthetic cannot be less than min_aesthetic')
         return v
 
 
@@ -421,16 +430,18 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
-        os.makedirs(request.destination_folder, exist_ok=True)
-
         # Batch fetch all images in a single query (N+1 fix)
         images_map = db.get_images_by_ids(request.image_ids)
+        destination_ready = os.path.isdir(request.destination_folder)
 
         results = []
         for image_id in request.image_ids:
             image = images_map.get(image_id)
             if image and os.path.exists(image["path"]):
                 try:
+                    if not destination_ready:
+                        os.makedirs(request.destination_folder, exist_ok=True)
+                        destination_ready = True
                     new_path = move_image(image_id, request.destination_folder, image["path"])
                     results.append({"id": image_id, "new_path": new_path, "success": True})
                 except Exception as e:
@@ -475,14 +486,10 @@ class SortingService:
             max_width=request.max_width,
             min_height=request.min_height,
             max_height=request.max_height,
-            aspect_ratio=request.aspect_ratio
+            aspect_ratio=request.aspect_ratio,
+            min_aesthetic=request.min_aesthetic,
+            max_aesthetic=request.max_aesthetic,
         )
-
-        if total_count > BATCH_MOVE_LIMIT:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Found {total_count} images matching filters. Maximum allowed is {BATCH_MOVE_LIMIT}.",
-            )
 
         if total_count == 0:
             return {"message": "No images match the filters", "count": 0}
@@ -508,7 +515,7 @@ class SortingService:
         
         def run_batch_move():
             try:
-                images = db.get_images(
+                image_ids = db.get_filtered_image_ids(
                     generators=generators,
                     tags=tags,
                     ratings=ratings,
@@ -521,10 +528,11 @@ class SortingService:
                     min_height=request.min_height,
                     max_height=request.max_height,
                     aspect_ratio=request.aspect_ratio,
-                    limit=BATCH_MOVE_LIMIT
+                    min_aesthetic=request.min_aesthetic,
+                    max_aesthetic=request.max_aesthetic,
                 )
 
-                if not images:
+                if not image_ids:
                     self._set_batch_move_progress_if_current(
                         run_id,
                         {
@@ -548,36 +556,46 @@ class SortingService:
                 moved = 0
                 processed = 0
                 errors = []
-                for image in images:
-                    filename = image.get("filename", "image")
-                    error_message = None
+                for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
+                    batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
+                    image_map = db.get_images_by_ids(batch_ids)
 
-                    if os.path.exists(image["path"]):
-                        try:
-                            move_image(image["id"], destination_folder, image["path"])
-                            moved += 1
-                        except Exception as e:
-                            error_message = f"Error moving {image['path']}: {e}"
-                    else:
-                        error_message = f"Image file not found: {image['path']}"
+                    for image_id in batch_ids:
+                        image = image_map.get(image_id)
+                        if not image:
+                            processed += 1
+                            errors.append(f"Image row not found for id {image_id}")
+                            continue
 
-                    if error_message:
-                        errors.append(error_message)
+                        filename = image.get("filename", "image")
+                        error_message = None
 
-                    processed += 1
-                    if not self._update_batch_move_progress_if_current(
-                        run_id,
-                        step="moving",
-                        current=processed,
-                        total=total_count,
-                        errors=len(errors),
-                        moved=moved,
-                        message=f"Processed {filename} ({processed}/{total_count})",
-                        current_item=filename,
-                        recent_errors=errors[-3:],
-                        updated_at=time.time(),
-                    ):
-                        return
+                        if os.path.exists(image["path"]):
+                            try:
+                                move_image(image["id"], destination_folder, image["path"])
+                                moved += 1
+                            except Exception as e:
+                                error_message = f"Error moving {image['path']}: {e}"
+                        else:
+                            error_message = f"Image file not found: {image['path']}"
+
+                        if error_message:
+                            errors.append(error_message)
+
+                        processed += 1
+                        if not self._update_batch_move_progress_if_current(
+                            run_id,
+                            step="moving",
+                            current=processed,
+                            total=total_count,
+                            errors=len(errors),
+                            moved=moved,
+                            message=f"Processed {filename} ({processed}/{total_count})",
+                            current_item=filename,
+                            recent_errors=errors[-3:],
+                            updated_at=time.time(),
+                        ):
+                            return
 
                 self._set_batch_move_progress_if_current(
                     run_id,
@@ -642,6 +660,8 @@ class SortingService:
         min_height: Optional[int] = None,
         max_height: Optional[int] = None,
         aspect_ratio: Optional[str] = None,
+        min_aesthetic: Optional[float] = None,
+        max_aesthetic: Optional[float] = None,
         folders: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
@@ -657,6 +677,8 @@ class SortingService:
             raise HTTPException(status_code=400, detail="min_width cannot be greater than max_width")
         if min_height is not None and max_height is not None and min_height > max_height:
             raise HTTPException(status_code=400, detail="min_height cannot be greater than max_height")
+        if min_aesthetic is not None and max_aesthetic is not None and min_aesthetic > max_aesthetic:
+            raise HTTPException(status_code=400, detail="min_aesthetic cannot be greater than max_aesthetic")
 
         gen_list = generators.split(",") if generators else None
         tag_list = tags.split(",") if tags else None
@@ -678,7 +700,9 @@ class SortingService:
             max_width=max_width,
             min_height=min_height,
             max_height=max_height,
-            aspect_ratio=aspect_ratio
+            aspect_ratio=aspect_ratio,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
         )
 
         folder_config = self._parse_sort_folders(folders)
@@ -1001,7 +1025,10 @@ class SortingService:
                 is_valid, error = validate_folder_path(path, allow_create=True)
                 if not is_valid:
                     raise HTTPException(status_code=400, detail=error or f"Invalid folder path for key '{key}'")
-                os.makedirs(path, exist_ok=True)
+                try:
+                    os.makedirs(path, exist_ok=True)
+                except OSError as exc:
+                    raise HTTPException(status_code=400, detail=f"Cannot create folder for key '{key}': {exc}") from exc
 
         with self._sort_session_lock:
             self._sort_session["folders"] = config.folders
@@ -1042,37 +1069,31 @@ class SortingService:
         return {"status": "ok", "message": "Gallery cleared"}
 
     def get_analytics(self) -> Dict[str, Any]:
-        """Get popular tags, checkpoints, and loras."""
+        """Get all tags, checkpoints, and loras with counts."""
         with db.get_db() as conn:
             cursor = conn.cursor()
 
+            # No artificial limit — return ALL checkpoints
             cursor.execute("""
                 SELECT checkpoint, COUNT(*) as count
                 FROM images
                 WHERE checkpoint IS NOT NULL AND checkpoint != ''
                 GROUP BY checkpoint
                 ORDER BY count DESC
-                LIMIT 50
             """)
             checkpoints = [dict(row) for row in cursor.fetchall()]
 
+            # Use the normalized image_loras table instead of full-table JSON scan
             cursor.execute("""
-                SELECT id, loras, prompt
-                FROM images
-                WHERE (loras IS NOT NULL AND loras != '[]' AND loras != '')
-                   OR (prompt IS NOT NULL AND prompt LIKE '%<lora:%')
+                SELECT lora_name AS lora, COUNT(*) as count
+                FROM image_loras
+                GROUP BY lora_name
+                ORDER BY count DESC
             """)
-            all_loras_rows = cursor.fetchall()
-            lora_counts = {}
-            for row in all_loras_rows:
-                image_loras = db.extract_lora_names(row["loras"] or "", row["prompt"] or "")
-                for lora_name in image_loras:
-                    lora_counts[lora_name] = lora_counts.get(lora_name, 0) + 1
+            loras = [dict(row) for row in cursor.fetchall()]
 
-            sorted_loras = sorted(lora_counts.items(), key=lambda x: x[1], reverse=True)[:50]
-            loras = [{"lora": l, "count": c} for l, c in sorted_loras]
-
-            tags = db.get_all_tags()[:20]
+            # No artificial limit on tags
+            tags = db.get_all_tags()
 
         return {
             "checkpoints": checkpoints,
@@ -1097,13 +1118,12 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid output folder")
 
-        os.makedirs(request.output_folder, exist_ok=True)
-
         blacklist = set(tag.strip().lower() for tag in (request.blacklist or []))
         prefix = request.prefix or ""
 
         exported = 0
         errors = []
+        output_folder_ready = os.path.isdir(request.output_folder)
 
         for image_id in request.image_ids:
             image = db.get_image_by_id(image_id)
@@ -1119,6 +1139,9 @@ class SortingService:
             output_path = os.path.join(request.output_folder, f"{image_basename}.txt")
 
             try:
+                if not output_folder_ready:
+                    os.makedirs(request.output_folder, exist_ok=True)
+                    output_folder_ready = True
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(tag_string)
                 exported += 1

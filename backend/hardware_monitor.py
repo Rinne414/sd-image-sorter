@@ -1,9 +1,74 @@
 """Hardware detection and memory monitoring for adaptive AI model inference."""
+import json
 import logging
 import platform
-from typing import Any, Dict, Optional
+import subprocess
+from importlib import metadata
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
+    """Best-effort Windows GPU enumeration via CIM to catch NVIDIA/Intel/AMD devices."""
+    if platform.system() != "Windows":
+        return []
+
+    try:
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            (
+                "Get-CimInstance Win32_VideoController | "
+                "Select-Object Name,AdapterRAM,PNPDeviceID | ConvertTo-Json -Compress"
+            ),
+        ]
+        raw = subprocess.check_output(command, text=True, timeout=10).strip()
+        if not raw:
+            return []
+
+        parsed = json.loads(raw)
+        rows = parsed if isinstance(parsed, list) else [parsed]
+        devices: List[Dict[str, Any]] = []
+        for row in rows:
+            name = str(row.get("Name") or "").strip()
+            if not name:
+                continue
+
+            lowered = name.lower()
+            if "virtual" in lowered and "nvidia" not in lowered:
+                continue
+            if "microsoft basic render" in lowered:
+                continue
+
+            adapter_ram = row.get("AdapterRAM")
+            vram_mb = None
+            try:
+                if adapter_ram:
+                    vram_mb = round(float(adapter_ram) / (1024 ** 2), 0)
+            except Exception:
+                vram_mb = None
+
+            vendor = "unknown"
+            if "nvidia" in lowered:
+                vendor = "nvidia"
+            elif "intel" in lowered:
+                vendor = "intel"
+            elif "amd" in lowered or "radeon" in lowered:
+                vendor = "amd"
+
+            devices.append({
+                "name": name,
+                "vendor": vendor,
+                "vram_total_mb": vram_mb,
+                "pnp_device_id": row.get("PNPDeviceID"),
+            })
+
+        return devices
+    except Exception as exc:
+        logger.debug("Windows GPU enumeration failed: %s", exc)
+        return []
 
 
 def get_system_info() -> Dict[str, Any]:
@@ -28,6 +93,10 @@ def get_system_info() -> Dict[str, Any]:
         "cpu_count": None,
         "os_platform": platform.system(),
         "onnx_providers": [],
+        "gpu_devices": [],
+        "onnxruntime_version": None,
+        "onnxruntime_gpu_version": None,
+        "onnxruntime_conflict": False,
     }
 
     # --- RAM via psutil ---
@@ -47,6 +116,9 @@ def get_system_info() -> Dict[str, Any]:
         info["cpu_count"] = multiprocessing.cpu_count()
     except Exception as exc:
         logger.debug("CPU count detection failed: %s", exc)
+
+    # --- Windows multi-GPU enumeration (NVIDIA / Intel / AMD) ---
+    info["gpu_devices"] = _detect_windows_gpu_devices()
 
     # --- GPU via torch.cuda ---
     try:
@@ -87,6 +159,12 @@ def get_system_info() -> Dict[str, Any]:
         except Exception as exc:
             logger.debug("pynvml GPU detection failed: %s", exc)
 
+    # --- Final fallback from enumerated devices ---
+    if info["gpu_name"] is None and info["gpu_devices"]:
+        primary = info["gpu_devices"][0]
+        info["gpu_name"] = primary.get("name")
+        info["gpu_vram_total_mb"] = primary.get("vram_total_mb")
+
     # --- ONNX Runtime providers ---
     try:
         import onnxruntime as ort  # type: ignore
@@ -94,6 +172,23 @@ def get_system_info() -> Dict[str, Any]:
         info["onnx_providers"] = ort.get_available_providers()
     except Exception as exc:
         logger.debug("ONNX Runtime provider detection failed: %s", exc)
+
+    # --- Installed ONNX Runtime distributions ---
+    try:
+        info["onnxruntime_version"] = metadata.version("onnxruntime")
+    except metadata.PackageNotFoundError:
+        info["onnxruntime_version"] = None
+    except Exception as exc:
+        logger.debug("onnxruntime package inspection failed: %s", exc)
+
+    try:
+        info["onnxruntime_gpu_version"] = metadata.version("onnxruntime-gpu")
+    except metadata.PackageNotFoundError:
+        info["onnxruntime_gpu_version"] = None
+    except Exception as exc:
+        logger.debug("onnxruntime-gpu package inspection failed: %s", exc)
+
+    info["onnxruntime_conflict"] = bool(info["onnxruntime_version"] and info["onnxruntime_gpu_version"])
 
     return info
 
@@ -122,16 +217,20 @@ def recommend_tagger_config(
 
     onnx_providers = system_info.get("onnx_providers") or []
     has_cuda_provider = "CUDAExecutionProvider" in onnx_providers
+    has_dml_provider = "DmlExecutionProvider" in onnx_providers
+    model_key = str(model_name or "").strip().lower()
+    torch_cuda_available = bool(system_info.get("torch_cuda_available"))
+    uses_torch_cuda_runtime = "toriigate" in model_key
+    has_any_gpu_provider = has_cuda_provider or has_dml_provider or (uses_torch_cuda_runtime and torch_cuda_available)
 
     if use_gpu is None:
-        use_gpu = has_gpu and has_cuda_provider
+        use_gpu = has_gpu and has_any_gpu_provider
     else:
-        use_gpu = bool(use_gpu and has_gpu and has_cuda_provider)
+        use_gpu = bool(use_gpu and has_gpu and has_any_gpu_provider)
 
     ram_gb = system_info.get("total_ram_gb") or 8
     available_ram_gb = system_info.get("available_ram_gb") or ram_gb
     available_vram_mb = system_info.get("gpu_vram_available_mb") or vram_mb
-    model_key = str(model_name or "").strip().lower()
     is_heavy_model = "eva02" in model_key or "large" in model_key
 
     if use_gpu and vram_mb is not None:
@@ -152,16 +251,22 @@ def recommend_tagger_config(
         if is_heavy_model:
             batch_size = max(2, min(batch_size, 12 if (vram_mb or 0) < 16000 else 16))
     else:
-        # CPU mode: conservative batch sizes to prevent OOM crashes.
-        # CPU ONNX inference is memory-hungry; keep batches small.
+        # CPU / fallback runtimes: still keep a safety margin, but avoid tiny defaults on
+        # modern 16-32GB desktops where users expect faster throughput.
         if available_ram_gb < 8:
-            batch_size = 2
-        elif available_ram_gb < 16:
             batch_size = 4
+        elif available_ram_gb < 12:
+            batch_size = 6
+        elif available_ram_gb < 20:
+            batch_size = 10
         elif available_ram_gb < 32:
-            batch_size = 8
+            batch_size = 14
         else:
-            batch_size = 12
+            batch_size = 18
+
+        total_ram_gb = system_info.get("total_ram_gb") or available_ram_gb
+        if total_ram_gb >= 24 and available_ram_gb >= 4:
+            batch_size = max(batch_size, 8)
 
     session_refresh_interval = 180 if use_gpu else 0
 
@@ -187,11 +292,25 @@ def recommend_tagger_config(
         else:
             parts.append("Sufficient VRAM for aggressive batched GPU inference.")
     else:
-        if has_gpu and not has_cuda_provider:
+        if system_info.get("onnxruntime_conflict"):
+            parts.append(
+                "Both onnxruntime and onnxruntime-gpu are installed. "
+                "On Windows the launcher should keep only onnxruntime-gpu."
+            )
+            parts.append("Running on CPU until the package state is repaired.")
+        elif has_gpu and not has_cuda_provider:
             parts.append(f"GPU detected ({gpu_name}) but CUDAExecutionProvider not available in ONNX Runtime.")
             parts.append("Running on CPU.")
         else:
             parts.append("No GPU detected. Running on CPU.")
+
+    extra_devices = [
+        device.get("name")
+        for device in (system_info.get("gpu_devices") or [])
+        if device.get("name") and device.get("name") != gpu_name
+    ]
+    if extra_devices:
+        parts.append("Also detected: " + ", ".join(extra_devices[:3]) + ".")
     message = " ".join(parts)
 
     return {

@@ -43,6 +43,21 @@ def _build_model_inventory() -> List[Dict[str, Any]]:
         first_variant = installed_wd14[0]
         wd14_primary_path = str((Path(get_wd14_model_dir()) / first_variant / TAGGER_MODELS[first_variant]["model_file"]).resolve())
 
+    # Aesthetic predictor status
+    aesthetic_available = False
+    aesthetic_message = "Aesthetic predictor dependencies are not installed"
+    aesthetic_head_path = str(Path(__file__).parent.parent.parent / "models" / "aesthetic" / "sa_0_4_vit_l_14_linear.pth")
+    aesthetic_head_exists = Path(aesthetic_head_path).exists()
+    try:
+        from aesthetic import is_available
+        aesthetic_available = is_available()
+        if aesthetic_available:
+            aesthetic_message = "Aesthetic predictor is ready (CLIP + linear head)."
+        elif aesthetic_head_exists:
+            aesthetic_message = "Linear head downloaded but CLIP dependencies missing (torch/open_clip)."
+    except ImportError:
+        pass
+
     def with_status(*, is_ready: bool, is_downloaded: bool) -> Dict[str, str]:
         if is_ready:
             return {"status": "ready", "status_label": "Ready"}
@@ -79,6 +94,17 @@ def _build_model_inventory() -> List[Dict[str, Any]]:
             "message": health["clip"]["message"] if not health["clip"].get("runtime_loaded") or health["clip"]["available"] else "CLIP model is loaded and ready.",
             "path": health["clip"]["model_path"],
             "download_supported": True,
+        },
+        {
+            "id": "aesthetic",
+            "name": "Aesthetic Predictor",
+            "group": "Scoring",
+            "available": aesthetic_available,
+            **with_status(is_ready=aesthetic_available, is_downloaded=aesthetic_head_exists),
+            "message": aesthetic_message,
+            "path": aesthetic_head_path if aesthetic_head_exists else None,
+            "download_supported": True,
+            "note": "Uses CLIP ViT-L/14 + LAION linear head (~3KB). CLIP model (~400MB) downloads on first use via open_clip.",
         },
         {
             "id": "artist",
@@ -282,6 +308,30 @@ async def prepare_model(request: PrepareModelRequest):
                 "model_id": model_id,
                 "message": "SAM3 files were downloaded from ModelScope.",
                 "paths": {"checkpoint_path": refreshed_path},
+            }
+
+        if model_id == "aesthetic":
+            from aesthetic import _ensure_loaded, _get_models_dir, is_available
+            import urllib.request as _urllib
+
+            head_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
+            if not head_path.exists():
+                url = "https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth"
+                _urllib.urlretrieve(url, str(head_path))
+
+            if is_available():
+                _ensure_loaded()
+                return {
+                    "status": "ok",
+                    "model_id": model_id,
+                    "message": "Aesthetic predictor is ready.",
+                    "paths": {"head_path": str(head_path)},
+                }
+            return {
+                "status": "ok",
+                "model_id": model_id,
+                "message": "Linear head downloaded. CLIP model will download on first scoring run.",
+                "paths": {"head_path": str(head_path)},
             }
 
         raise HTTPException(status_code=400, detail=f"Model '{request.model_id}' cannot be prepared from the UI yet.")

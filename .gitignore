@@ -29,6 +29,7 @@ models/artist/
 models/clip/
 models/sam3/
 models/nudenet/
+models/aesthetic/
 models/yolo/*.onnx
 models/yolo/*.pt
 
@@ -133,6 +134,9 @@ docs/DELETION_LOG.md
 docs/IMPROVEMENT_PLAN.md
 docs/SECURITY_ARCHITECTURE.md
 docs/architecture.md
+
+# Internal scratch / audit prompts (not for public repo)
+v3_audit_prompt.md
 
 # Windows temp files
 nul

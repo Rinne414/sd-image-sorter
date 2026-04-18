@@ -101,6 +101,10 @@ def scan_folder(
                 logger.warning("Could not serialize metadata for %s: %s", image_path, e)
                 metadata_json = "{}"
             
+            # Extract model_hash from generation_params if available
+            gen_params = metadata.get("metadata", {}).get("_parsed", {}).get("generation_params") or {}
+            model_hash = gen_params.get("model_hash")
+
             # Add to database
             add_image(
                 path=image_path,
@@ -114,7 +118,8 @@ def scan_folder(
                 file_size=metadata["file_size"],
                 checkpoint=metadata["checkpoint"],
                 loras=metadata["loras"],
-                created_at=created_at
+                created_at=created_at,
+                model_hash=model_hash
             )
             
             result["new"] += 1

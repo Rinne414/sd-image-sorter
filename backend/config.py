@@ -352,16 +352,14 @@ DUPLICATE_CHUNK_SIZE: int = int(os.environ.get(
 # Maximum path depth to prevent deep nesting attacks
 MAX_PATH_DEPTH: int = int(os.environ.get(
     "SD_IMAGE_SORTER_MAX_PATH_DEPTH",
-    "20"
+    "64"
 ))
 
-# Maximum path length (platform-aware)
-# Windows has a default limit of 260 characters, but can be extended
-# Linux/macOS typically have 4096 character limits
-if platform.system() == 'Windows':
-    _default_max_path = 260
-else:
-    _default_max_path = 4096
+# Maximum path length
+# Use a modern default across platforms. Older Windows setups may still fail on
+# the underlying filesystem, but the app should not pre-emptively block valid
+# longer paths just because the legacy 260-character limit exists.
+_default_max_path = 4096
 
 MAX_PATH_LENGTH: int = int(os.environ.get(
     "SD_IMAGE_SORTER_MAX_PATH_LENGTH",

@@ -65,7 +65,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic
 
 # Import services
 from services import (
@@ -241,7 +241,7 @@ A local web application for managing, tagging, sorting, and censoring Stable Dif
 
 For detailed documentation, see `docs/API.md`.
     """,
-    version="2.6.3",
+    version="3.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -369,6 +369,8 @@ app.include_router(prompts.router)
 app.include_router(similarity.router)
 app.include_router(artists.router)
 app.include_router(models.router)
+app.include_router(obfuscation.router)
+app.include_router(aesthetic.router)
 
 
 # ============================================================

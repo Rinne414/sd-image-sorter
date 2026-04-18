@@ -16,6 +16,27 @@ from prompt_generator import get_generator
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
 
+_RECIPE_TOKEN_EXCLUDES = (
+    "negative prompt",
+    "steps:",
+    "cfg scale",
+    "cfg:",
+    "sampler:",
+    "scheduler:",
+    "seed:",
+    "size:",
+    "model hash",
+    "output format",
+    "generation time",
+)
+
+
+def _is_useful_recipe_token(token: str) -> bool:
+    text = str(token or "").strip().lower()
+    if not text or len(text) < 2:
+        return False
+    return not any(excluded in text for excluded in _RECIPE_TOKEN_EXCLUDES)
+
 
 # ============================================================
 # Pydantic Models
@@ -497,3 +518,250 @@ async def delete_preset(preset_id: int):
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Preset not found")
     return {"deleted": True}
+
+
+@router.get("/stats")
+async def prompt_stats(
+    tag_limit: int = Query(100, ge=1, le=10000),
+    high_tag_limit: int = Query(100, ge=1, le=10000),
+    checkpoint_limit: int = Query(30, ge=1, le=5000),
+    leader_limit: int = Query(24, ge=1, le=5000),
+    recipe_limit: int = Query(24, ge=1, le=5000),
+    scored_limit: int = Query(24, ge=1, le=5000),
+):
+    """Analyze prompt patterns across the image library.
+
+    Returns tag frequency, checkpoint usage, high-aesthetic prompt patterns,
+    and average prompt statistics.
+    """
+    with db.get_db() as conn:
+        cursor = conn.cursor()
+        effective_checkpoint_limit = max(checkpoint_limit, recipe_limit)
+        effective_leader_limit = max(leader_limit, recipe_limit)
+
+        # Total images
+        total = cursor.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+
+        # Top tags
+        top_tags_total = cursor.execute(
+            "SELECT COUNT(*) FROM (SELECT tag FROM tags GROUP BY tag)"
+        ).fetchone()[0]
+        top_tags = []
+        for row in cursor.execute(
+            "SELECT tag, COUNT(*) as cnt FROM tags GROUP BY tag ORDER BY cnt DESC LIMIT ?",
+            (tag_limit,),
+        ).fetchall():
+            top_tags.append({"tag": row[0], "count": row[1], "pct": round(row[1] / max(total, 1) * 100, 1)})
+
+        # Top checkpoints
+        top_checkpoints_total = cursor.execute(
+            "SELECT COUNT(*) FROM ("
+            "SELECT checkpoint FROM images "
+            "WHERE checkpoint IS NOT NULL AND TRIM(checkpoint) != '' "
+            "GROUP BY checkpoint"
+            ")"
+        ).fetchone()[0]
+        top_checkpoints = []
+        for row in cursor.execute(
+            "SELECT checkpoint, COUNT(*) as cnt FROM images WHERE checkpoint IS NOT NULL AND TRIM(checkpoint) != '' "
+            "GROUP BY checkpoint ORDER BY cnt DESC LIMIT ?",
+            (effective_checkpoint_limit,),
+        ).fetchall():
+            checkpoint_name = str(row[0] or "").strip()
+            if not checkpoint_name:
+                continue
+            top_checkpoints.append({"name": checkpoint_name, "count": row[1]})
+
+        checkpoint_score_leaders_total = cursor.execute(
+            "SELECT COUNT(*) FROM ("
+            "SELECT checkpoint FROM images "
+            "WHERE checkpoint IS NOT NULL AND TRIM(checkpoint) != '' AND aesthetic_score IS NOT NULL "
+            "GROUP BY checkpoint "
+            "HAVING COUNT(*) >= 3"
+            ")"
+        ).fetchone()[0]
+        checkpoint_score_leaders = []
+        for row in cursor.execute(
+            "SELECT checkpoint, AVG(aesthetic_score) as avg_score, COUNT(*) as cnt "
+            "FROM images "
+            "WHERE checkpoint IS NOT NULL AND TRIM(checkpoint) != '' AND aesthetic_score IS NOT NULL "
+            "GROUP BY checkpoint "
+            "HAVING COUNT(*) >= 3 "
+            "ORDER BY avg_score DESC, cnt DESC "
+            "LIMIT ?",
+            (effective_leader_limit,),
+        ).fetchall():
+            checkpoint_name = str(row[0] or "").strip()
+            if not checkpoint_name:
+                continue
+            checkpoint_score_leaders.append({
+                "name": checkpoint_name,
+                "avg_score": round(row[1] or 0, 2),
+                "count": row[2],
+            })
+
+        recipe_sources = checkpoint_score_leaders[:recipe_limit] if checkpoint_score_leaders else top_checkpoints[:recipe_limit]
+        checkpoint_recipes_total = checkpoint_score_leaders_total if checkpoint_score_leaders_total else top_checkpoints_total
+        checkpoint_recipes = []
+        for leader in recipe_sources:
+            recipe_tags = []
+            tag_query = (
+                "SELECT t.tag, COUNT(*) as cnt "
+                "FROM tags t "
+                "INNER JOIN images i ON t.image_id = i.id "
+                "WHERE i.checkpoint = ? "
+            )
+            if leader.get("avg_score") is not None:
+                tag_query += "AND i.aesthetic_score IS NOT NULL "
+            tag_query += (
+                "GROUP BY t.tag "
+                "ORDER BY cnt DESC "
+                "LIMIT ?"
+            )
+
+            for row in cursor.execute(tag_query, (leader["name"], recipe_limit)).fetchall():
+                if _is_useful_recipe_token(row[0]):
+                    recipe_tags.append(row[0])
+
+            if not recipe_tags:
+                prompt_counts = {}
+                for row in cursor.execute(
+                    "SELECT prompt FROM images WHERE checkpoint = ? AND prompt IS NOT NULL AND prompt != '' LIMIT 1000",
+                    (leader["name"],)
+                ).fetchall():
+                    for token in db.extract_prompt_tokens(row[0]):
+                        if _is_useful_recipe_token(token):
+                            prompt_counts[token] = prompt_counts.get(token, 0) + 1
+
+                recipe_tags = [
+                    token for token, _count in sorted(
+                        prompt_counts.items(),
+                        key=lambda item: item[1],
+                        reverse=True
+                    )[:recipe_limit]
+                ]
+
+            checkpoint_recipes.append({
+                "name": leader["name"],
+                "avg_score": leader.get("avg_score"),
+                "count": leader["count"],
+                "tags": recipe_tags,
+            })
+
+        # Prompt length stats
+        prompt_stats_row = cursor.execute(
+            "SELECT AVG(LENGTH(prompt)), MAX(LENGTH(prompt)), MIN(LENGTH(CASE WHEN prompt IS NOT NULL AND prompt != '' THEN prompt END)) "
+            "FROM images WHERE prompt IS NOT NULL AND prompt != ''"
+        ).fetchone()
+        avg_len = round(prompt_stats_row[0] or 0)
+        max_len = prompt_stats_row[1] or 0
+        min_len = prompt_stats_row[2] or 0
+
+        # High aesthetic images' common tags (score >= 7)
+        high_score_tags_total = cursor.execute(
+            "SELECT COUNT(*) FROM ("
+            "SELECT t.tag FROM tags t "
+            "INNER JOIN images i ON t.image_id = i.id "
+            "WHERE i.aesthetic_score >= 7 "
+            "GROUP BY t.tag"
+            ")"
+        ).fetchone()[0]
+        high_score_tags = []
+        for row in cursor.execute(
+            "SELECT t.tag, COUNT(*) as cnt FROM tags t "
+            "INNER JOIN images i ON t.image_id = i.id "
+            "WHERE i.aesthetic_score >= 7 "
+            "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?",
+            (high_tag_limit,),
+        ).fetchall():
+            high_score_tags.append({"tag": row[0], "count": row[1]})
+
+        # Low aesthetic images' common tags (score < 4)
+        low_score_tags = []
+        for row in cursor.execute(
+            "SELECT t.tag, COUNT(*) as cnt FROM tags t "
+            "INNER JOIN images i ON t.image_id = i.id "
+            "WHERE i.aesthetic_score IS NOT NULL AND i.aesthetic_score < 4 "
+            "GROUP BY t.tag ORDER BY cnt DESC LIMIT ?",
+            (high_tag_limit,),
+        ).fetchall():
+            low_score_tags.append({"tag": row[0], "count": row[1]})
+
+        # Scored count
+        scored = cursor.execute("SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL").fetchone()[0]
+
+        top_scored_images = []
+        for row in cursor.execute(
+            "SELECT id, filename, checkpoint, prompt, aesthetic_score "
+            "FROM images "
+            "WHERE aesthetic_score IS NOT NULL "
+            "ORDER BY aesthetic_score DESC, id DESC "
+            "LIMIT ?",
+            (scored_limit,),
+        ).fetchall():
+            top_scored_images.append({
+                "id": row[0],
+                "filename": row[1],
+                "checkpoint": row[2],
+                "prompt": row[3] or "",
+                "aesthetic_score": row[4],
+            })
+
+        return {
+            "total_images": total,
+            "scored_images": scored,
+            "top_tags": top_tags,
+            "top_tags_total": top_tags_total,
+            "top_tags_has_more": top_tags_total > len(top_tags),
+            "top_checkpoints": top_checkpoints,
+            "top_checkpoints_total": top_checkpoints_total,
+            "top_checkpoints_has_more": top_checkpoints_total > len(top_checkpoints),
+            "checkpoint_score_leaders": checkpoint_score_leaders,
+            "checkpoint_score_leaders_total": checkpoint_score_leaders_total,
+            "checkpoint_score_leaders_has_more": checkpoint_score_leaders_total > len(checkpoint_score_leaders),
+            "checkpoint_recipes": checkpoint_recipes,
+            "checkpoint_recipes_total": checkpoint_recipes_total,
+            "checkpoint_recipes_has_more": checkpoint_recipes_total > len(checkpoint_recipes),
+            "prompt_length": {"avg": avg_len, "max": max_len, "min": min_len},
+            "high_aesthetic_tags": high_score_tags,
+            "high_aesthetic_tags_total": high_score_tags_total,
+            "high_aesthetic_tags_has_more": high_score_tags_total > len(high_score_tags),
+            "low_aesthetic_tags": low_score_tags,
+            "top_scored_images": top_scored_images,
+            "top_scored_images_total": scored,
+            "top_scored_images_has_more": scored > len(top_scored_images),
+        }
+
+
+@router.get("/compare")
+async def compare_prompts(
+    id_a: int = Query(..., description="First image ID"),
+    id_b: int = Query(..., description="Second image ID"),
+):
+    """Compare prompts and tags of two images side by side."""
+    img_a = db.get_image_by_id(id_a)
+    img_b = db.get_image_by_id(id_b)
+    if not img_a or not img_b:
+        raise HTTPException(status_code=404, detail="One or both images not found")
+
+    tags_a = set(t["tag"] for t in db.get_image_tags(id_a))
+    tags_b = set(t["tag"] for t in db.get_image_tags(id_b))
+
+    prompt_a = img_a.get("prompt") or ""
+    prompt_b = img_b.get("prompt") or ""
+
+    tokens_a = set(t.strip() for t in prompt_a.split(",") if t.strip())
+    tokens_b = set(t.strip() for t in prompt_b.split(",") if t.strip())
+
+    return {
+        "image_a": {"id": id_a, "filename": img_a["filename"], "prompt": prompt_a,
+                     "checkpoint": img_a.get("checkpoint"), "aesthetic_score": img_a.get("aesthetic_score")},
+        "image_b": {"id": id_b, "filename": img_b["filename"], "prompt": prompt_b,
+                     "checkpoint": img_b.get("checkpoint"), "aesthetic_score": img_b.get("aesthetic_score")},
+        "tags_common": sorted(tags_a & tags_b),
+        "tags_only_a": sorted(tags_a - tags_b),
+        "tags_only_b": sorted(tags_b - tags_a),
+        "prompt_common": sorted(tokens_a & tokens_b),
+        "prompt_only_a": sorted(tokens_a - tokens_b),
+        "prompt_only_b": sorted(tokens_b - tokens_a),
+    }

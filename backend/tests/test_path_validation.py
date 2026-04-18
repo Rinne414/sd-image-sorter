@@ -145,6 +145,37 @@ class TestValidateFolderPath:
         assert is_valid is True
         assert error is None
 
+    def test_moderately_deep_path_is_allowed(self, tmp_path: Path):
+        """Valid nested paths below the configured depth should still pass."""
+        base_depth = len(tmp_path.parts)
+        extra_levels = max(1, min(25, MAX_PATH_DEPTH - base_depth - 1))
+        nested = tmp_path
+        for index in range(extra_levels):
+            nested = nested / f"level_{index}"
+
+        is_valid, error = validate_folder_path(str(nested), allow_create=True)
+        assert is_valid is True
+        assert error is None
+
+    def test_path_depth_limit_still_blocks_excessive_nesting(self, tmp_path: Path):
+        """Paths beyond MAX_PATH_DEPTH should still fail."""
+        base_depth = len(tmp_path.parts)
+        extra_levels = max(1, MAX_PATH_DEPTH - base_depth + 2)
+        nested = tmp_path
+        for index in range(extra_levels):
+            nested = nested / f"too_deep_{index}"
+
+        is_valid, error = validate_folder_path(str(nested), allow_create=True)
+        assert is_valid is False
+        assert "depth" in error.lower()
+
+    def test_double_dot_inside_name_is_allowed(self, tmp_path: Path):
+        """Legitimate names containing '..' should not be treated as traversal."""
+        candidate = tmp_path / "model..v2"
+        is_valid, error = validate_folder_path(str(candidate), allow_create=True)
+        assert is_valid is True
+        assert error is None
+
     def test_file_path_fails(self, tmp_path: Path):
         """File path should fail folder validation."""
         file_path = tmp_path / "test.txt"
@@ -155,8 +186,9 @@ class TestValidateFolderPath:
         assert "not a directory" in error.lower()
 
     def test_very_long_path_fails(self):
-        """Paths exceeding MAX_PATH_LENGTH should fail."""
-        long_path = "C:\\" + "a" * 300 if os.name == "nt" else "/" + "a" * 5000
+        """Paths exceeding MAX_PATH_LENGTH should fail with a length-specific error."""
+        prefix = "C:\\" if os.name == "nt" else "/"
+        long_path = prefix + "a" * (MAX_PATH_LENGTH + 1)
         is_valid, error = validate_folder_path(long_path)
         assert is_valid is False
         assert "length" in error.lower() or "long" in error.lower() or "invalid" in error.lower()

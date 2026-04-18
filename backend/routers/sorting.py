@@ -307,6 +307,8 @@ async def start_sort_session(
     min_height: Optional[int] = Query(default=None, ge=1, le=100000),
     max_height: Optional[int] = Query(default=None, ge=1, le=100000),
     aspect_ratio: Optional[str] = Query(default=None),
+    min_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
+    max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     folders: Optional[str] = Query(default=None, max_length=4096),
     service: SortingService = Depends(get_sorting_service),
 ):
@@ -324,6 +326,8 @@ async def start_sort_session(
         min_height=min_height,
         max_height=max_height,
         aspect_ratio=aspect_ratio,
+        min_aesthetic=min_aesthetic,
+        max_aesthetic=max_aesthetic,
         folders=folders,
     )
 

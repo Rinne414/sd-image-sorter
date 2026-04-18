@@ -63,8 +63,9 @@ class SimilarityService:
     def search_similar(
         self,
         image_id: int,
-        limit: int = 20,
+        limit: int = 100,
         threshold: float = 0.5,
+        offset: int = 0,
     ) -> dict:
         """
         Find images similar to a given image ID.
@@ -74,22 +75,27 @@ class SimilarityService:
         """
         index = get_similarity_index(db)
         try:
-            results = index.search_by_id(image_id, limit=limit, threshold=threshold)
+            result = index.search_by_id(image_id, limit=limit, threshold=threshold, offset=offset)
         except SimilarityImageNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SimilarityEmbeddingMissingError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {
             "query_image_id": image_id,
-            "results": results,
-            "count": len(results),
+            "results": result["results"],
+            "count": len(result["results"]),
+            "total": result["total"],
+            "has_more": result["has_more"],
+            "offset": result["offset"],
+            "limit": result["limit"],
         }
 
     async def search_by_upload(
         self,
         file: UploadFile,
-        limit: int = 20,
+        limit: int = 100,
         threshold: float = 0.5,
+        offset: int = 0,
     ) -> dict:
         """
         Find images similar to an uploaded image.
@@ -106,18 +112,23 @@ class SimilarityService:
 
         index = get_similarity_index(db)
         try:
-            results = index.search_by_upload(image_data, limit=limit, threshold=threshold)
+            result = index.search_by_upload(image_data, limit=limit, threshold=threshold, offset=offset)
         except SimilarityInvalidImageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
-            "results": results,
-            "count": len(results),
+            "results": result["results"],
+            "count": len(result["results"]),
+            "total": result["total"],
+            "has_more": result["has_more"],
+            "offset": result["offset"],
+            "limit": result["limit"],
         }
 
     def find_duplicates(
         self,
         threshold: float = 0.95,
-        limit: int = 100,
+        limit: int = 500,
+        offset: int = 0,
     ) -> dict:
         """
         Find near-duplicate image pairs above similarity threshold.
@@ -127,20 +138,28 @@ class SimilarityService:
         """
         index = get_similarity_index(db)
         try:
-            results = index.find_duplicates(threshold=threshold, limit=limit)
+            result = index.find_duplicates(threshold=threshold, limit=limit, offset=offset)
         except SimilarityInsufficientEmbeddingsError as exc:
             return {
                 "duplicates": [],
                 "count": 0,
+                "total": 0,
+                "has_more": False,
+                "offset": offset,
+                "limit": limit,
                 "threshold": threshold,
                 "reason": "insufficient_embeddings",
                 "embedded_count": exc.embedded_count,
                 "minimum_required": exc.minimum_required,
             }
         return {
-            "duplicates": results,
-            "count": len(results),
-            "threshold": threshold,
+            "duplicates": result["duplicates"],
+            "count": len(result["duplicates"]),
+            "total": result["total"],
+            "has_more": result["has_more"],
+            "offset": result["offset"],
+            "limit": result["limit"],
+            "threshold": result["threshold"],
         }
 
     def get_stats(self) -> dict:

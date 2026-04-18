@@ -25,6 +25,20 @@ const SimilarImages = {
     searchResults: [],
     duplicateResults: [],
     currentSearchId: null,
+    searchPageSize: 100,
+    duplicatePageSize: 500,
+    currentSearchOffset: 0,
+    currentDuplicateOffset: 0,
+    currentSearchFile: null,
+    currentSearchMode: null,
+    currentSearchThreshold: 0.5,
+    currentDuplicateThreshold: 0.95,
+    lastSearchCount: 0,
+    lastDuplicateCount: 0,
+    searchHasMore: false,
+    duplicateHasMore: false,
+    totalSearchCount: 0,
+    totalDuplicateCount: 0,
     requestSequence: 0,
     activeSearchToken: 0,
     activeDuplicateToken: 0,
@@ -106,14 +120,18 @@ const SimilarImages = {
 
     renderSearchMessage(message) {
         const container = document.getElementById('similar-results');
+        const loadMoreBtn = document.getElementById('btn-similar-load-more');
         if (!container) return;
         container.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
     },
 
     renderDuplicateMessage(message) {
         const container = document.getElementById('similar-duplicates');
+        const loadMoreBtn = document.getElementById('btn-similar-duplicates-more');
         if (!container) return;
         container.innerHTML = `<div class="empty-state">${escapeHtml(message)}</div>`;
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
     },
 
     async waitForEmbeddingStatusReady(timeoutMs = 10000) {
@@ -209,17 +227,19 @@ const SimilarImages = {
         const view = document.getElementById('view-similar');
         if (!view) return;
 
+        const t = (key) => (window.I18n ? window.I18n.t(key) : key);
         const overlay = window.App.createGuideOverlay({
             id: 'similar-first-use-guide',
             storageKey: 'similar-guide-seen',
-            title: '🔍 Similar Images Guide',
-            description: 'Find visually similar images in your library using AI.',
+            title: t('guide.similarTitle'),
+            description: t('guide.similarDescription'),
             steps: [
-                { title: 'Generate Embeddings', text: 'Creates visual fingerprints for all images and builds the searchable local index.' },
-                { title: 'Search by ID', text: 'Enter an image ID from your gallery' },
-                { title: 'Upload Search', text: 'Drag & drop any image to find similar ones' },
-                { title: 'Duplicates', text: 'Find near-duplicate images in your library' },
+                { title: t('guide.similarStep1Title'), text: t('guide.similarStep1Text') },
+                { title: t('guide.similarStep2Title'), text: t('guide.similarStep2Text') },
+                { title: t('guide.similarStep3Title'), text: t('guide.similarStep3Text') },
+                { title: t('guide.similarStep4Title'), text: t('guide.similarStep4Text') },
             ],
+            closeLabel: t('guide.closeLabel'),
             maxWidth: '480px',
         });
 
@@ -375,7 +395,7 @@ const SimilarImages = {
 
     // ============== Search by Image ==============
 
-    async searchByImage(imageId) {
+    async searchByImage(imageId, { append = false } = {}) {
         const { showToast, API } = window.App;
         this.currentSearchId = imageId;
 
@@ -395,15 +415,31 @@ const SimilarImages = {
 
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = 'No similar images found for this image at the current threshold.';
-
-        resultsContainer.innerHTML = '<div class="spinner"></div>';
+        if (!append) {
+            this.currentSearchOffset = 0;
+            this.searchResults = [];
+            this.searchHasMore = false;
+            this.totalSearchCount = 0;
+            resultsContainer.innerHTML = '<div class="spinner"></div>';
+        }
 
         try {
             const thresholdEl = document.getElementById('similar-search-threshold');
             const threshold = thresholdEl ? parseFloat(thresholdEl.value) : 0.5;
-            const result = await API.get(`/api/similarity/search/${imageId}?limit=20&threshold=${threshold}`);
+            this.currentSearchId = imageId;
+            this.currentSearchMode = 'id';
+            this.currentSearchThreshold = threshold;
+            const requestOffset = append ? this.currentSearchOffset : 0;
+            const result = await API.get(
+                `/api/similarity/search/${imageId}?limit=${this.searchPageSize}&offset=${requestOffset}&threshold=${threshold}`
+            );
             if (requestToken !== this.activeSearchToken) return;
-            this.searchResults = result.results || [];
+            const pageResults = Array.isArray(result.results) ? result.results : [];
+            this.searchResults = append ? [...this.searchResults, ...pageResults] : pageResults;
+            this.lastSearchCount = pageResults.length;
+            this.currentSearchOffset = requestOffset + pageResults.length;
+            this.searchHasMore = Boolean(result.has_more);
+            this.totalSearchCount = Number(result.total || this.searchResults.length);
             this.renderSearchResults();
         } catch (e) {
             if (requestToken !== this.activeSearchToken) return;
@@ -420,7 +456,7 @@ const SimilarImages = {
         }
     },
 
-    async searchByUpload(file) {
+    async searchByUpload(file, { append = false } = {}) {
         const { showToast, API } = window.App;
 
         const resultsContainer = document.getElementById('similar-results');
@@ -439,8 +475,13 @@ const SimilarImages = {
 
         const requestToken = this.beginSearchRequest();
         this.searchEmptyMessage = 'No similar images found for the uploaded image at the current threshold.';
-
-        resultsContainer.innerHTML = '<div class="spinner"></div>';
+        if (!append) {
+            this.currentSearchOffset = 0;
+            this.searchResults = [];
+            this.searchHasMore = false;
+            this.totalSearchCount = 0;
+            resultsContainer.innerHTML = '<div class="spinner"></div>';
+        }
 
         try {
             const formData = new FormData();
@@ -448,10 +489,17 @@ const SimilarImages = {
 
             const thresholdEl = document.getElementById('similar-search-threshold');
             const searchThreshold = thresholdEl ? parseFloat(thresholdEl.value) : 0.5;
-            const response = await fetch(`/api/similarity/search-upload?limit=20&threshold=${searchThreshold}`, {
+            this.currentSearchMode = 'upload';
+            this.currentSearchFile = file;
+            this.currentSearchThreshold = searchThreshold;
+            const requestOffset = append ? this.currentSearchOffset : 0;
+            const response = await fetch(
+                `/api/similarity/search-upload?limit=${this.searchPageSize}&offset=${requestOffset}&threshold=${searchThreshold}`,
+                {
                 method: 'POST',
                 body: formData,
-            });
+                }
+            );
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(errorData.detail || `API Error: ${response.status}`);
@@ -459,7 +507,12 @@ const SimilarImages = {
             const result = await response.json();
             if (requestToken !== this.activeSearchToken) return;
 
-            this.searchResults = result.results || [];
+            const pageResults = Array.isArray(result.results) ? result.results : [];
+            this.searchResults = append ? [...this.searchResults, ...pageResults] : pageResults;
+            this.lastSearchCount = pageResults.length;
+            this.currentSearchOffset = requestOffset + pageResults.length;
+            this.searchHasMore = Boolean(result.has_more);
+            this.totalSearchCount = Number(result.total || this.searchResults.length);
             this.renderSearchResults();
         } catch (e) {
             if (requestToken !== this.activeSearchToken) return;
@@ -509,10 +562,11 @@ const SimilarImages = {
 
     // ============== Duplicate Finder ==============
 
-    async findDuplicates() {
+    async findDuplicates({ append = false } = {}) {
         const { showToast, API } = window.App;
 
         const threshold = parseFloat(document.getElementById('similar-dup-threshold')?.value || '0.95');
+        this.currentDuplicateThreshold = threshold;
         const resultsContainer = document.getElementById('similar-duplicates');
         if (!resultsContainer) return;
 
@@ -529,13 +583,26 @@ const SimilarImages = {
 
         const requestToken = this.beginDuplicateRequest();
         this.duplicateEmptyMessage = 'No duplicates found at this threshold.';
-
-        resultsContainer.innerHTML = '<div class="spinner"></div>';
+        if (!append) {
+            this.currentDuplicateOffset = 0;
+            this.duplicateResults = [];
+            this.duplicateHasMore = false;
+            this.totalDuplicateCount = 0;
+            resultsContainer.innerHTML = '<div class="spinner"></div>';
+        }
 
         try {
-            const result = await API.get(`/api/similarity/duplicates?threshold=${threshold}&limit=50`);
+            const requestOffset = append ? this.currentDuplicateOffset : 0;
+            const result = await API.get(
+                `/api/similarity/duplicates?threshold=${threshold}&limit=${this.duplicatePageSize}&offset=${requestOffset}`
+            );
             if (requestToken !== this.activeDuplicateToken) return;
-            this.duplicateResults = result.duplicates || [];
+            const pageResults = Array.isArray(result.duplicates) ? result.duplicates : [];
+            this.duplicateResults = append ? [...this.duplicateResults, ...pageResults] : pageResults;
+            this.lastDuplicateCount = pageResults.length;
+            this.currentDuplicateOffset = requestOffset + pageResults.length;
+            this.duplicateHasMore = Boolean(result.has_more);
+            this.totalDuplicateCount = Number(result.total || this.duplicateResults.length);
             if (result.reason === 'insufficient_embeddings') {
                 this.duplicateEmptyMessage = this._t(
                     'similar.needMoreEmbeddings',
@@ -559,10 +626,12 @@ const SimilarImages = {
 
     renderSearchResults() {
         const container = document.getElementById('similar-results');
+        const loadMoreBtn = document.getElementById('btn-similar-load-more');
         if (!container) return;
 
         if (this.searchResults.length === 0) {
             container.innerHTML = `<div class="empty-state">${escapeHtml(this.searchEmptyMessage)}</div>`;
+            if (loadMoreBtn) loadMoreBtn.style.display = 'none';
             return;
         }
 
@@ -576,25 +645,39 @@ const SimilarImages = {
 
         container.replaceChildren(fragment);
 
-        // Click to open preview
         container.querySelectorAll('.similar-result').forEach(el => {
             el.addEventListener('click', () => {
                 const id = parseInt(el.dataset.id, 10);
-                if (window.App && typeof window.App.openGalleryPreview === 'function') {
-                    window.App.openGalleryPreview(id);
-                } else if (window.Gallery) {
-                    window.Gallery.openPreview(id);
-                }
+                this._previewImage(id);
             });
         });
+
+        container.querySelectorAll('.similar-action-btn').forEach(btn => {
+            btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const action = btn.dataset.action;
+                const id = parseInt(btn.dataset.id, 10);
+                if (!id) return;
+                if (action === 'preview') this._previewImage(id);
+                if (action === 'reader') this._openInReader(id, btn.dataset.filename || '');
+                if (action === 'edit') this._sendToEdit(id);
+                if (action === 'build') this._openInBuild(id);
+            });
+        });
+
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = this.searchHasMore ? 'inline-flex' : 'none';
+        }
     },
 
     renderDuplicateResults() {
         const container = document.getElementById('similar-duplicates');
+        const loadMoreBtn = document.getElementById('btn-similar-duplicates-more');
         if (!container) return;
 
         if (this.duplicateResults.length === 0) {
             container.innerHTML = `<div class="empty-state">${escapeHtml(this.duplicateEmptyMessage)}</div>`;
+            if (loadMoreBtn) loadMoreBtn.style.display = 'none';
             return;
         }
 
@@ -611,13 +694,62 @@ const SimilarImages = {
         container.querySelectorAll('.dup-image').forEach(el => {
             el.addEventListener('click', () => {
                 const id = parseInt(el.dataset.id, 10);
-                if (window.App && typeof window.App.openGalleryPreview === 'function') {
-                    window.App.openGalleryPreview(id);
-                } else if (window.Gallery) {
-                    window.Gallery.openPreview(id);
-                }
+                this._previewImage(id);
             });
         });
+
+        container.querySelectorAll('.similar-action-btn').forEach(btn => {
+            btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                const action = btn.dataset.action;
+                const id = parseInt(btn.dataset.id, 10);
+                if (!id) return;
+                if (action === 'preview') this._previewImage(id);
+                if (action === 'reader') this._openInReader(id, btn.dataset.filename || '');
+                if (action === 'edit') this._sendToEdit(id);
+                if (action === 'build') this._openInBuild(id);
+            });
+        });
+
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = this.duplicateHasMore ? 'inline-flex' : 'none';
+        }
+    },
+
+    async loadMoreSearchResults() {
+        if (this.currentSearchMode === 'id' && this.currentSearchId) {
+            await this.searchByImage(this.currentSearchId, { append: true });
+            return;
+        }
+        if (this.currentSearchMode === 'upload' && this.currentSearchFile) {
+            await this.searchByUpload(this.currentSearchFile, { append: true });
+        }
+    },
+
+    async loadMoreDuplicateResults() {
+        await this.findDuplicates({ append: true });
+    },
+
+    _previewImage(id) {
+        if (window.App && typeof window.App.openGalleryPreview === 'function') {
+            window.App.openGalleryPreview(id);
+        } else if (window.Gallery) {
+            window.Gallery.openPreview(id);
+        }
+    },
+
+    _sendToEdit(id) {
+        if (window.App?.addToCensorQueue) {
+            window.App.addToCensorQueue([id]);
+        }
+    },
+
+    _openInReader(id, filename = '') {
+        window.App?.openReaderFromImage?.(id, filename);
+    },
+
+    _openInBuild(id) {
+        window.App?.openPromptBuildFromImage?.(id);
     },
 
     _renderSearchResult(result, getThumbnailUrl) {
@@ -646,7 +778,16 @@ const SimilarImages = {
         name.title = result.filename || '';
         name.textContent = result.filename || 'Unknown';
 
-        info.append(score, name);
+        const actions = document.createElement('div');
+        actions.className = 'similar-actions';
+        actions.innerHTML = `
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${result.id}">👁 ${this._t('similar.preview', 'Preview')}</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${result.id}" data-filename="${escapeHtml(result.filename || '')}">📖 ${this._t('similar.reader', 'Reader')}</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${result.id}">🔳 ${this._t('similar.edit', 'Edit')}</button>
+            <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${result.id}">✏️ ${this._t('similar.build', 'Build')}</button>
+        `;
+
+        info.append(score, name, actions);
         card.append(thumb, info);
         return card;
     },
@@ -676,7 +817,16 @@ const SimilarImages = {
         firstName.className = 'dup-name';
         firstName.textContent = filename1;
 
-        first.append(firstImg, firstName);
+        const firstActions = document.createElement('div');
+        firstActions.className = 'similar-actions';
+        firstActions.innerHTML = `
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${id1}" title="${this._t('similar.preview', 'Preview')}">👁</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${id1}" data-filename="${escapeHtml(filename1 || '')}" title="${this._t('similar.reader', 'Reader')}">📖</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id1}" title="${this._t('similar.edit', 'Edit')}">🔳</button>
+            <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${id1}" title="${this._t('similar.build', 'Build')}">✏️</button>
+        `;
+
+        first.append(firstImg, firstName, firstActions);
 
         const score = document.createElement('div');
         score.className = 'dup-score';
@@ -695,7 +845,16 @@ const SimilarImages = {
         secondName.className = 'dup-name';
         secondName.textContent = filename2;
 
-        second.append(secondImg, secondName);
+        const secondActions = document.createElement('div');
+        secondActions.className = 'similar-actions';
+        secondActions.innerHTML = `
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="preview" data-id="${id2}" title="${this._t('similar.preview', 'Preview')}">👁</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="reader" data-id="${id2}" data-filename="${escapeHtml(filename2 || '')}" title="${this._t('similar.reader', 'Reader')}">📖</button>
+            <button class="btn btn-ghost btn-small similar-action-btn" data-action="edit" data-id="${id2}" title="${this._t('similar.edit', 'Edit')}">🔳</button>
+            <button class="btn btn-secondary btn-small similar-action-btn" data-action="build" data-id="${id2}" title="${this._t('similar.build', 'Build')}">✏️</button>
+        `;
+
+        second.append(secondImg, secondName, secondActions);
         wrapper.append(first, score, second);
         return wrapper;
     },
@@ -767,10 +926,14 @@ const SimilarImages = {
         uploadDropzone?.addEventListener('dragend', () => this.setUploadDropzoneActive(false));
         uploadDropzone?.addEventListener('drop', (event) => this.handleUploadDrop(event));
         uploadInput?.addEventListener('change', (event) => this.handleUploadInputChange(event));
+        document.getElementById('btn-similar-load-more')?.addEventListener('click', () => this.loadMoreSearchResults());
+        document.getElementById('btn-similar-duplicates-more')?.addEventListener('click', () => this.loadMoreDuplicateResults());
 
         // Duplicate finder
         const btnDuplicates = document.getElementById('btn-similar-duplicates');
-        btnDuplicates?.addEventListener('click', () => this.findDuplicates());
+        btnDuplicates?.addEventListener('click', () => {
+            this.findDuplicates();
+        });
 
         // Threshold slider
         const thresholdSlider = document.getElementById('similar-dup-threshold');

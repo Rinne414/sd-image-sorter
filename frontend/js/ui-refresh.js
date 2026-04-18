@@ -145,6 +145,7 @@
                 character_count: 'sort.characterCount',
                 file_size: 'sort.fileSize',
                 file_size_asc: 'sort.fileSizeAsc',
+                aesthetic: 'sort.aesthetic',
                 random: 'sort.random'
             });
 
@@ -191,7 +192,7 @@
             this._setButton('#btn-browse-destination', 'common.browse', null, 'common.browse');
             this._setPlaceholder('#autosep-destination', 'modal.folderPath');
             this._setText('#view-autosep .preview-section h4', 'autosep.preview');
-            this._setText('#autosep-preview .stat-label', 'autosep.willMove', '{count} images will be moved');
+            this._setText('#autosep-preview .stat-label', 'common.images', 'images');
             this._setText('#autosep-preview-list .autosep-preview-empty', 'autosep.previewEmpty');
             this._setText('#view-autosep .autosep-preview-hint', 'autosep.previewHint');
             this._setButton('#btn-preview-autosep', 'autosep.previewBtn', null, 'autosep.previewBtn');
@@ -294,6 +295,7 @@
             this._setToggleHeader('#modal-params-section h4', 'modal.genParams');
             this._setText('#modal-img2img-section h4', 'modal.img2imgDetails');
             this._setToggleHeader('#modal-nodes-section h4', 'modal.promptNodes');
+            this._setToggleHeader('#modal-color-distribution h4', 'modal.colorDistribution');
             this._setText('.modal-tags-header h4', 'modal.tags');
         },
 
@@ -399,6 +401,7 @@
             this._setText('#tags-library-modal .modal-description', 'library.description');
             this._setButton('#library-tab-tags', 'library.tags', '🏷️', 'library.tags');
             this._setButton('#library-tab-prompts', 'library.prompts', '📝', 'library.prompts');
+            this._setButton('#library-tab-loras', 'library.loras', '🧩', 'library.loras');
             this._setOptionText('#library-sort', {
                 frequency: 'library.sortFrequency',
                 alphabetical: 'library.sortAlpha'

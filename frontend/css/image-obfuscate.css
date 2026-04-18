@@ -1,0 +1,317 @@
+/* ============== Image Obfuscation Tab ============== */
+
+.obfuscate-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    width: min(100%, 1200px);
+    max-width: 1200px;
+    margin: 0 auto;
+    background: var(--bg-card, rgba(13, 22, 37, 0.88));
+    border-radius: 18px;
+    border: 1px solid rgba(191, 219, 254, 0.08);
+    box-shadow: 0 20px 48px rgba(2, 6, 23, 0.34);
+}
+
+/* Drop zone */
+.obfuscate-drop-zone {
+    border: 2px dashed rgba(245, 158, 11, 0.25);
+    border-radius: 14px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.04), rgba(245, 158, 11, 0.04));
+}
+
+.obfuscate-drop-zone:hover,
+.obfuscate-drop-zone.drag-over {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: linear-gradient(135deg, rgba(20, 184, 166, 0.08), rgba(245, 158, 11, 0.08));
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.08);
+}
+
+.obfuscate-drop-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.obfuscate-drop-icon {
+    font-size: 28px;
+    opacity: 0.7;
+}
+
+.obfuscate-drop-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.obfuscate-drop-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted, rgba(255, 255, 255, 0.4));
+}
+
+/* Controls bar — stacked: settings row then action row */
+.obfuscate-controls-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.obfuscate-mode-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.obfuscate-mode-select {
+    min-width: 160px;
+    max-width: 220px;
+    flex-shrink: 0;
+}
+
+.obfuscate-password-input {
+    flex: 1;
+    min-width: 120px;
+    max-width: 240px;
+}
+
+.obfuscate-settings-toggle {
+    flex-shrink: 0;
+    min-height: 34px;
+    padding: 4px 8px;
+    font-size: 16px;
+}
+
+.obfuscate-action-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+/* Advanced settings panel */
+.obfuscate-advanced-settings {
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    border: 1px solid rgba(191, 219, 254, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.obfuscate-advanced-settings small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.obfuscate-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.obfuscate-checkbox-row.is-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* Status bar */
+.obfuscate-status-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-height: 20px;
+}
+
+.obfuscate-progress {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+/* Queue — grid of cards with larger previews */
+.obfuscate-queue {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 480px;
+    overflow-y: auto;
+}
+
+.obfuscate-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.15s;
+}
+
+.obfuscate-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.obfuscate-item.processing {
+    background: rgba(100, 108, 255, 0.08);
+    border-color: rgba(100, 108, 255, 0.2);
+}
+.obfuscate-item.done {
+    background: rgba(7, 188, 12, 0.06);
+    border-color: rgba(7, 188, 12, 0.15);
+}
+.obfuscate-item.error {
+    background: rgba(255, 68, 68, 0.06);
+    border-color: rgba(255, 68, 68, 0.15);
+}
+
+/* Thumbnail pair: source → result */
+.obfuscate-thumb-pair {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.obfuscate-thumb {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.obfuscate-thumb.result-thumb {
+    border: 2px solid rgba(34, 197, 94, 0.4);
+}
+
+.obfuscate-thumb-arrow {
+    color: var(--text-muted);
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.obfuscate-item-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.obfuscate-item-name {
+    font-size: 0.85rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #fff);
+}
+
+.obfuscate-item-name-input {
+    font-size: 0.82rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-primary, #fff);
+    padding: 2px 4px;
+    width: 100%;
+    min-width: 0;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.obfuscate-item-name-input:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.obfuscate-item-name-input:focus {
+    outline: none;
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.obfuscate-item-status {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Action buttons on each queue item */
+.obfuscate-item-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.obfuscate-item-actions .btn-icon {
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    color: var(--text-secondary);
+}
+
+.obfuscate-item-actions .btn-icon:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.obfuscate-item-actions .btn-icon:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.obfuscate-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 32px 20px;
+    font-size: 0.9rem;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+/* Batch download bar */
+.obfuscate-batch-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-top: 4px;
+}
+
+/* Clickable thumbnails in queue */
+.obfuscate-thumb {
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.obfuscate-thumb:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .obfuscate-controls-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .obfuscate-mode-group {
+        flex-wrap: wrap;
+    }
+    .obfuscate-mode-select {
+        min-width: 100%;
+    }
+}

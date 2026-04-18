@@ -26,6 +26,18 @@ const PromptLab = {
     isReady: false,
     eventsBound: false,
     randomizeExcludedCategories: new Set(['unknown', 'rating', 'meta']),
+    imagePickerTarget: '',
+    imageCatalog: [],
+    imageCatalogLoaded: false,
+    imageCatalogPromise: null,
+    statsVisibleCounts: {
+        topTags: 20,
+        highTags: 20,
+        checkpoints: 12,
+        bestCheckpoints: 8,
+        scoredImages: 8,
+        recipes: 8,
+    },
 
     // Current builder state (slot-based)
     slots: {},       // { category: [selected tags] }
@@ -35,6 +47,7 @@ const PromptLab = {
     async init() {
         if (!this.eventsBound) {
             this.bindEvents();
+            this.bindIntelligenceEvents();
             this.eventsBound = true;
         }
 
@@ -45,11 +58,14 @@ const PromptLab = {
             await this.loadTagSets();
             await this.loadExclusionRules();
             await this.loadPresets();
+            await this._ensureImageCatalog().catch(() => null);
             this.renderTagSetOptions();
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
             this.renderPresetList();
             this.showFirstUseGuide();
+            // Load stats for the default Stats tab
+            this.loadStats();
         } finally {
             this.setReadyState(true);
         }
@@ -61,17 +77,19 @@ const PromptLab = {
         const view = document.getElementById('view-promptlab');
         if (!view) return;
 
+        const t = (key) => (window.I18n ? window.I18n.t(key) : key);
         const overlay = window.App.createGuideOverlay({
             id: 'promptlab-first-use-guide',
             storageKey: 'promptlab-guide-seen',
-            title: '🧪 Prompt Lab Guide',
-            description: 'Generate random prompts with intelligent tag selection.',
+            title: t('guide.promptlabTitle'),
+            description: t('guide.promptlabDescription'),
             steps: [
-                { title: 'Randomize', text: 'Generate a random prompt with smart tag selection' },
-                { title: 'Tag Sets', text: 'Apply pre-built outfit combinations' },
-                { title: 'Lock Slots', text: 'Keep specific tags during randomization' },
-                { title: 'Exclusions', text: 'Auto-prevent conflicting tags' },
+                { title: t('guide.promptlabStep1Title'), text: t('guide.promptlabStep1Text') },
+                { title: t('guide.promptlabStep2Title'), text: t('guide.promptlabStep2Text') },
+                { title: t('guide.promptlabStep3Title'), text: t('guide.promptlabStep3Text') },
+                { title: t('guide.promptlabStep4Title'), text: t('guide.promptlabStep4Text') },
             ],
+            closeLabel: t('guide.closeLabel'),
             maxWidth: '520px',
         });
 
@@ -138,8 +156,199 @@ const PromptLab = {
         }
     },
 
-    _t(key, fallback) {
-        return window.I18n?.t?.(key) || fallback || key;
+    _t(key, fallback, params) {
+        return window.I18n?.t?.(key, params) || fallback || key;
+    },
+
+    _getImageThumbUrl(imageId, size = 320) {
+        const api = window.App?.API;
+        return api?.getThumbnailUrl?.(imageId, size) || `/api/image-thumbnail/${imageId}?size=${size}`;
+    },
+
+    _getImageRecord(imageId) {
+        const numericId = Number(imageId);
+        if (!Number.isFinite(numericId)) return null;
+        const fromCatalog = (this.imageCatalog || []).find((image) => Number(image.id) === numericId);
+        if (fromCatalog) return fromCatalog;
+        return (window.App?.AppState?.images || []).find((image) => Number(image.id) === numericId) || null;
+    },
+
+    _getPromptLabImages() {
+        if (Array.isArray(this.imageCatalog) && this.imageCatalog.length > 0) {
+            return this.imageCatalog;
+        }
+        return window.App?.AppState?.images || [];
+    },
+
+    async _ensureImageCatalog() {
+        if (this.imageCatalogLoaded && this.imageCatalog.length > 0) {
+            return this.imageCatalog;
+        }
+        if (this.imageCatalogPromise) {
+            return this.imageCatalogPromise;
+        }
+
+        this.imageCatalogPromise = (async () => {
+            const api = window.App?.API;
+            if (!api?.getImages) {
+                this.imageCatalog = window.App?.AppState?.images || [];
+                this.imageCatalogLoaded = true;
+                return this.imageCatalog;
+            }
+
+            const allImages = [];
+            let cursor = null;
+            let hasMore = true;
+            while (hasMore) {
+                const result = await api.getImages({
+                    sortBy: 'newest',
+                    limit: 500,
+                    cursor,
+                });
+                const rows = Array.isArray(result?.images) ? result.images : [];
+                allImages.push(...rows);
+                cursor = result?.next_cursor || null;
+                hasMore = Boolean(result?.has_more && cursor);
+            }
+
+            this.imageCatalog = allImages;
+            this.imageCatalogLoaded = true;
+            this.imageCatalogPromise = null;
+            return this.imageCatalog;
+        })().catch((error) => {
+            this.imageCatalogPromise = null;
+            throw error;
+        });
+
+        return this.imageCatalogPromise;
+    },
+
+    _formatPromptlabImageMeta(image) {
+        if (!image) return '';
+        const parts = [];
+        if (image.aesthetic_score != null) parts.push(`★ ${Number(image.aesthetic_score).toFixed(1)}`);
+        if (image.width && image.height) parts.push(`📐 ${image.width}×${image.height}`);
+        if (image.generator) parts.push(String(image.generator));
+        if (image.checkpoint) {
+            const checkpoint = String(image.checkpoint).replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || String(image.checkpoint);
+            parts.push(`🧠 ${checkpoint}`);
+        }
+        return parts.join(' · ');
+    },
+
+    _renderImagePreviewCard(targetId, imageId, emptyKey, emptyFallback) {
+        const container = document.getElementById(targetId);
+        if (!container) return;
+
+        const image = this._getImageRecord(imageId);
+        if (!image) {
+            container.className = 'promptlab-image-preview-card promptlab-image-preview-empty';
+            container.textContent = this._t(emptyKey, emptyFallback);
+            return;
+        }
+
+        container.className = 'promptlab-image-preview-card';
+        container.innerHTML = `
+            <div class="promptlab-image-preview-body">
+                <img class="promptlab-image-preview-thumb" src="${escapeHtml(this._getImageThumbUrl(image.id, 320))}" alt="${escapeHtml(image.filename || '')}" loading="lazy">
+                <div class="promptlab-image-preview-info">
+                    <div class="promptlab-image-preview-title">${escapeHtml(image.filename || `Image ${image.id}`)}</div>
+                    <div class="promptlab-image-preview-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick metadata'))}</div>
+                </div>
+            </div>
+        `;
+    },
+
+    _getPickerTargetMeta(target) {
+        if (target === 'compare-a') {
+            return {
+                selectId: 'pl-compare-a',
+                title: this._t('promptlab.pickImageForA', 'Pick Image A'),
+            };
+        }
+        if (target === 'compare-b') {
+            return {
+                selectId: 'pl-compare-b',
+                title: this._t('promptlab.pickImageForB', 'Pick Image B'),
+            };
+        }
+        return {
+            selectId: 'pl-build-source',
+            title: this._t('promptlab.pickImageForBuild', 'Pick Build Template'),
+        };
+    },
+
+    openImagePicker(target) {
+        this.imagePickerTarget = target;
+        const modal = document.getElementById('promptlab-image-picker-modal');
+        const title = document.getElementById('pl-image-picker-title');
+        const search = document.getElementById('pl-image-picker-search');
+        const meta = this._getPickerTargetMeta(target);
+        if (title) title.textContent = meta.title;
+        if (search) search.value = '';
+        this.renderImagePicker(true);
+        modal?.classList.add('visible');
+        this._ensureImageCatalog()
+            .then(() => this.renderImagePicker())
+            .catch(() => this.renderImagePicker());
+    },
+
+    closeImagePicker() {
+        document.getElementById('promptlab-image-picker-modal')?.classList.remove('visible');
+        this.imagePickerTarget = '';
+    },
+
+    renderImagePicker(isLoading = false) {
+        const grid = document.getElementById('pl-image-picker-grid');
+        const count = document.getElementById('pl-image-picker-count');
+        if (!grid) return;
+
+        if (isLoading) {
+            grid.innerHTML = `<div class="promptlab-image-preview-empty">${escapeHtml(this._t('promptlab.loadingImages', 'Loading images...'))}</div>`;
+            return;
+        }
+
+        const query = String(document.getElementById('pl-image-picker-search')?.value || '').trim().toLowerCase();
+        const images = this._getPromptLabImages().filter((image) => {
+            if (!query) return true;
+            const checkpoint = String(image.checkpoint || '').replace(/\\/g, '/').split('/').pop() || '';
+            const haystack = [
+                image.filename || '',
+                image.prompt || '',
+                image.negative_prompt || '',
+                checkpoint,
+            ].join(' ').toLowerCase();
+            return haystack.includes(query);
+        });
+
+        if (count) {
+            count.textContent = this._t('promptlab.pickImageCount', '{count} images', { count: images.length }).replace('{count}', images.length);
+        }
+
+        if (!images.length) {
+            grid.innerHTML = `<div class="promptlab-image-preview-empty">${escapeHtml(this._t('promptlab.pickImageNoResults', 'No images matched this search.'))}</div>`;
+            return;
+        }
+
+        grid.innerHTML = images.map((image) => `
+            <div class="promptlab-image-picker-card" data-image-id="${image.id}">
+                <img src="${escapeHtml(this._getImageThumbUrl(image.id, 320))}" alt="${escapeHtml(image.filename || '')}" loading="lazy">
+                <div class="promptlab-image-picker-info">
+                    <div class="promptlab-image-picker-name">${escapeHtml(image.filename || `Image ${image.id}`)}</div>
+                    <div class="promptlab-image-picker-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick metadata'))}</div>
+                </div>
+            </div>
+        `).join('');
+    },
+
+    selectImageFromPicker(imageId) {
+        const meta = this._getPickerTargetMeta(this.imagePickerTarget);
+        const select = document.getElementById(meta.selectId);
+        if (select) {
+            select.value = String(imageId);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        this.closeImagePicker();
     },
 
     hasBuilderSelection() {
@@ -535,12 +744,12 @@ const PromptLab = {
         const { showToast } = window.App;
 
         if (!this.isReady) {
-            showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            showToast(this._t('promptlab.loadingWait', 'Prompt Lab is still loading. Please wait a moment.'), 'info');
             return;
         }
 
         if (!this.hasBuilderSelection()) {
-            showToast('Add at least one tag or apply a tag set before generating', 'warning');
+            showToast(this._t('promptlab.addTagBeforeGenerate', 'Add at least one tag or apply a tag set before generating'), 'warning');
             return;
         }
 
@@ -569,7 +778,11 @@ const PromptLab = {
             this.renderOutput();
 
             if (result.warnings?.length > 0) {
-                showToast(`Generated with ${result.warnings.length} warning(s)`, 'info');
+                showToast(
+                    this._t('promptlab.generatedWarnings', 'Generated with {count} warning(s)', { count: result.warnings.length })
+                        .replace('{count}', result.warnings.length),
+                    'info'
+                );
             }
         } catch (e) {
             showToast(formatUserError(e, "Generation failed"), "error");
@@ -578,7 +791,7 @@ const PromptLab = {
 
     async randomize() {
         if (!this.isReady) {
-            window.App.showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            window.App.showToast(this._t('promptlab.loadingWait', 'Prompt Lab is still loading. Please wait a moment.'), 'info');
             return;
         }
 
@@ -621,12 +834,12 @@ const PromptLab = {
         const { showToast } = window.App;
 
         if (!this.isReady) {
-            showToast('Prompt Lab is still loading. Please wait a moment.', 'info');
+            showToast(this._t('promptlab.loadingWait', 'Prompt Lab is still loading. Please wait a moment.'), 'info');
             return;
         }
 
         if (!this.hasBuilderSelection()) {
-            showToast('Add at least one tag before validating conflicts', 'warning');
+            showToast(this._t('promptlab.addTagBeforeValidate', 'Add at least one tag before validating conflicts'), 'warning');
             return;
         }
 
@@ -636,9 +849,13 @@ const PromptLab = {
             const violations = result.violations || result.conflicts || [];
 
             if (violations.length > 0 || result.valid === false) {
-                showToast(`Found ${violations.length} conflict(s)`, 'error');
+                showToast(
+                    this._t('promptlab.conflictsFound', 'Found {count} conflict(s)', { count: violations.length })
+                        .replace('{count}', violations.length),
+                    'error'
+                );
             } else {
-                showToast('No conflicts detected', 'success');
+                showToast(this._t('promptlab.noConflicts', 'No conflicts detected'), 'success');
             }
         } catch (e) {
             showToast(formatUserError(e, "Validation failed"), "error");
@@ -649,8 +866,8 @@ const PromptLab = {
 
     async savePreset() {
         const name = await window.App.showInputModal(
-            'Save Preset',
-            'Enter a name for this preset:',
+            this._t('promptlab.savePresetTitle', 'Save Preset'),
+            this._t('promptlab.savePresetMessage', 'Enter a name for this preset:'),
             ''
         );
         if (!name) return;
@@ -666,7 +883,10 @@ const PromptLab = {
             });
             await this.loadPresets();
             this.renderPresetList();
-            window.App.showToast(`Preset "${name}" saved`, 'success');
+            window.App.showToast(
+                this._t('promptlab.presetSaved', 'Preset "{name}" saved', { name }).replace('{name}', name),
+                'success'
+            );
         } catch (e) {
             window.App.showToast(formatUserError(e, "Failed to save preset"), "error");
         }
@@ -684,9 +904,12 @@ const PromptLab = {
             this.invalidateGeneratedPrompt();
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
-            window.App.showToast(`Loaded preset "${preset.name}"`, 'success');
+            window.App.showToast(
+                this._t('promptlab.presetLoaded', 'Loaded preset "{name}"', { name: preset.name }).replace('{name}', preset.name),
+                'success'
+            );
         } catch (e) {
-            window.App.showToast('Failed to load preset', 'error');
+            window.App.showToast(this._t('promptlab.presetLoadFailed', 'Failed to load preset'), 'error');
         }
     },
 
@@ -694,16 +917,16 @@ const PromptLab = {
         const { showConfirm, API, showToast } = window.App;
 
         showConfirm(
-            'Delete Preset',
-            'Delete this preset? This cannot be undone.',
+            this._t('promptlab.deletePresetTitle', 'Delete Preset'),
+            this._t('promptlab.deletePresetMessage', 'Delete this preset? This cannot be undone.'),
             async () => {
                 try {
                     await API.delete(`/api/prompts/presets/${id}`);
                     await this.loadPresets();
                     this.renderPresetList();
-                    showToast('Preset deleted', 'info');
+                    showToast(this._t('promptlab.presetDeleted', 'Preset deleted'), 'info');
                 } catch (e) {
-                    showToast('Failed to delete preset', 'error');
+                    showToast(this._t('promptlab.presetDeleteFailed', 'Failed to delete preset'), 'error');
                 }
             }
         );
@@ -730,7 +953,10 @@ const PromptLab = {
         this.invalidateGeneratedPrompt();
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
-        window.App.showToast(`Applied tag set "${set.name}"`, 'success');
+        window.App.showToast(
+            this._t('promptlab.tagSetApplied', 'Applied tag set "{name}"', { name: set.name }).replace('{name}', set.name),
+            'success'
+        );
     },
 
     // ============== Copy ==============
@@ -815,7 +1041,636 @@ const PromptLab = {
                 }
             });
         });
-    }
+    },
+
+    // ============== Intelligence Features ==============
+
+    bindIntelligenceEvents() {
+        const self = this;
+        // Tab switching
+        document.querySelectorAll('.promptlab-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.promptlab-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.promptlab-mode').forEach(m => m.classList.remove('active'));
+                tab.classList.add('active');
+                const mode = tab.dataset.mode;
+                const panel = document.getElementById(`promptlab-mode-${mode}`);
+                if (panel) panel.classList.add('active');
+                if (mode === 'stats') self.loadStats();
+                if (mode === 'compare') self.populateImageSelectors();
+                if (mode === 'build') self.populateBuildSelector();
+            });
+        });
+
+        // Compare
+        document.getElementById('pl-compare-go')?.addEventListener('click', () => self.runCompare());
+        document.getElementById('pl-compare-a')?.addEventListener('change', (event) => {
+            self._renderImagePreviewCard('pl-compare-a-preview', event.target.value, 'promptlab.comparePreviewEmpty', 'Choose an image to preview it here.');
+        });
+        document.getElementById('pl-compare-b')?.addEventListener('change', (event) => {
+            self._renderImagePreviewCard('pl-compare-b-preview', event.target.value, 'promptlab.comparePreviewEmpty', 'Choose an image to preview it here.');
+        });
+        document.getElementById('pl-pick-a')?.addEventListener('click', () => self.openImagePicker('compare-a'));
+        document.getElementById('pl-pick-b')?.addEventListener('click', () => self.openImagePicker('compare-b'));
+        document.getElementById('pl-pick-build')?.addEventListener('click', () => self.openImagePicker('build'));
+        document.getElementById('pl-image-picker-close')?.addEventListener('click', () => self.closeImagePicker());
+        document.querySelector('#promptlab-image-picker-modal .modal-backdrop')?.addEventListener('click', () => self.closeImagePicker());
+        document.getElementById('pl-image-picker-search')?.addEventListener('input', () => self.renderImagePicker());
+        document.getElementById('pl-image-picker-grid')?.addEventListener('click', (event) => {
+            const card = event.target.closest('.promptlab-image-picker-card');
+            if (!card) return;
+            self.selectImageFromPicker(card.dataset.imageId || '');
+        });
+        document.getElementById('pl-top-tags-more')?.addEventListener('click', () => self._expandStatsSection('topTags', 20));
+        document.getElementById('pl-high-tags-more')?.addEventListener('click', () => self._expandStatsSection('highTags', 20));
+        document.getElementById('pl-top-checkpoints-more')?.addEventListener('click', () => self._expandStatsSection('checkpoints', 12));
+        document.getElementById('pl-best-checkpoints-more')?.addEventListener('click', () => self._expandStatsSection('bestCheckpoints', 8));
+        document.getElementById('pl-top-scored-images-more')?.addEventListener('click', () => self._expandStatsSection('scoredImages', 8));
+        document.getElementById('pl-recipe-suggestions-more')?.addEventListener('click', () => self._expandStatsSection('recipes', 8));
+        document.getElementById('pl-pick-a')?.addEventListener('click', () => self.openImagePicker('compare-a'));
+        document.getElementById('pl-pick-b')?.addEventListener('click', () => self.openImagePicker('compare-b'));
+        document.getElementById('pl-pick-build')?.addEventListener('click', () => self.openImagePicker('build'));
+        document.getElementById('pl-image-picker-close')?.addEventListener('click', () => self.closeImagePicker());
+        document.querySelector('#promptlab-image-picker-modal .modal-backdrop')?.addEventListener('click', () => self.closeImagePicker());
+        document.getElementById('pl-image-picker-search')?.addEventListener('input', () => self.renderImagePicker());
+        document.getElementById('pl-image-picker-grid')?.addEventListener('click', (event) => {
+            const card = event.target.closest('.promptlab-image-picker-card');
+            if (!card) return;
+            self.selectImageFromPicker(card.dataset.imageId || '');
+        });
+
+        document.getElementById('pl-best-checkpoints')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+            const checkpoint = actionButton.dataset.checkpoint || '';
+            if (!checkpoint) return;
+
+            if (actionButton.dataset.action === 'gallery') {
+                const filters = window.App?.AppState?.filters;
+                if (!filters) return;
+                filters.checkpoints = filters.checkpoints.includes(checkpoint)
+                    ? filters.checkpoints
+                    : [...filters.checkpoints, checkpoint];
+                window.App?.updateFilterSummary?.();
+                window.App?.loadImages?.();
+                window.App?.switchView?.('gallery');
+            }
+
+            if (actionButton.dataset.action === 'build') {
+                const tags = String(actionButton.dataset.tags || '')
+                    .split('|')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+                self._openBuildRecipe(checkpoint, tags);
+            }
+
+            if (actionButton.dataset.action === 'random') {
+                const tags = String(actionButton.dataset.tags || '')
+                    .split('|')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+                self._openRandomFromTokens(tags, checkpoint);
+            }
+        });
+
+        document.getElementById('pl-top-scored-images')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+            const imageId = actionButton.dataset.imageId || '';
+            if (!imageId) return;
+
+            if (actionButton.dataset.action === 'build') {
+                self._openBuildFromImageId(imageId);
+            }
+
+            if (actionButton.dataset.action === 'reader') {
+                const filename = actionButton.dataset.filename || '';
+                window.App?.openReaderFromImage?.(Number(imageId), filename);
+            }
+
+            if (actionButton.dataset.action === 'preview') {
+                window.App?.switchView?.('gallery');
+                window.App?.openGalleryPreview?.(Number(imageId));
+            }
+        });
+
+        document.getElementById('pl-recipe-suggestions')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+
+            if (actionButton.dataset.action === 'gallery') {
+                const checkpoint = actionButton.dataset.checkpoint || '';
+                const tags = String(actionButton.dataset.tags || '')
+                    .split('|')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+                const filters = window.App?.AppState?.filters;
+                if (!filters) return;
+                if (checkpoint) {
+                    filters.checkpoints = filters.checkpoints.includes(checkpoint)
+                        ? filters.checkpoints
+                        : [...filters.checkpoints, checkpoint];
+                }
+                for (const tag of tags) {
+                    if (!filters.tags.includes(tag)) {
+                        filters.tags = [...filters.tags, tag];
+                    }
+                }
+                window.App?.updateFilterSummary?.();
+                window.App?.loadImages?.();
+                window.App?.switchView?.('gallery');
+            }
+
+            if (actionButton.dataset.action === 'build') {
+                const checkpoint = actionButton.dataset.checkpoint || '';
+                const tags = String(actionButton.dataset.tags || '')
+                    .split('|')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+                self._openBuildRecipe(checkpoint, tags);
+            }
+
+            if (actionButton.dataset.action === 'random') {
+                const checkpoint = actionButton.dataset.checkpoint || '';
+                const tags = String(actionButton.dataset.tags || '')
+                    .split('|')
+                    .map((tag) => tag.trim())
+                    .filter(Boolean);
+                self._openRandomFromTokens(tags, checkpoint);
+            }
+        });
+
+        document.getElementById('pl-compare-result')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+
+            if (actionButton.dataset.action === 'build-image') {
+                const imageId = actionButton.dataset.imageId || '';
+                if (imageId) self._openBuildFromImageId(imageId);
+            }
+
+            if (actionButton.dataset.action === 'build-common') {
+                const tokens = String(actionButton.dataset.tokens || '')
+                    .split('|')
+                    .map((token) => token.trim())
+                    .filter(Boolean);
+                self._openBuildDraft(tokens);
+            }
+        });
+
+        document.getElementById('pl-top-tags')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+            const tag = actionButton.dataset.tag || '';
+            if (!tag) return;
+
+            if (actionButton.dataset.action === 'build-tag') {
+                self._appendBuildDraftTokens([tag]);
+            }
+
+            if (actionButton.dataset.action === 'gallery-tag') {
+                self._filterGalleryByTags([tag]);
+            }
+
+            if (actionButton.dataset.action === 'random-tag') {
+                self._openRandomFromTokens([tag]);
+            }
+        });
+
+        document.getElementById('pl-high-tags')?.addEventListener('click', (event) => {
+            const actionButton = event.target.closest('[data-action]');
+            if (!actionButton) return;
+            const tag = actionButton.dataset.tag || '';
+            if (!tag) return;
+
+            if (actionButton.dataset.action === 'build-tag') {
+                self._appendBuildDraftTokens([tag]);
+            }
+
+            if (actionButton.dataset.action === 'gallery-tag') {
+                self._filterGalleryByTags([tag]);
+            }
+
+            if (actionButton.dataset.action === 'random-tag') {
+                self._openRandomFromTokens([tag]);
+            }
+        });
+
+        // Build
+        document.getElementById('pl-build-source')?.addEventListener('change', (e) => self.loadBuildSource(e.target.value));
+        document.getElementById('pl-build-copy')?.addEventListener('click', () => {
+            const prompt = document.getElementById('pl-build-prompt')?.value;
+            if (prompt) {
+                navigator.clipboard.writeText(prompt);
+                window.App?.showToast?.(self._t('promptlab.promptCopied', 'Prompt copied'), 'success');
+            }
+        });
+        document.getElementById('pl-build-copy-all')?.addEventListener('click', () => {
+            const prompt = document.getElementById('pl-build-prompt')?.value || '';
+            const neg = document.getElementById('pl-build-negative')?.value || '';
+            const text = neg ? `${prompt}\nNegative prompt: ${neg}` : prompt;
+            navigator.clipboard.writeText(text);
+            window.App?.showToast?.(self._t('promptlab.copyAllSuccess', 'Prompt and negative prompt copied'), 'success');
+        });
+    },
+
+    async loadStats() {
+        try {
+            const statsQuery = new URLSearchParams({
+                tag_limit: String(Math.max(this.statsVisibleCounts.topTags, 100)),
+                high_tag_limit: String(Math.max(this.statsVisibleCounts.highTags, 100)),
+                checkpoint_limit: String(Math.max(this.statsVisibleCounts.checkpoints, 30)),
+                leader_limit: String(Math.max(this.statsVisibleCounts.bestCheckpoints, 24)),
+                recipe_limit: String(Math.max(this.statsVisibleCounts.recipes, 24)),
+                scored_limit: String(Math.max(this.statsVisibleCounts.scoredImages, 24)),
+            });
+            const stats = await window.App.API.get(`/api/prompts/stats?${statsQuery.toString()}`);
+            this.lastStats = stats;
+            document.getElementById('pl-total-images').textContent = stats.total_images || 0;
+            document.getElementById('pl-scored-images').textContent = stats.scored_images || 0;
+            document.getElementById('pl-avg-prompt-len').textContent = stats.prompt_length?.avg || 0;
+
+            const topTagsEl = document.getElementById('pl-top-tags');
+            if (topTagsEl && stats.top_tags) {
+                const visible = stats.top_tags.slice(0, this.statsVisibleCounts.topTags);
+                const maxCount = stats.top_tags[0]?.count || 1;
+                topTagsEl.innerHTML = visible.map(t =>
+                    `<div class="promptlab-tag-item">
+                        <span class="tag-name">${escapeHtml(t.tag)}</span>
+                        <div class="tag-bar"><div class="tag-bar-fill" style="width:${(t.count / maxCount * 100).toFixed(0)}%"></div></div>
+                        <span class="tag-count">${t.pct}%</span>
+                        <div class="promptlab-inline-actions">
+                            <button class="btn btn-ghost btn-small" data-action="gallery-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.filterGallery', 'Filter Gallery')}</button>
+                            <button class="btn btn-ghost btn-small" data-action="random-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
+                            <button class="btn btn-secondary btn-small" data-action="build-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.addToBuild', 'Add to Build')}</button>
+                        </div>
+                    </div>`
+                ).join('');
+            }
+
+            const highEl = document.getElementById('pl-high-tags');
+            if (highEl && stats.high_aesthetic_tags) {
+                const maxH = stats.high_aesthetic_tags[0]?.count || 1;
+                const visible = stats.high_aesthetic_tags.slice(0, this.statsVisibleCounts.highTags);
+                highEl.innerHTML = stats.high_aesthetic_tags.length
+                    ? visible.map(t =>
+                        `<div class="promptlab-tag-item">
+                            <span class="tag-name">${escapeHtml(t.tag)}</span>
+                            <div class="tag-bar"><div class="tag-bar-fill" style="width:${(t.count / maxH * 100).toFixed(0)}%;background:#22c55e;"></div></div>
+                            <span class="tag-count">${t.count}</span>
+                            <div class="promptlab-inline-actions">
+                                <button class="btn btn-ghost btn-small" data-action="gallery-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.filterGallery', 'Filter Gallery')}</button>
+                                <button class="btn btn-ghost btn-small" data-action="random-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
+                                <button class="btn btn-secondary btn-small" data-action="build-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.addToBuild', 'Add to Build')}</button>
+                            </div>
+                        </div>`
+                    ).join('')
+                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noScoredImagesYet', 'No scored images yet')}</div>`;
+            }
+
+            const cpEl = document.getElementById('pl-top-checkpoints');
+            if (cpEl && stats.top_checkpoints) {
+                cpEl.innerHTML = stats.top_checkpoints.slice(0, this.statsVisibleCounts.checkpoints).map(c => {
+                    const name = c.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || c.name;
+                    return `<div class="promptlab-tag-item"><span class="tag-name">🧠 ${escapeHtml(name)}</span><span class="tag-count">${c.count}</span></div>`;
+                }).join('');
+            }
+
+            const bestCheckpointEl = document.getElementById('pl-best-checkpoints');
+            if (bestCheckpointEl) {
+                const leaders = stats.checkpoint_score_leaders || [];
+                bestCheckpointEl.innerHTML = leaders.length
+                    ? leaders.slice(0, this.statsVisibleCounts.bestCheckpoints).map((entry) => {
+                        const cleanName = entry.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || entry.name;
+                        const metaText = entry.avg_score != null
+                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${entry.count} images`
+                            : `${entry.count} images`;
+                        const matchingRecipe = (stats.checkpoint_recipes || []).find(recipe => recipe.name === entry.name);
+                        const recipeTags = Array.isArray(matchingRecipe?.tags) ? matchingRecipe.tags : [];
+                        const recipePreview = recipeTags.slice(0, 8);
+                        return `<div class="promptlab-action-card">
+                            <div class="promptlab-action-title">🧠 ${escapeHtml(cleanName)}</div>
+                            <div class="promptlab-action-meta">${metaText}${recipePreview.length ? `<br>${escapeHtml(recipePreview.join(', '))}` : ''}</div>
+                            <div class="promptlab-action-buttons">
+                                <button class="btn btn-ghost btn-small" data-action="gallery" data-checkpoint="${escapeHtml(entry.name)}">${this._t('promptlab.filterGallery', 'Filter Gallery')}</button>
+                                <button class="btn btn-secondary btn-small" data-action="random" data-checkpoint="${escapeHtml(entry.name)}" data-tags="${escapeHtml(recipeTags.join('|'))}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
+                                <button class="btn btn-primary btn-small" data-action="build" data-checkpoint="${escapeHtml(entry.name)}" data-tags="${escapeHtml(recipeTags.join('|'))}">${this._t('promptlab.sendRecipeToBuild', 'Send to Build')}</button>
+                            </div>
+                        </div>`;
+                    }).join('')
+                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.notEnoughScoredData', 'Not enough scored data yet')}</div>`;
+            }
+
+            const topScoredEl = document.getElementById('pl-top-scored-images');
+            if (topScoredEl) {
+                const examples = stats.top_scored_images || [];
+                topScoredEl.innerHTML = examples.length
+                    ? examples.slice(0, this.statsVisibleCounts.scoredImages).map((entry) => {
+                        const cleanCheckpoint = entry.checkpoint
+                            ? entry.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || entry.checkpoint
+                            : '';
+                        const promptPreview = escapeHtml(String(entry.prompt || '').slice(0, 120) || '');
+                        return `<div class="promptlab-action-card promptlab-action-card-image">
+                            <div class="promptlab-action-thumb">
+                                <img src="${escapeHtml(this._getImageThumbUrl(entry.id, 320))}" alt="${escapeHtml(entry.filename || '')}" loading="lazy">
+                            </div>
+                            <div class="promptlab-action-main">
+                                <div class="promptlab-action-title">${escapeHtml(entry.filename)} · ★ ${Number(entry.aesthetic_score || 0).toFixed(2)}</div>
+                                <div class="promptlab-action-meta">${cleanCheckpoint ? `🧠 ${escapeHtml(cleanCheckpoint)}<br>` : ''}${promptPreview}</div>
+                                <div class="promptlab-action-buttons">
+                                    <button class="btn btn-primary btn-small" data-action="build" data-image-id="${entry.id}">${this._t('promptlab.openInBuild', 'Open in Build')}</button>
+                                    <button class="btn btn-ghost btn-small" data-action="reader" data-image-id="${entry.id}" data-filename="${escapeHtml(entry.filename || '')}">${this._t('promptlab.openInReader', 'Open in Reader')}</button>
+                                    <button class="btn btn-ghost btn-small" data-action="preview" data-image-id="${entry.id}">${this._t('promptlab.previewImage', 'Preview Image')}</button>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')
+                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noScoredExamples', 'No scored examples yet')}</div>`;
+            }
+
+            const recipeEl = document.getElementById('pl-recipe-suggestions');
+            if (recipeEl) {
+                const recipes = stats.checkpoint_recipes || [];
+                recipeEl.innerHTML = recipes.length
+                    ? recipes.slice(0, this.statsVisibleCounts.recipes).map((entry) => {
+                        const cleanName = entry.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || entry.name;
+                        const tags = Array.isArray(entry.tags) ? entry.tags : [];
+                        const tagPreview = tags.slice(0, 8);
+                        const metaText = entry.avg_score != null
+                            ? `★ ${Number(entry.avg_score || 0).toFixed(2)} · ${entry.count} images`
+                            : `${entry.count} images`;
+                        return `<div class="promptlab-action-card">
+                            <div class="promptlab-action-title">🧪 ${escapeHtml(cleanName)}</div>
+                            <div class="promptlab-action-meta">${metaText}<br>${escapeHtml(tagPreview.join(', '))}</div>
+                            <div class="promptlab-action-buttons">
+                                <button class="btn btn-secondary btn-small" data-action="gallery" data-checkpoint="${escapeHtml(entry.name)}" data-tags="${escapeHtml(tags.join('|'))}">${this._t('promptlab.tryRecipe', 'Try in Gallery')}</button>
+                                <button class="btn btn-secondary btn-small" data-action="random" data-checkpoint="${escapeHtml(entry.name)}" data-tags="${escapeHtml(tags.join('|'))}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
+                                <button class="btn btn-primary btn-small" data-action="build" data-checkpoint="${escapeHtml(entry.name)}" data-tags="${escapeHtml(tags.join('|'))}">${this._t('promptlab.sendRecipeToBuild', 'Send to Build')}</button>
+                            </div>
+                        </div>`;
+                    }).join('')
+                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noRecipeSuggestions', 'No recipe suggestions yet')}</div>`;
+            }
+
+            this._syncStatsLoadMore('pl-top-tags-more', stats.top_tags_total ?? stats.top_tags?.length ?? 0, this.statsVisibleCounts.topTags);
+            this._syncStatsLoadMore('pl-high-tags-more', stats.high_aesthetic_tags_total ?? stats.high_aesthetic_tags?.length ?? 0, this.statsVisibleCounts.highTags);
+            this._syncStatsLoadMore('pl-top-checkpoints-more', stats.top_checkpoints_total ?? stats.top_checkpoints?.length ?? 0, this.statsVisibleCounts.checkpoints);
+            this._syncStatsLoadMore('pl-best-checkpoints-more', stats.checkpoint_score_leaders_total ?? (stats.checkpoint_score_leaders || []).length, this.statsVisibleCounts.bestCheckpoints);
+            this._syncStatsLoadMore('pl-top-scored-images-more', stats.top_scored_images_total ?? (stats.top_scored_images || []).length, this.statsVisibleCounts.scoredImages);
+            this._syncStatsLoadMore('pl-recipe-suggestions-more', stats.checkpoint_recipes_total ?? (stats.checkpoint_recipes || []).length, this.statsVisibleCounts.recipes);
+        } catch (e) {
+            console.error('Failed to load prompt stats:', e);
+        }
+    },
+
+    _syncStatsLoadMore(buttonId, totalCount, visibleCount) {
+        const button = document.getElementById(buttonId);
+        if (!button) return;
+        button.style.display = totalCount > visibleCount ? 'inline-flex' : 'none';
+    },
+
+    _expandStatsSection(key, step) {
+        this.statsVisibleCounts[key] = (this.statsVisibleCounts[key] || 0) + step;
+        this.loadStats();
+    },
+
+    populateImageSelectors() {
+        const images = this._getPromptLabImages();
+        const options = images.map(img =>
+            `<option value="${img.id}">${escapeHtml(img.filename)}${img.aesthetic_score != null ? ' ★' + img.aesthetic_score.toFixed(1) : ''}</option>`
+        ).join('');
+        const defaultOpt = `<option value="">${this._t('promptlab.selectImage', 'Select image...')}</option>`;
+        ['pl-compare-a', 'pl-compare-b'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = defaultOpt + options;
+        });
+        this._renderImagePreviewCard('pl-compare-a-preview', document.getElementById('pl-compare-a')?.value || '', 'promptlab.comparePreviewEmpty', 'Choose an image to preview it here.');
+        this._renderImagePreviewCard('pl-compare-b-preview', document.getElementById('pl-compare-b')?.value || '', 'promptlab.comparePreviewEmpty', 'Choose an image to preview it here.');
+        if (!this.imageCatalogLoaded) {
+            this._ensureImageCatalog().then(() => this.populateImageSelectors()).catch(() => {});
+        }
+    },
+
+    async runCompare() {
+        const idA = document.getElementById('pl-compare-a')?.value;
+        const idB = document.getElementById('pl-compare-b')?.value;
+        if (!idA || !idB) {
+            window.App?.showToast?.(this._t('promptlab.selectTwoImages', 'Select two images to compare'), 'warning');
+            return;
+        }
+        try {
+            const result = await window.App.API.get(`/api/prompts/compare?id_a=${idA}&id_b=${idB}`);
+            const container = document.getElementById('pl-compare-result');
+            if (!container) return;
+            const renderTags = (tags, cls) => tags.map(t => `<span class="promptlab-diff-tag ${cls}">${escapeHtml(t)}</span>`).join('');
+            const commonTokens = Array.isArray(result.prompt_common) ? result.prompt_common : [];
+            container.innerHTML = `
+                <div class="promptlab-diff-card" style="grid-column:1/-1;">
+                    <h5 style="color:#86efac;">${this._t('promptlab.commonTokens', 'Common')} (${result.prompt_common.length})</h5>
+                    <div class="promptlab-diff-tags">${renderTags(result.prompt_common, 'common') || `<span style="color:var(--text-muted)">${this._t('promptlab.none', 'None')}</span>`}</div>
+                    <div class="promptlab-action-buttons" style="margin-top:10px;">
+                        <button class="btn btn-primary btn-small" data-action="build-common" data-tokens="${escapeHtml(commonTokens.join('|'))}">${this._t('promptlab.buildFromCommon', 'Build from Common')}</button>
+                    </div>
+                </div>
+                <div class="promptlab-diff-card">
+                    <h5 style="color:#93c5fd;">${this._t('promptlab.onlyInImage', 'Only in {name}', { name: result.image_a.filename }).replace('{name}', escapeHtml(result.image_a.filename))} (${result.prompt_only_a.length})</h5>
+                    <div class="promptlab-diff-tags">${renderTags(result.prompt_only_a, 'only-a') || `<span style="color:var(--text-muted)">${this._t('promptlab.none', 'None')}</span>`}</div>
+                    <div class="promptlab-action-buttons" style="margin-top:10px;">
+                        <button class="btn btn-secondary btn-small" data-action="build-image" data-image-id="${result.image_a.id}">${this._t('promptlab.openImageABuild', 'Open Image A in Build')}</button>
+                    </div>
+                </div>
+                <div class="promptlab-diff-card">
+                    <h5 style="color:#fcd34d;">${this._t('promptlab.onlyInImage', 'Only in {name}', { name: result.image_b.filename }).replace('{name}', escapeHtml(result.image_b.filename))} (${result.prompt_only_b.length})</h5>
+                    <div class="promptlab-diff-tags">${renderTags(result.prompt_only_b, 'only-b') || `<span style="color:var(--text-muted)">${this._t('promptlab.none', 'None')}</span>`}</div>
+                    <div class="promptlab-action-buttons" style="margin-top:10px;">
+                        <button class="btn btn-secondary btn-small" data-action="build-image" data-image-id="${result.image_b.id}">${this._t('promptlab.openImageBBuild', 'Open Image B in Build')}</button>
+                    </div>
+                </div>`;
+        } catch (e) {
+            window.App?.showToast?.(`${this._t('promptlab.compareFailed', 'Compare failed')}: ${e.message || e}`, 'error');
+        }
+    },
+
+    populateBuildSelector() {
+        const images = this._getPromptLabImages();
+        const options = images.map(img =>
+            `<option value="${img.id}">${escapeHtml(img.filename)}${img.aesthetic_score != null ? ' ★' + img.aesthetic_score.toFixed(1) : ''}</option>`
+        ).join('');
+        const el = document.getElementById('pl-build-source');
+        if (el) el.innerHTML = `<option value="">${this._t('promptlab.selectTemplate', 'Select an image as template...')}</option>` + options;
+        this._renderImagePreviewCard('pl-build-preview', el?.value || '', 'promptlab.buildPreviewEmpty', 'Choose a template image to see it here before loading the prompt.');
+        if (!this.imageCatalogLoaded) {
+            this._ensureImageCatalog().then(() => this.populateBuildSelector()).catch(() => {});
+        }
+    },
+
+    _openBuildFromImageId(imageId) {
+        window.App?.openPromptBuildFromImage?.(imageId);
+    },
+
+    _openBuildDraft(tokens) {
+        const buildTab = document.querySelector('.promptlab-tab[data-mode="build"]');
+        buildTab?.click();
+        const editor = document.getElementById('pl-build-editor');
+        const promptArea = document.getElementById('pl-build-prompt');
+        const negativeArea = document.getElementById('pl-build-negative');
+        const infoEl = document.getElementById('pl-build-info');
+        if (editor) editor.style.display = '';
+        if (promptArea) promptArea.value = (tokens || []).join(', ');
+        if (negativeArea) negativeArea.value = '';
+        if (infoEl) infoEl.textContent = this._t('promptlab.commonDraftLoaded', 'Loaded common prompt tokens into Build');
+    },
+
+    _openBuildRecipe(checkpoint, tokens) {
+        const buildTab = document.querySelector('.promptlab-tab[data-mode="build"]');
+        buildTab?.click();
+        const editor = document.getElementById('pl-build-editor');
+        const promptArea = document.getElementById('pl-build-prompt');
+        const negativeArea = document.getElementById('pl-build-negative');
+        const infoEl = document.getElementById('pl-build-info');
+        if (editor) editor.style.display = '';
+        if (promptArea) promptArea.value = (tokens || []).join(', ');
+        if (negativeArea) negativeArea.value = '';
+        if (infoEl) {
+            infoEl.textContent = [
+                checkpoint ? `🧠 ${checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || checkpoint}` : '',
+                this._t('promptlab.recipeLoaded', 'Loaded from recipe suggestion'),
+            ].filter(Boolean).join(' · ');
+        }
+    },
+
+    _appendBuildDraftTokens(tokens) {
+        const buildTab = document.querySelector('.promptlab-tab[data-mode="build"]');
+        buildTab?.click();
+        const editor = document.getElementById('pl-build-editor');
+        const promptArea = document.getElementById('pl-build-prompt');
+        const infoEl = document.getElementById('pl-build-info');
+        if (editor) editor.style.display = '';
+        if (!promptArea) return;
+
+        const currentTokens = String(promptArea.value || '')
+            .split(',')
+            .map((token) => token.trim())
+            .filter(Boolean);
+        const merged = [...new Set([...currentTokens, ...(tokens || []).filter(Boolean)])];
+        promptArea.value = merged.join(', ');
+        if (infoEl) infoEl.textContent = this._t('promptlab.tagDraftLoaded', 'Added selected data insight to Build');
+    },
+
+    _findCategoryForToken(token) {
+        const normalized = String(token || '').trim().toLowerCase();
+        if (!normalized) return null;
+
+        for (const [category, tags] of Object.entries(this.categories || {})) {
+            const match = (tags || []).find((tag) => String(tag || '').trim().toLowerCase() === normalized);
+            if (match) {
+                return { category, tag: match };
+            }
+        }
+
+        return null;
+    },
+
+    async _openRandomFromTokens(tokens, checkpoint = '') {
+        const randomTab = document.querySelector('.promptlab-tab[data-mode="random"]');
+        randomTab?.click();
+
+        const assigned = [];
+        const unmatched = [];
+        for (const token of tokens || []) {
+            const match = this._findCategoryForToken(token);
+            if (!match) {
+                unmatched.push(token);
+                continue;
+            }
+            if (!this.slots[match.category]) {
+                this.slots[match.category] = [];
+            }
+            if (!this.slots[match.category].includes(match.tag)) {
+                this.slots[match.category] = [...this.slots[match.category], match.tag];
+                assigned.push(match.tag);
+            }
+        }
+
+        this.invalidateGeneratedPrompt();
+        this.renderCategoryBrowser();
+        this.renderSlotBuilder();
+
+        if (assigned.length) {
+            await this.generate();
+        }
+
+        const checkpointLabel = checkpoint
+            ? (checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || checkpoint)
+            : '';
+        const info = [
+            checkpointLabel ? `🧠 ${checkpointLabel}` : '',
+            this._t('promptlab.randomDraftLoaded', 'Loaded data insight into Random'),
+            assigned.length ? `${assigned.length}` : '',
+        ].filter(Boolean).join(' · ');
+
+        const outputEl = document.getElementById('promptlab-output');
+        if (outputEl && info) {
+            outputEl.title = info;
+        }
+
+        if (assigned.length && unmatched.length) {
+            window.App?.showToast?.(
+                this._t('promptlab.randomDraftLoadedPartial', 'Loaded {assigned} tags into Random. {unmatched} did not match known categories.', {
+                    assigned: assigned.length,
+                    unmatched: unmatched.length,
+                })
+                    .replace('{assigned}', assigned.length)
+                    .replace('{unmatched}', unmatched.length),
+                'info'
+            );
+            return;
+        }
+
+        if (assigned.length) {
+            window.App?.showToast?.(
+                this._t('promptlab.randomDraftLoadedFull', 'Loaded {count} tags into Random and generated a draft.', { count: assigned.length })
+                    .replace('{count}', assigned.length),
+                'success'
+            );
+            return;
+        }
+
+        window.App?.showToast?.(this._t('promptlab.randomDraftNoMatch', 'Could not map these insights into the Random categories yet.'), 'warning');
+    },
+
+    _filterGalleryByTags(tags) {
+        const filters = window.App?.AppState?.filters;
+        if (!filters) return;
+        for (const tag of tags || []) {
+            if (!filters.tags.includes(tag)) {
+                filters.tags = [...filters.tags, tag];
+            }
+        }
+        window.App?.updateFilterSummary?.();
+        window.App?.loadImages?.();
+        window.App?.switchView?.('gallery');
+    },
+
+    async loadBuildSource(imageId) {
+        const editor = document.getElementById('pl-build-editor');
+        this._renderImagePreviewCard('pl-build-preview', imageId, 'promptlab.buildPreviewEmpty', 'Choose a template image to see it here before loading the prompt.');
+        if (!imageId) { if (editor) editor.style.display = 'none'; return; }
+        try {
+            const result = await window.App.API.get(`/api/images/${imageId}`);
+            const img = result.image;
+            if (editor) editor.style.display = '';
+            document.getElementById('pl-build-prompt').value = img.prompt || '';
+            document.getElementById('pl-build-negative').value = img.negative_prompt || '';
+            const info = [];
+            if (img.checkpoint) info.push(`🧠 ${img.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '')}`);
+            if (img.width && img.height) info.push(`📐 ${img.width}×${img.height}`);
+            if (img.aesthetic_score != null) info.push(`★ ${Number(img.aesthetic_score).toFixed(1)}`);
+            document.getElementById('pl-build-info').textContent = info.join(' · ') || '';
+        } catch (e) {
+            window.App?.showToast?.(this._t('promptlab.loadImageFailed', 'Failed to load image'), 'error');
+        }
+    },
 };
 
 // Initialize when Prompt Lab tab is first activated

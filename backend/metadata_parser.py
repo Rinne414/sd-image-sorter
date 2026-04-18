@@ -87,6 +87,13 @@ class MetadataParser:
         "LoraLoaderBlockWeight",
     }
 
+    # Multi-LoRA loader node types (rgthree-style: lora_1, lora_2, ...)
+    COMFYUI_MULTI_LORA_NODE_TYPES = {
+        "Power Lora Loader (rgthree)",
+        "CR LoRA Stack",
+        "Efficient Loader",
+    }
+
     # Node types that are KSamplers (have positive/negative inputs)
     COMFYUI_SAMPLER_NODE_TYPES = {
         "KSampler",
@@ -669,17 +676,25 @@ class MetadataParser:
             class_type = node.get("class_type", "")
             inputs = node.get("inputs", {})
 
-            # Check all checkpoint loader variants
-            if any(ct in class_type for ct in ["CheckpointLoader", "CheckPointLoader", "UNETLoader", "DiffusionModelLoader"]):
+            # Check all checkpoint/UNet loader variants (generic: any node with ckpt_name/unet_name/model_name input)
+            if any(ct in class_type for ct in ["CheckpointLoader", "CheckPointLoader", "UNETLoader", "DiffusionModelLoader"]) or \
+               (class_type_lower := class_type.lower(), "checkpoint" in class_type_lower or "ckpt" in class_type_lower or "unet" in class_type_lower or "diffusionmodel" in class_type_lower)[1]:
                 cp = inputs.get("ckpt_name", inputs.get("unet_name", inputs.get("model_name", "")))
                 if cp and isinstance(cp, str):
                     checkpoint = cp
 
-            # Extract LoRAs
-            if any(ct in class_type for ct in ["LoraLoader", "LoRALoader"]):
+            # Extract LoRAs — universal approach:
+            # 1. Named LoRA loaders (class_type contains "lora" case-insensitive) with lora_name input
+            # 2. Multi-lora nodes with lora_1, lora_2, ... inputs
+            if "lora" in class_type.lower():
+                # Standard single-lora (lora_name input)
                 lr = inputs.get("lora_name", "")
                 if lr and isinstance(lr, str):
                     loras.append(lr)
+                # Multi-lora format (lora_1, lora_2, ... inputs)
+                multi = self._extract_multi_lora_inputs(inputs)
+                if multi:
+                    loras.extend(multi)
 
         # Try to find positive/negative prompts via KSampler graph traversal
         positive_text, negative_text = self._trace_sampler_prompts(nodes)
@@ -728,11 +743,15 @@ class MetadataParser:
                 if cp and isinstance(cp, str):
                     checkpoint = cp
 
-            # LoRAs
+            # LoRAs (standard single-lora nodes)
             if any(ct in class_type for ct in ["LoraLoader", "LoRALoader"]):
                 lr = inputs.get("lora_name", "")
                 if lr and isinstance(lr, str):
                     loras.append(lr)
+
+            # LoRAs (multi-lora nodes like rgthree Power Lora Loader)
+            if any(ct in class_type for ct in self.COMFYUI_MULTI_LORA_NODE_TYPES):
+                loras.extend(self._extract_multi_lora_inputs(inputs))
 
             # KSampler params
             if any(st in class_type for st in ["KSampler", "SamplerCustom"]):
@@ -872,6 +891,29 @@ class MetadataParser:
                                 })
 
         return result
+
+    @staticmethod
+    def _extract_multi_lora_inputs(inputs: dict) -> List[str]:
+        """Extract LoRA names from multi-lora nodes (e.g. rgthree Power Lora Loader).
+
+        These nodes have inputs like lora_1, lora_2, ... lora_N.
+        Each can be:
+        - A dict with {on: bool, lora: str, strength: float}
+        - A string (lora name directly)
+        """
+        loras = []
+        for key, value in inputs.items():
+            if not key.startswith("lora_"):
+                continue
+            if isinstance(value, dict):
+                if value.get("on") is False:
+                    continue
+                lora_name = value.get("lora", "")
+                if lora_name and isinstance(lora_name, str) and lora_name != "None":
+                    loras.append(lora_name)
+            elif isinstance(value, str) and value and value != "None":
+                loras.append(value)
+        return loras
 
     def _trace_sampler_prompts(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
         """

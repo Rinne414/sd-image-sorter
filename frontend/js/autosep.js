@@ -4,25 +4,106 @@
  */
 
 let _previewRequestId = 0;
+let _autosepPreviewTimer = null;
+const AUTOSEP_SETTINGS_KEY = 'autosep_settings_v1';
+const AUTOSEP_DESTINATION_KEY = 'autosep_destination_v1';
+const AUTOSEP_CONFIGS_KEY = 'autosep_configs_v1';
+const AUTOSEP_FILTER_STATE_KEY = 'autosep_filter_state_v1';
+
+const DEFAULT_AUTOSEP_SETTINGS = {
+    rememberDestination: true,
+    autoPreview: false,
+    confirmBeforeMove: true,
+};
 
 const AutoSepState = {
     matchCount: 0,
     previewImages: [],
-    previewSignature: null
+    previewSignature: null,
+    settings: { ...DEFAULT_AUTOSEP_SETTINGS },
+    configs: [],
+    filters: null,
 };
+
+function tKey(key, enText, zhText = enText) {
+    const translated = window.I18n?.t?.(key);
+    if (translated && translated !== key) return translated;
+    return window.I18n?.getLang?.() === 'zh-CN' ? zhText : enText;
+}
+
+function getFallbackAutoSepFilters() {
+    const clone = window.App?.cloneFilterState;
+    if (typeof clone === 'function') {
+        return serializeAutoSepFilters(clone(window.App?.AppState?.filters || null));
+    }
+    return serializeAutoSepFilters({});
+}
+
+function loadAutoSepFilters() {
+    try {
+        const raw = localStorage.getItem(AUTOSEP_FILTER_STATE_KEY);
+        if (raw) {
+            AutoSepState.filters = serializeAutoSepFilters(JSON.parse(raw));
+            return;
+        }
+    } catch (_) {
+        // Fall back to a safe default when the saved state is invalid.
+    }
+    AutoSepState.filters = getFallbackAutoSepFilters();
+}
+
+function saveAutoSepFilters() {
+    localStorage.setItem(AUTOSEP_FILTER_STATE_KEY, JSON.stringify(serializeAutoSepFilters(AutoSepState.filters || {})));
+}
+
+function setAutoSepFilters(nextFilters) {
+    AutoSepState.filters = serializeAutoSepFilters(nextFilters || {});
+    saveAutoSepFilters();
+}
+
+function getAutoSepFilters() {
+    if (!AutoSepState.filters) {
+        loadAutoSepFilters();
+    }
+    return AutoSepState.filters;
+}
 
 // ============== Initialization ==============
 
 function initAutoSeparate() {
     // Use direct selectors to avoid timing issues with window.App
     const $ = (sel) => document.querySelector(sel);
+    loadAutoSepFilters();
+    loadAutoSepSettings();
+    applyAutoSepSettingsToUi();
+    updateAutoSepSettingsSummary();
+    loadAutoSepConfigs();
+    renderAutoSepConfigControls();
 
     // Edit Filters button - opens unified filter modal
     const filterBtn = $('#btn-autosep-filters');
     if (filterBtn) {
         filterBtn.addEventListener('click', () => {
             if (window.App && window.App.openFilterModal) {
-                window.App.openFilterModal();
+                window.App.openFilterModal({
+                    mode: 'auto-separate',
+                    titleText: tKey('autosep.filterTitle', 'Auto-Separate Filters', '自动分类筛选'),
+                    applyButtonText: tKey('autosep.applyFilters', 'Apply to Auto-Separate', '应用到自动分类'),
+                    resetButtonText: tKey('autosep.resetFilters', 'Reset Auto-Separate Filters', '重置自动分类筛选'),
+                    filterState: getAutoSepFilters(),
+                    onApply: (filters) => {
+                        setAutoSepFilters(filters);
+                        updateAutoSepSummary();
+                        invalidateAutoSepPreview();
+                        renderAutoSepConfigControls();
+                    },
+                    onReset: (filters) => {
+                        setAutoSepFilters(filters);
+                        updateAutoSepSummary();
+                        invalidateAutoSepPreview();
+                        renderAutoSepConfigControls();
+                    },
+                });
             } else {
                 Logger.error('openFilterModal not available');
             }
@@ -55,21 +136,383 @@ function initAutoSeparate() {
             );
             if (path !== null && input) {
                 input.value = path;
+                persistAutoSepDestination(path);
+                updateAutoSepSettingsSummary();
             }
         });
     }
 
+    $('#autosep-destination')?.addEventListener('input', (event) => {
+        persistAutoSepDestination(String(event.target.value || '').trim());
+        updateAutoSepSettingsSummary();
+    });
+
+    $('#btn-autosep-settings')?.addEventListener('click', openAutoSepSettingsModal);
+    $('#btn-close-autosep-settings')?.addEventListener('click', closeAutoSepSettingsModal);
+    $('#btn-cancel-autosep-settings')?.addEventListener('click', closeAutoSepSettingsModal);
+    $('#autosep-settings-modal .modal-backdrop')?.addEventListener('click', closeAutoSepSettingsModal);
+    $('#btn-save-autosep-settings')?.addEventListener('click', saveAutoSepSettingsFromUi);
+    $('#btn-reset-autosep-settings')?.addEventListener('click', resetAutoSepSettings);
+    $('#btn-autosep-new-config')?.addEventListener('click', createAutoSepConfig);
+    $('#btn-autosep-save-config')?.addEventListener('click', saveCurrentAutoSepConfig);
+    $('#btn-autosep-load-config')?.addEventListener('click', loadSelectedAutoSepConfig);
+    $('#btn-autosep-rename-config')?.addEventListener('click', renameSelectedAutoSepConfig);
+    $('#btn-autosep-delete-config')?.addEventListener('click', deleteSelectedAutoSepConfig);
+    $('#autosep-config-select')?.addEventListener('change', renderAutoSepConfigControls);
+
     resumeAutosepMoveProgress();
+}
+
+function serializeAutoSepFilters(filters) {
+    const source = filters || {};
+    return {
+        generators: [...(source.generators || ['comfyui', 'nai', 'webui', 'forge', 'unknown'])],
+        ratings: [...(source.ratings || ['general', 'sensitive', 'questionable', 'explicit'])],
+        tags: [...(source.tags || [])],
+        checkpoints: [...(source.checkpoints || [])],
+        loras: [...(source.loras || [])],
+        prompts: [...(source.prompts || [])],
+        artist: source.artist || null,
+        search: source.search || '',
+        minWidth: source.minWidth || null,
+        maxWidth: source.maxWidth || null,
+        minHeight: source.minHeight || null,
+        maxHeight: source.maxHeight || null,
+        aspectRatio: source.aspectRatio || '',
+        minAesthetic: source.minAesthetic || null,
+        maxAesthetic: source.maxAesthetic || null,
+    };
+}
+
+function loadAutoSepConfigs() {
+    try {
+        const raw = localStorage.getItem(AUTOSEP_CONFIGS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        AutoSepState.configs = Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+        AutoSepState.configs = [];
+    }
+}
+
+function saveAutoSepConfigs() {
+    localStorage.setItem(AUTOSEP_CONFIGS_KEY, JSON.stringify(AutoSepState.configs));
+}
+
+function getSelectedAutoSepConfigId() {
+    return document.getElementById('autosep-config-select')?.value || '';
+}
+
+function getAutoSepConfigById(configId) {
+    return AutoSepState.configs.find((config) => String(config.id) === String(configId)) || null;
+}
+
+function renderAutoSepConfigControls() {
+    const select = document.getElementById('autosep-config-select');
+    const summary = document.getElementById('autosep-config-summary');
+    if (!select || !summary) return;
+
+    const currentValue = select.value;
+    const defaultLabel = tKey('autosep.noConfigSelected', 'Select a saved config', '选择一个已保存配置');
+    select.innerHTML = `<option value="">${defaultLabel}</option>` + AutoSepState.configs.map((config) =>
+        `<option value="${escapeHtml(String(config.id))}">${escapeHtml(config.name || `Config ${config.id}`)}</option>`
+    ).join('');
+
+    if (currentValue && AutoSepState.configs.some((config) => String(config.id) === String(currentValue))) {
+        select.value = currentValue;
+    }
+
+    const selectedConfig = getAutoSepConfigById(select.value);
+    if (!selectedConfig) {
+        summary.textContent = AutoSepState.configs.length
+            ? tKey('autosep.configHelp', 'Saved configs keep your current filters and destination for later reuse.', '已保存配置会记住你当前的筛选条件和目标目录，方便以后直接复用。')
+            : tKey('autosep.noConfigsYet', 'No saved configs yet. Save your current setup as Config 1, Config 2, and more.', '还没有保存配置。你可以把当前规则保存成 Config 1、Config 2 等方案。');
+    } else {
+        const filters = selectedConfig.filters || {};
+        const summaryParts = [];
+        if (selectedConfig.destination) {
+            summaryParts.push(
+                tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}')
+                    .replace('{path}', selectedConfig.destination)
+            );
+        }
+        const filterSummary = window.formatFilterSummary?.(filters);
+        if (filterSummary) {
+            summaryParts.push(`${tKey('filter.tags', 'Tags', '标签')}: ${filterSummary.tags}`);
+            summaryParts.push(`${tKey('filter.prompts', 'Prompts', '提示词')}: ${filterSummary.prompts}`);
+            summaryParts.push(`${tKey('filter.sizeRules', 'Size Rules', '尺寸规则')}: ${filterSummary.dimensions}`);
+        }
+        summary.textContent = summaryParts.join(' • ');
+    }
+
+    const hasSelected = Boolean(selectedConfig);
+    const renameBtn = document.getElementById('btn-autosep-rename-config');
+    const deleteBtn = document.getElementById('btn-autosep-delete-config');
+    const loadBtn = document.getElementById('btn-autosep-load-config');
+    if (renameBtn) renameBtn.disabled = !hasSelected;
+    if (deleteBtn) deleteBtn.disabled = !hasSelected;
+    if (loadBtn) loadBtn.disabled = !hasSelected;
+}
+
+function buildAutoSepConfigPayload(name) {
+    return {
+        id: Date.now().toString(36),
+        name,
+        filters: serializeAutoSepFilters(getAutoSepFilters()),
+        destination: document.getElementById('autosep-destination')?.value?.trim() || '',
+        savedAt: new Date().toISOString(),
+    };
+}
+
+async function createAutoSepConfig() {
+    const suggestedName = `Config ${AutoSepState.configs.length + 1}`;
+    const name = await window.App.showInputModal(
+        tKey('autosep.newConfigTitle', 'New Auto-Separate Config', '新建自动分类配置'),
+        tKey('autosep.newConfigMessage', 'Enter a name for this config:', '请输入这个配置的名称：'),
+        suggestedName
+    );
+    if (!name) return;
+
+    AutoSepState.configs.push(buildAutoSepConfigPayload(name.trim()));
+    saveAutoSepConfigs();
+    renderAutoSepConfigControls();
+    const select = document.getElementById('autosep-config-select');
+    if (select) select.value = AutoSepState.configs[AutoSepState.configs.length - 1].id;
+    renderAutoSepConfigControls();
+    window.App?.showToast?.(
+        tKey('autosep.configSaved', 'Saved config "{name}"', '已保存配置“{name}”').replace('{name}', name.trim()),
+        'success'
+    );
+}
+
+async function saveCurrentAutoSepConfig() {
+    const configId = getSelectedAutoSepConfigId();
+    if (!configId) {
+        await createAutoSepConfig();
+        return;
+    }
+
+    const config = getAutoSepConfigById(configId);
+    if (!config) return;
+    const updated = buildAutoSepConfigPayload(config.name);
+    updated.id = config.id;
+    const index = AutoSepState.configs.findIndex((entry) => entry.id === config.id);
+    if (index >= 0) {
+        AutoSepState.configs[index] = updated;
+        saveAutoSepConfigs();
+        renderAutoSepConfigControls();
+        const select = document.getElementById('autosep-config-select');
+        if (select) select.value = config.id;
+        window.App?.showToast?.(
+            tKey('autosep.configUpdated', 'Updated config "{name}"', '已更新配置“{name}”').replace('{name}', config.name),
+            'success'
+        );
+    }
+}
+
+function applyAutoSepConfig(config) {
+    if (!config) return;
+    setAutoSepFilters(config.filters || {});
+
+    const destinationInput = document.getElementById('autosep-destination');
+    if (destinationInput) {
+        destinationInput.value = config.destination || '';
+        persistAutoSepDestination(destinationInput.value.trim());
+    }
+
+    if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
+    if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
+}
+
+function loadSelectedAutoSepConfig() {
+    const config = getAutoSepConfigById(getSelectedAutoSepConfigId());
+    if (!config) return;
+    applyAutoSepConfig(config);
+    renderAutoSepConfigControls();
+    updateAutoSepSettingsSummary();
+    window.App?.showToast?.(
+        tKey('autosep.configLoaded', 'Loaded config "{name}"', '已载入配置“{name}”').replace('{name}', config.name),
+        'success'
+    );
+}
+
+async function renameSelectedAutoSepConfig() {
+    const config = getAutoSepConfigById(getSelectedAutoSepConfigId());
+    if (!config) return;
+    const nextName = await window.App.showInputModal(
+        tKey('autosep.renameConfigTitle', 'Rename Config', '重命名配置'),
+        tKey('autosep.renameConfigMessage', 'Enter the new name for this config:', '请输入这个配置的新名称：'),
+        config.name
+    );
+    if (!nextName) return;
+
+    config.name = nextName.trim();
+    saveAutoSepConfigs();
+    renderAutoSepConfigControls();
+    const select = document.getElementById('autosep-config-select');
+    if (select) select.value = config.id;
+    renderAutoSepConfigControls();
+}
+
+function deleteSelectedAutoSepConfig() {
+    const config = getAutoSepConfigById(getSelectedAutoSepConfigId());
+    if (!config) return;
+
+    window.App.showConfirm(
+        tKey('autosep.deleteConfigTitle', 'Delete Config', '删除配置'),
+        tKey('autosep.deleteConfigMessage', 'Delete "{name}"? This only removes the saved config.', '要删除“{name}”吗？这只会移除已保存的配置。')
+            .replace('{name}', config.name),
+        () => {
+            AutoSepState.configs = AutoSepState.configs.filter((entry) => entry.id !== config.id);
+            saveAutoSepConfigs();
+            renderAutoSepConfigControls();
+            window.App?.showToast?.(
+                tKey('autosep.configDeleted', 'Deleted config "{name}"', '已删除配置“{name}”').replace('{name}', config.name),
+                'info'
+            );
+        }
+    );
+}
+
+function loadAutoSepSettings() {
+    try {
+        const rawSettings = localStorage.getItem(AUTOSEP_SETTINGS_KEY);
+        const parsed = rawSettings ? JSON.parse(rawSettings) : {};
+        AutoSepState.settings = {
+            ...DEFAULT_AUTOSEP_SETTINGS,
+            ...(parsed && typeof parsed === 'object' ? parsed : {}),
+        };
+    } catch (_) {
+        AutoSepState.settings = { ...DEFAULT_AUTOSEP_SETTINGS };
+    }
+}
+
+function saveAutoSepSettings() {
+    localStorage.setItem(AUTOSEP_SETTINGS_KEY, JSON.stringify(AutoSepState.settings));
+}
+
+function persistAutoSepDestination(value) {
+    if (!AutoSepState.settings.rememberDestination) return;
+    if (value) {
+        localStorage.setItem(AUTOSEP_DESTINATION_KEY, value);
+    } else {
+        localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
+    }
+}
+
+function getSavedAutoSepDestination() {
+    return localStorage.getItem(AUTOSEP_DESTINATION_KEY) || '';
+}
+
+function applyAutoSepSettingsToUi() {
+    const destinationInput = document.getElementById('autosep-destination');
+    const rememberDestination = document.getElementById('autosep-remember-destination');
+    const autoPreview = document.getElementById('autosep-auto-preview');
+    const confirmMove = document.getElementById('autosep-confirm-move');
+
+    if (rememberDestination) rememberDestination.checked = Boolean(AutoSepState.settings.rememberDestination);
+    if (autoPreview) autoPreview.checked = Boolean(AutoSepState.settings.autoPreview);
+    if (confirmMove) confirmMove.checked = Boolean(AutoSepState.settings.confirmBeforeMove);
+
+    if (destinationInput && AutoSepState.settings.rememberDestination && !destinationInput.value.trim()) {
+        destinationInput.value = getSavedAutoSepDestination();
+    }
+}
+
+function updateAutoSepSettingsSummary() {
+    const summaryEl = document.getElementById('autosep-settings-summary');
+    if (!summaryEl) return;
+
+    const destination = document.getElementById('autosep-destination')?.value?.trim() || '';
+    const parts = [];
+
+    parts.push(
+        AutoSepState.settings.rememberDestination
+            ? tKey('autosep.summaryRememberOn', 'Destination memory: On', '目标路径记忆：开启')
+            : tKey('autosep.summaryRememberOff', 'Destination memory: Off', '目标路径记忆：关闭')
+    );
+    parts.push(
+        AutoSepState.settings.autoPreview
+            ? tKey('autosep.summaryAutoPreviewOn', 'Auto-preview: On', '自动预览：开启')
+            : tKey('autosep.summaryAutoPreviewOff', 'Auto-preview: Off', '自动预览：关闭')
+    );
+    parts.push(
+        AutoSepState.settings.confirmBeforeMove
+            ? tKey('autosep.summaryConfirmOn', 'Confirm move: On', '移动确认：开启')
+            : tKey('autosep.summaryConfirmOff', 'Confirm move: Off', '移动确认：关闭')
+    );
+
+    if (destination) {
+        parts.push(
+            tKey('autosep.summaryDestination', 'Current destination: {path}', '当前目标：{path}')
+                .replace('{path}', destination)
+        );
+    }
+
+    summaryEl.textContent = parts.join(' • ');
+}
+
+function openAutoSepSettingsModal() {
+    applyAutoSepSettingsToUi();
+    updateAutoSepSettingsSummary();
+    if (typeof showModal === 'function') {
+        showModal('autosep-settings-modal');
+    } else {
+        document.getElementById('autosep-settings-modal')?.classList.add('visible');
+    }
+}
+
+function closeAutoSepSettingsModal() {
+    if (typeof hideModal === 'function') {
+        hideModal('autosep-settings-modal');
+    } else {
+        document.getElementById('autosep-settings-modal')?.classList.remove('visible');
+    }
+}
+
+function saveAutoSepSettingsFromUi() {
+    AutoSepState.settings.rememberDestination = Boolean(document.getElementById('autosep-remember-destination')?.checked);
+    AutoSepState.settings.autoPreview = Boolean(document.getElementById('autosep-auto-preview')?.checked);
+    AutoSepState.settings.confirmBeforeMove = Boolean(document.getElementById('autosep-confirm-move')?.checked);
+    saveAutoSepSettings();
+
+    const destination = document.getElementById('autosep-destination')?.value?.trim() || '';
+    if (AutoSepState.settings.rememberDestination) {
+        persistAutoSepDestination(destination);
+    } else {
+        localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
+    }
+
+    updateAutoSepSettingsSummary();
+    closeAutoSepSettingsModal();
+    window.App?.showToast?.(
+        tKey('autosep.settingsSaved', 'Auto-Separate settings saved', '自动分类设置已保存'),
+        'success'
+    );
+}
+
+function resetAutoSepSettings() {
+    AutoSepState.settings = { ...DEFAULT_AUTOSEP_SETTINGS };
+    saveAutoSepSettings();
+    localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
+    const destinationInput = document.getElementById('autosep-destination');
+    if (destinationInput) destinationInput.value = '';
+    applyAutoSepSettingsToUi();
+    updateAutoSepSettingsSummary();
+    window.App?.showToast?.(
+        tKey('autosep.settingsReset', 'Saved Auto-Separate settings cleared', '自动分类已保存设置已清除'),
+        'info'
+    );
 }
 
 // ============== Update Summary Display ==============
 
 function updateAutoSepSummary() {
-    const { $, AppState } = window.App;
-    if (!AppState || !AppState.filters) return;
+    const { $ } = window.App;
+    const filters = getAutoSepFilters();
+    if (!filters) return;
 
     // Use shared filter summary formatter
-    const summary = window.formatFilterSummary(AppState.filters);
+    const summary = window.formatFilterSummary(filters);
 
     // Generators
     const genEl = $('#autosep-summary-generators');
@@ -117,7 +560,9 @@ function getAutoSepFilterSignature(filters) {
         maxWidth: filters.maxWidth || null,
         minHeight: filters.minHeight || null,
         maxHeight: filters.maxHeight || null,
-        aspectRatio: filters.aspectRatio || null
+        aspectRatio: filters.aspectRatio || null,
+        minAesthetic: filters.minAesthetic ?? null,
+        maxAesthetic: filters.maxAesthetic ?? null,
     });
 }
 
@@ -136,7 +581,7 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
         return;
     }
 
-    images.slice(0, 8).forEach((image) => {
+    images.forEach((image) => {
         const button = document.createElement('button');
         button.className = 'autosep-preview-item';
         button.type = 'button';
@@ -163,7 +608,7 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
         container.appendChild(button);
     });
 
-    const remaining = totalCount - Math.min(images.length, 8);
+    const remaining = totalCount - images.length;
     if (remaining > 0) {
         const more = document.createElement('div');
         more.className = 'autosep-preview-more';
@@ -177,24 +622,25 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
 
 async function updateAutoSepPreview() {
     const requestId = ++_previewRequestId;
-    const { $, API, AppState } = window.App;
+    const { $, API } = window.App;
+    const filters = getAutoSepFilters();
 
     // Update summary display
     updateAutoSepSummary();
 
-    const f = AppState.filters;
-    const currentSignature = getAutoSepFilterSignature(f);
+    const currentSignature = getAutoSepFilterSignature(filters);
 
     // Check if any meaningful filters are set
     const hasFilters =
-        (f.generators?.length > 0 && f.generators.length < 5) ||
-        (f.tags?.length > 0) ||
-        (f.ratings?.length > 0 && f.ratings.length < 4) ||
-        (f.checkpoints?.length > 0) ||
-        (f.loras?.length > 0) ||
-        (f.prompts?.length > 0) ||
-        Boolean(f.search?.trim()) ||
-        f.minWidth || f.maxWidth || f.minHeight || f.maxHeight || f.aspectRatio;
+        (filters.generators?.length > 0 && filters.generators.length < 5) ||
+        (filters.tags?.length > 0) ||
+        (filters.ratings?.length > 0 && filters.ratings.length < 4) ||
+        (filters.checkpoints?.length > 0) ||
+        (filters.loras?.length > 0) ||
+        (filters.prompts?.length > 0) ||
+        Boolean(filters.search?.trim()) ||
+        filters.minWidth || filters.maxWidth || filters.minHeight || filters.maxHeight ||
+        filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null;
 
     if (!hasFilters) {
         $('#autosep-preview .stat-number').textContent = '0';
@@ -206,25 +652,40 @@ async function updateAutoSepPreview() {
     }
 
     try {
-        const firstPage = await API.getImages({
-            generators: f.generators?.length > 0 ? f.generators : null,
-            tags: f.tags?.length > 0 ? f.tags : null,
-            ratings: f.ratings?.length < 4 ? f.ratings : null,
-            checkpoints: f.checkpoints?.length > 0 ? f.checkpoints : null,
-            loras: f.loras?.length > 0 ? f.loras : null,
-            prompts: f.prompts?.length > 0 ? f.prompts : null,
-            search: f.search?.trim() || null,
-            minWidth: f.minWidth,
-            maxWidth: f.maxWidth,
-            minHeight: f.minHeight,
-            maxHeight: f.maxHeight,
-            aspectRatio: f.aspectRatio,
-            limit: 1000
-        });
+        const allImages = [];
+        let cursor = null;
+        let hasMore = true;
+
+        while (hasMore) {
+            const result = await API.getImages({
+                generators: filters.generators?.length > 0 ? filters.generators : null,
+                tags: filters.tags?.length > 0 ? filters.tags : null,
+                ratings: filters.ratings?.length < 4 ? filters.ratings : null,
+                checkpoints: filters.checkpoints?.length > 0 ? filters.checkpoints : null,
+                loras: filters.loras?.length > 0 ? filters.loras : null,
+                prompts: filters.prompts?.length > 0 ? filters.prompts : null,
+                search: filters.search?.trim() || null,
+                minWidth: filters.minWidth,
+                maxWidth: filters.maxWidth,
+                minHeight: filters.minHeight,
+                maxHeight: filters.maxHeight,
+                aspectRatio: filters.aspectRatio,
+                minAesthetic: filters.minAesthetic,
+                maxAesthetic: filters.maxAesthetic,
+                limit: 500,
+                cursor,
+            });
+
+            const rows = Array.isArray(result?.images) ? result.images : [];
+            allImages.push(...rows);
+            cursor = result?.next_cursor || null;
+            hasMore = Boolean(result?.has_more && cursor);
+            if (requestId !== _previewRequestId) return;
+        }
 
         if (requestId !== _previewRequestId) return; // Stale request, discard
-        AutoSepState.matchCount = firstPage.total || 0;
-        AutoSepState.previewImages = firstPage.images || [];
+        AutoSepState.matchCount = allImages.length;
+        AutoSepState.previewImages = allImages;
         AutoSepState.previewSignature = currentSignature;
         $('#autosep-preview .stat-number').textContent = AutoSepState.matchCount;
         renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount);
@@ -241,6 +702,16 @@ function invalidateAutoSepPreview() {
     AutoSepState.previewSignature = null;
     if (statNumber) statNumber.textContent = '0';
     renderAutoSepPreviewList([], 0);
+
+    if (AutoSepState.settings.autoPreview) {
+        clearTimeout(_autosepPreviewTimer);
+        _autosepPreviewTimer = setTimeout(() => {
+            const autosepView = document.getElementById('view-autosep');
+            if (autosepView && autosepView.style.display !== 'none') {
+                updateAutoSepPreview();
+            }
+        }, 250);
+    }
 }
 
 // ============== Initialize ==============
@@ -447,7 +918,7 @@ async function resumeAutosepMoveProgress() {
 
 // Enhanced execute with progress tracking
 async function executeAutoSeparateWithProgress() {
-    const { $, API, showToast, AppState, showConfirm } = window.App;
+    const { $, API, showToast, showConfirm } = window.App;
 
     const destEl = $('#autosep-destination');
     const destination = destEl ? destEl.value.trim() : '';
@@ -457,7 +928,8 @@ async function executeAutoSeparateWithProgress() {
         return;
     }
 
-    const currentSignature = getAutoSepFilterSignature(AppState.filters);
+    const filters = getAutoSepFilters();
+    const currentSignature = getAutoSepFilterSignature(filters);
     if (AutoSepState.previewSignature !== currentSignature) {
         showToast('Please preview the current filter results before moving images', 'info');
         await updateAutoSepPreview();
@@ -469,34 +941,34 @@ async function executeAutoSeparateWithProgress() {
         return;
     }
 
-    const f = AppState.filters;
     const total = AutoSepState.matchCount;
 
-    showConfirm(
-        'Confirm Auto-Separate',
-        `Move ${total} matching images to:\n${destination}\n\nReview the preview list above before continuing.`,
-        async () => {
+    const executeMove = async () => {
             showAutosepMoveProgress(total);
 
             try {
                 const dimensions = {
-                    minWidth: f.minWidth,
-                    maxWidth: f.maxWidth,
-                    minHeight: f.minHeight,
-                    maxHeight: f.maxHeight,
-                    aspectRatio: f.aspectRatio
+                    minWidth: filters.minWidth,
+                    maxWidth: filters.maxWidth,
+                    minHeight: filters.minHeight,
+                    maxHeight: filters.maxHeight,
+                    aspectRatio: filters.aspectRatio
                 };
 
                 const startResult = await API.batchMove(
-                    f.generators?.length > 0 ? f.generators : null,
-                    f.tags?.length > 0 ? f.tags : null,
-                    f.ratings?.length < 4 ? f.ratings : null,
+                    filters.generators?.length > 0 ? filters.generators : null,
+                    filters.tags?.length > 0 ? filters.tags : null,
+                    filters.ratings?.length < 4 ? filters.ratings : null,
                     destination,
-                    f.checkpoints?.length > 0 ? f.checkpoints : null,
-                    f.loras?.length > 0 ? f.loras : null,
-                    f.prompts?.length > 0 ? f.prompts : null,
+                    filters.checkpoints?.length > 0 ? filters.checkpoints : null,
+                    filters.loras?.length > 0 ? filters.loras : null,
+                    filters.prompts?.length > 0 ? filters.prompts : null,
                     dimensions,
-                    f.search?.trim() || null
+                    filters.search?.trim() || null,
+                    {
+                        min: filters.minAesthetic,
+                        max: filters.maxAesthetic,
+                    }
                 );
 
                 if (startResult?.error) {
@@ -514,8 +986,18 @@ async function executeAutoSeparateWithProgress() {
                 hideAutosepMoveProgress();
                 showToast(formatUserError(error, "Failed to move images"), "error");
             }
-        }
-    );
+    };
+
+    if (AutoSepState.settings.confirmBeforeMove) {
+        showConfirm(
+            'Confirm Auto-Separate',
+            `Move ${total} matching images to:\n${destination}\n\nReview the preview list above before continuing.`,
+            executeMove
+        );
+        return;
+    }
+
+    await executeMove();
 }
 
 // Replace the original function

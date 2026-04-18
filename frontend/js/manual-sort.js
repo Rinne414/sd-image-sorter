@@ -21,8 +21,11 @@ const ManualSortState = {
     undoAvailable: false,
     redoAvailable: false,
     startTime: null,
-    actionTimestamps: []  // For speed calculation
+    actionTimestamps: [],  // For speed calculation
+    filters: null,
 };
+
+const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 
 // Key mappings
 const KEY_MAP = {
@@ -50,17 +53,87 @@ const DEFAULT_FOLDER_LABELS = {
     d: 'Best'
 };
 
+function manualSortText(key, enText, zhText = enText) {
+    const translated = window.I18n?.t?.(key);
+    if (translated && translated !== key) return translated;
+    return window.I18n?.getLang?.() === 'zh-CN' ? zhText : enText;
+}
+
+function serializeManualSortFilters(filters) {
+    const source = filters || {};
+    const clone = window.App?.cloneFilterState;
+    if (typeof clone === 'function') {
+        return clone(source);
+    }
+    return {
+        generators: [...(source.generators || ['comfyui', 'nai', 'webui', 'forge', 'unknown'])],
+        ratings: [...(source.ratings || ['general', 'sensitive', 'questionable', 'explicit'])],
+        tags: [...(source.tags || [])],
+        checkpoints: [...(source.checkpoints || [])],
+        loras: [...(source.loras || [])],
+        prompts: [...(source.prompts || [])],
+        artist: source.artist || null,
+        search: source.search || '',
+        sortBy: source.sortBy || 'newest',
+        limit: source.limit || 0,
+        minWidth: source.minWidth ?? null,
+        maxWidth: source.maxWidth ?? null,
+        minHeight: source.minHeight ?? null,
+        maxHeight: source.maxHeight ?? null,
+        aspectRatio: source.aspectRatio || '',
+        minAesthetic: source.minAesthetic ?? null,
+        maxAesthetic: source.maxAesthetic ?? null,
+    };
+}
+
+function loadManualSortFilters() {
+    try {
+        const raw = localStorage.getItem(MANUAL_SORT_FILTER_STATE_KEY);
+        if (raw) {
+            ManualSortState.filters = serializeManualSortFilters(JSON.parse(raw));
+            return;
+        }
+    } catch (_) {
+        // Ignore invalid saved state and fall back to a safe clone.
+    }
+    ManualSortState.filters = serializeManualSortFilters(window.App?.AppState?.filters || null);
+}
+
+function saveManualSortFilters() {
+    localStorage.setItem(MANUAL_SORT_FILTER_STATE_KEY, JSON.stringify(serializeManualSortFilters(ManualSortState.filters || {})));
+}
+
+function setManualSortFilters(nextFilters) {
+    ManualSortState.filters = serializeManualSortFilters(nextFilters || {});
+    saveManualSortFilters();
+}
+
+function getManualSortFilters() {
+    if (!ManualSortState.filters) {
+        loadManualSortFilters();
+    }
+    return ManualSortState.filters;
+}
+
 // ============== Initialization ==============
 
 async function initManualSort() {
     // Use direct selectors to avoid timing issues with window.App
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
+    loadManualSortFilters();
 
     // Folder path inputs
     $$('.folder-path-input').forEach(input => {
+        const savedFolder = localStorage.getItem(`sort-folder-${input.dataset.key}`);
+        if(savedFolder) {
+            input.value = savedFolder;
+            ManualSortState.folders[input.dataset.key] = savedFolder;
+        }
+
         input.addEventListener('change', () => {
             ManualSortState.folders[input.dataset.key] = input.value;
+            localStorage.setItem(`sort-folder-${input.dataset.key}`, input.value);
         });
     });
 
@@ -81,6 +154,7 @@ async function initManualSort() {
                 if (path !== null) {
                     input.value = path;
                     ManualSortState.folders[input.dataset.key] = path;
+                    localStorage.setItem(`sort-folder-${input.dataset.key}`, path);
                 }
             }
         });
@@ -91,7 +165,21 @@ async function initManualSort() {
     if (filterBtn) {
         filterBtn.addEventListener('click', () => {
             if (window.App && window.App.openFilterModal) {
-                window.App.openFilterModal();
+                window.App.openFilterModal({
+                    mode: 'manual-sort',
+                    titleText: manualSortText('manual.filterTitle', 'Manual Sort Filters', '手动分类筛选'),
+                    applyButtonText: manualSortText('manual.applyFilters', 'Apply to Manual Sort', '应用到手动分类'),
+                    resetButtonText: manualSortText('manual.resetFilters', 'Reset Manual Sort Filters', '重置手动分类筛选'),
+                    filterState: getManualSortFilters(),
+                    onApply: (filters) => {
+                        setManualSortFilters(filters);
+                        updateManualSortFilterSummary();
+                    },
+                    onReset: (filters) => {
+                        setManualSortFilters(filters);
+                        updateManualSortFilterSummary();
+                    },
+                });
             }
         });
     }
@@ -167,7 +255,7 @@ async function initManualSort() {
 // ============== Start Sorting ==============
 
 async function startSorting() {
-    const { $, $$, API, showToast, AppState } = window.App;
+    const { $, $$, API, showToast } = window.App;
 
     // Collect folder paths
     const folders = {};
@@ -186,14 +274,16 @@ async function startSorting() {
     ManualSortState.folders = folders;
 
     // Save destination folders for quick access later
-    Object.values(folders).forEach(path => {
+    Object.keys(folders).forEach(key => {
+        const path = folders[key];
+        localStorage.setItem(`sort-folder-${key}`, path);
         if (window.App && window.App.addRecentFolder) {
             window.App.addRecentFolder(path);
         }
     });
 
-    // Get filters from unified AppState
-    const f = AppState.filters;
+    // Manual Sort keeps its own filter state so queue/sort work does not pollute Gallery.
+    const f = getManualSortFilters();
     const generators = f.generators?.length > 0 ? f.generators : null;
     const ratings = f.ratings?.length > 0 ? f.ratings : null;
     const tags = f.tags?.length > 0 ? f.tags : null;
@@ -223,7 +313,11 @@ async function startSorting() {
             loras,
             prompts,
             dimensions,
-            search
+            search,
+            {
+                min: f.minAesthetic,
+                max: f.maxAesthetic,
+            }
         );
 
         if (result.total_images === 0) {
@@ -249,6 +343,8 @@ async function startSorting() {
                 minHeight: f.minHeight,
                 maxHeight: f.maxHeight,
                 aspectRatio: f.aspectRatio,
+                minAesthetic: f.minAesthetic,
+                maxAesthetic: f.maxAesthetic,
                 limit: 1000,
                 cursor: previewCursor
             });
@@ -884,11 +980,12 @@ function exitSorting() {
 // ============== Filter Summary ==============
 
 function updateManualSortFilterSummary() {
-    const { $, AppState } = window.App;
-    if (!AppState || !AppState.filters) return;
+    const { $ } = window.App;
+    const filters = getManualSortFilters();
+    if (!filters) return;
 
     // Use shared filter summary formatter
-    const summary = window.formatFilterSummary(AppState.filters);
+    const summary = window.formatFilterSummary(filters);
 
     // Generators
     const genEl = $('#manual-sort-summary-generators');

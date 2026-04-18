@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.6.3-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.0-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -16,9 +16,9 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 <p align="center">
@@ -107,13 +107,36 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 - View top artists and their image counts
 - Supports HuggingFace, ModelScope, or local model loading
 
+### 📖 Image Reader — Drag, drop, read *(new in 3.0)*
+
+Inspect any SD image without scanning it into your library. Drag an image onto the Reader tab and see everything instantly.
+
+- **Full metadata**: prompt, negative prompt, sampler, steps, CFG, seed, checkpoint, VAE, LoRAs with weights
+- **Model hashes**: all hashes exposed for checkpoint / VAE / LoRA so you can cross-reference Civitai
+- **Prompt reformat**: view in original, SD WebUI, or NovelAI syntax
+- **Drag-replace**: drop a new image anytime to swap; no modal, no loading screens
+- **Histogram preview**: RGB and luminance distribution of the source image
+
+### 🧩 Image Obfuscate — Scramble sharing *(new in 3.0)*
+
+Clipboard-first image scrambler compatible with the Big Tomato (`dfqtphx`) and Small Tomato (`singularpoint`) reference sites.
+
+- **Drag / paste / browse**: queue any number of images
+- **Encode or decode**: both directions with an optional password
+- **Compat modes**: Big Tomato (preserves PNG metadata) or Small Tomato (pure pixel scramble)
+- **Clipboard copy**: paste the decoded PNG straight into Discord, Twitter, etc. — download only if you need it
+
+### ✨ Aesthetic Score *(new in 3.0)*
+
+LAION aesthetic predictor (CLIP ViT-L/14 + linear head) scores any image on a ~1–10 aesthetic scale. Surfaces in the detail modal alongside ratings and tags.
+
 ---
 
 ## ⬇️ Download & Install
 
 ### Windows
 
-1. **[Download sd-image-sorter-v2.6.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-windows-portable.zip)**
+1. **[Download sd-image-sorter-v3.0.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip)**
 2. Extract to any folder
 3. Double-click **`run-portable.bat`**
 4. Browser opens `http://localhost:8487` — done
@@ -124,10 +147,10 @@ Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v2.6.3-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz)**
+1. **[Download sd-image-sorter-v3.0.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz)**
 2. Extract and run:
    ```bash
-   tar xzf sd-image-sorter-v2.6.3-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > Requires Python 3.9+. The script creates a virtualenv automatically.
@@ -181,6 +204,7 @@ Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select i
 | NudeNet 320n | ~12 MB | Censor detection |
 | Kaloscope 2.0 | ~2.8 GB | Artist ID |
 | SAM3 | ~3.3 GB | Censor refinement |
+| CLIP ViT-L/14 + aesthetic head | ~400 MB | Aesthetic score |
 </details>
 
 ---
@@ -228,9 +252,9 @@ This project wouldn't be possible without these amazing contributors and their i
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
 </p>
 
 <p align="center">
@@ -318,13 +342,36 @@ This project wouldn't be possible without these amazing contributors and their i
 - 按识别出的画师筛选画廊
 - 支持 HuggingFace、ModelScope、本地模型
 
+### 📖 图片阅读器 — 拖进来就看 *（3.0 新增）*
+
+想看一张 SD 图的参数，又不想扫进图库？拖进 Reader 分页立即看全部信息。
+
+- **完整元数据**：正向/负向提示词、采样器、步数、CFG、种子、模型、VAE、LoRA 及权重
+- **模型 hash**：checkpoint / VAE / LoRA 的 hash 都能看到，方便去 Civitai 对照
+- **提示词格式切换**：原始、SD WebUI、NovelAI 三种语法互换
+- **拖拽替换**：随时再拖一张就换，不弹窗、不转圈
+- **直方图**：源图的 RGB 和亮度分布
+
+### 🧩 图片混淆 — 加扰分享 *（3.0 新增）*
+
+剪贴板优先的图片加扰工具，兼容 Big Tomato（`dfqtphx`）和 Small Tomato（`singularpoint`）两个参考站点。
+
+- **拖拽 / 粘贴 / 浏览**：任意数量图片入队
+- **加密 / 解密**：双向，可选密码
+- **兼容模式**：Big Tomato（保留 PNG metadata）或 Small Tomato（纯像素加扰）
+- **剪贴板复制**：解码后的 PNG 直接粘到 Discord、Twitter，不用存文件
+
+### ✨ 美学评分 *（3.0 新增）*
+
+LAION Aesthetic Predictor（CLIP ViT-L/14 + 线性头）给图片打一个 ~1–10 分的美学分。显示在详情弹窗里，和评级、标签并列。
+
 ---
 
 ## ⬇️ 下载安装
 
 ### Windows
 
-1. **[下载 sd-image-sorter-v2.6.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-windows-portable.zip)**
+1. **[下载 sd-image-sorter-v3.0.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip)**
 2. 解压到任意文件夹
 3. 双击 **`run-portable.bat`**
 4. 浏览器打开 `http://localhost:8487` — 搞定
@@ -335,10 +382,10 @@ This project wouldn't be possible without these amazing contributors and their i
 
 ### Linux / macOS
 
-1. **[下载 sd-image-sorter-v2.6.3-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v2.6.3-linux-mac.tar.gz)**
+1. **[下载 sd-image-sorter-v3.0.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz)**
 2. 解压并运行：
    ```bash
-   tar xzf sd-image-sorter-v2.6.3-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.0-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > 需要 Python 3.9+，脚本自动创建虚拟环境。
@@ -392,6 +439,7 @@ HF_ENDPOINT=https://hf-mirror.com
 | NudeNet 320n | ~12 MB | 打码检测 |
 | Kaloscope 2.0 | ~2.8 GB | 画师识别 |
 | SAM3 | ~3.3 GB | 打码精修 |
+| CLIP ViT-L/14 + aesthetic head | ~400 MB | 美学评分 |
 </details>
 
 ---

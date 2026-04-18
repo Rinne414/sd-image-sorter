@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SD Image Sorter - Main Application
  * Core app logic and API communication
  */
@@ -81,6 +81,110 @@ const RequestManager = {
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
 
+function getDefaultGalleryPageSize(mode = null) {
+    const resolvedMode = mode || localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid';
+    const viewportWidth = window.innerWidth || 1600;
+
+    if (resolvedMode === 'large') {
+        if (viewportWidth >= 1800) return 220;
+        if (viewportWidth >= 1366) return 180;
+        return 140;
+    }
+
+    if (resolvedMode === 'waterfall') {
+        if (viewportWidth >= 1800) return 260;
+        if (viewportWidth >= 1366) return 220;
+        return 180;
+    }
+
+    if (viewportWidth >= 1800) return 420;
+    if (viewportWidth >= 1366) return 320;
+    return 240;
+}
+
+function createDefaultFilterState() {
+    return {
+        generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+        ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+        tags: [],
+        checkpoints: [],
+        loras: [],
+        prompts: [],
+        artist: null,
+        search: '',
+        sortBy: 'newest',
+        limit: 0,
+        minWidth: null,
+        maxWidth: null,
+        minHeight: null,
+        maxHeight: null,
+        aspectRatio: '',
+        minAesthetic: null,
+        maxAesthetic: null
+    };
+}
+
+function cloneFilterState(filters) {
+    const source = filters || createDefaultFilterState();
+    return {
+        generators: [...(source.generators || [])],
+        ratings: [...(source.ratings || [])],
+        tags: [...(source.tags || [])],
+        checkpoints: [...(source.checkpoints || [])],
+        loras: [...(source.loras || [])],
+        prompts: [...(source.prompts || [])],
+        artist: source.artist || null,
+        search: source.search || '',
+        sortBy: source.sortBy || 'newest',
+        limit: source.limit || 0,
+        minWidth: source.minWidth ?? null,
+        maxWidth: source.maxWidth ?? null,
+        minHeight: source.minHeight ?? null,
+        maxHeight: source.maxHeight ?? null,
+        aspectRatio: source.aspectRatio || '',
+        minAesthetic: source.minAesthetic ?? null,
+        maxAesthetic: source.maxAesthetic ?? null
+    };
+}
+
+function copyFilterState(target, source) {
+    if (!target || !source) return target;
+    const next = cloneFilterState(source);
+    Object.keys(target).forEach((key) => delete target[key]);
+    Object.assign(target, next);
+    return target;
+}
+
+let FilterModalController = {
+    mode: 'gallery',
+    workingState: null,
+    targetState: null,
+    onApply: null,
+    onReset: null,
+    titleText: null,
+    applyButtonText: null,
+    resetButtonText: null,
+    optionData: null,
+};
+
+function getFilterModalState() {
+    return FilterModalController.workingState || AppState.filters;
+}
+
+function resetFilterModalController() {
+    FilterModalController = {
+        mode: 'gallery',
+        workingState: null,
+        targetState: null,
+        onApply: null,
+        onReset: null,
+        titleText: null,
+        applyButtonText: null,
+        resetButtonText: null,
+        optionData: null,
+    };
+}
+
 // Load saved filter state from localStorage
 function loadSavedFilterState() {
     try {
@@ -101,17 +205,7 @@ const AppState = {
     currentView: 'gallery',
     viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
-    filters: savedFilters || {
-        generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
-        ratings: ['general', 'sensitive', 'questionable', 'explicit'],
-        tags: [],
-        checkpoints: [],
-        loras: [],
-        prompts: [],  // Multi-prompt filter
-        artist: null,  // Artist filter
-        search: '',
-        sortBy: 'newest'
-    },
+    filters: savedFilters || createDefaultFilterState(),
     selectedImage: null,
     isLoading: false,
 
@@ -121,7 +215,7 @@ const AppState = {
         offset: 0,
         hasMore: true,
         total: 0,
-        pageSize: 200
+        pageSize: getDefaultGalleryPageSize()
     },
 
     // Multi-select state
@@ -153,6 +247,7 @@ const SORT_PAIRS = {
     rating: 'rating_desc',
     character_count: 'character_count_asc',
     file_size: 'file_size_asc',
+    aesthetic: 'aesthetic_asc',
 };
 // Build full bidirectional reverse map
 const SORT_REVERSE_MAP = {};
@@ -188,6 +283,29 @@ function updateSortReverseButton() {
     if (dropdown) {
         dropdown.value = getBaseSortValue(sortBy);
     }
+}
+
+function syncGallerySortLabels() {
+    const dropdown = $('#gallery-sort');
+    if (!dropdown) return;
+
+    const mappings = {
+        newest: ['sort.newest', 'Newest'],
+        name_asc: ['sort.nameAsc', 'Name (A-Z)'],
+        generator: ['sort.generator', 'Generator'],
+        prompt_length: ['sort.promptLength', 'Prompt Length'],
+        tag_count: ['sort.tagCount', 'Most Tags'],
+        rating: ['sort.rating', 'Rating (NSFW first)'],
+        character_count: ['sort.characterCount', 'Characters'],
+        file_size: ['sort.fileSize', 'Largest File'],
+        aesthetic: ['sort.aesthetic', 'Aesthetic Score'],
+        random: ['sort.random', 'Random'],
+    };
+
+    Object.entries(mappings).forEach(([value, [key, fallback]]) => {
+        const option = dropdown.querySelector(`option[value="${value}"]`);
+        if (option) option.textContent = appT(key, fallback);
+    });
 }
 
 function supportsCursorPagination(sortBy = AppState.filters.sortBy) {
@@ -335,6 +453,8 @@ const API = {
         if (filters.minHeight) params.set('min_height', filters.minHeight);
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
         if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
+        if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -355,6 +475,10 @@ const API = {
         return this.post(`/api/images/${id}/reparse`);
     },
 
+    async openFolder(imageId) {
+        return this.post('/api/open-folder', { image_id: imageId });
+    },
+
     getImageUrl(id) {
         return `${API_BASE}/api/image-file/${id}`;
     },
@@ -369,7 +493,7 @@ const API = {
         return this.get('/api/tags');
     },
 
-    async getTagsLibrary(sortBy = 'frequency', limit = 2000) {
+    async getTagsLibrary(sortBy = 'frequency', limit = 100000) {
         return this.get(`/api/tags/library?sort_by=${sortBy}&limit=${limit}`);
     },
 
@@ -377,8 +501,12 @@ const API = {
         return this.post('/api/tags/import', { images, overwrite });
     },
 
-    async getPromptsLibrary(limit = 5000) {
+    async getPromptsLibrary(limit = 100000) {
         return this.get(`/api/prompts/library?limit=${limit}`);
+    },
+
+    async getLorasLibrary(limit = 100000) {
+        return this.get(`/api/loras/library?limit=${limit}`);
     },
 
     async getGenerators() {
@@ -388,6 +516,22 @@ const API = {
     // Stats
     async getStats() {
         return this.get('/api/stats');
+    },
+
+    async getAestheticStatus() {
+        return this.get('/api/aesthetic/status');
+    },
+
+    async startAestheticScoring(force = false) {
+        return this.post(`/api/aesthetic/score-all?force=${force ? 'true' : 'false'}`);
+    },
+
+    async getAestheticProgress() {
+        return this.get('/api/aesthetic/progress');
+    },
+
+    async scoreAestheticForImage(imageId) {
+        return this.post(`/api/aesthetic/score/${imageId}`);
     },
 
     async getModelStatus() {
@@ -448,7 +592,7 @@ const API = {
         return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -462,12 +606,14 @@ const API = {
             min_height: dimensions?.minHeight || null,
             max_height: dimensions?.maxHeight || null,
             aspect_ratio: dimensions?.aspectRatio || null,
+            min_aesthetic: aesthetic?.min ?? null,
+            max_aesthetic: aesthetic?.max ?? null,
             destination_folder: destinationFolder
         });
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null) {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -481,6 +627,8 @@ const API = {
         if (dimensions?.minHeight) params.set('min_height', dimensions.minHeight);
         if (dimensions?.maxHeight) params.set('max_height', dimensions.maxHeight);
         if (dimensions?.aspectRatio) params.set('aspect_ratio', dimensions.aspectRatio);
+        if (aesthetic?.min != null) params.set('min_aesthetic', aesthetic.min);
+        if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
         if (folders) params.set('folders', JSON.stringify(folders));
         return this.post(`/api/sort/start?${params}`);
     },
@@ -779,6 +927,8 @@ function showModal(modalId) {
                 e.preventDefault();
                 if (modalId === 'tag-modal') {
                     minimizeTaggingToBackground();
+                } else if (modalId === 'filter-modal') {
+                    closeFilterModal();
                 } else {
                     hideModal(modalId);
                 }
@@ -829,6 +979,11 @@ function hideModal(modalId) {
         // Release focus trap and restore focus
         releaseFocus();
     }
+}
+
+function closeFilterModal() {
+    hideModal('filter-modal');
+    resetFilterModalController();
 }
 
 // Custom input modal (replaces native prompt())
@@ -1021,6 +1176,7 @@ function formatSize(bytes) {
 function setGalleryViewMode(mode) {
     const nextMode = ['grid', 'large', 'waterfall'].includes(mode) ? mode : 'grid';
     AppState.viewMode = nextMode;
+    AppState.pagination.pageSize = getDefaultGalleryPageSize(nextMode);
     localStorage.setItem(GALLERY_VIEW_MODE_KEY, nextMode);
 
     $$('.view-btn').forEach(btn => {
@@ -1186,8 +1342,8 @@ function getTaggerHardwareRecommendation() {
 
 function getRecommendedTaggerChunkSize() {
     const recommendation = getTaggerHardwareRecommendation();
-    const size = Number(recommendation?.recommended_batch_size || 4);
-    return Number.isFinite(size) && size > 0 ? size : 4;
+    const size = Number(recommendation?.recommended_batch_size || 8);
+    return Number.isFinite(size) && size > 0 ? size : 8;
 }
 
 function getTaggerProviderState() {
@@ -1196,16 +1352,26 @@ function getTaggerProviderState() {
         ? systemInfo.onnx_providers.map((provider) => String(provider))
         : [];
     const hasCuda = providers.includes('CUDAExecutionProvider');
+    const hasDml = providers.includes('DmlExecutionProvider');
     const hasTensorRt = providers.includes('TensorrtExecutionProvider');
-    const label = hasCuda
-        ? (hasTensorRt ? 'TensorRT + CUDA Ready' : 'CUDA Ready')
-        : 'CPU Runtime Only';
-    const tone = hasCuda ? 'is-safe' : 'is-warning';
+    const hasTorchCuda = Boolean(systemInfo.torch_cuda_available);
+    const label = hasTensorRt
+        ? appT('tagger.tensorrtReady', 'TensorRT + CUDA ready')
+        : hasCuda
+            ? appT('tagger.cudaReady', 'CUDA ready')
+            : hasDml
+                ? appT('tagger.directmlReady', 'DirectML ready')
+                : hasTorchCuda
+                    ? appT('tagger.pytorchCudaOnly', 'PyTorch CUDA only')
+                    : appT('tagger.cpuRuntime', 'CPU runtime');
+    const tone = (hasCuda || hasTensorRt) ? 'is-safe' : 'is-warning';
 
     return {
         providers,
         hasCuda,
+        hasDml,
         hasTensorRt,
+        hasTorchCuda,
         label,
         tone,
     };
@@ -1213,6 +1379,7 @@ function getTaggerProviderState() {
 
 function setTaggerStatusChip(element, text, tone = '') {
     if (!element) return;
+    element.removeAttribute('data-i18n');
     element.textContent = text;
     const baseClass = element.classList.contains('system-info-chip') ? 'system-info-chip' : 'tag-runtime-chip';
     const safeTone = VALID_TONES.has(tone) ? tone : '';
@@ -1413,14 +1580,20 @@ function syncTaggerModelUi(options = {}) {
     const gpuLocked = isGpuLockedTaggerModel(normalizedModel, { isCustom });
     const hardwareRecommendation = getTaggerHardwareRecommendation();
     const providerState = getTaggerProviderState();
+    const onnxGpuAvailable = providerState.hasCuda || providerState.hasDml;
+    const torchGpuAvailable = providerState.hasTorchCuda || providerState.hasCuda || providerState.hasTensorRt;
     const hardwareRisk = String(hardwareRecommendation?.risk_level || '').toLowerCase();
-    const hardwarePrefersGpu = hardwareRecommendation
-        ? Boolean(hardwareRecommendation.recommended_use_gpu)
-        : true;
+    const hardwarePrefersGpu = isToriiGate
+        ? torchGpuAvailable
+        : (isCustom
+            ? onnxGpuAvailable
+            : (hardwareRecommendation
+                ? Boolean(hardwareRecommendation.recommended_use_gpu)
+                : onnxGpuAvailable));
     const hardwareHighRisk = hardwareRisk === 'high';
     const taggingIsRunning = $('#btn-start-tag')?.disabled === true;
     const modelDisabled = !isCustom && Boolean(meta?.disabled);
-    const modelPrefersGpu = isCustom ? false : Boolean(meta?.gpu_default ?? true);
+    const modelPrefersGpu = isCustom ? onnxGpuAvailable : Boolean(meta?.gpu_default ?? true);
     const recommendedGpu = gpuLocked
         ? false
         : (modelPrefersGpu && hardwarePrefersGpu);
@@ -1458,7 +1631,9 @@ function syncTaggerModelUi(options = {}) {
 
     if (modelHelp) {
         if (isCustom) {
-            modelHelp.textContent = appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+            modelHelp.textContent = onnxGpuAvailable
+                ? appT('tagger.customModelHelpGpuPreferred', 'Custom ONNX model. GPU Preferred is active because a compatible provider is available. CPU Safe Mode is still safer if stability is unknown.')
+                : appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
         } else if (modelDisabled) {
             modelHelp.textContent = meta?.disabled_reason || appT('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
         } else {
@@ -1499,11 +1674,13 @@ function syncTaggerModelUi(options = {}) {
                 ? appT('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
                 : appT('tagger.toriiGateCpuDetail', 'ToriiGate can run on CPU, but it is much slower than CUDA. WD14 thresholds do not apply here.');
         } else if (isCustom) {
-            runtimeDetail.textContent = providerState.hasCuda
+            runtimeDetail.textContent = onnxGpuAvailable
                 ? appT('tagger.customGpuAvailDetail', 'The final provider is decided when the custom ONNX session is created. GPU is available, but model stability still decides the final path.')
                 : appT('tagger.customCpuOnlyDetail', 'CUDAExecutionProvider is not available for the ONNX runtime path right now, so a custom model run will stay on CPU.');
-        } else if (providerState.hasCuda) {
+        } else if (providerState.hasCuda || providerState.hasDml) {
             runtimeDetail.textContent = appT('tagger.cudaAvailDetail', 'CUDAExecutionProvider is available on this machine. If the session loads cleanly, the run should stay on GPU.');
+        } else if (providerState.hasTorchCuda) {
+            runtimeDetail.textContent = appT('tagger.pytorchCudaOnlyDetail', 'PyTorch CUDA is available, but the ONNX runtime path is still CPU-only on this machine.');
         } else {
             runtimeDetail.textContent = appT('tagger.cpuOnlyDetail', 'The current ONNX runtime probe does not expose CUDAExecutionProvider, so this run will stay on CPU.');
         }
@@ -1522,7 +1699,7 @@ function syncTaggerModelUi(options = {}) {
             ? appT('tagger.chipVlmNeeded', 'VLM Backend Needed')
             : (isToriiGate
                 ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? appT('tagger.chipPytorchCuda', 'PyTorch CUDA') : appT('tagger.chipPytorchCpu', 'PyTorch CPU'))
-                : (providerState.hasCuda ? providerState.label : appT('tagger.chipCpuRuntime', 'CPU Runtime')));
+                : ((providerState.hasCuda || providerState.hasDml || providerState.hasTorchCuda) ? providerState.label : appT('tagger.chipCpuRuntime', 'CPU Runtime')));
         const providerTone = modelDisabled
             ? 'is-danger'
             : (isToriiGate
@@ -1566,7 +1743,7 @@ function syncTaggerModelUi(options = {}) {
             gpuHelp.textContent = appT('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.');
         } else if (!gpuEnabled) {
             gpuHelp.textContent = isCustom
-                ? appT('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Keep it here until you have one stable run.')
+                ? appT('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Switch back to GPU Preferred if you need more speed and the model stays stable.')
                 : (hardwareHighRisk
                     ? appT('tagger.gpuHelpHighRiskCpu', 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.')
                     : appT('tagger.gpuHelpCpuSafe', 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.'));
@@ -1794,6 +1971,36 @@ function switchView(viewName) {
     }
 }
 
+function updateNavigationOverflowState() {
+    const navBar = $('.nav-bar');
+    const navTabs = $('.nav-tabs');
+    if (!navBar || !navTabs) return window.innerWidth <= 768;
+
+    const forceMobileLayout = window.innerWidth <= 768;
+    if (forceMobileLayout) {
+        navBar.classList.add('nav-tabs-overflow');
+        return true;
+    }
+
+    navBar.classList.remove('nav-tabs-overflow');
+
+    const navActions = $('.nav-actions');
+    const navBrand = $('.nav-brand');
+    const availableWidth = Math.max(
+        0,
+        navBar.clientWidth - (navBrand?.offsetWidth || 0) - (navActions?.offsetWidth || 0) - 72
+    );
+
+    const shouldCollapse = availableWidth > 0 && navTabs.scrollWidth > availableWidth + 24;
+    navBar.classList.toggle('nav-tabs-overflow', shouldCollapse);
+
+    if (!shouldCollapse) {
+        closeMobileMenu();
+    }
+
+    return shouldCollapse;
+}
+
 // ============== Event Listeners ==============
 
 function initEventListeners() {
@@ -1813,6 +2020,10 @@ function initEventListeners() {
 
     // Tag button
     $('#btn-tag').addEventListener('click', () => showModal('tag-modal'));
+    $('#btn-score-aesthetic')?.addEventListener('click', async () => {
+        await refreshAestheticStatus();
+        await startAestheticScoring(false);
+    });
 
     // Modal backdrops
     $$('.modal-backdrop').forEach(backdrop => {
@@ -1821,6 +2032,14 @@ function initEventListeners() {
             // For tag-modal, use cancelTagging logic to minimize to background
             if (modal && modal.id === 'tag-modal') {
                 minimizeTaggingToBackground();
+                return;
+            }
+            if (modal && modal.id === 'filter-modal') {
+                closeFilterModal();
+                return;
+            }
+            if (modal && modal.id === 'tags-library-modal') {
+                finishTagsLibraryInteraction();
                 return;
             }
             if (modal) hideModal(modal.id);
@@ -1914,6 +2133,15 @@ function initEventListeners() {
     // Gallery sort dropdown
     $('#gallery-sort').addEventListener('change', (e) => {
         AppState.filters.sortBy = e.target.value;
+        if (AppState.filters.sortBy === 'aesthetic') {
+            if (!_aestheticStatus.available) {
+                showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable — required dependencies not installed'), 'warning');
+                e.target.value = 'newest';
+                AppState.filters.sortBy = 'newest';
+            } else if (_aestheticStatus.scored_count === 0) {
+                showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Click the ⭐ button in the toolbar to score your images first.'), 'info');
+            }
+        }
         updateSortReverseButton();
         loadImages();
     });
@@ -2030,12 +2258,50 @@ function initEventListeners() {
 
     // --- Unified Filter Modal ---
     $('#btn-open-filters').addEventListener('click', openFilterModal);
-    $('#btn-close-filter-modal').addEventListener('click', () => hideModal('filter-modal'));
+
+    // --- UI Desktop Sidebar Toggle ---
+    const btnCollapseDesktop = $('#btn-collapse-desktop-sidebar');
+    const btnRestoreDesktop = $('#btn-restore-desktop-sidebar');
+    const sidebarDesktop = $('.filter-sidebar');
+    const galleryDesktop = $('.gallery-container');
+
+    const toggleDesktopSidebar = (collapse) => {
+        if(collapse) {
+            sidebarDesktop?.classList.add('desktop-collapsed');
+            galleryDesktop?.classList.add('desktop-collapsed');
+            if(btnRestoreDesktop) btnRestoreDesktop.style.display = 'block';
+            localStorage.setItem('desktop-sidebar-collapsed', 'true');
+        } else {
+            sidebarDesktop?.classList.remove('desktop-collapsed');
+            galleryDesktop?.classList.remove('desktop-collapsed');
+            if(btnRestoreDesktop) btnRestoreDesktop.style.display = 'none';
+            localStorage.setItem('desktop-sidebar-collapsed', 'false');
+        }
+    };
+
+    if (localStorage.getItem('desktop-sidebar-collapsed') === 'true') {
+        toggleDesktopSidebar(true);
+    }
+
+    btnCollapseDesktop?.addEventListener('click', () => toggleDesktopSidebar(true));
+    btnRestoreDesktop?.addEventListener('click', () => toggleDesktopSidebar(false));
+    $('#btn-close-filter-modal').addEventListener('click', closeFilterModal);
     $('#btn-apply-modal-filters').addEventListener('click', applyModalFilters);
     $('#btn-reset-filters').addEventListener('click', resetAllFilters);
     $('#btn-clear-artist')?.addEventListener('click', clearArtistFilter);
     $('#filter-modal')?.addEventListener('change', () => updateFilterModalSummary());
     $('#filter-modal')?.addEventListener('input', () => updateFilterModalSummary());
+
+    // Aesthetic quick filter buttons
+    $$('.aesthetic-quick').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const minInput = $('#filter-aesthetic-min');
+            const maxInput = $('#filter-aesthetic-max');
+            if (minInput) minInput.value = btn.dataset.min || '';
+            if (maxInput) maxInput.value = btn.dataset.max || '';
+            updateFilterModalSummary();
+        });
+    });
 
     // Modal tag search (debounced)
     const debouncedTagSearch = debounce((value) => searchModalTags(value), 300);
@@ -2047,10 +2313,11 @@ function initEventListeners() {
             e.preventDefault();
             const input = e.target.value.trim();
             if (input) {
+                const filterState = getFilterModalState();
                 const tags = input.split(',').map(t => t.trim()).filter(t => t.length > 0);
-                const newTags = tags.filter(tag => !AppState.filters.tags.includes(tag));
+                const newTags = tags.filter(tag => !filterState.tags.includes(tag));
                 if (newTags.length > 0) {
-                    AppState.filters.tags = [...AppState.filters.tags, ...newTags];
+                    filterState.tags = [...filterState.tags, ...newTags];
                 }
                 renderModalActiveTags();
                 e.target.value = '';
@@ -2073,10 +2340,14 @@ function initEventListeners() {
                 e.preventDefault();
                 const input = e.target.value.trim();
                 if (input) {
-                    const prompts = input.split(',').map(p => p.trim()).filter(p => p.length > 0);
-                    const newPrompts = prompts.filter(prompt => !AppState.filters.prompts.includes(prompt));
+                    const filterState = getFilterModalState();
+                    // Normalize: lowercase + underscore→space, then dedup against existing
+                    const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
+                    const prompts = input.split(',').map(p => normalize(p)).filter(p => p.length > 0);
+                    const existingNormalized = filterState.prompts.map(normalize);
+                    const newPrompts = prompts.filter(prompt => !existingNormalized.includes(prompt));
                     if (newPrompts.length > 0) {
-                        AppState.filters.prompts = [...AppState.filters.prompts, ...newPrompts];
+                        filterState.prompts = [...filterState.prompts, ...newPrompts];
                     }
                     renderModalActivePrompts();
                     e.target.value = '';
@@ -2089,16 +2360,31 @@ function initEventListeners() {
     // Library buttons
     $('#btn-tags-library')?.addEventListener('click', openTagsLibrary);
     $('#btn-open-library-from-filter')?.addEventListener('click', () => {
+        const returnFilterOptions = {
+            mode: FilterModalController.mode || 'gallery',
+            titleText: FilterModalController.titleText || null,
+            filterState: getFilterModalState(),
+            onApply: FilterModalController.onApply,
+            onReset: FilterModalController.onReset,
+            applyButtonText: FilterModalController.applyButtonText,
+            resetButtonText: FilterModalController.resetButtonText,
+            optionData: FilterModalController.optionData,
+        };
         hideModal('filter-modal');
-        openTagsLibrary();
+        openTagsLibrary({
+            filterState: getFilterModalState(),
+            returnFilterOptions,
+            optionData: FilterModalController.optionData,
+        });
     });
-    $('#btn-close-tags-library')?.addEventListener('click', () => hideModal('tags-library-modal'));
-    $('#btn-close-tags-library-2')?.addEventListener('click', () => hideModal('tags-library-modal'));
+    $('#btn-close-tags-library')?.addEventListener('click', finishTagsLibraryInteraction);
+    $('#btn-close-tags-library-2')?.addEventListener('click', finishTagsLibraryInteraction);
     $('#library-search')?.addEventListener('input', filterLibraryContent);
     $('#library-sort')?.addEventListener('change', loadLibraryContent);
     // Library tab switching
     $('#library-tab-tags')?.addEventListener('click', () => switchLibraryTab('tags'));
     $('#library-tab-prompts')?.addEventListener('click', () => switchLibraryTab('prompts'));
+    $('#library-tab-loras')?.addEventListener('click', () => switchLibraryTab('loras'));
 
     // Checkpoint search in filter modal
     $('#modal-checkpoint-search')?.addEventListener('input', (e) => {
@@ -2254,13 +2540,13 @@ function initMobileNavigation() {
         }
     });
 
-    // Handle resize - close mobile menu if window gets larger
+    // Handle resize - keep nav usable when tabs overflow on desktop
     let resizeTimeout;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimeout);
         resizeTimeout = setTimeout(() => {
-            if (window.innerWidth > 768) {
-                closeMobileMenu();
+            const collapsed = updateNavigationOverflowState();
+            if (!collapsed) {
                 const filterSidebar = $('.filter-sidebar');
                 if (filterSidebar) {
                     filterSidebar.classList.remove('mobile-visible');
@@ -2268,6 +2554,8 @@ function initMobileNavigation() {
             }
         }, 150);
     });
+
+    updateNavigationOverflowState();
 }
 
 function toggleMobileMenu() {
@@ -3185,6 +3473,150 @@ async function loadStats() {
     }
 }
 
+let _aestheticStatus = { available: false, message: '' };
+let _aestheticProgressTimer = null;
+
+function clearAestheticProgressTimer() {
+    if (_aestheticProgressTimer) {
+        clearTimeout(_aestheticProgressTimer);
+        _aestheticProgressTimer = null;
+    }
+}
+
+function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
+    const button = $('#btn-score-aesthetic');
+    const chip = $('#aesthetic-status-chip');
+    if (!button || !chip) return;
+
+    const t = (key, fallback, params) => {
+        const translated = window.I18n?.t?.(key, params);
+        return translated && translated !== key ? translated : (fallback || key);
+    };
+
+    if (!_aestheticStatus.available) {
+        button.disabled = true;
+        button.title = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
+        chip.style.display = 'inline-flex';
+        chip.className = 'header-status-chip is-warning';
+        chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
+        return;
+    }
+
+    button.disabled = running;
+    button.title = running
+        ? t('gallery.aestheticRunning', 'Scoring aesthetics...')
+        : t('gallery.scoreAesthetic', 'Score Aesthetic');
+
+    if (running) {
+        chip.style.display = 'inline-flex';
+        chip.className = 'header-status-chip is-info';
+        chip.textContent = t('gallery.aestheticProgress', '{completed}/{total} scored', {
+            completed,
+            total: Math.max(total, completed),
+        });
+    } else {
+        // Idle state — hide chip to reduce visual noise
+        chip.style.display = 'none';
+    }
+}
+
+async function refreshAestheticStatus() {
+    try {
+        const status = await API.getAestheticStatus();
+        _aestheticStatus = {
+            available: Boolean(status?.available),
+            message: status?.message || '',
+            scored_count: Number(status?.scored_count || 0),
+        };
+    } catch (error) {
+        _aestheticStatus = {
+            available: false,
+            message: formatUserError(error, 'Aesthetic scoring is unavailable'),
+            scored_count: 0,
+        };
+    }
+
+    updateAestheticUi();
+
+    // Update sort dropdown option availability
+    const sortDropdown = $('#gallery-sort');
+    if (sortDropdown) {
+        const aestheticOption = sortDropdown.querySelector('option[value="aesthetic"]');
+        if (aestheticOption) {
+            if (!_aestheticStatus.available && _aestheticStatus.scored_count === 0) {
+                aestheticOption.disabled = true;
+                aestheticOption.textContent = appT('sort.aestheticDisabled', 'Aesthetic Score (unavailable)');
+            } else if (_aestheticStatus.scored_count === 0) {
+                aestheticOption.disabled = false;
+                aestheticOption.textContent = appT('sort.aestheticNoScores', 'Aesthetic Score (no scores yet - click ⭐ to score)');
+            } else {
+                aestheticOption.disabled = false;
+                aestheticOption.textContent = appT('sort.aesthetic', 'Aesthetic Score') +
+                    ` (${_aestheticStatus.scored_count} scored)`;
+            }
+        }
+    }
+}
+
+async function pollAestheticProgress() {
+    clearAestheticProgressTimer();
+    try {
+        const progress = await API.getAestheticProgress();
+        const running = Boolean(progress?.running);
+        const completed = Number(progress?.completed || 0);
+        const total = Number(progress?.total || 0);
+
+        updateAestheticUi({ running, completed, total });
+
+        if (running) {
+            _aestheticProgressTimer = setTimeout(pollAestheticProgress, 1200);
+            return;
+        }
+
+        if (total > 0) {
+            const errors = Number(progress?.errors || 0);
+            showToast(
+                errors > 0
+                    ? appT('gallery.aestheticCompletedWarn', 'Aesthetic scoring finished with {errors} errors.').replace('{errors}', errors)
+                    : appT('gallery.aestheticCompleted', 'Aesthetic scoring completed.'),
+                errors > 0 ? 'warning' : 'success'
+            );
+            await loadImages();
+            await loadStats();
+        }
+    } catch (error) {
+        updateAestheticUi({ running: false });
+        showToast(formatUserError(error, 'Failed to read aesthetic progress'), 'error');
+    }
+}
+
+async function startAestheticScoring(force = false) {
+    if (!_aestheticStatus.available) {
+        showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable'), 'warning');
+        return;
+    }
+
+    try {
+        const result = await API.startAestheticScoring(force);
+        const status = String(result?.status || 'started');
+        const total = Number(result?.total || 0);
+        if (status === 'started' && total === 0) {
+            updateAestheticUi({ running: false, completed: 0, total: 0 });
+            showToast(appT('gallery.aestheticNothingToScore', 'All current images already have aesthetic scores.'), 'info');
+            return;
+        }
+        if (status === 'started' || status === 'already_running') {
+            updateAestheticUi({ running: true, completed: 0, total });
+            if (status === 'started') {
+                showToast(appT('gallery.aestheticStarted', 'Aesthetic scoring started in the background.'), 'info');
+            }
+            await pollAestheticProgress();
+        }
+    } catch (error) {
+        showToast(formatUserError(error, 'Failed to start aesthetic scoring'), 'error');
+    }
+}
+
 // ============== Image Loading ==============
 
 const IMAGE_LOAD_KEY = 'images-load';
@@ -3494,16 +3926,35 @@ function updateCollapsibleFilterUI(type, items) {
 const libraryData = {
     currentTab: 'tags',
     tags: [],
-    prompts: []
+    prompts: [],
+    loras: [],
+    filterState: null,
+    returnFilterOptions: null,
+    optionData: null,
 };
 
-function openTagsLibrary() {
+function openTagsLibrary(options = {}) {
+    libraryData.filterState = options.filterState || null;
+    libraryData.returnFilterOptions = options.returnFilterOptions || null;
+    libraryData.optionData = options.optionData || null;
     const searchInput = $('#library-search');
     if (searchInput) {
         searchInput.value = '';
     }
     showModal('tags-library-modal');
     loadLibraryContent();
+}
+
+function finishTagsLibraryInteraction() {
+    const returnFilterOptions = libraryData.returnFilterOptions;
+    hideModal('tags-library-modal');
+    libraryData.filterState = null;
+    libraryData.returnFilterOptions = null;
+    libraryData.optionData = null;
+
+    if (returnFilterOptions) {
+        openFilterModal(returnFilterOptions);
+    }
 }
 
 function switchLibraryTab(tab) {
@@ -3515,6 +3966,7 @@ function switchLibraryTab(tab) {
     // Update tab button active states
     const tagsTab = $('#library-tab-tags');
     const promptsTab = $('#library-tab-prompts');
+    const lorasTab = $('#library-tab-loras');
     if (tagsTab) {
         tagsTab.classList.toggle('active', tab === 'tags');
         tagsTab.classList.toggle('btn-secondary', tab === 'tags');
@@ -3525,6 +3977,11 @@ function switchLibraryTab(tab) {
         promptsTab.classList.toggle('btn-secondary', tab === 'prompts');
         promptsTab.classList.toggle('btn-ghost', tab !== 'prompts');
     }
+    if (lorasTab) {
+        lorasTab.classList.toggle('active', tab === 'loras');
+        lorasTab.classList.toggle('btn-secondary', tab === 'loras');
+        lorasTab.classList.toggle('btn-ghost', tab !== 'loras');
+    }
     loadLibraryContent();
 }
 
@@ -3532,14 +3989,17 @@ async function loadLibraryContent() {
     const content = $('#library-content');
     const statsText = $('#library-stats-text');
     const sortBy = $('#library-sort')?.value || 'frequency';
-    const isTagsTab = libraryData.currentTab === 'tags';
+    const currentTab = libraryData.currentTab;
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
     };
-    const loadingLabel = isTagsTab
-        ? t('library.loadingTags', null, 'Loading tag library…')
-        : t('library.loadingPrompts', null, 'Loading prompt library…');
+    const loadingLabels = {
+        tags: t('library.loadingTags', null, 'Loading tag library…'),
+        prompts: t('library.loadingPrompts', null, 'Loading prompt library…'),
+        loras: t('library.loadingLoras', null, 'Loading LoRA library…')
+    };
+    const loadingLabel = loadingLabels[currentTab] || loadingLabels.tags;
 
     content.innerHTML = `
         <div class="library-status">
@@ -3552,15 +4012,56 @@ async function loadLibraryContent() {
     }
 
     try {
-        if (isTagsTab) {
-            const result = await API.getTagsLibrary(sortBy, 2000);
+        if (libraryData.optionData) {
+            if (currentTab === 'tags') {
+                const tags = libraryData.optionData.tags || [];
+                if (tags.length > 0) {
+                    libraryData.tags = tags;
+                    renderLibraryTags(tags);
+                    if (statsText) {
+                        statsText.textContent = t('library.tagsFound', { count: tags.length }, `${tags.length} unique tags found`);
+                    }
+                    return;
+                }
+            } else if (currentTab === 'loras') {
+                const loras = libraryData.optionData.loras || [];
+                if (loras.length > 0) {
+                    libraryData.loras = loras;
+                    renderLibraryLoras(loras);
+                    if (statsText) {
+                        statsText.textContent = t('library.lorasFound', { count: loras.length }, `${loras.length} unique LoRAs found`);
+                    }
+                    return;
+                }
+            } else {
+                const prompts = libraryData.optionData.prompts || [];
+                if (prompts.length > 0) {
+                    libraryData.prompts = prompts;
+                    renderLibraryPrompts(prompts);
+                    if (statsText) {
+                        statsText.textContent = t('library.promptsFound', { count: prompts.length }, `${prompts.length} unique prompts found`);
+                    }
+                    return;
+                }
+            }
+        }
+
+        if (currentTab === 'tags') {
+            const result = await API.getTagsLibrary(sortBy);
             libraryData.tags = result.tags;
             renderLibraryTags(result.tags);
             if (statsText) {
                 statsText.textContent = t('library.tagsFound', { count: result.total }, `${result.total} unique tags found`);
             }
+        } else if (currentTab === 'loras') {
+            const result = await API.getLorasLibrary();
+            libraryData.loras = result.loras;
+            renderLibraryLoras(result.loras);
+            if (statsText) {
+                statsText.textContent = t('library.lorasFound', { count: result.total }, `${result.total} unique LoRAs found`);
+            }
         } else {
-            const result = await API.getPromptsLibrary(10000);
+            const result = await API.getPromptsLibrary();
             libraryData.prompts = result.prompts;
             renderLibraryPrompts(result.prompts);
             if (statsText) {
@@ -3568,9 +4069,12 @@ async function loadLibraryContent() {
             }
         }
     } catch (error) {
-        const fallbackMessage = isTagsTab
-            ? t('library.loadTagsFailed', null, 'Failed to load tag library')
-            : t('library.loadPromptsFailed', null, 'Failed to load prompt library');
+        const fallbackMessages = {
+            tags: t('library.loadTagsFailed', null, 'Failed to load tag library'),
+            prompts: t('library.loadPromptsFailed', null, 'Failed to load prompt library'),
+            loras: t('library.loadLorasFailed', null, 'Failed to load LoRA library')
+        };
+        const fallbackMessage = fallbackMessages[currentTab] || fallbackMessages.tags;
         const message = escapeHtml(formatUserError(error, fallbackMessage));
         content.innerHTML = `
             <div class="library-status library-status-error">
@@ -3589,11 +4093,12 @@ function renderLibraryTags(tags) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     if (!tags || tags.length === 0) {
-        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">No tags found. Scan a folder and run Tag Images first.</p>';
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.tagsEmpty', 'No tags found. Scan a folder and run Tag Images first.')) + '</p>';
         return;
     }
+    const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
     content.innerHTML = tags.map(t => `
-        <div class="library-tag" data-tag="${escapeHtml(t.tag)}" title="Click to add as filter">
+        <div class="library-tag" data-tag="${escapeHtml(t.tag)}" title="${addHint}">
             <span class="tag-name">${escapeHtml(t.tag)}</span>
             <span class="tag-count">${t.count}</span>
         </div>
@@ -3602,12 +4107,15 @@ function renderLibraryTags(tags) {
     content.querySelectorAll('.library-tag').forEach(el => {
         el.addEventListener('click', () => {
             const tag = el.dataset.tag;
-            if (!AppState.filters.tags.includes(tag)) {
-                AppState.filters.tags = [...AppState.filters.tags, tag];
-                updateFilterSummary();
-                hideModal('tags-library-modal');
-                loadImages();
-                showToast(`Added "${tag}" to filters`, 'success');
+            const filterState = libraryData.filterState || AppState.filters;
+            if (!filterState.tags.includes(tag)) {
+                filterState.tags = [...filterState.tags, tag];
+                if (!libraryData.returnFilterOptions) {
+                    updateFilterSummary();
+                    loadImages();
+                }
+                finishTagsLibraryInteraction();
+                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', tag), 'success');
             }
         });
     });
@@ -3617,11 +4125,12 @@ function renderLibraryPrompts(prompts) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     if (!prompts || prompts.length === 0) {
-        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">No prompts found. Scan a folder with images first.</p>';
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.promptsEmpty', 'No prompts found. Extract prompts from metadata first.')) + '</p>';
         return;
     }
+    const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
     content.innerHTML = prompts.map(p => `
-        <div class="library-tag" data-prompt="${escapeHtml(p.prompt)}" title="Click to add as filter">
+        <div class="library-tag" data-prompt="${escapeHtml(p.prompt)}" title="${addHint}">
             <span class="tag-name">${escapeHtml(p.prompt)}</span>
             <span class="tag-count">${p.count}</span>
         </div>
@@ -3630,12 +4139,48 @@ function renderLibraryPrompts(prompts) {
     content.querySelectorAll('.library-tag').forEach(el => {
         el.addEventListener('click', () => {
             const prompt = el.dataset.prompt;
-            if (!AppState.filters.prompts.includes(prompt)) {
-                AppState.filters.prompts = [...AppState.filters.prompts, prompt];
-                updateFilterSummary();
-                hideModal('tags-library-modal');
-                loadImages();
-                showToast(`Added "${prompt}" to filters`, 'success');
+            const filterState = libraryData.filterState || AppState.filters;
+            if (!filterState.prompts.includes(prompt)) {
+                filterState.prompts = [...filterState.prompts, prompt];
+                if (!libraryData.returnFilterOptions) {
+                    updateFilterSummary();
+                    loadImages();
+                }
+                finishTagsLibraryInteraction();
+                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', prompt), 'success');
+            }
+        });
+    });
+}
+
+function renderLibraryLoras(loras) {
+    const content = $('#library-content');
+    content.style.flexDirection = 'row';
+    if (!loras || loras.length === 0) {
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.lorasEmpty', 'No LoRAs found. Extract metadata from images first.')) + '</p>';
+        return;
+    }
+    const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
+    content.innerHTML = loras.map(l => `
+        <div class="library-tag" data-lora="${escapeHtml(l.lora)}" title="${addHint}">
+            <span class="tag-name">${escapeHtml(l.lora)}</span>
+            <span class="tag-count">${l.count}</span>
+        </div>
+    `).join('');
+
+    content.querySelectorAll('.library-tag').forEach(el => {
+        el.addEventListener('click', () => {
+            const lora = el.dataset.lora;
+            const filterState = libraryData.filterState || AppState.filters;
+            const currentLoras = filterState.loras || [];
+            if (!currentLoras.includes(lora)) {
+                filterState.loras = [...currentLoras, lora];
+                if (!libraryData.returnFilterOptions) {
+                    updateFilterSummary();
+                    loadImages();
+                }
+                finishTagsLibraryInteraction();
+                showToast(appT('library.addedFilter', 'Added "{value}" to filters').replace('{value}', lora), 'success');
             }
         });
     });
@@ -3647,6 +4192,9 @@ function filterLibraryContent() {
     if (libraryData.currentTab === 'tags') {
         const filtered = libraryData.tags.filter(t => t.tag.toLowerCase().includes(query));
         renderLibraryTags(filtered);
+    } else if (libraryData.currentTab === 'loras') {
+        const filtered = (libraryData.loras || []).filter(l => l.lora.toLowerCase().includes(query));
+        renderLibraryLoras(filtered);
     } else {
         const filtered = libraryData.prompts.filter(p => p.prompt.toLowerCase().includes(query));
         renderLibraryPrompts(filtered);
@@ -3978,54 +4526,11 @@ function clearFilters() {
     AppState.filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
     AppState.filters.tags = [];
     AppState.filters.search = '';
-    const tagSearch = $('#tag-search');
-    if (tagSearch) tagSearch.value = '';
-    const promptSearch = $('#prompt-search');
-    if (promptSearch) promptSearch.value = '';
+    const freeTextSearch = $('#modal-free-text-search');
+    if (freeTextSearch) freeTextSearch.value = '';
     const activeTags = $('#active-tags');
     if (activeTags) activeTags.innerHTML = '';
     loadImages();
-}
-
-async function searchTags(e) {
-    const query = e.target.value.trim();
-    if (query.length < 2) {
-        $('#tag-suggestions').classList.remove('visible');
-        return;
-    }
-
-    try {
-        // Use cached tags to avoid repeated API calls on every keystroke
-        const now = Date.now();
-        if (!tagsLibraryCache || (now - tagsLibraryCacheTime) > TAGS_CACHE_TTL) {
-            tagsLibraryCache = await API.getTags();
-            tagsLibraryCacheTime = now;
-        }
-        const result = tagsLibraryCache;
-        const filtered = result.tags
-            .filter(t => t.tag.toLowerCase().includes(query.toLowerCase()))
-            .slice(0, 10);
-
-        const suggestionsEl = $('#tag-suggestions');
-        suggestionsEl.innerHTML = filtered.map(t => `
-            <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
-                ${escapeHtml(t.tag)} <span style="color: var(--text-muted)">(${t.count})</span>
-            </div>
-        `).join('');
-
-        suggestionsEl.classList.add('visible');
-
-        // Add click handlers
-        suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
-            el.addEventListener('click', () => {
-                addTagFilter(el.dataset.tag);
-                $('#tag-search').value = '';
-                suggestionsEl.classList.remove('visible');
-            });
-        });
-    } catch (error) {
-        // Tag search failed silently - non-critical autocomplete
-    }
 }
 
 function addTagFilter(tag) {
@@ -4063,33 +4568,66 @@ function renderActiveTagFilters() {
 
 // ============== Unified Filter Modal ==============
 
-async function openFilterModal() {
+async function openFilterModal(options = {}) {
+    const targetState = options.filterState || AppState.filters;
+    FilterModalController.mode = options.mode || 'gallery';
+    FilterModalController.targetState = targetState;
+    FilterModalController.workingState = cloneFilterState(targetState);
+    FilterModalController.onApply = typeof options.onApply === 'function' ? options.onApply : null;
+    FilterModalController.onReset = typeof options.onReset === 'function' ? options.onReset : null;
+    FilterModalController.titleText = options.titleText || null;
+    FilterModalController.applyButtonText = options.applyButtonText || null;
+    FilterModalController.resetButtonText = options.resetButtonText || null;
+    FilterModalController.optionData = options.optionData || null;
+
     // Show skeleton while loading
     if (window.SkeletonFilterModal) {
         window.SkeletonFilterModal.show('filter-modal');
     }
 
     // Sync modal state with current AppState
+    const filterState = getFilterModalState();
+    const titleEl = $('#filter-modal-title');
+    if (titleEl && FilterModalController.titleText) {
+        titleEl.textContent = FilterModalController.titleText;
+    } else if (titleEl) {
+        titleEl.textContent = appT('filter.filterImages', 'Filter Images');
+    }
+    const applyButton = $('#btn-apply-modal-filters');
+    const resetButton = $('#btn-reset-filters');
+    if (applyButton) {
+        applyButton.textContent = FilterModalController.applyButtonText || appT('filter.apply', 'Apply Filters');
+    }
+    if (resetButton) {
+        resetButton.textContent = FilterModalController.resetButtonText || appT('filter.reset', 'Reset All');
+    }
     $$('#modal-generator-filters input').forEach(cb => {
-        cb.checked = AppState.filters.generators.includes(cb.value);
+        cb.checked = filterState.generators.includes(cb.value);
     });
     $$('#modal-rating-filters input').forEach(cb => {
-        cb.checked = AppState.filters.ratings.includes(cb.value);
+        cb.checked = filterState.ratings.includes(cb.value);
     });
     const minWidthInput = $('#filter-min-width');
     const maxWidthInput = $('#filter-max-width');
     const minHeightInput = $('#filter-min-height');
     const maxHeightInput = $('#filter-max-height');
-    if (minWidthInput) minWidthInput.value = AppState.filters.minWidth ?? '';
-    if (maxWidthInput) maxWidthInput.value = AppState.filters.maxWidth ?? '';
-    if (minHeightInput) minHeightInput.value = AppState.filters.minHeight ?? '';
-    if (maxHeightInput) maxHeightInput.value = AppState.filters.maxHeight ?? '';
+    if (minWidthInput) minWidthInput.value = filterState.minWidth ?? '';
+    if (maxWidthInput) maxWidthInput.value = filterState.maxWidth ?? '';
+    if (minHeightInput) minHeightInput.value = filterState.minHeight ?? '';
+    if (maxHeightInput) maxHeightInput.value = filterState.maxHeight ?? '';
     $$('input[name="aspect-ratio"]').forEach(radio => {
-        radio.checked = radio.value === (AppState.filters.aspectRatio || '');
+        radio.checked = radio.value === (filterState.aspectRatio || '');
     });
+    // Aesthetic score filter
+    const minAestheticInput = $('#filter-aesthetic-min');
+    const maxAestheticInput = $('#filter-aesthetic-max');
+    if (minAestheticInput) minAestheticInput.value = filterState.minAesthetic ?? '';
+    if (maxAestheticInput) maxAestheticInput.value = filterState.maxAesthetic ?? '';
     // Don't prefill prompt search bar with AppState.filters.search —
     // the prompt search is for adding prompt filters, not for text search
     $('#modal-prompt-search').value = '';
+    const freeTextSearch = $('#modal-free-text-search');
+    if (freeTextSearch) freeTextSearch.value = filterState.search || '';
     const modalTagSearch = $('#modal-tag-search');
     const modalTagSuggestions = $('#modal-tag-suggestions');
     const modalPromptSuggestions = $('#modal-prompt-suggestions');
@@ -4124,7 +4662,8 @@ function renderModalActiveTags() {
     if (!container) return;
     container.innerHTML = '';
 
-    AppState.filters.tags.forEach(tag => {
+    const filterState = getFilterModalState();
+    filterState.tags.forEach(tag => {
         const tagEl = document.createElement('span');
         tagEl.className = 'active-tag';
         tagEl.appendChild(document.createTextNode(`${tag} `));
@@ -4134,7 +4673,7 @@ function renderModalActiveTags() {
         removeEl.dataset.tag = tag;
         removeEl.textContent = '×';
         removeEl.addEventListener('click', () => {
-            AppState.filters.tags = AppState.filters.tags.filter(t => t !== tag);
+            filterState.tags = filterState.tags.filter(t => t !== tag);
             renderModalActiveTags();
         });
 
@@ -4161,7 +4700,8 @@ function renderModalActivePrompts() {
     }
 
     container.innerHTML = '';
-    AppState.filters.prompts.forEach(prompt => {
+    const filterState = getFilterModalState();
+    filterState.prompts.forEach(prompt => {
         const promptEl = document.createElement('span');
         promptEl.className = 'active-tag';
         promptEl.appendChild(document.createTextNode(`${prompt} `));
@@ -4171,7 +4711,7 @@ function renderModalActivePrompts() {
         removeEl.dataset.prompt = prompt;
         removeEl.textContent = '×';
         removeEl.addEventListener('click', () => {
-            AppState.filters.prompts = AppState.filters.prompts.filter(p => p !== prompt);
+            filterState.prompts = filterState.prompts.filter(p => p !== prompt);
             renderModalActivePrompts();
         });
 
@@ -4309,6 +4849,8 @@ function renderModelManager(models = []) {
 async function loadModalFilterLists() {
     const cpList = $('#modal-checkpoint-list');
     const loraList = $('#modal-lora-list');
+    const filterState = getFilterModalState();
+    const optionData = FilterModalController.optionData;
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
@@ -4328,14 +4870,13 @@ async function loadModalFilterLists() {
     }
 
     try {
-        // Use cached analytics data if available, otherwise fetch from API
-        const data = AppState.analytics || await API.getStats();
+        const data = optionData || AppState.analytics || await API.getStats();
 
         // Render checkpoints
         if (cpList) {
             cpList.innerHTML = (data.checkpoints || []).length > 0 ? (data.checkpoints || []).map(cp => `
                 <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${AppState.filters.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
+                    <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${filterState.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
                     <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
                     <span class="checkbox-count">${cp.count}</span>
@@ -4347,7 +4888,7 @@ async function loadModalFilterLists() {
         if (loraList) {
             loraList.innerHTML = (data.loras || []).length > 0 ? (data.loras || []).map(l => `
                 <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(l.lora)}" ${AppState.filters.loras?.includes(l.lora) ? 'checked' : ''}>
+                    <input type="checkbox" value="${escapeHtml(l.lora)}" ${filterState.loras?.includes(l.lora) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
                     <span class="checkbox-text">${escapeHtml(l.lora)}</span>
                     <span class="checkbox-count">${l.count}</span>
@@ -4368,6 +4909,7 @@ async function loadModalFilterLists() {
 function updateFilterModalSummary() {
     const selectionSummary = $('#filter-modal-selection-summary');
     const summaryHint = $('#filter-modal-summary-hint');
+    const filterState = getFilterModalState();
     const t = (key, params, fallback) => {
         const translated = window.I18n?.t?.(key, params);
         return translated && translated !== key ? translated : (fallback || key);
@@ -4386,12 +4928,12 @@ function updateFilterModalSummary() {
 
     const generatorTotal = Math.max(1, $$('#modal-generator-filters input').length || 5);
     const ratingTotal = Math.max(1, $$('#modal-rating-filters input').length || 4);
-    const generatorCount = countChecked('#modal-generator-filters input:checked', AppState.filters.generators?.length || generatorTotal);
-    const ratingCount = countChecked('#modal-rating-filters input:checked', AppState.filters.ratings?.length || ratingTotal);
-    const checkpointCount = countChecked('#modal-checkpoint-list input:checked', AppState.filters.checkpoints?.length || 0);
-    const loraCount = countChecked('#modal-lora-list input:checked', AppState.filters.loras?.length || 0);
-    const tagCount = AppState.filters.tags?.length || 0;
-    const promptCount = AppState.filters.prompts?.length || 0;
+    const generatorCount = countChecked('#modal-generator-filters input:checked', filterState.generators?.length || generatorTotal);
+    const ratingCount = countChecked('#modal-rating-filters input:checked', filterState.ratings?.length || ratingTotal);
+    const checkpointCount = countChecked('#modal-checkpoint-list input:checked', filterState.checkpoints?.length || 0);
+    const loraCount = countChecked('#modal-lora-list input:checked', filterState.loras?.length || 0);
+    const tagCount = filterState.tags?.length || 0;
+    const promptCount = filterState.prompts?.length || 0;
     const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
     const maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
     const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
@@ -4406,6 +4948,14 @@ function updateFilterModalSummary() {
     setCount('filter-modal-count-checkpoints', String(checkpointCount));
     setCount('filter-modal-count-loras', String(loraCount));
     setCount('filter-modal-count-dimensions', dimensionCount > 0 ? String(dimensionCount) : t('filter.any', null, 'Any'));
+
+    // Aesthetic stat
+    const aestheticMin = filterState.minAesthetic;
+    const aestheticMax = filterState.maxAesthetic;
+    const aestheticLabel = (aestheticMin || aestheticMax)
+        ? `${aestheticMin ?? '0'} - ${aestheticMax ?? '10'}`
+        : t('filter.any', null, 'Any');
+    setCount('filter-modal-count-aesthetic', aestheticLabel);
 
     const activeGroupCount = [
         generatorCount !== generatorTotal,
@@ -4440,6 +4990,36 @@ const _debouncedTagSearch = debounce(async (query) => {
     }
 
     try {
+        const normalizedQuery = query.toLowerCase().replace(/_/g, ' ');
+        if (FilterModalController.optionData?.tags) {
+            const filtered = FilterModalController.optionData.tags
+                .filter(t => t.tag.toLowerCase().replace(/_/g, ' ').includes(normalizedQuery))
+                .slice(0, 24);
+
+            if (filtered.length > 0) {
+                suggestionsEl.innerHTML = filtered.map(t => `
+                    <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
+                        ${escapeHtml(t.tag)} <span style="color: var(--text-muted)">(${t.count})</span>
+                    </div>
+                `).join('');
+
+                suggestionsEl.classList.add('visible');
+                suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const filterState = getFilterModalState();
+                        if (!filterState.tags.includes(el.dataset.tag)) {
+                            filterState.tags = [...filterState.tags, el.dataset.tag];
+                            renderModalActiveTags();
+                        }
+                        $('#modal-tag-search').value = '';
+                        suggestionsEl.innerHTML = '';
+                        suggestionsEl.classList.remove('visible');
+                    });
+                });
+                return;
+            }
+        }
+
         // Use cached tags to avoid repeated API calls on every keystroke
         const now = Date.now();
         if (!tagsLibraryCache || (now - tagsLibraryCacheTime) > TAGS_CACHE_TTL) {
@@ -4448,8 +5028,8 @@ const _debouncedTagSearch = debounce(async (query) => {
         }
         const result = tagsLibraryCache;
         const filtered = result.tags
-            .filter(t => t.tag.toLowerCase().includes(query.toLowerCase()))
-            .slice(0, 8);
+            .filter(t => t.tag.toLowerCase().replace(/_/g, ' ').includes(normalizedQuery))
+            .slice(0, 24);
 
         suggestionsEl.innerHTML = filtered.map(t => `
             <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
@@ -4465,8 +5045,9 @@ const _debouncedTagSearch = debounce(async (query) => {
 
         suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
             el.addEventListener('click', () => {
-                if (!AppState.filters.tags.includes(el.dataset.tag)) {
-                    AppState.filters.tags = [...AppState.filters.tags, el.dataset.tag];
+                const filterState = getFilterModalState();
+                if (!filterState.tags.includes(el.dataset.tag)) {
+                    filterState.tags = [...filterState.tags, el.dataset.tag];
                     renderModalActiveTags();
                 }
                 $('#modal-tag-search').value = '';
@@ -4504,17 +5085,47 @@ const _debouncedPromptSearch = debounce(async (query) => {
     }
 
     try {
+        if (FilterModalController.optionData?.prompts) {
+            const filtered = FilterModalController.optionData.prompts
+                .filter(p => p.prompt.toLowerCase().includes(query.toLowerCase().replace(/_/g, ' ')))
+                .slice(0, 24);
+
+            if (filtered.length > 0) {
+                suggestionsEl.innerHTML = filtered.map(p => `
+                    <div class="tag-suggestion" data-prompt="${escapeHtml(p.prompt)}">
+                        ${escapeHtml(p.prompt)} <span style="color: var(--text-muted)">(${p.count})</span>
+                    </div>
+                `).join('');
+
+                suggestionsEl.classList.add('visible');
+                suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const prompt = el.dataset.prompt;
+                        const filterState = getFilterModalState();
+                        if (!filterState.prompts.includes(prompt)) {
+                            filterState.prompts = [...filterState.prompts, prompt];
+                            renderModalActivePrompts();
+                        }
+                        $('#modal-prompt-search').value = '';
+                        suggestionsEl.innerHTML = '';
+                        suggestionsEl.classList.remove('visible');
+                    });
+                });
+                return;
+            }
+        }
+
         // Cache the prompts library for better performance (with TTL)
         const now = Date.now();
         if (!promptsLibraryCache || (now - promptsLibraryCacheTime) > PROMPTS_CACHE_TTL) {
-            const result = await API.getPromptsLibrary(5000);
+            const result = await API.getPromptsLibrary();
             promptsLibraryCache = result.prompts || [];
             promptsLibraryCacheTime = now;
         }
 
         const filtered = promptsLibraryCache
-            .filter(p => p.prompt.toLowerCase().includes(query.toLowerCase()))
-            .slice(0, 10);
+            .filter(p => p.prompt.toLowerCase().includes(query.toLowerCase().replace(/_/g, ' ')))
+            .slice(0, 24);
 
         suggestionsEl.innerHTML = filtered.map(p => `
             <div class="tag-suggestion" data-prompt="${escapeHtml(p.prompt)}">
@@ -4531,8 +5142,9 @@ const _debouncedPromptSearch = debounce(async (query) => {
         suggestionsEl.querySelectorAll('.tag-suggestion').forEach(el => {
             el.addEventListener('click', () => {
                 const prompt = el.dataset.prompt;
-                if (!AppState.filters.prompts.includes(prompt)) {
-                    AppState.filters.prompts = [...AppState.filters.prompts, prompt];
+                const filterState = getFilterModalState();
+                if (!filterState.prompts.includes(prompt)) {
+                    filterState.prompts = [...filterState.prompts, prompt];
                     renderModalActivePrompts();
                 }
                 $('#modal-prompt-search').value = '';
@@ -4550,29 +5162,31 @@ function searchModalPrompts(query) {
 }
 
 function applyModalFilters() {
+    const filterState = getFilterModalState();
     // Get generators
     const generators = [];
     $$('#modal-generator-filters input:checked').forEach(cb => generators.push(cb.value));
-    AppState.filters.generators = generators;
+    filterState.generators = generators;
 
     // Get ratings
     const ratings = [];
     $$('#modal-rating-filters input:checked').forEach(cb => ratings.push(cb.value));
-    AppState.filters.ratings = ratings;
+    filterState.ratings = ratings;
 
     // Get checkpoints
     const checkpoints = [];
     $$('#modal-checkpoint-list input:checked').forEach(cb => checkpoints.push(cb.value));
-    AppState.filters.checkpoints = checkpoints;
+    filterState.checkpoints = checkpoints;
 
     // Get loras
     const loras = [];
     $$('#modal-lora-list input:checked').forEach(cb => loras.push(cb.value));
-    AppState.filters.loras = loras;
+    filterState.loras = loras;
 
-    // Prompts: don't use search bar - prompts array is built via Enter key
-    // Clear search bar since prompts are in the array now
-    AppState.filters.search = '';
+    // Prompts: don't use prompt search bar as text search — prompts array is built via Enter key
+    // But read the free-text search field for filename/prompt text search
+    const freeTextSearch = $('#modal-free-text-search');
+    filterState.search = freeTextSearch ? freeTextSearch.value.trim() : '';
     const promptSearch = $('#modal-prompt-search');
     if (promptSearch) promptSearch.value = '';
 
@@ -4581,26 +5195,44 @@ function applyModalFilters() {
     const maxWidth = parseInt($('#filter-max-width')?.value, 10) || null;
     const minHeight = parseInt($('#filter-min-height')?.value, 10) || null;
     const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
-    AppState.filters.minWidth = minWidth;
-    AppState.filters.maxWidth = maxWidth;
-    AppState.filters.minHeight = minHeight;
-    AppState.filters.maxHeight = maxHeight;
+    filterState.minWidth = minWidth;
+    filterState.maxWidth = maxWidth;
+    filterState.minHeight = minHeight;
+    filterState.maxHeight = maxHeight;
 
     // Get aspect ratio
     const aspectRadio = $('input[name="aspect-ratio"]:checked');
-    AppState.filters.aspectRatio = aspectRadio ? aspectRadio.value : '';
+    filterState.aspectRatio = aspectRadio ? aspectRadio.value : '';
+
+    // Get aesthetic score range
+    const minAesthetic = parseFloat($('#filter-aesthetic-min')?.value) || null;
+    const maxAesthetic = parseFloat($('#filter-aesthetic-max')?.value) || null;
+    filterState.minAesthetic = minAesthetic;
+    filterState.maxAesthetic = maxAesthetic;
+
+    if (FilterModalController.targetState) {
+        copyFilterState(FilterModalController.targetState, filterState);
+    }
+
+    hideModal('filter-modal');
+
+    if (FilterModalController.onApply) {
+        FilterModalController.onApply(cloneFilterState(FilterModalController.targetState || filterState));
+        showToast('Filters applied', 'success');
+        resetFilterModalController();
+        return;
+    }
 
     // Update all filter summaries (gallery sidebar + view-specific)
     updateFilterSummary();
-    // Also update Auto-Separate and Manual Sort summaries if their functions exist
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
-    hideModal('filter-modal');
     syncGenTabsWithFilters();
     loadImages();
     showToast('Filters applied', 'success');
+    resetFilterModalController();
 }
 
 // Sync generator tab active state with current filter state
@@ -4618,23 +5250,8 @@ function syncGenTabsWithFilters() {
 }
 
 function resetAllFilters() {
-    AppState.filters = {
-        generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
-        ratings: ['general', 'sensitive', 'questionable', 'explicit'],
-        tags: [],
-        checkpoints: [],
-        loras: [],
-        prompts: [],
-        artist: null,  // Clear artist filter
-        search: '',
-        sortBy: 'newest',
-        limit: 0,
-        minWidth: null,
-        maxWidth: null,
-        minHeight: null,
-        maxHeight: null,
-        aspectRatio: ''
-    };
+    const filterState = getFilterModalState();
+    copyFilterState(filterState, createDefaultFilterState());
 
     // Reset modal checkboxes
     $$('#modal-generator-filters input').forEach(cb => cb.checked = true);
@@ -4643,6 +5260,13 @@ function resetAllFilters() {
     $$('#modal-lora-list input').forEach(cb => cb.checked = false);
     const modalPromptSearch = $('#modal-prompt-search');
     if (modalPromptSearch) modalPromptSearch.value = '';
+    const freeTextSearch = $('#modal-free-text-search');
+    if (freeTextSearch) freeTextSearch.value = '';
+    // Reset aesthetic inputs
+    const minAeInput = $('#filter-aesthetic-min');
+    const maxAeInput = $('#filter-aesthetic-max');
+    if (minAeInput) minAeInput.value = '';
+    if (maxAeInput) maxAeInput.value = '';
     renderModalActiveTags();
     renderModalActivePrompts();
 
@@ -4665,14 +5289,27 @@ function resetAllFilters() {
 
     // Update all filter summaries
     updateFilterSummary();
+    hideModal('filter-modal');
+
+    if (FilterModalController.targetState) {
+        copyFilterState(FilterModalController.targetState, filterState);
+    }
+
+    if (FilterModalController.onReset) {
+        FilterModalController.onReset(cloneFilterState(FilterModalController.targetState || filterState));
+        showToast('Filters cleared', 'success');
+        resetFilterModalController();
+        return;
+    }
+
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
 
-    hideModal('filter-modal');
     syncGenTabsWithFilters();
     loadImages();
     showToast('Filters cleared', 'success');
+    resetFilterModalController();
 }
 
 // ============== Filter Presets ==============
@@ -4747,7 +5384,7 @@ function loadFilterPreset(name) {
         cb.checked = AppState.filters.ratings.includes(cb.value);
     });
 
-    hideModal('filter-modal');
+    closeFilterModal();
     loadImages();
     showToast(`Preset "${name}" loaded`, 'success');
     return true;
@@ -4851,7 +5488,9 @@ function saveFilterState() {
             maxWidth: AppState.filters.maxWidth,
             minHeight: AppState.filters.minHeight,
             maxHeight: AppState.filters.maxHeight,
-            aspectRatio: AppState.filters.aspectRatio
+            aspectRatio: AppState.filters.aspectRatio,
+            minAesthetic: AppState.filters.minAesthetic,
+            maxAesthetic: AppState.filters.maxAesthetic,
         };
         localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(stateToSave));
     } catch (e) {
@@ -5002,8 +5641,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setTaggingUiState(false);
     setGalleryViewMode(AppState.viewMode);
     updateSortReverseButton();
+    syncGallerySortLabels();
     switchView('gallery');
     loadStats();
+    refreshAestheticStatus();
     updateFilterSummary();
     updateSelectionUI();
     resumeScanProgress();
@@ -5032,6 +5673,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     window.addEventListener('resize', _onGalleryScroll, { passive: true });
+    document.addEventListener('languageChanged', updateNavigationOverflowState);
+    updateNavigationOverflowState();
 });
 
 function addToCensorQueue(imageIds = []) {
@@ -5053,6 +5696,42 @@ function addToCensorQueue(imageIds = []) {
     }
 
     switchView('censor');
+    return false;
+}
+
+function openPromptBuildFromImage(imageId) {
+    const normalizedId = Number(imageId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+        return false;
+    }
+
+    switchView('promptlab');
+    if (typeof window.initPromptLab === 'function') {
+        window.initPromptLab();
+    }
+
+    const buildTab = document.querySelector('.promptlab-tab[data-mode="build"]');
+    buildTab?.click();
+    const buildSource = document.getElementById('pl-build-source');
+    if (buildSource) {
+        buildSource.value = String(normalizedId);
+        buildSource.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+    }
+
+    return false;
+}
+
+async function openReaderFromImage(imageId, filename = '') {
+    const normalizedId = Number(imageId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+        return false;
+    }
+
+    switchView('reader');
+    if (window.ImageReader?.openLibraryImage) {
+        return window.ImageReader.openLibraryImage(normalizedId, filename);
+    }
     return false;
 }
 
@@ -5092,6 +5771,12 @@ function buildAppContext() {
         applyModalFilters,
         resetAllFilters,
         updateFilterSummary,
+        syncGenTabsWithFilters,
+        createDefaultFilterState,
+        cloneFilterState,
+        copyFilterState,
+        updateSortReverseButton,
+        syncGallerySortLabels,
         openTagsLibrary,
         switchLibraryTab,
         filterLibraryContent,
@@ -5099,7 +5784,10 @@ function buildAppContext() {
         openGalleryPreview,
         applyPromptFilter,
         addToCensorQueue,
+        sendToCensor: addToCensorQueue,
         _addToCensorQueue: null,
+        openPromptBuildFromImage,
+        openReaderFromImage,
         addRecentFolder,
         getRecentFolders,
         $,

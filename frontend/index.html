@@ -8,9 +8,11 @@
     <meta name="description"
         content="Powerful image management tool for Stable Diffusion users - tag, filter, and sort your AI-generated images">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
-    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="stylesheet" href="/static/css/styles.css">
     <link rel="stylesheet" href="/static/css/censor-v2.css">
+    <link rel="stylesheet" href="/static/css/queue-solitaire.css">
+    <link rel="stylesheet" href="/static/css/image-reader.css">
+    <link rel="stylesheet" href="/static/css/image-obfuscate.css">
     <link rel="stylesheet" href="/static/css/new-views.css">
     <link rel="stylesheet" href="/static/css/ui-refresh.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -113,30 +115,28 @@
                     <span class="tab-icon" aria-hidden="true">🖼️</span>
                     <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                 </button>
-                <button class="nav-tab" data-view="autosep" role="tab" aria-selected="false" aria-controls="view-autosep">
-                    <span class="tab-icon" aria-hidden="true">📁</span>
-                    <span class="tab-text" data-i18n="nav.autosep">Auto-Separate</span>
-                </button>
-                <button class="nav-tab" data-view="manual" role="tab" aria-selected="false" aria-controls="view-manual">
-                    <span class="tab-icon" aria-hidden="true">🎮</span>
-                    <span class="tab-text" data-i18n="nav.manual">Manual Sort</span>
+                <button class="nav-tab" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
+                    <span class="tab-text" data-i18n="nav.reader">Image Reader</span>
                 </button>
                 <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
                     <span class="tab-icon" aria-hidden="true">🔳</span>
-                    <span class="tab-text" data-i18n="nav.censor">Censored Edit</span>
+                    <span class="tab-text" data-i18n="nav.censor">Edit</span>
                 </button>
                 <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
                     <span class="tab-icon" aria-hidden="true">🔍</span>
                     <span class="tab-text" data-i18n="nav.similar">Similar</span>
                 </button>
+                <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
+                    <span class="tab-icon" aria-hidden="true">🎨</span>
+                    <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
+                </button>
                 <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
                     <span class="tab-icon" aria-hidden="true">🧪</span>
                     <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
                 </button>
-                <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
-                    <span class="tab-icon" aria-hidden="true">🎨</span>
-                    <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
-                    <span class="tab-badge tab-badge-experimental" data-i18n="nav.experimental">Experimental</span>
+                <button class="nav-tab" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
+                    <span class="tab-icon" aria-hidden="true">📁</span>
+                    <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                 </button>
             </div>
 
@@ -154,30 +154,29 @@
                             <span class="mobile-nav-icon" aria-hidden="true">🖼️</span>
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="autosep" aria-label="Auto-Separate view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
-                            <span class="mobile-nav-text" data-i18n="nav.autosep">Auto-Separate</span>
-                        </button>
-                        <button class="mobile-nav-item" data-view="manual" aria-label="Manual Sort view">
-                            <span class="mobile-nav-icon" aria-hidden="true">🎮</span>
-                            <span class="mobile-nav-text" data-i18n="nav.manual">Manual Sort</span>
+                        <button class="mobile-nav-item" data-view="reader" aria-label="Image Reader view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📋</span>
+                            <span class="mobile-nav-text" data-i18n="nav.reader">Image Reader</span>
                         </button>
                         <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
-                            <span class="mobile-nav-text" data-i18n="nav.censor">Censored Edit</span>
+                            <span class="mobile-nav-text" data-i18n="nav.censor">Edit</span>
                         </button>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔍</span>
                             <span class="mobile-nav-text" data-i18n="nav.similar">Similar</span>
                         </button>
+                        <button class="mobile-nav-item" data-view="artist" aria-label="Artist ID view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🎨</span>
+                            <span class="mobile-nav-text" data-i18n="nav.artist">Artist ID</span>
+                        </button>
                         <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="artist" aria-label="Artist ID view">
-                            <span class="mobile-nav-icon" aria-hidden="true">🎨</span>
-                            <span class="mobile-nav-text" data-i18n="nav.artist">Artist ID</span>
-                            <span class="tab-badge tab-badge-experimental" data-i18n="nav.experimental">Experimental</span>
+                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
+                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
@@ -205,7 +204,7 @@
                     <span aria-hidden="true">🗑️</span>
                     <span data-i18n="action.clearGallery">Clear Gallery</span>
                 </button>
-                <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library">
+                <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.library" data-i18n-aria="action.library">
                     <span aria-hidden="true">📚</span>
                     <span data-i18n="action.library">Library</span>
                 </button>
@@ -243,8 +242,11 @@
             <!-- Gallery View -->
             <section id="view-gallery" class="view active" role="tabpanel" aria-labelledby="nav-tab-gallery">
                 <aside class="filter-sidebar compact" aria-label="Image filters">
-                    <div class="filter-header">
-                        <h3 class="sidebar-title" id="filter-sidebar-title" data-i18n="filter.title">Filters</h3>
+                    <div class="filter-header" style="display: flex; gap: 8px;">
+                        <button id="btn-collapse-desktop-sidebar" class="btn btn-ghost btn-small" title="Collapse Sidebar" style="padding: 4px 8px; margin-left: -8px;">
+                            <span aria-hidden="true">◀</span>
+                        </button>
+                        <h3 class="sidebar-title" id="filter-sidebar-title" data-i18n="filter.title" style="flex: 1; margin: 0;">Filters</h3>
                         <button id="btn-open-filters" class="btn btn-primary btn-small" aria-label="Open filter editor">
                             <span aria-hidden="true">🔍</span>
                             <span data-i18n="gallery.editFilters">Edit Filters</span>
@@ -323,6 +325,11 @@
                     <span class="filter-badge" id="mobile-filter-badge" style="display: none;" aria-hidden="true">!</span>
                 </button>
 
+                <!-- Desktop Sidebar Restore Button -->
+                <button id="btn-restore-desktop-sidebar" class="btn btn-secondary" title="Expand Sidebar" style="display: none; position: fixed; top: calc(var(--nav-height) + 16px); left: 0; z-index: 100; padding: 12px 8px; border-radius: 0 4px 4px 0; border-left: none;">
+                    <span aria-hidden="true">▶</span>
+                </button>
+
                 <div class="gallery-container">
                     <div class="gallery-header">
                         <div class="gallery-header-left">
@@ -336,6 +343,11 @@
                                 <span aria-hidden="true">🎲</span>
                                 <span data-i18n="gallery.random">Random</span>
                             </button>
+                            <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics">
+                                <span aria-hidden="true">✨</span>
+                                <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
+                            </button>
+                            <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
                                 <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true">All <span class="gen-count" id="count-all">0</span></button>
@@ -356,6 +368,7 @@
                                 <option value="rating">Rating</option>
                                 <option value="character_count">Characters</option>
                                 <option value="file_size">File Size</option>
+                                <option value="aesthetic">Aesthetic Score</option>
                                 <option value="random">Random</option>
                             </select>
                             <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
@@ -452,23 +465,23 @@
                     <div id="gallery-empty-state" style="display:none" role="status">
                         <div class="empty-state-card">
                             <span class="empty-icon">🖼️</span>
-                            <h3>No Images Loaded</h3>
-                            <p>Scan a folder to start managing your AI-generated images</p>
+                            <h3 data-i18n="gallery.noImages">No Images Loaded</h3>
+                            <p data-i18n="gallery.scanPrompt">Scan a folder to start managing your AI-generated images</p>
                             <div class="empty-actions">
                                 <button class="btn btn-primary" id="empty-state-scan-btn">
-                                    <span aria-hidden="true">📂</span> Scan Folder
+                                    <span aria-hidden="true">📂</span> <span data-i18n="action.scanFolder">Scan Folder</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                     <div class="gallery-load-more" id="gallery-load-more" style="display:none">
-                        <button class="btn btn-secondary" id="load-more-btn" aria-label="Load more images">
+                        <button class="btn btn-secondary" id="load-more-btn" aria-label="Load more images" data-i18n="gallery.loadMore">
                             Load More Images
                         </button>
                     </div>
                     <div class="gallery-loading" id="gallery-loading" role="status" aria-live="polite" aria-label="Loading status">
                         <div class="spinner" aria-hidden="true"></div>
-                        <span>Loading images...</span>
+                        <span data-i18n="gallery.loading">Loading images...</span>
                     </div>
                     <button id="btn-open-model-manager" class="gallery-model-manager-fab" type="button" aria-label="Open model manager">
                         <span aria-hidden="true">🧰</span>
@@ -477,13 +490,241 @@
                 </div>
             </section>
 
-            <!-- Auto-Separate View -->
-            <section id="view-autosep" class="view">
+            <!-- Image Reader View -->
+            <div id="view-reader" class="view" style="display: none;">
+                <div class="reader-tools-header">
+                    <div class="reader-tools-copy">
+                        <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Reader Workspace</h2>
+                        <p class="reader-tools-subtitle" data-i18n="reader.workspaceSubtitle">Read metadata fast, then switch to privacy-safe obfuscation without hunting for another hidden panel.</p>
+                    </div>
+                    <div class="reader-tools-tabs" role="tablist" aria-label="Reader tools">
+                        <button class="reader-tool-tab active" id="reader-tool-tab-reader" type="button" data-reader-tool="reader" role="tab" aria-selected="true" aria-controls="reader-tool-panel-reader">
+                            <span aria-hidden="true">📖</span>
+                            <span data-i18n="nav.reader">Image Reader</span>
+                        </button>
+                        <button class="reader-tool-tab" id="reader-tool-tab-obfuscation" type="button" data-reader-tool="obfuscation" role="tab" aria-selected="false" aria-controls="reader-tool-panel-obfuscation">
+                            <span aria-hidden="true">🕶️</span>
+                            <span data-i18n="tools.obfuscation">Image Obfuscation</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="reader-tool-panel active" id="reader-tool-panel-reader" role="tabpanel" aria-labelledby="reader-tool-tab-reader">
+                <div class="reader-container">
+                    <div class="reader-left">
+                        <div id="reader-drop-zone" class="reader-drop-zone">
+                            <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 6C12.9 6 12 6.9 12 8v32c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V16l-10-10H14z" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M26 6v10h10" fill="none" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M18 26h12M18 30h8" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+                            <div class="drop-text" data-i18n="reader.dropText">Drop an image here</div>
+                            <div class="drop-hint" data-i18n="reader.dropHint">or click to browse</div>
+                        </div>
+                        <img id="reader-image-preview" style="display: none;" alt="Preview">
+                        <input type="file" id="reader-file-input" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="reader-right">
+                        <div id="reader-status" class="reader-status" style="display: none;"></div>
+                        <div id="reader-result-panel" class="reader-result-panel">
+                            <div class="reader-header">
+                                <span id="reader-generator" class="reader-generator-badge"></span>
+                                <span id="reader-file-info" class="reader-file-info"></span>
+                                <button id="reader-clear" class="btn btn-ghost btn-sm" data-i18n="reader.clear">Clear</button>
+                            </div>
+                            <div class="reader-section">
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-prompt-text" data-collapse-key="prompt">
+                                        <span class="reader-section-title" data-i18n="reader.prompt">Prompt</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                    <button id="reader-toggle-format" class="reader-copy-btn">Format: Original</button>
+                                    <button id="reader-copy-prompt" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
+                                </div>
+                                <div id="reader-prompt-text" class="reader-section-text"></div>
+                            </div>
+                            <div class="reader-section" id="reader-negative-section">
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-negative-text" data-collapse-key="negative">
+                                        <span class="reader-section-title" data-i18n="reader.negative">Negative Prompt</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                    <button id="reader-copy-negative" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
+                                </div>
+                                <div id="reader-negative-text" class="reader-section-text"></div>
+                            </div>
+                            <div class="reader-meta-row">
+                                <div class="reader-meta-item">
+                                    <div class="reader-meta-label" data-i18n="reader.checkpoint">Checkpoint</div>
+                                    <div id="reader-checkpoint" class="reader-meta-value"></div>
+                                </div>
+                                <div class="reader-meta-item reader-hash-row">
+                                    <div class="reader-meta-label" data-i18n="reader.modelHash">Model Hash</div>
+                                    <div id="reader-model-hash" class="reader-meta-value"></div>
+                                </div>
+                            </div>
+                            <div class="reader-meta-item" style="margin-top: 8px;">
+                                <div class="reader-section-header reader-compact-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-loras" data-collapse-key="loras">
+                                        <span class="reader-meta-label" data-i18n="reader.loras">LoRAs</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                </div>
+                                <div id="reader-loras" class="reader-meta-value"></div>
+                            </div>
+                            <div class="reader-section">
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-params" data-collapse-key="params">
+                                        <span class="reader-section-title" data-i18n="reader.params">Generation Parameters</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                    <button id="reader-copy-params" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
+                                </div>
+                                <div id="reader-params" class="reader-params-grid"></div>
+                            </div>
+                            <div class="reader-section" id="reader-hashes-section" style="display: none;">
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-hashes" data-collapse-key="hashes">
+                                        <span class="reader-section-title" data-i18n="reader.hashes">Model &amp; LoRA Hashes</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                </div>
+                                <div id="reader-hashes"></div>
+                            </div>
+                            <div class="reader-section" id="reader-color-section" style="display: none;">
+                                <div class="reader-section-header">
+                                    <div>
+                                        <div class="reader-section-title" data-i18n="modal.colorDistribution">Color Distribution</div>
+                                        <div class="reader-section-hint" data-i18n="modal.colorHint">Palette can be used for visual analysis now. Filtering support comes next.</div>
+                                    </div>
+                                    <div class="modal-color-mode-switch">
+                                        <button type="button" class="modal-color-mode-btn active" data-reader-histogram-mode="rgb">RGB</button>
+                                        <button type="button" class="modal-color-mode-btn" data-reader-histogram-mode="split">Split</button>
+                                        <button type="button" class="modal-color-mode-btn" data-reader-histogram-mode="luma">Luma</button>
+                                    </div>
+                                </div>
+                                <div class="reader-color-histogram"><canvas id="reader-color-histogram-canvas"></canvas></div>
+                                <div id="reader-color-palette" class="reader-color-palette"></div>
+                            </div>
+                            <div class="reader-actions">
+                                <button id="reader-copy-sd" class="btn btn-secondary btn-sm" data-i18n="reader.copySd">Copy as SD Format</button>
+                                <button id="reader-copy-all" class="btn btn-primary btn-sm" data-i18n="reader.copyAll">Copy All</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
+                <div class="reader-tool-panel" id="reader-tool-panel-obfuscation" role="tabpanel" aria-labelledby="reader-tool-tab-obfuscation">
+                    <div class="obfuscate-container">
+                        <!-- Step 1: Drop Zone -->
+                        <div id="obfuscate-drop-zone" class="obfuscate-drop-zone">
+                            <div class="obfuscate-drop-inner">
+                                <span class="obfuscate-drop-icon">🖼️</span>
+                                <span class="obfuscate-drop-text" data-i18n="tools.dropImages">Drop images here, click to browse, or Ctrl+V to paste</span>
+                                <span class="obfuscate-drop-hint" data-i18n="tools.dropHint">Supports PNG, JPG, WebP</span>
+                            </div>
+                        </div>
+                        <input type="file" id="obfuscate-file-input" accept="image/*" multiple style="display: none;">
+
+                        <!-- Step 2: Mode + Actions -->
+                        <div class="obfuscate-controls-bar">
+                            <div class="obfuscate-mode-group">
+                                <select id="obfuscate-compat-mode" class="input-field obfuscate-mode-select" title="Compatibility mode">
+                                    <option value="big_tomato" data-i18n="tools.compatBigTomato">🍅 Standard (password + metadata)</option>
+                                    <option value="small_tomato" data-i18n="tools.compatSmallTomato">🍅 Simple (no password)</option>
+                                </select>
+                                <input type="password" id="obfuscate-password" class="input-field obfuscate-password-input" placeholder="Password (optional)" data-i18n-placeholder="tools.password">
+                                <button class="btn btn-ghost btn-small obfuscate-settings-toggle" id="obfuscate-settings-toggle" title="Advanced settings" type="button">⚙️</button>
+                            </div>
+                            <div class="obfuscate-action-group">
+                                <button id="obfuscate-btn-encode" class="btn btn-primary" data-i18n="tools.encode">🔒 Encode</button>
+                                <button id="obfuscate-btn-decode" class="btn btn-secondary" data-i18n="tools.decode">🔓 Decode</button>
+                                <button id="obfuscate-btn-clear" class="btn btn-ghost" data-i18n="tools.clearQueue">Clear</button>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Settings (hidden by default) -->
+                        <div class="obfuscate-advanced-settings" id="obfuscate-advanced-settings" style="display: none;">
+                            <small id="obfuscate-compat-help" data-i18n="tools.compatBigTomatoHelp">Standard mode uses password / PNG Info compatible processing.</small>
+                            <label class="obfuscate-checkbox-row" id="obfuscate-metadata-row">
+                                <input type="checkbox" id="obfuscate-preserve-metadata" checked>
+                                <span data-i18n="tools.preserveMetadata">Preserve metadata (SD prompts in PNG Info)</span>
+                            </label>
+                            <label class="obfuscate-checkbox-row" id="obfuscate-legacy-row">
+                                <input type="checkbox" id="obfuscate-use-legacy-pnginfo">
+                                <span data-i18n="tools.legacyPngInfo">Use old PNG Info algorithm (legacy compat)</span>
+                            </label>
+                        </div>
+
+                        <!-- Progress -->
+                        <div class="obfuscate-status-bar">
+                            <span id="obfuscate-count" class="obfuscate-progress"></span>
+                            <span id="obfuscate-progress" class="obfuscate-progress"></span>
+                        </div>
+
+                        <!-- Queue with larger previews -->
+                        <div id="obfuscate-queue" class="obfuscate-queue">
+                            <div class="obfuscate-empty" data-i18n="tools.noImages">No images in queue — drop files above or paste from clipboard</div>
+                        </div>
+
+                        <!-- Batch download -->
+                        <div class="obfuscate-batch-bar" id="obfuscate-batch-bar" style="display: none;">
+                            <button id="obfuscate-btn-download-all" class="btn btn-secondary btn-small" data-i18n="tools.downloadAll">⬇️ Download All (.zip)</button>
+                        </div>
+                    </div>
+
+                    <!-- Obfuscation Preview Modal -->
+                    <div class="modal" id="obfuscate-preview-modal">
+                        <div class="modal-backdrop"></div>
+                        <div class="modal-content modal-large" style="max-width: 90vw; max-height: 90vh;">
+                            <button class="modal-close" id="obfuscate-preview-close">✕</button>
+                            <div style="display: flex; justify-content: center; align-items: center; flex: 1; overflow: auto; padding: 16px;">
+                                <img id="obfuscate-preview-img" src="" alt="Preview" style="max-width: 100%; max-height: 80vh; object-fit: contain; border-radius: 8px;">
+                            </div>
+                            <div style="display: flex; gap: 8px; justify-content: center; padding: 12px;">
+                                <button class="btn btn-primary btn-small" id="obfuscate-preview-copy">📋 <span data-i18n="tools.copyImage">Copy</span></button>
+                                <button class="btn btn-secondary btn-small" id="obfuscate-preview-download">⬇️ <span data-i18n="tools.downloadImage">Download</span></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sorting View (Auto-Separate + Manual Sort) -->
+            <section id="view-sorting" class="view">
+                <div class="sorting-sub-tabs">
+                    <button class="btn btn-primary sorting-sub-tab active" data-sorting-sub="autosep" onclick="window._switchSortingSub('autosep')">
+                        <span data-i18n="nav.autosep">Auto-Separate</span>
+                    </button>
+                    <button class="btn btn-ghost sorting-sub-tab" data-sorting-sub="manual" onclick="window._switchSortingSub('manual')">
+                        <span data-i18n="nav.manual">Manual Sort</span>
+                    </button>
+                </div>
+
+                <!-- Auto-Separate sub-section -->
+            <div id="view-autosep">
                 <div class="autosep-container">
                     <div class="autosep-panel">
-                        <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
-                        <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.
-                        </p>
+                        <div class="autosep-header-row">
+                            <div>
+                                <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
+                                <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.
+                                </p>
+                            </div>
+                            <button class="btn btn-ghost btn-small" id="btn-autosep-settings" type="button">⚙️ <span data-i18n="common.settings">Settings</span></button>
+                        </div>
+
+                        <div class="filter-section">
+                            <div class="filter-header-compact">
+                                <h4 data-i18n="autosep.savedConfigs">Saved Configs</h4>
+                                <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
+                            </div>
+                            <div class="autosep-config-controls">
+                                <select id="autosep-config-select" class="input-field"></select>
+                                <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
+                                <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save Current</button>
+                                <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig">Rename</button>
+                                <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
+                            </div>
+                            <div class="autosep-config-summary" id="autosep-config-summary"></div>
+                        </div>
 
                         <div class="filter-section">
                             <div class="filter-header-compact">
@@ -518,6 +759,7 @@
                                     placeholder="D:\sorted\my-folder">
                                 <button class="btn btn-secondary" id="btn-browse-destination">Browse</button>
                             </div>
+                            <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
                         </div>
 
                         <div class="preview-section">
@@ -529,7 +771,7 @@
                             <div class="autosep-preview-list" id="autosep-preview-list">
                                 <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
                             </div>
-                            <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview shows the first few matches only.</div>
+                            <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</div>
                             <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
                         </div>
 
@@ -539,10 +781,54 @@
                         </button>
                     </div>
                 </div>
-            </section>
+            </div>
 
-            <!-- Manual Sort View -->
-            <section id="view-manual" class="view">
+            <div class="modal" id="autosep-settings-modal">
+                <div class="modal-backdrop"></div>
+                <div class="modal-content modal-small">
+                    <button class="modal-close" id="btn-close-autosep-settings">✕</button>
+                    <h3 data-i18n="autosep.settingsTitle">Auto-Separate Settings</h3>
+                    <p class="modal-description" data-i18n="autosep.settingsDescription">Save the behavior you want and keep it until you reset it yourself.</p>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autosep-remember-destination" checked>
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
+                        </label>
+                        <small class="helper-text" data-i18n="autosep.rememberDestinationHelp">Keep the last destination path until you clear settings.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autosep-auto-preview">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="autosep.autoPreview">Auto-preview after filter changes</span>
+                        </label>
+                        <small class="helper-text" data-i18n="autosep.autoPreviewHelp">Refresh preview automatically when filters change, without clicking Preview Results.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autosep-confirm-move" checked>
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before moving files</span>
+                        </label>
+                        <small class="helper-text" data-i18n="autosep.confirmMoveHelp">Keep a confirmation step before the move starts.</small>
+                    </div>
+
+                    <div class="modal-actions" style="justify-content: space-between;">
+                        <button class="btn btn-ghost" id="btn-reset-autosep-settings" data-i18n="autosep.resetSettings">Reset Saved Settings</button>
+                        <div style="display:flex; gap:8px;">
+                            <button class="btn btn-ghost" id="btn-cancel-autosep-settings" data-i18n="modal.cancel">Cancel</button>
+                            <button class="btn btn-primary" id="btn-save-autosep-settings" data-i18n="modal.save">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- Manual Sort sub-section -->
+            <div id="view-manual" style="display: none;">
                 <!-- Mobile Warning for Manual Sort -->
                 <div class="mobile-warning" id="manual-sort-mobile-warning">
                     <div class="mobile-warning-content">
@@ -729,33 +1015,191 @@
                         </button>
                     </div>
                 </div>
+            </div>
             </section>
 
             <!-- Censored Edit View -->
             <section id="view-censor" class="view">
                 <div class="censor-workspace-v2">
+                    <!-- Queue Manager Solitaire (full-screen overlay within workspace) -->
+                    <div class="queue-solitaire" id="queue-solitaire">
+                        <div class="qs-toolbar">
+                            <span class="qs-toolbar-title">🗂️ <span data-i18n="censor.queueManager">Queue Manager</span></span>
+                            <span class="qs-toolbar-stats" id="qs-stats"></span>
+                            <button class="btn btn-ghost btn-small" id="qs-btn-filter">🔍 <span data-i18n="filter.title">Filter</span></button>
+                            <div style="position:relative;">
+                                <button class="btn btn-ghost btn-small" id="qs-btn-auto-sort">⚡ <span data-i18n="queueSolitaire.autoSort">Auto-Sort</span> ▾</button>
+                                <div class="qs-auto-sort-menu" id="qs-auto-sort-menu" style="display:none;">
+                                    <button id="qs-sort-rating" data-i18n="queueSolitaire.sortRating">By Rating (G/S/Q/E)</button>
+                                    <button id="qs-sort-aesthetic" data-i18n="queueSolitaire.sortAesthetic">By Aesthetic Score</button>
+                                    <button id="qs-sort-resolution" data-i18n="queueSolitaire.sortResolution">By Resolution (HD/SD)</button>
+                                    <div class="qs-auto-sort-divider"></div>
+                                    <div class="qs-auto-sort-section-label" data-i18n="queueSolitaire.savedProfiles">Saved Profiles</div>
+                                    <div id="qs-auto-sort-profiles"></div>
+                                    <button id="qs-manage-auto-sort" data-i18n="queueSolitaire.manageProfiles">Manage Profiles</button>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary btn-small" id="qs-btn-add-section">+ <span data-i18n="queueSolitaire.section">Section</span></button>
+                            <button class="btn btn-primary btn-small" id="qs-btn-done">✓ <span data-i18n="modal.done">Done</span></button>
+                        </div>
+
+                        <div class="qs-body">
+                            <div class="qs-preview">
+                                <div class="qs-preview-img-wrap">
+                                    <img id="qs-preview-img" src="" alt="Preview" style="display:none;">
+                                </div>
+                                <div class="qs-preview-info" id="qs-preview-info">
+                                    <span style="color:var(--text-muted)" data-i18n="queueSolitaire.clickPreview">Click an image to preview</span>
+                                </div>
+                            </div>
+                            <div class="qs-sections" id="qs-sections">
+                                <!-- Sections rendered by JS -->
+                            </div>
+                        </div>
+
+                        <div class="qs-filter-bar" id="qs-filter-bar">
+                            <div class="qs-filter-help" data-i18n="queueSolitaire.filterHelp">Search tags or prompt keywords, then move matching images into a section.</div>
+                            <div class="qs-filter-summary" id="qs-filter-summary" data-i18n="queueSolitaire.filterSummaryIdle">No queue filters active yet.</div>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-advanced" type="button">🧰 <span data-i18n="queueSolitaire.advancedFilters">Advanced Filters</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-gallery" type="button">🖼️ <span data-i18n="queueSolitaire.useGalleryFilters">Use Gallery Filters</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-reset" type="button">↺ <span data-i18n="queueSolitaire.resetFilters">Reset</span></button>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-select" type="button">✓ <span data-i18n="queueSolitaire.selectMatched">Select Matched</span></button>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="queueSolitaire.searchLabel">Tag / Prompt</span>
+                                <input type="text" id="qs-filter-tag" placeholder="Tag / prompt keyword..." data-i18n-placeholder="queueSolitaire.searchPlaceholder" style="flex:1; min-width:150px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.generators">Generators</span>
+                                <select id="qs-filter-generator" style="min-width:110px;">
+                                    <option value="" data-i18n="filter.any">Any</option>
+                                    <option value="comfyui">ComfyUI</option>
+                                    <option value="nai">NovelAI</option>
+                                    <option value="webui">WebUI</option>
+                                    <option value="forge">Forge</option>
+                                    <option value="unknown" data-i18n="generator.unknown">Unknown</option>
+                                </select>
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.ratings">Ratings</span>
+                                <select id="qs-filter-rating" style="min-width:110px;">
+                                    <option value="" data-i18n="filter.any">Any</option>
+                                    <option value="general">General</option>
+                                    <option value="sensitive">Sensitive</option>
+                                    <option value="questionable">Questionable</option>
+                                    <option value="explicit">Explicit</option>
+                                    <option value="unrated" data-i18n="queueSolitaire.unrated">Unrated</option>
+                                </select>
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.sizeRules">Size Rules</span>
+                                <select id="qs-filter-resolution" style="min-width:110px;">
+                                    <option value="" data-i18n="filter.any">Any</option>
+                                    <option value="hd" data-i18n="queueSolitaire.resolutionHD">HD</option>
+                                    <option value="sd" data-i18n="queueSolitaire.resolutionSD">SD</option>
+                                </select>
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.checkpoints">Checkpoint</span>
+                                <input type="text" id="qs-filter-checkpoint" placeholder="Search checkpoint..." data-i18n-placeholder="filter.searchCheckpoints" style="min-width:130px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.loras">LoRAs</span>
+                                <input type="text" id="qs-filter-lora" placeholder="Search loras..." data-i18n-placeholder="filter.searchLoras" style="min-width:130px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.widthMin">Min width</span>
+                                <input type="number" id="qs-filter-minw" placeholder="Min width" data-i18n-placeholder="filter.widthMin" style="width:90px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.widthMax">Max width</span>
+                                <input type="number" id="qs-filter-maxw" placeholder="Max width" data-i18n-placeholder="filter.widthMax" style="width:90px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.heightMin">Min height</span>
+                                <input type="number" id="qs-filter-minh" placeholder="Min height" data-i18n-placeholder="filter.heightMin" style="width:90px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.heightMax">Max height</span>
+                                <input type="number" id="qs-filter-maxh" placeholder="Max height" data-i18n-placeholder="filter.heightMax" style="width:90px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.aspect">Aspect Ratio</span>
+                                <select id="qs-filter-aspect" style="min-width:110px;">
+                                    <option value="" data-i18n="filter.any">Any</option>
+                                    <option value="square" data-i18n="filter.square">Square</option>
+                                    <option value="landscape" data-i18n="filter.landscape">Landscape</option>
+                                    <option value="portrait" data-i18n="filter.portrait">Portrait</option>
+                                </select>
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.aestheticMin">Min score</span>
+                                <input type="number" id="qs-filter-aesthetic" placeholder="Min ★" step="0.5" min="0" max="10" style="width:70px;">
+                            </div>
+                            <div class="qs-filter-field">
+                                <span class="qs-filter-label" data-i18n="filter.aestheticMax">Max score</span>
+                                <input type="number" id="qs-filter-aesthetic-max" placeholder="Max ★" step="0.5" min="0" max="10" style="width:70px;">
+                            </div>
+                            <button class="btn btn-ghost btn-small" id="qs-filter-apply" data-i18n="action.search">Search</button>
+                            <span class="qs-filter-match" id="qs-filter-match-count" data-i18n="queueSolitaire.initialMatching">0 matching</span>
+                            <span style="color:var(--text-muted)">→</span>
+                            <select id="qs-filter-target" style="min-width:120px;"></select>
+                            <button class="btn btn-primary btn-small" id="qs-filter-move"><span data-i18n="queueSolitaire.moveToSection">Move</span> ▶</button>
+                        </div>
+
+                        <div class="qs-marquee" id="qs-marquee"></div>
+                        <div class="qs-hover-preview" id="qs-hover-preview"><img id="qs-hover-preview-img" src="" alt=""></div>
+                        <div class="qs-undo-toast" id="qs-undo-toast"></div>
+
+                        <div class="qs-profile-modal" id="qs-profile-modal" hidden>
+                            <div class="qs-profile-backdrop" id="qs-profile-backdrop"></div>
+                            <div class="qs-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="qs-profile-title">
+                                <div class="qs-profile-header">
+                                    <div>
+                                        <h3 id="qs-profile-title" data-i18n="queueSolitaire.manageProfiles">Manage Profiles</h3>
+                                        <p class="qs-profile-subtitle" data-i18n="queueSolitaire.profileHelp">Save custom Queue Manager auto-sort rules so you can rebuild the same sections in one click.</p>
+                                    </div>
+                                    <button class="btn btn-ghost btn-small" id="qs-profile-close" type="button">✕</button>
+                                </div>
+                                <div class="qs-profile-toolbar">
+                                    <select id="qs-profile-select" class="input-field"></select>
+                                    <button class="btn btn-secondary btn-small" id="qs-profile-new" type="button" data-i18n="queueSolitaire.newProfile">New</button>
+                                    <button class="btn btn-ghost btn-small" id="qs-profile-rename" type="button" data-i18n="queueSolitaire.renameProfile">Rename</button>
+                                    <button class="btn btn-ghost btn-small" id="qs-profile-delete" type="button" data-i18n="queueSolitaire.deleteProfile">Delete</button>
+                                </div>
+                                <div class="qs-profile-sections" id="qs-profile-sections"></div>
+                                <div class="qs-profile-actions">
+                                    <button class="btn btn-ghost btn-small" id="qs-profile-add-section" type="button" data-i18n="queueSolitaire.addProfileSection">Add Section Rule</button>
+                                    <div class="qs-profile-actions-right">
+                                        <button class="btn btn-secondary btn-small" id="qs-profile-save" type="button" data-i18n="modal.save">Save</button>
+                                        <button class="btn btn-primary btn-small" id="qs-profile-apply" type="button" data-i18n="queueSolitaire.applyProfileNow">Apply Now</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <!-- Left Sidebar (Queue Only) -->
                     <aside class="censor-sidebar-v2 left">
                         <div class="sidebar-header-v2">
-                              <h4 class="sidebar-title-v2" data-i18n="censor.queue">Processing Queue</h4>
-                              <p class="sidebar-subtitle" data-i18n="censor.queueSubtitle">Click to edit • Ctrl/Shift multi-select</p>
-                            <div class="queue-selection-count-row">
-                                <span class="queue-selection-count" id="queue-selection-count"></span>
+                            <div class="queue-title-row">
+                                <h4 class="sidebar-title-v2" data-i18n="censor.queue">Queue</h4>
+                                <button class="btn btn-primary btn-small queue-manager-btn" id="btn-open-queue-manager" title="Queue Manager" type="button">🗂️ <span data-i18n="censor.queueManager">Manager</span></button>
                             </div>
-                            <div class="queue-actions-row" style="margin-bottom: 6px;">
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-select-all" title="Select All" type="button" aria-label="Select all queue items">✓ <span data-i18n="censor.selectAll">All</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-deselect-all" title="Deselect All" type="button" aria-label="Deselect all queue items">✕ <span data-i18n="censor.deselectAll">None</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-filter" title="Filter queue" type="button" aria-label="Filter queue">🔍 <span data-i18n="common.filter">Filter</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-open-queue-manager" title="Open queue manager" type="button" aria-label="Open queue manager">🗂️ <span data-i18n="censor.queueManager">Queue Manager</span></button>
+                            <div class="queue-btn-rows">
+                                <div class="queue-btn-row">
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-select-all" title="Select All">✓</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-deselect-all" title="Deselect">✕</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-filter" title="Filter">🔍</button>
+                                    <span class="queue-selection-count" id="queue-selection-count"></span>
+                                </div>
+                                <div class="queue-btn-row">
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-top" title="Top">⤒</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-up" title="Up">↑</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-down" title="Down">↓</button>
+                                    <button class="btn btn-ghost btn-small queue-mini-btn" id="btn-queue-move-bottom" title="Bottom">⤓</button>
+                                </div>
                             </div>
-                            <div class="queue-filter-row" id="queue-filter-row" style="display: none; margin-bottom: 6px;">
-                                <input type="text" id="queue-filter-input" class="input-field" placeholder="Filter by filename..." data-i18n-placeholder="censor.queueFilterPlaceholder" style="width: 100%; padding: 6px 8px; font-size: 12px;">
-                            </div>
-                            <div class="queue-actions-row">
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-top" title="Move to top" type="button" aria-label="Move selection to top">⤒ <span data-i18n="common.top">Top</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-up" title="Move up" type="button" aria-label="Move selection up">↑ <span data-i18n="common.up">Up</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-down" title="Move down" type="button" aria-label="Move selection down">↓ <span data-i18n="common.down">Down</span></button>
-                                <button class="btn btn-secondary btn-small queue-action-btn" id="btn-queue-move-bottom" title="Move to bottom" type="button" aria-label="Move selection to bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
+                            <div class="queue-filter-row" id="queue-filter-row" style="display: none;">
+                                <input type="text" id="queue-filter-input" class="input-field" placeholder="Filter..." data-i18n-placeholder="censor.queueFilterPlaceholder" style="width:100%; padding:3px 6px; font-size:11px;">
                             </div>
                         </div>
 
@@ -803,6 +1247,10 @@
                                 <span class="tool-icon-v2">↩️</span>
                                 <span class="tool-label"><span data-i18n="censor.undo">Undo</span> <kbd>Z</kbd></span>
                             </button>
+                            <button class="tool-btn-v2" id="btn-redo" title="Redo (Ctrl+Shift+Z)">
+                                <span class="tool-icon-v2">↪️</span>
+                                <span class="tool-label"><span data-i18n="censor.redo">Redo</span> <kbd>Y</kbd></span>
+                            </button>
                             <button class="tool-btn-v2" id="btn-clear-edits" title="Reset to Original">
                                 <span class="tool-icon-v2">🔄</span>
                                 <span class="tool-label" data-i18n="censor.reset">Reset</span>
@@ -848,124 +1296,155 @@
                             </div>
 
                             <div class="zoom-controls-v2">
-                                <button class="zoom-btn-v2" id="btn-zoom-out" title="Zoom Out">−</button>
+                                <button class="zoom-btn-v2" id="btn-zoom-out" title="Zoom Out" data-i18n-title="censor.zoomOutTitle">−</button>
                                 <span class="zoom-level-v2" id="zoom-level">100%</span>
-                                <button class="zoom-btn-v2" id="btn-zoom-in" title="Zoom In">+</button>
+                                <button class="zoom-btn-v2" id="btn-zoom-in" title="Zoom In" data-i18n-title="censor.zoomInTitle">+</button>
                                 <div class="zoom-divider-v"></div>
-                                <button class="zoom-btn-v2 reset" id="btn-zoom-fit" title="Reset Zoom">Reset</button>
+                                <button class="zoom-btn-v2 reset" id="btn-zoom-fit" title="Reset Zoom" data-i18n-title="censor.zoomResetTitle" data-i18n="censor.zoomReset">Reset</button>
                             </div>
                         </div>
                     </div>
 
                     <!-- Right Sidebar (Settings & Tools) -->
                     <aside class="censor-sidebar-v2 right">
-                        <div class="properties-header">
-                            <h4 class="properties-title" data-i18n="censor.settings">Settings & Tools</h4>
-                        </div>
-
-                        <!-- Auto-Detection Section -->
-                        <div class="property-section">
-                            <div class="section-header">
-                                <span class="section-title">🔍 <span data-i18n="censor.detection">Auto-Detection</span></span>
-                                <span class="collapse-arrow">▼</span>
+                        <div class="censor-side-card">
+                            <div class="censor-side-card-header">
+                                <div>
+                                    <h4 class="censor-side-card-title" data-i18n="censor.paintPanel">Brush & Paint</h4>
+                                    <p class="censor-side-card-subtitle" data-i18n="censor.paintPanelHelp">Most-used drawing controls stay together at the top.</p>
+                                </div>
                             </div>
-                            <div class="section-content" id="section-detection" style="padding-top: 8px;">
-                                <div class="model-health-banner model-health-banner-compact" id="censor-model-health"></div>
-                                <div class="helper-text" id="censor-simple-guide" style="margin: 8px 0 10px;"></div>
-
-                                <!-- Unified Model Toggles -->
-                                <div class="prop-group-v2" style="margin-bottom: 8px;">
-                                    <label data-i18n="censor.detectionModel">Detection Model</label>
-                                    <select id="censor-model-type" class="toolbar-select" style="width: 100%; padding: 6px 8px;">
-                                        <option value="legacy" data-i18n="censor.legacyYolo">Wenaka YOLO (Local)</option>
-                                        <option value="nudenet" data-i18n="censor.nudenet">NudeNet v3</option>
-                                        <option value="both" data-i18n="censor.both">Both (NudeNet + Wenaka)</option>
-                                    </select>
-                                </div>
-
-                                <!-- Confidence Threshold (inline in sidebar) -->
-                                <div class="prop-group-v2" style="margin-bottom: 8px;">
-                                    <label><span data-i18n="censor.confidenceThreshold">Confidence</span>: <span id="censor-confidence-value-sidebar">0.50</span></label>
-                                    <input type="range" id="censor-confidence-sidebar" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
-                                </div>
-
-                                <!-- SAM3 Confidence (shown when SAM3 available) -->
-                                <div class="prop-group-v2" id="sam3-confidence-group" style="margin-bottom: 8px; display: none;">
-                                    <label><span data-i18n="censor.sam3Confidence">SAM3 Threshold</span>: <span id="sam3-confidence-value">0.50</span></label>
-                                    <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
-                                </div>
-
-                                <!-- Action buttons: Detect Current + Detect All + Settings -->
-                                <div class="sidebar-action-row-v2" style="grid-template-columns: 1fr;">
-                                    <button class="btn-side-v2 primary" id="btn-auto-detect-current"
-                                        title="Run AI detection on current image (D)" style="white-space: nowrap;">
-                                        <span class="btn-icon">🎯</span> <span data-i18n="censor.detectCurrentBtn">Detect Current</span> <kbd>D</kbd>
-                                    </button>
-                                    <button class="btn-side-v2 primary" id="btn-auto-detect-all-sidebar"
-                                        title="Run AI detection on all queue images">
-                                        <span class="btn-icon">⚡</span> <span data-i18n="censor.detectAll">Detect All</span>
-                                    </button>
-                                </div>
-                                <div class="sidebar-action-row-v2" style="grid-template-columns: 1fr; margin-top: 6px;">
-                                    <button class="btn-side-v2" id="btn-open-detect-modal"
-                                        title="Configure detection settings">
-                                        <span class="btn-icon">⚙️</span> <span data-i18n="censor.advancedSettings">Advanced Settings</span>
-                                    </button>
+                            <div class="censor-side-row">
+                                <label class="censor-side-inline-label"><span data-i18n="censor.brushSize">Brush</span>: <span class="censor-side-value"><span id="tool-size-value">30</span>px</span></label>
+                                <input type="range" id="tool-size" class="slider-v2" min="5" max="200" step="5" value="30">
+                            </div>
+                            <div class="censor-side-row">
+                                <label class="censor-side-inline-label"><span data-i18n="censor.blockSize">Block</span>: <span class="censor-side-value" id="censor-block-size-value">16</span></label>
+                                <input type="range" id="censor-block-size" class="slider-v2" min="4" max="64" step="2" value="16">
+                            </div>
+                            <div class="censor-side-split-row">
+                                <label class="censor-color-input-wrap">
+                                    <span class="censor-side-small-label" data-i18n="censor.color">Color</span>
+                                    <input type="color" id="pen-color" value="#ff0000" class="censor-color-input">
+                                </label>
+                                <div class="censor-side-grow">
+                                    <label class="censor-side-inline-label"><span data-i18n="censor.opacity">Opacity</span>: <span class="censor-side-value" id="pen-opacity-value">100%</span></label>
+                                    <input type="range" id="pen-opacity" class="slider-v2" min="10" max="100" step="5" value="100">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Brush & Censor Section -->
-                        <div class="property-section" id="section-pen">
-                            <div class="section-header">
-                                <span class="section-title">🖌️ <span data-i18n="censor.brushCensor">Brush & Censor</span></span>
-                                <span class="collapse-arrow">▼</span>
-                            </div>
-                            <div class="section-content" style="padding-top: 8px;">
-                                <div class="prop-group-v2">
-                                    <label><span data-i18n="censor.brushSize">Brush Size</span>: <span id="tool-size-value">30</span>px</label>
-                                    <input type="range" id="tool-size" class="slider-v2" min="5" max="200" step="5"
-                                        value="30">
-                                </div>
-                                <div class="prop-group-v2">
-                                    <label><span data-i18n="censor.blockSize">Block Size</span>: <span id="censor-block-size-value">16</span></label>
-                                    <input type="range" id="censor-block-size" class="slider-v2" min="4" max="64"
-                                        step="2" value="16">
-                                </div>
-                                <div class="prop-group-v2">
-                                    <label data-i18n="censor.penColor">Pen Color</label>
-                                    <input type="color" id="pen-color" class="input-v2" value="#ff0000"
-                                        style="height: 40px; padding: 4px;">
-                                </div>
-                                <div class="prop-group-v2">
-                                    <label><span data-i18n="censor.opacity">Opacity</span>: <span id="pen-opacity-value">100%</span></label>
-                                    <input type="range" id="pen-opacity" class="slider-v2" min="10" max="100" step="5"
-                                        value="100">
+                        <div class="censor-side-card">
+                            <div class="censor-side-card-header">
+                                <div>
+                                    <h4 class="censor-side-card-title" data-i18n="censor.detectPanel">Auto Detect</h4>
+                                    <p class="censor-side-card-subtitle" data-i18n="censor.detectPanelHelp">Pick the detector, then run current / batch / settings from one place.</p>
                                 </div>
                             </div>
+                            <div class="censor-detect-quick">
+                                <select id="censor-model-type" class="toolbar-select censor-detect-select">
+                                    <option value="legacy" data-i18n="censor.legacyYolo">YOLO</option>
+                                    <option value="nudenet" data-i18n="censor.nudenet">NudeNet</option>
+                                    <option value="both" data-i18n="censor.both">Both</option>
+                                </select>
+                                <div class="censor-detect-actions-inline">
+                                    <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)">🎯 <kbd>D</kbd></button>
+                                    <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All">⚡</button>
+                                    <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings">⚙️</button>
+                                </div>
+                            </div>
+                            <div class="censor-side-row">
+                                <label class="censor-side-inline-label"><span data-i18n="censor.confidenceThreshold">Conf</span>: <span class="censor-side-value" id="censor-confidence-value-sidebar">0.50</span></label>
+                                <input type="range" id="censor-confidence-sidebar" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
+                            </div>
+                            <div class="censor-side-row" id="sam3-confidence-group" style="display:none;">
+                                <label class="censor-side-inline-label">SAM3: <span class="censor-side-value" id="sam3-confidence-value">0.50</span></label>
+                                <input type="range" id="sam3-confidence" class="slider-v2" min="0.0" max="1.0" step="0.05" value="0.5">
+                            </div>
+                            <div id="censor-model-health" style="display:none"></div>
+                            <div id="censor-simple-guide" style="display:none"></div>
                         </div>
 
-                        <!-- Output & Save Section -->
-                        <div class="property-section">
-                            <div class="section-header">
-                                <span class="section-title">📤 <span data-i18n="censor.output">Output & Save</span></span>
-                                <span class="collapse-arrow">▼</span>
+                        <div class="censor-side-card">
+                            <div class="censor-side-card-header">
+                                <div>
+                                    <h4 class="censor-side-card-title">🎨 <span data-i18n="censor.filters">Filters</span></h4>
+                                    <p class="censor-side-card-subtitle" data-i18n="censor.filterPanelHelp">Tune the image, preview the histogram, then apply once.</p>
+                                </div>
                             </div>
-                            <div class="section-content" id="section-output" style="padding-top: 8px;">
-                                <button class="btn-side-v2 primary" id="btn-save-all-processed"
-                                    style="margin-top: 12px; width: 100%;">
-                                    <span class="btn-icon">💾</span> <span data-i18n="censor.saveAll">Save All Processed</span>
+                            <div class="sidebar-filter-2col">
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.brightness">Bright</span>: <span id="filter-brightness-value">0</span></label>
+                                    <input type="range" id="filter-brightness" class="slider-v2" min="-100" max="100" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.contrast">Contr</span>: <span id="filter-contrast-value">0</span></label>
+                                    <input type="range" id="filter-contrast" class="slider-v2" min="-100" max="100" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.saturation">Satur</span>: <span id="filter-saturation-value">0</span></label>
+                                    <input type="range" id="filter-saturation" class="slider-v2" min="-100" max="100" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.hueRotate">Hue</span>: <span id="filter-hue-value">0°</span></label>
+                                    <input type="range" id="filter-hue" class="slider-v2" min="0" max="360" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.blur">Blur</span>: <span id="filter-blur-value">0</span></label>
+                                    <input type="range" id="filter-blur" class="slider-v2" min="0" max="20" step="1" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.sharpen">Sharp</span>: <span id="filter-sharpen-value">0</span></label>
+                                    <input type="range" id="filter-sharpen" class="slider-v2" min="0" max="100" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.temperature">Temp</span>: <span id="filter-temperature-value">0</span></label>
+                                    <input type="range" id="filter-temperature" class="slider-v2" min="-50" max="50" step="5" value="0">
+                                </div>
+                                <div class="sidebar-filter-item">
+                                    <label><span data-i18n="censor.vignette">Vign</span>: <span id="filter-vignette-value">0</span></label>
+                                    <input type="range" id="filter-vignette" class="slider-v2" min="0" max="100" step="5" value="0">
+                                </div>
+                            </div>
+                            <div class="filter-preset-row censor-filter-presets">
+                                <button class="btn btn-ghost btn-small" id="btn-filter-reset" title="Reset" data-i18n="censor.filterReset">Reset</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-vivid" data-i18n="censor.filterVivid">Vivid</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-warm" data-i18n="censor.filterWarm">Warm</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-cool" data-i18n="censor.filterCool">Cool</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-bw" data-i18n="censor.filterBW">B&W</button>
+                                <button class="btn btn-ghost btn-small" id="btn-filter-dramatic" data-i18n="censor.filterHDR">HDR</button>
+                            </div>
+                            <div class="censor-filter-apply-group">
+                                <button class="btn btn-primary btn-small censor-apply-filters-btn" id="btn-apply-filters">
+                                    ✨ <span data-i18n="censor.applyToCurrent">Apply to Current</span>
                                 </button>
-                                <button class="btn-side-v2" id="btn-batch-rename" style="margin-top: 8px; width: 100%;">
-                                    <span class="btn-icon">📝</span> <span data-i18n="censor.batchRename">Batch Rename</span>
+                                <button class="btn btn-secondary btn-small censor-apply-filters-btn" id="btn-apply-filters-selected">
+                                    ✨ <span data-i18n="censor.applyToSelected">Apply to Selected</span>
                                 </button>
+                                <button class="btn btn-ghost btn-small censor-apply-filters-btn" id="btn-apply-filters-all">
+                                    ✨ <span data-i18n="censor.applyToAll">Apply to All</span>
+                                </button>
+                            </div>
+                            <div class="filter-color-preview censor-filter-preview" id="filter-color-preview" style="display:none;">
+                                <div class="filter-histogram-wrap"><canvas id="filter-histogram-canvas"></canvas></div>
+                                <div id="filter-color-palette" class="modal-color-palette"></div>
                             </div>
                         </div>
 
-                        <div class="properties-footer">
-                            <button class="btn-side-v2 danger" id="btn-clear-queue" style="width: 100%;">
-                                <span class="btn-icon">🗑️</span> <span data-i18n="censor.clearQueue">Clear Queue</span>
-                            </button>
+                        <div class="sidebar-bottom-actions censor-side-card censor-save-card">
+                            <div class="censor-side-card-header">
+                                <div>
+                                    <h4 class="censor-side-card-title" data-i18n="censor.outputPanel">Save & Queue</h4>
+                                    <p class="censor-side-card-subtitle" data-i18n="censor.outputPanelHelp">Keep save actions obvious. Keep dangerous clear actions far away.</p>
+                                </div>
+                            </div>
+                            <div class="censor-save-actions">
+                                <button class="btn btn-primary btn-small censor-save-primary" id="btn-save-all-processed">
+                                    💾 <span data-i18n="censor.saveAll">Save All</span>
+                                </button>
+                                <button class="btn btn-ghost btn-small censor-save-secondary" id="btn-batch-rename" title="Batch Rename" data-i18n-title="censor.batchRename">📝 <span data-i18n="censor.batchRename">Batch Rename</span></button>
+                            </div>
+                            <button class="btn btn-ghost btn-small censor-clear-queue-btn" id="btn-clear-queue" title="Clear Queue">🗑️ <span data-i18n="censor.clearQueue">Clear</span></button>
                         </div>
                     </aside>
                 </div>
@@ -976,28 +1455,13 @@
                     <div class="modal-content modal-medium">
                         <button class="modal-close" id="btn-close-detect-modal">✕</button>
                         <h3>🔍 <span data-i18n="censor.autoDetectSettings">Auto-Detect Settings</span></h3>
-                        <p class="modal-description" data-i18n="censor.autoDetectDesc">Configure AI detection and apply censoring automatically.</p>
 
+                        <!-- SECTION 1: What to detect (most important — top position) -->
                         <div class="censor-detect-section">
-                            <div class="censor-detect-section-header">
-                                <h4 class="censor-detect-section-title" data-i18n="censor.quickAutoCensor">Quick Auto Censor</h4>
-                                <p class="censor-detect-section-note" data-i18n="censor.quickAutoCensorHelp">Use Wenaka / NudeNet for the normal privacy workflow.</p>
-                            </div>
-
-                            <div class="form-group">
-                                <label data-i18n="censor.modelCapabilities">Model Capabilities</label>
-                                <div id="censor-capability-panel" class="censor-capability-panel"></div>
-                            </div>
-
-                            <div class="form-group">
-                                <label><span data-i18n="censor.confidenceThreshold">Confidence Threshold</span>: <span id="censor-confidence-value">0.50</span></label>
-                                <input type="range" id="censor-confidence" min="0.0" max="1.0" step="0.05" value="0.5">
-                            </div>
-
                             <div class="form-group" id="censor-target-region-group">
-                                <label data-i18n="censor.targetRegions">Target Regions</label>
+                                <label data-i18n="censor.targetRegions" style="font-weight:700;">Target Regions</label>
                                 <div class="checkbox-grid"
-                                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px;">
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="breasts" checked>
                                         <span class="checkbox-custom"></span>
@@ -1011,7 +1475,7 @@
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="dick" checked>
                                         <span class="checkbox-custom"></span>
-                                        <span class="checkbox-text" data-i18n="censor.regionDick">Dick / Penis</span>
+                                        <span class="checkbox-text" data-i18n="censor.regionDick">Dick</span>
                                     </label>
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="anus" checked>
@@ -1026,7 +1490,7 @@
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="penis" checked>
                                         <span class="checkbox-custom"></span>
-                                        <span class="checkbox-text" data-i18n="censor.regionPenis">Penis (NudeNet)</span>
+                                        <span class="checkbox-text" data-i18n="censor.regionPenis">Penis (NN)</span>
                                     </label>
                                     <label class="checkbox-label">
                                         <input type="checkbox" class="target-region-check" value="cum">
@@ -1034,10 +1498,15 @@
                                         <span class="checkbox-text" data-i18n="censor.regionCum">Cum</span>
                                     </label>
                                 </div>
-                                <small class="helper-text" id="censor-target-region-help" data-i18n="censor.targetRegionHelp">These quick target filters are mainly for the built-in privacy model.</small>
                             </div>
 
-                            <div class="modal-actions censor-detect-actions">
+                            <!-- Confidence + Actions -->
+                            <div class="form-group" style="margin-top:8px;">
+                                <label><span data-i18n="censor.confidenceThreshold">Confidence</span>: <span id="censor-confidence-value">0.50</span></label>
+                                <input type="range" id="censor-confidence" min="0.0" max="1.0" step="0.05" value="0.5">
+                            </div>
+
+                            <div class="modal-actions censor-detect-actions" style="margin-top:8px;">
                                 <button class="btn btn-secondary" id="btn-auto-detect-current-modal" style="flex: 1;">
                                     🎯 <span data-i18n="censor.detectCurrentBtn">Detect Current</span>
                                 </button>
@@ -1047,11 +1516,20 @@
                             </div>
                         </div>
 
-                        <div class="censor-detect-section">
-                            <div class="censor-detect-section-header">
-                                <h4 class="censor-detect-section-title" data-i18n="censor.advancedModelPicker">Advanced Local Model Picker</h4>
-                                <p class="censor-detect-section-note" data-i18n="censor.advancedModelPickerHelp">Only use this when you intentionally want YOLO26 / generic YOLOv8 experiments.</p>
-                            </div>
+                        <!-- SECTION 2: Model info (collapsed — for users who want details) -->
+                        <details class="censor-detect-section" style="margin-top:8px;">
+                            <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
+                                📋 <span data-i18n="censor.modelCapabilities">Model Details</span>
+                            </summary>
+                            <div id="censor-capability-panel" class="censor-capability-panel" style="margin-top:8px;"></div>
+                            <small class="helper-text" id="censor-target-region-help" data-i18n="censor.targetRegionHelp" style="display:block; margin-top:6px;">These target filters are for the built-in privacy models.</small>
+                        </details>
+
+                        <!-- SECTION 3: Advanced model picker (collapsed) -->
+                        <details class="censor-detect-section" style="margin-top:4px;">
+                            <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
+                                ⚙️ <span data-i18n="censor.advancedModelPicker">Advanced Model Picker</span>
+                            </summary>
 
                             <div class="form-group">
                                 <label data-i18n="censor.installedYoloModel">Installed YOLO Model</label>
@@ -1079,25 +1557,22 @@
                                 </div>
                                 <small class="helper-text" data-i18n="censor.yoloModelPathHelp">Normal users can leave this empty. It is only for custom experiments.</small>
                             </div>
-                        </div>
+                        </details>
 
-                        <div class="censor-detect-section censor-detect-section-pro" id="censor-pro-segmentation-group">
-                            <div class="censor-detect-section-header">
-                                <h4 class="censor-detect-section-title" data-i18n="censor.proSegmentation">Pro Segmentation (SAM3)</h4>
-                                <p class="censor-detect-section-note" data-i18n="censor.proSegmentationHelp">Use SAM3 for text-guided precision masks when the runtime is ready. SAM3 can refine individual boxes or follow a text prompt.</p>
-                            </div>
+                        <details class="censor-detect-section censor-detect-section-pro" id="censor-pro-segmentation-group" style="margin-top:4px;">
+                            <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
+                                ✨ <span data-i18n="censor.proSegmentation">Pro Segmentation (SAM3)</span>
+                            </summary>
 
-                            <div class="form-group">
-                                <label><span data-i18n="censor.sam3Confidence">SAM3 Confidence Threshold</span>: <span id="sam3-confidence-modal-value">0.50</span></label>
+                            <div class="form-group" style="margin-top:6px;">
+                                <label><span data-i18n="censor.sam3Confidence">SAM3 Confidence</span>: <span id="sam3-confidence-modal-value">0.50</span></label>
                                 <input type="range" id="sam3-confidence-modal" min="0.0" max="1.0" step="0.05" value="0.5">
-                                <small class="helper-text" data-i18n="censor.sam3ConfidenceHelp">Controls SAM3 segmentation confidence. Lower values capture more area, higher values are more precise.</small>
                             </div>
 
                             <div class="form-group">
                                 <label data-i18n="censor.advancedPrecision">Text Prompt Segmentation</label>
                                 <input type="text" id="censor-text-prompt" class="input-field"
                                     placeholder="e.g. exposed breasts, face, tattoo, hand" data-i18n-placeholder="censor.textPromptPlaceholder">
-                                <small class="helper-text" id="censor-text-prompt-help" data-i18n="censor.textPromptHelp">Uses SAM3 text-prompt segmentation on the current image when the GPU runtime is ready.</small>
                             </div>
 
                             <div class="modal-actions censor-detect-actions">
@@ -1108,8 +1583,7 @@
                                     ⚡ <span data-i18n="censor.sam3BatchRefine">SAM3 Refine All</span>
                                 </button>
                             </div>
-                            <small class="helper-text" data-i18n="censor.sam3MultiBoxHelp">SAM3 processes one image at a time. "Refine All" iterates through queued detections sequentially.</small>
-                        </div>
+                        </details>
                     </div>
                 </div>
             </section>
@@ -1168,6 +1642,9 @@
                             <div id="similar-results">
                                 <div class="empty-state" data-i18n="similar.searchEmpty">Enter an image ID or upload an image to find similar images.</div>
                             </div>
+                            <div class="promptlab-load-more-row">
+                                <button class="btn btn-ghost btn-small" id="btn-similar-load-more" type="button" data-i18n="common.loadMore">Load More</button>
+                            </div>
                         </div>
 
                         <!-- Duplicates Panel -->
@@ -1181,6 +1658,9 @@
                             <div id="similar-duplicates">
                                 <div class="empty-state" data-i18n="similar.duplicatesEmpty">Click "Find Duplicates" to scan for duplicate images.</div>
                             </div>
+                            <div class="promptlab-load-more-row">
+                                <button class="btn btn-ghost btn-small" id="btn-similar-duplicates-more" type="button" data-i18n="common.loadMore">Load More</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1189,62 +1669,199 @@
             <!-- ========== Prompt Lab View ========== -->
             <section id="view-promptlab" class="view">
                 <div class="promptlab-container">
-                    <!-- Left: Category Browser -->
-                    <div class="promptlab-browser">
-                        <div class="promptlab-browser-header">
-                            <h4 data-i18n="promptlab.categories">Tag Categories</h4>
-                            <input type="text" class="input" id="promptlab-search" placeholder="Search tags..." data-i18n-placeholder="promptlab.searchTags">
+                    <!-- Mode Tabs -->
+                    <div class="promptlab-tabs">
+                        <button class="promptlab-tab active" data-mode="stats">📊 <span data-i18n="promptlab.stats">Stats</span></button>
+                        <button class="promptlab-tab" data-mode="compare">🔄 <span data-i18n="promptlab.compare">Compare</span></button>
+                        <button class="promptlab-tab" data-mode="build">✏️ <span data-i18n="promptlab.build">Build</span></button>
+                        <button class="promptlab-tab" data-mode="random">🎲 <span data-i18n="promptlab.random">Random</span></button>
+                    </div>
+
+                    <!-- Stats Mode -->
+                    <div class="promptlab-mode active" id="promptlab-mode-stats">
+                        <div class="promptlab-stats-grid" id="promptlab-stats-grid">
+                            <div class="promptlab-stat-card">
+                                <div class="promptlab-stat-number" id="pl-total-images">-</div>
+                                <div class="promptlab-stat-label" data-i18n="promptlab.totalImages">Total Images</div>
+                            </div>
+                            <div class="promptlab-stat-card">
+                                <div class="promptlab-stat-number" id="pl-scored-images">-</div>
+                                <div class="promptlab-stat-label" data-i18n="promptlab.scoredImages">Scored</div>
+                            </div>
+                            <div class="promptlab-stat-card">
+                                <div class="promptlab-stat-number" id="pl-avg-prompt-len">-</div>
+                                <div class="promptlab-stat-label" data-i18n="promptlab.avgPromptLen">Avg Prompt Len</div>
+                            </div>
                         </div>
-                        <div class="promptlab-browser-body" id="promptlab-categories">
-                            <div class="empty-state" data-i18n="promptlab.loadingCategories">Loading categories...</div>
+
+                        <div class="promptlab-stats-columns">
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.topTags">Your Most Used Tags</h4>
+                                <div id="pl-top-tags" class="promptlab-tag-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-top-tags-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.highAestheticTags">High Score (≥7) Tags</h4>
+                                <div id="pl-high-tags" class="promptlab-tag-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-high-tags-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.topCheckpoints">Top Checkpoints</h4>
+                                <div id="pl-top-checkpoints" class="promptlab-tag-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-top-checkpoints-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
                         </div>
-                        <!-- Tag set selector -->
-                        <div class="tagset-selector">
-                            <label data-i18n="promptlab.tagSet">Tag Set:</label>
-                            <select class="input" id="promptlab-set-select">
-                                <option value="" data-i18n="promptlab.selectTagSet">-- Select Tag Set --</option>
-                            </select>
-                            <button class="btn btn-small btn-secondary" id="btn-promptlab-apply-tagset" data-i18n="promptlab.applyTagSet">Apply</button>
+
+                        <div class="promptlab-stats-columns promptlab-action-columns">
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.bestCheckpointRecipes">Best Checkpoints by Score</h4>
+                                <div id="pl-best-checkpoints" class="promptlab-action-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-best-checkpoints-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.topScoredExamples">Top Scored Examples</h4>
+                                <div id="pl-top-scored-images" class="promptlab-action-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-top-scored-images-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
+                            <div class="promptlab-stats-col">
+                                <h4 data-i18n="promptlab.recipeSuggestions">Recipe Suggestions</h4>
+                                <div id="pl-recipe-suggestions" class="promptlab-action-list"></div>
+                                <div class="promptlab-load-more-row"><button class="btn btn-ghost btn-small" id="pl-recipe-suggestions-more" type="button" data-i18n="common.showMore">Show More</button></div>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Center: Slot Builder -->
-                    <div class="promptlab-builder">
-                        <div class="promptlab-builder-header">
-                            <h4 data-i18n="promptlab.slots">Prompt Slots</h4>
-                            <div class="promptlab-builder-actions">
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 <span data-i18n="promptlab.randomize">Randomize</span></button>
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ <span data-i18n="promptlab.clear">Clear</span></button>
+                    <!-- Compare Mode -->
+                    <div class="promptlab-mode" id="promptlab-mode-compare">
+                        <div class="promptlab-compare-selectors">
+                            <div class="promptlab-compare-pick">
+                                <label data-i18n="promptlab.imageA">Image A</label>
+                                <div class="promptlab-picker-row">
+                                    <select id="pl-compare-a" class="input-field" style="width:100%;">
+                                        <option value="" data-i18n="promptlab.selectImage">Select image...</option>
+                                    </select>
+                                    <button class="btn btn-ghost btn-small" id="pl-pick-a" type="button" data-i18n="promptlab.pickVisually">Pick Visually</button>
+                                </div>
+                                <div id="pl-compare-a-preview" class="promptlab-image-preview-card promptlab-image-preview-empty" data-i18n="promptlab.comparePreviewEmpty">Choose an image to preview it here.</div>
                             </div>
+                            <span style="font-size:24px;color:var(--text-muted);align-self:center;">⟷</span>
+                            <div class="promptlab-compare-pick">
+                                <label data-i18n="promptlab.imageB">Image B</label>
+                                <div class="promptlab-picker-row">
+                                    <select id="pl-compare-b" class="input-field" style="width:100%;">
+                                        <option value="" data-i18n="promptlab.selectImage">Select image...</option>
+                                    </select>
+                                    <button class="btn btn-ghost btn-small" id="pl-pick-b" type="button" data-i18n="promptlab.pickVisually">Pick Visually</button>
+                                </div>
+                                <div id="pl-compare-b-preview" class="promptlab-image-preview-card promptlab-image-preview-empty" data-i18n="promptlab.comparePreviewEmpty">Choose an image to preview it here.</div>
+                            </div>
+                            <button class="btn btn-primary btn-small" id="pl-compare-go" style="align-self:end;" data-i18n="promptlab.compare">Compare</button>
                         </div>
-                        <div class="promptlab-slots-container" id="promptlab-slots">
-                            <div class="empty-state" data-i18n="promptlab.loadingSlots">Loading slots...</div>
+                        <div id="pl-compare-result" class="promptlab-compare-result"></div>
+                    </div>
+
+                    <!-- Build Mode -->
+                    <div class="promptlab-mode" id="promptlab-mode-build">
+                        <div class="promptlab-build-source">
+                            <label data-i18n="promptlab.sourceImage">Source Image (template)</label>
+                            <div class="promptlab-picker-row">
+                                <select id="pl-build-source" class="input-field" style="width:100%;max-width:400px;">
+                                    <option value="" data-i18n="promptlab.selectTemplate">Select an image as template...</option>
+                                </select>
+                                <button class="btn btn-ghost btn-small" id="pl-pick-build" type="button" data-i18n="promptlab.pickVisually">Pick Visually</button>
+                            </div>
+                            <div id="pl-build-preview" class="promptlab-image-preview-card promptlab-image-preview-empty" data-i18n="promptlab.buildPreviewEmpty">Choose a template image to see it here before loading the prompt.</div>
+                        </div>
+                        <div class="promptlab-build-editor" id="pl-build-editor" style="display:none;">
+                            <div class="promptlab-build-row">
+                                <label data-i18n="promptlab.editPrompt">Edit Prompt</label>
+                                <textarea id="pl-build-prompt" class="input-field" rows="6" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+                            </div>
+                            <div class="promptlab-build-row">
+                                <label data-i18n="promptlab.editNegative">Negative Prompt</label>
+                                <textarea id="pl-build-negative" class="input-field" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+                            </div>
+                            <div class="promptlab-build-info" id="pl-build-info"></div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn btn-primary btn-small" id="pl-build-copy">📋 <span data-i18n="promptlab.copyPrompt">Copy Prompt</span></button>
+                                <button class="btn btn-secondary btn-small" id="pl-build-copy-all">📋 <span data-i18n="promptlab.copyAll">Copy All</span></button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Right: Output Panel -->
-                    <div class="promptlab-output-panel">
-                        <div class="promptlab-output-header">
-                            <h4 data-i18n="promptlab.output">Generated Prompt</h4>
-                            <div class="promptlab-gen-buttons">
-                                <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 <span data-i18n="promptlab.useInGallery">Use in Gallery</span></button>
-                                <button class="btn btn-primary" id="btn-promptlab-generate" data-i18n="promptlab.generate">Generate</button>
-                                <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy to clipboard">📋 <span data-i18n="promptlab.copy">Copy</span></button>
-                                <button class="btn btn-secondary" id="btn-promptlab-validate" title="Check for issues">✅ <span data-i18n="promptlab.validate">Validate</span></button>
+                    <div class="modal" id="promptlab-image-picker-modal">
+                        <div class="modal-backdrop"></div>
+                        <div class="modal-content modal-large">
+                            <button class="modal-close" id="pl-image-picker-close" type="button">✕</button>
+                            <h3 id="pl-image-picker-title" data-i18n="promptlab.pickImageTitle">Pick an Image</h3>
+                            <p class="modal-description" id="pl-image-picker-desc" data-i18n="promptlab.pickImageDesc">Pick by thumbnail instead of guessing from random file names.</p>
+                            <div class="promptlab-image-picker-toolbar">
+                                <input id="pl-image-picker-search" class="input-field" type="text" data-i18n-placeholder="promptlab.pickImageSearch" placeholder="Search filename, prompt, checkpoint...">
+                                <span id="pl-image-picker-count" class="promptlab-image-picker-count">0</span>
                             </div>
+                            <div id="pl-image-picker-grid" class="promptlab-image-picker-grid"></div>
                         </div>
-                        <div class="promptlab-output-body">
-                            <textarea id="promptlab-output" placeholder="Click Generate or Randomize to create a prompt..." data-i18n-placeholder="promptlab.outputPlaceholder"></textarea>
-                            <div id="promptlab-warnings"></div>
-                        </div>
-                        <!-- Presets -->
-                        <div class="promptlab-presets-section">
-                            <div class="promptlab-presets-header">
-                                <h5 data-i18n="promptlab.presets">Presets</h5>
-                                <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save current as preset">💾 <span data-i18n="promptlab.savePreset">Save</span></button>
+                    </div>
+
+                    <!-- Random Mode (existing feature preserved) -->
+                    <div class="promptlab-mode" id="promptlab-mode-random">
+                        <div class="promptlab-random-layout">
+                            <!-- Left: Category Browser -->
+                            <div class="promptlab-browser">
+                                <div class="promptlab-browser-header">
+                                    <h4 data-i18n="promptlab.categories">Tag Categories</h4>
+                                    <input type="text" class="input" id="promptlab-search" placeholder="Search tags..." data-i18n-placeholder="promptlab.searchTags">
+                                </div>
+                                <div class="promptlab-browser-body" id="promptlab-categories">
+                                    <div class="empty-state" data-i18n="promptlab.loadingCategories">Loading categories...</div>
+                                </div>
+                                <div class="tagset-selector">
+                                    <label data-i18n="promptlab.tagSet">Tag Set:</label>
+                                    <select class="input" id="promptlab-set-select">
+                                        <option value="" data-i18n="promptlab.selectTagSet">-- Select Tag Set --</option>
+                                    </select>
+                                    <button class="btn btn-small btn-secondary" id="btn-promptlab-apply-tagset" data-i18n="promptlab.applyTagSet">Apply</button>
+                                </div>
                             </div>
-                            <div id="promptlab-presets">
-                                <div class="preset-empty" data-i18n="promptlab.noPresets">No presets saved yet.</div>
+
+                            <!-- Center: Slot Builder -->
+                            <div class="promptlab-builder">
+                                <div class="promptlab-builder-header">
+                                    <h4 data-i18n="promptlab.slots">Prompt Slots</h4>
+                                    <div class="promptlab-builder-actions">
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 <span data-i18n="promptlab.randomize">Randomize</span></button>
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ <span data-i18n="promptlab.clear">Clear</span></button>
+                                    </div>
+                                </div>
+                                <div class="promptlab-slots-container" id="promptlab-slots">
+                                    <div class="empty-state" data-i18n="promptlab.loadingSlots">Loading slots...</div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Output Panel -->
+                            <div class="promptlab-output-panel">
+                                <div class="promptlab-output-header">
+                                    <h4 data-i18n="promptlab.output">Generated Prompt</h4>
+                                    <div class="promptlab-gen-buttons">
+                                        <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 <span data-i18n="promptlab.useInGallery">Gallery</span></button>
+                                        <button class="btn btn-primary" id="btn-promptlab-generate" data-i18n="promptlab.generate">Generate</button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy">📋</button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-validate" title="Validate">✅</button>
+                                    </div>
+                                </div>
+                                <div class="promptlab-output-body">
+                                    <textarea id="promptlab-output" placeholder="Click Generate or Randomize..." data-i18n-placeholder="promptlab.outputPlaceholder"></textarea>
+                                    <div id="promptlab-warnings"></div>
+                                </div>
+                                <div class="promptlab-presets-section">
+                                    <div class="promptlab-presets-header">
+                                        <h5 data-i18n="promptlab.presets">Presets</h5>
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save preset">💾 <span data-i18n="promptlab.savePreset">Save</span></button>
+                                    </div>
+                                    <div id="promptlab-presets">
+                                        <div class="preset-empty" data-i18n="promptlab.noPresets">No presets saved yet.</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1357,6 +1974,9 @@
                             <div class="artist-images-preview" id="artist-images-preview">
                                 <!-- Preview images will be inserted here -->
                             </div>
+                            <div class="promptlab-load-more-row">
+                                <button class="btn btn-ghost btn-small" id="btn-artist-load-more" type="button" data-i18n="common.loadMore">Load More</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1391,32 +2011,60 @@
                 <div class="modal-image-column">
                     <div class="modal-image-toolbar">
                         <button class="btn btn-ghost btn-small" id="modal-prev-image" aria-label="Previous image">
-                            <span aria-hidden="true">←</span> Prev
+                            <span aria-hidden="true">←</span> <span data-i18n="modal.prev">Prev</span>
                         </button>
                         <button class="btn btn-ghost btn-small" id="modal-next-image" aria-label="Next image">
-                            Next <span aria-hidden="true">→</span>
+                            <span data-i18n="modal.next">Next</span> <span aria-hidden="true">→</span>
                         </button>
                     </div>
                     <div class="modal-image-container">
                         <img id="modal-image" src="" alt="Image preview">
                     </div>
                 </div>
-                <div class="modal-info modal-info-workspace">
-                    <div class="modal-sticky-actions">
-                        <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format">View as SD</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-prompt" aria-label="Copy prompt to clipboard">Copy Prompt</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-negative" aria-label="Copy negative prompt to clipboard">Copy Negative</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-tags" aria-label="Copy tags to clipboard">Copy Tags</button>
-                        <button class="btn btn-secondary btn-small" id="btn-copy-params" aria-label="Copy parameters to clipboard">Copy Params</button>
-                        <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all metadata to clipboard">Copy All</button>
-                        <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Reparse image metadata">Reparse</button>
+                    <div class="modal-info modal-info-workspace">
+                        <div class="modal-sticky-actions">
+                            <div class="modal-action-primary">
+                                <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all metadata to clipboard" data-i18n="modal.copyAll">Copy All</button>
+                                <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n="modal.viewAsSD">View as SD</button>
+                                <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Reparse image metadata" data-i18n="modal.reparse">Reparse</button>
+                            </div>
+                            <div class="modal-action-secondary modal-copy-shortcuts">
+                                <button class="btn btn-ghost btn-small" id="btn-copy-prompt" aria-label="Copy prompt" title="Copy prompt only">📋 <span data-i18n="modal.prompt">Prompt</span></button>
+                                <button class="btn btn-ghost btn-small" id="btn-copy-negative" aria-label="Copy negative" title="Copy negative prompt only">📋 <span data-i18n="modal.negative">Negative</span></button>
+                                <button class="btn btn-ghost btn-small" id="btn-copy-tags" aria-label="Copy tags" title="Copy tags only">📋 <span data-i18n="modal.tags">Tags</span></button>
+                                <button class="btn btn-ghost btn-small" id="btn-copy-params" aria-label="Copy params" title="Copy params only">📋 <span data-i18n="modal.params">Params</span></button>
+                            </div>
+                        </div>
+                        <h3 id="modal-filename">filename.png</h3>
+                        <div class="modal-path-row" style="display: none;">
+                            <div class="modal-path-block">
+                                <span id="modal-file-subfolder" class="modal-file-subfolder" title=""></span>
+                                <span id="modal-file-path" class="modal-file-path" title=""></span>
+                        </div>
+                        <button id="btn-open-folder" class="btn-icon" title="Open in folder" data-i18n-title="modal.openFolder">📂</button>
                     </div>
-                    <h3 id="modal-filename">filename.png</h3>
                     <div class="modal-meta">
                         <span class="meta-item"><strong>Generator:</strong> <span id="modal-generator">-</span></span>
                         <span class="meta-item"><strong>Size:</strong> <span id="modal-size">-</span></span>
                         <span class="meta-item" id="modal-checkpoint-item" style="display:none"><strong>Checkpoint:</strong> <span id="modal-checkpoint">-</span></span>
+                        <span class="meta-item" id="modal-aesthetic-item" style="display:none"><strong>Aesthetic:</strong> <span id="modal-aesthetic-score">-</span></span>
                         <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
+                    </div>
+
+                    <div class="modal-color-distribution modal-section" id="modal-color-distribution" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-color-content" data-collapse-key="color">Color Distribution <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-color-content">
+                            <div class="modal-color-toolbar">
+                                <div class="modal-color-mode-group" role="group" aria-label="Histogram mode">
+                                    <button type="button" class="modal-color-mode-btn active" data-histogram-mode="rgb">RGB</button>
+                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="split">Split</button>
+                                    <button type="button" class="modal-color-mode-btn" data-histogram-mode="luma">Luma</button>
+                                </div>
+                                <div class="modal-color-note" data-i18n="modal.colorHint">Palette can be used for visual analysis now. Filtering support comes next.</div>
+                            </div>
+                            <div class="modal-color-histogram"><canvas id="modal-color-histogram-canvas"></canvas></div>
+                            <div id="modal-color-palette" class="modal-color-palette"></div>
+                        </div>
                     </div>
 
                     <div class="modal-loading-state" id="modal-loading-state">Loading details…</div>
@@ -1431,17 +2079,17 @@
                     </div>
 
                     <div class="modal-section" id="modal-loras-section" style="display:none">
-                        <h4>LoRAs</h4>
+                        <h4 class="section-toggle" data-target="modal-loras-list" data-collapse-key="loras" data-i18n="modal.loras">LoRAs <span class="collapse-icon">▼</span></h4>
                         <div id="modal-loras-list" class="lora-pills"></div>
                     </div>
 
-                    <div class="modal-prompt">
-                        <h4>Prompt</h4>
+                    <div class="modal-prompt modal-section">
+                        <h4 class="section-toggle" data-target="modal-prompt-text" data-collapse-key="prompt" data-i18n="modal.prompt">Prompt <span class="collapse-icon">▼</span></h4>
                         <p id="modal-prompt-text">-</p>
                     </div>
 
                     <div class="modal-section" id="modal-negative-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-negative-text">Negative Prompt <span class="collapse-icon">▼</span></h4>
+                        <h4 class="section-toggle" data-target="modal-negative-text" data-collapse-key="negative" data-i18n="modal.negativePrompt">Negative Prompt <span class="collapse-icon">▼</span></h4>
                         <p id="modal-negative-text" class="modal-negative-text">-</p>
                     </div>
 
@@ -1451,7 +2099,7 @@
                     </div>
 
                     <div class="modal-section" id="modal-params-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-params-grid">Generation Parameters <span class="collapse-icon">▼</span></h4>
+                        <h4 class="section-toggle" data-target="modal-params-grid" data-collapse-key="params" data-i18n="modal.generationParameters">Generation Parameters <span class="collapse-icon">▼</span></h4>
                         <div id="modal-params-grid" class="params-grid"></div>
                     </div>
 
@@ -1461,7 +2109,7 @@
                     </div>
 
                     <div class="modal-section" id="modal-nodes-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-nodes-list">Prompt Nodes <span class="collapse-icon">▼</span></h4>
+                        <h4 class="section-toggle" data-target="modal-nodes-list" data-collapse-key="nodes" data-i18n="modal.promptNodes">Prompt Nodes <span class="collapse-icon">▼</span></h4>
                         <div id="modal-nodes-list"></div>
                     </div>
 
@@ -1487,12 +2135,12 @@
         <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
-                <h3 id="scan-modal-title">Scan Folder</h3>
+                <h3 id="scan-modal-title" data-i18n="modal.scanFolder">Scan Folder</h3>
                 <div class="form-group">
-                    <label for="scan-folder-path" id="scan-folder-path-label">Folder Path</label>
+                    <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Folder Path</label>
                     <div class="folder-path-row">
                         <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
-                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" onmousedown="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); }" onclick="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); } return false;">Browse</button>
+                        <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" onmousedown="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); }" onclick="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); } return false;" data-i18n="scan.browse">Browse</button>
                     </div>
                     <div id="folder-browser-container"></div>
                 </div>
@@ -1500,7 +2148,7 @@
                     <label class="checkbox-label">
                         <input type="checkbox" id="scan-recursive" checked>
                         <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text">Include subfolders</span>
+                        <span class="checkbox-text" data-i18n="modal.includeSubfolders">Include subfolders</span>
                     </label>
                 </div>
                 <div class="form-group">
@@ -1514,11 +2162,11 @@
                     <div class="progress-bar">
                         <div class="progress-fill" id="scan-progress-fill"></div>
                     </div>
-                    <span class="progress-text" id="scan-progress-text">Starting...</span>
+                    <span class="progress-text" id="scan-progress-text" data-i18n="modal.scanStarting">Starting...</span>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start scanning folder">Start Scan</button>
+                    <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start scanning folder" data-i18n="modal.startScan">Start Scan</button>
                 </div>
             </div>
         </div>
@@ -1562,13 +2210,13 @@
                     <div class="system-info-panel" id="system-info-panel" style="display:none">
                         <div class="system-info-content">
                             <div class="system-info-chip-row">
-                                <span class="system-info-chip" id="tag-hardware-chip">Detecting hardware...</span>
-                                <span class="system-info-chip" id="tag-risk-chip">Risk unknown</span>
-                                <span class="system-info-chip" id="tag-provider-chip">Provider unknown</span>
+                                <span class="system-info-chip" id="tag-hardware-chip" data-i18n="tag.hardwareDetect">Detecting hardware...</span>
+                                <span class="system-info-chip" id="tag-risk-chip" data-i18n="tag.riskUnknown">Risk unknown</span>
+                                <span class="system-info-chip" id="tag-provider-chip" data-i18n="tag.providerUnknown">Provider unknown</span>
                             </div>
-                            <div class="system-info-line" id="system-info-content">Detecting hardware...</div>
-                            <div class="system-info-line system-info-line-strong" id="tag-system-recommendation">Loading the recommended runtime...</div>
-                            <div class="system-info-line" id="tag-batch-recommendation">Recommended runtime chunk size will appear here.</div>
+                            <div class="system-info-line" id="system-info-content" data-i18n="tag.hardwareDetect">Detecting hardware...</div>
+                            <div class="system-info-line system-info-line-strong" id="tag-system-recommendation" data-i18n="tag.systemRecommendation">Loading the recommended runtime...</div>
+                            <div class="system-info-line" id="tag-batch-recommendation" data-i18n="tag.batchRecommendation">Recommended runtime chunk size will appear here.</div>
                         </div>
                     </div>
 
@@ -1615,9 +2263,9 @@
                     <div class="tag-runtime-card" role="status" aria-live="polite">
                         <div class="tag-runtime-eyebrow" data-i18n="modal.tagRuntimePlan">Runtime Plan</div>
                         <div class="tag-runtime-chip-row">
-                            <span class="tag-runtime-chip" id="tag-runtime-mode-chip">Auto Runtime</span>
-                            <span class="tag-runtime-chip" id="tag-runtime-provider-chip">Provider Unknown</span>
-                            <span class="tag-runtime-chip" id="tag-runtime-chunk-chip">Chunk --</span>
+                            <span class="tag-runtime-chip" id="tag-runtime-mode-chip" data-i18n="tag.autoRuntime">Auto Runtime</span>
+                            <span class="tag-runtime-chip" id="tag-runtime-provider-chip" data-i18n="tag.providerUnknown">Provider Unknown</span>
+                            <span class="tag-runtime-chip" id="tag-runtime-chunk-chip" data-i18n="tag.chunkUnknown">Chunk --</span>
                         </div>
                         <p class="tag-runtime-summary" id="tag-runtime-summary">The app will automatically use the recommended runtime mode for this model.</p>
                         <p class="tag-runtime-detail" id="tag-runtime-detail">The final provider is decided when the model session is created.</p>
@@ -1661,7 +2309,7 @@
                     <div class="progress-bar">
                         <div class="progress-fill" id="tag-progress-fill"></div>
                     </div>
-                    <span class="progress-text" id="tag-progress-text">Loading model...</span>
+                    <span class="progress-text" id="tag-progress-text" data-i18n="modal.tagLoadingModel">Loading model...</span>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-export-tags-json" title="Export all tags to JSON file">📤 <span data-i18n="modal.tagExport">Export Tags</span></button>
@@ -1679,18 +2327,18 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-large">
                 <button class="modal-close">✕</button>
-                <h3>📊 Image Analytics</h3>
+                <h3 data-i18n="modal.analytics">📊 Image Analytics</h3>
                 <div class="analytics-grid">
                     <div class="analytics-card">
-                        <h4>Top Checkpoints</h4>
+                        <h4 data-i18n="modal.topCheckpoints">Top Checkpoints</h4>
                         <div id="analytics-checkpoints" class="analytics-list"></div>
                     </div>
                     <div class="analytics-card">
-                        <h4>Top Loras</h4>
+                        <h4 data-i18n="modal.topLoras">Top Loras</h4>
                         <div id="analytics-loras" class="analytics-list"></div>
                     </div>
                     <div class="analytics-card">
-                        <h4>Top Tags</h4>
+                        <h4 data-i18n="modal.topTags">Top Tags</h4>
                         <div id="analytics-tags" class="analytics-list"></div>
                     </div>
                 </div>
@@ -1702,14 +2350,14 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-export">✕</button>
-                <h3 id="export-title">📤 Export Prompts</h3>
+                <h3 id="export-title" data-i18n="modal.exportPrompts">📤 Export Prompts</h3>
                 <p class="modal-description" id="export-count">0 images selected</p>
                 <div class="export-container">
                     <textarea id="export-text" class="input-field" rows="15" readonly></textarea>
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-secondary" id="btn-export-tags-alt">Export Tags Instead</button>
-                    <button class="btn btn-primary" id="btn-copy-export">Copy to Clipboard</button>
+                    <button class="btn btn-secondary" id="btn-export-tags-alt" data-i18n="modal.exportTagsAlt">Export Tags Instead</button>
+                    <button class="btn btn-primary" id="btn-copy-export" data-i18n="modal.copyToClipboard">Copy to Clipboard</button>
                 </div>
             </div>
         </div>
@@ -1718,11 +2366,11 @@
         <div class="modal" id="confirm-modal">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-small">
-                <h3 id="confirm-title">Are you sure?</h3>
-                <p id="confirm-message">This action cannot be undone.</p>
+                <h3 id="confirm-title" data-i18n="modal.confirm">Are you sure?</h3>
+                <p id="confirm-message" data-i18n="modal.confirmAction">This action cannot be undone.</p>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-confirm-cancel">Cancel</button>
-                    <button class="btn btn-primary danger" id="btn-confirm-ok">Yes, proceed</button>
+                    <button class="btn btn-ghost" id="btn-confirm-cancel" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary danger" id="btn-confirm-ok" data-i18n="modal.yes">Yes, proceed</button>
                 </div>
             </div>
         </div>
@@ -1731,14 +2379,14 @@
         <div class="modal" id="input-modal">
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-small">
-                <h3 id="input-modal-title">Enter Value</h3>
+                <h3 id="input-modal-title" data-i18n="modal.enterValue">Enter Value</h3>
                 <p id="input-modal-message" class="modal-description"></p>
                 <div class="form-group">
                     <input type="text" id="input-modal-field" class="input-field" placeholder="">
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-input-cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-input-ok">OK</button>
+                    <button class="btn btn-ghost" id="btn-input-cancel" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-input-ok" data-i18n="modal.ok">OK</button>
                 </div>
             </div>
         </div>
@@ -1748,39 +2396,39 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-batch-export">✕</button>
-                <h3>📝 Export Tags to Files</h3>
+                <h3 data-i18n="batchExport.title">📝 Export Tags to Files</h3>
                 <p class="modal-description" id="batch-export-count">0 images selected</p>
 
                 <div class="form-group">
-                    <label>Output Folder</label>
+                    <label data-i18n="batchExport.outputFolder">Output Folder</label>
                     <input type="text" id="batch-export-folder" class="input-field" placeholder="D:\\exported_tags">
-                    <small class="helper-text">Each image will create a .txt file with the same name</small>
+                    <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Each image will create a .txt file with the same name</small>
                 </div>
 
                 <div class="form-group">
-                    <label>Tag Prefix (optional)</label>
+                    <label data-i18n="batchExport.tagPrefix">Tag Prefix (optional)</label>
                     <input type="text" id="batch-export-prefix" class="input-field"
                         placeholder="e.g., masterpiece, best quality, ">
-                    <small class="helper-text">Text to add at the beginning of each tag file</small>
+                    <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Text to add at the beginning of each tag file</small>
                 </div>
 
                 <div class="form-group">
-                    <label>Tag Blacklist (optional)</label>
+                    <label data-i18n="batchExport.tagBlacklist">Tag Blacklist (optional)</label>
                     <textarea id="batch-export-blacklist" class="input-field" rows="3"
                         placeholder="e.g., 1girl, solo, simple background"></textarea>
-                    <small class="helper-text">Comma-separated list of tags to exclude from export</small>
+                    <small class="helper-text" data-i18n="batchExport.tagBlacklistHelper">Comma-separated list of tags to exclude from export</small>
                 </div>
 
                 <div class="progress-container" id="batch-export-progress" style="display: none;">
                     <div class="progress-bar">
                         <div class="progress-fill" id="batch-export-progress-fill"></div>
                     </div>
-                    <span class="progress-text" id="batch-export-progress-text">Exporting...</span>
+                    <span class="progress-text" id="batch-export-progress-text" data-i18n="batchExport.exporting">Exporting...</span>
                 </div>
 
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-batch-export">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-batch-export">Export Files</button>
+                    <button class="btn btn-ghost" id="btn-cancel-batch-export" data-i18n="batchExport.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-batch-export" data-i18n="batchExport.exportFiles">Export Files</button>
                 </div>
             </div>
         </div>
@@ -1793,33 +2441,27 @@
                 <button class="modal-close" id="btn-close-filter-modal" aria-label="Close filter modal">
                     <span aria-hidden="true">✕</span>
                 </button>
-                <div class="filter-modal-hero">
-                    <div class="filter-modal-hero-copy">
-                        <div class="filter-modal-eyebrow">Gallery</div>
-                        <h3 id="filter-modal-title" data-i18n="filter.filterImages">Filter Images</h3>
-                        <p class="modal-description" data-i18n="filter.description">Choose source, rating, tag, prompt, checkpoint, and LoRA filters in one place.</p>
+                <div class="filter-modal-hero" style="padding: 0; gap: 0; margin-bottom: 8px;">
+                        <div class="filter-modal-hero-copy" style="gap: 2px;">
+                        <h3 id="filter-modal-title" data-i18n="filter.filterImages" style="font-size: 18px; margin: 0;">Filter Images</h3>
                     </div>
-                    <div class="filter-modal-hero-actions">
-                        <div class="filter-modal-summary-card">
-                            <p class="filter-modal-summary-label">What will happen</p>
-                            <p id="filter-modal-selection-summary">No extra limits selected yet. Apply now to keep the current gallery scope.</p>
-                            <p class="filter-modal-summary-hint" id="filter-modal-summary-hint">Tip: use tags, prompts, or dimensions when you want a smaller and more targeted result list.</p>
-                        </div>
-                        <button class="btn btn-secondary filter-library-btn" id="btn-open-library-from-filter" data-i18n-aria="filter.browseLibrary" aria-label="Open tags and prompts library">
-                            <span aria-hidden="true">📚</span>
-                            <span data-i18n="filter.browseLibrary">Browse Library</span>
+                    <div class="filter-modal-hero-actions" style="gap: 6px;">
+                        <span id="filter-modal-selection-summary" style="font-size: 12px; color: var(--text-muted); max-width: 300px;"></span>
+                        <button class="btn btn-ghost btn-small" id="btn-open-library-from-filter" aria-label="Open tags and prompts library" style="white-space: nowrap;">
+                            📚 <span data-i18n="filter.browseLibrary">Library</span>
                         </button>
                     </div>
                 </div>
 
                 <div class="filter-modal-stat-grid" aria-label="Current filter counts">
-                    <div class="filter-stat-card"><span class="filter-stat-label">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">5/5</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">Ratings</span><strong class="filter-stat-value" id="filter-modal-count-ratings">4/4</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">Tags</span><strong class="filter-stat-value" id="filter-modal-count-tags">0</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">Prompts</span><strong class="filter-stat-value" id="filter-modal-count-prompts">0</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">Checkpoints</span><strong class="filter-stat-value" id="filter-modal-count-checkpoints">0</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">LoRAs</span><strong class="filter-stat-value" id="filter-modal-count-loras">0</strong></div>
-                    <div class="filter-stat-card"><span class="filter-stat-label">Size Rules</span><strong class="filter-stat-value" id="filter-modal-count-dimensions">Any</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.generators">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">5/5</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.ratings">Ratings</span><strong class="filter-stat-value" id="filter-modal-count-ratings">4/4</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.tags">Tags</span><strong class="filter-stat-value" id="filter-modal-count-tags">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.prompts">Prompts</span><strong class="filter-stat-value" id="filter-modal-count-prompts">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.checkpoints">Checkpoints</span><strong class="filter-stat-value" id="filter-modal-count-checkpoints">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.loras">LoRAs</span><strong class="filter-stat-value" id="filter-modal-count-loras">0</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.sizeRules">Size Rules</span><strong class="filter-stat-value" id="filter-modal-count-dimensions">Any</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.aesthetic">Aesthetic</span><strong class="filter-stat-value" id="filter-modal-count-aesthetic">Any</strong></div>
                 </div>
 
                 <div class="filter-modal-grid">
@@ -1915,6 +2557,33 @@
                                 </label>
                             </div>
                         </section>
+
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker">Quality</p>
+                                    <h4 data-i18n="filter.aestheticTitle">Aesthetic Score</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.aestheticHelp">Filter by AI-predicted aesthetic quality (1-10 scale).</p>
+                            </div>
+                            <div class="dimension-grid" role="group">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.aestheticMin">Min score</span>
+                                    <input type="number" id="filter-aesthetic-min" class="input-field" placeholder="e.g. 5" min="0" max="10" step="0.5" aria-label="Minimum aesthetic score">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.aestheticMax">Max score</span>
+                                    <input type="number" id="filter-aesthetic-max" class="input-field" placeholder="e.g. 10" min="0" max="10" step="0.5" aria-label="Maximum aesthetic score">
+                                </label>
+                            </div>
+                            <div class="aesthetic-quick-filters" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-i18n="filter.aestheticAny">Any</button>
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="7" data-max="" data-i18n="filter.aestheticGreat">Great (7+)</button>
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="5" data-max="" data-i18n="filter.aestheticGood">Good (5+)</button>
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="4" data-i18n="filter.aestheticLow">Low (&lt;4)</button>
+                                <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-i18n="filter.aestheticUnscored">Unscored</button>
+                            </div>
+                        </section>
                     </div>
 
                     <div class="filter-column filter-column-secondary">
@@ -1943,6 +2612,11 @@
                                     <div class="tag-suggestions" id="modal-prompt-suggestions"></div>
                                 </div>
                                 <div class="active-tags" id="modal-active-prompts"></div>
+                            </div>
+
+                            <div class="filter-section">
+                                <h5 data-i18n="filter.textSearch">Text Search</h5>
+                                <input type="text" id="modal-free-text-search" class="input-field" placeholder="Search in prompts and filenames..." data-i18n-placeholder="filter.searchText">
                             </div>
                         </section>
 
@@ -2021,7 +2695,7 @@
                 <div class="form-group rename-preview-group">
                     <label data-i18n="censor.renamePreview">Preview</label>
                     <div class="rename-preview">
-                        <div class="rename-preview-summary" id="rename-preview-summary" data-i18n="rename.previewSummary">Previewing the first few files.</div>
+                        <div class="rename-preview-summary" id="rename-preview-summary" data-i18n="rename.previewSummary">Rename preview updates against the current target set.</div>
                         <div class="rename-preview-list" id="rename-preview-list">
                             <div class="rename-preview-row rename-preview-row-head">
                                 <span data-i18n="rename.currentName">Current</span>
@@ -2092,61 +2766,41 @@
             <div class="modal-content modal-large queue-manager-shell">
                 <button class="modal-close" id="btn-close-queue-manager">✕</button>
                 <h3>🗂️ <span data-i18n="censor.queueManager">Queue Manager</span></h3>
-                <p class="modal-description" data-i18n="censor.queueManagerDescription">Use the large queue window for selecting, searching, and reordering big batches.</p>
+                <p class="modal-description" data-i18n="censor.queueManagerDescription">Drag thumbnails to rearrange. Double-click to rename. Select multiple to move as a block.</p>
 
-                <div class="queue-manager-toolbar">
+                <div class="queue-manager-toolbar-compact">
                     <input type="text" id="queue-manager-search" class="input-field" placeholder="Search filenames..." data-i18n-placeholder="censor.queueManagerSearch">
-                    <button class="btn btn-secondary" id="btn-queue-manager-select-all">✓ <span data-i18n="censor.selectAll">All</span></button>
-                    <button class="btn btn-secondary" id="btn-queue-manager-deselect-all">✕ <span data-i18n="censor.deselectAll">None</span></button>
-                    <label class="checkbox-label queue-manager-toggle">
-                        <input type="checkbox" id="queue-manager-show-selected">
-                        <span class="checkbox-custom"></span>
-                        <span class="checkbox-text" data-i18n="censor.queueManagerShowSelected">Show selected only</span>
-                    </label>
+                    <div class="queue-manager-toolbar-actions">
+                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-select-all" title="Select All">✓ <span data-i18n="censor.selectAll">All</span></button>
+                        <button class="btn btn-ghost btn-small" id="btn-queue-manager-deselect-all" title="Deselect">✕ <span data-i18n="censor.deselectAll">None</span></button>
+                        <label class="checkbox-label queue-manager-toggle">
+                            <input type="checkbox" id="queue-manager-show-selected">
+                            <span class="checkbox-custom"></span>
+                            <span class="checkbox-text" data-i18n="censor.queueManagerShowSelected">Selected only</span>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="queue-manager-selection-panel">
-                    <div class="queue-manager-selection-header">
-                        <div>
-                            <div class="queue-manager-selection-title">Selected items</div>
-                            <div class="queue-manager-selection-note">Select multiple thumbnails, then move them as a single block.</div>
-                        </div>
-                        <div class="queue-manager-selection-count" id="queue-manager-selection-count">0 selected</div>
-                    </div>
-                    <div class="queue-manager-selection-strip" id="queue-manager-selection-strip"></div>
-                </div>
-
-                <div class="queue-manager-action-bar">
-                    <div class="queue-manager-move-group">
-                        <div class="queue-manager-action-title">Move selected</div>
-                        <div class="queue-manager-action-note">The selected images stay together in the order you picked them.</div>
-                        <div class="queue-manager-action-buttons">
-                            <button class="btn btn-secondary" id="btn-queue-manager-move-top">⤒ <span data-i18n="common.top">Top</span></button>
-                            <button class="btn btn-secondary" id="btn-queue-manager-move-up">↑ <span data-i18n="common.up">Up</span></button>
-                            <button class="btn btn-secondary" id="btn-queue-manager-move-down">↓ <span data-i18n="common.down">Down</span></button>
-                            <button class="btn btn-secondary" id="btn-queue-manager-move-bottom">⤓ <span data-i18n="common.bottom">Bottom</span></button>
-                        </div>
-                    </div>
-                    <div class="queue-manager-position-box">
-                        <label for="queue-manager-position" data-i18n="censor.moveToPosition">Move To Position</label>
-                        <div class="queue-manager-position-row">
-                            <input type="number" id="queue-manager-position" class="input-field" min="1" value="1">
-                            <button class="btn btn-primary" id="btn-queue-manager-move-position" data-i18n="common.move">Move</button>
-                        </div>
+                <div class="queue-manager-compact-actions">
+                    <span class="queue-manager-count" id="queue-manager-selection-count">0 selected</span>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-top" title="Move to Top">⤒</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-up" title="Move Up">↑</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-down" title="Move Down">↓</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-move-bottom" title="Move to Bottom">⤓</button>
+                    <div class="queue-manager-separator"></div>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-batch-rename" title="Batch rename selected">📝 Rename</button>
+                    <button class="btn btn-ghost btn-small" id="btn-queue-manager-remove-selected" title="Remove selected from queue" style="color:#ef4444">✕ Remove</button>
+                    <div class="queue-manager-position-inline">
+                        <input type="number" id="queue-manager-position" class="input-field" min="1" value="1" style="width: 60px; min-height: 36px; padding: 6px 8px;">
+                        <button class="btn btn-primary btn-small" id="btn-queue-manager-move-position" data-i18n="common.move">Go</button>
                     </div>
                 </div>
 
                 <div class="queue-manager-summary" id="queue-manager-summary" aria-live="polite"></div>
 
-                <div class="queue-manager-table">
-                    <div class="queue-manager-head">
-                        <span data-i18n="censor.queueColumnIndex">#</span>
-                        <span data-i18n="censor.queueColumnPreview">Preview</span>
-                        <span data-i18n="censor.queueColumnFilename">Filename</span>
-                        <span data-i18n="censor.queueColumnStatus">Status</span>
-                    </div>
-                    <div class="queue-manager-list" id="queue-manager-list"></div>
-                </div>
+                <div class="queue-manager-selection-strip" id="queue-manager-selection-strip" aria-live="polite"></div>
+
+                <div class="queue-manager-grid" id="queue-manager-list"></div>
 
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-close-queue-manager-footer" data-i18n="common.close">Close</button>
@@ -2159,17 +2813,17 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-model-select">✕</button>
-                <h3 id="model-select-title">Select Models</h3>
+                <h3 id="model-select-title" data-i18n="modelSelect.title">Select Models</h3>
                 <div class="search-container" style="margin: 15px 0;">
-                    <input type="text" id="model-select-search" class="input-field" placeholder="Search models...">
+                    <input type="text" id="model-select-search" class="input-field" placeholder="Search models..." data-i18n-placeholder="modelSelect.search">
                 </div>
                 <div class="model-select-list" id="model-select-list"
                     style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin-bottom: 20px;">
                     <!-- Populated dynamically -->
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-cancel-model-select">Cancel</button>
-                    <button class="btn btn-primary" id="btn-confirm-model-select">Apply Selection</button>
+                    <button class="btn btn-ghost" id="btn-cancel-model-select" data-i18n="modelSelect.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-confirm-model-select" data-i18n="modelSelect.apply">Apply Selection</button>
                 </div>
             </div>
         </div>
@@ -2195,6 +2849,10 @@
                         <button class="btn btn-ghost" id="library-tab-prompts" data-tab="prompts">
                             <span aria-hidden="true">📝</span>
                             <span data-i18n="library.prompts">Prompts</span>
+                        </button>
+                        <button class="btn btn-ghost" id="library-tab-loras" data-tab="loras">
+                            <span aria-hidden="true">🧩</span>
+                            <span data-i18n="library.loras">LoRAs</span>
                         </button>
                     </div>
                     <select id="library-sort" class="sort-dropdown library-sort">
@@ -2228,7 +2886,7 @@
         <div class="global-loading-overlay" id="global-loading" style="display: none;">
             <div class="global-loading-content">
                 <div class="spinner-large"></div>
-                <span id="global-loading-msg">Loading...</span>
+                <span id="global-loading-msg" data-i18n="common.loading">Loading...</span>
             </div>
         </div>
     </div>
@@ -2257,11 +2915,35 @@
     <script src="/static/js/manual-sort.js"></script>
     <script src="/static/js/audio.js"></script>
     <script src="/static/js/censor-edit.js"></script>
+    <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/artist-ident.js"></script>
+    <script src="/static/js/image-reader.js"></script>
+    <script src="/static/js/obfuscate-engine.js"></script>
+    <script src="/static/js/image-obfuscate.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
+    <script>
+    /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
+    window._switchSortingSub = function(sub) {
+        var autosep = document.getElementById('view-autosep');
+        var manual = document.getElementById('view-manual');
+        if (!autosep || !manual) return;
+        if (sub === 'autosep') {
+            autosep.style.display = '';
+            manual.style.display = 'none';
+        } else {
+            autosep.style.display = 'none';
+            manual.style.display = '';
+        }
+        var btns = document.querySelectorAll('.sorting-sub-tab');
+        btns.forEach(function(b) {
+            var isActive = b.getAttribute('data-sorting-sub') === sub;
+            b.className = 'btn sorting-sub-tab ' + (isActive ? 'btn-primary active' : 'btn-ghost');
+        });
+    };
+    </script>
 </body>
 
 </html>

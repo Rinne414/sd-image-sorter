@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 from typing import Optional, Tuple
+from urllib.parse import unquote
 
 from config import (
     ALLOWED_IMAGE_EXTENSIONS,
@@ -19,7 +20,6 @@ from config import (
 # Suspicious patterns for directory traversal and injection attacks
 # Note: We don't check for ':' here because Windows drive letters (C:\) use it
 SUSPICIOUS_PATTERNS = [
-    r'\.\.',           # Directory traversal
     r'[\x00-\x1f]',    # Control characters including null byte
     r'[\x7f-\x9f]',    # Extended control characters
     r'^\s+$',          # Whitespace-only
@@ -43,8 +43,22 @@ def _contains_suspicious_patterns(path_str: str) -> bool:
     Returns:
         True if suspicious patterns found, False otherwise
     """
-    for pattern in SUSPICIOUS_PATTERNS:
-        if re.search(pattern, path_str):
+    variants = []
+    candidate = str(path_str or "")
+    for _ in range(3):
+        if candidate in variants:
+            break
+        variants.append(candidate)
+        candidate = unquote(candidate)
+
+    for value in variants:
+        for pattern in SUSPICIOUS_PATTERNS:
+            if re.search(pattern, value):
+                return True
+
+        normalized = value.replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part not in ("", ".")]
+        if any(part == ".." for part in parts):
             return True
     return False
 

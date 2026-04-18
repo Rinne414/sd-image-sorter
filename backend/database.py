@@ -76,23 +76,25 @@ def escape_like_pattern(value: str) -> str:
 
 def normalize_lora_name(lora_name: str) -> str:
     """Normalize a LORA name for consistent matching.
-    
-    Strips weight notation and file extensions for cleaner display:
+
+    Strips path prefixes, weight notation, and file extensions:
+    - "Anima\\anime\\my_lora.safetensors" -> "my_lora"
     - "my_lora:0.8" -> "my_lora"
     - "my_lora.safetensors" -> "my_lora"
-    - "my-lora_v2.ckpt" -> "my-lora_v2"
     - Lowercase for matching
     """
     # Strip weight notation (everything after last colon if it's a number)
     if ':' in lora_name:
         parts = lora_name.rsplit(':', 1)
-        # Check if the part after colon is a weight (number)
         try:
             float(parts[1])
             lora_name = parts[0]
         except ValueError:
             pass
-    
+
+    # Strip path prefix (keep only filename)
+    lora_name = lora_name.replace('\\', '/').rsplit('/', 1)[-1]
+
     # Strip common model file extensions
     extensions_to_strip = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin']
     lora_lower = lora_name.lower()
@@ -262,6 +264,10 @@ def init_db() -> None:
             cursor.execute("ALTER TABLE images ADD COLUMN embedding BLOB")
         if 'ai_caption' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN ai_caption TEXT")
+        if 'model_hash' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN model_hash TEXT")
+        if 'aesthetic_score' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN aesthetic_score REAL")
 
         # Collections table (Favorites MVP uses a built-in collection)
         cursor.execute("""
@@ -424,6 +430,9 @@ def init_db() -> None:
         # Filename index for name sorting performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename)")
 
+        # Model hash index for checkpoint dedup
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_model_hash ON images(model_hash) WHERE model_hash IS NOT NULL")
+
         # Remove redundant simple indexes superseded by composite ones
         # idx_tags_tag is redundant with idx_tags_tag_image(tag, image_id)
         # idx_tags_image_id is redundant with idx_tags_image_id_tag(image_id, tag)
@@ -482,7 +491,8 @@ def add_image(
     file_size: Optional[int] = None,
     checkpoint: Optional[str] = None,
     loras: Optional[List[str]] = None,
-    created_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None,
+    model_hash: Optional[str] = None
 ) -> int:
     """Add an image to the database. Returns the image ID."""
     with get_db() as conn:
@@ -508,6 +518,7 @@ def add_image(
                     file_size = ?,
                     checkpoint = ?,
                     loras = ?,
+                    model_hash = COALESCE(?, model_hash),
                     created_at = COALESCE(?, created_at),
                     indexed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
@@ -523,6 +534,7 @@ def add_image(
                     file_size,
                     checkpoint,
                     serialized_loras,
+                    model_hash,
                     created_at,
                     image_id,
                 )
@@ -532,8 +544,8 @@ def add_image(
                 """
                 INSERT INTO images
                 (path, filename, generator, prompt, negative_prompt, metadata_json,
-                 width, height, file_size, checkpoint, loras, created_at, indexed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 width, height, file_size, checkpoint, loras, model_hash, created_at, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     path,
@@ -547,6 +559,7 @@ def add_image(
                     file_size,
                     checkpoint,
                     serialized_loras,
+                    model_hash,
                     created_at,
                 )
             )
@@ -647,7 +660,7 @@ VALID_SORT_OPTIONS = {
     "newest", "oldest", "name_asc", "name_desc", "generator", "generator_desc",
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
-    "random", "file_size", "file_size_asc",
+    "random", "file_size", "file_size_asc", "aesthetic", "aesthetic_asc",
 }
 
 # Canonical column lists for image queries.
@@ -655,20 +668,20 @@ VALID_SORT_OPTIONS = {
 # so column additions only need to change one place.
 _IMAGE_COLUMNS_FULL = (
     "i.id, i.path, i.filename, i.generator, i.prompt, i.negative_prompt, i.metadata_json, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.created_at, i.indexed_at, i.tagged_at, i.ai_caption"
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.indexed_at, i.tagged_at, i.ai_caption, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_WITH_PROMPT = (
     "i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.tagged_at, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_LIGHTWEIGHT = (
     "i.id, i.filename, i.path, i.generator, i.width, i.height, "
-    "i.file_size, i.checkpoint, i.loras, i.created_at, i.tagged_at"
+    "i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.tagged_at, i.aesthetic_score"
 )
 # Bare-table version (no alias prefix) for single-table queries
 _IMAGE_COLUMNS_BARE = (
     "id, path, filename, generator, prompt, negative_prompt, metadata_json, "
-    "width, height, file_size, checkpoint, loras, created_at, indexed_at, tagged_at, ai_caption"
+    "width, height, file_size, checkpoint, loras, model_hash, created_at, indexed_at, tagged_at, ai_caption, aesthetic_score"
 )
 
 
@@ -932,6 +945,19 @@ def _apply_dimension_filters(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
+                            min_aesthetic: Optional[float],
+                            max_aesthetic: Optional[float]) -> tuple:
+    """Apply aesthetic score range filters."""
+    if min_aesthetic is not None:
+        conditions.append("i.aesthetic_score IS NOT NULL AND i.aesthetic_score >= ?")
+        params.append(min_aesthetic)
+    if max_aesthetic is not None:
+        conditions.append("i.aesthetic_score IS NOT NULL AND i.aesthetic_score <= ?")
+        params.append(max_aesthetic)
+    return conditions, params
+
+
 def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
                          artist: Optional[str]) -> tuple:
     """Apply artist filter by joining with artist_predictions table.
@@ -1003,6 +1029,8 @@ def _get_order_clause(sort_by: str) -> str:
         "random": "RANDOM()",
         "file_size": "i.file_size DESC, i.id DESC",
         "file_size_asc": "i.file_size ASC, i.id ASC",
+        "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",
+        "aesthetic_asc": "COALESCE(i.aesthetic_score, 0) ASC, i.id ASC",
     }
     return sort_options.get(sort_by, "i.created_at DESC, i.id DESC")
 
@@ -1098,6 +1126,8 @@ def get_images(
     aspect_ratio: Optional[str] = None,  # 'square', 'landscape', 'portrait'
     artist: Optional[str] = None,  # Artist filter
     image_ids: Optional[List[int]] = None,
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -1177,6 +1207,11 @@ def get_images(
             min_width, max_width, min_height, max_height, aspect_ratio
         )
 
+        # Apply aesthetic score filters
+        conditions, params = _apply_aesthetic_filter(
+            conditions, params, min_aesthetic, max_aesthetic
+        )
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -1214,6 +1249,8 @@ def get_filtered_image_count(
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
 ) -> int:
     """Get count of images matching filters without loading image data.
 
@@ -1274,6 +1311,10 @@ def get_filtered_image_count(
             min_width, max_width, min_height, max_height, aspect_ratio
         )
 
+        conditions, params = _apply_aesthetic_filter(
+            conditions, params, min_aesthetic, max_aesthetic
+        )
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -1301,6 +1342,8 @@ def get_filtered_image_ids(
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -1356,6 +1399,10 @@ def get_filtered_image_ids(
         conditions, params = _apply_dimension_filters(
             conditions, params,
             min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        conditions, params = _apply_aesthetic_filter(
+            conditions, params, min_aesthetic, max_aesthetic
         )
 
         # Apply artist filter (JOIN)
@@ -1440,6 +1487,8 @@ def get_images_paginated(
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     skip_count: bool = False,  # Option to skip expensive COUNT query
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -1509,6 +1558,11 @@ def get_images_paginated(
         conditions, params = _apply_dimension_filters(
             conditions, params,
             min_width, max_width, min_height, max_height, aspect_ratio
+        )
+
+        # Apply aesthetic score filters
+        conditions, params = _apply_aesthetic_filter(
+            conditions, params, min_aesthetic, max_aesthetic
         )
 
         # Apply artist filter (JOIN)
@@ -1806,6 +1860,7 @@ def update_image_metadata(
     file_size: Optional[int],
     checkpoint: Optional[str],
     loras: Optional[List[str]],
+    model_hash: Optional[str] = None,
 ):
     """Update parsed metadata fields for an existing image without replacing the row."""
     with get_db() as conn:
@@ -1823,6 +1878,7 @@ def update_image_metadata(
                 file_size = ?,
                 checkpoint = ?,
                 loras = ?,
+                model_hash = COALESCE(?, model_hash),
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -1836,6 +1892,7 @@ def update_image_metadata(
                 file_size,
                 checkpoint,
                 serialized_loras,
+                model_hash,
                 image_id,
             )
         )

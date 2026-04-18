@@ -335,9 +335,10 @@ class TestBatchMove:
         # Either no images match or they are moved
         assert "count" in data or "message" in data
 
-    def test_batch_move_rejects_over_limit_requests(self, test_client, tmp_path: Path):
-        """Batch move should fail fast instead of returning 200 + error when the match count is too large."""
-        with patch("services.sorting_service.db.get_filtered_image_count", return_value=5001):
+    def test_batch_move_allows_large_match_counts_when_background_chunking_is_available(self, test_client, tmp_path: Path):
+        """Large batch moves should now start and stream through image ID chunks instead of hard-failing at 5000."""
+        with patch("services.sorting_service.db.get_filtered_image_count", return_value=5001), \
+             patch("services.sorting_service.db.get_filtered_image_ids", return_value=[1, 2, 3]):
             response = test_client.post(
                 "/api/batch-move",
                 json={
@@ -346,9 +347,10 @@ class TestBatchMove:
                 }
             )
 
-        assert response.status_code == 400
+        assert response.status_code == 200
         data = response.json()
-        assert "Maximum allowed is 5000" in (data.get("detail") or data.get("error") or "")
+        assert data["status"] == "started"
+        assert data["total"] == 5001
 
     def test_batch_move_rejects_second_start_while_running(self, test_client, tmp_path: Path, isolated_sorting_service):
         """Starting another batch move while one is already running should fail with 409."""

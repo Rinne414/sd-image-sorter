@@ -933,11 +933,10 @@ class TaggingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error)
 
-        os.makedirs(request.output_folder, exist_ok=True)
-
         exported = 0
         errors = 0
         used_output_paths = set()
+        output_folder_ready = os.path.isdir(request.output_folder)
 
         for image_id in request.image_ids:
             try:
@@ -976,11 +975,20 @@ class TaggingService:
                             break
                         counter += 1
 
+                if not output_folder_ready:
+                    try:
+                        os.makedirs(request.output_folder, exist_ok=True)
+                    except OSError as exc:
+                        raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
+                    output_folder_ready = True
+
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(file_content)
 
                 used_output_paths.add(txt_path)
                 exported += 1
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error("Error exporting tags for image %d: %s", image_id, e)
                 errors += 1

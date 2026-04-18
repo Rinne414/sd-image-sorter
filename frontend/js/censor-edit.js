@@ -3,6 +3,16 @@
  * Queue-based workflow with professional editing tools.
  */
 
+const CENSOR_UNDO_DEFAULT_DEPTH = 20;
+const CENSOR_UNDO_MIN_DEPTH = 5;
+const CENSOR_UNDO_MAX_DEPTH = 200;
+
+function getCensorUndoDepth() {
+    const raw = parseInt(localStorage.getItem('censor_undo_depth'), 10);
+    if (!Number.isFinite(raw)) return CENSOR_UNDO_DEFAULT_DEPTH;
+    return Math.max(CENSOR_UNDO_MIN_DEPTH, Math.min(CENSOR_UNDO_MAX_DEPTH, raw));
+}
+
 const CensorState = {
     // Queue of { id, originalFilename, outputFilename, originalUrl, currentDataUrl, regions, isProcessed, isModified }
     queue: [],
@@ -37,8 +47,12 @@ const CensorState = {
 
     // Undo/Redo
     undoStack: [],
+    redoStack: [],
     baseCanvasState: null,
     baseItemState: null,
+    filterActionUndoStack: [],
+    filterActionRedoStack: [],
+    lastHistorySource: null,
 
     // Config
     modelPath: localStorage.getItem('censor_model_path') || '',
@@ -161,6 +175,7 @@ function initCensorEdit() {
         initPanControls();
         censorEventsInitialized = true;
     }
+    updateUndoRedoButtons();
 }
 
 function bindEvents() {
@@ -287,6 +302,7 @@ function bindEvents() {
     });
 
     $('#btn-undo')?.addEventListener('click', undo);
+    $('#btn-redo')?.addEventListener('click', redo);
 
     // Consolidated Clear Queue
     const clearQueueHandler = () => {
@@ -300,8 +316,12 @@ function bindEvents() {
                 CensorState.selectedItems.clear();
                 CensorState.lastSelectedIndex = -1;
                 CensorState.undoStack = [];
+                CensorState.redoStack = [];
                 CensorState.baseCanvasState = null;
                 CensorState.baseItemState = null;
+                CensorState.filterActionUndoStack = [];
+                CensorState.filterActionRedoStack = [];
+                CensorState.lastHistorySource = null;
                 CensorState.originalImageData = null;
                 renderQueue();
                 clearCanvas();
@@ -479,6 +499,35 @@ function bindEvents() {
         moveQueueSelectionToPosition(rawValue);
     });
 
+    // Queue Manager: Batch rename selected
+    $('#btn-queue-manager-batch-rename')?.addEventListener('click', () => {
+        const onlySelectedCheckbox = document.getElementById('rename-only-selected');
+        if (onlySelectedCheckbox) {
+            onlySelectedCheckbox.checked = true;
+        }
+        populateRenamePreview();
+        if (typeof showModal === 'function') {
+            showModal('rename-modal');
+        } else {
+            document.getElementById('rename-modal')?.classList.add('visible');
+        }
+    });
+
+    // Queue Manager: Remove selected from queue
+    $('#btn-queue-manager-remove-selected')?.addEventListener('click', () => {
+        const selectedIds = getOrderedSelectedQueueIds();
+        if (!selectedIds.length) {
+            window.App?.showToast?.(tText('Select items first', '请先选中项目'), 'warning');
+            return;
+        }
+        const selectedSet = new Set(selectedIds);
+        CensorState.queue = CensorState.queue.filter(item => !selectedSet.has(item.id));
+        CensorState.selectedItems.clear();
+        renderQueue();
+        renderQueueManager();
+        window.App?.showToast?.(tText(`Removed ${selectedIds.length} items`, `已移除 ${selectedIds.length} 项`), 'success');
+    });
+
     $('#btn-segment-text-current')?.addEventListener('click', async () => {
         $('#detect-modal')?.classList.remove('visible');
         await segmentCurrentImageByText();
@@ -634,6 +683,7 @@ function renderQueue() {
             </div>
         `;
         updateQueueSelection();
+        updateUndoRedoButtons();
         return;
     }
 
@@ -748,6 +798,7 @@ function renderQueue() {
     });
 
     updateQueueSelection();
+    updateUndoRedoButtons();
 }
 
 function initDragAndDrop() {
@@ -767,6 +818,12 @@ function getQueueManagerItems() {
 }
 
 function openQueueManager() {
+    // Use the new Solitaire queue manager if available
+    if (window.QueueSolitaire) {
+        window.QueueSolitaire.open();
+        return;
+    }
+    // Fallback to old modal
     CensorState.queueManagerSearch = '';
     CensorState.queueManagerShowSelectedOnly = false;
     const searchInput = document.getElementById('queue-manager-search');
@@ -844,7 +901,7 @@ function renderQueueManagerSelectionStrip(items = []) {
         return;
     }
 
-    strip.innerHTML = selectedItems.slice(0, 8).map((item) => {
+    strip.innerHTML = selectedItems.map((item) => {
         const thumbSrc = escapeHtml(getQueueManagerThumbnailSrc(item));
         const label = escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`);
         return `
@@ -854,13 +911,6 @@ function renderQueueManagerSelectionStrip(items = []) {
             </button>
         `;
     }).join('');
-
-    if (selectedItems.length > 8) {
-        const overflow = document.createElement('div');
-        overflow.className = 'queue-manager-selection-chip queue-manager-selection-chip-overflow';
-        overflow.textContent = `+${selectedItems.length - 8}`;
-        strip.appendChild(overflow);
-    }
 
     strip.querySelectorAll('.queue-manager-selection-chip[data-id]').forEach((chip) => {
         chip.addEventListener('click', () => {
@@ -874,11 +924,18 @@ function renderQueueManager() {
     const list = document.getElementById('queue-manager-list');
     const summary = document.getElementById('queue-manager-summary');
     const positionInput = document.getElementById('queue-manager-position');
+    const countEl = document.getElementById('queue-manager-selection-count');
     if (!list || !summary) return;
 
     const items = getQueueManagerItems();
     summary.textContent = formatQueueManagerSummary(items.length);
-    renderQueueManagerSelectionStrip(getOrderedSelectedQueueIds().map((id) => CensorState.queue.find((item) => item.id === id)).filter(Boolean));
+
+    if (countEl) {
+        const count = CensorState.selectedItems.size;
+        countEl.textContent = count > 0
+            ? tText(`${count} selected`, `已选 ${count} 项`)
+            : tText('0 selected', '0 已选');
+    }
 
     if (positionInput && CensorState.selectedItems.size > 0) {
         const firstSelectedIndex = CensorState.queue.findIndex((item) => CensorState.selectedItems.has(item.id));
@@ -894,30 +951,31 @@ function renderQueueManager() {
 
     list.innerHTML = items.map((item) => {
         const index = CensorState.queue.findIndex((entry) => entry.id === item.id);
+        const isActive = item.id === CensorState.activeId;
+        const isSelected = CensorState.selectedItems.has(item.id);
+        const isProcessed = item.processed || item.saved;
         const classes = [
-            'queue-manager-row',
-            item.id === CensorState.activeId ? 'is-active' : '',
-            CensorState.selectedItems.has(item.id) ? 'is-selected' : '',
+            'queue-manager-grid-item',
+            isActive ? 'is-active' : '',
+            isSelected ? 'is-selected' : '',
+            isProcessed ? 'is-processed' : '',
         ].filter(Boolean).join(' ');
+        const badgeClass = isActive ? 'is-active' : isProcessed ? 'is-processed' : '';
+        const displayName = item.outputFilename || item.originalFilename || `Image ${item.id}`;
         return `
-            <div class="${classes}" data-id="${item.id}" data-index="${index}" draggable="true">
-                <div class="queue-manager-index">${index + 1}</div>
-                <div class="queue-manager-thumb-shell">
-                    <img class="queue-manager-thumb" src="${escapeHtml(getQueueManagerThumbnailSrc(item))}" alt="${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}" loading="lazy" decoding="async">
-                </div>
-                <div class="queue-manager-file">
-                    <div class="queue-manager-file-name">${escapeHtml(item.outputFilename || item.originalFilename || `Image ${item.id}`)}</div>
-                    <div class="queue-manager-file-sub">${escapeHtml(item.originalFilename || '')}</div>
-                </div>
-                <div class="queue-manager-status">${getQueueManagerStatusBadges(item)}</div>
+            <div class="${classes}" data-id="${item.id}" data-index="${index}" draggable="true" title="${escapeHtml(displayName)}">
+                <img class="queue-manager-grid-thumb" src="${escapeHtml(getQueueManagerThumbnailSrc(item))}" alt="${escapeHtml(displayName)}" loading="lazy" decoding="async">
+                <span class="queue-manager-grid-index">${index + 1}</span>
+                ${badgeClass ? `<span class="queue-manager-grid-badge ${badgeClass}"></span>` : ''}
+                <div class="queue-manager-grid-label" title="Double-click to rename">${escapeHtml(displayName)}</div>
             </div>
         `;
     }).join('');
 
-    list.querySelectorAll('.queue-manager-row').forEach((row) => {
-        row.addEventListener('click', (event) => {
-            const clickedId = Number.parseInt(row.dataset.id, 10);
-            const clickedIndex = Number.parseInt(row.dataset.index, 10);
+    list.querySelectorAll('.queue-manager-grid-item').forEach((item) => {
+        item.addEventListener('click', (event) => {
+            const clickedId = Number.parseInt(item.dataset.id, 10);
+            const clickedIndex = Number.parseInt(item.dataset.index, 10);
 
             if (event.ctrlKey || event.metaKey) {
                 if (CensorState.selectedItems.has(clickedId)) {
@@ -944,25 +1002,55 @@ function renderQueueManager() {
             updateQueueSelection();
         });
 
-        row.addEventListener('dblclick', async () => {
-            const clickedId = Number.parseInt(row.dataset.id, 10);
-            const item = CensorState.queue.find((entry) => entry.id === clickedId);
+        item.addEventListener('dblclick', async (event) => {
+            const label = item.querySelector('.queue-manager-grid-label');
+            if (label && event.target === label) {
+                // Enable inline rename
+                label.contentEditable = 'true';
+                label.focus();
+                const range = document.createRange();
+                range.selectNodeContents(label);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                const finishRename = () => {
+                    label.contentEditable = 'false';
+                    const clickedId = Number.parseInt(item.dataset.id, 10);
+                    const queueItem = CensorState.queue.find((entry) => entry.id === clickedId);
+                    if (queueItem) {
+                        const newName = label.textContent.trim();
+                        if (newName) queueItem.outputFilename = newName;
+                    }
+                    label.removeEventListener('blur', finishRename);
+                    label.removeEventListener('keydown', handleKey);
+                };
+                const handleKey = (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); label.blur(); }
+                    if (e.key === 'Escape') { label.contentEditable = 'false'; }
+                };
+                label.addEventListener('blur', finishRename);
+                label.addEventListener('keydown', handleKey);
+                return;
+            }
+            // Double-click on thumb loads into editor
+            const clickedId = Number.parseInt(item.dataset.id, 10);
+            const queueItem = CensorState.queue.find((entry) => entry.id === clickedId);
             await loadCanvasImage(clickedId);
             closeQueueManager();
             window.App.showToast(
-                tKey('censor.queueManagerLoaded', 'Loaded {filename} into the editor.', '已把 {filename} 载入编辑器。').replace('{filename}', item?.outputFilename || item?.originalFilename || String(clickedId)),
+                tKey('censor.queueManagerLoaded', 'Loaded {filename} into the editor.', '已把 {filename} 载入编辑器。').replace('{filename}', queueItem?.outputFilename || queueItem?.originalFilename || String(clickedId)),
                 'success'
             );
         });
 
-        row.addEventListener('dragstart', handleQueueManagerDragStart);
-        row.addEventListener('dragend', handleQueueManagerDragEnd);
-        row.addEventListener('dragover', (event) => {
+        item.addEventListener('dragstart', handleQueueManagerDragStart);
+        item.addEventListener('dragend', handleQueueManagerDragEnd);
+        item.addEventListener('dragover', (event) => {
             event.preventDefault();
-            row.classList.add('drag-over');
+            item.classList.add('drag-over');
         });
-        row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
-        row.addEventListener('drop', handleQueueManagerDrop);
+        item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+        item.addEventListener('drop', handleQueueManagerDrop);
     });
 }
 
@@ -1005,10 +1093,17 @@ function reorderQueueByDraggedTarget(draggedId, targetId) {
     const moveAsGroup = CensorState.selectedItems.size > 1 && CensorState.selectedItems.has(draggedId);
     const movingIds = moveAsGroup ? getOrderedSelectedQueueIds() : [draggedId];
     const movingSet = new Set(movingIds);
+    const originalDraggedIndex = CensorState.queue.findIndex((item) => item.id === draggedId);
+    const originalTargetIndex = CensorState.queue.findIndex((item) => item.id === targetId);
     const movingItems = CensorState.queue.filter((item) => movingSet.has(item.id));
     const remainingItems = CensorState.queue.filter((item) => !movingSet.has(item.id));
     let insertIndex = remainingItems.findIndex((item) => item.id === targetId);
     if (insertIndex < 0) insertIndex = remainingItems.length;
+
+    const movingForward = originalDraggedIndex >= 0 && originalTargetIndex >= 0 && originalDraggedIndex < originalTargetIndex;
+    if (movingForward) {
+        insertIndex += 1;
+    }
 
     const nextQueue = [
         ...remainingItems.slice(0, insertIndex),
@@ -1035,7 +1130,7 @@ function handleQueueManagerDragStart(e) {
 
 function handleQueueManagerDragEnd() {
     this.classList.remove('dragging');
-    document.querySelectorAll('.queue-manager-row').forEach((row) => row.classList.remove('drag-over'));
+    document.querySelectorAll('.queue-manager-grid-item').forEach((el) => el.classList.remove('drag-over'));
 }
 
 function handleQueueManagerDrop(e) {
@@ -1243,6 +1338,10 @@ async function loadCanvasImage(id) {
     const item = CensorState.queue.find(i => i.id === id);
     if (!item) return;
 
+    if (typeof window.__invalidateCensorFilterPreview === 'function') {
+        window.__invalidateCensorFilterPreview();
+    }
+
     CensorState.selectedItems.clear();
     CensorState.selectedItems.add(id);
     CensorState.lastSelectedIndex = CensorState.queue.findIndex(queueItem => queueItem.id === id);
@@ -1302,6 +1401,8 @@ async function loadCanvasImage(id) {
             isModified: Boolean(item.isModified)
         };
         CensorState.undoStack = initialState ? [initialState] : [];
+        CensorState.redoStack = [];
+        updateUndoRedoButtons();
 
         // Fit canvases to container before showing
         fitCanvasToContainer(nextCanvas, img.width, img.height);
@@ -1326,6 +1427,9 @@ async function loadCanvasImage(id) {
             if (filenameEl) filenameEl.textContent = item.outputFilename;
 
             resetZoom();
+            if (typeof window.__updateCensorFilterPreview === 'function') {
+                window.__updateCensorFilterPreview();
+            }
             CensorState.isLoadingImage = false; // Release lock
         });
 
@@ -2065,8 +2169,68 @@ function pushUndoState(serializedState = null) {
     }
 
     CensorState.undoStack.push(state);
-    if (CensorState.undoStack.length > 20) CensorState.undoStack.shift();
+    const maxDepth = getCensorUndoDepth();
+    while (CensorState.undoStack.length > maxDepth) CensorState.undoStack.shift();
+    if (typeof window.__invalidateCensorFilterPreview === 'function') {
+        window.__invalidateCensorFilterPreview();
+    }
+    CensorState.redoStack = [];
+    CensorState.lastHistorySource = 'canvas';
+    updateUndoRedoButtons();
     return state;
+}
+
+function updateUndoRedoButtons() {
+    const canUndoCanvas = CensorState.undoStack.length > 1;
+    const canRedoCanvas = CensorState.redoStack.length > 0;
+    const canUndoFilter = CensorState.filterActionUndoStack.length > 0;
+    const canRedoFilter = CensorState.filterActionRedoStack.length > 0;
+    const canUndo = canUndoFilter || canUndoCanvas;
+    const canRedo = canRedoFilter || canRedoCanvas;
+
+    const undoBtn = document.getElementById('btn-undo');
+    const redoBtn = document.getElementById('btn-redo');
+    if (undoBtn) {
+        undoBtn.disabled = !canUndo;
+        undoBtn.setAttribute('aria-disabled', String(!canUndo));
+    }
+    if (redoBtn) {
+        redoBtn.disabled = !canRedo;
+        redoBtn.setAttribute('aria-disabled', String(!canRedo));
+    }
+}
+
+function pushFilterActionHistory(entry) {
+    if (!entry?.snapshots?.length) return;
+    CensorState.filterActionUndoStack.push(entry);
+    if (CensorState.filterActionUndoStack.length > 20) {
+        CensorState.filterActionUndoStack.shift();
+    }
+    CensorState.filterActionRedoStack = [];
+    CensorState.lastHistorySource = 'filter';
+    updateUndoRedoButtons();
+}
+
+async function restoreFilterActionEntry(entry, direction = 'undo') {
+    if (!entry?.snapshots?.length) return;
+
+    for (const snapshot of entry.snapshots) {
+        const item = CensorState.queue.find((queueItem) => queueItem.id === snapshot.id);
+        if (!item) continue;
+        if (direction === 'undo') {
+            item.currentDataUrl = snapshot.beforeDataUrl || null;
+            item.isModified = Boolean(snapshot.beforeModified);
+        } else {
+            item.currentDataUrl = snapshot.afterDataUrl || null;
+            item.isModified = Boolean(snapshot.afterModified);
+        }
+    }
+
+    renderQueue();
+    if (CensorState.activeId && entry.targetIds?.includes(CensorState.activeId)) {
+        await loadCanvasImage(CensorState.activeId);
+    }
+    updateUndoRedoButtons();
 }
 
 function clearCanvas() {
@@ -2357,9 +2521,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             target_classes: plan.targetClasses,
         });
 
-        // Sort by confidence and take top 50 to avoid processing thousands
-        const sortedDetections = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence).slice(0, 50);
-        const regions = sortedDetections;
+        const regions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
         item.regions = regions;
 
         // Apply to a temporary canvas to generate DataURL
@@ -2726,8 +2888,7 @@ function updateRenamePreview() {
     }, new Map());
     const duplicateCount = Array.from(duplicateMap.values()).filter(count => count > 1).length;
 
-    const visibleRows = rows.slice(0, 8);
-    const rowHtml = visibleRows.map((row) => {
+    const rowHtml = rows.map((row) => {
         const isDuplicate = (duplicateMap.get(row.newName.toLowerCase()) || 0) > 1;
         return `
             <div class="rename-preview-row${isDuplicate ? ' is-duplicate' : ''}">
@@ -2758,11 +2919,7 @@ function updateRenamePreview() {
         ' Final export extension still follows Save Options.',
         ' 最终导出的扩展名仍然以保存设置为准。'
     );
-    const hiddenCount = Math.max(0, rows.length - visibleRows.length);
-    const hiddenNote = hiddenCount > 0
-        ? tText(` Showing the first ${visibleRows.length}; ${hiddenCount} more are hidden.`, `这里只显示前 ${visibleRows.length} 条，另外还有 ${hiddenCount} 条已折叠。`)
-        : '';
-    previewSummary.textContent = `${previewScope}${hiddenNote}${extensionNote}`;
+    previewSummary.textContent = `${previewScope}${extensionNote}`;
 
     if (duplicateCount > 0) {
         previewAlert.className = 'rename-preview-alert is-warning';
@@ -3048,9 +3205,17 @@ function pushUndo() {
 
 
 async function undo() {
+    if (CensorState.lastHistorySource === 'filter' && CensorState.filterActionUndoStack.length > 0) {
+        const entry = CensorState.filterActionUndoStack.pop();
+        CensorState.filterActionRedoStack.push(entry);
+        await restoreFilterActionEntry(entry, 'undo');
+        return;
+    }
+
     // Keep at least 1 item in the stack (the initial/base state)
     if (CensorState.undoStack.length <= 1) return;
-    CensorState.undoStack.pop(); // Discard current state
+    const current = CensorState.undoStack.pop(); // Discard current state
+    CensorState.redoStack.push(current);
     const prev = CensorState.undoStack[CensorState.undoStack.length - 1]; // Peek at previous
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     if (!canvas) return;
@@ -3067,6 +3232,8 @@ async function undo() {
                 bitmap.close();
             }
             saveCurrentCanvasToState(prev);
+            CensorState.lastHistorySource = 'canvas';
+            updateUndoRedoButtons();
             return;
         }
     } catch (error) {
@@ -3078,8 +3245,56 @@ async function undo() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         saveCurrentCanvasToState(prev);
+        CensorState.lastHistorySource = 'canvas';
+        updateUndoRedoButtons();
     };
     img.src = prev;
+}
+
+async function redo() {
+    if (CensorState.lastHistorySource === 'filter' && CensorState.filterActionRedoStack.length > 0) {
+        const entry = CensorState.filterActionRedoStack.pop();
+        CensorState.filterActionUndoStack.push(entry);
+        await restoreFilterActionEntry(entry, 'redo');
+        return;
+    }
+
+    if (!CensorState.redoStack.length) return;
+    const next = CensorState.redoStack.pop();
+    const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    try {
+        if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
+            const response = await fetch(next);
+            const blob = await response.blob();
+            const bitmap = await createImageBitmap(blob);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+            CensorState.undoStack.push(next);
+            saveCurrentCanvasToState(next);
+            CensorState.lastHistorySource = 'canvas';
+            updateUndoRedoButtons();
+            return;
+        }
+    } catch (error) {
+        Logger.warn('Falling back to Image() redo restore:', error);
+    }
+
+    const img = new Image();
+    img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        CensorState.undoStack.push(next);
+        saveCurrentCanvasToState(next);
+        CensorState.lastHistorySource = 'canvas';
+        updateUndoRedoButtons();
+    };
+    img.src = next;
 }
 
 function handleKeydown(e) {
@@ -3156,7 +3371,15 @@ function handleKeydown(e) {
     }
     // Undo
     else if (e.ctrlKey && key === 'z') {
-        undo();
+        if (e.shiftKey) {
+            redo();
+        } else {
+            undo();
+        }
+        e.preventDefault();
+    }
+    else if ((e.ctrlKey && key === 'y') || (e.metaKey && key === 'y')) {
+        redo();
         e.preventDefault();
     }
 }
@@ -3251,6 +3474,9 @@ function clearAllEdits() {
         isModified: false
     };
     CensorState.undoStack = restoredState ? [restoredState] : [];
+    CensorState.redoStack = [];
+    CensorState.lastHistorySource = 'canvas';
+    updateUndoRedoButtons();
 
     window.App.showToast('Edits cleared - image restored to original', 'success');
 }
@@ -3577,3 +3803,487 @@ function cleanupCensorViewFull() {
 // Export
 window.initCensorEdit = initCensorEdit;
 window.cleanupCensorView = cleanupCensorViewFull;
+
+// =====================================================
+// Image Filters & Adjustments
+// =====================================================
+(function initFilterControls() {
+    const FILTER_DEFAULTS = {
+        brightness: 0, contrast: 0, saturation: 0,
+        hue: 0, blur: 0, sharpen: 0, temperature: 0, vignette: 0
+    };
+    const PRESETS = {
+        reset:    { brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, sharpen: 0, temperature: 0, vignette: 0 },
+        vivid:    { brightness: 5, contrast: 20, saturation: 40, hue: 0, blur: 0, sharpen: 30, temperature: 0, vignette: 0 },
+        warm:     { brightness: 5, contrast: 10, saturation: 15, hue: 0, blur: 0, sharpen: 0, temperature: 30, vignette: 10 },
+        cool:     { brightness: 0, contrast: 10, saturation: 10, hue: 0, blur: 0, sharpen: 0, temperature: -30, vignette: 10 },
+        bw:       { brightness: 0, contrast: 15, saturation: -100, hue: 0, blur: 0, sharpen: 10, temperature: 0, vignette: 0 },
+        dramatic: { brightness: -5, contrast: 40, saturation: 20, hue: 0, blur: 0, sharpen: 40, temperature: 5, vignette: 30 }
+    };
+
+    let currentFilters = { ...FILTER_DEFAULTS };
+
+    function getActiveCanvas() {
+        return document.getElementById(CensorState.activeCanvasId || 'censor-canvas')
+            || document.getElementById('censor-canvas');
+    }
+
+    function setSliders(values) {
+        Object.entries(values).forEach(([key, val]) => {
+            const slider = document.getElementById(`filter-${key}`);
+            const label = document.getElementById(`filter-${key}-value`);
+            if (slider) slider.value = val;
+            if (label) label.textContent = key === 'hue' ? `${val}°` : String(val);
+            currentFilters[key] = val;
+        });
+    }
+
+    // Pre-filter pixel snapshot, captured on first slider use per session.
+    // Lets sharpen/vignette preview without compounding, and lets us revert when
+    // the slider returns to 0.
+    let preFilterSnapshot = null;
+    let preFilterCanvasRef = null;
+    let pixelPreviewTimer = null;
+
+    function invalidatePreFilterSnapshot() {
+        preFilterSnapshot = null;
+        preFilterCanvasRef = null;
+        if (pixelPreviewTimer) {
+            clearTimeout(pixelPreviewTimer);
+            pixelPreviewTimer = null;
+        }
+    }
+
+    function ensurePreFilterSnapshot(canvas) {
+        if (preFilterSnapshot && preFilterCanvasRef === canvas) return;
+        try {
+            const ctx = canvas.getContext('2d');
+            preFilterSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            preFilterCanvasRef = canvas;
+        } catch (err) {
+            preFilterSnapshot = null;
+            preFilterCanvasRef = null;
+        }
+    }
+
+    function runPixelPreview(canvas) {
+        if (!canvas) return;
+        const needsSharpen = currentFilters.sharpen > 0;
+        const needsVignette = currentFilters.vignette > 0;
+
+        if (!needsSharpen && !needsVignette) {
+            if (preFilterSnapshot && preFilterCanvasRef === canvas) {
+                canvas.getContext('2d').putImageData(preFilterSnapshot, 0, 0);
+            }
+            return;
+        }
+
+        ensurePreFilterSnapshot(canvas);
+        if (!preFilterSnapshot || preFilterCanvasRef !== canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        ctx.putImageData(preFilterSnapshot, 0, 0);
+        if (needsSharpen) applySharpen(canvas, currentFilters.sharpen / 100);
+        if (needsVignette) applyVignette(canvas, currentFilters.vignette / 100);
+    }
+
+    function schedulePixelPreview(canvas) {
+        if (pixelPreviewTimer) clearTimeout(pixelPreviewTimer);
+        pixelPreviewTimer = setTimeout(() => {
+            pixelPreviewTimer = null;
+            runPixelPreview(canvas);
+            updateFilterColorPreview(canvas);
+        }, 100);
+    }
+
+    function applyFilterPreview() {
+        const canvas = getActiveCanvas();
+        if (!canvas) return;
+        const wrapper = canvas.closest('.censor-canvas-wrapper-v2') || canvas.parentElement;
+        if (!wrapper) return;
+
+        const b = 100 + currentFilters.brightness;
+        const c = 100 + currentFilters.contrast;
+        const s = 100 + currentFilters.saturation;
+        const h = currentFilters.hue;
+        const bl = currentFilters.blur;
+
+        const filters = [
+            `brightness(${b}%)`,
+            `contrast(${c}%)`,
+            `saturate(${s}%)`,
+            `hue-rotate(${h}deg)`,
+        ];
+        if (bl > 0) filters.push(`blur(${bl}px)`);
+
+        // Temperature via sepia + hue
+        if (currentFilters.temperature !== 0) {
+            const temp = currentFilters.temperature;
+            if (temp > 0) {
+                filters.push(`sepia(${Math.abs(temp)}%)`);
+            } else {
+                filters.push(`sepia(${Math.abs(temp) * 0.3}%)`);
+                filters.push(`hue-rotate(${180 + h}deg)`);
+            }
+        }
+
+        canvas.style.filter = filters.join(' ');
+
+        // Sharpen & vignette need real pixel ops; debounce to keep slider responsive.
+        schedulePixelPreview(canvas);
+
+        updateFilterColorPreview(canvas);
+    }
+
+    function updateFilterColorPreview(canvas) {
+        const histCanvas = document.getElementById('filter-histogram-canvas');
+        const paletteEl = document.getElementById('filter-color-palette');
+        const previewEl = document.getElementById('filter-color-preview');
+        if (!histCanvas || !previewEl || !canvas) return;
+
+        try {
+            const tmpCanvas = document.createElement('canvas');
+            const sampleSize = 96;
+            tmpCanvas.width = sampleSize;
+            tmpCanvas.height = sampleSize;
+            const tmpCtx = tmpCanvas.getContext('2d');
+            tmpCtx.filter = canvas.style.filter || 'none';
+            tmpCtx.drawImage(canvas, 0, 0, sampleSize, sampleSize);
+            const data = tmpCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+
+            // Build histograms
+            const rH = new Uint32Array(256);
+            const gH = new Uint32Array(256);
+            const bH = new Uint32Array(256);
+            const buckets = {};
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i+1], b = data[i+2];
+                rH[r]++; gH[g]++; bH[b]++;
+                const br = Math.round(r / 32) * 32;
+                const bg = Math.round(g / 32) * 32;
+                const bb = Math.round(b / 32) * 32;
+                const key = `${br},${bg},${bb}`;
+                if (!buckets[key]) buckets[key] = { count: 0, sumR: 0, sumG: 0, sumB: 0 };
+                buckets[key].count++;
+                buckets[key].sumR += r;
+                buckets[key].sumG += g;
+                buckets[key].sumB += b;
+            }
+
+            // Draw histogram
+            const w = 256, h = 60;
+            histCanvas.width = w;
+            histCanvas.height = h;
+            const ctx = histCanvas.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+
+            let maxVal = 1;
+            for (let i = 1; i < 255; i++) {
+                maxVal = Math.max(maxVal, rH[i], gH[i], bH[i]);
+            }
+
+            const drawCh = (hist, color) => {
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                for (let i = 0; i < 256; i++) {
+                    ctx.lineTo(i, h - Math.min(h, (hist[i] / maxVal) * h * 0.9));
+                }
+                ctx.lineTo(w, h);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+            };
+            drawCh(bH, 'rgba(66,133,244,0.35)');
+            drawCh(gH, 'rgba(52,211,153,0.35)');
+            drawCh(rH, 'rgba(239,68,68,0.35)');
+
+            // Palette
+            if (paletteEl) {
+                const sorted = Object.values(buckets).sort((a, b) => b.count - a.count).slice(0, 6);
+                const total = sorted.reduce((s, b) => s + b.count, 0);
+                paletteEl.innerHTML = sorted.map(b => {
+                    const ar = Math.round(b.sumR / b.count);
+                    const ag = Math.round(b.sumG / b.count);
+                    const ab = Math.round(b.sumB / b.count);
+                    const hex = '#' + [ar, ag, ab].map(v => v.toString(16).padStart(2, '0')).join('');
+                    return `<div class="modal-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="${hex}">
+                        <span class="swatch-dot" style="background:${hex}"></span>
+                        <span>${hex}</span>
+                    </div>`;
+                }).join('');
+            }
+
+            previewEl.style.display = '';
+        } catch (e) {
+            previewEl.style.display = 'none';
+        }
+    }
+
+    function hasFilterChanges() {
+        return Object.values(currentFilters).some(v => v !== 0);
+    }
+
+    async function renderFilteredDataUrlFromUrl(url) {
+        const img = await loadImage(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+
+        const b = 100 + currentFilters.brightness;
+        const c = 100 + currentFilters.contrast;
+        const s = 100 + currentFilters.saturation;
+        const h = currentFilters.hue;
+        const bl = currentFilters.blur;
+
+        const filters = [
+            `brightness(${b}%)`,
+            `contrast(${c}%)`,
+            `saturate(${s}%)`,
+            `hue-rotate(${h}deg)`,
+        ];
+        if (bl > 0) filters.push(`blur(${bl}px)`);
+        if (currentFilters.temperature !== 0) {
+            const temp = currentFilters.temperature;
+            if (temp > 0) {
+                filters.push(`sepia(${Math.abs(temp)}%)`);
+            } else {
+                filters.push(`sepia(${Math.abs(temp) * 0.3}%)`);
+                filters.push(`hue-rotate(${180 + h}deg)`);
+            }
+        }
+
+        ctx.filter = filters.join(' ');
+        ctx.drawImage(img, 0, 0);
+
+        if (currentFilters.sharpen > 0) {
+            applySharpen(canvas, currentFilters.sharpen / 100);
+        }
+        if (currentFilters.vignette > 0) {
+            applyVignette(canvas, currentFilters.vignette / 100);
+        }
+
+        return canvas.toDataURL('image/png');
+    }
+
+    async function bakeFiltersToTargets(targetIds) {
+        if (!Array.isArray(targetIds) || targetIds.length === 0) {
+            window.App?.showToast?.('No target images selected', 'warning');
+            return;
+        }
+
+        if (!hasFilterChanges()) {
+            window.App?.showToast?.('No filter changes to apply', 'info');
+            return;
+        }
+
+        showLoading(true, `Filter · applying to ${targetIds.length} image(s)...`);
+        let applied = 0;
+        const historyEntry = {
+            type: 'filter-batch',
+            targetIds: [...targetIds],
+            snapshots: [],
+        };
+
+        try {
+            for (const targetId of targetIds) {
+                const item = CensorState.queue.find(entry => entry.id === targetId);
+                if (!item) continue;
+                const sourceUrl = item.currentDataUrl || item.originalUrl;
+                const beforeDataUrl = item.currentDataUrl || null;
+                const beforeModified = Boolean(item.isModified);
+                item.currentDataUrl = await renderFilteredDataUrlFromUrl(sourceUrl);
+                item.isModified = true;
+                historyEntry.snapshots.push({
+                    id: targetId,
+                    beforeDataUrl,
+                    beforeModified,
+                    afterDataUrl: item.currentDataUrl || null,
+                    afterModified: Boolean(item.isModified),
+                });
+                applied += 1;
+            }
+
+            renderQueue();
+            if (CensorState.activeId && targetIds.includes(CensorState.activeId)) {
+                await loadCanvasImage(CensorState.activeId);
+            }
+
+            setSliders(FILTER_DEFAULTS);
+            pushFilterActionHistory(historyEntry);
+            window.App?.showToast?.(`Applied filters to ${applied} image(s)`, 'success');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function bakeFiltersToCanvas() {
+        const canvas = getActiveCanvas();
+        if (!canvas || !CensorState.activeId) {
+            window.App?.showToast?.('No image loaded — select an image first', 'warning');
+            return;
+        }
+
+        if (!hasFilterChanges()) {
+            window.App?.showToast?.('No filter changes to apply', 'info');
+            return;
+        }
+
+        // Check canvas has actual content
+        if (canvas.width === 0 || canvas.height === 0) {
+            window.App?.showToast?.('Canvas is empty — load an image first', 'warning');
+            return;
+        }
+
+        // Restore pre-preview pixels so sharpen/vignette aren't double-applied.
+        if (pixelPreviewTimer) { clearTimeout(pixelPreviewTimer); pixelPreviewTimer = null; }
+        if (preFilterSnapshot && preFilterCanvasRef === canvas) {
+            canvas.getContext('2d').putImageData(preFilterSnapshot, 0, 0);
+        }
+
+        const tmpCanvas = document.createElement('canvas');
+        tmpCanvas.width = canvas.width;
+        tmpCanvas.height = canvas.height;
+        const ctx = tmpCanvas.getContext('2d');
+        ctx.filter = canvas.style.filter || 'none';
+        ctx.drawImage(canvas, 0, 0);
+        canvas.style.filter = 'none';
+
+        const activeItem = CensorState.queue.find(i => i.id === CensorState.activeId);
+        const historyEntry = {
+            type: 'filter-batch',
+            targetIds: [CensorState.activeId],
+            snapshots: activeItem ? [{
+                id: activeItem.id,
+                beforeDataUrl: activeItem.currentDataUrl || null,
+                beforeModified: Boolean(activeItem.isModified),
+                afterDataUrl: null,
+                afterModified: true,
+            }] : [],
+        };
+
+        const destCtx = canvas.getContext('2d');
+        destCtx.clearRect(0, 0, canvas.width, canvas.height);
+        destCtx.drawImage(tmpCanvas, 0, 0);
+
+        // Apply sharpen if needed
+        if (currentFilters.sharpen > 0) {
+            applySharpen(canvas, currentFilters.sharpen / 100);
+        }
+
+        // Apply vignette if needed
+        if (currentFilters.vignette > 0) {
+            applyVignette(canvas, currentFilters.vignette / 100);
+        }
+
+        // Mark the active item as modified
+        if (activeItem) {
+            activeItem.isModified = true;
+            activeItem.currentDataUrl = canvas.toDataURL('image/png');
+            if (historyEntry.snapshots[0]) {
+                historyEntry.snapshots[0].afterDataUrl = activeItem.currentDataUrl || null;
+                historyEntry.snapshots[0].afterModified = Boolean(activeItem.isModified);
+            }
+        }
+
+        // Reset sliders after applying to current
+        await loadCanvasImage(CensorState.activeId);
+        invalidatePreFilterSnapshot();
+        setSliders(FILTER_DEFAULTS);
+        pushFilterActionHistory(historyEntry);
+        window.App?.showToast?.('Filters applied to canvas', 'success');
+    }
+
+    function applySharpen(canvas, amount) {
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const w = canvas.width;
+        const copy = new Uint8ClampedArray(data);
+        const kernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
+
+        for (let y = 1; y < canvas.height - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+                for (let c = 0; c < 3; c++) {
+                    let val = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            val += copy[((y + ky) * w + (x + kx)) * 4 + c] * kernel[(ky + 1) * 3 + (kx + 1)];
+                        }
+                    }
+                    data[(y * w + x) * 4 + c] = Math.max(0, Math.min(255, val));
+                }
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    function applyVignette(canvas, amount) {
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const radius = Math.max(cx, cy);
+        const gradient = ctx.createRadialGradient(cx, cy, radius * (1 - amount * 0.5), cx, cy, radius);
+        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+        gradient.addColorStop(1, `rgba(0,0,0,${amount * 0.7})`);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Bind events after DOM is ready
+    document.addEventListener('DOMContentLoaded', () => {
+        // Slider events
+        Object.keys(FILTER_DEFAULTS).forEach(key => {
+            const slider = document.getElementById(`filter-${key}`);
+            if (slider) {
+                slider.addEventListener('input', () => {
+                    const val = Number(slider.value);
+                    const label = document.getElementById(`filter-${key}-value`);
+                    if (label) label.textContent = key === 'hue' ? `${val}°` : String(val);
+                    currentFilters[key] = val;
+                    applyFilterPreview();
+                });
+            }
+        });
+
+        // Preset buttons
+        Object.entries(PRESETS).forEach(([name, values]) => {
+            const btn = document.getElementById(`btn-filter-${name}`);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    if (name === 'reset') {
+                        const canvas = getActiveCanvas();
+                        if (canvas && preFilterSnapshot && preFilterCanvasRef === canvas) {
+                            canvas.getContext('2d').putImageData(preFilterSnapshot, 0, 0);
+                        }
+                        invalidatePreFilterSnapshot();
+                        setSliders(values);
+                        canvas && (canvas.style.filter = '');
+                        updateFilterColorPreview(canvas);
+                        return;
+                    }
+                    setSliders(values);
+                    applyFilterPreview();
+                });
+            }
+        });
+
+        // Apply button
+        const applyBtn = document.getElementById('btn-apply-filters');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', bakeFiltersToCanvas);
+        }
+
+        document.getElementById('btn-apply-filters-selected')?.addEventListener('click', async () => {
+            await bakeFiltersToTargets(getOrderedSelectedQueueIds());
+        });
+
+        document.getElementById('btn-apply-filters-all')?.addEventListener('click', async () => {
+            await bakeFiltersToTargets(CensorState.queue.map(item => item.id));
+        });
+    });
+
+    window.__updateCensorFilterPreview = applyFilterPreview;
+    window.__invalidateCensorFilterPreview = invalidatePreFilterSnapshot;
+})();

@@ -59,9 +59,10 @@ class TestDatabaseInit:
         cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
         indexes = [row[0] for row in cursor.fetchall()]
 
-        # Check key indexes exist
-        assert "idx_tags_tag" in indexes
-        assert "idx_tags_image_id" in indexes
+        # Check key indexes exist. Tag lookups are served by composite indexes
+        # whose leftmost prefix covers the single-column query patterns.
+        assert "idx_tags_tag_image" in indexes  # (tag, image_id) — covers tag lookups
+        assert "idx_tags_image_id_tag" in indexes  # (image_id, tag) — covers image_id lookups
         assert "idx_images_generator" in indexes
 
         conn.close()

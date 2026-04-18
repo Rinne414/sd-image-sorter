@@ -8,6 +8,7 @@ const OnboardingTour = (function() {
 
     const STORAGE_KEY = 'sd-image-sorter-onboarding-completed';
     const DISMISSED_KEY = 'sd-image-sorter-onboarding-dismissed-version';
+    const AUTO_START_ENABLED = false;
 
     // Current tour version - increment when adding new features
     const TOUR_VERSION = 1;
@@ -100,7 +101,7 @@ const OnboardingTour = (function() {
                     <li><strong>Z</strong> - Undo last action</li>
                 </ul>
                 <p>Configure your folder destinations in the Manual Sort tab.</p>`,
-            target: '[data-view="manual"]',
+            target: '[data-view="sorting"]',
             position: 'bottom'
         },
         {
@@ -140,6 +141,13 @@ const OnboardingTour = (function() {
     let tooltipEl = null;
     let progressEl = null;
     let originalOverflow = '';
+
+    function cleanupResidualTourUi() {
+        document.querySelectorAll('.onboarding-overlay, .onboarding-tooltip').forEach((node) => {
+            node.remove();
+        });
+        document.body.style.overflow = '';
+    }
 
     /**
      * Check if onboarding has been completed
@@ -522,8 +530,12 @@ const OnboardingTour = (function() {
      * Tour is also available via OnboardingTour.start() programmatically.
      */
     function init() {
-        // Auto-start tour for first-time users
-        if (!isCompleted() && !wasDismissed()) {
+        cleanupResidualTourUi();
+
+        // Do not auto-open a full-screen blocking overlay on first launch.
+        // The tour remains available via OnboardingTour.start() if we expose
+        // it from a dedicated help action in the future.
+        if (AUTO_START_ENABLED && !isCompleted() && !wasDismissed()) {
             setTimeout(() => start(), 800);
         }
     }
