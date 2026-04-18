@@ -9,8 +9,59 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _nvidia_smi_probe() -> List[Dict[str, Any]]:
+    """Query nvidia-smi for per-GPU name + true VRAM. Returns [] if unavailable."""
+    try:
+        raw = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            timeout=6,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception as exc:
+        logger.debug("nvidia-smi probe failed: %s", exc)
+        return []
+
+    results: List[Dict[str, Any]] = []
+    for line in raw.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 2:
+            continue
+        name = parts[0]
+        try:
+            total_mb = float(parts[1])
+        except ValueError:
+            continue
+        free_mb: Optional[float] = None
+        if len(parts) >= 3:
+            try:
+                free_mb = float(parts[2])
+            except ValueError:
+                free_mb = None
+        results.append({
+            "name": name,
+            "vendor": "nvidia",
+            "vram_total_mb": total_mb,
+            "vram_available_mb": free_mb,
+        })
+    return results
+
+
+# Win32_VideoController.AdapterRAM is a 32-bit DWORD, capped at ~4 GB. Any value at
+# this cap is unreliable for modern GPUs and should be replaced with nvidia-smi data.
+WMI_ADAPTER_RAM_CAP_MB = 4095
+
+
 def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
-    """Best-effort Windows GPU enumeration via CIM to catch NVIDIA/Intel/AMD devices."""
+    """Best-effort Windows GPU enumeration via CIM to catch NVIDIA/Intel/AMD devices.
+
+    NVIDIA VRAM reported by WMI is clamped at 4 GB due to the 32-bit AdapterRAM field,
+    so we overlay nvidia-smi results when they are available.
+    """
     if platform.system() != "Windows":
         return []
 
@@ -64,6 +115,39 @@ def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
                 "vram_total_mb": vram_mb,
                 "pnp_device_id": row.get("PNPDeviceID"),
             })
+
+        nvidia_true = _nvidia_smi_probe()
+        if nvidia_true:
+            # WMI enumerates in PnP order; nvidia-smi enumerates in NVML/CUDA
+            # order. On dual-NVIDIA rigs the two orders can diverge, so match
+            # by name first and only fall back to positional matching when the
+            # names don't uniquely line up (e.g. two identical cards).
+            consumed = [False] * len(nvidia_true)
+            for device in devices:
+                if device.get("vendor") != "nvidia":
+                    continue
+                wmi_name = (device.get("name") or "").strip().lower()
+                truth_idx: Optional[int] = None
+                for idx, truth in enumerate(nvidia_true):
+                    if consumed[idx]:
+                        continue
+                    if (truth.get("name") or "").strip().lower() == wmi_name:
+                        truth_idx = idx
+                        break
+                if truth_idx is None:
+                    for idx in range(len(nvidia_true)):
+                        if not consumed[idx]:
+                            truth_idx = idx
+                            break
+                if truth_idx is None:
+                    break
+                consumed[truth_idx] = True
+                truth = nvidia_true[truth_idx]
+                wmi_vram = device.get("vram_total_mb")
+                if wmi_vram is None or wmi_vram <= WMI_ADAPTER_RAM_CAP_MB + 1:
+                    device["vram_total_mb"] = truth.get("vram_total_mb")
+                if truth.get("vram_available_mb") is not None:
+                    device["vram_available_mb"] = truth["vram_available_mb"]
 
         return devices
     except Exception as exc:
@@ -159,11 +243,24 @@ def get_system_info() -> Dict[str, Any]:
         except Exception as exc:
             logger.debug("pynvml GPU detection failed: %s", exc)
 
-    # --- Final fallback from enumerated devices ---
+    # --- Final fallback from enumerated devices (nvidia-smi has already overlaid
+    #     accurate NVIDIA VRAM on top of the 4 GB-capped WMI AdapterRAM) ---
     if info["gpu_name"] is None and info["gpu_devices"]:
         primary = info["gpu_devices"][0]
         info["gpu_name"] = primary.get("name")
         info["gpu_vram_total_mb"] = primary.get("vram_total_mb")
+        if info["gpu_vram_available_mb"] is None:
+            info["gpu_vram_available_mb"] = primary.get("vram_available_mb")
+    elif info["gpu_devices"]:
+        # torch / pynvml already populated gpu_name. If they missed VRAM numbers,
+        # borrow from the matching enumerated device.
+        for device in info["gpu_devices"]:
+            if device.get("name") == info["gpu_name"]:
+                if info["gpu_vram_total_mb"] is None:
+                    info["gpu_vram_total_mb"] = device.get("vram_total_mb")
+                if info["gpu_vram_available_mb"] is None:
+                    info["gpu_vram_available_mb"] = device.get("vram_available_mb")
+                break
 
     # --- ONNX Runtime providers ---
     try:

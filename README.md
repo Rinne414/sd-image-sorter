@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.1-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.2-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -16,9 +16,9 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 <p align="center">
@@ -137,7 +137,7 @@ LAION aesthetic predictor (CLIP ViT-L/14 + linear head) scores any image on a ~1
 
 ### Windows
 
-1. **[Download sd-image-sorter-v3.0.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip)**
+1. **[Download sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)**
 2. Extract to any folder
 3. Double-click **`run-portable.bat`**
 4. Browser opens `http://localhost:8487` — done
@@ -150,14 +150,14 @@ LAION aesthetic predictor (CLIP ViT-L/14 + linear head) scores any image on a ~1
 > - **Intel Arc / AMD Radeon** → auto-swapped to `onnxruntime-directml` so the iGPU / dGPU accelerates tagging
 > - **No GPU or missing drivers** → clean CPU fallback, runtime status shown in the Tagger modal
 >
-> If you previously got stuck on CPU with a 50-series card or an Intel / AMD GPU, delete the old folder and unzip v3.0.1 fresh — the first launch will repair the ONNX Runtime install automatically.
+> If you previously got stuck on CPU with a 50-series card or an Intel / AMD GPU, delete the old folder and unzip v3.0.2 fresh — the first launch will repair the ONNX Runtime install automatically.
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v3.0.1-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz)**
+1. **[Download sd-image-sorter-v3.0.2-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz)**
 2. Extract and run:
    ```bash
-   tar xzf sd-image-sorter-v3.0.1-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > Requires Python 3.9+. The script creates a virtualenv automatically.
@@ -259,9 +259,9 @@ This project wouldn't be possible without these amazing contributors and their i
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
 </p>
 
 <p align="center">
@@ -379,7 +379,7 @@ LAION Aesthetic Predictor（CLIP ViT-L/14 + 线性头）给图片打一个 ~1–
 
 ### Windows
 
-1. **[下载 sd-image-sorter-v3.0.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip)**
+1. **[下载 sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)**
 2. 解压到任意文件夹
 3. 双击 **`run-portable.bat`**
 4. 浏览器打开 `http://localhost:8487` — 搞定
@@ -392,14 +392,14 @@ LAION Aesthetic Predictor（CLIP ViT-L/14 + 线性头）给图片打一个 ~1–
 > - **Intel Arc / AMD Radeon** → 自动切换到 `onnxruntime-directml`，核显 / 独显都能加速打标
 > - **没有独显 / 驱动不全** → 稳定回退 CPU，Tagger 弹窗里会显示当前 runtime 状态
 >
-> 如果以前 50 系显卡或 Intel / AMD 显卡卡在 CPU 模式，删掉旧目录重新解压 v3.0.1 即可 — 首次启动会自动修复 ONNX Runtime 安装。
+> 如果以前 50 系显卡或 Intel / AMD 显卡卡在 CPU 模式，删掉旧目录重新解压 v3.0.2 即可 — 首次启动会自动修复 ONNX Runtime 安装。
 
 ### Linux / macOS
 
-1. **[下载 sd-image-sorter-v3.0.1-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz)**
+1. **[下载 sd-image-sorter-v3.0.2-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz)**
 2. 解压并运行：
    ```bash
-   tar xzf sd-image-sorter-v3.0.1-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > 需要 Python 3.9+，脚本自动创建虚拟环境。
