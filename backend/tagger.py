@@ -552,9 +552,13 @@ class WD14Tagger:
         # Load ONNX model with error handling
         logger.info(f"Loading model from {model_path}...")
 
-        # Choose providers based on use_gpu setting
+        # Choose providers based on use_gpu setting.
+        # Provider preference: CUDA (NVIDIA) -> DirectML (Intel/AMD on Windows) -> CPU.
+        # Providers not actually installed are filtered out below, so this is safe
+        # for NVIDIA-only setups: DmlExecutionProvider simply falls off the list
+        # when onnxruntime-gpu is installed without DirectML support.
         if self.use_gpu:
-            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+            providers = ['CUDAExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']
         else:
             providers = ['CPUExecutionProvider']
 
@@ -562,7 +566,9 @@ class WD14Tagger:
         providers = [p for p in providers if p in available_providers]
         logger.info(f"Using providers: {providers} (GPU {'enabled' if self.use_gpu else 'disabled'})")
 
-        session_uses_gpu = self.use_gpu and 'CUDAExecutionProvider' in providers
+        session_uses_gpu = self.use_gpu and (
+            'CUDAExecutionProvider' in providers or 'DmlExecutionProvider' in providers
+        )
         sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:
@@ -592,8 +598,11 @@ class WD14Tagger:
         logger.info(f"Model loaded. Using providers: {self.session.get_providers()}")
 
     def _session_uses_gpu(self) -> bool:
-        """Return True when the active ONNX session is using CUDA."""
-        return bool(self.session and 'CUDAExecutionProvider' in self.session.get_providers())
+        """Return True when the active ONNX session is using CUDA or DirectML."""
+        if self.session is None:
+            return False
+        current = self.session.get_providers()
+        return 'CUDAExecutionProvider' in current or 'DmlExecutionProvider' in current
 
     def _fallback_to_cpu_session(self, error: Exception) -> None:
         """Rebuild the active ONNX session in CPU Safe Mode."""
@@ -797,14 +806,16 @@ class WD14Tagger:
             gc.collect()
 
             if self.use_gpu:
-                providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+                providers = ['CUDAExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']
             else:
                 providers = ['CPUExecutionProvider']
 
             available_providers = ort.get_available_providers()
             providers = [p for p in providers if p in available_providers]
 
-            session_uses_gpu = self.use_gpu and 'CUDAExecutionProvider' in providers
+            session_uses_gpu = self.use_gpu and (
+                'CUDAExecutionProvider' in providers or 'DmlExecutionProvider' in providers
+            )
             sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
             self.session = self._create_session(

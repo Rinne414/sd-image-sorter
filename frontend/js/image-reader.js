@@ -56,6 +56,40 @@
             document.getElementById('reader-copy-sd')?.addEventListener('click', () => this._copy('sd'));
             document.getElementById('reader-clear')?.addEventListener('click', () => this._clear());
             document.getElementById('reader-toggle-format')?.addEventListener('click', () => this._toggleFormat());
+
+            // Paste button — stop propagation so clicking it doesn't also open the file picker
+            const pasteBtn = document.getElementById('reader-paste-btn');
+            if (pasteBtn) {
+                pasteBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this._handlePaste();
+                });
+            }
+
+            // Global Ctrl+V listener — only acts when the reader view is active
+            document.addEventListener('paste', (e) => {
+                const readerView = document.getElementById('view-reader');
+                if (!readerView || readerView.style.display === 'none') return;
+                if (!this._isReaderToolActive()) return;
+
+                const target = e.target;
+                const tag = (target?.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                for (const item of items) {
+                    if (item.kind === 'file' && item.type.startsWith('image/')) {
+                        const file = item.getAsFile();
+                        if (file) {
+                            e.preventDefault();
+                            this._handleFile(file);
+                            return;
+                        }
+                    }
+                }
+            });
             document.querySelectorAll('[data-reader-histogram-mode]').forEach((button) => {
                 button.addEventListener('click', () => {
                     this._histogramMode = button.dataset.readerHistogramMode || 'rgb';
@@ -389,6 +423,50 @@
                     e.target.value = '';
                 }
             });
+        },
+
+        _isReaderToolActive() {
+            const readerPanel = document.getElementById('reader-tool-panel-reader');
+            if (!readerPanel) return true; // no tool tabs yet, assume reader is active
+            return readerPanel.classList.contains('active');
+        },
+
+        async _handlePaste() {
+            try {
+                if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
+                    window.App?.showToast?.(
+                        this._t('reader.pasteUnsupported', 'Clipboard paste is not supported in this browser'),
+                        'error'
+                    );
+                    return;
+                }
+
+                const items = await navigator.clipboard.read();
+                for (const item of items) {
+                    const imageType = (item.types || []).find((t) => t.startsWith('image/'));
+                    if (!imageType) continue;
+
+                    const blob = await item.getType(imageType);
+                    const ext = imageType.split('/').pop() || 'png';
+                    const file = new File([blob], `clipboard-${Date.now()}.${ext}`, {
+                        type: imageType,
+                        lastModified: Date.now(),
+                    });
+                    await this._handleFile(file);
+                    return;
+                }
+
+                window.App?.showToast?.(
+                    this._t('reader.pasteNoImage', 'No image found in clipboard'),
+                    'error'
+                );
+            } catch (error) {
+                const name = error?.name || '';
+                const msg = name === 'NotAllowedError'
+                    ? this._t('reader.pastePermissionDenied', 'Clipboard permission denied. Please allow clipboard access.')
+                    : this._t('reader.pasteFailed', 'Failed to read clipboard');
+                window.App?.showToast?.(msg, 'error');
+            }
         },
 
         async _handleFile(file) {

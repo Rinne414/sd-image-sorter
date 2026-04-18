@@ -1173,6 +1173,12 @@ window.I18nLang_zhCN = {
     // ========================
     'reader.dropText': '拖放图片到这里',
     'reader.dropHint': '或点击浏览',
+    'reader.pasteButton': '从剪贴板粘贴',
+    'reader.pasteHint': '或按 Ctrl+V 粘贴',
+    'reader.pasteNoImage': '剪贴板中没有图片',
+    'reader.pasteFailed': '读取剪贴板失败',
+    'reader.pasteUnsupported': '当前浏览器不支持剪贴板粘贴',
+    'reader.pastePermissionDenied': '剪贴板权限被拒绝，请允许访问剪贴板',
     'reader.clear': '清除',
     'reader.prompt': '提示词',
     'reader.negative': '反向提示词',

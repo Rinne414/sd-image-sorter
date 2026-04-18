@@ -284,7 +284,16 @@ def recommend_tagger_config(
     # Build message
     parts = []
     if use_gpu:
-        parts.append(f"GPU detected: {gpu_name} ({int(vram_mb)}MB VRAM).")
+        if has_cuda_provider:
+            runtime_label = "CUDA"
+        elif has_dml_provider:
+            runtime_label = "DirectML"
+        elif uses_torch_cuda_runtime and torch_cuda_available:
+            runtime_label = "CUDA (Torch)"
+        else:
+            runtime_label = "GPU"
+        vram_fragment = f" ({int(vram_mb)}MB VRAM)" if vram_mb is not None else ""
+        parts.append(f"{runtime_label} GPU detected: {gpu_name}{vram_fragment}.")
         if risk_level == "high":
             parts.append("VRAM headroom is tight right now. Auto runtime lowered the true batch size and kept session refresh enabled.")
         elif risk_level == "medium":
@@ -295,11 +304,15 @@ def recommend_tagger_config(
         if system_info.get("onnxruntime_conflict"):
             parts.append(
                 "Both onnxruntime and onnxruntime-gpu are installed. "
-                "On Windows the launcher should keep only onnxruntime-gpu."
+                "On Windows the launcher should keep only onnxruntime-gpu (NVIDIA) "
+                "or onnxruntime-directml (Intel / AMD)."
             )
             parts.append("Running on CPU until the package state is repaired.")
-        elif has_gpu and not has_cuda_provider:
-            parts.append(f"GPU detected ({gpu_name}) but CUDAExecutionProvider not available in ONNX Runtime.")
+        elif has_gpu and not (has_cuda_provider or has_dml_provider):
+            parts.append(
+                f"GPU detected ({gpu_name}) but no GPU execution provider is available in ONNX Runtime. "
+                "Install onnxruntime-gpu for NVIDIA or onnxruntime-directml for Intel / AMD."
+            )
             parts.append("Running on CPU.")
         else:
             parts.append("No GPU detected. Running on CPU.")

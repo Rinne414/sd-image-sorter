@@ -516,6 +516,11 @@
                             <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 6C12.9 6 12 6.9 12 8v32c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V16l-10-10H14z" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M26 6v10h10" fill="none" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M18 26h12M18 30h8" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
                             <div class="drop-text" data-i18n="reader.dropText">Drop an image here</div>
                             <div class="drop-hint" data-i18n="reader.dropHint">or click to browse</div>
+                            <button type="button" id="reader-paste-btn" class="reader-paste-btn" data-i18n-title="reader.pasteHint" title="Paste from clipboard (Ctrl+V)">
+                                <span aria-hidden="true">📋</span>
+                                <span data-i18n="reader.pasteButton">Paste from Clipboard</span>
+                            </button>
+                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteHint">or press Ctrl+V to paste</div>
                         </div>
                         <img id="reader-image-preview" style="display: none;" alt="Preview">
                         <input type="file" id="reader-file-input" accept="image/*" style="display: none;">

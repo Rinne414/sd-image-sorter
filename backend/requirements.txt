@@ -1,8 +1,12 @@
 fastapi>=0.109.0
 starlette<1.0  # Required for compatibility with FastAPI routers
 uvicorn[standard]>=0.27.0
+# Windows: onnxruntime-gpu 1.20+ ships CUDA 12.8 / cuDNN 9 wheels needed for
+# Blackwell RTX 50 (sm_120). Older cards (RTX 40/30/20/GTX) still work because
+# 1.20+ preserves CUDA 12.x compatibility. The launcher repair script can swap
+# this for onnxruntime-directml when the primary GPU is Intel or AMD.
 onnxruntime>=1.17.0; sys_platform != "win32"
-onnxruntime-gpu>=1.17.0; sys_platform == "win32"
+onnxruntime-gpu>=1.20.0; sys_platform == "win32"
 Pillow>=10.0.0
 numpy>=1.24.0,<2.0.0
 huggingface-hub>=0.20.0

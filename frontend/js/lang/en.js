@@ -1032,6 +1032,12 @@ window.I18nLang_en = {
     // ========================
     'reader.dropText': 'Drop an image here',
     'reader.dropHint': 'or click to browse',
+    'reader.pasteButton': 'Paste from Clipboard',
+    'reader.pasteHint': 'or press Ctrl+V to paste',
+    'reader.pasteNoImage': 'No image found in clipboard',
+    'reader.pasteFailed': 'Failed to read clipboard',
+    'reader.pasteUnsupported': 'Clipboard paste is not supported in this browser',
+    'reader.pastePermissionDenied': 'Clipboard permission denied. Please allow clipboard access.',
     'reader.clear': 'Clear',
     'reader.prompt': 'Prompt',
     'reader.negative': 'Negative Prompt',

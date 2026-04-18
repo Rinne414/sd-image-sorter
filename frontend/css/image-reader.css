@@ -79,6 +79,37 @@
 .reader-drop-zone .drop-text { font-size: 0.95rem; color: var(--text-muted); }
 .reader-drop-zone .drop-hint { font-size: 0.78rem; color: var(--text-muted); opacity: 0.5; margin-top: 4px; }
 
+/* Paste button inside drop zone */
+.reader-paste-btn {
+    margin-top: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.reader-paste-btn:hover {
+    background: rgba(245, 158, 11, 0.22);
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #fcd34d;
+    transform: translateY(-1px);
+}
+.reader-paste-btn:active {
+    transform: translateY(0);
+}
+.reader-paste-hint {
+    margin-top: 6px !important;
+    opacity: 0.4 !important;
+    font-size: 0.72rem !important;
+}
+
 /* Image preview */
 #reader-image-preview {
     max-width: 100%;

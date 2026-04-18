@@ -7,7 +7,7 @@
 <a name="english"></a>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.0-purple" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.1-purple" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
@@ -16,9 +16,9 @@
 <h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
 </p>
 
 <p align="center">
@@ -115,6 +115,7 @@ Inspect any SD image without scanning it into your library. Drag an image onto t
 - **Model hashes**: all hashes exposed for checkpoint / VAE / LoRA so you can cross-reference Civitai
 - **Prompt reformat**: view in original, SD WebUI, or NovelAI syntax
 - **Drag-replace**: drop a new image anytime to swap; no modal, no loading screens
+- **Paste from clipboard**: press `Ctrl+V` or click the paste button — parse screenshots or copied PNGs without saving them first
 - **Histogram preview**: RGB and luminance distribution of the source image
 
 ### 🧩 Image Obfuscate — Scramble sharing *(new in 3.0)*
@@ -136,21 +137,27 @@ LAION aesthetic predictor (CLIP ViT-L/14 + linear head) scores any image on a ~1
 
 ### Windows
 
-1. **[Download sd-image-sorter-v3.0.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip)**
+1. **[Download sd-image-sorter-v3.0.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip)**
 2. Extract to any folder
 3. Double-click **`run-portable.bat`**
 4. Browser opens `http://localhost:8487` — done
 
 > Python 3.11 is bundled. AI models auto-download on first use (~500 MB).
 >
-> For **GPU tagging on Windows**, your system still needs the NVIDIA driver plus the CUDA / cuDNN / MSVC runtime pieces required by `onnxruntime-gpu`. If those dependencies are missing, the app now falls back cleanly to CPU and the tagger modal will show that in the runtime status chips.
+> **GPU support on Windows** — The launcher auto-detects your GPU and swaps the ONNX Runtime package to match:
+> - **NVIDIA (GTX / RTX 20 / 30 / 40)** → `onnxruntime-gpu` with CUDA 12.x
+> - **NVIDIA Blackwell (RTX 5070 Ti / 5080 / 5090)** → `onnxruntime-gpu 1.20+` with CUDA 12.8 / cuDNN 9 (native `sm_120` support)
+> - **Intel Arc / AMD Radeon** → auto-swapped to `onnxruntime-directml` so the iGPU / dGPU accelerates tagging
+> - **No GPU or missing drivers** → clean CPU fallback, runtime status shown in the Tagger modal
+>
+> If you previously got stuck on CPU with a 50-series card or an Intel / AMD GPU, delete the old folder and unzip v3.0.1 fresh — the first launch will repair the ONNX Runtime install automatically.
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v3.0.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz)**
+1. **[Download sd-image-sorter-v3.0.1-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz)**
 2. Extract and run:
    ```bash
-   tar xzf sd-image-sorter-v3.0.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.1-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > Requires Python 3.9+. The script creates a virtualenv automatically.
@@ -252,9 +259,9 @@ This project wouldn't be possible without these amazing contributors and their i
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
   &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
 </p>
 
 <p align="center">
@@ -350,6 +357,7 @@ This project wouldn't be possible without these amazing contributors and their i
 - **模型 hash**：checkpoint / VAE / LoRA 的 hash 都能看到，方便去 Civitai 对照
 - **提示词格式切换**：原始、SD WebUI、NovelAI 三种语法互换
 - **拖拽替换**：随时再拖一张就换，不弹窗、不转圈
+- **剪贴板粘贴**：按 `Ctrl+V` 或点粘贴按钮 — 截图或复制的 PNG 不用保存就能解析
 - **直方图**：源图的 RGB 和亮度分布
 
 ### 🧩 图片混淆 — 加扰分享 *（3.0 新增）*
@@ -371,21 +379,27 @@ LAION Aesthetic Predictor（CLIP ViT-L/14 + 线性头）给图片打一个 ~1–
 
 ### Windows
 
-1. **[下载 sd-image-sorter-v3.0.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-windows-portable.zip)**
+1. **[下载 sd-image-sorter-v3.0.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-windows-portable.zip)**
 2. 解压到任意文件夹
 3. 双击 **`run-portable.bat`**
 4. 浏览器打开 `http://localhost:8487` — 搞定
 
 > 内置 Python 3.11，无需安装。AI 模型首次使用自动下载（约 500 MB）。
 >
-> 如果你想在 **Windows 上用 GPU 打标**，系统仍然需要满足 `onnxruntime-gpu` 的 CUDA / cuDNN / MSVC 运行时要求。缺少这些依赖时，程序现在会稳定回退到 CPU，并在 Tagger 弹窗里明确显示当前 runtime 状态。
+> **Windows 下的 GPU 支持** — 启动器会自动识别你的显卡并切换到对应的 ONNX Runtime：
+> - **NVIDIA（GTX / RTX 20 / 30 / 40）** → `onnxruntime-gpu`（CUDA 12.x）
+> - **NVIDIA Blackwell（RTX 5070 Ti / 5080 / 5090）** → `onnxruntime-gpu 1.20+`（CUDA 12.8 / cuDNN 9，原生 `sm_120`）
+> - **Intel Arc / AMD Radeon** → 自动切换到 `onnxruntime-directml`，核显 / 独显都能加速打标
+> - **没有独显 / 驱动不全** → 稳定回退 CPU，Tagger 弹窗里会显示当前 runtime 状态
+>
+> 如果以前 50 系显卡或 Intel / AMD 显卡卡在 CPU 模式，删掉旧目录重新解压 v3.0.1 即可 — 首次启动会自动修复 ONNX Runtime 安装。
 
 ### Linux / macOS
 
-1. **[下载 sd-image-sorter-v3.0.0-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.0-linux-mac.tar.gz)**
+1. **[下载 sd-image-sorter-v3.0.1-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.1-linux-mac.tar.gz)**
 2. 解压并运行：
    ```bash
-   tar xzf sd-image-sorter-v3.0.0-linux-mac.tar.gz
+   tar xzf sd-image-sorter-v3.0.1-linux-mac.tar.gz
    cd sd-image-sorter && chmod +x run.sh && ./run.sh
    ```
 > 需要 Python 3.9+，脚本自动创建虚拟环境。
