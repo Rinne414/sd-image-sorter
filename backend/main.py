@@ -23,6 +23,45 @@ from contextlib import asynccontextmanager
 # Add current dir to path for imports
 sys.path.insert(0, os.path.dirname(__file__))
 
+
+def _register_nvidia_dll_dirs() -> None:
+    """Make cuDNN / cuBLAS sub-DLLs loadable on Windows.
+
+    onnxruntime-gpu 1.19+ calls `os.add_dll_directory()` for the primary
+    nvidia wheels, which lets the main DLL (e.g. cudnn64_9.dll) load. But
+    when cuDNN then does `LoadLibraryW("cudnn_engines_tensor_ir64_9.dll")`
+    for its sub-libraries, Windows uses the default search (exe dir +
+    system32 + PATH) and ignores `os.add_dll_directory`, so the load
+    silently fails with CUDNN_STATUS_SUBLIBRARY_LOADING_FAILED at first
+    inference. Prepending every `site-packages/nvidia/*/bin` directory to
+    PATH makes those sub-DLLs discoverable via the default search order.
+    """
+    if sys.platform != "win32":
+        return
+    import site
+    candidate_roots = set()
+    for entry in site.getsitepackages():
+        candidate_roots.add(os.path.join(entry, "nvidia"))
+    user_site = site.getusersitepackages()
+    if user_site:
+        candidate_roots.add(os.path.join(user_site, "nvidia"))
+    for nvidia_root in candidate_roots:
+        if not os.path.isdir(nvidia_root):
+            continue
+        for entry in os.listdir(nvidia_root):
+            bin_dir = os.path.join(nvidia_root, entry, "bin")
+            if not os.path.isdir(bin_dir):
+                continue
+            if bin_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+            try:
+                os.add_dll_directory(bin_dir)
+            except (OSError, AttributeError):
+                pass
+
+
+_register_nvidia_dll_dirs()
+
 from config import (
     SERVER_HOST,
     SERVER_PORT,
