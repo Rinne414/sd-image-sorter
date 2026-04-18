@@ -1,12 +1,15 @@
 fastapi>=0.109.0
 starlette<1.0  # Required for compatibility with FastAPI routers
 uvicorn[standard]>=0.27.0
-# Windows: onnxruntime-gpu 1.20+ ships CUDA 12.8 / cuDNN 9 wheels needed for
-# Blackwell RTX 50 (sm_120). Older cards (RTX 40/30/20/GTX) still work because
-# 1.20+ preserves CUDA 12.x compatibility. The launcher repair script can swap
-# this for onnxruntime-directml when the primary GPU is Intel or AMD.
+# Windows: onnxruntime-gpu 1.18+ stopped bundling CUDA/cuDNN runtime DLLs
+# (~1.4 GB). The [cuda,cudnn] PyPI extras (introduced in 1.21.0) pull in
+# nvidia-cublas-cu12, nvidia-cudnn-cu12, nvidia-cufft-cu12, etc. The launcher
+# repair script (repair_onnxruntime.py) installs those extras only when an
+# NVIDIA GPU is detected as primary, so Intel/AMD users do not pay the cost
+# and get swapped to onnxruntime-directml. Older cards (RTX 40/30/20/GTX)
+# still work via CUDA 12.x compatibility.
 onnxruntime>=1.17.0; sys_platform != "win32"
-onnxruntime-gpu>=1.20.0; sys_platform == "win32"
+onnxruntime-gpu>=1.21.0; sys_platform == "win32"
 Pillow>=10.0.0
 numpy>=1.24.0,<2.0.0
 huggingface-hub>=0.20.0

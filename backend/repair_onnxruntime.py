@@ -240,6 +240,32 @@ def repair_windows_onnxruntime() -> Dict[str, Any]:
             _run_pip(["uninstall", "-y", current_runtime])
             _run_pip(["install", "--upgrade", "--force-reinstall", target_runtime])
 
+    # Step 5: NVIDIA users need the CUDA 12 + cuDNN 9 runtime DLLs to
+    # actually load CUDAExecutionProvider. onnxruntime-gpu 1.18+ stopped
+    # bundling these (~1.4 GB total), so without them ONNX Runtime lists
+    # CUDAExecutionProvider as available but silently falls back to CPU
+    # with "Failed to load cublas64_12.dll" etc. The [cuda,cudnn] extras
+    # (added in 1.21.0) pull in nvidia-cublas-cu12, nvidia-cudnn-cu12,
+    # nvidia-cufft-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12,
+    # and nvidia-curand-cu12. We probe nvidia-cudnn-cu12 as the sentinel
+    # because it transitively pulls in cublas as well.
+    final_gpu_version = _version("onnxruntime-gpu")
+    if (
+        primary_vendor == "nvidia"
+        and target_runtime == "onnxruntime-gpu"
+        and final_gpu_version
+        and not _version("nvidia-cudnn-cu12")
+    ):
+        actions.append(
+            f"Installing CUDA 12 + cuDNN 9 runtime DLLs (~1.4 GB) so onnxruntime-gpu "
+            f"{final_gpu_version} can use CUDAExecutionProvider"
+        )
+        _run_pip([
+            "install",
+            "--no-warn-script-location",
+            f"onnxruntime-gpu[cuda,cudnn]=={final_gpu_version}",
+        ])
+
     if not actions:
         actions.append("No repair needed")
 
