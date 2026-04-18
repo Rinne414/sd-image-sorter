@@ -517,9 +517,11 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
             }
         )
 
+    # Manifest is a local-only record of SHA-256 + sizes for CI / verification.
+    # Do not append to `assets` so it is not uploaded as a public release asset —
+    # the same SHAs are already printed in the release notes.
     manifest_path = ARTIFACT_ROOT / f"sd-image-sorter-v{version}-release-manifest.json"
     manifest_path.write_text(json.dumps({"version": version, "assets": manifest_entries}, indent=2), encoding="utf-8")
-    assets.append(manifest_path)
     shutil.rmtree(STAGING_ROOT, ignore_errors=True)
     return assets
 
