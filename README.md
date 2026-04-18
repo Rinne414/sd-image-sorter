@@ -1,491 +1,363 @@
-# SD Image Sorter (AI 图像筛选管理器)
-
-[English](#english) | [简体中文](#简体中文)
-
----
-
-<a name="english"></a>
+# SD Image Sorter
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.2-purple" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.9+-blue" alt="Python">
-  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
-</p>
-
-<h3 align="center">The all-in-one image manager for Stable Diffusion creators.</h3>
-
-<p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip"><b>⬇️ Download for Windows</b></a>
-  &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz"><b>⬇️ Download for Linux/Mac</b></a>
+  <b>Local-first AI image command center for Stable Diffusion creators.</b>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/gallery_hero.png" alt="SD Image Sorter — Gallery View" width="900">
+  扫图库、读参数、自动打标、WASD 狂飙分拣、相似图查重、AI 打码修图，全都在你自己的电脑上完成。
 </p>
 
----
+<p align="center">
+  <a href="#zh-cn">简体中文</a>
+  ·
+  <a href="#english">English</a>
+</p>
 
-### Ever feel like this?
+<p align="center">
+  <img src="https://img.shields.io/badge/version-3.0.2-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="Python">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
+  <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
+</p>
 
-> *Thousands of AI images scattered everywhere. Some have metadata, some don't. You can't search by prompt, can't filter by model, can't find that one image you made last week...*
+<p align="center">
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip"><b>Download for Windows</b></a>
+  ·
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
+  ·
+  <a href="#quick-start">Quick Start</a>
+</p>
 
-**SD Image Sorter** fixes all of that — and more.
+<p align="center">
+  <img src="docs/screenshots/gallery_hero.png" alt="SD Image Sorter gallery hero screenshot" width="100%">
+</p>
 
----
+> [!IMPORTANT]
+> This is a local-only app. Your images stay on your machine. Models run locally. No cloud upload, no account, no nonsense.
 
-## ✨ What Can It Do?
+<a name="zh-cn"></a>
 
-### 🖼️ Gallery — Your images, finally organized
+## 简体中文
 
-Point it at any folder. The app scans your images, **auto-detects the generator** (ComfyUI, NovelAI, WebUI, Forge), and **extracts everything**: prompts, negative prompts, sampling settings, checkpoints, LoRAs, seeds — all searchable, all filterable.
+> 你说得对，但这就是 **SD Image Sorter**🤚。能扫几千张 SD 图👌，能自动识别 ComfyUI / NovelAI / WebUI / Forge 元数据✌️，能把 prompt、negative prompt、checkpoint、LoRA、VAE、seed 一口气全扒出来🤙。有 Gallery 管图库✊，有 Image Reader 拖图即读👍，有 WD14 AI 打标👈，有分级和后台批处理👐，有 Auto-Separate 一键搬运🙌，还有 WASD 手动狂飙分拣😨。然后还有 CLIP 相似图查重😰，还有 Prompt Lab 反炼提示词😭，还有 Artist Identification 认风格🖐️，还有 Image Obfuscate 加扰解扰🤚，还有 Aesthetic Score 本地打分😵。然后 Censor Edit 还能 YOLO 自动检测👊🏿😭👊🏿，还能手动画笔、马赛克、高斯模糊、黑白条、批量保存🖐️😭🤚。Reader、Tagger、Sorter、Similarity、Prompt Lab、Artist ID、Obfuscate、Aesthetic、Censor 一套全开，文件夹就啊啊啊啊啊啊。
 
-- **Filter** by generator, tags, content rating, checkpoint, LoRA, prompt keywords, image dimensions, aspect ratio
-- **Sort** by date, filename, prompt length, tag count, or AI-predicted rating
-- **Tab view** separating images by generator type
+### 一句话宣传
 
-### 🏷️ AI Tagging — One click, thousands of tags
+**SD Image Sorter：把“AI 图满盘爆炸、参数到处失踪、好图根本挑不出来、发出去前还得重新打码”的崩溃现场，硬生生压成“扫描、读取、打标、分拣、查重、炼词、识别、打码、加扰、评分”一套打完的本地工作流。**
 
-Built-in **WD14 Tagger** (anime/illustration-focused) automatically labels every image with descriptive tags like `1girl`, `blue_hair`, `school_uniform`, `outdoors` — plus character recognition and content rating.
+### 它到底解决什么问题
 
-- **8 runnable taggers**: EVA02-Large, SwinV2, ConvNeXt, ViT, ViT-Large, Camie v2, PixAI v0.9, ToriiGate 0.5
-- **Newer tag spaces**: Camie v2 and PixAI v0.9 improve coverage beyond the older WD tag databases
-- **Experimental VLM backend**: ToriiGate 0.5 runs through a separate Transformers-based multimodal backend instead of the WD14 ONNX runtime
-- **Large first-run download warning**: ToriiGate is much larger than the WD14 models, so the first download is significantly heavier
-- **Dual thresholds**: tune general tag sensitivity separately from character tag sensitivity
-- **Content rating**: auto-classifies General / Sensitive / Questionable / Explicit
-- **AI captions**: ToriiGate generates natural-language descriptions alongside tags — viewable in the image detail modal
-- **Background tagging**: close the tagger modal and keep browsing — a floating progress pill in the bottom-right corner tracks the job, with stop and details controls
-- **Elastic batch sizing**: the app monitors your RAM/VRAM in real time and adjusts batch size to prevent crashes
-- Models auto-download from HuggingFace on first use
+如果你也经历过这些破事，这个工具就是给你做的：
 
-### 📁 Sorting — Organize at game speed
+- 图很多，但根本想不起哪张是哪个模型、哪组提示词生成的
+- 想把 `best / keep / delete / explicit` 分桶，结果手工拖文件拖到怀疑人生
+- 想批量打标签、查重、找相似图、做隐私打码，却要开一堆零碎脚本和网站
+- 想快速回看一张图的 SD 参数，但不想先导入一整个图库
 
-Two powerful sorting modes:
+### 为什么这个仓库值得点 Star
 
-- **Auto-Separate**: set filter criteria → pick a destination folder → one click moves all matching images
-- **WASD Manual Sort**: images appear one by one, press `W`/`A`/`S`/`D` to sort into 4 folders. `Space` to skip, `Z` to undo. It's fast, satisfying, and hard to stop.
+- **真本地**：浏览器只是界面，核心在本机跑，图片不上传。
+- **真懂 SD 图**：能读 ComfyUI、NovelAI、WebUI / A1111、Forge 等常见元数据。
+- **真能干活**：不是只看图，是完整的筛选、打标、排序、查重、打码工作流。
+- **真适合大图库**：几千张图不是展示案例，是默认使用场景。
+- **真有速度感**：WASD 手动分拣、批量动作、后台进度、快捷键都不是摆设。
+- **真有界面**：不是冷冰冰的调试页，而是带玻璃拟态和霓虹氛围的本地工具。
 
-### 🔳 Censor Edit — AI detection + pixel-perfect manual control
+## 截图
 
-A full canvas-based editor for privacy masking. The AI detects sensitive regions, then you fine-tune with manual tools.
+<p align="center">
+  <img src="docs/screenshots/gallery_demo.gif" alt="Gallery demo" width="48%">
+  <img src="docs/screenshots/manual_sort_demo.gif" alt="Manual sort demo" width="48%">
+</p>
 
-- **Detection models**: Wenaka YOLO (privacy-focused), NudeNet v3, or both combined for best coverage
-- **Censor styles**: mosaic pixelation, gaussian blur, solid black/white bars
-- **Manual tools**: variable-size brush, pen, eraser (restore original pixels), clone stamp
-- **SAM3 integration**: text-prompt guided segmentation for surgical precision (requires CUDA GPU)
-- **Batch workflow**: queue multiple images → detect all → review → batch save with custom naming and optional metadata stripping
-- **Queue Manager**: full-screen modal for large batches — search by filename, drag-and-drop reorder, multi-select, move-to-position
+<p align="center">
+  <img src="docs/screenshots/manual_sort.png" alt="Manual sort screenshot" width="48%">
+  <img src="docs/screenshots/censor_edit.png" alt="Censor edit screenshot" width="48%">
+</p>
 
-### 🔍 Similar Images — Find duplicates and visual matches
+## 核心功能
 
-Powered by **CLIP embeddings**, this feature creates a visual fingerprint of every image in your library.
+### 1. Gallery 画廊
 
-- **Search by ID**: click any image → find visually similar ones
-- **Search by upload**: drop in any image from outside your library
-- **Duplicate finder**: scan your entire collection for near-identical pairs
-- **Adjustable threshold**: from loose similarity to strict duplicate matching
-- Local-first: the CLIP model runs on your machine, nothing leaves your PC
+- 扫描任意文件夹，建立本地图库
+- 自动识别生成器：ComfyUI、NovelAI、WebUI / A1111、Forge
+- 提取 prompt、negative prompt、steps、CFG、seed、checkpoint、LoRA、VAE、尺寸等信息
+- 按生成器、标签、评级、模型、LoRA、提示词关键字、尺寸、长宽比筛选
+- 按时间、文件名、提示词长度、标签数量等排序
 
-### 🧪 Prompt Lab — Generate new prompts from your own library
+### 2. AI Tagging 打标
 
-Analyze the tags across your image collection and generate randomized, coherent prompts.
+- 内置 WD14 系列标签模型，支持批量自动打标
+- 支持 general / character 双阈值
+- 自动判定 General / Sensitive / Questionable / Explicit
+- 支持 EVA02、SwinV2、ConvNeXt、ViT、Camie、PixAI、ToriiGate 等模型
+- 后台持续打标，右下角进度跟踪，不会卡死整个界面
 
-- **Smart randomizer**: picks tags while respecting exclusion rules (e.g., `from_behind` auto-excludes `looking_at_viewer`)
-- **Tag sets**: pre-built outfits (school uniform, swimsuit, maid, etc.) for one-click outfit combos
-- **Category browser**: explore your library's tags organized by type (body, pose, outfit, expression, etc.)
-- **Negative prompt**: auto-generates quality-focused negative prompts
-- Works even with a small library — built-in fallback tag pools fill the gaps
+### 3. Sorting 排序
 
-### 🎨 Artist Identification *(experimental)*
+- **Auto-Separate**：按筛选条件一键批量移动
+- **Manual Sort**：`W / A / S / D` 四路分拣，`Space` 跳过，`Z` 撤销
+- 适合把收藏、精选、待删、NSFW、角色分类等工作压缩成几分钟
 
-Identify the artist or style of your images using **Kaloscope 2.0** (LSNet-based classifier).
+### 4. Censor Edit 打码编辑
 
-- Batch-process your entire library with progress tracking
-- Filter gallery by predicted artist
-- View top artists and their image counts
-- Supports HuggingFace, ModelScope, or local model loading
+- YOLO 自动检测敏感区域
+- 支持马赛克、高斯模糊、黑条、白条
+- 画笔、铅笔、橡皮、仿制图章一套齐
+- 队列式批量处理，适合做分享版、公开版、平台版素材
 
-### 📖 Image Reader — Drag, drop, read *(new in 3.0)*
+### 5. Similar Images 相似图
 
-Inspect any SD image without scanning it into your library. Drag an image onto the Reader tab and see everything instantly.
+- 基于 CLIP embedding 做视觉相似度搜索
+- 找近似重复图
+- 用库内图片搜相似图
+- 用外部图片搜图库里的相似结果
 
-- **Full metadata**: prompt, negative prompt, sampler, steps, CFG, seed, checkpoint, VAE, LoRAs with weights
-- **Model hashes**: all hashes exposed for checkpoint / VAE / LoRA so you can cross-reference Civitai
-- **Prompt reformat**: view in original, SD WebUI, or NovelAI syntax
-- **Drag-replace**: drop a new image anytime to swap; no modal, no loading screens
-- **Paste from clipboard**: press `Ctrl+V` or click the paste button — parse screenshots or copied PNGs without saving them first
-- **Histogram preview**: RGB and luminance distribution of the source image
+### 6. Prompt Lab 提示词工坊
 
-### 🧩 Image Obfuscate — Scramble sharing *(new in 3.0)*
+- 从你自己的图库标签反推可复用 prompt
+- 自动处理部分互斥标签
+- 内置标签套装和负向 prompt 生成
+- 对小图库也有兜底标签池
 
-Clipboard-first image scrambler compatible with the Big Tomato (`dfqtphx`) and Small Tomato (`singularpoint`) reference sites.
+### 7. 其他实用模块
 
-- **Drag / paste / browse**: queue any number of images
-- **Encode or decode**: both directions with an optional password
-- **Compat modes**: Big Tomato (preserves PNG metadata) or Small Tomato (pure pixel scramble)
-- **Clipboard copy**: paste the decoded PNG straight into Discord, Twitter, etc. — download only if you need it
+- **Artist Identification**：实验性画师 / 风格识别
+- **Image Reader**：拖一张图进来，立刻读参数，不用先扫描图库
+- **Image Obfuscate**：图片加扰 / 解扰，适合带密码分享
+- **Aesthetic Score**：本地美学评分
 
-### ✨ Aesthetic Score *(new in 3.0)*
+## 这工具最适合谁
 
-LAION aesthetic predictor (CLIP ViT-L/14 + linear head) scores any image on a ~1–10 aesthetic scale. Surfaces in the detail modal alongside ratings and tags.
+- Stable Diffusion / NovelAI / ComfyUI 重度用户
+- 有几千到几万张图，已经开始找不到图的人
+- 想把“生成”变成“可检索资产管理”的人
+- 想把分拣、筛选、打码、查重流程尽量压在一个本地工具里的人
 
----
-
-## ⬇️ Download & Install
+## 60 秒上手
 
 ### Windows
 
-1. **[Download sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)**
-2. Extract to any folder
-3. Double-click **`run-portable.bat`**
-4. Browser opens `http://localhost:8487` — done
-
-> Python 3.11 is bundled. AI models auto-download on first use (~500 MB).
->
-> **GPU support on Windows** — The launcher auto-detects your GPU and swaps the ONNX Runtime package to match:
-> - **NVIDIA (GTX / RTX 20 / 30 / 40)** → `onnxruntime-gpu` with CUDA 12.x
-> - **NVIDIA Blackwell (RTX 5070 Ti / 5080 / 5090)** → `onnxruntime-gpu 1.20+` with CUDA 12.8 / cuDNN 9 (native `sm_120` support)
-> - **Intel Arc / AMD Radeon** → auto-swapped to `onnxruntime-directml` so the iGPU / dGPU accelerates tagging
-> - **No GPU or missing drivers** → clean CPU fallback, runtime status shown in the Tagger modal
->
-> If you previously got stuck on CPU with a 50-series card or an Intel / AMD GPU, delete the old folder and unzip v3.0.2 fresh — the first launch will repair the ONNX Runtime install automatically.
+1. 下载 [sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)
+2. 解压到任意目录
+3. 双击 `run-portable.bat`
+4. 浏览器会自动打开 `http://localhost:8487`
 
 ### Linux / macOS
 
-1. **[Download sd-image-sorter-v3.0.2-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz)**
-2. Extract and run:
-   ```bash
-   tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
-   cd sd-image-sorter && chmod +x run.sh && ./run.sh
-   ```
-> Requires Python 3.9+. The script creates a virtualenv automatically.
+1. 下载 [sd-image-sorter-v3.0.2-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz)
+2. 解压并执行：
 
-### From Source
+```bash
+tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
+cd sd-image-sorter
+chmod +x run.sh
+./run.sh
+```
+
+### 从源码运行
 
 ```bash
 git clone https://github.com/peter119lee/sd-image-sorter.git
 cd sd-image-sorter
-# Windows: run.bat  |  Linux/Mac: ./run.sh
+# Windows
+run.bat
+
+# Linux / macOS
+./run.sh
 ```
 
----
+> [!TIP]
+> Windows 便携版自带 Python 3.11。AI 模型按需自动下载。首次启动时间长一点是正常的，不是死了。
 
-## 🌐 China Mainland / 大陆用户
+## 下载与运行说明
 
-Models download from HuggingFace by default. Behind the GFW? Add one line to `backend/.env`:
+### GPU / 运行时说明
 
-```
+- NVIDIA 显卡会优先使用 `onnxruntime-gpu`
+- Intel Arc / AMD Radeon 会切到 `onnxruntime-directml`
+- 没有合适 GPU 也能 CPU 跑，只是慢一些
+- `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
+
+### 大陆用户
+
+默认从 HuggingFace 下载模型。网络不顺时，在 `backend/.env` 添加：
+
+```env
 HF_ENDPOINT=https://hf-mirror.com
 ```
 
-Artist ID and SAM3 also support [ModelScope](https://modelscope.cn) — select in the UI.
+Artist ID 和 SAM3 也支持 [ModelScope](https://modelscope.cn)。
 
----
+## 快捷键
 
-## 🧰 Hardware Guide
-
-| Feature | RAM | GPU |
-|:--------|:----|:----|
-| Gallery · Filters · Sort · Prompt Lab | 4 GB | — |
-| WD14 tagging (SwinV2 / ConvNeXt / ViT family) | 8 GB | Optional |
-| WD14 tagging (EVA02 / Camie / PixAI) | 16 GB | Recommended |
-| ToriiGate 0.5 multimodal tagging | 24 GB | **CUDA strongly recommended** |
-| Censor detection | 8 GB | Optional |
-| Similar images (CLIP) | 8 GB | — |
-| Artist ID (Kaloscope) | 16 GB | Recommended |
-| SAM3 refinement | 16 GB | **CUDA required** |
+| 场景 | 按键 | 动作 |
+|:--|:--|:--|
+| Manual Sort | `W` `A` `S` `D` | 移动到 4 个目标文件夹 |
+| Manual Sort | `Space` | 跳过当前图片 |
+| Manual Sort | `Z` | 撤销上一步 |
+| Censor Edit | `A` / `D` | 上一张 / 下一张 |
+| Censor Edit | `B` `P` `E` `G` | 画笔 / 铅笔 / 橡皮 / 仿制 |
+| Censor Edit | `[` `]` | 调整笔刷大小 |
+| Censor Edit | `Ctrl+Z` | 撤销笔触 |
+| Censor Edit | `Ctrl + 滚轮` | 缩放画布 |
 
 <details>
-<summary>Model sizes (downloaded on first use)</summary>
+<summary><b>支持的元数据来源</b></summary>
 
-| Model | Size | Feature |
-|:------|:-----|:--------|
-| wd-swinv2-tagger-v3 | ~446 MB | AI Tagging (default) |
-| wd-eva02-large-tagger-v3 | ~1.2 GB | AI Tagging (best quality) |
-| camie-tagger-v2 | ~1.3 GB | AI Tagging (newer tag space) |
-| pixai-tagger-v0.9 | ~1.2 GB | AI Tagging (newer tag space) |
-| clip-ViT-B-32-vision | ~335 MB | Similar Images |
-| wenaka_yolov8s-seg | ~46 MB | Censor detection |
-| NudeNet 320n | ~12 MB | Censor detection |
-| Kaloscope 2.0 | ~2.8 GB | Artist ID |
-| SAM3 | ~3.3 GB | Censor refinement |
-| CLIP ViT-L/14 + aesthetic head | ~400 MB | Aesthetic score |
+- ComfyUI：PNG `prompt` / `workflow` JSON
+- NovelAI：PNG `Comment` JSON
+- WebUI / A1111：PNG `parameters`
+- Forge：兼容 WebUI 参数串
+- WebP：EXIF / XMP 中的 SD 元数据
+
 </details>
 
----
-
-## ⌨️ Keyboard Shortcuts
-
-| Context | Key | Action |
-|:--------|:----|:-------|
-| **Manual Sort** | `W` `A` `S` `D` | Move to folder slot |
-| | `Space` | Skip image |
-| | `Z` | Undo |
-| **Censor Edit** | `A` / `D` | Prev / Next image |
-| | `B` `P` `E` `G` | Brush · Pen · Eraser · Clone |
-| | `[` `]` | Brush size −/+ |
-| | `Ctrl+Z` | Undo stroke |
-| | `Ctrl+Scroll` | Zoom canvas |
-
----
-
-## 🙏 Special Thanks
-
-This project wouldn't be possible without these amazing contributors and their inspiring work:
-
-| Contributor | Contribution |
-|:------------|:-------------|
-| **[Antigravity](https://github.com/peter119lee)** & **Claude Code** · **Claude Opus 4.6** · **Codex** · **GPT-5.4** · **Gemini 3.1 Pro** | 💻 Core development & AI-assisted coding |
-| **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 Auto-censor concept inspiration |
-| **Wenaka2004** | 🎯 [YOLO detection model](https://civitai.com/models/1736285) |
-| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**, **DraconicDragon**, **heathcliff01** | 🔮 LSNet / Kaloscope artist identification |
-| **[SmilingWolf](https://huggingface.co/SmilingWolf)** | 🏷️ WD14 Tagger models |
-| **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | 📖 Prompt reader concept inspiration |
-
-📄 [MIT License](LICENSE)
-
----
-
-<br>
-
-<a name="简体中文"></a>
-
-<h3 align="center">🎨 SD Image Sorter — AI 图像筛选管理器</h3>
-
-<p align="center">
-  专为 Stable Diffusion 创作者打造的全能图像管理工具
-</p>
-
-<p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip"><b>⬇️ 下载 Windows 版</b></a>
-  &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz"><b>⬇️ 下载 Linux/Mac 版</b></a>
-</p>
-
-<p align="center">
-  <img src="docs/screenshots/gallery_hero.png" alt="SD Image Sorter — 画廊视图" width="900">
-</p>
-
----
-
-### 你是不是也这样？
-
-> *几千张 AI 图散落各处。有些有元数据有些没有。想按提示词搜搜不了，想按模型筛筛不了，上周那张满意的图死活找不到…*
-
-**SD Image Sorter** 帮你全搞定。
-
----
-
-## ✨ 功能介绍
-
-### 🖼️ 画廊 — 你的图库，终于能管了
-
-指向任意文件夹，程序自动扫描图片，**识别生成器**（ComfyUI、NovelAI、WebUI、Forge），**提取所有信息**：正向提示词、负向提示词、采样参数、模型、LoRA、种子 — 全部可搜索、可筛选。
-
-- **筛选**：按生成器、标签、内容评级、模型、LoRA、提示词关键字、图片尺寸、长宽比
-- **排序**：按时间、文件名、提示词长度、标签数量、AI 评级
-- **分页浏览**：按生成器类型自动分页
-
-### 🏷️ AI 打标 — 一键标注成千上万张图
-
-内置 **WD14 Tagger**（动漫/插画专用），自动为每张图打上描述标签：`1girl`、`blue_hair`、`school_uniform`、`outdoors` — 还能识别角色和内容分级。
-
-- **8 个可运行打标模型**：EVA02-Large、SwinV2、ConvNeXt、ViT、ViT-Large、Camie v2、PixAI v0.9、ToriiGate 0.5
-- **更新的标签空间**：Camie v2 和 PixAI v0.9 比老 WD 标签库更现代
-- **实验性 VLM 后端**：ToriiGate 0.5 通过单独的 Transformers 多模态后端运行，不走 WD14 ONNX 运行链
-- **首次下载很大**：ToriiGate 体积远大于 WD14 系模型，首次下载会明显更重
-- **双阈值**：通用标签和角色标签分开调节灵敏度
-- **内容评级**：自动分类 General / Sensitive / Questionable / Explicit
-- **AI 描述**：ToriiGate 在打标签的同时生成自然语言描述，可在图片详情弹窗查看
-- **后台打标**：关闭打标弹窗继续浏览，右下角浮动进度条实时跟踪任务，支持停止/查看详情
-- **弹性 batch**：程序实时监控 RAM/VRAM 使用量，自动调节 batch size 防止崩溃
-- 模型首次使用时从 HuggingFace 自动下载
-
-### 📁 排序 — 打游戏一样快
-
-两种强大的排序模式：
-
-- **自动分类**：设好筛选条件 → 选目标文件夹 → 一键移动所有符合条件的图
-- **WASD 手动排序**：图片逐张显示，按 `W`/`A`/`S`/`D` 分到 4 个文件夹。`空格`跳过，`Z`撤销。快到停不下来。
-
-### 🔳 打码编辑 — AI 检测 + 像素级手动精修
-
-完整的画布编辑器，AI 自动检测敏感区域，然后你可以精修。
-
-- **检测模型**：Wenaka YOLO（隐私部位专用）、NudeNet v3、或两者并用覆盖更全
-- **打码风格**：马赛克、高斯模糊、纯黑条、纯白条
-- **手动工具**：可调大小画笔、铅笔、橡皮擦（恢复原图像素）、仿制图章
-- **SAM3**：文本提示引导的精准分割（需要 CUDA GPU）
-- **批量流程**：加入队列 → 全部检测 → 逐张审核 → 批量保存，支持自定义命名和元数据剥离
-- **队列管理器**：大批量专用全屏弹窗 — 按文件名搜索、拖拽排序、多选、移到指定位置
-
-### 🔍 相似图片 — 找重复、找相似
-
-基于 **CLIP 向量**，为图库里每张图创建视觉指纹。
-
-- **按 ID 搜索**：点击任意图片 → 找到视觉相似的
-- **上传搜索**：拖入外部图片搜索你的图库
-- **重复检测**：扫描整个图库找近似重复对
-- **阈值可调**：从宽松的相似到严格的重复
-- 本地运行：CLIP 模型在你电脑上跑，数据不外传
-
-### 🧪 提示词工坊 — 从你自己的图库生成新提示词
-
-分析你图库中的标签，生成随机但连贯的提示词。
-
-- **智能随机**：选标签时自动遵守排除规则（比如 `from_behind` 自动排除 `looking_at_viewer`）
-- **标签套装**：预设服装组合（校服、泳装、女仆装等），一键套用
-- **分类浏览**：按类别（身体、姿势、服装、表情等）探索你图库的标签
-- **负向提示词**：自动生成质量优化的负向提示词
-- 图库小也能用 — 内置兜底标签池
-
-### 🎨 画师识别 *（实验性）*
-
-用 **Kaloscope 2.0**（基于 LSNet）识别图片的画师或风格。
-
-- 批量处理整个图库
-- 按识别出的画师筛选画廊
-- 支持 HuggingFace、ModelScope、本地模型
-
-### 📖 图片阅读器 — 拖进来就看 *（3.0 新增）*
-
-想看一张 SD 图的参数，又不想扫进图库？拖进 Reader 分页立即看全部信息。
-
-- **完整元数据**：正向/负向提示词、采样器、步数、CFG、种子、模型、VAE、LoRA 及权重
-- **模型 hash**：checkpoint / VAE / LoRA 的 hash 都能看到，方便去 Civitai 对照
-- **提示词格式切换**：原始、SD WebUI、NovelAI 三种语法互换
-- **拖拽替换**：随时再拖一张就换，不弹窗、不转圈
-- **剪贴板粘贴**：按 `Ctrl+V` 或点粘贴按钮 — 截图或复制的 PNG 不用保存就能解析
-- **直方图**：源图的 RGB 和亮度分布
-
-### 🧩 图片混淆 — 加扰分享 *（3.0 新增）*
-
-剪贴板优先的图片加扰工具，兼容 Big Tomato（`dfqtphx`）和 Small Tomato（`singularpoint`）两个参考站点。
-
-- **拖拽 / 粘贴 / 浏览**：任意数量图片入队
-- **加密 / 解密**：双向，可选密码
-- **兼容模式**：Big Tomato（保留 PNG metadata）或 Small Tomato（纯像素加扰）
-- **剪贴板复制**：解码后的 PNG 直接粘到 Discord、Twitter，不用存文件
-
-### ✨ 美学评分 *（3.0 新增）*
-
-LAION Aesthetic Predictor（CLIP ViT-L/14 + 线性头）给图片打一个 ~1–10 分的美学分。显示在详情弹窗里，和评级、标签并列。
-
----
-
-## ⬇️ 下载安装
-
-### Windows
-
-1. **[下载 sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)**
-2. 解压到任意文件夹
-3. 双击 **`run-portable.bat`**
-4. 浏览器打开 `http://localhost:8487` — 搞定
-
-> 内置 Python 3.11，无需安装。AI 模型首次使用自动下载（约 500 MB）。
->
-> **Windows 下的 GPU 支持** — 启动器会自动识别你的显卡并切换到对应的 ONNX Runtime：
-> - **NVIDIA（GTX / RTX 20 / 30 / 40）** → `onnxruntime-gpu`（CUDA 12.x）
-> - **NVIDIA Blackwell（RTX 5070 Ti / 5080 / 5090）** → `onnxruntime-gpu 1.20+`（CUDA 12.8 / cuDNN 9，原生 `sm_120`）
-> - **Intel Arc / AMD Radeon** → 自动切换到 `onnxruntime-directml`，核显 / 独显都能加速打标
-> - **没有独显 / 驱动不全** → 稳定回退 CPU，Tagger 弹窗里会显示当前 runtime 状态
->
-> 如果以前 50 系显卡或 Intel / AMD 显卡卡在 CPU 模式，删掉旧目录重新解压 v3.0.2 即可 — 首次启动会自动修复 ONNX Runtime 安装。
-
-### Linux / macOS
-
-1. **[下载 sd-image-sorter-v3.0.2-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-linux-mac.tar.gz)**
-2. 解压并运行：
-   ```bash
-   tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
-   cd sd-image-sorter && chmod +x run.sh && ./run.sh
-   ```
-> 需要 Python 3.9+，脚本自动创建虚拟环境。
-
-### 从源码
-
-```bash
-git clone https://github.com/peter119lee/sd-image-sorter.git
-cd sd-image-sorter
-# Windows: run.bat  |  Linux/Mac: ./run.sh
-```
-
----
-
-## 🌐 大陆镜像
-
-模型默认从 HuggingFace 下载。大陆用户在 `backend/.env` 加一行：
-
-```
-HF_ENDPOINT=https://hf-mirror.com
-```
-
-画师识别和 SAM3 还支持 [ModelScope](https://modelscope.cn) — 在界面下拉菜单选择。
-
----
-
-## 🧰 硬件指南
+<details>
+<summary><b>硬件建议</b></summary>
 
 | 功能 | 内存 | GPU |
-|:-----|:-----|:----|
-| 画廊 · 筛选 · 排序 · 提示词 | 4 GB | — |
-| WD14 打标（SwinV2 / ConvNeXt / ViT 系） | 8 GB | 可选 |
+|:--|:--|:--|
+| Gallery / Filters / Sort / Prompt Lab | 4 GB | 可无 |
+| WD14 打标（SwinV2 / ConvNeXt / ViT） | 8 GB | 可选 |
 | WD14 打标（EVA02 / Camie / PixAI） | 16 GB | 建议 |
-| ToriiGate 0.5 多模态打标 | 24 GB | **强烈建议 CUDA** |
-| 打码检测 | 8 GB | 可选 |
-| 相似图片 (CLIP) | 8 GB | — |
-| 画师识别 | 16 GB | 建议 |
-| SAM3 精修 | 16 GB | **必须 CUDA** |
+| ToriiGate 多模态打标 | 24 GB | 强烈建议 CUDA |
+| Censor Detection | 8 GB | 可选 |
+| Similar Images | 8 GB | 可无 |
+| Artist ID | 16 GB | 建议 |
+| SAM3 精修 | 16 GB | 必须 CUDA |
+
+</details>
 
 <details>
-<summary>模型体积（首次使用自动下载）</summary>
+<summary><b>模型体积（首次使用自动下载）</b></summary>
 
 | 模型 | 大小 | 用途 |
-|:-----|:-----|:-----|
-| wd-swinv2-tagger-v3 | ~446 MB | AI 打标（默认） |
-| wd-eva02-large-tagger-v3 | ~1.2 GB | AI 打标（最高质量） |
-| camie-tagger-v2 | ~1.3 GB | AI 打标（更新标签空间） |
-| pixai-tagger-v0.9 | ~1.2 GB | AI 打标（更新标签空间） |
-| clip-ViT-B-32-vision | ~335 MB | 相似图片 |
+|:--|:--|:--|
+| wd-swinv2-tagger-v3 | ~446 MB | AI 打标默认模型 |
+| wd-eva02-large-tagger-v3 | ~1.2 GB | 更高质量打标 |
+| camie-tagger-v2 | ~1.3 GB | 更新标签空间 |
+| pixai-tagger-v0.9 | ~1.2 GB | 更新标签空间 |
+| clip-ViT-B-32-vision | ~335 MB | 相似图搜索 |
 | wenaka_yolov8s-seg | ~46 MB | 打码检测 |
 | NudeNet 320n | ~12 MB | 打码检测 |
 | Kaloscope 2.0 | ~2.8 GB | 画师识别 |
 | SAM3 | ~3.3 GB | 打码精修 |
 | CLIP ViT-L/14 + aesthetic head | ~400 MB | 美学评分 |
+
 </details>
 
+## 项目结构
+
+```text
+sd-image-sorter/
+├── backend/            # FastAPI + SQLite + AI model orchestration
+├── frontend/           # Vanilla HTML / JS / CSS UI
+├── docs/screenshots/   # README 展示图
+├── models/             # 本地模型目录
+├── run-portable.bat    # Windows 便携版入口
+├── run.bat             # Windows 源码运行入口
+└── run.sh              # Linux / macOS 运行入口
+```
+
+## 更多文档
+
+- [CHANGELOG.md](CHANGELOG.md)
+- [docs/API.md](docs/API.md)
+- [docs/architecture.md](docs/architecture.md)
+- [SECURITY.md](SECURITY.md)
+
+## 特别感谢
+
+| 名称 | 贡献 |
+|:--|:--|
+| [Antigravity](https://github.com/peter119lee) | 项目主导开发 |
+| Claude Code / Claude Opus 4.6 / Codex / GPT-5.4 / Gemini 3.1 Pro | AI 辅助开发与验证 |
+| [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 模型 |
+| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、heathcliff01 | LSNet / Kaloscope 画师识别方向 |
+| [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 模型 |
+| [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader 方向启发 |
+
+License: [MIT](LICENSE)
+
 ---
 
-## ⌨️ 快捷键
+<a name="english"></a>
 
-| 场景 | 按键 | 动作 |
-|:-----|:-----|:-----|
-| **排序** | `W` `A` `S` `D` | 移到对应文件夹 |
-| | `空格` | 跳过 |
-| | `Z` | 撤销 |
-| **打码** | `A` / `D` | 上/下一张 |
-| | `B` `P` `E` `G` | 画笔 · 铅笔 · 橡皮 · 仿制 |
-| | `[` `]` | 笔触大小 |
-| | `Ctrl+Z` | 撤销 |
-| | `Ctrl+滚轮` | 缩放 |
+## English
 
----
+**SD Image Sorter** is a local-first web app for people who generate too many Stable Diffusion images and are tired of losing track of them.
 
-## 🙏 特别感谢
+It scans folders, reads SD metadata, tags images with WD14 models, finds similar images with CLIP, sorts images with keyboard-speed workflows, and provides an AI-assisted censor editor for batch-safe sharing.
 
-没有以下贡献者和他们的杰出工作，这个项目不可能实现：
+### Promo Line
 
-| 贡献者 | 贡献 |
-|:-------|:-----|
-| **[Antigravity](https://github.com/peter119lee)** & **Claude Code** · **Claude Opus 4.6** · **Codex** · **GPT-5.4** · **Gemini 3.1 Pro** | 💻 核心开发 & AI 辅助编程 |
-| **[Wenaka2004](https://github.com/Wenaka2004/auto-censor)** | 💡 自动打码概念启发 |
-| **Wenaka2004** | 🎯 [YOLO 检测模型](https://civitai.com/models/1736285) |
-| **[Spawner1145](https://github.com/spawner1145/comfyui-lsnet)**、**DraconicDragon**、**heathcliff01** | 🔮 LSNet / Kaloscope 画师识别 |
-| **[SmilingWolf](https://huggingface.co/SmilingWolf)** | 🏷️ WD14 Tagger 模型 |
-| **[Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader)** | 📖 提示词读取概念启发 |
+**SD Image Sorter turns “my AI image folder is a landfill” into a fast local workflow for finding, filtering, tagging, sorting, comparing, and cleaning your best shots.**
 
-📄 [MIT License](LICENSE)
+### Highlights
 
-*Made with ❤️ for the Stable Diffusion community*
+- **Gallery built for SD workflows**: ComfyUI, NovelAI, WebUI / A1111, Forge metadata support
+- **AI Tagging**: WD14 family, rating prediction, background jobs, adjustable thresholds
+- **Fast sorting**: Auto-Separate plus addictive `W / A / S / D` manual sorting
+- **Censor Edit**: YOLO detection, brush tools, queue workflow, batch save
+- **Similar search**: CLIP embeddings for duplicates and near-matches
+- **Prompt Lab**: generate reusable prompts from your own library
+- **Extra tools**: Artist ID, Image Reader, Image Obfuscate, Aesthetic Score
+
+### Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/gallery_hero.png" alt="Gallery screenshot" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/gallery_demo.gif" alt="Gallery demo gif" width="48%">
+  <img src="docs/screenshots/manual_sort_demo.gif" alt="Manual sort demo gif" width="48%">
+</p>
+
+### Quick Start
+
+#### Windows Portable
+
+1. Download [sd-image-sorter-v3.0.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.2-windows-portable.zip)
+2. Extract it anywhere
+3. Double-click `run-portable.bat`
+4. Your browser opens `http://localhost:8487`
+
+#### Linux / macOS
+
+```bash
+tar xzf sd-image-sorter-v3.0.2-linux-mac.tar.gz
+cd sd-image-sorter
+chmod +x run.sh
+./run.sh
+```
+
+#### From Source
+
+```bash
+git clone https://github.com/peter119lee/sd-image-sorter.git
+cd sd-image-sorter
+./run.sh
+```
+
+### Tech Stack
+
+- **Backend**: FastAPI, SQLite, Pillow, ONNX Runtime
+- **Frontend**: Vanilla HTML, CSS, JavaScript
+- **AI models**: WD14 taggers, YOLOv8-based censor detection, CLIP similarity, Kaloscope artist ID
+- **Design language**: glassmorphism, neon UI, keyboard-first workflows
+
+### Notes
+
+- Local-only by design
+- Models download on first use
+- Mainland China users can set `HF_ENDPOINT=https://hf-mirror.com`
+- See [CHANGELOG.md](CHANGELOG.md) for recent fixes and release history
+
+### Credits
+
+Huge thanks to the contributors, model authors, and toolmakers listed above.
+
+License: [MIT](LICENSE)
