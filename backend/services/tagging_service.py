@@ -12,6 +12,7 @@ import json
 import threading
 import queue as queue_module
 import multiprocessing
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import HTTPException, BackgroundTasks
@@ -137,6 +138,27 @@ def _tagging_worker_main(
     try:
         if request.model_path:
             send("running", "Loading custom model...")
+        elif runtime_backend == "toriigate":
+            # ToriiGate first-use pulls Qwen2.5-VL (~5 GB). Detect the empty
+            # cache and surface a clear size warning BEFORE the download starts
+            # so users on slow / metered links know what is about to happen.
+            try:
+                from config import get_toriigate_model_dir
+                cache_root = Path(get_toriigate_model_dir()) / effective_model_name
+                already_cached = (cache_root / "config.json").exists()
+            except Exception:
+                already_cached = False
+            if not already_cached:
+                send(
+                    "running",
+                    "First-time ToriiGate download: ~5 GB from HuggingFace. "
+                    "This runs once; keep the app open until it completes.",
+                )
+            else:
+                send(
+                    "running",
+                    f"Loading ToriiGate on {'GPU' if effective_use_gpu else 'CPU'}...",
+                )
         elif effective_use_gpu:
             send("running", "Loading model on GPU...")
         else:

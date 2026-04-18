@@ -501,8 +501,37 @@ async def list_models():
 
 @router.get("/diagnostics")
 async def get_artist_diagnostics():
-    """Return user-friendly runtime diagnostics for the artist feature."""
-    artist = get_model_health()["artist"]
+    """Return user-friendly runtime diagnostics for the artist feature.
+
+    Reports the richer of two signals:
+      * Static health from model_health (Kaloscope runtime + checkpoint present).
+      * Live singleton state — if the identifier has already loaded a model
+        (HF fallback / ModelScope fallback / local), treat the feature as
+        available even when the Kaloscope files are missing.
+    """
+    artist = dict(get_model_health()["artist"])
+    live_loaded = False
+    live_backend: Optional[str] = None
+    live_error: Optional[str] = None
+    try:
+        identifier = get_artist_identifier()
+        live_loaded = bool(
+            identifier._model is not None and identifier._model != "placeholder"
+        )
+        live_backend = getattr(identifier, "_backend", None)
+        live_error = getattr(identifier, "_load_error", None)
+    except Exception:  # identifier import/init must not crash diagnostics
+        pass
+
+    if live_loaded:
+        artist["available"] = True
+        artist["message"] = (
+            f"Artist identifier is loaded ({live_backend or 'fallback'})."
+        )
+    artist["runtime_loaded"] = live_loaded
+    artist["runtime_backend"] = live_backend
+    if live_error and not artist.get("available"):
+        artist["runtime_error"] = live_error
     return {
         "status": "ok",
         **artist,

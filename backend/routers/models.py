@@ -22,9 +22,34 @@ from config import TAGGER_MODELS, get_wd14_model_dir, get_yolo_model_dir
 
 router = APIRouter(prefix="/api/models", tags=["models"])
 
-PRIVACY_YOLO_PAGE_URL = "https://civitai.com/models/1736285/and-or-dickvaginatitsanuscum-yolov8-segment-model"
-PRIVACY_YOLO_API_URL = "https://civitai.com/api/v1/models/1736285"
+PRIVACY_YOLO_PAGE_URL = "https://civitai.red/models/1736285/and-or-dickvaginatitsanuscum-yolov8-segment-model"
+PRIVACY_YOLO_API_URL = "https://civitai.red/api/v1/models/1736285"
+# Pinned direct-download URL (version 1965032) used when the Civitai API
+# blocks us or returns no downloadUrl. Keeps first-run YOLO prep resilient.
+PRIVACY_YOLO_DIRECT_URL = (
+    "https://civitai.red/api/download/models/1965032?type=Archive&format=Other"
+)
 SAM3_MODELSCOPE_URL = "https://modelscope.cn/models/facebook/sam3/files"
+
+# Civitai rejects requests with the default urllib User-Agent (Python-urllib/x.y)
+# with HTTP 403. Supplying a realistic browser UA restores metadata + download access.
+_DOWNLOAD_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36 sd-image-sorter/3.0.3"
+    ),
+    "Accept": "application/json, */*;q=0.8",
+}
+
+
+def _urlopen_with_ua(url: str, timeout: int = 30):
+    """Wrap urllib.request.urlopen with a browser-style User-Agent header.
+
+    Some CDNs (notably Civitai) reject the default Python-urllib UA with 403.
+    """
+    req = urllib.request.Request(url, headers=_DOWNLOAD_HEADERS)
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 class PrepareModelRequest(BaseModel):
@@ -179,20 +204,46 @@ def _download_privacy_yolo_bundle() -> Dict[str, str]:
     target_dir = Path(get_yolo_model_dir())
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    with urllib.request.urlopen(PRIVACY_YOLO_API_URL, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-
-    versions = payload.get("modelVersions") or []
-    if not versions:
-        raise RuntimeError("Civitai returned no model versions for the privacy YOLO package.")
-
-    download_url = versions[0].get("downloadUrl")
+    # Prefer the Civitai API for the latest version; on any failure (403, 5xx,
+    # missing downloadUrl, network hiccup) fall back to the pinned direct URL
+    # so first-run YOLO prep still succeeds.
+    download_url: Optional[str] = None
+    try:
+        with _urlopen_with_ua(PRIVACY_YOLO_API_URL, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        versions = payload.get("modelVersions") or []
+        if versions:
+            download_url = versions[0].get("downloadUrl") or None
+    except Exception:
+        download_url = None
     if not download_url:
-        raise RuntimeError("Civitai did not provide a downloadable archive URL.")
+        download_url = PRIVACY_YOLO_DIRECT_URL
 
     with tempfile.TemporaryDirectory(prefix="privacy-yolo-") as tmp_dir:
         zip_path = Path(tmp_dir) / "privacy-yolo.zip"
-        urllib.request.urlretrieve(download_url, zip_path)
+        with _urlopen_with_ua(download_url, timeout=300) as src, open(zip_path, "wb") as dst:
+            response_content_type = (src.headers.get("Content-Type") or "").lower()
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                dst.write(chunk)
+
+        # Civitai now gates NSFW model downloads behind a login. Unauthenticated
+        # requests get HTTP 200 + an HTML login page (not the zip). Detect this
+        # and surface a clear, actionable error instead of a cryptic BadZipFile.
+        if "text/html" in response_content_type or not zipfile.is_zipfile(zip_path):
+            raise RuntimeError(
+                "Civitai requires an account login to download the Wenaka privacy YOLO "
+                "model. The automated download returned a sign-in page instead of the "
+                "model archive. To complete setup manually:\n"
+                f"  1. Open {PRIVACY_YOLO_PAGE_URL} in a browser and sign in.\n"
+                "  2. Download the archive (.zip) from the model page.\n"
+                f"  3. Extract its contents into: {target_dir.resolve()}\n"
+                "  4. Restart SD Image Sorter (or reopen the Models panel) to pick up the files.\n"
+                "This is a Civitai policy change; the app cannot bypass their auth wall."
+            )
+
         with zipfile.ZipFile(zip_path, "r") as archive:
             for member in archive.namelist():
                 member_path = (target_dir / member).resolve()

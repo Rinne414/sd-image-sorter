@@ -161,11 +161,15 @@ else
 fi
 echo
 
+# Honor SD_IMAGE_SORTER_PORT override for the browser URL; default 8487.
+APP_PORT="${SD_IMAGE_SORTER_PORT:-8487}"
+APP_URL="http://localhost:${APP_PORT}"
+
 echo "=========================================="
 echo "  SD Image Sorter is running!"
 echo
 echo "  Opening browser to:"
-echo "    http://localhost:8487"
+echo "    ${APP_URL}"
 echo
 echo "  Press Ctrl+C to stop the server."
 echo "=========================================="
@@ -175,11 +179,11 @@ echo
 (
     sleep 2
     if [ "$(uname)" = "Darwin" ]; then
-        open "http://localhost:8487" 2>/dev/null
+        open "${APP_URL}" 2>/dev/null
     elif command -v xdg-open &> /dev/null; then
-        xdg-open "http://localhost:8487" 2>/dev/null
+        xdg-open "${APP_URL}" 2>/dev/null
     elif command -v wslview &> /dev/null; then
-        wslview "http://localhost:8487" 2>/dev/null
+        wslview "${APP_URL}" 2>/dev/null
     fi
 ) &
 

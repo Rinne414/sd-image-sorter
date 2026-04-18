@@ -160,17 +160,22 @@ echo [Info] Checking startup readiness...
 backend\venv\Scripts\python.exe backend\model_health.py --startup
 echo.
 
+REM -- Honor SD_IMAGE_SORTER_PORT override for the browser URL; default 8487.
+set "APP_PORT=!SD_IMAGE_SORTER_PORT!"
+if "!APP_PORT!"=="" set "APP_PORT=8487"
+set "APP_URL=http://localhost:!APP_PORT!"
+
 echo.
 echo ==========================================
 echo   SD Image Sorter is running!
 echo.
-echo   Open browser: http://localhost:8487
+echo   Open browser: !APP_URL!
 echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.
 
 REM -- Open browser and start server
-start "" http://localhost:8487
+start "" !APP_URL!
 
 cd backend
 call venv\Scripts\activate.bat 2>nul
