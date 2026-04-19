@@ -91,6 +91,7 @@ const Gallery = {
         prompt: false,
         negative: false,
         params: false,
+        modelAssets: false,
         loras: false,
         nodes: false,
         color: true,
@@ -1279,7 +1280,8 @@ const Gallery = {
             is_img2img: false,
             img2img_info: {},
             character_prompts: [],
-            prompt_nodes: []
+            prompt_nodes: [],
+            model_assets: null,
         };
     },
 
@@ -1843,6 +1845,132 @@ const Gallery = {
         return entries;
     },
 
+    _renderModalModelAssets(parsedData) {
+        const section = document.querySelector('#modal-model-assets-section');
+        const grid = document.querySelector('#modal-model-assets-grid');
+        if (!section || !grid) return;
+
+        const assets = parsedData?.model_assets || null;
+        const hasAssets = assets && (
+            assets.primary_model_name ||
+            (assets.loras && assets.loras.length) ||
+            (assets.yolo_models && assets.yolo_models.length) ||
+            (assets.checkpoint_candidates && assets.checkpoint_candidates.length) ||
+            (assets.unet_candidates && assets.unet_candidates.length) ||
+            (assets.diffusion_model_candidates && assets.diffusion_model_candidates.length) ||
+            (assets.model_candidates && assets.model_candidates.length) ||
+            (assets.yolo_candidates && assets.yolo_candidates.length) ||
+            (assets.global_lora_candidates && assets.global_lora_candidates.length) ||
+            (assets.global_yolo_candidates && assets.global_yolo_candidates.length)
+        );
+
+        if (!hasAssets) {
+            section.style.display = 'none';
+            grid.innerHTML = '';
+            return;
+        }
+
+        const t = (key, fallback) => this._t(key, null, fallback);
+        const blocks = [];
+        const humanizeSource = (value) => {
+            if (!value) return '';
+            if (value === 'activity_subgraph_fallback') return t('modal.modelAssetsSourceActivity', 'Active subgraph fallback');
+            if (value === 'global_candidate_fallback') return t('modal.modelAssetsSourceGlobal', 'Global candidate fallback');
+            if (value === 'global_graph_fallback') return t('modal.modelAssetsSourceGraph', 'Full graph fallback');
+            if (value === 'fast_path') return t('modal.modelAssetsSourceFastPath', 'Fast path');
+            return String(value).replace(/_/g, ' ');
+        };
+        const humanizeConfidence = (value) => {
+            if (value === 'high') return t('modal.modelAssetsConfidenceHigh', 'High confidence');
+            if (value === 'medium') return t('modal.modelAssetsConfidenceMedium', 'Medium confidence');
+            if (value === 'low') return t('modal.modelAssetsConfidenceLow', 'Low confidence');
+            return '';
+        };
+        const addListBlock = (label, values) => {
+            if (!Array.isArray(values) || values.length === 0) return;
+            const uniqueValues = [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+            if (!uniqueValues.length) return;
+            blocks.push(`
+                <div class="model-asset-block">
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(label)}</span></div>
+                    <div class="model-asset-list">
+                        ${uniqueValues.map((value) => `<span class="model-asset-pill">${window.escapeHtml(value)}</span>`).join('')}
+                    </div>
+                </div>
+            `);
+        };
+        const addCandidateBlock = (label, items) => {
+            if (!Array.isArray(items) || items.length === 0) return;
+            const uniqueItems = [];
+            const seenNames = new Set();
+            for (const item of items) {
+                const name = String(item?.name || '').trim();
+                if (!name || seenNames.has(name)) continue;
+                seenNames.add(name);
+                uniqueItems.push(item);
+            }
+            if (!uniqueItems.length) return;
+
+            blocks.push(`
+                <div class="model-asset-block model-asset-block-secondary">
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(label)}</span></div>
+                    <div class="model-asset-candidate-list">
+                        ${uniqueItems.map((item) => {
+                            const metaParts = [
+                                humanizeSource(item?.source_mode),
+                                item?.node_id ? `${t('modal.modelAssetsNode', 'Node')} ${item.node_id}` : '',
+                                item?.class_type ? String(item.class_type) : '',
+                                item?.key_path ? String(item.key_path) : (item?.input_key ? String(item.input_key) : ''),
+                            ].filter(Boolean);
+                            const confidence = String(item?.confidence || 'low').toLowerCase();
+                            return `
+                                <div class="model-asset-candidate model-asset-candidate-secondary">
+                                    <div class="model-asset-candidate-head">
+                                        <span class="model-asset-pill">${window.escapeHtml(String(item?.name || ''))}</span>
+                                        <span class="model-asset-confidence is-${window.escapeHtml(confidence)}">${window.escapeHtml(humanizeConfidence(confidence))}</span>
+                                    </div>
+                                    <div class="model-asset-candidate-meta">${window.escapeHtml(metaParts.join(' • '))}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `);
+        };
+
+        if (assets.primary_model_name) {
+            blocks.push(`
+                <div class="model-asset-block">
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.primaryModel', 'Primary Model'))}</span><span class="param-value">${window.escapeHtml(assets.primary_model_name)}</span></div>
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.primaryModelType', 'Primary Model Type'))}</span><span class="param-value">${window.escapeHtml(assets.primary_model_type || 'unknown')}</span></div>
+                </div>
+            `);
+        }
+
+        if (assets.source) {
+            blocks.push(`
+                <div class="model-asset-block">
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.modelAssetsSource', 'Parser Source'))}</span><span class="param-value">${window.escapeHtml(humanizeSource(assets.source))}</span></div>
+                </div>
+            `);
+        }
+        if (Array.isArray(assets.sources) && assets.sources.length > 1) {
+            addListBlock(t('modal.modelAssetsSources', 'All Sources'), assets.sources.map((value) => humanizeSource(value)));
+        }
+
+        addListBlock(t('modal.modelAssetsCheckpoints', 'Checkpoint Candidates'), (assets.checkpoint_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsUnets', 'UNet Candidates'), (assets.unet_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsDiffusion', 'Diffusion Candidates'), (assets.diffusion_model_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsModels', 'Additional / Upscale / ControlNet Models'), (assets.model_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsLoras', 'LoRA Candidates'), (assets.lora_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsYolo', 'YOLO / Detector Models'), assets.yolo_models || (assets.yolo_candidates || []).map((item) => item.name));
+        addCandidateBlock(t('modal.modelAssetsGlobalLoras', 'Global LoRA Candidates'), assets.global_lora_candidates || []);
+        addCandidateBlock(t('modal.modelAssetsGlobalYolo', 'Full-graph YOLO Candidates'), assets.global_yolo_candidates || []);
+
+        grid.innerHTML = blocks.join('');
+        section.style.display = '';
+    },
+
     _applyModalPromptView(promptView) {
         const promptText = document.querySelector('#modal-prompt-text');
         const negSection = document.querySelector('#modal-negative-section');
@@ -2068,6 +2196,8 @@ const Gallery = {
             paramsSection.style.display = 'none';
             paramsGrid.innerHTML = '';
         }
+
+        this._renderModalModelAssets(parsedData);
 
         // --- img2img Details ---
         const img2imgSection = $('#modal-img2img-section');
@@ -2327,7 +2457,7 @@ ${String(value)}`)
         document.querySelector('#modal-tags-list').style.color = 'var(--text-muted)';
         $('#btn-toggle-prompt-format').disabled = true;
         $('#btn-toggle-prompt-format').textContent = this._t('modal.viewAsSD', null, 'View as SD');
-        ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-img2img-section', '#modal-nodes-section', '#modal-caption-section'].forEach(selector => {
+        ['#modal-loras-section', '#modal-negative-section', '#modal-characters-section', '#modal-params-section', '#modal-model-assets-section', '#modal-img2img-section', '#modal-nodes-section', '#modal-caption-section'].forEach(selector => {
             const element = document.querySelector(selector);
             if (element) {
                 element.style.display = 'none';
@@ -2341,6 +2471,7 @@ ${String(value)}`)
         document.querySelector('#modal-loras-list').innerHTML = '';
         document.querySelector('#modal-characters-list').innerHTML = '';
         document.querySelector('#modal-params-grid').innerHTML = '';
+        document.querySelector('#modal-model-assets-grid').innerHTML = '';
         document.querySelector('#modal-img2img-info').innerHTML = '';
         document.querySelector('#modal-nodes-list').innerHTML = '';
         $('#btn-reparse-metadata').onclick = async () => {

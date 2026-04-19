@@ -5,9 +5,11 @@ Focuses on high-value validation behavior and a few lightweight success-path
 assertions that do not require heavy model execution.
 """
 import base64
+import io
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 # Add parent directories to path for imports
@@ -506,6 +508,151 @@ class TestSimilarityRouterValidation:
         assert data["status"] == "ok"
         assert "model_name" in data
         assert "available" in data
+
+    def test_embed_progress_reports_skipped_unreadable_and_failed(self, test_db, tmp_path, monkeypatch):
+        import similarity as similarity_module
+        from PIL import Image
+
+        good_path = tmp_path / "good.png"
+        Image.new("RGB", (64, 64), color="white").save(good_path)
+
+        unreadable_path = tmp_path / "unreadable.png"
+        unreadable_path.write_bytes(good_path.read_bytes()[:-24])
+
+        fail_path = tmp_path / "embed_fail.png"
+        Image.new("RGB", (64, 64), color="blue").save(fail_path)
+
+        missing_path = tmp_path / "missing.png"
+
+        good_id = test_db.add_image(path=str(good_path), filename=good_path.name, metadata_json="{}")
+        unreadable_id = test_db.add_image(path=str(unreadable_path), filename=unreadable_path.name, metadata_json="{}")
+        fail_id = test_db.add_image(path=str(fail_path), filename=fail_path.name, metadata_json="{}")
+        missing_id = test_db.add_image(path=str(missing_path), filename=missing_path.name, metadata_json="{}")
+
+        monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+
+        def fake_embed(path, model=None):
+            if path.endswith("embed_fail.png"):
+                return None
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(similarity_module, "embed_image_file", fake_embed)
+
+        index = similarity_module.SimilarityIndex(test_db)
+        result = index.embed_batch([good_id, unreadable_id, fail_id, missing_id])
+        progress = index.get_progress()
+
+        assert result["embedded"] == 1
+        assert result["skipped"] == 1
+        assert result["unreadable"] == 1
+        assert result["failed"] == 1
+        assert progress["embedded"] == 1
+        assert progress["skipped"] == 1
+        assert progress["unreadable"] == 1
+        assert progress["failed"] == 1
+        assert {issue["filename"] for issue in progress["recent_issues"]} == {
+            "unreadable.png",
+            "embed_fail.png",
+            "missing.png",
+        }
+
+    def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
+        from routers import models as models_router
+
+        def raise_auth_wall():
+            raise models_router.ExternalAuthRequiredError(
+                models_router._build_civitai_auth_error(Path("/tmp/privacy-yolo"))
+            )
+
+        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_auth_wall)
+
+        response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+
+        assert response.status_code == 409
+        data = response.json()
+        assert data["type"] == "CivitaiLoginRequired"
+        assert "Civitai" in data["message"]
+        assert isinstance(data["manual_steps"], list)
+        assert data["manual_steps"]
+        assert data["external_url"] == models_router.PRIVACY_YOLO_PAGE_URL
+
+    def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
+        from routers import models as models_router
+
+        def raise_prepare_failure():
+            raise models_router.ModelPreparationFailedError(
+                models_router._build_privacy_yolo_prepare_error(
+                    Path("/tmp/privacy-yolo"),
+                    "Downloaded file was not a valid zip archive.",
+                )
+            )
+
+        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_prepare_failure)
+
+        response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+
+        assert response.status_code == 502
+        data = response.json()
+        assert data["type"] == "ModelPreparationFailed"
+        assert data["reason"] == "Downloaded file was not a valid zip archive."
+        assert data["model_id"] == "censor-legacy"
+        assert isinstance(data["manual_steps"], list)
+        assert data["manual_steps"]
+
+    def test_similarity_search_upload_and_duplicates_ignore_unreadable_embedded_rows(self, test_db, tmp_path, monkeypatch):
+        import similarity as similarity_module
+        from PIL import Image
+
+        query_path = tmp_path / "query.png"
+        readable_match_path = tmp_path / "readable-match.png"
+        unreadable_path = tmp_path / "historical-bad.png"
+
+        Image.new("RGB", (64, 64), color="white").save(query_path)
+        Image.new("RGB", (64, 64), color="gray").save(readable_match_path)
+        Image.new("RGB", (64, 64), color="black").save(unreadable_path)
+
+        query_id = test_db.add_image(path=str(query_path), filename=query_path.name, metadata_json="{}")
+        readable_match_id = test_db.add_image(path=str(readable_match_path), filename=readable_match_path.name, metadata_json="{}")
+        unreadable_id = test_db.add_image(
+            path=str(unreadable_path),
+            filename=unreadable_path.name,
+            metadata_json="{}",
+            is_readable=False,
+            read_error="Truncated File Read",
+        )
+
+        embedding = similarity_module.embedding_to_bytes(np.array([1, 0, 0, 0], dtype=np.float32))
+        with test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE images SET embedding = ? WHERE id = ?", (embedding, query_id))
+            cursor.execute("UPDATE images SET embedding = ? WHERE id = ?", (embedding, readable_match_id))
+            cursor.execute("UPDATE images SET embedding = ? WHERE id = ?", (embedding, unreadable_id))
+
+        monkeypatch.setattr(
+            similarity_module,
+            "embed_image_pil",
+            lambda _image: np.array([1, 0, 0, 0], dtype=np.float32),
+        )
+
+        upload_buf = io.BytesIO()
+        Image.new("RGB", (64, 64), color="white").save(upload_buf, format="PNG")
+
+        index = similarity_module.SimilarityIndex(test_db)
+
+        search_result = index.search_by_id(query_id, limit=10, threshold=0.1)
+        assert [item["id"] for item in search_result["results"]] == [readable_match_id]
+
+        upload_result = index.search_by_upload(upload_buf.getvalue(), limit=10, threshold=0.1)
+        upload_ids = [item["id"] for item in upload_result["results"]]
+        assert unreadable_id not in upload_ids
+        assert {query_id, readable_match_id}.issubset(set(upload_ids))
+
+        duplicates_result = index.find_duplicates(threshold=0.99, limit=10, offset=0)
+        duplicate_pairs = {
+            tuple(sorted((pair["image_a"]["id"], pair["image_b"]["id"])))
+            for pair in duplicates_result["duplicates"]
+        }
+        assert duplicate_pairs == {tuple(sorted((query_id, readable_match_id)))}
 
 
 class TestArtistsRouterValidation:

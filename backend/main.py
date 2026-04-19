@@ -491,6 +491,13 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         request.url.path,
         exc.detail
     )
+    if isinstance(exc.detail, dict):
+        payload = dict(exc.detail)
+        if "message" in payload and "error" not in payload:
+            payload["error"] = payload["message"]
+        payload.setdefault("type", "HTTPException")
+        payload.setdefault("status_code", exc.status_code)
+        return JSONResponse(status_code=exc.status_code, content=payload)
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.detail if isinstance(exc.detail, str) else "Request failed", "type": "HTTPException", "status_code": exc.status_code}

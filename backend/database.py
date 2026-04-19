@@ -247,6 +247,8 @@ def init_db() -> None:
                 file_size INTEGER,
                 checkpoint TEXT,
                 loras TEXT, -- JSON array of lora names
+                is_readable INTEGER DEFAULT 1,
+                read_error TEXT,
                 created_at DATETIME,
                 indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 tagged_at DATETIME
@@ -268,6 +270,11 @@ def init_db() -> None:
             cursor.execute("ALTER TABLE images ADD COLUMN model_hash TEXT")
         if 'aesthetic_score' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN aesthetic_score REAL")
+        if 'is_readable' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN is_readable INTEGER DEFAULT 1")
+        if 'read_error' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN read_error TEXT")
+        cursor.execute("UPDATE images SET is_readable = 1 WHERE is_readable IS NULL")
 
         # Collections table (Favorites MVP uses a built-in collection)
         cursor.execute("""
@@ -433,6 +440,9 @@ def init_db() -> None:
         # Model hash index for checkpoint dedup
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_model_hash ON images(model_hash) WHERE model_hash IS NOT NULL")
 
+        # Readability index: normal library queries filter on COALESCE(is_readable, 1) = 1
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_readable ON images(is_readable)")
+
         # Remove redundant simple indexes superseded by composite ones
         # idx_tags_tag is redundant with idx_tags_tag_image(tag, image_id)
         # idx_tags_image_id is redundant with idx_tags_image_id_tag(image_id, tag)
@@ -492,7 +502,9 @@ def add_image(
     checkpoint: Optional[str] = None,
     loras: Optional[List[str]] = None,
     created_at: Optional[datetime] = None,
-    model_hash: Optional[str] = None
+    model_hash: Optional[str] = None,
+    is_readable: bool = True,
+    read_error: Optional[str] = None,
 ) -> int:
     """Add an image to the database. Returns the image ID."""
     with get_db() as conn:
@@ -519,6 +531,8 @@ def add_image(
                     checkpoint = ?,
                     loras = ?,
                     model_hash = COALESCE(?, model_hash),
+                    is_readable = ?,
+                    read_error = ?,
                     created_at = COALESCE(?, created_at),
                     indexed_at = CURRENT_TIMESTAMP
                 WHERE id = ?
@@ -535,6 +549,8 @@ def add_image(
                     checkpoint,
                     serialized_loras,
                     model_hash,
+                    1 if is_readable else 0,
+                    read_error,
                     created_at,
                     image_id,
                 )
@@ -544,8 +560,8 @@ def add_image(
                 """
                 INSERT INTO images
                 (path, filename, generator, prompt, negative_prompt, metadata_json,
-                 width, height, file_size, checkpoint, loras, model_hash, created_at, indexed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error, created_at, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 (
                     path,
@@ -560,6 +576,8 @@ def add_image(
                     checkpoint,
                     serialized_loras,
                     model_hash,
+                    1 if is_readable else 0,
+                    read_error,
                     created_at,
                 )
             )
@@ -668,20 +686,24 @@ VALID_SORT_OPTIONS = {
 # so column additions only need to change one place.
 _IMAGE_COLUMNS_FULL = (
     "i.id, i.path, i.filename, i.generator, i.prompt, i.negative_prompt, i.metadata_json, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.indexed_at, i.tagged_at, i.ai_caption, i.aesthetic_score"
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.created_at, i.indexed_at, i.tagged_at, i.ai_caption, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_WITH_PROMPT = (
     "i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.tagged_at, i.aesthetic_score"
+    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.created_at, i.tagged_at, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_LIGHTWEIGHT = (
     "i.id, i.filename, i.path, i.generator, i.width, i.height, "
-    "i.file_size, i.checkpoint, i.loras, i.model_hash, i.created_at, i.tagged_at, i.aesthetic_score"
+    "i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.created_at, i.tagged_at, i.aesthetic_score"
 )
 # Bare-table version (no alias prefix) for single-table queries
 _IMAGE_COLUMNS_BARE = (
     "id, path, filename, generator, prompt, negative_prompt, metadata_json, "
-    "width, height, file_size, checkpoint, loras, model_hash, created_at, indexed_at, tagged_at, ai_caption, aesthetic_score"
+    "width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error, "
+    "created_at, indexed_at, tagged_at, ai_caption, aesthetic_score"
 )
 
 
@@ -1002,6 +1024,19 @@ def _apply_image_ids_filter(conditions: List[str], params: List[Any],
 
     return conditions, params
 
+
+def _apply_readable_filter(
+    conditions: List[str],
+    params: List[Any],
+    include_unreadable: bool = False,
+) -> tuple:
+    """Exclude unreadable images from normal library workflows by default."""
+    if include_unreadable:
+        return conditions, params
+
+    conditions.append("COALESCE(i.is_readable, 1) = 1")
+    return conditions, params
+
 def _get_order_clause(sort_by: str) -> str:
     """Get the ORDER BY clause for a given sort method.
 
@@ -1128,6 +1163,7 @@ def get_images(
     image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    include_unreadable: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -1182,6 +1218,9 @@ def get_images(
 
         # Apply image IDs filter
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Exclude unreadable images from normal library results (unless include_unreadable=True)
+        conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
 
         # Apply generator filter
         conditions, params = _apply_generator_filter(conditions, params, generators)
@@ -1251,6 +1290,7 @@ def get_filtered_image_count(
     image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    include_unreadable: bool = False,
 ) -> int:
     """Get count of images matching filters without loading image data.
 
@@ -1286,6 +1326,9 @@ def get_filtered_image_count(
 
         # Apply image IDs filter
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Exclude unreadable images from normal library results (unless include_unreadable=True)
+        conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
 
         # Apply generator filter
         conditions, params = _apply_generator_filter(conditions, params, generators)
@@ -1344,6 +1387,7 @@ def get_filtered_image_ids(
     image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    include_unreadable: bool = False,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -1376,6 +1420,9 @@ def get_filtered_image_ids(
 
         # Apply image IDs filter
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+
+        # Exclude unreadable images from normal library results (unless include_unreadable=True)
+        conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
 
         # Apply generator filter
         conditions, params = _apply_generator_filter(conditions, params, generators)
@@ -1489,6 +1536,7 @@ def get_images_paginated(
     skip_count: bool = False,  # Option to skip expensive COUNT query
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    include_unreadable: bool = False,
 ) -> Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -1535,6 +1583,9 @@ def get_images_paginated(
 
         # Apply tag filter (JOIN)
         query, params = _apply_tag_filter(query, tags, params)
+
+        # Exclude unreadable images from normal library results (unless include_unreadable=True)
+        conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
 
         # Apply generator filter
         conditions, params = _apply_generator_filter(conditions, params, generators)
@@ -1619,7 +1670,7 @@ def get_images_paginated(
             total_count = _get_filtered_count(
                 conn, generators, tags, ratings, checkpoints, loras,
                 search_query, prompt_terms, artist, min_width, max_width,
-                min_height, max_height, aspect_ratio
+                min_height, max_height, aspect_ratio, include_unreadable
             )
 
         # Determine next cursor (last item's ID)
@@ -1651,6 +1702,7 @@ def _get_filtered_count(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     aspect_ratio: Optional[str] = None,
+    include_unreadable: bool = False,
 ) -> int:
     """Get total count for filtered images.
 
@@ -1664,6 +1716,9 @@ def _get_filtered_count(
 
     # Apply tag filter (JOIN)
     query, params = _apply_tag_filter(query, tags, params)
+
+    # Exclude unreadable images from normal library results
+    conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
 
     # Apply generator filter
     conditions, params = _apply_generator_filter(conditions, params, generators)
@@ -1796,6 +1851,7 @@ def get_all_generators() -> List[Dict[str, Any]]:
         cursor.execute("""
             SELECT generator, COUNT(*) as count 
             FROM images 
+            WHERE COALESCE(is_readable, 1) = 1
             GROUP BY generator 
             ORDER BY count DESC
         """)
@@ -1807,7 +1863,7 @@ def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE tagged_at IS NULL LIMIT ?",
+            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 LIMIT ?",
             (limit,)
         )
         return [dict(row) for row in cursor.fetchall()]
@@ -1821,7 +1877,7 @@ def get_all_image_ids() -> List[int]:
     """
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images ORDER BY id")
+        cursor.execute("SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 ORDER BY id")
         return [row[0] for row in cursor.fetchall()]
 
 
@@ -1833,7 +1889,7 @@ def get_untagged_image_ids() -> List[int]:
     """
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL ORDER BY id")
+        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
         return [row[0] for row in cursor.fetchall()]
 
 
@@ -1849,6 +1905,56 @@ def update_image_path(image_id: int, new_path: str):
         )
 
 
+def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
+    """Mark an indexed image as unreadable so normal workflows exclude it."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE images
+            SET is_readable = 0,
+                read_error = ?,
+                embedding = NULL,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (read_error, image_id),
+        )
+
+
+def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
+    """Mark an existing image row as unreadable based on its file path."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE images
+            SET is_readable = 0,
+                read_error = ?,
+                embedding = NULL,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE path = ?
+            """,
+            (read_error, os.path.abspath(path)),
+        )
+
+
+def mark_image_readable(image_id: int) -> None:
+    """Restore an image row to readable state after a successful re-parse."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE images
+            SET is_readable = 1,
+                read_error = NULL,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (image_id,),
+        )
+
+
 def update_image_metadata(
     image_id: int,
     generator: str,
@@ -1861,6 +1967,8 @@ def update_image_metadata(
     checkpoint: Optional[str],
     loras: Optional[List[str]],
     model_hash: Optional[str] = None,
+    is_readable: Optional[bool] = None,
+    read_error: Optional[str] = None,
 ):
     """Update parsed metadata fields for an existing image without replacing the row."""
     with get_db() as conn:
@@ -1879,6 +1987,8 @@ def update_image_metadata(
                 checkpoint = ?,
                 loras = ?,
                 model_hash = COALESCE(?, model_hash),
+                is_readable = COALESCE(?, is_readable),
+                read_error = ?,
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -1893,6 +2003,8 @@ def update_image_metadata(
                 checkpoint,
                 serialized_loras,
                 model_hash,
+                None if is_readable is None else (1 if is_readable else 0),
+                read_error,
                 image_id,
             )
         )

@@ -25,6 +25,7 @@ from config import (
     EMBEDDING_BATCH_SIZE,
     DUPLICATE_CHUNK_SIZE,
 )
+from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
 
 
@@ -201,14 +202,20 @@ class SimilarityIndex:
 
     def __init__(self, db_module=None):
         self.db = db_module
+        self._progress_lock = threading.Lock()
         self._progress = {
             "running": False,
             "total": 0,
             "processed": 0,
+            "embedded": 0,
             "errors": 0,
+            "skipped": 0,
+            "unreadable": 0,
+            "failed": 0,
             "message": "",
             "step": "idle",
             "current_item": None,
+            "recent_issues": [],
             "started_at": None,
             "updated_at": None,
             "current_batch": 0,
@@ -216,8 +223,24 @@ class SimilarityIndex:
         }
 
     def get_progress(self) -> Dict[str, Any]:
-        """Get current embedding progress."""
-        return dict(self._progress)
+        """Get current embedding progress (snapshot guarded by lock)."""
+        with self._progress_lock:
+            snapshot = dict(self._progress)
+            snapshot["recent_issues"] = list(self._progress["recent_issues"])
+            return snapshot
+
+    def _record_issue(self, kind: str, image_id: int, image_path: str, reason: str) -> None:
+        entry = {
+            "kind": kind,
+            "image_id": image_id,
+            "filename": os.path.basename(image_path),
+            "path": image_path,
+            "reason": reason,
+        }
+        with self._progress_lock:
+            issues = self._progress["recent_issues"]
+            issues.append(entry)
+            self._progress["recent_issues"] = issues[-10:]
 
     def embed_batch(self, image_ids: Optional[List[int]] = None):
         """
@@ -234,10 +257,15 @@ class SimilarityIndex:
             "running": True,
             "total": 0,
             "processed": 0,
+            "embedded": 0,
             "errors": 0,
+            "skipped": 0,
+            "unreadable": 0,
+            "failed": 0,
             "message": "Preparing embedding job...",
             "step": "preparing",
             "current_item": None,
+            "recent_issues": [],
             "started_at": time.time(),
             "updated_at": time.time(),
             "current_batch": 0,
@@ -251,12 +279,12 @@ class SimilarityIndex:
                 if image_ids:
                     placeholders = ",".join("?" * len(image_ids))
                     cursor.execute(
-                        f"SELECT id, path FROM images WHERE id IN ({placeholders}) AND embedding IS NULL",
+                        f"SELECT id, path FROM images WHERE id IN ({placeholders}) AND embedding IS NULL AND COALESCE(is_readable, 1) = 1",
                         image_ids,
                     )
                 else:
                     cursor.execute(
-                        "SELECT id, path FROM images WHERE embedding IS NULL"
+                        "SELECT id, path FROM images WHERE embedding IS NULL AND COALESCE(is_readable, 1) = 1"
                     )
 
                 rows = cursor.fetchall()
@@ -280,6 +308,7 @@ class SimilarityIndex:
                 model = _get_embed_model()
             except Exception as exc:
                 self._progress["errors"] = len(rows)
+                self._progress["failed"] = len(rows)
                 self._progress["message"] = f"Embedding unavailable: {exc}"
                 self._progress["step"] = "error"
                 self._progress["updated_at"] = time.time()
@@ -303,20 +332,40 @@ class SimilarityIndex:
                 self._progress["current_batch"] = batch_index
                 self._progress["updated_at"] = time.time()
 
-                # Filter to existing files
-                valid = [(r[0], r[1]) for r in batch if os.path.exists(r[1])]
-
                 # Batch update embeddings - collect all updates first
                 updates = []
-                for img_id, img_path in valid:
+                for img_id, img_path in batch:
                     self._progress["current_item"] = os.path.basename(img_path)
                     self._progress["updated_at"] = time.time()
+
+                    if not os.path.exists(img_path):
+                        self._progress["processed"] += 1
+                        self._progress["errors"] += 1
+                        self._progress["skipped"] += 1
+                        self._record_issue("skipped", img_id, img_path, "File not found")
+                        if hasattr(self.db, "mark_image_unreadable"):
+                            self.db.mark_image_unreadable(img_id, "File not found")
+                        continue
+
+                    readable, read_error = verify_image_readable(img_path)
+                    if not readable:
+                        self._progress["processed"] += 1
+                        self._progress["errors"] += 1
+                        self._progress["unreadable"] += 1
+                        self._record_issue("unreadable", img_id, img_path, read_error or "Unreadable image")
+                        if hasattr(self.db, "mark_image_unreadable"):
+                            self.db.mark_image_unreadable(img_id, read_error or "Unreadable image")
+                        continue
+
                     embedding = embed_image_file(img_path, model=model)
+                    self._progress["processed"] += 1
                     if embedding is not None:
                         updates.append((embedding_to_bytes(embedding), img_id))
-                        self._progress["processed"] += 1
+                        self._progress["embedded"] += 1
                     else:
                         self._progress["errors"] += 1
+                        self._progress["failed"] += 1
+                        self._record_issue("failed", img_id, img_path, "Embedding backend returned no vector")
 
                 # Single batch UPDATE for all embeddings in this chunk
                 if updates:
@@ -327,12 +376,15 @@ class SimilarityIndex:
                             updates
                         )
 
-                # Count non-existent files as errors
-                self._progress["errors"] += len(batch) - len(valid)
-
             self._progress["message"] = (
-                f"Completed embeddings: {self._progress['processed']} processed"
-                + (f", {self._progress['errors']} failed." if self._progress["errors"] else ".")
+                f"Completed embeddings: {self._progress['embedded']} embedded"
+                + (
+                    f", {self._progress['skipped']} skipped, "
+                    f"{self._progress['unreadable']} unreadable, "
+                    f"{self._progress['failed']} failed."
+                    if self._progress["errors"]
+                    else "."
+                )
             )
             self._progress["step"] = "done"
             self._progress["current_item"] = None
@@ -343,9 +395,14 @@ class SimilarityIndex:
 
         return {
             "processed": self._progress["processed"],
+            "embedded": self._progress["embedded"],
             "errors": self._progress["errors"],
+            "skipped": self._progress["skipped"],
+            "unreadable": self._progress["unreadable"],
+            "failed": self._progress["failed"],
             "total": self._progress["total"],
             "message": self._progress["message"],
+            "recent_issues": list(self._progress["recent_issues"]),
         }
 
     def search_by_id(
@@ -371,7 +428,13 @@ class SimilarityIndex:
 
             # Get all embeddings
             cursor.execute(
-                "SELECT id, path, filename, embedding FROM images WHERE embedding IS NOT NULL AND id != ?",
+                """
+                SELECT id, path, filename, embedding
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                  AND id != ?
+                """,
                 (image_id,),
             )
             candidates = cursor.fetchall()
@@ -407,7 +470,12 @@ class SimilarityIndex:
         with self.db.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, path, filename, embedding FROM images WHERE embedding IS NOT NULL"
+                """
+                SELECT id, path, filename, embedding
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                """
             )
             candidates = cursor.fetchall()
 
@@ -431,7 +499,12 @@ class SimilarityIndex:
         with self.db.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, path, filename, embedding FROM images WHERE embedding IS NOT NULL"
+                """
+                SELECT id, path, filename, embedding
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                """
             )
             rows = cursor.fetchall()
 

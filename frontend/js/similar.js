@@ -134,6 +134,19 @@ const SimilarImages = {
         if (loadMoreBtn) loadMoreBtn.style.display = 'none';
     },
 
+    formatIssueSummary(progress = {}) {
+        const issues = Array.isArray(progress.recent_issues) ? progress.recent_issues : [];
+        if (!issues.length) return '';
+        return issues
+            .slice(-3)
+            .map((issue) => {
+                const idPart = issue.image_id ? `#${issue.image_id} ` : '';
+                const reasonPart = issue.reason ? ` (${issue.reason})` : '';
+                return `${issue.kind}: ${idPart}${issue.filename}${reasonPart}`;
+            })
+            .join(' | ');
+    },
+
     async waitForEmbeddingStatusReady(timeoutMs = 10000) {
         const startedAt = Date.now();
         while (this.isCheckingEmbeddingStatus && (Date.now() - startedAt) < timeoutMs) {
@@ -148,9 +161,15 @@ const SimilarImages = {
         const progressText = document.getElementById('similar-embed-text');
         const total = Number(progress.total || 0);
         const processed = Number(progress.processed || progress.current || 0);
+        const hasBreakdown = ['embedded', 'skipped', 'unreadable', 'failed'].some((key) => progress[key] != null);
+        const embedded = Number(progress.embedded || 0);
         const errors = Number(progress.errors || 0);
-        const completed = total > 0 ? Math.min(total, processed + errors) : 0;
+        const skipped = Number(progress.skipped || 0);
+        const unreadable = Number(progress.unreadable || 0);
+        const failed = Number(progress.failed || 0);
+        const completed = total > 0 ? Math.min(total, hasBreakdown ? processed : (processed + errors)) : 0;
         const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const issueSummary = this.formatIssueSummary(progress);
 
         if (progressBar) {
             progressBar.style.display = 'block';
@@ -170,8 +189,10 @@ const SimilarImages = {
                     total,
                     tracker: this.embedProgressTracker,
                     defaultMessage: errors > 0
-                        ? `${processed} embedded, ${errors} error(s)`
-                        : `${processed} embedded`,
+                        ? (hasBreakdown
+                            ? `${embedded} embedded, ${skipped} skipped, ${unreadable} unreadable, ${failed} failed${issueSummary ? ` (${issueSummary})` : ''}`
+                            : `${processed} embedded, ${errors} error(s)`)
+                        : `${hasBreakdown ? embedded : processed} embedded`,
                     primaryLabel: 'Embedding'
                 });
             } else if (progress.running) {
@@ -302,6 +323,10 @@ const SimilarImages = {
                     <span class="stat-number">${result.pending_count ?? result.pending ?? 0}</span>
                     <span class="stat-label">Pending</span>
                 </div>
+                <div class="stat-card">
+                    <span class="stat-number">${result.unreadable_count || 0}</span>
+                    <span class="stat-label">Unreadable</span>
+                </div>
             `;
         } catch (e) {
             if (e.message === 'App API is not ready yet') {
@@ -361,10 +386,16 @@ const SimilarImages = {
 
                 const total = Number(result.total || 0);
                 const processed = Number(result.processed || result.current || 0);
+                const hasBreakdown = ['embedded', 'skipped', 'unreadable', 'failed'].some((key) => result[key] != null);
+                const embedded = Number(result.embedded || 0);
                 const errors = Number(result.errors || 0);
-                const completed = total > 0 ? Math.min(total, processed + errors) : 0;
+                const skipped = Number(result.skipped || 0);
+                const unreadable = Number(result.unreadable || 0);
+                const failed = Number(result.failed || 0);
+                const completed = total > 0 ? Math.min(total, hasBreakdown ? processed : (processed + errors)) : 0;
+                const issueSummary = this.formatIssueSummary(result);
                 const finalMessage = total > 0
-                    ? `${completed}/${total} images (${processed} embedded${errors > 0 ? `, ${errors} error(s)` : ''})`
+                    ? `${completed}/${total} images (${hasBreakdown ? embedded : processed} embedded${errors > 0 ? (hasBreakdown ? `, ${skipped} skipped, ${unreadable} unreadable, ${failed} failed` : `, ${errors} error(s)`) : ''}${issueSummary ? `, ${issueSummary}` : ''})`
                     : 'No pending images to embed.';
 
                 this.resetEmbeddingUi({ hideProgress: false, progressMessage: finalMessage });
@@ -378,9 +409,14 @@ const SimilarImages = {
                 if (total === 0) {
                     window.App.showToast('No pending images to embed', 'info');
                 } else if (errors > 0) {
-                    window.App.showToast(`Embedding finished: ${processed} embedded, ${errors} failed`, 'warning');
+                    window.App.showToast(
+                        hasBreakdown
+                            ? `Embedding finished: ${embedded} embedded, ${skipped} skipped, ${unreadable} unreadable, ${failed} failed${issueSummary ? ` (${issueSummary})` : ''}`
+                            : `Embedding finished: ${processed} embedded, ${errors} failed`,
+                        'warning',
+                    );
                 } else {
-                    window.App.showToast(`Embedding complete: ${processed} images embedded`, 'success');
+                    window.App.showToast(`Embedding complete: ${hasBreakdown ? embedded : processed} images embedded`, 'success');
                 }
             }
         } catch (e) {

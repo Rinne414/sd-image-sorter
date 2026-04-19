@@ -31,11 +31,12 @@ test.describe('Image Reader — Paste from Clipboard', () => {
 
     const pasteBtn = page.locator('#reader-paste-btn')
     await expect(pasteBtn).toBeVisible()
-    await expect(pasteBtn).toContainText(/Paste from Clipboard|从剪贴板粘贴/)
+    await expect(pasteBtn).toContainText(/Paste via Ctrl\+V|通过 Ctrl\+V 粘贴/)
 
-    const hint = page.locator('.reader-paste-hint')
-    await expect(hint).toBeVisible()
-    await expect(hint).toContainText(/Ctrl\+V/i)
+    const hints = page.locator('.reader-paste-hint')
+    await expect(hints.first()).toBeVisible()
+    await expect(hints.first()).toContainText(/Ctrl\+V/i)
+    await expect(hints.nth(1)).toContainText(/metadata|元数据/i)
   })
 
   test('Ctrl+V paste event containing an image triggers the reader pipeline', async ({ page }) => {
@@ -83,67 +84,125 @@ test.describe('Image Reader — Paste from Clipboard', () => {
       document.dispatchEvent(evt)
     }, TINY_PNG_BASE64)
 
-    // The reader should show the preview and then the result panel.
+    // The reader should show the preview, result panel, and clipboard warning.
     await expect(page.locator('#reader-image-preview')).toBeVisible({ timeout: 5000 })
     await expect(page.locator('#reader-generator')).toHaveText('WEBUI', { timeout: 5000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('test paste prompt')
+    await expect(page.locator('#reader-status')).toContainText(/Clipboard images may lose|剪贴板图片可能丢失/, { timeout: 5000 })
   })
 
-  test('paste button invokes the _handlePaste method', async ({ page }) => {
+  test('paste button arms clipboard capture and the next paste event uses the same pipeline', async ({ page }) => {
     await openReaderView(page)
 
-    // Spy on _handlePaste so we don't depend on the non-writable navigator.clipboard.
-    await page.evaluate(() => {
-      const reader = (window as any).ImageReader
-      reader.__pasteCalls = 0
-      const original = reader._handlePaste.bind(reader)
-      reader._handlePaste = function () {
-        this.__pasteCalls++
-        return original()
-      }
+    await page.route('**/api/parse-image', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          generator: 'webui',
+          prompt: 'button paste prompt',
+          negative_prompt: '',
+          width: 1,
+          height: 1,
+          file_size: 70,
+          checkpoint: '',
+          loras: [],
+          metadata: { _parsed: { generation_params: {} } },
+        }),
+      })
     })
 
     await page.locator('#reader-paste-btn').click()
+    await expect(page.locator('#reader-status')).toContainText(/Press Ctrl\+V now|现在按 Ctrl\+V/, { timeout: 5000 })
 
-    const calls = await page.evaluate(() => (window as any).ImageReader.__pasteCalls)
-    expect(calls).toBe(1)
+    await page.evaluate((b64) => {
+      const binary = atob(b64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      const blob = new Blob([bytes], { type: 'image/png' })
+      const file = new File([blob], 'button-paste.png', { type: 'image/png' })
+
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      const evt = new ClipboardEvent('paste', {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      } as ClipboardEventInit)
+      document.dispatchEvent(evt)
+    }, TINY_PNG_BASE64)
+
+    await expect(page.locator('#reader-prompt-text')).toContainText('button paste prompt', { timeout: 5000 })
   })
 
-  test('empty clipboard shows the no-image toast', async ({ page, context }) => {
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  test('non-image paste after arming shows the no-image toast', async ({ page }) => {
     await openReaderView(page)
 
-    // Override navigator.clipboard.read via Object.defineProperty since the
-    // property is typically non-writable in Chromium.
-    await page.evaluate(() => {
-      const fakeClipboard = {
-        read: async () => [
-          {
-            types: ['text/plain'],
-            getType: async () => new Blob(['hello'], { type: 'text/plain' }),
-          },
-        ],
-        readText: async () => 'hello',
-        write: async () => {},
-        writeText: async () => {},
-      }
-      try {
-        Object.defineProperty(navigator, 'clipboard', {
-          configurable: true,
-          get: () => fakeClipboard,
-        })
-      } catch (_) {
-        // fallback
-        ;(navigator as any).clipboard = fakeClipboard
-      }
-    })
-
     await page.locator('#reader-paste-btn').click()
+    await page.evaluate(() => {
+      const dt = new DataTransfer()
+      dt.setData('text/plain', 'hello')
+      const evt = new ClipboardEvent('paste', {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      } as ClipboardEventInit)
+      document.dispatchEvent(evt)
+    })
 
     // Toast container selector matches the rest of the app.
     await expect(page.locator('.toast, #toast-container .toast')).toContainText(
       /No image found|剪贴板中没有图片/,
       { timeout: 5000 },
     )
+  })
+
+  test('clipboard images with missing SD metadata show the explicit metadata-lost warning', async ({ page }) => {
+    await openReaderView(page)
+
+    await page.route('**/api/parse-image', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          generator: 'unknown',
+          prompt: '',
+          negative_prompt: '',
+          width: 1,
+          height: 1,
+          file_size: 70,
+          checkpoint: '',
+          loras: [],
+          metadata: { _parsed: { generation_params: {} } },
+        }),
+      })
+    })
+
+    await page.evaluate((b64) => {
+      const binary = atob(b64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      const blob = new Blob([bytes], { type: 'image/png' })
+      const file = new File([blob], 'metadata-lost.png', { type: 'image/png' })
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      const evt = new ClipboardEvent('paste', {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      } as ClipboardEventInit)
+      document.dispatchEvent(evt)
+    }, TINY_PNG_BASE64)
+
+    await expect(page.locator('#reader-generator')).toHaveText('UNKNOWN', { timeout: 5000 })
+    await expect(page.locator('#reader-status')).toContainText(/did not include original SD metadata|没有带上原始 SD 元数据/, {
+      timeout: 5000,
+    })
+    await expect(page.locator('#reader-prompt-text')).toContainText(/lost SD metadata|已经丢失 SD 元数据/, {
+      timeout: 5000,
+    })
+    await expect(page.locator('#reader-params')).toContainText(/lost SD generation parameters|已经丢失 SD 生成参数/, {
+      timeout: 5000,
+    })
   })
 })

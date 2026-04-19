@@ -1870,6 +1870,27 @@ textarea:focus,
     transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Indeterminate "still working" animation for phases with no percent
+   (model load, first-time download). Keeps users from thinking the bar is
+   stuck at 0 while torch/onnxruntime imports or the ToriiGate VLM loads. */
+#tag-progress-fill.is-indeterminate,
+#bg-tag-progress-fill.is-indeterminate,
+#scan-progress-fill.is-indeterminate {
+    width: 35% !important;
+    transition: none;
+    animation: indeterminateSlide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0) 0%,
+        var(--accent-primary, #ff8a3d) 30%,
+        var(--accent-secondary, #f97316) 70%,
+        rgba(255, 255, 255, 0) 100%);
+}
+@keyframes indeterminateSlide {
+    0%   { transform: translateX(-120%); }
+    60%  { transform: translateX(180%); }
+    100% { transform: translateX(220%); }
+}
+
 /* Gallery item fade-in entrance */
 .gallery-item {
     animation: galleryItemIn 280ms ease-out both;

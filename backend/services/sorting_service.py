@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database as db
 from image_manager import scan_folder, move_image
+from metadata_parser import verify_image_readable
 from utils.path_validation import validate_folder_path
 
 logger = logging.getLogger(__name__)
@@ -317,6 +318,37 @@ class SortingService:
             }
             return True
 
+    def _filter_readable_image_ids(self, image_ids: List[int]) -> tuple[List[int], List[Dict[str, Any]]]:
+        """Drop unreadable images from interactive sorting/move flows and mark them in DB."""
+        if not image_ids:
+            return [], []
+
+        filtered: List[int] = []
+        skipped: List[Dict[str, Any]] = []
+        images_map = db.get_images_by_ids(image_ids)
+
+        for image_id in image_ids:
+            image = images_map.get(image_id)
+            if not image:
+                continue
+
+            path = image.get("path") or ""
+            filename = image.get("filename") or f"image-{image_id}"
+            if not path or not os.path.exists(path):
+                skipped.append({"image_id": image_id, "filename": filename, "error": "File not found"})
+                db.mark_image_unreadable(image_id, "File not found")
+                continue
+
+            readable, read_error = verify_image_readable(path)
+            if not readable:
+                skipped.append({"image_id": image_id, "filename": filename, "error": read_error or "Unreadable image"})
+                db.mark_image_unreadable(image_id, read_error or "Unreadable image")
+                continue
+
+            filtered.append(image_id)
+
+        return filtered, skipped
+
     def set_sort_session(self, session: Dict[str, Any]) -> None:
         """Set the sort session."""
         with self._sort_session_lock:
@@ -359,14 +391,23 @@ class SortingService:
                 }
 
             try:
-                def progress_cb(current, total, filename):
+                def progress_cb(current, total, filename, details=None):
                     with self._scan_lock:
                         now = time.time()
+                        details = details or {}
+                        last_error = details.get("last_error") if isinstance(details, dict) else None
+                        message = f"Processing: {filename}"
+                        if last_error:
+                            message = (
+                                f"Skipped unreadable image: {last_error.get('filename', filename)}"
+                                f" ({last_error.get('error', 'Unreadable image')})"
+                            )
                         self._scan_progress["current"] = current
                         self._scan_progress["processed"] = current
                         self._scan_progress["total"] = total
                         self._scan_progress["step"] = "scanning"
-                        self._scan_progress["message"] = f"Processing: {filename}"
+                        self._scan_progress["errors"] = details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0)
+                        self._scan_progress["message"] = message
                         self._scan_progress["current_item"] = filename
                         self._scan_progress["updated_at"] = now
 
@@ -381,6 +422,10 @@ class SortingService:
                         summary += f" {updated_count} updated."
                     if errors:
                         summary += f" {errors} failed."
+                    recent_errors = result.get("recent_errors") or []
+                    if recent_errors:
+                        filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
+                        summary += f" Bad files: {filenames}."
                     self._scan_progress = {
                         "status": "done",
                         "step": "done",
@@ -394,7 +439,8 @@ class SortingService:
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
                         "updated_at": now,
-                        "result": result
+                        "result": result,
+                        "recent_errors": recent_errors,
                     }
             except Exception as e:
                 with self._scan_lock:
@@ -432,12 +478,28 @@ class SortingService:
 
         # Batch fetch all images in a single query (N+1 fix)
         images_map = db.get_images_by_ids(request.image_ids)
+        readable_ids, unreadable_skips = self._filter_readable_image_ids(request.image_ids)
+        readable_id_set = set(readable_ids)
+        unreadable_map = {
+            entry["image_id"]: entry
+            for entry in unreadable_skips
+        }
         destination_ready = os.path.isdir(request.destination_folder)
 
         results = []
         for image_id in request.image_ids:
+            if image_id in unreadable_map:
+                results.append(
+                    {
+                        "id": image_id,
+                        "error": unreadable_map[image_id]["error"],
+                        "success": False,
+                    }
+                )
+                continue
+
             image = images_map.get(image_id)
-            if image and os.path.exists(image["path"]):
+            if image_id in readable_id_set and image and os.path.exists(image["path"]):
                 try:
                     if not destination_ready:
                         os.makedirs(request.destination_folder, exist_ok=True)
@@ -532,6 +594,8 @@ class SortingService:
                     max_aesthetic=request.max_aesthetic,
                 )
 
+                image_ids, unreadable_skips = self._filter_readable_image_ids(image_ids)
+
                 if not image_ids:
                     self._set_batch_move_progress_if_current(
                         run_id,
@@ -540,11 +604,11 @@ class SortingService:
                             "step": "done",
                             "current": 0,
                             "total": 0,
-                            "message": "No images match the filters",
-                            "errors": 0,
+                            "message": "No readable images match the filters",
+                            "errors": len(unreadable_skips),
                             "moved": 0,
                             "current_item": None,
-                            "recent_errors": [],
+                            "recent_errors": unreadable_skips[-3:],
                             "started_at": time.time(),
                             "updated_at": time.time(),
                         }
@@ -555,7 +619,7 @@ class SortingService:
 
                 moved = 0
                 processed = 0
-                errors = []
+                errors = list(unreadable_skips)
                 for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
                     batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
                     image_map = db.get_images_by_ids(batch_ids)
@@ -564,7 +628,7 @@ class SortingService:
                         image = image_map.get(image_id)
                         if not image:
                             processed += 1
-                            errors.append(f"Image row not found for id {image_id}")
+                            errors.append({"image_id": image_id, "filename": f"id-{image_id}", "error": "Image row not found"})
                             continue
 
                         filename = image.get("filename", "image")
@@ -575,12 +639,12 @@ class SortingService:
                                 move_image(image["id"], destination_folder, image["path"])
                                 moved += 1
                             except Exception as e:
-                                error_message = f"Error moving {image['path']}: {e}"
+                                error_message = str(e)
                         else:
-                            error_message = f"Image file not found: {image['path']}"
+                            error_message = "Image file not found"
 
                         if error_message:
-                            errors.append(error_message)
+                            errors.append({"image_id": image_id, "filename": filename, "error": error_message})
 
                         processed += 1
                         if not self._update_batch_move_progress_if_current(
@@ -704,6 +768,9 @@ class SortingService:
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
         )
+        # DB-level filter already excludes images marked unreadable.
+        # Per-image verification runs lazily in get_current_sort_image so
+        # starting a session doesn't stall on thousands of PIL decodes.
 
         folder_config = self._parse_sort_folders(folders)
 
@@ -723,7 +790,8 @@ class SortingService:
         return {
             "status": "started",
             "total_images": len(image_ids),
-            "current": first_image
+            "current": first_image,
+            "skipped_unreadable": [],
         }
 
     def get_current_sort_image(self) -> Dict[str, Any]:
@@ -755,6 +823,22 @@ class SortingService:
 
             current = db.get_image_by_id(current_id)
             if not current:
+                with self._sort_session_lock:
+                    self._sort_session["current_index"] += 1
+                    self._save_session_to_disk()
+                continue
+
+            current_path = current.get("path") or ""
+            if not current_path or not os.path.exists(current_path):
+                db.mark_image_unreadable(current_id, "File not found")
+                with self._sort_session_lock:
+                    self._sort_session["current_index"] += 1
+                    self._save_session_to_disk()
+                continue
+
+            readable, read_error = verify_image_readable(current_path)
+            if not readable:
+                db.mark_image_unreadable(current_id, read_error or "Unreadable image")
                 with self._sort_session_lock:
                     self._sort_session["current_index"] += 1
                     self._save_session_to_disk()

@@ -25,6 +25,14 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
+def _create_sort_image(tmp_path: Path, filename: str) -> Path:
+    from PIL import Image
+
+    image_path = tmp_path / filename
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+    return image_path
+
+
 @pytest.fixture
 def isolated_sorting_service():
     """Use a fresh sorting service instance so progress state does not leak across tests."""
@@ -162,6 +170,85 @@ class TestScan:
         assert progress["new"] == 1
         assert db.get_image_count() == 1
 
+    def test_scan_mixed_root_keeps_good_files_and_reports_corrupt_and_truncated_names(self, test_client, tmp_path: Path):
+        """Mixed scan roots should finish, index good files, and name bad files in progress."""
+        import database as db
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        metadata = PngInfo()
+        metadata.add_text(
+            "parameters",
+            "masterpiece\nNegative prompt: lowres\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1, Size: 64x64, Model: demo.safetensors",
+        )
+
+        good_path = tmp_path / "good.png"
+        Image.new("RGB", (64, 64), color="green").save(good_path, pnginfo=metadata)
+
+        truncated_path = tmp_path / "truncated.png"
+        Image.new("RGB", (64, 64), color="blue").save(truncated_path, pnginfo=metadata)
+        truncated_bytes = truncated_path.read_bytes()
+        truncated_path.write_bytes(truncated_bytes[: len(truncated_bytes) // 2])
+
+        corrupt_path = tmp_path / "corrupt.png"
+        corrupt_path.write_bytes(b"not-a-real-png")
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": False}
+        )
+
+        assert response.status_code == 200
+
+        progress = test_client.get("/api/scan/progress").json()
+        assert progress["status"] == "done"
+        assert progress["new"] == 1
+        assert progress["errors"] == 2
+        assert "Bad files:" in progress["message"]
+        assert "truncated.png" in progress["message"]
+        assert "corrupt.png" in progress["message"]
+        assert [entry["filename"] for entry in progress["recent_errors"]] == ["corrupt.png", "truncated.png"]
+
+        images = db.get_images(limit=10)
+        assert [image["filename"] for image in images] == ["good.png"]
+
+        sort_response = test_client.post("/api/sort/start")
+        assert sort_response.status_code == 200
+        assert sort_response.json()["total_images"] == 1
+
+    def test_scan_mixed_root_skips_truncated_and_reports_filenames(self, test_client, tmp_path: Path):
+        """Mixed scan roots should keep good files and report corrupt/truncated filenames."""
+        import database as db
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        good_path = tmp_path / "good.png"
+        metadata = PngInfo()
+        metadata.add_text(
+            "parameters",
+            "masterpiece\nNegative prompt: lowres\nSteps: 20, Sampler: Euler, Model: demo-checkpoint",
+        )
+        Image.new("RGB", (64, 64), color="green").save(good_path, pnginfo=metadata)
+
+        truncated_path = tmp_path / "truncated.png"
+        truncated_path.write_bytes(good_path.read_bytes()[:-24])
+        (tmp_path / "corrupt.png").write_bytes(b"not-a-real-png")
+
+        response = test_client.post(
+            "/api/scan",
+            json={"folder_path": str(tmp_path), "recursive": False}
+        )
+
+        assert response.status_code == 200
+
+        progress = test_client.get("/api/scan/progress").json()
+        assert progress["status"] == "done"
+        assert progress["errors"] == 2
+        assert progress["new"] == 1
+        assert "corrupt.png" in progress["message"]
+        assert "truncated.png" in progress["message"]
+        assert [img["filename"] for img in db.get_images(limit=20)] == ["good.png"]
+
     def test_scan_reset(self, test_client):
         """Resetting scan progress should work."""
         response = test_client.post("/api/scan/reset")
@@ -263,6 +350,47 @@ class TestMove:
         # Verify file was moved
         assert not img_path.exists()
         assert (dest_dir / "move_me.png").exists()
+
+    def test_move_rejects_unreadable_image_even_if_file_exists(self, test_client, test_db, tmp_path: Path):
+        """A truncated image should not be moved just because the file still exists on disk."""
+        import database as db
+        from PIL import Image
+
+        source_dir = tmp_path / "source"
+        source_dir.mkdir()
+        dest_dir = tmp_path / "dest"
+        dest_dir.mkdir()
+
+        seed_path = source_dir / "seed.png"
+        Image.new("RGB", (64, 64), color="blue").save(seed_path)
+
+        truncated_path = source_dir / "truncated.png"
+        truncated_path.write_bytes(seed_path.read_bytes()[:-24])
+
+        image_id = db.add_image(
+            path=str(truncated_path),
+            filename=truncated_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/move",
+            json={
+                "image_ids": [image_id],
+                "destination_folder": str(dest_dir),
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"][0]["success"] is False
+        assert "Truncated" in data["results"][0]["error"]
+        assert truncated_path.exists()
+        assert not (dest_dir / truncated_path.name).exists()
+
+        row = db.get_image_by_id(image_id)
+        assert row["is_readable"] == 0
+        assert "Truncated" in (row["read_error"] or "")
 
 
 class TestBatchMove:
@@ -475,11 +603,12 @@ class TestSortSession:
         data = response.json()
         assert "image" in data or "done" in data
 
-    def test_get_current_sort_image_reports_history_counts(self, test_client):
+    def test_get_current_sort_image_reports_history_counts(self, test_client, tmp_path: Path):
         """Current sort payload should expose restored move/skip counts for resumed sessions."""
         db = test_client.test_db
+        first_path = _create_sort_image(tmp_path, "resume_skip.png")
         db.add_image(
-            path="/tmp/resume_skip.png",
+            path=str(first_path),
             filename="resume_skip.png",
             generator="unknown",
             prompt=None,
@@ -488,11 +617,12 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=first_path.stat().st_size,
             metadata_json="{}",
         )
+        second_path = _create_sort_image(tmp_path, "resume_skip_2.png")
         db.add_image(
-            path="/tmp/resume_skip_2.png",
+            path=str(second_path),
             filename="resume_skip_2.png",
             generator="unknown",
             prompt=None,
@@ -501,7 +631,7 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=second_path.stat().st_size,
             metadata_json="{}",
         )
 
@@ -516,11 +646,54 @@ class TestSortSession:
         assert data["sorted_count"] == 0
         assert data["skipped_count"] == 1
 
-    def test_get_current_sort_image_exposes_resume_metadata(self, test_client, isolated_sorting_service):
+    def test_start_sort_session_defers_unreadable_detection_to_lazy_verify(self, test_client, tmp_path: Path):
+        """Manual sort should start quickly without bulk-verifying every image.
+
+        The sync start endpoint used to run a full PIL decode on every candidate
+        image, which blocked the event loop for minutes on large libraries. We
+        now rely on (a) the scan-time ``is_readable`` flag already filtering the
+        DB query, and (b) the lazy per-image verification inside
+        ``get_current_sort_image`` to skip any stragglers at playback time.
+        """
+        db = test_client.test_db
+        good_path = _create_sort_image(tmp_path, "manual_good.png")
+        truncated_source = _create_sort_image(tmp_path, "manual_source.png")
+        truncated_path = tmp_path / "manual_bad.png"
+        truncated_path.write_bytes(truncated_source.read_bytes()[:-24])
+
+        good_id = db.add_image(
+            path=str(good_path),
+            filename="manual_good.png",
+            generator="unknown",
+            width=64,
+            height=64,
+            file_size=good_path.stat().st_size,
+            metadata_json="{}",
+        )
+        bad_id = db.add_image(
+            path=str(truncated_path),
+            filename="manual_bad.png",
+            generator="unknown",
+            width=64,
+            height=64,
+            file_size=truncated_path.stat().st_size,
+            metadata_json="{}",
+        )
+
+        response = test_client.post("/api/sort/start?generators=unknown")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_images"] == 2
+        assert data["skipped_unreadable"] == []
+        assert data["current"]["id"] in {good_id, bad_id}
+
+    def test_get_current_sort_image_exposes_resume_metadata(self, test_client, isolated_sorting_service, tmp_path: Path):
         """Resume payload should include stable image id order plus undo/redo availability for the frontend."""
         db = test_client.test_db
+        first_path = _create_sort_image(tmp_path, "resume_meta_1.png")
         first_id = db.add_image(
-            path="/tmp/resume_meta_1.png",
+            path=str(first_path),
             filename="resume_meta_1.png",
             generator="unknown",
             prompt=None,
@@ -529,11 +702,12 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=first_path.stat().st_size,
             metadata_json="{}",
         )
+        second_path = _create_sort_image(tmp_path, "resume_meta_2.png")
         second_id = db.add_image(
-            path="/tmp/resume_meta_2.png",
+            path=str(second_path),
             filename="resume_meta_2.png",
             generator="unknown",
             prompt=None,
@@ -542,7 +716,7 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=second_path.stat().st_size,
             metadata_json="{}",
         )
 
@@ -636,11 +810,12 @@ class TestSortSession:
         assert data["skipped_count"] == 0
         assert data["redo_available"] is True
 
-    def test_sort_redo_replays_persisted_skip(self, test_client, isolated_sorting_service):
+    def test_sort_redo_replays_persisted_skip(self, test_client, isolated_sorting_service, tmp_path: Path):
         """Redo should be driven by backend session state so it survives resume/reload."""
         db = test_client.test_db
+        first_path = _create_sort_image(tmp_path, "redo_skip_1.png")
         first_id = db.add_image(
-            path="/tmp/redo_skip_1.png",
+            path=str(first_path),
             filename="redo_skip_1.png",
             generator="unknown",
             prompt=None,
@@ -649,11 +824,12 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=first_path.stat().st_size,
             metadata_json="{}",
         )
+        second_path = _create_sort_image(tmp_path, "redo_skip_2.png")
         second_id = db.add_image(
-            path="/tmp/redo_skip_2.png",
+            path=str(second_path),
             filename="redo_skip_2.png",
             generator="unknown",
             prompt=None,
@@ -662,7 +838,7 @@ class TestSortSession:
             loras=[],
             width=64,
             height=64,
-            file_size=1,
+            file_size=second_path.stat().st_size,
             metadata_json="{}",
         )
 

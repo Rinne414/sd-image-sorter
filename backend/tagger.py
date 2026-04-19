@@ -564,11 +564,17 @@ class WD14Tagger:
 
         available_providers = ort.get_available_providers()
         providers = [p for p in providers if p in available_providers]
-        logger.info(f"Using providers: {providers} (GPU {'enabled' if self.use_gpu else 'disabled'})")
-
         session_uses_gpu = self.use_gpu and (
             'CUDAExecutionProvider' in providers or 'DmlExecutionProvider' in providers
         )
+        if self.use_gpu and not session_uses_gpu:
+            logger.info(
+                f"Using providers: {providers} (GPU requested, but no GPU execution provider is installed — running on CPU)"
+            )
+        elif self.use_gpu:
+            logger.info(f"Using providers: {providers} (GPU enabled)")
+        else:
+            logger.info(f"Using providers: {providers} (GPU disabled)")
         sess_options = self._build_session_options(gpu_enabled=session_uses_gpu)
 
         try:

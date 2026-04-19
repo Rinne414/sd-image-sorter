@@ -1,9 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
+const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
+const basePort = Number(new URL(baseURL).port || defaultPort)
+
 /**
  * E2E Test Configuration for SD Image Sorter
  *
- * Tests run against the local FastAPI server on localhost:8001
+ * Tests run against the local FastAPI server on a configurable localhost port.
  */
 export default defineConfig({
   testDir: './specs',
@@ -17,7 +21,7 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: process.env.BASE_URL || 'http://127.0.0.1:8001',
+    baseURL,
     storageState: './storage/onboarding-complete.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
@@ -32,8 +36,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: '..\\..\\backend\\venv\\Scripts\\python.exe ..\\..\\backend\\main.py --port 8001',
-    url: 'http://127.0.0.1:8001',
+    command: `..\\..\\backend\\venv\\Scripts\\python.exe ..\\..\\backend\\main.py --port ${basePort}`,
+    url: baseURL,
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120000,
     stdout: 'pipe',

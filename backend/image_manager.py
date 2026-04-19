@@ -10,8 +10,8 @@ from pathlib import Path
 import json
 
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
-from database import add_image, update_image_path, get_images, add_tags, update_image_metadata
-from metadata_parser import parse_image
+from database import add_image, update_image_path, get_images, add_tags, update_image_metadata, mark_image_unreadable_by_path
+from metadata_parser import parse_image, verify_image_readable
 from exceptions import ScanError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
 
@@ -45,7 +45,8 @@ def scan_folder(
         "new": 0,
         "updated": 0,
         "errors": 0,
-        "by_generator": {}
+        "by_generator": {},
+        "recent_errors": [],
     }
     
     # C5: Use a generator to avoid collecting all paths into memory at once.
@@ -79,15 +80,37 @@ def scan_folder(
     image_files = list(_iter_images())
     result["total"] = len(image_files)
 
+    def _record_scan_error(filename: str, error: str, kind: str = "unreadable") -> Dict[str, str]:
+        entry = {
+            "filename": filename,
+            "error": error,
+            "kind": kind,
+        }
+        result["errors"] += 1
+        result["recent_errors"].append(entry)
+        result["recent_errors"] = result["recent_errors"][-10:]
+        return entry
+
     # Process each image
     for i, image_path in enumerate(image_files):
         filename = os.path.basename(image_path)
+        progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
         try:
+            readable, read_error = verify_image_readable(image_path)
+            if not readable:
+                logger.warning("Skipping unreadable image during scan: %s (%s)", image_path, read_error)
+                mark_image_unreadable_by_path(image_path, read_error)
+                progress_details["last_error"] = _record_scan_error(filename, read_error or "Unreadable image")
+                progress_details["errors"] = result["errors"]
+                continue
+
             # Parse metadata
             metadata = parse_image(image_path)
             if metadata["width"] <= 0 or metadata["height"] <= 0:
                 logger.warning("Skipping unreadable image during scan: %s", image_path)
-                result["errors"] += 1
+                mark_image_unreadable_by_path(image_path, "Metadata parse returned no dimensions")
+                progress_details["last_error"] = _record_scan_error(filename, "Metadata parse returned no dimensions")
+                progress_details["errors"] = result["errors"]
                 continue
             
             # Get file timestamps
@@ -119,7 +142,9 @@ def scan_folder(
                 checkpoint=metadata["checkpoint"],
                 loras=metadata["loras"],
                 created_at=created_at,
-                model_hash=model_hash
+                model_hash=model_hash,
+                is_readable=True,
+                read_error=None,
             )
             
             result["new"] += 1
@@ -130,16 +155,22 @@ def scan_folder(
             
         except PermissionError as e:
             logger.warning("Permission denied processing %s: %s", image_path, e)
-            result["errors"] += 1
+            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="permission")
+            progress_details["errors"] = result["errors"]
         except OSError as e:
             logger.warning("OS error processing %s: %s", image_path, e)
-            result["errors"] += 1
+            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="os_error")
+            progress_details["errors"] = result["errors"]
         except Exception as e:
             logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
-            result["errors"] += 1
+            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
+            progress_details["errors"] = result["errors"]
         finally:
             if progress_callback:
-                progress_callback(i + 1, result["total"], filename)
+                try:
+                    progress_callback(i + 1, result["total"], filename, progress_details)
+                except TypeError:
+                    progress_callback(i + 1, result["total"], filename)
     
     return result
 
@@ -287,6 +318,8 @@ def reparse_image_metadata(image_id: int, image_path: str) -> Dict[str, Any]:
         file_size=metadata["file_size"],
         checkpoint=metadata["checkpoint"],
         loras=metadata["loras"],
+        is_readable=True,
+        read_error=None,
     )
 
     return metadata

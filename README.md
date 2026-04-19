@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.3-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.4-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.3-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.3-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -67,13 +67,21 @@
 ## 截图
 
 <p align="center">
-  <img src="docs/screenshots/gallery_demo.gif" alt="Gallery demo" width="48%">
-  <img src="docs/screenshots/manual_sort_demo.gif" alt="Manual sort demo" width="48%">
+  <img src="docs/screenshots/workflow_focus.gif" alt="Reader to queue workflow demo" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/manual_sort.png" alt="Manual sort screenshot" width="48%">
-  <img src="docs/screenshots/censor_edit.png" alt="Censor edit screenshot" width="48%">
+  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filters screenshot" width="48%">
+  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace screenshot" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/obfuscate_workspace.png" alt="Image obfuscate workspace screenshot" width="48%">
+  <img src="docs/screenshots/prompt_lab_stats.png" alt="Prompt Lab stats screenshot" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/artist_identification.png" alt="Artist identification screenshot" width="100%">
 </p>
 
 ## 核心功能
@@ -124,7 +132,7 @@
 ### 7. 其他实用模块
 
 - **Artist Identification**：实验性画师 / 风格识别
-- **Image Reader**：拖一张图进来，立刻读参数，不用先扫描图库
+- **Image Reader**：拖放或选择原始 PNG，立刻读参数，不用先扫描图库；剪贴板图片会明确提示可能丢失 SD metadata
 - **Image Obfuscate**：图片加扰 / 解扰，适合带密码分享
 - **Aesthetic Score**：本地美学评分
 
@@ -139,18 +147,18 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.0.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.3-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.0.4-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
 
 ### Linux / macOS
 
-1. 下载 [sd-image-sorter-v3.0.3-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.3-linux-mac.tar.gz)
+1. 下载 [sd-image-sorter-v3.0.4-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-linux-mac.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.0.3-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.4-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -180,6 +188,7 @@ run.bat
 - 没有合适 GPU 也能 CPU 跑，只是慢一些
 - `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
 - `v3.0.3` 修了 portable launcher 无视 `SD_IMAGE_SORTER_PORT` 打开错误 URL、Civitai 下载 403、艺术家识别诊断接口一直回 `available:false`、ToriiGate 首次下载没有明确 5 GB 提示
+- `v3.0.4` 收口了 4 个发布阻塞：Reader 剪贴板图片会明确提示 metadata 可能丢失、`censor-legacy` prepare 改成结构化 `409` 登录墙错误、scan 会隔离 corrupt/truncated 图片、similarity 进度会点名跳过/坏图/失败项
 
 ### 大陆用户
 
@@ -304,24 +313,33 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 - **Censor Edit**: YOLO detection, brush tools, queue workflow, batch save
 - **Similar search**: CLIP embeddings for duplicates and near-matches
 - **Prompt Lab**: generate reusable prompts from your own library
-- **Extra tools**: Artist ID, Image Reader, Image Obfuscate, Aesthetic Score
+- **Extra tools**: Artist ID, Image Reader (original file / drag-drop is metadata-safe; clipboard images may lose SD PNG metadata), Image Obfuscate, Aesthetic Score
 
 ### Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/gallery_hero.png" alt="Gallery screenshot" width="100%">
+  <img src="docs/screenshots/workflow_focus.gif" alt="Reader and queue workflow gif" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/gallery_demo.gif" alt="Gallery demo gif" width="48%">
-  <img src="docs/screenshots/manual_sort_demo.gif" alt="Manual sort demo gif" width="48%">
+  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filters screenshot" width="48%">
+  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace screenshot" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/obfuscate_workspace.png" alt="Image obfuscate workspace screenshot" width="48%">
+  <img src="docs/screenshots/prompt_lab_stats.png" alt="Prompt Lab stats screenshot" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/artist_identification.png" alt="Artist identification screenshot" width="100%">
 </p>
 
 ### Quick Start
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.0.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.3-windows-portable.zip)
+1. Download [sd-image-sorter-v3.0.4-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -329,7 +347,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 #### Linux / macOS
 
 ```bash
-tar xzf sd-image-sorter-v3.0.3-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.4-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh

@@ -1,4 +1,47 @@
+import os from 'os'
+import path from 'path'
 import { test, expect } from '@playwright/test'
+
+// Destination path used by auto-separate mocked tests. Overridable via env so
+// runners on any platform can avoid writing to the author's absolute L:\ path.
+const MOCK_AUTOSEP_DESTINATION =
+  process.env.SD_TEST_MOVE_TARGET ?? path.join(os.tmpdir(), 'sd-image-sorter-mock-move')
+
+// AutoSep keeps its own filter state in localStorage under this key (see
+// autosep.js:11 AUTOSEP_FILTER_STATE_KEY). Tests must seed this directly —
+// writing to window.App.AppState.filters has no effect on AutoSep since v3.0.0.
+const DEFAULT_AUTOSEP_FILTER_STATE = {
+  generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+  ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+  tags: [] as string[],
+  checkpoints: [] as string[],
+  loras: [] as string[],
+  prompts: [] as string[],
+  artist: null as string | null,
+  search: '',
+  minWidth: null as number | null,
+  maxWidth: null as number | null,
+  minHeight: null as number | null,
+  maxHeight: null as number | null,
+  aspectRatio: '',
+  minAesthetic: null as number | null,
+  maxAesthetic: null as number | null,
+}
+
+async function seedAutoSepFilterState(page, overrides: Partial<typeof DEFAULT_AUTOSEP_FILTER_STATE> = {}) {
+  const state = { ...DEFAULT_AUTOSEP_FILTER_STATE, ...overrides }
+  await page.addInitScript((payload) => {
+    try {
+      localStorage.setItem('autosep_filter_state_v1', JSON.stringify(payload))
+    } catch (_) {
+      // Ignore storage errors in the test bootstrap.
+    }
+  }, state)
+}
+
+async function seedAutoSepTagFilter(page, tags) {
+  await seedAutoSepFilterState(page, { tags })
+}
 
 const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
 
@@ -1059,21 +1102,23 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should preview auto-separate matches for an active gallery filter', async ({ page }) => {
+    // v3.0.0 decoupled AutoSep's filter state from the main gallery filter (see
+    // autosep.js AUTOSEP_FILTER_STATE_KEY). To exercise the preview path against
+    // the real backend, we seed a narrow generator filter (length < 5 satisfies
+    // the hasFilters predicate in updateAutoSepPreview) and then probe the
+    // gallery to confirm at least one matching image exists before asserting.
+    await seedAutoSepFilterState(page, { generators: ['comfyui', 'nai', 'webui', 'forge'] })
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const nonEmptyGenerator = await page.evaluate(() => {
-      const tabs = Array.from(document.querySelectorAll('.gen-tab'))
-        .map((tab) => ({
-          gen: tab.getAttribute('data-gen'),
-          count: Number(tab.querySelector('.gen-count')?.textContent || '0')
-        }))
-
-      return tabs.find((tab) => tab.gen && tab.gen !== 'all' && tab.count > 0)?.gen || null
+    const backendHasMatchingImages = await page.evaluate(async () => {
+      const res = await fetch('/api/images?generators=comfyui,nai,webui,forge&limit=1')
+      if (!res.ok) return 0
+      const body = await res.json()
+      return Array.isArray(body?.images) ? body.images.length : 0
     })
-
-    expect(nonEmptyGenerator).not.toBeNull()
-    await page.locator(`.gen-tab[data-gen="${nonEmptyGenerator}"]`).click()
+    test.skip(backendHasMatchingImages === 0, 'No images with comfyui/nai/webui/forge generator in backend — scan one first.')
 
     await openSortingSubView(page, 'autosep')
 
@@ -1089,12 +1134,14 @@ test.describe('Smoke Tests', () => {
 
   test('auto-separate should report partial move failures without lying about moved count', async ({ page }) => {
     await mockImageAsset(page, 1)
+    await seedAutoSepTagFilter(page, ['partial_match'])
 
     await page.route('**/api/images?**', async (route) => {
       await route.fulfill({
         json: {
           images: [
-            { id: 1, filename: 'partial-match.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/partial-match.png' },
+            { id: 1, filename: 'partial-match-1.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/partial-match-1.png' },
+            { id: 2, filename: 'partial-match-2.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/partial-match-2.png' },
           ],
           total: 2,
           has_more: false,
@@ -1128,18 +1175,12 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.evaluate(() => {
-      window.App.AppState.filters.tags = ['partial_match']
-      window.App.updateFilterSummary()
-      window.invalidateAutoSepPreview?.()
-    })
-
     await openSortingSubView(page, 'autosep')
 
     await page.locator('#btn-preview-autosep').click()
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('2')
 
-    await page.locator('#autosep-destination').fill('L:\\Antigravitiy code\\sd-image-sorter\\.tmp_move_target')
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
     await page.locator('#btn-execute-autosep').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await page.locator('#btn-confirm-ok').click()
@@ -1151,15 +1192,32 @@ test.describe('Smoke Tests', () => {
   })
 
   test('auto-separate should surface start errors instead of polling a non-existent batch job', async ({ page }) => {
-    await mockImageAsset(page, 1)
+    await seedAutoSepTagFilter(page, ['too_many'])
+
+    // Preview renders one DOM button per image (no cap — matches production
+    // behavior of not arbitrarily limiting results). 6000 DOM nodes freezes
+    // Chromium in Playwright. We use a realistic preview size and rely on the
+    // backend's 400 response to assert the "too many images" error path — the
+    // frontend preview count is independent of the backend limit message.
+    const MOCK_PREVIEW_COUNT = 100
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+    await page.route('**/api/image-file/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+
+    const tooManyImages = Array.from({ length: MOCK_PREVIEW_COUNT }, (_, i) => ({
+      id: i + 1,
+      filename: `too-many-${i}.png`,
+      path: `L:/Antigravitiy code/sd-image-sorter/test-data/too-many-${i}.png`,
+    }))
 
     await page.route('**/api/images?**', async (route) => {
       await route.fulfill({
         json: {
-          images: [
-            { id: 1, filename: 'too-many.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/too-many.png' },
-          ],
-          total: 6000,
+          images: tooManyImages,
+          total: tooManyImages.length,
           has_more: false,
         },
       })
@@ -1192,18 +1250,12 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    await page.evaluate(() => {
-      window.App.AppState.filters.tags = ['too_many']
-      window.App.updateFilterSummary()
-      window.invalidateAutoSepPreview?.()
-    })
-
     await openSortingSubView(page, 'autosep')
 
     await page.locator('#btn-preview-autosep').click()
-    await expect(page.locator('#autosep-preview .stat-number')).toHaveText('6000')
+    await expect(page.locator('#autosep-preview .stat-number')).toHaveText(String(MOCK_PREVIEW_COUNT))
 
-    await page.locator('#autosep-destination').fill('L:\\Antigravitiy code\\sd-image-sorter\\.tmp_move_target')
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
     await page.locator('#btn-execute-autosep').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await page.locator('#btn-confirm-ok').click()
@@ -1211,7 +1263,7 @@ test.describe('Smoke Tests', () => {
     const errorToast = page.locator('.toast.error').last()
     await expect(errorToast).toContainText('Maximum allowed is 5000')
     expect(progressCalls).toBeLessThanOrEqual(1)
-    await expect(page.locator('#autosep-preview .stat-number')).toHaveText('6000')
+    await expect(page.locator('#autosep-preview .stat-number')).toHaveText(String(MOCK_PREVIEW_COUNT))
   })
 
   test('should populate prompt lab tag set selector from API data', async ({ page }) => {

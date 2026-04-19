@@ -166,16 +166,19 @@ class SimilarityService:
         """Get statistics about embeddings."""
         with db.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM images")
+            cursor.execute("SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1")
             total = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM images WHERE embedding IS NOT NULL")
+            cursor.execute("SELECT COUNT(*) FROM images WHERE embedding IS NOT NULL AND COALESCE(is_readable, 1) = 1")
             embedded = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 0")
+            unreadable = cursor.fetchone()[0]
         return {
             "total_images": total,
             "embedded_images": embedded,
             "embedded_count": embedded,
             "pending": total - embedded,
             "pending_count": total - embedded,
+            "unreadable_count": unreadable,
             "coverage": round(embedded / total * 100, 1) if total > 0 else 0,
         }
 

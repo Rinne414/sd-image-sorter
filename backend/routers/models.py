@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from model_health import get_model_health
@@ -37,10 +39,28 @@ _DOWNLOAD_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36 sd-image-sorter/3.0.3"
+        "Chrome/124.0.0.0 Safari/537.36 sd-image-sorter/3.0.4"
     ),
     "Accept": "application/json, */*;q=0.8",
 }
+
+
+class ExternalAuthRequiredError(RuntimeError):
+    """Raised when a model download is blocked by an external auth wall."""
+
+    def __init__(self, payload: Dict[str, Any], status_code: int = 409):
+        super().__init__(payload.get("message") or payload.get("error") or "External authentication required")
+        self.payload = payload
+        self.status_code = status_code
+
+
+class ModelPreparationFailedError(RuntimeError):
+    """Raised when a model cannot be prepared automatically for a non-auth reason."""
+
+    def __init__(self, payload: Dict[str, Any], status_code: int = 502):
+        super().__init__(payload.get("message") or payload.get("error") or "Model preparation failed")
+        self.payload = payload
+        self.status_code = status_code
 
 
 def _urlopen_with_ua(url: str, timeout: int = 30):
@@ -50,6 +70,49 @@ def _urlopen_with_ua(url: str, timeout: int = 30):
     """
     req = urllib.request.Request(url, headers=_DOWNLOAD_HEADERS)
     return urllib.request.urlopen(req, timeout=timeout)
+
+
+def _build_civitai_auth_error(target_dir: Path) -> Dict[str, Any]:
+    target_dir_resolved = str(target_dir.resolve())
+    return {
+        "error": "Civitai login required for the Privacy YOLO download.",
+        "type": "CivitaiLoginRequired",
+        "message": (
+            "Privacy YOLO cannot be downloaded automatically because Civitai now requires a signed-in browser session."
+        ),
+        "provider": "Civitai",
+        "model_id": "censor-legacy",
+        "manual_steps": [
+            f"Open {PRIVACY_YOLO_PAGE_URL} in a browser and sign in to Civitai.",
+            "Download the Privacy YOLO archive (.zip) from the model page.",
+            f"Extract the archive into {target_dir_resolved}.",
+            "Restart SD Image Sorter or reopen the Models panel so the files are detected.",
+        ],
+        "target_dir": target_dir_resolved,
+        "external_url": PRIVACY_YOLO_PAGE_URL,
+    }
+
+
+def _build_privacy_yolo_prepare_error(target_dir: Path, reason: str) -> Dict[str, Any]:
+    target_dir_resolved = str(target_dir.resolve())
+    return {
+        "error": "Privacy YOLO preparation failed.",
+        "type": "ModelPreparationFailed",
+        "message": (
+            "Privacy YOLO could not be prepared automatically because the download or archive verification failed."
+        ),
+        "provider": "Civitai",
+        "model_id": "censor-legacy",
+        "reason": reason,
+        "manual_steps": [
+            f"Open {PRIVACY_YOLO_PAGE_URL} in a browser and sign in to Civitai.",
+            "Download the Privacy YOLO archive (.zip) from the model page.",
+            f"Extract the archive into {target_dir_resolved}.",
+            "Restart SD Image Sorter or reopen the Models panel so the files are detected.",
+        ],
+        "target_dir": target_dir_resolved,
+        "external_url": PRIVACY_YOLO_PAGE_URL,
+    }
 
 
 class PrepareModelRequest(BaseModel):
@@ -219,37 +282,84 @@ def _download_privacy_yolo_bundle() -> Dict[str, str]:
     if not download_url:
         download_url = PRIVACY_YOLO_DIRECT_URL
 
+    civitai_auth_error = _build_civitai_auth_error(target_dir)
+
     with tempfile.TemporaryDirectory(prefix="privacy-yolo-") as tmp_dir:
         zip_path = Path(tmp_dir) / "privacy-yolo.zip"
-        with _urlopen_with_ua(download_url, timeout=300) as src, open(zip_path, "wb") as dst:
-            response_content_type = (src.headers.get("Content-Type") or "").lower()
-            while True:
-                chunk = src.read(1 << 20)
-                if not chunk:
-                    break
-                dst.write(chunk)
+        response_content_type = ""
+        try:
+            src_ctx = _urlopen_with_ua(download_url, timeout=300)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (401, 403):
+                raise ExternalAuthRequiredError(civitai_auth_error) from exc
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    f"Civitai returned HTTP {exc.code} while downloading the archive.",
+                )
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    f"Download request failed: {exc.reason or exc}",
+                )
+            ) from exc
 
-        # Civitai now gates NSFW model downloads behind a login. Unauthenticated
-        # requests get HTTP 200 + an HTML login page (not the zip). Detect this
-        # and surface a clear, actionable error instead of a cryptic BadZipFile.
+        try:
+            with src_ctx as src, open(zip_path, "wb") as dst:
+                response_content_type = (src.headers.get("Content-Type") or "").lower()
+                while True:
+                    chunk = src.read(1 << 20)
+                    if not chunk:
+                        break
+                    dst.write(chunk)
+        except OSError as exc:
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    f"Failed to store the downloaded archive locally: {exc}",
+                )
+            ) from exc
+
+        # Civitai may also return HTTP 200 + an HTML login page instead of the
+        # zip. Detect this and surface the same actionable guidance.
         if "text/html" in response_content_type or not zipfile.is_zipfile(zip_path):
-            raise RuntimeError(
-                "Civitai requires an account login to download the Wenaka privacy YOLO "
-                "model. The automated download returned a sign-in page instead of the "
-                "model archive. To complete setup manually:\n"
-                f"  1. Open {PRIVACY_YOLO_PAGE_URL} in a browser and sign in.\n"
-                "  2. Download the archive (.zip) from the model page.\n"
-                f"  3. Extract its contents into: {target_dir.resolve()}\n"
-                "  4. Restart SD Image Sorter (or reopen the Models panel) to pick up the files.\n"
-                "This is a Civitai policy change; the app cannot bypass their auth wall."
+            if "text/html" in response_content_type:
+                raise ExternalAuthRequiredError(civitai_auth_error)
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    "Downloaded file was not a valid zip archive.",
+                )
             )
 
-        with zipfile.ZipFile(zip_path, "r") as archive:
-            for member in archive.namelist():
-                member_path = (target_dir / member).resolve()
-                if not str(member_path).startswith(str(target_dir.resolve())):
-                    raise RuntimeError(f"Privacy YOLO archive contains an unsafe path: {member}")
-            archive.extractall(target_dir)
+        try:
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                for member in archive.namelist():
+                    member_path = (target_dir / member).resolve()
+                    if not str(member_path).startswith(str(target_dir.resolve())):
+                        raise ModelPreparationFailedError(
+                            _build_privacy_yolo_prepare_error(
+                                target_dir,
+                                f"Archive contained an unsafe path: {member}",
+                            )
+                        )
+                archive.extractall(target_dir)
+        except zipfile.BadZipFile as exc:
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    f"Downloaded archive could not be opened as a zip file: {exc}",
+                )
+            ) from exc
+        except OSError as exc:
+            raise ModelPreparationFailedError(
+                _build_privacy_yolo_prepare_error(
+                    target_dir,
+                    f"Failed to extract the Privacy YOLO archive: {exc}",
+                )
+            ) from exc
 
     default_path = get_model_health()["censor"]["legacy"]["default_model_path"]
     return {
@@ -386,6 +496,10 @@ async def prepare_model(request: PrepareModelRequest):
             }
 
         raise HTTPException(status_code=400, detail=f"Model '{request.model_id}' cannot be prepared from the UI yet.")
+    except ExternalAuthRequiredError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.payload)
+    except ModelPreparationFailedError as exc:
+        return JSONResponse(status_code=exc.status_code, content=exc.payload)
     except HTTPException:
         raise
     except Exception as exc:

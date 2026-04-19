@@ -935,6 +935,71 @@ class TestUtilityFunctions:
         assert len(ids) >= 2
         assert all(isinstance(i, int) for i in ids)
 
+    def test_readability_filters_exclude_unreadable_rows_from_default_queries(self, test_db):
+        """Unreadable images should stay out of default library/tagging query helpers."""
+        readable_id = db.add_image(path="/test/readable.png", filename="readable.png")
+        unreadable_id = db.add_image(
+            path="/test/unreadable.png",
+            filename="unreadable.png",
+            is_readable=False,
+            read_error="Truncated File Read",
+        )
+
+        ids = db.get_all_image_ids()
+        untagged = db.get_untagged_images()
+        images = db.get_images(limit=20)
+
+        assert readable_id in ids
+        assert unreadable_id not in ids
+        assert unreadable_id not in [img["id"] for img in untagged]
+        assert unreadable_id not in [img["id"] for img in images]
+
+    def test_include_unreadable_true_surfaces_unreadable_rows(self, test_db):
+        """When include_unreadable=True is passed, unreadable images must be visible.
+
+        Regression guard for v3.0.4 bug where duplicate _apply_readable_filter calls
+        made include_unreadable=True a no-op across get_images / get_filtered_image_count /
+        get_filtered_image_ids / get_images_paginated.
+        """
+        readable_id = db.add_image(path="/test/visible_readable.png", filename="visible_readable.png")
+        unreadable_id = db.add_image(
+            path="/test/visible_unreadable.png",
+            filename="visible_unreadable.png",
+            is_readable=False,
+            read_error="Truncated File Read",
+        )
+
+        # Default: unreadable hidden
+        default_images = db.get_images(limit=20)
+        default_ids = [img["id"] for img in default_images]
+        assert readable_id in default_ids
+        assert unreadable_id not in default_ids
+
+        # include_unreadable=True: unreadable visible
+        all_images = db.get_images(limit=20, include_unreadable=True)
+        all_ids = [img["id"] for img in all_images]
+        assert readable_id in all_ids
+        assert unreadable_id in all_ids
+
+        # Same guarantee for the count helper
+        default_count = db.get_filtered_image_count()
+        all_count = db.get_filtered_image_count(include_unreadable=True)
+        assert all_count >= default_count + 1
+
+        # Same guarantee for the id-only helper
+        default_id_list = db.get_filtered_image_ids()
+        all_id_list = db.get_filtered_image_ids(include_unreadable=True)
+        assert unreadable_id not in default_id_list
+        assert unreadable_id in all_id_list
+
+        # Same guarantee for the paginated helper
+        default_paginated = db.get_images_paginated(limit=20)
+        all_paginated = db.get_images_paginated(limit=20, include_unreadable=True)
+        default_paginated_ids = [img["id"] for img in default_paginated["images"]]
+        all_paginated_ids = [img["id"] for img in all_paginated["images"]]
+        assert unreadable_id not in default_paginated_ids
+        assert unreadable_id in all_paginated_ids
+
 
 class TestAddTagsBatch:
     """Tests for batch tag insertion via add_tags_batch()."""

@@ -13,10 +13,13 @@
         _promptFormat: 'original', // 'original' | 'sd' | 'nai'
         _histogramMode: 'rgb',
         _languageBound: false,
+        _currentSourceKind: 'file',
+        _awaitingClipboardPaste: false,
         _collapsedState: {
             prompt: true,
             negative: false,
             params: false,
+            modelAssets: false,
             loras: false,
             hashes: false,
         },
@@ -43,7 +46,7 @@
                     e.stopPropagation();
                     const files = e.dataTransfer?.files;
                     if (files?.length > 0) {
-                        this._handleFile(files[0]);
+                        this._handleFile(files[0], { sourceKind: 'file' });
                     }
                 });
             }
@@ -78,16 +81,30 @@
                 if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
 
                 const items = e.clipboardData?.items;
-                if (!items) return;
+                if (!items) {
+                    if (this._awaitingClipboardPaste) {
+                        this._setClipboardPasteState(false);
+                        window.App?.showToast?.(this._t('reader.pasteNoImage', 'No image found in clipboard'), 'error');
+                    }
+                    return;
+                }
                 for (const item of items) {
                     if (item.kind === 'file' && item.type.startsWith('image/')) {
                         const file = item.getAsFile();
                         if (file) {
                             e.preventDefault();
-                            this._handleFile(file);
+                            const sourceKind = this._awaitingClipboardPaste ? 'clipboard-button' : 'clipboard-shortcut';
+                            this._setClipboardPasteState(false);
+                            this._handleFile(file, { sourceKind });
                             return;
                         }
                     }
+                }
+
+                if (this._awaitingClipboardPaste) {
+                    e.preventDefault();
+                    this._setClipboardPasteState(false);
+                    window.App?.showToast?.(this._t('reader.pasteNoImage', 'No image found in clipboard'), 'error');
                 }
             });
             document.querySelectorAll('[data-reader-histogram-mode]').forEach((button) => {
@@ -257,15 +274,22 @@
             };
         },
 
-        _renderPromptSection(result) {
+        _renderPromptSection(result, options = {}) {
             const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
             const promptView = this._buildPromptView(result, this._promptFormat);
-            this._setText('reader-prompt-text', promptView?.promptText || t('reader.noPrompt', 'No prompt found'));
+            const clipboardMetadataMissing = Boolean(options.clipboardMetadataMissing);
+            const promptText = clipboardMetadataMissing
+                ? t(
+                    'reader.clipboardWarningPromptFallback',
+                    'Clipboard image likely lost SD metadata. Open the original PNG file to read the prompt.',
+                )
+                : (promptView?.promptText || t('reader.noPrompt', 'No prompt found'));
+            this._setText('reader-prompt-text', promptText);
             this._setText('reader-negative-text', promptView?.negativeText || t('reader.noNegative', 'No negative prompt'));
 
             const negSection = document.getElementById('reader-negative-section');
             if (negSection) {
-                negSection.style.display = promptView?.negativeText ? '' : 'none';
+                negSection.style.display = (!clipboardMetadataMissing && promptView?.negativeText) ? '' : 'none';
             }
         },
 
@@ -412,14 +436,14 @@
                 dropZone.classList.remove('drag-over');
                 const files = e.dataTransfer?.files;
                 if (files?.length > 0) {
-                    this._handleFile(files[0]);
+                    this._handleFile(files[0], { sourceKind: 'file' });
                 }
             });
 
             dropZone.addEventListener('click', () => fileInput?.click());
             fileInput?.addEventListener('change', (e) => {
                 if (e.target.files?.length > 0) {
-                    this._handleFile(e.target.files[0]);
+                    this._handleFile(e.target.files[0], { sourceKind: 'file' });
                     e.target.value = '';
                 }
             });
@@ -431,49 +455,79 @@
             return readerPanel.classList.contains('active');
         },
 
-        async _handlePaste() {
-            try {
-                if (!navigator.clipboard || typeof navigator.clipboard.read !== 'function') {
-                    window.App?.showToast?.(
-                        this._t('reader.pasteUnsupported', 'Clipboard paste is not supported in this browser'),
-                        'error'
-                    );
-                    return;
-                }
-
-                const items = await navigator.clipboard.read();
-                for (const item of items) {
-                    const imageType = (item.types || []).find((t) => t.startsWith('image/'));
-                    if (!imageType) continue;
-
-                    const blob = await item.getType(imageType);
-                    const ext = imageType.split('/').pop() || 'png';
-                    const file = new File([blob], `clipboard-${Date.now()}.${ext}`, {
-                        type: imageType,
-                        lastModified: Date.now(),
-                    });
-                    await this._handleFile(file);
-                    return;
-                }
-
-                window.App?.showToast?.(
-                    this._t('reader.pasteNoImage', 'No image found in clipboard'),
-                    'error'
-                );
-            } catch (error) {
-                const name = error?.name || '';
-                const msg = name === 'NotAllowedError'
-                    ? this._t('reader.pastePermissionDenied', 'Clipboard permission denied. Please allow clipboard access.')
-                    : this._t('reader.pasteFailed', 'Failed to read clipboard');
-                window.App?.showToast?.(msg, 'error');
+        _setClipboardPasteState(armed) {
+            this._awaitingClipboardPaste = armed;
+            const dropZone = document.getElementById('reader-drop-zone');
+            if (dropZone) {
+                dropZone.classList.toggle('paste-armed', armed);
             }
         },
 
-        async _handleFile(file) {
+        _getClipboardWarning(result, sourceKind) {
+            if (!sourceKind || !sourceKind.startsWith('clipboard')) {
+                return '';
+            }
+
+            const gp = this._getGenParams(result);
+            const hasPrompt = Boolean(String(result?.prompt || '').trim());
+            const hasCheckpoint = Boolean(String(result?.checkpoint || gp.model || '').trim());
+            const hasParams = Object.keys(gp || {}).length > 0;
+            const generator = String(result?.generator || 'unknown').toLowerCase();
+
+            if (!hasPrompt && !hasCheckpoint && !hasParams && generator === 'unknown') {
+                return this._t(
+                    'reader.clipboardWarningMissingMeta',
+                    'This clipboard image did not include original SD metadata. Drag or browse the PNG file itself to read prompt, checkpoint, and params.',
+                );
+            }
+
+            return this._t(
+                'reader.clipboardWarning',
+                'Clipboard images may lose original SD PNG metadata. If prompt or checkpoint looks incomplete, drag-drop the original file instead.',
+            );
+        },
+
+        _clipboardMetadataMissing(result, sourceKind) {
+            if (!sourceKind || !sourceKind.startsWith('clipboard')) {
+                return false;
+            }
+
+            const gp = this._getGenParams(result);
+            const hasPrompt = Boolean(String(result?.prompt || '').trim());
+            const hasCheckpoint = Boolean(String(result?.checkpoint || gp.model || '').trim());
+            const hasParams = Object.keys(gp || {}).length > 0;
+            const generator = String(result?.generator || 'unknown').toLowerCase();
+            return !hasPrompt && !hasCheckpoint && !hasParams && generator === 'unknown';
+        },
+
+        async _handlePaste() {
+            this._setClipboardPasteState(true);
+
+            const dropZone = document.getElementById('reader-drop-zone');
+            if (dropZone && typeof dropZone.focus === 'function') {
+                dropZone.focus();
+            }
+
+            const statusEl = document.getElementById('reader-status');
+            if (statusEl) {
+                statusEl.textContent = this._t(
+                    'reader.pasteArmed',
+                    'Clipboard capture is ready. Press Ctrl+V now. Clipboard images may lose SD metadata; drag-drop the original PNG for guaranteed metadata.',
+                );
+                statusEl.className = 'reader-status warning';
+                statusEl.style.display = 'block';
+            }
+        },
+
+        async _handleFile(file, options = {}) {
             if (!file.type.startsWith('image/')) {
                 window.App?.showToast?.(this._t('reader.invalidFile', 'Please drop an image file'), 'error');
                 return;
             }
+
+            const sourceKind = options.sourceKind || 'file';
+            this._currentSourceKind = sourceKind;
+            this._setClipboardPasteState(false);
 
             // Show preview immediately (no need to clear first)
             const preview = document.getElementById('reader-image-preview');
@@ -515,11 +569,18 @@
                 const result = await response.json();
                 this._currentResult = result;
                 this._currentImage = file;
-                this._renderResult(result, file.name, { resetFormat: true });
+                this._renderResult(result, file.name, { resetFormat: true, sourceKind });
 
+                const clipboardWarning = this._getClipboardWarning(result, sourceKind);
                 if (statusEl) {
-                    statusEl.textContent = '';
-                    statusEl.style.display = 'none';
+                    if (clipboardWarning) {
+                        statusEl.textContent = clipboardWarning;
+                        statusEl.className = 'reader-status warning';
+                        statusEl.style.display = 'block';
+                    } else {
+                        statusEl.textContent = '';
+                        statusEl.style.display = 'none';
+                    }
                 }
                 if (resultPanel) resultPanel.style.display = 'block';
             } catch (error) {
@@ -551,7 +612,7 @@
                     type: blob.type || 'image/png',
                     lastModified: Date.now(),
                 });
-                await this._handleFile(file);
+                await this._handleFile(file, { sourceKind: 'library' });
                 return true;
             } catch (error) {
                 window.App?.showToast?.(
@@ -570,6 +631,17 @@
                 return parsed?._parsed?.generation_params || parsed?.generation_params || {};
             } catch (_) {
                 return {};
+            }
+        },
+
+        _getModelAssets(result) {
+            const metadata = result?.metadata;
+            if (!metadata) return null;
+            try {
+                const parsed = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                return parsed?._parsed?.model_assets || null;
+            } catch (_) {
+                return null;
             }
         },
 
@@ -624,6 +696,133 @@
             return hashes;
         },
 
+        _renderModelAssetsSection(result) {
+            const section = document.getElementById('reader-model-assets-section');
+            const container = document.getElementById('reader-model-assets');
+            if (!section || !container) return;
+
+            const assets = this._getModelAssets(result);
+            const hasAssets = assets && (
+                assets.primary_model_name ||
+                (assets.loras && assets.loras.length) ||
+                (assets.yolo_models && assets.yolo_models.length) ||
+                (assets.checkpoint_candidates && assets.checkpoint_candidates.length) ||
+                (assets.unet_candidates && assets.unet_candidates.length) ||
+                (assets.diffusion_model_candidates && assets.diffusion_model_candidates.length) ||
+                (assets.model_candidates && assets.model_candidates.length) ||
+                (assets.yolo_candidates && assets.yolo_candidates.length) ||
+                (assets.global_lora_candidates && assets.global_lora_candidates.length) ||
+                (assets.global_yolo_candidates && assets.global_yolo_candidates.length)
+            );
+
+            if (!hasAssets) {
+                section.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+
+            const blocks = [];
+            const humanizeSource = (value) => {
+                if (!value) return '';
+                if (value === 'activity_subgraph_fallback') return this._t('reader.modelAssetsSourceActivity', 'Active subgraph fallback');
+                if (value === 'global_candidate_fallback') return this._t('reader.modelAssetsSourceGlobal', 'Global candidate fallback');
+                if (value === 'global_graph_fallback') return this._t('reader.modelAssetsSourceGraph', 'Full graph fallback');
+                if (value === 'fast_path') return this._t('reader.modelAssetsSourceFastPath', 'Fast path');
+                return String(value).replace(/_/g, ' ');
+            };
+            const humanizeConfidence = (value) => {
+                if (value === 'high') return this._t('reader.modelAssetsConfidenceHigh', 'High confidence');
+                if (value === 'medium') return this._t('reader.modelAssetsConfidenceMedium', 'Medium confidence');
+                if (value === 'low') return this._t('reader.modelAssetsConfidenceLow', 'Low confidence');
+                return '';
+            };
+            const addListBlock = (titleKey, titleFallback, values) => {
+                if (!Array.isArray(values) || values.length === 0) return;
+                const uniqueValues = [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+                if (!uniqueValues.length) return;
+                blocks.push(`
+                    <div class="reader-model-asset-block">
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t(titleKey, titleFallback))}</div>
+                        <div class="reader-model-asset-list">
+                            ${uniqueValues.map((value) => `<span class="reader-model-asset-pill">${this._escapeHtml(value)}</span>`).join('')}
+                        </div>
+                    </div>
+                `);
+            };
+            const addCandidateBlock = (titleKey, titleFallback, items) => {
+                if (!Array.isArray(items) || items.length === 0) return;
+                const uniqueItems = [];
+                const seenNames = new Set();
+                for (const item of items) {
+                    const name = String(item?.name || '').trim();
+                    if (!name || seenNames.has(name)) continue;
+                    seenNames.add(name);
+                    uniqueItems.push(item);
+                }
+                if (!uniqueItems.length) return;
+
+                blocks.push(`
+                    <div class="reader-model-asset-block">
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t(titleKey, titleFallback))}</div>
+                        <div class="model-asset-candidate-list">
+                            ${uniqueItems.map((item) => {
+                                const confidence = String(item?.confidence || 'low').toLowerCase();
+                                const metaParts = [
+                                    humanizeSource(item?.source_mode),
+                                    item?.node_id ? `${this._t('reader.modelAssetsNode', 'Node')} ${item.node_id}` : '',
+                                    item?.class_type ? String(item.class_type) : '',
+                                    item?.key_path ? String(item.key_path) : (item?.input_key ? String(item.input_key) : ''),
+                                ].filter(Boolean);
+                                return `
+                                    <div class="model-asset-candidate model-asset-candidate-secondary">
+                                        <div class="model-asset-candidate-head">
+                                            <span class="reader-model-asset-pill">${this._escapeHtml(String(item?.name || ''))}</span>
+                                            <span class="model-asset-confidence is-${this._escapeHtml(confidence)}">${this._escapeHtml(humanizeConfidence(confidence))}</span>
+                                        </div>
+                                        <div class="model-asset-candidate-meta">${this._escapeHtml(metaParts.join(' • '))}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `);
+            };
+
+            if (assets.primary_model_name) {
+                blocks.push(`
+                    <div class="reader-model-asset-block">
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModel', 'Primary Model'))}</div>
+                        <div class="reader-model-asset-value">${this._escapeHtml(assets.primary_model_name)}</div>
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModelType', 'Primary Model Type'))}: ${this._escapeHtml(assets.primary_model_type || 'unknown')}</div>
+                    </div>
+                `);
+            }
+
+            if (assets.source) {
+                blocks.push(`
+                    <div class="reader-model-asset-block">
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.modelAssetsSource', 'Parser Source'))}</div>
+                        <div class="reader-model-asset-value">${this._escapeHtml(humanizeSource(assets.source))}</div>
+                    </div>
+                `);
+            }
+            if (Array.isArray(assets.sources) && assets.sources.length > 1) {
+                addListBlock('reader.modelAssetsSources', 'All Sources', assets.sources.map((value) => humanizeSource(value)));
+            }
+
+            addListBlock('reader.modelAssetsCheckpoints', 'Checkpoint Candidates', (assets.checkpoint_candidates || []).map((item) => item.name));
+            addListBlock('reader.modelAssetsUnets', 'UNet Candidates', (assets.unet_candidates || []).map((item) => item.name));
+            addListBlock('reader.modelAssetsDiffusion', 'Diffusion Candidates', (assets.diffusion_model_candidates || []).map((item) => item.name));
+            addListBlock('reader.modelAssetsModels', 'Additional / Upscale / ControlNet Models', (assets.model_candidates || []).map((item) => item.name));
+            addListBlock('reader.modelAssetsLoras', 'LoRA Candidates', (assets.lora_candidates || []).map((item) => item.name));
+            addListBlock('reader.modelAssetsYolo', 'YOLO / Detector Models', assets.yolo_models || (assets.yolo_candidates || []).map((item) => item.name));
+            addCandidateBlock('reader.modelAssetsGlobalLoras', 'Global LoRA Candidates', assets.global_lora_candidates || []);
+            addCandidateBlock('reader.modelAssetsGlobalYolo', 'Full-graph YOLO Candidates', assets.global_yolo_candidates || []);
+
+            container.innerHTML = blocks.join('');
+            section.style.display = '';
+        },
+
         _renderResult(result, filename, options = {}) {
             const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
             const gp = this._getGenParams(result);
@@ -651,7 +850,8 @@
                 this._promptFormat = 'original';
             }
             this._updateFormatButton();
-            this._renderPromptSection(result);
+            const clipboardMetadataMissing = this._clipboardMetadataMissing(result, options.sourceKind || this._currentSourceKind);
+            this._renderPromptSection(result, { clipboardMetadataMissing });
 
             // Checkpoint — strip path, show clean name, tooltip for full path
             const cpRaw = result.checkpoint || gp.model || '';
@@ -726,9 +926,16 @@
                 if (paramPairs.length > 0) {
                     paramsEl.innerHTML = paramPairs.join('');
                 } else {
-                    paramsEl.textContent = t('reader.noParams', 'No generation parameters');
+                    paramsEl.textContent = clipboardMetadataMissing
+                        ? t(
+                            'reader.clipboardWarningParamsFallback',
+                            'Clipboard image likely lost SD generation parameters. Open the original PNG file to inspect them.',
+                        )
+                        : t('reader.noParams', 'No generation parameters');
                 }
             }
+
+            this._renderModelAssetsSection(result);
 
             const negativeSection = document.getElementById('reader-negative-section');
             if (negativeSection && !String(result.negative_prompt || '').trim()) {
@@ -802,6 +1009,8 @@
         _clear() {
             this._currentImage = null;
             this._currentResult = null;
+            this._currentSourceKind = 'file';
+            this._setClipboardPasteState(false);
 
             const preview = document.getElementById('reader-image-preview');
             const dropZone = document.getElementById('reader-drop-zone');
@@ -821,6 +1030,10 @@
             }
             const colorSection = document.getElementById('reader-color-section');
             if (colorSection) colorSection.style.display = 'none';
+            const modelAssetsSection = document.getElementById('reader-model-assets-section');
+            const modelAssets = document.getElementById('reader-model-assets');
+            if (modelAssetsSection) modelAssetsSection.style.display = 'none';
+            if (modelAssets) modelAssets.innerHTML = '';
             this._updateFormatButton();
         },
 

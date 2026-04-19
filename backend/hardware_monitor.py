@@ -439,14 +439,16 @@ def check_memory_pressure() -> Dict[str, Any]:
 
     Returns a dictionary with:
     - ram_available_gb: float or None
+    - ram_total_gb: float or None
     - ram_percent_used: float or None
     - vram_available_mb: float or None (None if no GPU)
     - vram_percent_used: float or None (None if no GPU)
-    - should_pause: bool (True when RAM < 1GB available)
+    - should_pause: bool (True when mem.percent >= 95, relative to total RAM)
     - should_restart_session: bool (True when VRAM available < 500MB and GPU is in use)
     """
     result: Dict[str, Any] = {
         "ram_available_gb": None,
+        "ram_total_gb": None,
         "ram_percent_used": None,
         "vram_available_mb": None,
         "vram_percent_used": None,
@@ -460,8 +462,12 @@ def check_memory_pressure() -> Dict[str, Any]:
 
         mem = psutil.virtual_memory()
         result["ram_available_gb"] = round(mem.available / (1024 ** 3), 2)
+        result["ram_total_gb"] = round(mem.total / (1024 ** 3), 2)
         result["ram_percent_used"] = mem.percent
-        if result["ram_available_gb"] < 1.0:
+        # Pressure is relative to total, not absolute. A 32 GB box with 1.5 GB
+        # free is fine; a 4 GB box with 1.5 GB free is fine too. Both at 95%+
+        # used are actually tight.
+        if mem.percent >= 95.0:
             result["should_pause"] = True
     except Exception as exc:
         logger.debug("psutil memory check failed: %s", exc)

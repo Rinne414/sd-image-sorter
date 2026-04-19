@@ -22,7 +22,7 @@ import os
 logger = logging.getLogger(__name__)
 
 
-PARSED_METADATA_VERSION = 3
+PARSED_METADATA_VERSION = 5
 
 
 class MetadataParser:
@@ -103,6 +103,35 @@ class MetadataParser:
         "SamplerCustomAdvanced",
     }
 
+    COMFYUI_MODEL_FILE_EXTENSIONS = (
+        ".safetensors",
+        ".ckpt",
+        ".pt",
+        ".pth",
+        ".bin",
+        ".onnx",
+    )
+
+    COMFYUI_MODEL_KEY_TYPES = {
+        "ckpt_name": "checkpoint",
+        "checkpoint_name": "checkpoint",
+        "checkpoint": "checkpoint",
+        "unet_name": "unet",
+        "diffusion_model": "diffusion_model",
+        "diffusion_model_name": "diffusion_model",
+        "model_name": "model",
+        "base_model": "model",
+        "lora_name": "lora",
+        "yolo_model": "yolo",
+        "yolo_model_name": "yolo",
+        "detector_model": "yolo",
+        "detector_model_name": "yolo",
+        "bbox_model_name": "yolo",
+        "segm_model_name": "yolo",
+        "ultralytics_model": "yolo",
+        "ultralytics_model_name": "yolo",
+    }
+
     def parse(self, image_path: str) -> Dict[str, Any]:
         """
         Parse image metadata and return structured data.
@@ -180,6 +209,7 @@ class MetadataParser:
                     "img2img_info": parsed.get("img2img_info"),
                     "character_prompts": parsed.get("character_prompts"),
                     "prompt_nodes": parsed.get("prompt_nodes"),
+                    "model_assets": parsed.get("model_assets"),
                 }
 
         except Exception as e:
@@ -233,6 +263,309 @@ class MetadataParser:
                     return flattened
         return None
 
+    def _extract_metadata_model_identifier(self, metadata: dict) -> Optional[str]:
+        """Extract the best available model identifier from raw metadata."""
+        software = str(metadata.get("Software", "") or "").strip().lower()
+
+        for key in ("Source", "source", "Model", "model"):
+            value = metadata.get(key)
+            if not isinstance(value, str):
+                continue
+
+            text = value.strip().strip("\0 ")
+            if not text:
+                continue
+
+            lower = text.lower()
+            if self._looks_like_model_filename(text):
+                return text
+            if any(token in lower for token in ("novelai diffusion", "stable diffusion")):
+                return text
+            if "novelai" in software and re.match(r"^(sdxl|nai|stable diffusion)\b", text, flags=re.IGNORECASE):
+                return text
+
+        return None
+
+    @staticmethod
+    def _dedupe_non_empty_strings(values: List[Any]) -> List[str]:
+        """Deduplicate string values while preserving order."""
+        result: List[str] = []
+        seen: Set[str] = set()
+
+        for value in values:
+            text = str(value or "").strip()
+            if not text or text.lower() in {"none", "null", "false"} or text in seen:
+                continue
+            seen.add(text)
+            result.append(text)
+
+        return result
+
+    @staticmethod
+    def _asset_alias_key(value: str) -> str:
+        """Normalize a model path/tag into a comparison-friendly alias key."""
+        text = re.sub(r"[\\/]+", "/", str(value or "").strip().strip('"').strip("'"))
+        if not text:
+            return ""
+
+        leaf = text.split("/")[-1]
+        stem = leaf.rsplit(".", 1)[0] if "." in leaf else leaf
+        return stem.lower()
+
+    def _normalize_lora_names(self, names: List[str]) -> List[str]:
+        """Prefer explicit filenames over bare inline aliases when both exist."""
+        unique_names = self._dedupe_non_empty_strings(names)
+        file_backed = [name for name in unique_names if self._looks_like_model_filename(name)]
+        alias_covered = {
+            self._asset_alias_key(name)
+            for name in file_backed
+            if self._asset_alias_key(name)
+        }
+
+        result: List[str] = []
+        seen: Set[str] = set()
+        for name in [*file_backed, *[item for item in unique_names if item not in file_backed]]:
+            if not self._looks_like_model_filename(name):
+                alias_key = self._asset_alias_key(name)
+                if alias_key and alias_key in alias_covered:
+                    continue
+            if name in seen:
+                continue
+            seen.add(name)
+            result.append(name)
+
+        return result
+
+    @staticmethod
+    def _model_candidate_identity(candidate: Dict[str, Any]) -> Tuple[str, str, str, str, str]:
+        """Stable dedupe key for model candidate records."""
+        return (
+            str(candidate.get("name", "")).strip(),
+            str(candidate.get("node_id", "")).strip(),
+            str(candidate.get("class_type", "")).strip(),
+            str(candidate.get("input_key", "")).strip(),
+            str(candidate.get("key_path", "")).strip(),
+        )
+
+    def _merge_candidate_records(self, *candidate_lists: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """Merge candidate records while preserving first-seen ordering."""
+        merged: List[Dict[str, Any]] = []
+        seen: Set[Tuple[str, str, str, str, str]] = set()
+
+        for candidate_list in candidate_lists:
+            if not isinstance(candidate_list, list):
+                continue
+            for candidate in candidate_list:
+                if not isinstance(candidate, dict):
+                    continue
+                identity = self._model_candidate_identity(candidate)
+                if identity[0] == "" or identity in seen:
+                    continue
+                seen.add(identity)
+                merged.append(dict(candidate))
+
+        return merged
+
+    def _build_explicit_model_assets(
+        self,
+        source: str,
+        checkpoint: Optional[str] = None,
+        loras: Optional[List[str]] = None,
+        unets: Optional[List[str]] = None,
+        diffusion_models: Optional[List[str]] = None,
+        yolo_models: Optional[List[str]] = None,
+        model_names: Optional[List[str]] = None,
+        confidence: str = "high",
+    ) -> Optional[Dict[str, Any]]:
+        """Build a normalized model_assets payload from explicit metadata fields."""
+        checkpoint_names = self._dedupe_non_empty_strings([checkpoint] if checkpoint else [])
+        unet_names = self._dedupe_non_empty_strings(unets or [])
+        diffusion_names = self._dedupe_non_empty_strings(diffusion_models or [])
+        generic_model_names = self._dedupe_non_empty_strings(model_names or [])
+        lora_names = self._normalize_lora_names(loras or [])
+        yolo_names = self._dedupe_non_empty_strings(yolo_models or [])
+
+        if not any((checkpoint_names, unet_names, diffusion_names, generic_model_names, lora_names, yolo_names)):
+            return None
+
+        def make_candidates(asset_type: str, names: List[str]) -> List[Dict[str, Any]]:
+            return [
+                {
+                    "name": name,
+                    "asset_type": asset_type,
+                    "source_mode": source,
+                    "confidence": confidence,
+                    "match_type": "explicit_metadata",
+                }
+                for name in names
+            ]
+
+        primary_model_type = None
+        primary_model_name = None
+        for asset_type, names in (
+            ("checkpoint", checkpoint_names),
+            ("unet", unet_names),
+            ("diffusion_model", diffusion_names),
+            ("model", generic_model_names),
+        ):
+            if names:
+                primary_model_type = asset_type
+                primary_model_name = names[0]
+                break
+
+        return {
+            "source": source,
+            "primary_model_type": primary_model_type,
+            "primary_model_name": primary_model_name,
+            "checkpoint_candidates": make_candidates("checkpoint", checkpoint_names),
+            "unet_candidates": make_candidates("unet", unet_names),
+            "diffusion_model_candidates": make_candidates("diffusion_model", diffusion_names),
+            "model_candidates": make_candidates("model", generic_model_names),
+            "lora_candidates": make_candidates("lora", lora_names),
+            "yolo_candidates": make_candidates("yolo", yolo_names),
+            "loras": lora_names,
+            "yolo_models": yolo_names,
+        }
+
+    def _merge_model_assets(self, primary: Optional[Dict[str, Any]], secondary: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Merge two normalized model_assets payloads."""
+        if not primary:
+            return dict(secondary) if secondary else None
+        if not secondary:
+            return primary
+
+        merged: Dict[str, Any] = dict(primary)
+
+        if not merged.get("primary_model_name") and secondary.get("primary_model_name"):
+            merged["primary_model_name"] = secondary.get("primary_model_name")
+            merged["primary_model_type"] = secondary.get("primary_model_type")
+
+        primary_source = str(primary.get("source", "")).strip()
+        secondary_source = str(secondary.get("source", "")).strip()
+        if primary_source and secondary_source and primary_source != secondary_source:
+            merged["sources"] = self._dedupe_non_empty_strings([
+                *(primary.get("sources") or [primary_source]),
+                *(secondary.get("sources") or [secondary_source]),
+            ])
+
+        candidate_keys = {
+            "checkpoint_candidates",
+            "unet_candidates",
+            "diffusion_model_candidates",
+            "model_candidates",
+            "lora_candidates",
+            "yolo_candidates",
+            "workflow_widget_lora_candidates",
+            "global_lora_candidates",
+            "global_yolo_candidates",
+        }
+        for key in candidate_keys:
+            merged_list = self._merge_candidate_records(primary.get(key), secondary.get(key))
+            if merged_list:
+                merged[key] = merged_list
+
+        merged["loras"] = self._normalize_lora_names([
+            *(primary.get("loras") or []),
+            *(secondary.get("loras") or []),
+        ])
+        merged["yolo_models"] = self._dedupe_non_empty_strings([
+            *(primary.get("yolo_models") or []),
+            *(secondary.get("yolo_models") or []),
+        ])
+        merged["activity_root_ids"] = self._dedupe_non_empty_strings([
+            *(primary.get("activity_root_ids") or []),
+            *(secondary.get("activity_root_ids") or []),
+        ])
+
+        primary_count = primary.get("activity_node_count")
+        secondary_count = secondary.get("activity_node_count")
+        if isinstance(primary_count, int) or isinstance(secondary_count, int):
+            merged["activity_node_count"] = max(
+                int(primary_count or 0),
+                int(secondary_count or 0),
+            )
+
+        return merged
+
+    def _looks_like_yolo_model_name(self, value: str, class_type: str = "", key_path: str = "") -> bool:
+        """Detect Ultralytics/YOLO-style detector models without confusing them with checkpoints."""
+        if not self._looks_like_model_filename(value):
+            return False
+
+        combined = " ".join([
+            str(class_type or "").lower(),
+            str(key_path or "").lower(),
+            str(value or "").lower(),
+        ])
+        return any(token in combined for token in (
+            "ultralytics",
+            "yolo",
+            "detector",
+            "bbox/",
+            "segm",
+            "detailer",
+            "adetailer",
+        ))
+
+    def _extract_webui_yolo_models(self, params: str, gen_params: Optional[Dict[str, Any]]) -> List[str]:
+        """Extract detector/YOLO models from WebUI/Forge parameter blobs."""
+        names: List[str] = []
+
+        def push(value: Any) -> None:
+            text = str(value or "").strip().strip('"')
+            if not text or not self._looks_like_model_filename(text):
+                return
+            if not self._looks_like_yolo_model_name(text, key_path=text):
+                return
+            names.append(text)
+
+        if gen_params:
+            for key, value in gen_params.items():
+                key_lower = str(key).lower()
+                if not isinstance(value, str):
+                    continue
+                if any(token in key_lower for token in ("adetailer", "detector", "yolo", "bbox", "segm")):
+                    push(value)
+
+        for match in re.finditer(
+            r"(?:ADetailer|Detector|YOLO)[^:\n]*:\s*([^,\n]+)",
+            params or "",
+            flags=re.IGNORECASE,
+        ):
+            push(match.group(1))
+
+        return self._dedupe_non_empty_strings(names)
+
+    def _extract_webui_checkpoint_identifier(self, gen_params: Optional[Dict[str, Any]], params: str) -> Optional[str]:
+        """Recover the best available WebUI/Forge model identifier."""
+        if gen_params:
+            model_name = str(gen_params.get("model") or "").strip()
+            if model_name:
+                return model_name
+
+            hashes_blob = gen_params.get("hashes")
+            if isinstance(hashes_blob, str):
+                try:
+                    hashes_json = json.loads(hashes_blob)
+                except Exception:
+                    hashes_json = None
+                if isinstance(hashes_json, dict):
+                    hash_model = str(hashes_json.get("model") or "").strip()
+                    if hash_model:
+                        return f"Model hash {hash_model}"
+
+            model_hash = str(gen_params.get("model_hash") or "").strip()
+            if model_hash:
+                return f"Model hash {model_hash}"
+
+        raw_hash_match = re.search(r"(?:^|,\s*)Model hash:\s*([^,\n]+)", params or "", flags=re.IGNORECASE)
+        if raw_hash_match:
+            model_hash = raw_hash_match.group(1).strip()
+            if model_hash:
+                return f"Model hash {model_hash}"
+
+        return None
+
     def _detect_and_parse(self, metadata: dict) -> Dict[str, Any]:
         """
         Detect generator type and extract prompts, checkpoint, loras, and extended info.
@@ -250,6 +583,7 @@ class MetadataParser:
             "img2img_info": None,
             "character_prompts": None,
             "prompt_nodes": None,
+            "model_assets": None,
         }
 
         # === Check for WebUI/Forge 'parameters' text chunk first ===
@@ -264,6 +598,15 @@ class MetadataParser:
                     "generator": generator, "prompt": prompt, "negative_prompt": neg,
                     "checkpoint": cp, "loras": lr, "generation_params": gen_params,
                 })
+                if not base["checkpoint"]:
+                    base["checkpoint"] = self._extract_metadata_model_identifier(metadata)
+                base["model_assets"] = self._build_explicit_model_assets(
+                    source=f"{generator}_parameters",
+                    checkpoint=base["checkpoint"],
+                    loras=base["loras"],
+                    yolo_models=self._extract_webui_yolo_models(params, gen_params),
+                )
+                self._merge_workflow_widget_assets_into_result(base, metadata)
                 # img2img detection for WebUI/Forge
                 if gen_params:
                     ds = gen_params.get("denoising_strength")
@@ -282,6 +625,11 @@ class MetadataParser:
         if "UserComment" in metadata:
             nai_result = self._parse_nai_usercomment_extended(metadata["UserComment"], metadata)
             if nai_result:
+                if not nai_result.get("model_assets"):
+                    nai_result["model_assets"] = self._build_explicit_model_assets(
+                        source="nai_usercomment",
+                        checkpoint=nai_result.get("checkpoint"),
+                    )
                 base.update(nai_result)
                 return base
 
@@ -317,6 +665,11 @@ class MetadataParser:
                                 neg = self._flatten_text_value(v4_negative.get("caption") or v4_negative)
 
                         base.update({"generator": "nai", "prompt": prompt, "negative_prompt": neg})
+                        base["checkpoint"] = self._extract_metadata_model_identifier(metadata)
+                        base["model_assets"] = self._build_explicit_model_assets(
+                            source="nai_comment",
+                            checkpoint=base["checkpoint"],
+                        )
                         # Extract NAI generation params
                         base["generation_params"] = self._extract_nai_gen_params(comment_data)
                         # Extract character prompts if present
@@ -352,12 +705,23 @@ class MetadataParser:
                     except (json.JSONDecodeError, TypeError, ValueError) as e:
                         logger.debug("Failed to parse Comment in Description path: %s", e)
                 base.update({"generator": "nai", "prompt": str(desc), "negative_prompt": neg})
+                base["checkpoint"] = self._extract_metadata_model_identifier(metadata)
+                base["model_assets"] = self._build_explicit_model_assets(
+                    source="nai_description",
+                    checkpoint=base["checkpoint"],
+                )
                 return base
 
         # === Check for ComfyUI 'prompt' key with JSON workflow ===
         if "prompt" in metadata:
             try:
                 prompt_data = metadata["prompt"]
+                workflow_data = metadata.get("workflow")
+                if isinstance(workflow_data, str):
+                    try:
+                        workflow_data = json.loads(workflow_data)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        workflow_data = None
                 if isinstance(prompt_data, str):
                     prompt_data = json.loads(prompt_data)
                 if isinstance(prompt_data, dict):
@@ -366,11 +730,12 @@ class MetadataParser:
                         for v in prompt_data.values()
                     )
                     if has_nodes:
-                        pos, neg, cp, lr, gen_params, prompt_nodes, img2img = self._extract_comfyui_data_extended(prompt_data)
+                        pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets = self._extract_comfyui_data_extended(prompt_data, workflow_data)
                         base.update({
                             "generator": "comfyui", "prompt": pos, "negative_prompt": neg,
                             "checkpoint": cp, "loras": lr, "generation_params": gen_params,
                             "prompt_nodes": prompt_nodes,
+                            "model_assets": model_assets,
                         })
                         if img2img:
                             base["is_img2img"] = True
@@ -392,14 +757,24 @@ class MetadataParser:
                     except (json.JSONDecodeError, TypeError, ValueError) as e:
                         logger.debug('Failed to parse prompt in workflow path: %s', e)
                         prompt_raw = {}
-                pos, neg, cp, lr, gen_params, prompt_nodes, img2img = self._extract_comfyui_data_extended(prompt_raw)
+                pos, neg, cp, lr, gen_params, prompt_nodes, img2img, model_assets = self._extract_comfyui_data_extended(prompt_raw, workflow)
                 if not pos and isinstance(workflow, dict):
                     pos, neg = self._extract_from_workflow(workflow)
                 base.update({
                     "generator": "comfyui", "prompt": pos, "negative_prompt": neg,
                     "checkpoint": cp, "loras": lr, "generation_params": gen_params,
                     "prompt_nodes": prompt_nodes,
+                    "model_assets": model_assets,
                 })
+                if not base["checkpoint"]:
+                    workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(workflow)
+                    if workflow_assets:
+                        base["model_assets"] = self._merge_model_assets(base.get("model_assets"), workflow_assets)
+                        base["checkpoint"] = workflow_assets.get("primary_model_name")
+                        base["loras"] = self._normalize_lora_names([
+                            *(base.get("loras") or []),
+                            *(workflow_assets.get("loras") or []),
+                        ])
                 if img2img:
                     base["is_img2img"] = True
                     base["img2img_info"] = img2img
@@ -423,6 +798,15 @@ class MetadataParser:
                         "generator": generator, "prompt": prompt, "negative_prompt": neg,
                         "checkpoint": cp, "loras": lr, "generation_params": gen_params,
                     })
+                    if not base["checkpoint"]:
+                        base["checkpoint"] = self._extract_metadata_model_identifier(metadata)
+                    base["model_assets"] = self._build_explicit_model_assets(
+                        source=f"{generator}_parameters",
+                        checkpoint=base["checkpoint"],
+                        loras=base["loras"],
+                        yolo_models=self._extract_webui_yolo_models(params, gen_params),
+                    )
+                    self._merge_workflow_widget_assets_into_result(base, metadata)
                     if gen_params and gen_params.get("denoising_strength") is not None:
                         base["is_img2img"] = True
                         base["img2img_info"] = {
@@ -438,7 +822,15 @@ class MetadataParser:
                 prompt = metadata.get("Description", metadata.get("ImageDescription", None))
                 if prompt:
                     prompt = str(prompt)
-                base.update({"generator": "nai", "prompt": prompt})
+                base.update({
+                    "generator": "nai",
+                    "prompt": prompt,
+                    "checkpoint": self._extract_metadata_model_identifier(metadata),
+                })
+                base["model_assets"] = self._build_explicit_model_assets(
+                    source="nai_software_tag",
+                    checkpoint=base["checkpoint"],
+                )
                 return base
             if "comfyui" in software:
                 base["generator"] = "comfyui"
@@ -494,6 +886,7 @@ class MetadataParser:
                 "generator": "nai",
                 "prompt": self._flatten_text_value(data.get("Description", None)),
                 "negative_prompt": None,
+                "checkpoint": self._extract_metadata_model_identifier(metadata) or self._extract_metadata_model_identifier(data),
                 "generation_params": None,
                 "character_prompts": None,
                 "is_img2img": False,
@@ -652,78 +1045,30 @@ class MetadataParser:
         Uses graph traversal to follow KSampler positive/negative connections
         back to their source text nodes, rather than guessing based on order.
         """
-        if not isinstance(prompt_data, dict):
-            try:
-                prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
-            except Exception as e:
-                logger.debug('Failed to parse ComfyUI prompt_data: %s', e)
-                return (None, None, None, [])
-
-        if not prompt_data:
-            return (None, None, None, [])
-
-        checkpoint = None
-        loras = []
-
-        # Build a lookup of node_id -> node data
-        nodes = {}
-        for node_id, node in prompt_data.items():
-            if isinstance(node, dict):
-                nodes[str(node_id)] = node
-
-        # Extract checkpoint names
-        for node_id, node in nodes.items():
-            class_type = node.get("class_type", "")
-            inputs = node.get("inputs", {})
-
-            # Check all checkpoint/UNet loader variants (generic: any node with ckpt_name/unet_name/model_name input)
-            if any(ct in class_type for ct in ["CheckpointLoader", "CheckPointLoader", "UNETLoader", "DiffusionModelLoader"]) or \
-               (class_type_lower := class_type.lower(), "checkpoint" in class_type_lower or "ckpt" in class_type_lower or "unet" in class_type_lower or "diffusionmodel" in class_type_lower)[1]:
-                cp = inputs.get("ckpt_name", inputs.get("unet_name", inputs.get("model_name", "")))
-                if cp and isinstance(cp, str):
-                    checkpoint = cp
-
-            # Extract LoRAs — universal approach:
-            # 1. Named LoRA loaders (class_type contains "lora" case-insensitive) with lora_name input
-            # 2. Multi-lora nodes with lora_1, lora_2, ... inputs
-            if "lora" in class_type.lower():
-                # Standard single-lora (lora_name input)
-                lr = inputs.get("lora_name", "")
-                if lr and isinstance(lr, str):
-                    loras.append(lr)
-                # Multi-lora format (lora_1, lora_2, ... inputs)
-                multi = self._extract_multi_lora_inputs(inputs)
-                if multi:
-                    loras.extend(multi)
-
-        # Try to find positive/negative prompts via KSampler graph traversal
-        positive_text, negative_text = self._trace_sampler_prompts(nodes)
-
-        # Fallback: if graph traversal didn't find text, collect all text nodes
-        if not positive_text:
-            positive_text, negative_text = self._collect_text_from_nodes(nodes)
-
+        positive_text, negative_text, checkpoint, loras, _, _, _, _ = self._extract_comfyui_data_extended(prompt_data)
         return (positive_text, negative_text, checkpoint, loras)
 
-    def _extract_comfyui_data_extended(self, prompt_data: Any) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict], Optional[List], Optional[Dict]]:
+    def _extract_comfyui_data_extended(self, prompt_data: Any, workflow_data: Any = None) -> Tuple[Optional[str], Optional[str], Optional[str], List[str], Optional[Dict], Optional[List], Optional[Dict], Optional[Dict[str, Any]]]:
         """
-        Extended ComfyUI extraction: returns (pos, neg, checkpoint, loras, gen_params, prompt_nodes, img2img_info).
+        Extended ComfyUI extraction: returns
+        (pos, neg, checkpoint, loras, gen_params, prompt_nodes, img2img_info, model_assets).
         """
         if not isinstance(prompt_data, dict):
             try:
                 prompt_data = json.loads(prompt_data) if isinstance(prompt_data, str) else {}
             except Exception as e:
                 logger.debug('Failed to parse ComfyUI prompt_data (extended): %s', e)
-                return (None, None, None, [], None, None, None)
+                return (None, None, None, [], None, None, None, None)
 
         if not prompt_data:
-            return (None, None, None, [], None, None, None)
+            return (None, None, None, [], None, None, None, None)
 
         checkpoint = None
         loras = []
         gen_params: Dict[str, Any] = {}
         prompt_nodes = []
         img2img_info = None
+        model_assets = None
 
         # Build lookup
         nodes = {}
@@ -826,10 +1171,57 @@ class MetadataParser:
         if not positive_text:
             positive_text, negative_text = self._collect_text_from_nodes(nodes)
 
+        workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(workflow_data)
+
+        if checkpoint is None or not loras:
+            model_assets = self._extract_comfyui_model_assets_from_active_graph(nodes)
+            if checkpoint is None:
+                checkpoint = model_assets.get("primary_model_name")
+            if not loras:
+                loras = list(model_assets.get("loras", []))
+
+            global_lora_candidates = self._extract_comfyui_global_lora_candidates(nodes)
+            if global_lora_candidates:
+                existing_loras = {
+                    str(name).strip()
+                    for name in model_assets.get("loras", [])
+                    if str(name).strip()
+                }
+                existing_loras.update(
+                    str(item.get("name", "")).strip()
+                    for item in model_assets.get("lora_candidates", [])
+                    if str(item.get("name", "")).strip()
+                )
+                filtered_global_candidates = [
+                    item for item in global_lora_candidates
+                    if item["name"] not in existing_loras
+                ]
+                if filtered_global_candidates:
+                    model_assets["global_lora_candidates"] = filtered_global_candidates
+        else:
+            model_assets = self._build_explicit_model_assets(
+                source="fast_path",
+                checkpoint=checkpoint,
+                loras=loras,
+            )
+
+        model_assets = self._merge_model_assets(model_assets, workflow_assets)
+        model_assets = self._merge_model_assets(model_assets, self._extract_comfyui_yolo_assets_from_full_graph(nodes))
+
+        if checkpoint is None and model_assets:
+            checkpoint = model_assets.get("primary_model_name")
+        loras = self._normalize_lora_names([
+            *loras,
+            *((model_assets or {}).get("loras") or []),
+        ])
+        if model_assets is not None:
+            model_assets["loras"] = list(loras)
+
         return (positive_text, negative_text, checkpoint, loras,
                 gen_params if gen_params else None,
                 prompt_nodes if prompt_nodes else None,
-                img2img_info)
+                img2img_info,
+                model_assets)
 
     def _collect_prompt_nodes(self, nodes: Dict[str, dict]) -> List[Dict[str, Any]]:
         """Collect all text-bearing nodes for multi-node prompt breakdown."""
@@ -903,17 +1295,858 @@ class MetadataParser:
         """
         loras = []
         for key, value in inputs.items():
-            if not key.startswith("lora_"):
+            key_lower = str(key).lower()
+            if not key_lower.startswith("lora_"):
+                continue
+            if not (
+                re.match(r"^lora_\d+$", key_lower)
+                or key_lower.endswith("_name")
+                or key_lower.endswith("_lora")
+                or key_lower.endswith("_lora_name")
+            ):
                 continue
             if isinstance(value, dict):
                 if value.get("on") is False:
                     continue
-                lora_name = value.get("lora", "")
+                lora_name = value.get("lora", value.get("lora_name", ""))
                 if lora_name and isinstance(lora_name, str) and lora_name != "None":
                     loras.append(lora_name)
             elif isinstance(value, str) and value and value != "None":
                 loras.append(value)
         return loras
+
+    def _extract_comfyui_model_assets_from_active_graph(self, nodes: Dict[str, dict]) -> Dict[str, Any]:
+        """Fallback asset extraction that follows the active sampler subgraph.
+
+        This is slower than the old node-class whitelist, so callers should only
+        use it when the fast path failed to find checkpoint / LoRA data.
+        """
+        root_ids = self._find_comfyui_activity_roots(nodes)
+        distances = self._collect_comfyui_upstream_distances(nodes, root_ids)
+        if not distances:
+            distances = {node_id: 999 for node_id in nodes.keys()}
+
+        candidate_map: Dict[str, List[Dict[str, Any]]] = {
+            "checkpoint": [],
+            "unet": [],
+            "diffusion_model": [],
+            "model": [],
+            "lora": [],
+            "yolo": [],
+        }
+        seen: Set[Tuple[str, str, str, str]] = set()
+
+        for node_id, distance in distances.items():
+            node = nodes.get(node_id, {})
+            self._scan_comfyui_asset_candidates(
+                value=node.get("inputs", {}),
+                key_path="inputs",
+                node_id=node_id,
+                class_type=str(node.get("class_type", "")),
+                node_distance=distance,
+                candidate_map=candidate_map,
+                seen=seen,
+            )
+
+        for asset_type, items in candidate_map.items():
+            candidate_map[asset_type] = sorted(
+                items,
+                key=lambda item: (-item["score"], item["distance"], item["node_id"], item["name"].lower()),
+            )
+
+        primary_model_type = None
+        primary_model_name = None
+        for asset_type in ("checkpoint", "unet", "diffusion_model", "model"):
+            if candidate_map[asset_type]:
+                primary_model_type = asset_type
+                primary_model_name = candidate_map[asset_type][0]["name"]
+                break
+
+        lora_names = self._normalize_lora_names([item["name"] for item in candidate_map["lora"]])
+        yolo_names = self._dedupe_non_empty_strings([item["name"] for item in candidate_map["yolo"]])
+
+        return {
+            "source": "activity_subgraph_fallback",
+            "activity_root_ids": root_ids,
+            "activity_node_count": len(distances),
+            "primary_model_type": primary_model_type,
+            "primary_model_name": primary_model_name,
+            "checkpoint_candidates": candidate_map["checkpoint"],
+            "unet_candidates": candidate_map["unet"],
+            "diffusion_model_candidates": candidate_map["diffusion_model"],
+            "model_candidates": candidate_map["model"],
+            "lora_candidates": candidate_map["lora"],
+            "yolo_candidates": candidate_map["yolo"],
+            "loras": lora_names,
+            "yolo_models": yolo_names,
+        }
+
+    def _extract_comfyui_model_assets_from_workflow_widgets(self, workflow_data: Any) -> Optional[Dict[str, Any]]:
+        """Recover explicit asset filenames stored only in workflow widget state."""
+        if not isinstance(workflow_data, dict):
+            try:
+                workflow_data = json.loads(workflow_data) if isinstance(workflow_data, str) else {}
+            except Exception:
+                return None
+
+        nodes = workflow_data.get("nodes")
+        if not isinstance(nodes, list):
+            return None
+
+        candidate_map: Dict[str, List[Dict[str, Any]]] = {
+            "checkpoint": [],
+            "unet": [],
+            "diffusion_model": [],
+            "lora": [],
+            "yolo": [],
+        }
+        seen: Set[Tuple[str, str, str, str]] = set()
+
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            node_type = str(node.get("type", ""))
+            widgets = node.get("widgets_values")
+            if widgets is None:
+                continue
+
+            for path, value in self._iter_workflow_widget_strings(widgets):
+                widget_key_path = f"widgets_values[{path}]"
+                asset_type = self._classify_comfyui_workflow_widget_asset(node_type, widget_key_path, value)
+                if not asset_type:
+                    continue
+                identity = (asset_type, value, str(node.get("id", "")), widget_key_path)
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                candidate_map[asset_type].append({
+                    "name": value,
+                    "node_id": str(node.get("id", "")),
+                    "class_type": node_type,
+                    "input_key": widget_key_path,
+                    "key_path": widget_key_path,
+                    "source_mode": "workflow_widget_fallback",
+                    "confidence": "high",
+                    "match_type": "workflow_widget_value",
+                })
+
+        if not any(candidate_map.values()):
+            return None
+
+        primary_model_type = None
+        primary_model_name = None
+        for asset_type in ("checkpoint", "unet", "diffusion_model"):
+            if candidate_map[asset_type]:
+                primary_model_type = asset_type
+                primary_model_name = candidate_map[asset_type][0]["name"]
+                break
+
+        return {
+            "source": "workflow_widget_fallback",
+            "primary_model_type": primary_model_type,
+            "primary_model_name": primary_model_name,
+            "checkpoint_candidates": candidate_map["checkpoint"],
+            "unet_candidates": candidate_map["unet"],
+            "diffusion_model_candidates": candidate_map["diffusion_model"],
+            "lora_candidates": candidate_map["lora"],
+            "workflow_widget_lora_candidates": candidate_map["lora"],
+            "yolo_candidates": candidate_map["yolo"],
+            "loras": self._normalize_lora_names([item["name"] for item in candidate_map["lora"]]),
+            "yolo_models": self._dedupe_non_empty_strings([item["name"] for item in candidate_map["yolo"]]),
+        }
+
+    def _merge_workflow_widget_assets_into_result(self, result: Dict[str, Any], metadata: Dict[str, Any]) -> None:
+        """Merge explicit workflow widget assets into an already-detected result."""
+        workflow_assets = self._extract_comfyui_model_assets_from_workflow_widgets(metadata.get("workflow"))
+        if not workflow_assets:
+            return
+
+        if not result.get("checkpoint") and workflow_assets.get("primary_model_name"):
+            result["checkpoint"] = workflow_assets.get("primary_model_name")
+
+        result["loras"] = self._normalize_lora_names([
+            *(result.get("loras") or []),
+            *(workflow_assets.get("loras") or []),
+        ])
+
+        result["model_assets"] = self._merge_model_assets(result.get("model_assets"), workflow_assets)
+
+    def _classify_comfyui_workflow_widget_asset(self, node_type: str, key_path: str, value: str) -> Optional[str]:
+        """Classify widget-only values where the numeric path carries no semantic meaning."""
+        node_type_lower = str(node_type or "").lower()
+        text = str(value or "").strip()
+        if not text or not self._looks_like_model_filename(text):
+            return None
+
+        if self._looks_like_yolo_model_name(text, node_type, key_path):
+            return "yolo"
+        if "lora" in node_type_lower:
+            return "lora"
+        if "unet" in node_type_lower:
+            return "unet"
+        if "diffusion" in node_type_lower:
+            return "diffusion_model"
+        if any(token in node_type_lower for token in ("checkpoint", "ckpt", "efficient loader", "comfyloader")):
+            return "checkpoint"
+
+        return None
+
+    def _extract_comfyui_yolo_assets_from_full_graph(self, nodes: Dict[str, dict]) -> Optional[Dict[str, Any]]:
+        """Collect YOLO/detector models from the full graph so optional detailers still surface."""
+        candidates: List[Dict[str, Any]] = []
+        seen: Set[Tuple[str, str, str, str]] = set()
+
+        candidate_map = {"checkpoint": [], "unet": [], "diffusion_model": [], "model": [], "lora": [], "yolo": []}
+        for node_id, node in nodes.items():
+            if not isinstance(node, dict):
+                continue
+            self._scan_comfyui_asset_candidates(
+                value=node.get("inputs", {}),
+                key_path="inputs",
+                node_id=node_id,
+                class_type=str(node.get("class_type", "")),
+                node_distance=50,
+                candidate_map=candidate_map,
+                seen=seen,
+            )
+
+        for item in sorted(
+            candidate_map["yolo"],
+            key=lambda candidate: (-candidate["score"], candidate["node_id"], candidate["name"].lower()),
+        ):
+            enriched = dict(item)
+            enriched.setdefault("source_mode", "global_graph_fallback")
+            candidates.append(enriched)
+
+        if not candidates:
+            return None
+
+        return {
+            "source": "global_graph_fallback",
+            "global_yolo_candidates": candidates,
+            "yolo_candidates": candidates,
+            "yolo_models": self._dedupe_non_empty_strings([item["name"] for item in candidates]),
+        }
+
+    def _iter_workflow_widget_strings(self, value: Any, path: str = "") -> List[Tuple[str, str]]:
+        """Collect string widget values from workflow nodes with stable paths."""
+        results: List[Tuple[str, str]] = []
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                results.append((path or "0", text))
+            return results
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                next_path = f"{path}.{index}" if path else str(index)
+                results.extend(self._iter_workflow_widget_strings(item, next_path))
+            return results
+        if isinstance(value, dict):
+            for key, item in value.items():
+                next_path = f"{path}.{key}" if path else str(key)
+                results.extend(self._iter_workflow_widget_strings(item, next_path))
+        return results
+
+    def _extract_comfyui_global_lora_candidates(self, nodes: Dict[str, dict]) -> List[Dict[str, Any]]:
+        """Scan the full ComfyUI graph for secondary LoRA hints.
+
+        These candidates are intentionally conservative and stay in model_assets
+        only. They are not promoted into the main loras list from the global
+        fallback because disconnected helper/UI nodes can easily be stale.
+        """
+        candidates: List[Dict[str, Any]] = []
+        seen: Set[Tuple[str, str, str, str]] = set()
+
+        for node_id, node in nodes.items():
+            if not isinstance(node, dict):
+                continue
+            self._scan_comfyui_global_lora_candidates(
+                value=node.get("inputs", {}),
+                key_path="inputs",
+                node_id=node_id,
+                class_type=str(node.get("class_type", "")),
+                candidates=candidates,
+                seen=seen,
+            )
+
+        best_by_name: Dict[str, Dict[str, Any]] = {}
+        for item in candidates:
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            existing = best_by_name.get(name)
+            if existing is None or self._is_better_global_lora_candidate(item, existing):
+                best_by_name[name] = item
+
+        return sorted(
+            best_by_name.values(),
+            key=lambda item: (
+                self._global_lora_confidence_rank(item.get("confidence")),
+                -int(item.get("score", 0)),
+                str(item.get("node_id", "")),
+                str(item.get("name", "")).lower(),
+            ),
+        )
+
+    def _scan_comfyui_global_lora_candidates(
+        self,
+        value: Any,
+        key_path: str,
+        node_id: str,
+        class_type: str,
+        candidates: List[Dict[str, Any]],
+        seen: Set[Tuple[str, str, str, str]],
+    ) -> None:
+        """Recursively scan the full graph for secondary LoRA evidence."""
+        if isinstance(value, dict):
+            for key, nested_value in value.items():
+                next_path = f"{key_path}.{key}" if key_path else str(key)
+                self._scan_comfyui_global_lora_candidates(
+                    nested_value,
+                    next_path,
+                    node_id,
+                    class_type,
+                    candidates,
+                    seen,
+                )
+            return
+
+        if isinstance(value, (list, tuple)):
+            if len(value) >= 2 and isinstance(value[0], (str, int)):
+                return
+            for index, nested_value in enumerate(value):
+                next_path = f"{key_path}[{index}]"
+                self._scan_comfyui_global_lora_candidates(
+                    nested_value,
+                    next_path,
+                    node_id,
+                    class_type,
+                    candidates,
+                    seen,
+                )
+            return
+
+        if not isinstance(value, str):
+            return
+
+        text = value.strip()
+        if not text or text.lower() in {"none", "null", "false"}:
+            return
+
+        if self._is_explicit_comfyui_lora_key(key_path) and self._looks_like_model_filename(text):
+            self._add_comfyui_global_lora_candidate(
+                candidates=candidates,
+                seen=seen,
+                candidate_name=text,
+                node_id=node_id,
+                class_type=class_type,
+                key_path=key_path,
+                match_type="explicit_input",
+                confidence="high",
+            )
+
+        if text[0] in "[{":
+            for item in self._extract_comfyui_serialized_lora_candidates(text):
+                full_key_path = self._join_comfyui_key_path(key_path, item["key_path_suffix"])
+                self._add_comfyui_global_lora_candidate(
+                    candidates=candidates,
+                    seen=seen,
+                    candidate_name=item["name"],
+                    node_id=node_id,
+                    class_type=class_type,
+                    key_path=full_key_path,
+                    match_type=item["match_type"],
+                    confidence=item["confidence"],
+                )
+            return
+
+        for lora_name in self._extract_inline_lora_tags(text):
+            self._add_comfyui_global_lora_candidate(
+                candidates=candidates,
+                seen=seen,
+                candidate_name=lora_name,
+                node_id=node_id,
+                class_type=class_type,
+                key_path=key_path,
+                match_type="inline_lora_tag",
+                confidence="low",
+            )
+
+    def _extract_comfyui_serialized_lora_candidates(self, text: str) -> List[Dict[str, str]]:
+        """Extract LoRA candidates from JSON-serialized strings.
+
+        Only explicit lora/lora_name-style fields and inline <lora:...> tags are
+        accepted here to avoid turning arbitrary UI tokens into fake LoRA names.
+        """
+        text = text.strip()
+        if not text or text[0] not in "[{":
+            return []
+
+        try:
+            payload = json.loads(text)
+        except Exception:
+            return []
+
+        candidates: List[Dict[str, str]] = []
+
+        def walk(value: Any, key_path: str = "") -> None:
+            if isinstance(value, dict):
+                for key, nested_value in value.items():
+                    next_path = f"{key_path}.{key}" if key_path else str(key)
+                    key_lower = str(key).lower()
+
+                    if isinstance(nested_value, str):
+                        nested_text = nested_value.strip()
+                        if self._is_explicit_comfyui_lora_key(key_lower) and self._looks_like_model_filename(nested_text):
+                            candidates.append({
+                                "name": nested_text,
+                                "key_path_suffix": next_path,
+                                "match_type": "serialized_field",
+                                "confidence": "high",
+                            })
+
+                        for lora_name in self._extract_inline_lora_tags(nested_text):
+                            candidates.append({
+                                "name": lora_name,
+                                "key_path_suffix": next_path,
+                                "match_type": "serialized_inline_lora_tag",
+                                "confidence": "low",
+                            })
+                        continue
+
+                    walk(nested_value, next_path)
+                return
+
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    next_path = f"{key_path}[{index}]" if key_path else f"[{index}]"
+                    walk(item, next_path)
+                return
+
+            if isinstance(value, str):
+                nested_text = value.strip()
+                for lora_name in self._extract_inline_lora_tags(nested_text):
+                    candidates.append({
+                        "name": lora_name,
+                        "key_path_suffix": key_path or "value",
+                        "match_type": "serialized_inline_lora_tag",
+                        "confidence": "low",
+                    })
+
+        walk(payload)
+        return candidates
+
+    def _add_comfyui_global_lora_candidate(
+        self,
+        candidates: List[Dict[str, Any]],
+        seen: Set[Tuple[str, str, str, str]],
+        candidate_name: str,
+        node_id: str,
+        class_type: str,
+        key_path: str,
+        match_type: str,
+        confidence: str,
+    ) -> None:
+        """Add a deduplicated global LoRA candidate with provenance metadata."""
+        name = candidate_name.strip()
+        if not name or name.lower() in {"none", "null", "false"}:
+            return
+
+        dedupe_key = (name, node_id, key_path, match_type)
+        if dedupe_key in seen:
+            return
+        seen.add(dedupe_key)
+
+        candidates.append({
+            "name": name,
+            "asset_type": "lora",
+            "node_id": node_id,
+            "class_type": class_type,
+            "input_key": key_path.split(".")[-1],
+            "key_path": key_path,
+            "source_mode": "global_candidate_fallback",
+            "match_type": match_type,
+            "confidence": confidence,
+            "score": self._score_comfyui_global_lora_candidate(
+                class_type=class_type,
+                key_path=key_path,
+                candidate_name=name,
+                match_type=match_type,
+                confidence=confidence,
+            ),
+        })
+
+    def _score_comfyui_global_lora_candidate(
+        self,
+        class_type: str,
+        key_path: str,
+        candidate_name: str,
+        match_type: str,
+        confidence: str,
+    ) -> int:
+        """Score full-graph LoRA candidates so the best provenance wins."""
+        score = 300 if confidence == "high" else 200 if confidence == "medium" else 100
+        class_type_lower = class_type.lower()
+        key_path_lower = key_path.lower()
+
+        if match_type == "explicit_input":
+            score += 40
+        elif match_type == "serialized_field":
+            score += 35
+        elif match_type == "inline_lora_tag":
+            score += 20
+        elif match_type == "serialized_inline_lora_tag":
+            score += 15
+
+        if "lora" in class_type_lower:
+            score += 20
+        if "lora" in key_path_lower:
+            score += 15
+        if self._looks_like_model_filename(candidate_name):
+            score += 10
+
+        return score
+
+    def _is_better_global_lora_candidate(self, candidate: Dict[str, Any], existing: Dict[str, Any]) -> bool:
+        """Pick the strongest provenance record when the same LoRA appears repeatedly."""
+        candidate_rank = self._global_lora_confidence_rank(candidate.get("confidence"))
+        existing_rank = self._global_lora_confidence_rank(existing.get("confidence"))
+        if candidate_rank != existing_rank:
+            return candidate_rank < existing_rank
+
+        candidate_score = int(candidate.get("score", 0))
+        existing_score = int(existing.get("score", 0))
+        if candidate_score != existing_score:
+            return candidate_score > existing_score
+
+        return str(candidate.get("key_path", "")) < str(existing.get("key_path", ""))
+
+    @staticmethod
+    def _global_lora_confidence_rank(confidence: Optional[str]) -> int:
+        """Stable sort order for candidate confidence labels."""
+        return {
+            "high": 0,
+            "medium": 1,
+            "low": 2,
+        }.get(str(confidence or "").lower(), 3)
+
+    def _is_explicit_comfyui_lora_key(self, key_path: str) -> bool:
+        """Return True only for genuinely lora-shaped keys, not UI flags/noise."""
+        leaf_key = key_path.split(".")[-1].lower()
+        if re.match(r"^lora(_\d+)?$", leaf_key):
+            return True
+        if leaf_key in {"lora_name", "lora_path", "lora_file", "lora_str", "temp_lora_str"}:
+            return True
+        return (
+            leaf_key.endswith("_lora")
+            or leaf_key.endswith("_lora_name")
+            or leaf_key.endswith("_lora_str")
+            or leaf_key.endswith("_lora_stack")
+        )
+
+    @staticmethod
+    def _join_comfyui_key_path(base: str, suffix: str) -> str:
+        """Join serialized key suffixes onto an existing input key path."""
+        if not suffix:
+            return base
+        if suffix.startswith("["):
+            return f"{base}{suffix}"
+        return f"{base}.{suffix}"
+
+    def _find_comfyui_activity_roots(self, nodes: Dict[str, dict]) -> List[str]:
+        """Find likely sampler/output roots for the active ComfyUI branch."""
+        roots: List[str] = []
+        for node_id, node in nodes.items():
+            class_type = str(node.get("class_type", ""))
+            class_type_lower = class_type.lower()
+            inputs = node.get("inputs", {})
+
+            if any(token.lower() in class_type_lower for token in self.COMFYUI_SAMPLER_NODE_TYPES):
+                roots.append(node_id)
+                continue
+
+            if "ksampler" in class_type_lower or (
+                "model" in inputs and ("positive" in inputs or "negative" in inputs)
+            ):
+                roots.append(node_id)
+
+        return roots or list(nodes.keys())
+
+    def _collect_comfyui_upstream_distances(self, nodes: Dict[str, dict], root_ids: List[str]) -> Dict[str, int]:
+        """Breadth-first walk from active roots to upstream nodes."""
+        distances: Dict[str, int] = {}
+        queue: List[Tuple[str, int]] = [(root_id, 0) for root_id in root_ids if root_id in nodes]
+
+        while queue:
+            node_id, distance = queue.pop(0)
+            previous = distances.get(node_id)
+            if previous is not None and previous <= distance:
+                continue
+            distances[node_id] = distance
+
+            node = nodes.get(node_id, {})
+            for ref_id in self._iter_comfyui_input_refs(node.get("inputs", {})):
+                if ref_id in nodes:
+                    queue.append((ref_id, distance + 1))
+
+        return distances
+
+    def _iter_comfyui_input_refs(self, value: Any) -> List[str]:
+        """Collect node references from nested ComfyUI input values."""
+        refs: List[str] = []
+
+        if isinstance(value, (list, tuple)):
+            if len(value) >= 2 and isinstance(value[0], (str, int)):
+                refs.append(str(value[0]))
+                return refs
+            for item in value:
+                refs.extend(self._iter_comfyui_input_refs(item))
+            return refs
+
+        if isinstance(value, dict):
+            for nested in value.values():
+                refs.extend(self._iter_comfyui_input_refs(nested))
+
+        return refs
+
+    def _scan_comfyui_asset_candidates(
+        self,
+        value: Any,
+        key_path: str,
+        node_id: str,
+        class_type: str,
+        node_distance: int,
+        candidate_map: Dict[str, List[Dict[str, Any]]],
+        seen: Set[Tuple[str, str, str, str]],
+    ) -> None:
+        """Recursively scan a node input tree for model / LoRA asset candidates."""
+        if isinstance(value, dict):
+            for key, nested_value in value.items():
+                next_path = f"{key_path}.{key}" if key_path else str(key)
+                self._scan_comfyui_asset_candidates(
+                    nested_value,
+                    next_path,
+                    node_id,
+                    class_type,
+                    node_distance,
+                    candidate_map,
+                    seen,
+                )
+            return
+
+        if isinstance(value, (list, tuple)):
+            if len(value) >= 2 and isinstance(value[0], (str, int)):
+                return
+            for index, nested_value in enumerate(value):
+                next_path = f"{key_path}[{index}]"
+                self._scan_comfyui_asset_candidates(
+                    nested_value,
+                    next_path,
+                    node_id,
+                    class_type,
+                    node_distance,
+                    candidate_map,
+                    seen,
+                )
+            return
+
+        if not isinstance(value, str):
+            return
+
+        asset_name = value.strip()
+        if not asset_name or asset_name.lower() in {"none", "null", "false", "baked vae"}:
+            return
+
+        inline_loras = self._extract_inline_lora_tags(asset_name)
+        if inline_loras:
+            leaf_key = key_path.split(".")[-1]
+            for inline_lora in inline_loras:
+                dedupe_key = ("lora", inline_lora, node_id, leaf_key)
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+                score = self._score_comfyui_asset_candidate("lora", leaf_key, class_type, inline_lora, node_distance) + 30
+                candidate_map["lora"].append({
+                    "name": inline_lora,
+                    "node_id": node_id,
+                    "class_type": class_type,
+                    "input_key": leaf_key,
+                    "distance": node_distance,
+                    "score": score,
+                })
+
+        asset_type = self._classify_comfyui_asset_candidate(key_path, class_type, asset_name)
+        if not asset_type:
+            return
+
+        expanded_asset_names = self._expand_serialized_asset_value(asset_type, asset_name)
+        if expanded_asset_names:
+            asset_names = expanded_asset_names
+        else:
+            asset_names = [asset_name]
+
+        leaf_key = key_path.split(".")[-1]
+        for candidate_name in asset_names:
+            candidate_name = candidate_name.strip()
+            if not candidate_name or candidate_name.lower() in {"none", "null", "false"}:
+                continue
+            dedupe_key = (asset_type, candidate_name, node_id, leaf_key)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            score = self._score_comfyui_asset_candidate(asset_type, leaf_key, class_type, candidate_name, node_distance)
+            candidate_map[asset_type].append({
+                "name": candidate_name,
+                "node_id": node_id,
+                "class_type": class_type,
+                "input_key": leaf_key,
+                "distance": node_distance,
+                "score": score,
+            })
+
+    def _classify_comfyui_asset_candidate(self, key_path: str, class_type: str, asset_name: str) -> Optional[str]:
+        """Guess asset type from input semantics instead of node-name whitelists."""
+        leaf_key = key_path.split(".")[-1].lower()
+        key_path_lower = key_path.lower()
+        class_type_lower = class_type.lower()
+
+        if leaf_key in self.COMFYUI_MODEL_KEY_TYPES:
+            mapped_type = self.COMFYUI_MODEL_KEY_TYPES[leaf_key]
+            if mapped_type == "model" and self._looks_like_yolo_model_name(asset_name, class_type, key_path):
+                return "yolo"
+            return mapped_type
+
+        if re.match(r"^lora_\d+$", leaf_key):
+            return "lora"
+        if self._is_explicit_comfyui_lora_key(key_path):
+            return "lora"
+        if "ckpt" in leaf_key or "checkpoint" in leaf_key:
+            return "checkpoint"
+        if "unet" in leaf_key:
+            return "unet"
+        if "diffusion" in leaf_key and "model" in leaf_key:
+            return "diffusion_model"
+        if any(token in leaf_key for token in ("yolo", "detector", "bbox", "segm")):
+            return "yolo"
+
+        if not self._looks_like_model_filename(asset_name):
+            if "lora" in class_type_lower and leaf_key in {"lora", "lora_name"}:
+                return "lora"
+            if "loramanager" in class_type_lower and leaf_key == "name":
+                return "lora"
+            return None
+
+        if self._looks_like_yolo_model_name(asset_name, class_type, key_path):
+            return "yolo"
+        if "lora" in class_type_lower:
+            return "lora"
+        if "unet" in class_type_lower:
+            return "unet"
+        if "diffusion" in class_type_lower:
+            return "diffusion_model"
+        if any(token in class_type_lower for token in ("checkpoint", "ckpt", "loader", "model")):
+            return "model"
+
+        return None
+
+    def _score_comfyui_asset_candidate(
+        self,
+        asset_type: str,
+        input_key: str,
+        class_type: str,
+        asset_name: str,
+        node_distance: int,
+    ) -> int:
+        """Score candidates so the closest, most semantically explicit one wins."""
+        score = 0
+        class_type_lower = class_type.lower()
+        input_key_lower = input_key.lower()
+
+        if asset_type == "checkpoint":
+            score += 400
+        elif asset_type == "unet":
+            score += 320
+        elif asset_type == "diffusion_model":
+            score += 300
+        elif asset_type == "model":
+            score += 260
+        elif asset_type == "lora":
+            score += 350
+        elif asset_type == "yolo":
+            score += 240
+
+        if input_key_lower in self.COMFYUI_MODEL_KEY_TYPES:
+            score += 120
+        elif re.match(r"^lora_\d+$", input_key_lower):
+            score += 110
+
+        if "efficient loader" in class_type_lower:
+            score += 80
+        if "loader" in class_type_lower:
+            score += 40
+        if asset_type == "yolo":
+            if any(token in class_type_lower for token in ("ultralytics", "yolo", "detector", "detailer", "adetailer")):
+                score += 100
+            if any(token in input_key_lower for token in ("yolo", "detector", "bbox", "segm")):
+                score += 90
+        if self._looks_like_model_filename(asset_name):
+            score += 20
+
+        score -= node_distance * 5
+        return score
+
+    def _looks_like_model_filename(self, value: str) -> bool:
+        """Return True when a string looks like a model / LoRA filename."""
+        value_lower = value.lower().strip()
+        return value_lower.endswith(self.COMFYUI_MODEL_FILE_EXTENSIONS)
+
+    def _extract_inline_lora_tags(self, text: str) -> List[str]:
+        """Extract <lora:name:weight> tags from prompt-like strings."""
+        matches = re.findall(r"<lora:([^:>,\r\n]+)(?::[^>\r\n]*)?>", text, flags=re.IGNORECASE)
+        names: List[str] = []
+        seen = set()
+        for match in matches:
+            name = match.strip()
+            if not name or name.lower() == "none" or name in seen:
+                continue
+            seen.add(name)
+            names.append(name)
+        return names
+
+    def _expand_serialized_asset_value(self, asset_type: str, asset_name: str) -> List[str]:
+        """Expand JSON-serialized UI stacks into actual asset filenames."""
+        asset_name = asset_name.strip()
+        if not asset_name or asset_name[0] not in "[{":
+            return []
+
+        try:
+            payload = json.loads(asset_name)
+        except Exception:
+            return []
+
+        names: List[str] = []
+        allowed_keys = {
+            "lora": {"lora", "lora_name", "lora_path", "lora_file"},
+            "checkpoint": {"ckpt_name", "checkpoint", "checkpoint_name", "model_name", "name"},
+            "unet": {"unet_name", "model_name", "name"},
+            "diffusion_model": {"diffusion_model", "diffusion_model_name", "model_name", "name"},
+            "model": {"model_name", "ckpt_name", "unet_name", "diffusion_model", "name"},
+            "yolo": {"model_name", "yolo_model", "yolo_model_name", "detector_model", "detector_model_name", "bbox_model_name", "segm_model_name", "name"},
+        }.get(asset_type, {"name"})
+
+        def walk(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    if isinstance(nested, str) and key.lower() in allowed_keys and self._looks_like_model_filename(nested):
+                        names.append(nested)
+                    walk(nested)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item)
+
+        walk(payload)
+        return names
 
     def _trace_sampler_prompts(self, nodes: Dict[str, dict]) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -1288,15 +2521,8 @@ class MetadataParser:
         loras = []
         gen_params = {}
 
-        # Extract Lora from prompt: <lora:name:weight>
-        lora_matches = re.findall(r"<lora:([^:]+):[^>]+>", params)
-        if lora_matches:
-            loras = list(set(lora_matches))
-
-        # Extract Checkpoint from parameters (usually "Model: [name]")
-        model_match = re.search(r"Model:\s*([^,]+)", params)
-        if model_match:
-            checkpoint = model_match.group(1).strip()
+        # Extract LoRAs from prompt text. Allow both weighted and weightless tags.
+        loras = self._extract_inline_lora_tags(params)
 
         # WebUI format: prompt\nNegative prompt: neg\nSteps: X, ...
         lines = params.split("\n")
@@ -1335,8 +2561,53 @@ class MetadataParser:
         if param_start >= 0:
             params_line = "\n".join(lines[param_start:])
             gen_params = self._parse_gen_params_line(params_line)
+            checkpoint = self._extract_webui_checkpoint_identifier(gen_params, params)
+
+        extra_loras = self._extract_webui_loras_from_metadata(params, gen_params)
+        if extra_loras:
+            merged = []
+            seen = set()
+            for name in [*loras, *extra_loras]:
+                normalized = str(name).strip()
+                if not normalized or normalized.lower() == "none" or normalized in seen:
+                    continue
+                seen.add(normalized)
+                merged.append(normalized)
+            loras = merged
 
         return (prompt, negative, checkpoint, loras, gen_params if gen_params else None)
+
+    def _extract_webui_loras_from_metadata(self, params: str, gen_params: Optional[Dict[str, Any]]) -> List[str]:
+        """Recover LoRA names from WebUI/Forge metadata beyond inline <lora:...> tags."""
+        names: List[str] = []
+        seen = set()
+
+        def push(value: Any) -> None:
+            text = str(value or "").strip().strip('"')
+            if not text or text.lower() == "none" or text in seen:
+                return
+            seen.add(text)
+            names.append(text)
+
+        if gen_params:
+            lora_hashes = gen_params.get("lora_hashes") or gen_params.get("Lora hashes")
+            if isinstance(lora_hashes, str):
+                for part in lora_hashes.strip().strip('"').split(","):
+                    pair = part.strip()
+                    if not pair or ":" not in pair:
+                        continue
+                    push(pair.split(":", 1)[0].strip())
+
+            for key, value in gen_params.items():
+                key_lower = str(key).lower()
+                if key_lower.startswith("addnet_model_") or key_lower.startswith("addnet module_"):
+                    push(value)
+
+        # Some exports store AddNet names only in the raw parameters blob.
+        for match in re.finditer(r"AddNet Model \d+:\s*([^,\n]+)", params, re.IGNORECASE):
+            push(match.group(1))
+
+        return names
 
     def _parse_gen_params_line(self, params_line: str) -> Dict[str, Any]:
         """Parse the 'Steps: 20, Sampler: Euler a, CFG scale: 7, ...' line into a dict."""
@@ -1550,3 +2821,15 @@ def get_parser() -> MetadataParser:
 def parse_image(image_path: str) -> Dict[str, Any]:
     """Convenience function to parse a single image."""
     return get_parser().parse(image_path)
+
+
+def verify_image_readable(image_path: str) -> Tuple[bool, Optional[str]]:
+    """Confirm an image can be fully decoded, not just opened for metadata."""
+    try:
+        with Image.open(image_path) as img:
+            img.verify()
+        with Image.open(image_path) as img:
+            img.load()
+        return True, None
+    except Exception as exc:
+        return False, str(exc)

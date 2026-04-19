@@ -151,6 +151,8 @@ function initAutoSeparate() {
     $('#btn-close-autosep-settings')?.addEventListener('click', closeAutoSepSettingsModal);
     $('#btn-cancel-autosep-settings')?.addEventListener('click', closeAutoSepSettingsModal);
     $('#autosep-settings-modal .modal-backdrop')?.addEventListener('click', closeAutoSepSettingsModal);
+    $('#btn-close-autosep-overflow')?.addEventListener('click', () => window.App?.hideModal?.('autosep-overflow-modal'));
+    $('#autosep-overflow-modal .modal-backdrop')?.addEventListener('click', () => window.App?.hideModal?.('autosep-overflow-modal'));
     $('#btn-save-autosep-settings')?.addEventListener('click', saveAutoSepSettingsFromUi);
     $('#btn-reset-autosep-settings')?.addEventListener('click', resetAutoSepSettings);
     $('#btn-autosep-new-config')?.addEventListener('click', createAutoSepConfig);
@@ -566,8 +568,77 @@ function getAutoSepFilterSignature(filters) {
     });
 }
 
+function _formatAutoSepI18n(key, fallback, replacements = {}) {
+    const raw = window.I18n?.t?.(key) || fallback;
+    return Object.entries(replacements).reduce(
+        (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
+        raw,
+    );
+}
+
+function _computeAutoSepPreviewCap(container) {
+    // Two rows worth of thumbnails: matches what the user can see without
+    // scrolling and keeps the preview panel compact no matter how large the
+    // match count grows. Column count is derived from the container width
+    // because the grid uses auto-fill minmax(128px, 1fr).
+    if (!container) return 8;
+    const style = window.getComputedStyle(container);
+    const gap = parseFloat(style.columnGap || style.gap || '12') || 12;
+    const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+    const minColumn = 128;
+    const width = Math.max(0, (container.clientWidth || 0) - paddingX);
+    if (width <= 0) return 8;
+    const cols = Math.max(1, Math.floor((width + gap) / (minColumn + gap)));
+    return cols * 2;
+}
+
+function _buildAutoSepPreviewItem(image) {
+    const { API, openGalleryPreview } = window.App;
+    const button = document.createElement('button');
+    button.className = 'autosep-preview-item';
+    button.type = 'button';
+    button.dataset.imageId = String(image.id);
+    button.title = `Open ${image.filename}`;
+
+    const img = document.createElement('img');
+    img.className = 'autosep-preview-thumb';
+    img.src = API.getThumbnailUrl(image.id, 256);
+    img.alt = image.filename;
+    img.loading = 'lazy';
+
+    const name = document.createElement('span');
+    name.className = 'autosep-preview-name';
+    name.textContent = image.filename;
+
+    button.append(img, name);
+    button.addEventListener('click', () => {
+        const imageId = parseInt(button.dataset.imageId, 10);
+        if (typeof openGalleryPreview === 'function') {
+            openGalleryPreview(imageId);
+        }
+    });
+    return button;
+}
+
+function _renderAutoSepOverflowModal(images) {
+    const { showModal } = window.App;
+    const list = document.getElementById('autosep-overflow-list');
+    const description = document.getElementById('autosep-overflow-description');
+    if (!list) return;
+    list.innerHTML = '';
+    images.forEach((image) => list.appendChild(_buildAutoSepPreviewItem(image)));
+    if (description) {
+        description.textContent = _formatAutoSepI18n(
+            'autosep.overflowDescription',
+            'Showing the {shown} images that did not fit in the preview.',
+            { shown: images.length },
+        );
+    }
+    if (typeof showModal === 'function') showModal('autosep-overflow-modal');
+}
+
 function renderAutoSepPreviewList(images = [], totalCount = 0) {
-    const { $, API, openGalleryPreview } = window.App;
+    const { $ } = window.App;
     const container = $('#autosep-preview-list');
     if (!container) return;
 
@@ -581,38 +652,28 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
         return;
     }
 
-    images.forEach((image) => {
-        const button = document.createElement('button');
-        button.className = 'autosep-preview-item';
-        button.type = 'button';
-        button.dataset.imageId = String(image.id);
-        button.title = `Open ${image.filename}`;
+    const cap = _computeAutoSepPreviewCap(container);
+    // Reserve the last visible slot for the +N button when the match set is
+    // bigger than the cap — this keeps the visible row count consistent with
+    // the 2-row budget computed above, instead of spilling into row 3.
+    const willOverflow = images.length > cap;
+    const visibleCount = willOverflow ? Math.max(0, cap - 1) : images.length;
+    const visibleImages = images.slice(0, visibleCount);
+    const overflowImages = images.slice(visibleCount);
 
-        const img = document.createElement('img');
-        img.className = 'autosep-preview-thumb';
-        img.src = API.getThumbnailUrl(image.id, 256);
-        img.alt = image.filename;
+    visibleImages.forEach((image) => container.appendChild(_buildAutoSepPreviewItem(image)));
 
-        const name = document.createElement('span');
-        name.className = 'autosep-preview-name';
-        name.textContent = image.filename;
-
-        button.append(img, name);
-        button.addEventListener('click', () => {
-            const imageId = parseInt(button.dataset.imageId, 10);
-            if (typeof openGalleryPreview === 'function') {
-                openGalleryPreview(imageId);
-            }
-        });
-
-        container.appendChild(button);
-    });
-
-    const remaining = totalCount - images.length;
-    if (remaining > 0) {
-        const more = document.createElement('div');
-        more.className = 'autosep-preview-more';
-        more.textContent = `+${remaining} more matches`;
+    const remaining = Math.max(totalCount - visibleCount, overflowImages.length);
+    if (willOverflow && remaining > 0) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'autosep-preview-more autosep-preview-more-btn';
+        more.textContent = _formatAutoSepI18n('autosep.previewMore', '+{count} more', { count: remaining });
+        more.setAttribute(
+            'aria-label',
+            _formatAutoSepI18n('autosep.previewMoreAria', 'Show the remaining {count} matching images', { count: remaining }),
+        );
+        more.addEventListener('click', () => _renderAutoSepOverflowModal(overflowImages));
         container.appendChild(more);
     }
 }

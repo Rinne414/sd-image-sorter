@@ -94,6 +94,7 @@ backend/sort_session.json
 .tmp/
 .tmp_*/
 .playwright-tmp-results/
+.playwright-mcp/
 test-results/
 artifacts/
 tests/e2e/node_modules/
