@@ -85,7 +85,7 @@ All prior features remain: portable launcher honours `SD_IMAGE_SORTER_PORT`, Civ
 | Platform | File | Size |
 |----------|------|------|
 | **Windows** (portable, Python included) | `sd-image-sorter-v3.0.4-windows-portable.zip` | ~13 MB |
-| **Linux / macOS** (requires Python 3.9+) | `sd-image-sorter-v3.0.4-linux-mac.tar.gz` | ~1.0 MB |
+| **Linux / macOS** (requires Python 3.9+) | `sd-image-sorter-v3.0.4-linux-mac.tar.gz` | ~0.59 MB |
 
 ### Windows Quick Start / Windows 快速开始
 1. Download and extract the zip / 下载并解压 zip
@@ -107,7 +107,7 @@ cd sd-image-sorter && chmod +x run.sh && ./run.sh
 ## SHA-256
 
 ```
-sd-image-sorter-v3.0.4-windows-portable.zip  9e25e335e644ba0537f23e77e22e58deb02e3b0f8231eed86a744522687d3110
-sd-image-sorter-v3.0.4-linux-mac.tar.gz      b616f19a74fceee7eefe1f0cee377b8eec85d046d1c628f3113b11eb265d13d2
+sd-image-sorter-v3.0.4-windows-portable.zip  6ca53e695cfe84e3df5e7809b93b467057c5893e52a27a465f4c44b854877db3
+sd-image-sorter-v3.0.4-linux-mac.tar.gz      9ee41acd30eb9bb1834854b6b30297ee03cbcba6cd00f0c1bd4d34bc5be80307
 ```
 
