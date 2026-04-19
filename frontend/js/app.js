@@ -324,6 +324,7 @@ function formatApiError(status, errorData = {}) {
     // Use error detail if provided
     if (errorData.detail) return errorData.detail;
     if (errorData.error) return errorData.error;
+    if (errorData.message) return errorData.message;
 
     // Default messages based on status code
     const statusMessages = {
@@ -350,7 +351,10 @@ const API = {
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 const message = formatApiError(response.status, errorData);
-                throw new Error(message);
+                const error = new Error(message);
+                error.apiStatus = response.status;
+                error.apiData = errorData;
+                throw error;
             }
             return response.json();
         } catch (error) {
@@ -391,7 +395,10 @@ const API = {
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 const message = formatApiError(response.status, errorData);
-                throw new Error(message);
+                const error = new Error(message);
+                error.apiStatus = response.status;
+                error.apiData = errorData;
+                throw error;
             }
             return response.json();
         } catch (error) {
@@ -1596,7 +1603,7 @@ function syncTaggerModelUi(options = {}) {
     const modelPrefersGpu = isCustom ? onnxGpuAvailable : Boolean(meta?.gpu_default ?? true);
     const recommendedGpu = gpuLocked
         ? false
-        : (modelPrefersGpu && hardwarePrefersGpu);
+        : (isCustom ? false : (modelPrefersGpu && hardwarePrefersGpu));
 
     if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
     if (customTagsGroup) customTagsGroup.style.display = isCustom ? 'block' : 'none';
@@ -1647,6 +1654,12 @@ function syncTaggerModelUi(options = {}) {
         useGpu: gpuEnabled,
         recommendedGpu
     });
+    const liveRuntime = taggingIsRunning ? (window.__liveTagProgress || null) : null;
+    const liveTargetBackend = String(liveRuntime?.runtime_backend_target || (gpuEnabled ? 'gpu' : 'cpu')).toLowerCase();
+    const liveActualBackend = String(liveRuntime?.runtime_backend_actual || '').toLowerCase();
+    const liveRuntimeReason = String(liveRuntime?.runtime_backend_reason || '').trim();
+    const liveMemoryPressure = String(liveRuntime?.memory_pressure_warning || '').trim();
+    const hasLiveRuntime = Boolean(liveActualBackend) && !modelDisabled;
 
     if (runtimeSummary) {
         let summary = modelDisabled
@@ -1659,6 +1672,15 @@ function syncTaggerModelUi(options = {}) {
             meta
         });
         const recommendedChunk = getRecommendedTaggerChunkSize();
+        if (hasLiveRuntime) {
+            summary = `Requested ${liveTargetBackend.toUpperCase()}, actual ${liveActualBackend.toUpperCase()}.`;
+            if (liveRuntimeReason) {
+                summary += ` ${liveRuntimeReason}`;
+            }
+            if (liveMemoryPressure) {
+                summary += ` ${liveMemoryPressure}`;
+            }
+        }
         if (hardwareHighRisk && !gpuLocked && !gpuEnabled) {
             summary += appT('tagger.highRiskSuffix', ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.');
         }
@@ -1669,6 +1691,18 @@ function syncTaggerModelUi(options = {}) {
     if (runtimeDetail) {
         if (modelDisabled) {
             runtimeDetail.textContent = appT('tagger.catalogOnlyDetail', 'This entry stays in the catalog so the planned integration is visible, but the current tagger runtime cannot execute it.');
+        } else if (hasLiveRuntime) {
+            let detail = `Actual backend: ${liveActualBackend.toUpperCase()}.`;
+            if (liveTargetBackend && liveTargetBackend !== liveActualBackend) {
+                detail += ` Target requested ${liveTargetBackend.toUpperCase()}.`;
+            }
+            if (liveRuntimeReason) {
+                detail += ` ${liveRuntimeReason}`;
+            }
+            if (liveMemoryPressure) {
+                detail += ` ${liveMemoryPressure}`;
+            }
+            runtimeDetail.textContent = detail;
         } else if (isToriiGate) {
             runtimeDetail.textContent = gpuEnabled
                 ? appT('tagger.toriiGateGpuDetail', 'ToriiGate uses the multimodal PyTorch CUDA path. WD14 thresholds do not apply here.')
@@ -1689,22 +1723,30 @@ function syncTaggerModelUi(options = {}) {
     if (runtimeModeChip) {
         setTaggerStatusChip(
             runtimeModeChip,
-            modelDisabled ? appT('tagger.chipCatalogOnly', 'Catalog Only') : (gpuEnabled ? appT('tagger.chipGpuTarget', 'GPU Target') : appT('tagger.chipCpuTarget', 'CPU Target')),
-            modelDisabled ? 'is-danger' : (gpuEnabled ? 'is-safe' : 'is-warning')
+            modelDisabled
+                ? appT('tagger.chipCatalogOnly', 'Catalog Only')
+                : (hasLiveRuntime
+                    ? `${liveTargetBackend.toUpperCase()} target -> ${liveActualBackend.toUpperCase()} actual`
+                    : (gpuEnabled ? appT('tagger.chipGpuTarget', 'GPU Target') : appT('tagger.chipCpuTarget', 'CPU Target'))),
+            modelDisabled ? 'is-danger' : ((hasLiveRuntime ? liveActualBackend === 'gpu' : gpuEnabled) ? 'is-safe' : 'is-warning')
         );
     }
 
     if (runtimeProviderChip) {
         const providerLabel = modelDisabled
             ? appT('tagger.chipVlmNeeded', 'VLM Backend Needed')
-            : (isToriiGate
-                ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? appT('tagger.chipPytorchCuda', 'PyTorch CUDA') : appT('tagger.chipPytorchCpu', 'PyTorch CPU'))
-                : ((providerState.hasCuda || providerState.hasDml || providerState.hasTorchCuda) ? providerState.label : appT('tagger.chipCpuRuntime', 'CPU Runtime')));
+            : (hasLiveRuntime
+                ? `Actual ${liveActualBackend.toUpperCase()}`
+                : (isToriiGate
+                    ? ((window.__taggerSystemInfo?.system_info?.torch_cuda_available && gpuEnabled) ? appT('tagger.chipPytorchCuda', 'PyTorch CUDA') : appT('tagger.chipPytorchCpu', 'PyTorch CPU'))
+                    : ((providerState.hasCuda || providerState.hasDml || providerState.hasTorchCuda) ? providerState.label : appT('tagger.chipCpuRuntime', 'CPU Runtime'))));
         const providerTone = modelDisabled
             ? 'is-danger'
-            : (isToriiGate
+            : (hasLiveRuntime
+                ? (liveActualBackend === 'gpu' ? 'is-safe' : 'is-warning')
+                : (isToriiGate
                 ? (gpuEnabled ? 'is-safe' : 'is-warning')
-                : providerState.tone);
+                : providerState.tone));
         setTaggerStatusChip(runtimeProviderChip, providerLabel, providerTone);
     }
 
@@ -1735,6 +1777,15 @@ function syncTaggerModelUi(options = {}) {
     if (gpuHelp) {
         if (modelDisabled) {
             gpuHelp.textContent = meta?.disabled_reason || appT('tagger.modelNotStartable', 'This model cannot be started in the current build.');
+        } else if (hasLiveRuntime) {
+            let helpText = `Actual backend: ${liveActualBackend.toUpperCase()}.`;
+            if (liveRuntimeReason) {
+                helpText += ` ${liveRuntimeReason}`;
+            }
+            if (liveMemoryPressure) {
+                helpText += ` ${liveMemoryPressure}`;
+            }
+            gpuHelp.textContent = helpText;
         } else if (isToriiGate) {
             gpuHelp.textContent = gpuEnabled
                 ? appT('tagger.gpuHelpToriiGateGpu', 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.')
@@ -3196,6 +3247,8 @@ async function pollTagProgress() {
 
     try {
         const progress = await API.getTagProgress();
+        window.__liveTagProgress = progress;
+        syncTaggerModelUi();
 
         // UI-03: Improved progress display with ETA
         const current = (progress.processed ?? progress.current ?? 0);
@@ -3206,7 +3259,15 @@ async function pollTagProgress() {
         const tagged = Number(progress.tagged || 0);
         const errors = Number(progress.errors || 0);
 
-        $('#tag-progress-fill').style.width = percent + '%';
+        const fillEl = $('#tag-progress-fill');
+        // No real percent yet means we are still importing modules / downloading the
+        // VLM / loading the ONNX session. Switch the bar to an indeterminate "still
+        // working" animation so users can see activity instead of a stuck 0%.
+        const isIndeterminate = progress.status === 'running' && (total === 0 || current === 0);
+        if (fillEl) {
+            fillEl.classList.toggle('is-indeterminate', isIndeterminate);
+            fillEl.style.width = isIndeterminate ? '' : (percent + '%');
+        }
 
         // Build progress text with phase awareness and ETA
         const errorSuffix = errors > 0
@@ -3295,6 +3356,7 @@ async function pollTagProgress() {
         _updateBgTagProgress(percent, progressText, progress.status);
 
         if (progress.status === 'done') {
+            window.__liveTagProgress = null;
             _tagPollingActive = false;
             clearTagProgressTimer();
             _hideBgTagProgress();
@@ -3304,6 +3366,7 @@ async function pollTagProgress() {
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
             resetTagUiProgressState();
+            syncTaggerModelUi();
             promptsLibraryCache = null; // Invalidate cache after tagging
             // Reset timing state
             _tagStartTime = null;
@@ -3311,6 +3374,7 @@ async function pollTagProgress() {
             loadImages();
             loadStats();
         } else if (progress.status === 'cancelled') {
+            window.__liveTagProgress = null;
             _tagPollingActive = false;
             clearTagProgressTimer();
             _hideBgTagProgress();
@@ -3318,6 +3382,7 @@ async function pollTagProgress() {
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
             resetTagUiProgressState();
+            syncTaggerModelUi();
             _tagStartTime = null;
             _tagProgressHistory = [];
         } else if (progress.status === 'running') {
@@ -3325,6 +3390,7 @@ async function pollTagProgress() {
         } else if (progress.status === 'cancelling') {
             scheduleTagProgressPoll(300);
         } else if (progress.status === 'error') {
+            window.__liveTagProgress = null;
             _tagPollingActive = false;
             clearTagProgressTimer();
             _hideBgTagProgress();
@@ -3332,6 +3398,7 @@ async function pollTagProgress() {
             $('#tag-progress-container').style.display = 'none';
             setTaggingUiState(false);
             resetTagUiProgressState();
+            syncTaggerModelUi();
             // Reset timing state
             _tagStartTime = null;
             _tagProgressHistory = [];
@@ -3339,6 +3406,7 @@ async function pollTagProgress() {
             scheduleTagProgressPoll(500);
         }
     } catch (error) {
+        window.__liveTagProgress = null;
         _tagPollingActive = false;
         clearTagProgressTimer();
         _hideBgTagProgress();
@@ -3346,6 +3414,7 @@ async function pollTagProgress() {
         $('#tag-progress-container').style.display = 'none';
         setTaggingUiState(false);
         resetTagUiProgressState();
+        syncTaggerModelUi();
         // Reset timing state on error
         _tagStartTime = null;
         _tagProgressHistory = [];
@@ -3367,7 +3436,11 @@ function _updateBgTagProgress(percent, text, status) {
     bar.style.display = shouldShow ? 'flex' : 'none';
     const fill = $('#bg-tag-progress-fill');
     const textEl = $('#bg-tag-progress-text');
-    if (fill) fill.style.width = percent + '%';
+    const isIndeterminate = ['running', 'cancelling'].includes(status) && (!percent || percent === 0);
+    if (fill) {
+        fill.classList.toggle('is-indeterminate', isIndeterminate);
+        fill.style.width = isIndeterminate ? '' : (percent + '%');
+    }
     if (textEl) textEl.textContent = text;
 }
 
@@ -4838,7 +4911,29 @@ function renderModelManager(models = []) {
                 // Notify other tabs (e.g. Similar Images) that a model changed
                 document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
             } catch (error) {
-                showToast(formatUserError(error, 'Model preparation failed'), 'error');
+                const apiData = error?.apiData || {};
+                const userMessage = apiData.message || formatUserError(error, 'Model preparation failed');
+                const manualSteps = Array.isArray(apiData.manual_steps) ? apiData.manual_steps : [];
+                if (apiData.type === 'CivitaiLoginRequired' && manualSteps.length > 0) {
+                    const card = button.closest('.model-card');
+                    if (card) {
+                        const messageEl = card.querySelector('.model-card-message');
+                        if (messageEl) {
+                            messageEl.textContent = userMessage;
+                        }
+                        let stepsEl = card.querySelector('.model-card-manual-steps');
+                        if (!stepsEl) {
+                            stepsEl = document.createElement('div');
+                            stepsEl.className = 'model-card-hint model-card-manual-steps';
+                            const actionsEl = card.querySelector('.model-card-actions');
+                            card.insertBefore(stepsEl, actionsEl || null);
+                        }
+                        stepsEl.innerHTML = manualSteps
+                            .map((step, index) => `<div>${index + 1}. ${escapeHtml(step)}</div>`)
+                            .join('');
+                    }
+                }
+                showToast(userMessage, error?.apiStatus === 409 ? 'warning' : 'error');
                 button.disabled = false;
                 button.textContent = originalLabel;
             }

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 
 import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from metadata_parser import verify_image_readable
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,27 @@ def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
     return ", ".join(parts)
 
 
+def _iter_rescaling_batches(all_ids, get_batch_size):
+    """Yield (batch_start, batch_ids) slices while re-reading batch_size.
+
+    The worker mutates batch_size mid-run whenever memory pressure hits, but
+    ``range(0, total, batch_size)`` captures its step at creation time — so the
+    old for-range loop kept stepping by the ORIGINAL batch_size and silently
+    skipped images after a reduction. This helper re-queries the current size
+    each iteration and advances by the actual slice length so every id is
+    visited exactly once, regardless of how many times batch_size shrinks.
+    """
+    batch_start = 0
+    total = len(all_ids)
+    while batch_start < total:
+        batch_size = max(1, int(get_batch_size()))
+        batch_ids = all_ids[batch_start:batch_start + batch_size]
+        if not batch_ids:
+            break
+        yield batch_start, batch_ids
+        batch_start += len(batch_ids)
+
+
 def _build_tag_progress_state(
     status: str,
     current: int = 0,
@@ -65,6 +87,10 @@ def _build_tag_progress_state(
     tagged: int = 0,
     errors: int = 0,
     message: str = "",
+    runtime_backend_target: str = "",
+    runtime_backend_actual: str = "",
+    runtime_backend_reason: str = "",
+    memory_pressure_warning: str = "",
 ) -> Dict[str, Any]:
     """Build a normalized tag progress payload."""
     return {
@@ -75,6 +101,10 @@ def _build_tag_progress_state(
         "tagged": tagged,
         "errors": errors,
         "message": message,
+        "runtime_backend_target": runtime_backend_target,
+        "runtime_backend_actual": runtime_backend_actual,
+        "runtime_backend_reason": runtime_backend_reason,
+        "memory_pressure_warning": memory_pressure_warning,
     }
 
 
@@ -105,8 +135,40 @@ def _tagging_worker_main(
     total = 0
     gpu_fallback_announced = False
     tagging_start_time = 0.0
+    runtime_backend_target = "gpu" if effective_use_gpu else "cpu"
+    # Don't claim an actual backend until the tagger is actually loaded. ONNX Runtime
+    # silently falls back to CPU when CUDA init fails (no exception), so reading
+    # session.get_providers() post-load is the only honest source of truth. Leaving
+    # this blank during the load phase makes the UI show "GPU Target" (from checkbox)
+    # instead of lying with "GPU target -> GPU actual" before the session exists.
+    runtime_backend_actual = ""
+    runtime_backend_reason = ""
+    memory_pressure_warning = ""
 
-    def send(status: str, message: str, current: Optional[int] = None, total_override: Optional[int] = None) -> None:
+    def infer_runtime_reason() -> str:
+        try:
+            from hardware_monitor import get_system_info
+
+            system_info = get_system_info()
+        except Exception:
+            system_info = {}
+
+        if runtime_backend == "toriigate":
+            if not system_info.get("torch_cuda_available"):
+                return "CUDA is unavailable or this build only has the CPU PyTorch runtime."
+            return "ToriiGate failed to stay on CUDA and fell back to CPU."
+
+        providers = [str(item).lower() for item in (system_info.get("onnx_providers") or [])]
+        if not any(provider in providers for provider in ["cudaexecutionprovider", "dmlexecutionprovider", "tensorrtexecutionprovider"]):
+            return "The ONNX runtime has no GPU provider on this machine."
+        return "The GPU provider failed, so the run continued in CPU Safe Mode."
+
+    def send(
+        status: str,
+        message: str,
+        current: Optional[int] = None,
+        total_override: Optional[int] = None,
+    ) -> None:
         progress_queue.put(
             _build_tag_progress_state(
                 status=status,
@@ -115,6 +177,10 @@ def _tagging_worker_main(
                 tagged=total_tagged,
                 errors=total_errors,
                 message=message,
+                runtime_backend_target=runtime_backend_target,
+                runtime_backend_actual=runtime_backend_actual,
+                runtime_backend_reason=runtime_backend_reason,
+                memory_pressure_warning=memory_pressure_warning,
             )
         )
 
@@ -182,12 +248,23 @@ def _tagging_worker_main(
         if hasattr(tagger, "set_session_refresh_interval"):
             tagger.set_session_refresh_interval(session_refresh_interval)
 
+        runtime_backend_actual = "gpu" if getattr(tagger, "use_gpu", False) else "cpu"
+        if runtime_backend_actual == "gpu":
+            runtime_backend_reason = "The runtime loaded successfully on GPU."
+        elif effective_use_gpu:
+            runtime_backend_reason = infer_runtime_reason()
+        else:
+            runtime_backend_reason = "CPU Safe Mode was requested for this run."
+
         if startup_notice:
             send("running", startup_notice)
 
         if effective_use_gpu and not getattr(tagger, "use_gpu", False):
             gpu_fallback_announced = True
-            send("running", "GPU load failed. Continuing in CPU Safe Mode instead.")
+            send(
+                "running",
+                f"GPU load failed. Continuing in CPU Safe Mode instead. Reason: {runtime_backend_reason}",
+            )
 
         if cancel_event.is_set():
             send("cancelled", "Tagging cancelled before processing images")
@@ -206,11 +283,14 @@ def _tagging_worker_main(
         tagging_start_time = time.time()
         tags_batch: List[Dict[str, Any]] = []
 
-        for batch_start in range(0, total, batch_size):
+        # Use _iter_rescaling_batches so memory-pressure reductions to batch_size
+        # take effect on the very next iteration. A plain range(0, total, batch_size)
+        # would capture the step at creation and skip images whenever the chunk
+        # shrank mid-run.
+        for batch_start, batch_ids in _iter_rescaling_batches(all_ids, lambda: batch_size):
             if cancel_event.is_set():
                 break
 
-            batch_ids = all_ids[batch_start:batch_start + batch_size]
             batch_images_map = worker_db.get_images_by_ids(batch_ids)
             batch_images = [img for img in batch_images_map.values() if img]
 
@@ -218,16 +298,31 @@ def _tagging_worker_main(
             batch_paths: List[str] = []
 
             for img in batch_images:
-                if os.path.exists(img["path"]):
-                    existing_images.append(img)
-                    batch_paths.append(img["path"])
-                else:
+                image_path = img["path"]
+                image_name = os.path.basename(image_path)
+                if not os.path.exists(image_path):
                     total_errors += 1
                     total_processed += 1
-                    logger.error("Image file missing during tagging: %s", img["path"])
+                    worker_db.mark_image_unreadable(img["id"], "File not found")
+                    logger.error("Image file missing during tagging: %s", image_path)
                     send_with_eta(
-                        f"Processed {total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''})",
+                        f"Skipped unreadable image: {image_name} (File not found)",
                     )
+                    continue
+
+                readable, read_error = verify_image_readable(image_path)
+                if not readable:
+                    total_errors += 1
+                    total_processed += 1
+                    worker_db.mark_image_unreadable(img["id"], read_error or "Unreadable image")
+                    logger.warning("Skipping unreadable image during tagging: %s (%s)", image_path, read_error)
+                    send_with_eta(
+                        f"Skipped unreadable image: {image_name} ({read_error or 'Unreadable image'})",
+                    )
+                    continue
+
+                existing_images.append(img)
+                batch_paths.append(image_path)
 
             if existing_images:
                 processed_in_batch = 0
@@ -238,15 +333,43 @@ def _tagging_worker_main(
                         pressure = check_memory_pressure()
                         if pressure.get("should_restart_session"):
                             tagger._recreate_session()
+                            memory_pressure_warning = "VRAM pressure forced a runtime session refresh."
+                            send("running", memory_pressure_warning)
                         ram_avail = pressure.get("ram_available_gb")
+                        ram_total = pressure.get("ram_total_gb")
+                        ram_pct = pressure.get("ram_percent_used")
                         if pressure.get("should_pause"):
-                            logger.warning("Memory pressure critical (RAM: %.1fGB). Pausing 2s and reducing batch.", ram_avail or 0)
+                            logger.warning(
+                                "Memory pressure critical (RAM: %.1f/%.1f GB, %.0f%% used). Pausing 2s and reducing batch.",
+                                ram_avail or 0, ram_total or 0, ram_pct or 0,
+                            )
+                            if ram_avail is not None and ram_total is not None:
+                                memory_pressure_warning = (
+                                    f"Memory pressure is critical "
+                                    f"({ram_avail:.1f} of {ram_total:.1f} GB RAM free, {ram_pct:.0f}% used). "
+                                    f"Pausing briefly and reducing chunk size."
+                                )
+                            else:
+                                memory_pressure_warning = "Memory pressure is critical. Pausing briefly and reducing chunk size."
+                            send("running", memory_pressure_warning)
                             time.sleep(2)
                             gc.collect()
                             batch_size = max(1, batch_size // 2)
-                        elif ram_avail is not None and ram_avail < 2.0 and batch_size > 2:
-                            logger.info("Low RAM (%.1fGB available). Reducing batch size %d -> %d.", ram_avail, batch_size, max(2, batch_size // 2))
-                            batch_size = max(2, batch_size // 2)
+                        elif ram_pct is not None and ram_pct >= 90.0 and batch_size > 2:
+                            reduced = max(2, batch_size // 2)
+                            logger.info(
+                                "High RAM usage (%.0f%% used, %.1f/%.1f GB free). Reducing batch size %d -> %d.",
+                                ram_pct, ram_avail or 0, ram_total or 0, batch_size, reduced,
+                            )
+                            if ram_avail is not None and ram_total is not None:
+                                memory_pressure_warning = (
+                                    f"High RAM usage ({ram_pct:.0f}% used, {ram_avail:.1f} of {ram_total:.1f} GB free). "
+                                    f"Reducing chunk size to {reduced}."
+                                )
+                            else:
+                                memory_pressure_warning = f"High RAM usage detected. Reducing chunk size to {reduced}."
+                            send("running", memory_pressure_warning)
+                            batch_size = reduced
                     except Exception:
                         pass  # hardware_monitor not available
 
@@ -274,11 +397,17 @@ def _tagging_worker_main(
                     if runtime_adjustment_message:
                         send("running", f"Adaptive runtime: {runtime_adjustment_message}")
 
+                    if runtime_info.get("used_cpu_fallback"):
+                        runtime_backend_actual = "cpu"
+                        runtime_backend_reason = "GPU inference became unstable, so the run continued on CPU Safe Mode."
+
                     if effective_use_gpu and not gpu_fallback_announced and not getattr(tagger, "use_gpu", False):
                         gpu_fallback_announced = True
+                        runtime_backend_actual = "cpu"
+                        runtime_backend_reason = "GPU inference became unstable, so the run continued on CPU Safe Mode."
                         send(
                             "running",
-                            "GPU became unstable during inference. Continuing in CPU Safe Mode...",
+                            f"GPU became unstable during inference. Continuing in CPU Safe Mode... Reason: {runtime_backend_reason}",
                         )
 
                     for img, result in zip(existing_images, batch_results):
@@ -815,6 +944,10 @@ class TaggingService:
                 "tagged": payload.get("tagged", self._progress.get("tagged", 0)),
                 "errors": payload.get("errors", self._progress.get("errors", 0)),
                 "message": payload.get("message", self._progress.get("message", "")),
+                "runtime_backend_target": payload.get("runtime_backend_target", self._progress.get("runtime_backend_target", "")),
+                "runtime_backend_actual": payload.get("runtime_backend_actual", self._progress.get("runtime_backend_actual", "")),
+                "runtime_backend_reason": payload.get("runtime_backend_reason", self._progress.get("runtime_backend_reason", "")),
+                "memory_pressure_warning": payload.get("memory_pressure_warning", self._progress.get("memory_pressure_warning", "")),
             }
 
     def _drain_worker_queue(self, progress_queue: Any) -> bool:

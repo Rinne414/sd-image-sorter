@@ -512,15 +512,16 @@
                 <div class="reader-tool-panel active" id="reader-tool-panel-reader" role="tabpanel" aria-labelledby="reader-tool-tab-reader">
                 <div class="reader-container">
                     <div class="reader-left">
-                        <div id="reader-drop-zone" class="reader-drop-zone">
+                        <div id="reader-drop-zone" class="reader-drop-zone" tabindex="0">
                             <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 6C12.9 6 12 6.9 12 8v32c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V16l-10-10H14z" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M26 6v10h10" fill="none" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M18 26h12M18 30h8" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
                             <div class="drop-text" data-i18n="reader.dropText">Drop an image here</div>
                             <div class="drop-hint" data-i18n="reader.dropHint">or click to browse</div>
-                            <button type="button" id="reader-paste-btn" class="reader-paste-btn" data-i18n-title="reader.pasteHint" title="Paste from clipboard (Ctrl+V)">
+                            <button type="button" id="reader-paste-btn" class="reader-paste-btn" data-i18n-title="reader.pasteHint" title="Arm clipboard paste capture (Ctrl+V)">
                                 <span aria-hidden="true">📋</span>
-                                <span data-i18n="reader.pasteButton">Paste from Clipboard</span>
+                                <span data-i18n="reader.pasteButton">Paste via Ctrl+V</span>
                             </button>
-                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteHint">or press Ctrl+V to paste</div>
+                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteHint">click the button, then press Ctrl+V</div>
+                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteLimitation">Clipboard images may lose SD metadata. Drag-drop the original PNG for exact prompt and checkpoint data.</div>
                         </div>
                         <img id="reader-image-preview" style="display: none;" alt="Preview">
                         <input type="file" id="reader-file-input" accept="image/*" style="display: none;">
@@ -582,6 +583,15 @@
                                     <button id="reader-copy-params" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
                                 </div>
                                 <div id="reader-params" class="reader-params-grid"></div>
+                            </div>
+                            <div class="reader-section" id="reader-model-assets-section" style="display: none;">
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle" data-target="reader-model-assets" data-collapse-key="modelAssets">
+                                        <span class="reader-section-title" data-i18n="reader.modelAssets">Model Asset Details</span>
+                                        <span class="collapse-icon">▼</span>
+                                    </button>
+                                </div>
+                                <div id="reader-model-assets" class="reader-model-assets-grid"></div>
                             </div>
                             <div class="reader-section" id="reader-hashes-section" style="display: none;">
                                 <div class="reader-section-header">
@@ -785,6 +795,16 @@
                             <span data-i18n="autosep.moveBtn">Move Images</span>
                         </button>
                     </div>
+                </div>
+            </div>
+
+            <div class="modal" id="autosep-overflow-modal">
+                <div class="modal-backdrop"></div>
+                <div class="modal-content modal-large autosep-overflow-modal-content">
+                    <button class="modal-close" id="btn-close-autosep-overflow" data-i18n-aria-label="autosep.overflowCloseAria">✕</button>
+                    <h3 data-i18n="autosep.overflowTitle">All matching images</h3>
+                    <p class="modal-description" id="autosep-overflow-description" data-i18n="autosep.overflowDescription">Showing the remaining images that did not fit in the preview.</p>
+                    <div id="autosep-overflow-list" class="autosep-preview-list autosep-overflow-list"></div>
                 </div>
             </div>
 
@@ -2106,6 +2126,10 @@
                     <div class="modal-section" id="modal-params-section" style="display:none">
                         <h4 class="section-toggle" data-target="modal-params-grid" data-collapse-key="params" data-i18n="modal.generationParameters">Generation Parameters <span class="collapse-icon">▼</span></h4>
                         <div id="modal-params-grid" class="params-grid"></div>
+                    </div>
+                    <div class="modal-section" id="modal-model-assets-section" style="display:none">
+                        <h4 class="section-toggle" data-target="modal-model-assets-grid" data-collapse-key="modelAssets" data-i18n="modal.modelAssets">Model Asset Details <span class="collapse-icon">▼</span></h4>
+                        <div id="modal-model-assets-grid" class="params-grid model-assets-grid"></div>
                     </div>
 
                     <div class="modal-section" id="modal-img2img-section" style="display:none">

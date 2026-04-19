@@ -661,6 +661,21 @@ function bindEvents() {
 
 // ============== Queue Logic ==============
 
+function _resetBatchStatus(items = CensorState.queue) {
+    items.forEach((item) => {
+        delete item.batchStatus;
+        delete item.batchError;
+    });
+}
+
+function _summarizeBatchFailures(items = CensorState.queue) {
+    const failed = items.filter((it) => it.batchStatus === 'failed');
+    return {
+        failedCount: failed.length,
+        firstFailedName: failed[0]?.outputFilename || failed[0]?.originalFilename || '',
+    };
+}
+
 function renderQueue() {
     const list = document.getElementById('censor-queue-list');
     if (!list) return;
@@ -778,7 +793,8 @@ function renderQueue() {
 
         // Update properties (always update these - they may have changed)
         img.dataset.index = index;
-        img.title = item.outputFilename;
+        const baseTitle = item.outputFilename || '';
+        img.title = item.batchError ? `${baseTitle}\n⚠ ${item.batchError}` : baseTitle;
 
         // Only update src if it changed (prevents reload flash)
         const newSrc = item.currentDataUrl || item.originalUrl;
@@ -790,9 +806,13 @@ function renderQueue() {
         const isActive = item.id === CensorState.activeId;
         const isProcessed = item.isProcessed;
         const isSelected = CensorState.selectedItems.has(item.id);
+        const batchFailed = item.batchStatus === 'failed';
+        const batchRefined = item.batchStatus === 'refined';
         img.classList.toggle('active', isActive);
         img.classList.toggle('processed', isProcessed);
         img.classList.toggle('selected', isSelected);
+        img.classList.toggle('batch-error', batchFailed);
+        img.classList.toggle('batch-refined', batchRefined && !isProcessed);
         img.setAttribute('aria-selected', String(isSelected));
         img.setAttribute('aria-pressed', String(isSelected));
     });
@@ -3050,6 +3070,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
         return;
     }
 
+    _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
     showLoading(true, 'Save · preparing files...');
 
@@ -3090,14 +3111,32 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
                 output_format: formatOption,
                 original_image_id: item.id  // Pass original image ID for metadata copying
             });
+            item.batchStatus = 'saved';
             count++;
         } catch (e) {
             Logger.error(e);
+            item.batchStatus = 'failed';
+            item.batchError = `${tText('Save failed', '保存失败')}: ${e?.message || e || ''}`.trim();
         }
     }
 
     showLoading(false);
-    window.App.showToast(`Saved ${count} images to ${folder}`, 'success');
+    renderQueue();
+    const { failedCount } = _summarizeBatchFailures();
+    if (failedCount > 0) {
+        window.App.showToast(
+            tText(
+                `Saved ${count} images · ${failedCount} failed (red-outlined thumbnails)`,
+                `已保存 ${count} 张图片 · ${failedCount} 张失败（红框缩略图）`
+            ),
+            'warning'
+        );
+    } else {
+        window.App.showToast(
+            tText(`Saved ${count} images to ${folder}`, `已保存 ${count} 张图片到 ${folder}`),
+            'success'
+        );
+    }
 }
 
 /**
@@ -3549,6 +3588,7 @@ async function runDetectionForAll() {
         return;
     }
 
+    _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
     showLoading(true, 'Detect All · preparing queue...');
     let count = 0;
@@ -3565,21 +3605,36 @@ async function runDetectionForAll() {
                 primaryLabel: 'Detect All'
             }));
             await runDetectionForImage(item, true, executionPlan);
+            item.batchStatus = 'detected';
             count++;
         } catch (e) {
             Logger.error('Detection error for', item.id, e);
+            item.batchStatus = 'failed';
+            item.batchError = `${tText('Detection failed', '检测失败')}: ${e?.message || e || ''}`.trim();
         }
     }
 
     showLoading(false);
     renderQueue();
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
-    showToast(
-        executionPlan.switchMessage
-            ? tText(`Detection complete: ${count}/${CensorState.queue.length} images processed. The app auto-restored the privacy detector first.`, `检测完成：${count}/${CensorState.queue.length} 张图片已处理。开始前应用已自动恢复为隐私检测路线。`)
-            : tText(`Detection complete: ${count}/${CensorState.queue.length} images processed`, `检测完成：已处理 ${count}/${CensorState.queue.length} 张图片`),
-        'success'
-    );
+    const { failedCount } = _summarizeBatchFailures();
+    const total = CensorState.queue.length;
+    if (failedCount > 0) {
+        showToast(
+            tText(
+                `Detection: ${count}/${total} processed · ${failedCount} failed (red-outlined thumbnails)`,
+                `检测完成：${count}/${total} 张已处理 · ${failedCount} 张失败（红框缩略图）`
+            ),
+            'warning'
+        );
+    } else {
+        showToast(
+            executionPlan.switchMessage
+                ? tText(`Detection complete: ${count}/${total} images processed. The app auto-restored the privacy detector first.`, `检测完成：${count}/${total} 张图片已处理。开始前应用已自动恢复为隐私检测路线。`)
+                : tText(`Detection complete: ${count}/${total} images processed`, `检测完成：已处理 ${count}/${total} 张图片`),
+            'success'
+        );
+    }
 }
 
 
@@ -3613,6 +3668,16 @@ async function runSam3BatchRefine() {
         return;
     }
 
+    // Only reset status for items included in this batch so items untouched by SAM3 keep
+    // any prior save/detect status visual.
+    const includedIds = new Set(batchItems.map((entry) => entry.image_id));
+    CensorState.queue.forEach((item) => {
+        if (includedIds.has(item.id)) {
+            delete item.batchStatus;
+            delete item.batchError;
+        }
+    });
+
     showLoading(true, `SAM3 Batch Refine · 0/${batchItems.length}`);
 
     try {
@@ -3622,6 +3687,19 @@ async function runSam3BatchRefine() {
         });
 
         showLoading(false);
+
+        const refinedIds = new Set();
+        const failedErrorById = new Map();
+        for (const refined of result.results || []) {
+            if (refined.status === 'ok' && refined.mask) {
+                refinedIds.add(refined.image_id);
+            } else {
+                failedErrorById.set(
+                    refined.image_id,
+                    refined.error || tText('Mask refine returned no result', 'Mask 精化没有返回结果')
+                );
+            }
+        }
 
         if (result.completed > 0) {
             // Apply refined masks back to queue items
@@ -3641,14 +3719,28 @@ async function runSam3BatchRefine() {
                     await renderRasterMaskEffectOntoCanvas(cvs, refined.mask);
                     item.currentDataUrl = cvs.toDataURL('image/png');
                     item.isProcessed = true;
+                    item.batchStatus = 'refined';
                 } catch (maskErr) {
                     Logger.error('Failed to apply SAM3 mask for item', refined.image_id, maskErr);
+                    refinedIds.delete(refined.image_id);
+                    failedErrorById.set(
+                        refined.image_id,
+                        `${tText('Mask apply failed', 'Mask 应用失败')}: ${maskErr?.message || ''}`.trim()
+                    );
                 }
             }
-
-            renderQueue();
-            if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
         }
+
+        CensorState.queue.forEach((item) => {
+            if (!includedIds.has(item.id)) return;
+            if (failedErrorById.has(item.id)) {
+                item.batchStatus = 'failed';
+                item.batchError = `${tText('SAM3 refine failed', 'SAM3 精化失败')}: ${failedErrorById.get(item.id)}`;
+            }
+        });
+
+        renderQueue();
+        if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
 
         showToast(
             tText(
@@ -3660,6 +3752,12 @@ async function runSam3BatchRefine() {
     } catch (e) {
         showLoading(false);
         Logger.error('SAM3 Batch Refine error:', e);
+        CensorState.queue.forEach((item) => {
+            if (!includedIds.has(item.id)) return;
+            item.batchStatus = 'failed';
+            item.batchError = `${tText('SAM3 batch aborted', 'SAM3 批量中止')}: ${e?.message || e || ''}`.trim();
+        });
+        renderQueue();
         showToast(formatUserError(e, 'SAM3 Batch Refine failed'), 'error');
     }
 }
