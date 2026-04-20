@@ -715,16 +715,20 @@ const ArtistIdent = {
                     const percent = Math.round(completed / progress.total * 100);
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
-                        const progressLabel = window.App.buildProgressText({
-                            progress,
-                            completed,
-                            total: Number(progress.total || 0),
-                            tracker: this.progressTracker,
-                            defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
-                            primaryLabel: 'Artist ID'
-                        });
-                        const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
-                        progressText.textContent = `${progressLabel}${currentItem}`;
+                        if (processed === 0 && progress.step === 'loading_runtime') {
+                            progressText.textContent = progress.message || 'Loading artist model...';
+                        } else {
+                            const progressLabel = window.App.buildProgressText({
+                                progress,
+                                completed,
+                                total: Number(progress.total || 0),
+                                tracker: this.progressTracker,
+                                defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
+                                primaryLabel: 'Artist ID'
+                            });
+                            const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
+                            progressText.textContent = `${progressLabel}${currentItem}`;
+                        }
                     }
                 }
 

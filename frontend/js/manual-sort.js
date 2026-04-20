@@ -287,6 +287,20 @@ async function startSorting() {
         return;
     }
 
+    // Confirmation dialog before starting (files will be moved)
+    const confirmMessage = window.I18n?.getLang?.() === 'zh-CN'
+        ? '开始排序后，图片将被移动到对应文件夹。确定开始吗？'
+        : 'Starting a sort session will move images to the configured folders. Are you sure?';
+    const confirmed = await new Promise(resolve => {
+        window.App.showConfirm(
+            window.I18n?.getLang?.() === 'zh-CN' ? '确认开始排序' : 'Start Sorting',
+            confirmMessage,
+            () => resolve(true),
+            () => resolve(false)
+        );
+    });
+    if (!confirmed) return;
+
     ManualSortState.folders = folders;
 
     // Save destination folders for quick access later

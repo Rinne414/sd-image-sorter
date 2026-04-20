@@ -257,7 +257,8 @@
             this._setText('#view-artist .artist-results-header-note', 'artist.experimental');
             this._setTextAll('#artist-stats .stat-label', ['artist.totalImages', 'artist.identified', 'artist.undefined', 'artist.artistsFound']);
             this._setTextAll('#view-artist .control-section h3', ['artist.modelSettings', 'artist.identification', 'artist.actions']);
-            this._setTextAll('#view-artist .control-section label', ['artist.modelSource', 'artist.localModelPath', 'artist.confidenceThreshold']);
+            this._setTextAll('#view-artist .control-section label:not(.artist-threshold-label)', ['artist.modelSource', 'artist.localModelPath']);
+            this._setText('.artist-threshold-label [data-i18n="artist.confidenceThreshold"]', 'artist.confidenceThreshold');
             this._setOptionText('#artist-model-source', {
                 huggingface: 'artist.huggingface',
                 modelscope: 'artist.modelscope',
