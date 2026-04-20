@@ -382,12 +382,14 @@ sd-image-sorter/
 
 | 名称 | 贡献 |
 |:--|:--|
-| [Antigravity](https://github.com/peter119lee) | 项目主导开发 |
-| Claude Code / Claude Opus 4.6 / Codex / GPT-5.4 / Gemini 3.1 Pro | AI 辅助开发与验证 |
-| [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 模型 |
-| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、heathcliff01 | LSNet / Kaloscope 画师识别方向 |
-| [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 模型 |
+| [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 系列模型 |
+| [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 隐私检测模型 |
+| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、heathcliff01 | LSNet / Kaloscope 画师识别模型 |
+| [LAION](https://github.com/LAION-AI/aesthetic-predictor) | Aesthetic Score 美学评分模型 |
+| [OpenCLIP](https://github.com/mlfoundations/open_clip) | CLIP ViT-L/14 相似图搜索 |
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader 方向启发 |
+| [大番茄图片混淆](https://dfqtphx.netlify.app/) | 图片混淆 Hilbert 曲线方案 |
+| [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | 图片隐藏兼容方案 |
 
 License: [MIT](LICENSE)
 
@@ -561,6 +563,15 @@ Practical rule:
 
 ### Credits
 
-Huge thanks to the contributors, model authors, and toolmakers listed above.
+| Name | Contribution |
+|:--|:--|
+| [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger models |
+| [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | Auto-censor concept & YOLO privacy detection model |
+| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet), DraconicDragon, heathcliff01 | LSNet / Kaloscope artist identification model |
+| [LAION](https://github.com/LAION-AI/aesthetic-predictor) | Aesthetic Score predictor model |
+| [OpenCLIP](https://github.com/mlfoundations/open_clip) | CLIP ViT-L/14 for similar image search |
+| [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader inspiration |
+| [大番茄图片混淆](https://dfqtphx.netlify.app/) | Hilbert curve image obfuscation |
+| [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | Image hiding compatibility |
 
 License: [MIT](LICENSE)
