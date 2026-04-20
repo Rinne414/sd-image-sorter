@@ -383,7 +383,12 @@ sd-image-sorter/
 | 名称 | 贡献 |
 |:--|:--|
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 系列模型 |
+| [Camie](https://huggingface.co/camie-tagger/camie-tagger-v2) | Camie Tagger v2 模型 |
+| [PixAI](https://huggingface.co/PixAI-Tagger/PixAI-Tagger-v0.9) | PixAI Tagger v0.9 模型 |
+| [ToriiGate](https://huggingface.co/ToriiGate/ToriiGate-v0.5) | ToriiGate 多模态 VLM Tagger |
 | [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 隐私检测模型 |
+| [NudeNet](https://github.com/notAI-tech/NudeNet) | NudeNet NSFW 检测模型 |
+| [SAM3 / Segment Anything](https://github.com/facebookresearch/sam2) | SAM3 文本引导分割精修 |
 | [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、[heathcliff01](https://www.modelscope.cn/models/Heathcliff02/Kaloscope-2.0/summary) | LSNet / Kaloscope 画师识别模型 |
 | [LAION](https://github.com/LAION-AI/aesthetic-predictor) | Aesthetic Score 美学评分模型 |
 | [OpenCLIP](https://github.com/mlfoundations/open_clip) | CLIP ViT-L/14 相似图搜索 |
@@ -566,8 +571,13 @@ Practical rule:
 | Name | Contribution |
 |:--|:--|
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger models |
+| [Camie](https://huggingface.co/camie-tagger/camie-tagger-v2) | Camie Tagger v2 model |
+| [PixAI](https://huggingface.co/PixAI-Tagger/PixAI-Tagger-v0.9) | PixAI Tagger v0.9 model |
+| [ToriiGate](https://huggingface.co/ToriiGate/ToriiGate-v0.5) | ToriiGate multimodal VLM tagger |
 | [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | Auto-censor concept & YOLO privacy detection model |
-| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet), DraconicDragon, heathcliff01 | LSNet / Kaloscope artist identification model |
+| [NudeNet](https://github.com/notAI-tech/NudeNet) | NudeNet NSFW detection model |
+| [SAM3 / Segment Anything](https://github.com/facebookresearch/sam2) | SAM3 text-guided segmentation refinement |
+| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet), DraconicDragon, [heathcliff01](https://www.modelscope.cn/models/Heathcliff02/Kaloscope-2.0/summary) | LSNet / Kaloscope artist identification model |
 | [LAION](https://github.com/LAION-AI/aesthetic-predictor) | Aesthetic Score predictor model |
 | [OpenCLIP](https://github.com/mlfoundations/open_clip) | CLIP ViT-L/14 for similar image search |
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader inspiration |
