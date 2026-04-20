@@ -384,7 +384,7 @@ sd-image-sorter/
 |:--|:--|
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 系列模型 |
 | [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 隐私检测模型 |
-| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、heathcliff01 | LSNet / Kaloscope 画师识别模型 |
+| [Spawner1145](https://github.com/spawner1145/comfyui-lsnet)、DraconicDragon、[heathcliff01](https://www.modelscope.cn/models/Heathcliff02/Kaloscope-2.0/summary) | LSNet / Kaloscope 画师识别模型 |
 | [LAION](https://github.com/LAION-AI/aesthetic-predictor) | Aesthetic Score 美学评分模型 |
 | [OpenCLIP](https://github.com/mlfoundations/open_clip) | CLIP ViT-L/14 相似图搜索 |
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader 方向启发 |
