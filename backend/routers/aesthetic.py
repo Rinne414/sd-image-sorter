@@ -106,11 +106,15 @@ def score_all_images(background_tasks: BackgroundTasks, force: bool = Query(Fals
 
 def _score_batch(force: bool = False):
     """Background task to score all images."""
+    import gc
     from aesthetic import predict_score
 
     _scoring_state["running"] = True
     _scoring_state["completed"] = 0
     _scoring_state["errors"] = 0
+
+    COMMIT_INTERVAL = 20
+    CACHE_CLEAR_INTERVAL = 50
 
     conn = db.get_connection()
     try:
@@ -120,25 +124,49 @@ def _score_batch(force: bool = False):
             rows = conn.execute("SELECT id, path FROM images WHERE aesthetic_score IS NULL").fetchall()
 
         _scoring_state["total"] = len(rows)
+        pending_commits = 0
 
-        for row in rows:
+        for i, row in enumerate(rows):
             _scoring_state["current"] = row["path"]
             try:
                 score = predict_score(row["path"])
                 if score is not None:
                     conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (score, row["id"]))
-                    conn.commit()
+                    pending_commits += 1
                 else:
                     _scoring_state["errors"] += 1
             except Exception as e:
                 logger.error(f"Error scoring {row['path']}: {e}")
                 _scoring_state["errors"] += 1
 
-            _scoring_state["completed"] += 1
+            _scoring_state["completed"] = i + 1
+
+            if pending_commits >= COMMIT_INTERVAL:
+                conn.commit()
+                pending_commits = 0
+
+            if (i + 1) % CACHE_CLEAR_INTERVAL == 0:
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+
+        if pending_commits > 0:
+            conn.commit()
     finally:
         conn.close()
         _scoring_state["running"] = False
         _scoring_state["current"] = ""
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
 
 @router.get("/aesthetic/progress")

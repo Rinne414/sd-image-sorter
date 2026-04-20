@@ -122,6 +122,10 @@ class MetadataParser:
         "model_name": "model",
         "base_model": "model",
         "lora_name": "lora",
+        "vae_name": "vae",
+        "clip_name": "clip",
+        "clip_name1": "clip",
+        "clip_name2": "clip",
         "yolo_model": "yolo",
         "yolo_model_name": "yolo",
         "detector_model": "yolo",
@@ -1095,10 +1099,25 @@ class MetadataParser:
                 lr = inputs.get("lora_name", "")
                 if lr and isinstance(lr, str):
                     loras.append(lr)
+                    strength_model = inputs.get("strength_model")
+                    strength_clip = inputs.get("strength_clip")
+                    lora_detail = {"name": lr}
+                    if isinstance(strength_model, (int, float)):
+                        lora_detail["strength_model"] = round(float(strength_model), 4)
+                    if isinstance(strength_clip, (int, float)):
+                        lora_detail["strength_clip"] = round(float(strength_clip), 4)
+                    if "lora_details" not in gen_params:
+                        gen_params["lora_details"] = []
+                    gen_params["lora_details"].append(lora_detail)
 
             # LoRAs (multi-lora nodes like rgthree Power Lora Loader)
             if any(ct in class_type for ct in self.COMFYUI_MULTI_LORA_NODE_TYPES):
                 loras.extend(self._extract_multi_lora_inputs(inputs))
+                multi_details = self._extract_multi_lora_details(inputs)
+                if multi_details:
+                    if "lora_details" not in gen_params:
+                        gen_params["lora_details"] = []
+                    gen_params["lora_details"].extend(multi_details)
 
             # KSampler params
             if any(st in class_type for st in ["KSampler", "SamplerCustom"]):
@@ -1317,6 +1336,33 @@ class MetadataParser:
                 loras.append(value)
         return loras
 
+    @staticmethod
+    def _extract_multi_lora_details(inputs: dict) -> List[Dict[str, Any]]:
+        """Like _extract_multi_lora_inputs but returns structured details with weights."""
+        details = []
+        for key, value in inputs.items():
+            key_lower = str(key).lower()
+            if not key_lower.startswith("lora_"):
+                continue
+            if not (
+                re.match(r"^lora_\d+$", key_lower)
+                or key_lower.endswith("_name")
+                or key_lower.endswith("_lora")
+                or key_lower.endswith("_lora_name")
+            ):
+                continue
+            if isinstance(value, dict):
+                if value.get("on") is False:
+                    continue
+                lora_name = value.get("lora", value.get("lora_name", ""))
+                if lora_name and isinstance(lora_name, str) and lora_name != "None":
+                    detail: Dict[str, Any] = {"name": lora_name}
+                    strength = value.get("strength")
+                    if isinstance(strength, (int, float)):
+                        detail["strength_model"] = round(float(strength), 4)
+                    details.append(detail)
+        return details
+
     def _extract_comfyui_model_assets_from_active_graph(self, nodes: Dict[str, dict]) -> Dict[str, Any]:
         """Fallback asset extraction that follows the active sampler subgraph.
 
@@ -1334,6 +1380,8 @@ class MetadataParser:
             "diffusion_model": [],
             "model": [],
             "lora": [],
+            "vae": [],
+            "clip": [],
             "yolo": [],
         }
         seen: Set[Tuple[str, str, str, str]] = set()
@@ -1378,6 +1426,8 @@ class MetadataParser:
             "diffusion_model_candidates": candidate_map["diffusion_model"],
             "model_candidates": candidate_map["model"],
             "lora_candidates": candidate_map["lora"],
+            "vae_candidates": candidate_map["vae"],
+            "clip_candidates": candidate_map["clip"],
             "yolo_candidates": candidate_map["yolo"],
             "loras": lora_names,
             "yolo_models": yolo_names,
@@ -1400,6 +1450,8 @@ class MetadataParser:
             "unet": [],
             "diffusion_model": [],
             "lora": [],
+            "vae": [],
+            "clip": [],
             "yolo": [],
         }
         seen: Set[Tuple[str, str, str, str]] = set()
@@ -1498,7 +1550,7 @@ class MetadataParser:
         candidates: List[Dict[str, Any]] = []
         seen: Set[Tuple[str, str, str, str]] = set()
 
-        candidate_map = {"checkpoint": [], "unet": [], "diffusion_model": [], "model": [], "lora": [], "yolo": []}
+        candidate_map = {"checkpoint": [], "unet": [], "diffusion_model": [], "model": [], "lora": [], "vae": [], "clip": [], "yolo": []}
         for node_id, node in nodes.items():
             if not isinstance(node, dict):
                 continue
@@ -2027,6 +2079,10 @@ class MetadataParser:
             return "checkpoint"
         if "unet" in leaf_key:
             return "unet"
+        if "vae" in leaf_key:
+            return "vae"
+        if "clip" in leaf_key and "name" in leaf_key:
+            return "clip"
         if "diffusion" in leaf_key and "model" in leaf_key:
             return "diffusion_model"
         if any(token in leaf_key for token in ("yolo", "detector", "bbox", "segm")):
@@ -2043,6 +2099,10 @@ class MetadataParser:
             return "yolo"
         if "lora" in class_type_lower:
             return "lora"
+        if "vae" in class_type_lower:
+            return "vae"
+        if "clip" in class_type_lower and "loader" in class_type_lower:
+            return "clip"
         if "unet" in class_type_lower:
             return "unet"
         if "diffusion" in class_type_lower:
@@ -2071,6 +2131,10 @@ class MetadataParser:
             score += 320
         elif asset_type == "diffusion_model":
             score += 300
+        elif asset_type == "vae":
+            score += 280
+        elif asset_type == "clip":
+            score += 270
         elif asset_type == "model":
             score += 260
         elif asset_type == "lora":

@@ -87,21 +87,21 @@ def predict_score(image_path: str) -> Optional[float]:
 
         img = Image.open(image_path).convert("RGB")
         img_tensor = _clip_preprocess(img).unsqueeze(0).to(_device)
+        img.close()
 
         with torch.no_grad():
-            # Get CLIP image embedding
             try:
                 import open_clip
                 features = _clip_model.encode_image(img_tensor)
             except ImportError:
                 features = _clip_model.encode_image(img_tensor)
 
-            # Normalize
             features = features / features.norm(dim=-1, keepdim=True)
-            # Predict aesthetic score
             score = _predictor(features.float())
 
-        return round(float(score.item()), 4)
+        result = round(float(score.item()), 4)
+        del img_tensor, features, score
+        return result
 
     except Exception as e:
         logger.error(f"Aesthetic prediction failed for {image_path}: {e}")

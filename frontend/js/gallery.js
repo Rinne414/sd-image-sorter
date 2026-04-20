@@ -1851,6 +1851,8 @@ const Gallery = {
             (assets.yolo_models && assets.yolo_models.length) ||
             (assets.checkpoint_candidates && assets.checkpoint_candidates.length) ||
             (assets.unet_candidates && assets.unet_candidates.length) ||
+            (assets.vae_candidates && assets.vae_candidates.length) ||
+            (assets.clip_candidates && assets.clip_candidates.length) ||
             (assets.diffusion_model_candidates && assets.diffusion_model_candidates.length) ||
             (assets.model_candidates && assets.model_candidates.length) ||
             (assets.yolo_candidates && assets.yolo_candidates.length) ||
@@ -1954,9 +1956,29 @@ const Gallery = {
 
         addListBlock(t('modal.modelAssetsCheckpoints', 'Checkpoint Candidates'), (assets.checkpoint_candidates || []).map((item) => item.name));
         addListBlock(t('modal.modelAssetsUnets', 'UNet Candidates'), (assets.unet_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsVae', 'VAE'), (assets.vae_candidates || []).map((item) => item.name));
+        addListBlock(t('modal.modelAssetsClip', 'CLIP / Text Encoder'), (assets.clip_candidates || []).map((item) => item.name));
         addListBlock(t('modal.modelAssetsDiffusion', 'Diffusion Candidates'), (assets.diffusion_model_candidates || []).map((item) => item.name));
         addListBlock(t('modal.modelAssetsModels', 'Additional / Upscale / ControlNet Models'), (assets.model_candidates || []).map((item) => item.name));
-        addListBlock(t('modal.modelAssetsLoras', 'LoRA Candidates'), (assets.lora_candidates || []).map((item) => item.name));
+
+        const loraDetails = parsedData?.generation_params?.lora_details || [];
+        const loraDetailMap = new Map();
+        for (const detail of loraDetails) {
+            if (detail?.name) loraDetailMap.set(detail.name, detail);
+        }
+        const loraNames = (assets.lora_candidates || []).map((item) => {
+            const detail = loraDetailMap.get(item.name);
+            if (detail && typeof detail.strength_model === 'number') {
+                const sm = detail.strength_model;
+                const sc = detail.strength_clip;
+                if (typeof sc === 'number' && sc !== sm) {
+                    return `${item.name}  (M:${sm} / C:${sc})`;
+                }
+                return `${item.name}  (${sm})`;
+            }
+            return item.name;
+        });
+        addListBlock(t('modal.modelAssetsLoras', 'LoRAs'), loraNames);
         addListBlock(t('modal.modelAssetsYolo', 'YOLO / Detector Models'), assets.yolo_models || (assets.yolo_candidates || []).map((item) => item.name));
         addCandidateBlock(t('modal.modelAssetsGlobalLoras', 'Global LoRA Candidates'), assets.global_lora_candidates || []);
         addCandidateBlock(t('modal.modelAssetsGlobalYolo', 'Full-graph YOLO Candidates'), assets.global_yolo_candidates || []);
