@@ -2172,14 +2172,27 @@ class MetadataParser:
         for sampler_id, sampler_node in sampler_nodes:
             inputs = sampler_node.get("inputs", {})
 
-            # Trace positive conditioning
             pos_ref = inputs.get("positive")
+            neg_ref = inputs.get("negative")
+
+            # SamplerCustomAdvanced uses a guider node instead of direct
+            # positive/negative.  Follow the guider reference to find them.
+            if pos_ref is None and neg_ref is None:
+                guider_ref = inputs.get("guider")
+                if isinstance(guider_ref, (list, tuple)) and len(guider_ref) >= 2:
+                    guider_node = nodes.get(str(guider_ref[0]), {})
+                    guider_inputs = guider_node.get("inputs", {})
+                    pos_ref = guider_inputs.get("positive")
+                    neg_ref = guider_inputs.get("negative")
+                    if pos_ref is None:
+                        pos_ref = guider_inputs.get("cond")
+
+            # Trace positive conditioning
             if pos_ref:
                 texts = self._trace_to_text(pos_ref, nodes, set())
                 positive_texts.extend(texts)
 
             # Trace negative conditioning
-            neg_ref = inputs.get("negative")
             if neg_ref:
                 texts = self._trace_to_text(neg_ref, nodes, set())
                 negative_texts.extend(texts)
@@ -2347,7 +2360,7 @@ class MetadataParser:
         # This is intentionally AFTER Concatenate/Prompt checks since those class_types
         # can contain substrings like "Text" or "String" (e.g. "CR Text Concatenate")
         elif any(ct in class_type for ct in ["StringConstant", "String", "Text", "Note", "PrimitiveNode"]):
-            text_val = inputs.get("string", inputs.get("text", inputs.get("value", "")))
+            text_val = inputs.get("string", inputs.get("String", inputs.get("text", inputs.get("value", ""))))
             if isinstance(text_val, str) and text_val.strip():
                 texts.append(text_val)
             elif isinstance(text_val, (list, tuple)):
@@ -2383,7 +2396,32 @@ class MetadataParser:
         class_type = node.get("class_type", "")
         inputs = node.get("inputs", {})
 
-        for key in ["text_0", "text", "prompt", "user_prompt", "string", "value", "result"]:
+        # Join/Concat nodes use numbered keys (string_1, string_2, …)
+        if any(kw in class_type for kw in ["Concatenate", "Concat", "JoinString", "Join"]):
+            nested_visited = set(visited)
+            nested_visited.add(node_id)
+            results: List[Dict[str, Any]] = []
+            for key in ["string_a", "string_b", "string1", "string2",
+                         "text1", "text2", "text_a", "text_b",
+                         "prompt1", "prompt2", "prompt3",
+                         "string_1", "string_2", "string_3", "string_4"]:
+                val = inputs.get(key)
+                if val is None:
+                    continue
+                if isinstance(val, str) and val.strip():
+                    results.append({
+                        "text": val,
+                        "source_node_id": node_id,
+                        "source_class_type": class_type,
+                        "source_key": key,
+                    })
+                elif isinstance(val, (list, tuple)):
+                    traced = self._trace_to_text_with_source(val, nodes, nested_visited, depth + 1)
+                    results.extend(traced)
+            if results:
+                return results
+
+        for key in ["text_0", "text", "prompt", "user_prompt", "string", "String", "value", "result"]:
             value = inputs.get(key)
             if isinstance(value, str) and value.strip():
                 return [{
@@ -2436,7 +2474,7 @@ class MetadataParser:
             inputs = node.get("inputs", {})
 
             # Check all input keys for long string values
-            for key in ["text", "string", "prompt", "user_prompt", "positive",
+            for key in ["text", "string", "String", "prompt", "user_prompt", "positive",
                          "result", "text_0", "value", "user_text"]:
                 val = inputs.get(key)
                 if isinstance(val, str) and val.strip() and len(val.strip()) > 20:
