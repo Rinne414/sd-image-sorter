@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.5-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.6-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.6-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.6-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -147,18 +147,18 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.0.5-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.0.6-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.6-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
 
 ### Linux / macOS
 
-1. 下载 [sd-image-sorter-v3.0.5-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-linux-mac.tar.gz)
+1. 下载 [sd-image-sorter-v3.0.6-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.6-linux-mac.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.0.5-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.6-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -189,7 +189,8 @@ run.bat
 - `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
 - `v3.0.3` 修了 portable launcher 无视 `SD_IMAGE_SORTER_PORT` 打开错误 URL、Civitai 下载 403、艺术家识别诊断接口一直回 `available:false`、ToriiGate 首次下载没有明确 5 GB 提示
 - `v3.0.4` 收口了 4 个发布阻塞：Reader 剪贴板图片会明确提示 metadata 可能丢失、`censor-legacy` prepare 改成结构化 `409` 登录墙错误、scan 会隔离 corrupt/truncated 图片、similarity 进度会点名跳过/坏图/失败项
-- `v3.0.5` 收口这轮发布前修正：移除了过时的 GPU 二次确认语义并统一为自动限流策略、修了 Censor 工作区队列侧栏布局、scan 改成真正两遍流式处理，同时把版本字符串和测试启动路径同步干净
+- `v3.0.5` 自动 GPU 安全策略、Censor 侧栏布局、流式扫描、版本同步
+- `v3.0.6` ComfyUI 高级工作流 prompt 提取、LoRA 权重显示、VAE/CLIP 提取、aesthetic 冻死修复、JPG/WebP metadata 保留、禁用 LoRA 过滤、Artist ID 进度修复
 
 ### 大陆用户
 
@@ -438,7 +439,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.0.5-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip)
+1. Download [sd-image-sorter-v3.0.6-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.6-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -446,7 +447,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 #### Linux / macOS
 
 ```bash
-tar xzf sd-image-sorter-v3.0.5-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.6-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
