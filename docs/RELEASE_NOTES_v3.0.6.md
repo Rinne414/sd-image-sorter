@@ -91,6 +91,6 @@ cd sd-image-sorter && chmod +x run.sh && ./run.sh
 ## SHA-256
 
 ```
-sd-image-sorter-v3.0.6-windows-portable.zip  (will be filled after packaging)
-sd-image-sorter-v3.0.6-linux-mac.tar.gz      (will be filled after packaging)
+sd-image-sorter-v3.0.6-windows-portable.zip  578a75bad1e0d5a903b005f77361fd1377b5e3481a3365b5439216ccf364528c
+sd-image-sorter-v3.0.6-linux-mac.tar.gz      22e2007665bcc1da66c0d9c142bbdc8a52ec6aeb29362e54b46234018c317f72
 ```
