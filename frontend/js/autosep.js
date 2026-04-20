@@ -9,6 +9,8 @@ const AUTOSEP_SETTINGS_KEY = 'autosep_settings_v1';
 const AUTOSEP_DESTINATION_KEY = 'autosep_destination_v1';
 const AUTOSEP_CONFIGS_KEY = 'autosep_configs_v1';
 const AUTOSEP_FILTER_STATE_KEY = 'autosep_filter_state_v1';
+const AUTOSEP_PREVIEW_FETCH_LIMIT = 200;
+const AUTOSEP_OVERFLOW_PAGE_SIZE = 200;
 
 const DEFAULT_AUTOSEP_SETTINGS = {
     rememberDestination: true,
@@ -20,9 +22,16 @@ const AutoSepState = {
     matchCount: 0,
     previewImages: [],
     previewSignature: null,
+    overflowImages: [],
+    overflowSignature: null,
+    overflowNextCursor: null,
+    overflowHasMore: false,
+    overflowLoading: false,
     settings: { ...DEFAULT_AUTOSEP_SETTINGS },
     configs: [],
     filters: null,
+    hasSavedFilterState: false,
+    inheritedCurrentGalleryFilters: false,
 };
 
 function tKey(key, enText, zhText = enText) {
@@ -43,16 +52,19 @@ function loadAutoSepFilters() {
     try {
         const raw = localStorage.getItem(AUTOSEP_FILTER_STATE_KEY);
         if (raw) {
+            AutoSepState.hasSavedFilterState = true;
             AutoSepState.filters = serializeAutoSepFilters(JSON.parse(raw));
             return;
         }
     } catch (_) {
         // Fall back to a safe default when the saved state is invalid.
     }
+    AutoSepState.hasSavedFilterState = false;
     AutoSepState.filters = getFallbackAutoSepFilters();
 }
 
 function saveAutoSepFilters() {
+    AutoSepState.hasSavedFilterState = true;
     localStorage.setItem(AUTOSEP_FILTER_STATE_KEY, JSON.stringify(serializeAutoSepFilters(AutoSepState.filters || {})));
 }
 
@@ -66,6 +78,20 @@ function getAutoSepFilters() {
         loadAutoSepFilters();
     }
     return AutoSepState.filters;
+}
+
+function maybeAdoptAutoSepFiltersFromGallery() {
+    if (AutoSepState.hasSavedFilterState || AutoSepState.inheritedCurrentGalleryFilters) {
+        return false;
+    }
+
+    const galleryFilters = serializeAutoSepFilters(window.App?.cloneFilterState?.(window.App?.AppState?.filters || null));
+    AutoSepState.inheritedCurrentGalleryFilters = true;
+    setAutoSepFilters(galleryFilters);
+    updateAutoSepSummary();
+    invalidateAutoSepPreview();
+    renderAutoSepConfigControls();
+    return true;
 }
 
 // ============== Initialization ==============
@@ -621,20 +647,113 @@ function _buildAutoSepPreviewItem(image) {
 }
 
 function _renderAutoSepOverflowModal(images) {
-    const { showModal } = window.App;
     const list = document.getElementById('autosep-overflow-list');
     const description = document.getElementById('autosep-overflow-description');
     if (!list) return;
+
     list.innerHTML = '';
     images.forEach((image) => list.appendChild(_buildAutoSepPreviewItem(image)));
+
+    if (AutoSepState.overflowHasMore) {
+        const remaining = Math.max(0, AutoSepState.matchCount - AutoSepState.overflowImages.length);
+        const loadMoreBtn = document.createElement('button');
+        loadMoreBtn.type = 'button';
+        loadMoreBtn.id = 'autosep-overflow-load-more';
+        loadMoreBtn.className = 'btn btn-secondary';
+        loadMoreBtn.textContent = _formatAutoSepI18n('autosep.overflowLoadMore', 'Load {count} more', {
+            count: Math.min(AUTOSEP_OVERFLOW_PAGE_SIZE, remaining || AUTOSEP_OVERFLOW_PAGE_SIZE),
+        });
+        loadMoreBtn.disabled = AutoSepState.overflowLoading;
+        loadMoreBtn.addEventListener('click', loadMoreAutoSepOverflow);
+        list.appendChild(loadMoreBtn);
+    }
+
     if (description) {
         description.textContent = _formatAutoSepI18n(
-            'autosep.overflowDescription',
-            'Showing the {shown} images that did not fit in the preview.',
-            { shown: images.length },
+            'autosep.overflowDescriptionPaged',
+            'Showing {shown} of {total} matching images. Load more only if you need the full list.',
+            {
+                shown: AutoSepState.overflowImages.length,
+                total: AutoSepState.matchCount,
+            },
         );
     }
+}
+
+function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
+    return {
+        generators: filters.generators?.length > 0 ? filters.generators : null,
+        tags: filters.tags?.length > 0 ? filters.tags : null,
+        ratings: filters.ratings?.length < 4 ? filters.ratings : null,
+        checkpoints: filters.checkpoints?.length > 0 ? filters.checkpoints : null,
+        loras: filters.loras?.length > 0 ? filters.loras : null,
+        prompts: filters.prompts?.length > 0 ? filters.prompts : null,
+        search: filters.search?.trim() || null,
+        minWidth: filters.minWidth,
+        maxWidth: filters.maxWidth,
+        minHeight: filters.minHeight,
+        maxHeight: filters.maxHeight,
+        aspectRatio: filters.aspectRatio,
+        minAesthetic: filters.minAesthetic,
+        maxAesthetic: filters.maxAesthetic,
+        limit,
+        cursor,
+    };
+}
+
+function _resetAutoSepOverflowState(signature = null) {
+    AutoSepState.overflowImages = [];
+    AutoSepState.overflowSignature = signature;
+    AutoSepState.overflowNextCursor = null;
+    AutoSepState.overflowHasMore = false;
+    AutoSepState.overflowLoading = false;
+}
+
+async function loadMoreAutoSepOverflow() {
+    if (AutoSepState.overflowLoading) return;
+
+    const filters = getAutoSepFilters();
+    const signature = getAutoSepFilterSignature(filters);
+    if (AutoSepState.overflowSignature !== signature) {
+        _resetAutoSepOverflowState(signature);
+    }
+
+    AutoSepState.overflowLoading = true;
+    const list = document.getElementById('autosep-overflow-list');
+    if (list && !AutoSepState.overflowImages.length) {
+        list.innerHTML = `<div class="autosep-preview-empty">${escapeHtml(_formatAutoSepI18n('autosep.overflowLoading', 'Loading matching images...'))}</div>`;
+    }
+
+    try {
+        const result = await window.App.API.getImages(
+            _buildAutoSepImageQuery(filters, AutoSepState.overflowNextCursor, AUTOSEP_OVERFLOW_PAGE_SIZE)
+        );
+        const rows = Array.isArray(result?.images) ? result.images : [];
+        AutoSepState.overflowImages.push(...rows);
+        AutoSepState.matchCount = Number.isFinite(result?.total) && result.total >= 0
+            ? result.total
+            : Math.max(AutoSepState.matchCount, AutoSepState.overflowImages.length);
+        AutoSepState.overflowNextCursor = result?.next_cursor || null;
+        AutoSepState.overflowHasMore = Boolean(result?.has_more && AutoSepState.overflowNextCursor);
+        AutoSepState.overflowLoading = false;
+        _renderAutoSepOverflowModal(AutoSepState.overflowImages);
+    } catch (error) {
+        Logger.error('Failed to load Auto-Separate overflow preview:', error);
+        if (list) {
+            list.innerHTML = `<div class="autosep-preview-empty">${escapeHtml(_formatAutoSepI18n('autosep.overflowLoadFailed', 'Failed to load more matching images.'))}</div>`;
+        }
+    } finally {
+        AutoSepState.overflowLoading = false;
+    }
+}
+
+async function openAutoSepOverflowModal() {
+    const { showModal } = window.App;
+    const filters = getAutoSepFilters();
+    const signature = getAutoSepFilterSignature(filters);
+    _resetAutoSepOverflowState(signature);
     if (typeof showModal === 'function') showModal('autosep-overflow-modal');
+    await loadMoreAutoSepOverflow();
 }
 
 function renderAutoSepPreviewList(images = [], totalCount = 0) {
@@ -656,24 +775,24 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
     // Reserve the last visible slot for the +N button when the match set is
     // bigger than the cap — this keeps the visible row count consistent with
     // the 2-row budget computed above, instead of spilling into row 3.
-    const willOverflow = images.length > cap;
-    const visibleCount = willOverflow ? Math.max(0, cap - 1) : images.length;
+    const willOverflow = totalCount > cap;
+    const visibleCount = willOverflow ? Math.max(0, Math.min(images.length, cap - 1)) : images.length;
     const visibleImages = images.slice(0, visibleCount);
-    const overflowImages = images.slice(visibleCount);
 
     visibleImages.forEach((image) => container.appendChild(_buildAutoSepPreviewItem(image)));
 
-    const remaining = Math.max(totalCount - visibleCount, overflowImages.length);
+    const remaining = Math.max(totalCount - visibleCount, 0);
     if (willOverflow && remaining > 0) {
         const more = document.createElement('button');
         more.type = 'button';
+        more.id = 'autosep-preview-more';
         more.className = 'autosep-preview-more autosep-preview-more-btn';
         more.textContent = _formatAutoSepI18n('autosep.previewMore', '+{count} more', { count: remaining });
         more.setAttribute(
             'aria-label',
             _formatAutoSepI18n('autosep.previewMoreAria', 'Show the remaining {count} matching images', { count: remaining }),
         );
-        more.addEventListener('click', () => _renderAutoSepOverflowModal(overflowImages));
+        more.addEventListener('click', openAutoSepOverflowModal);
         container.appendChild(more);
     }
 }
@@ -713,41 +832,34 @@ async function updateAutoSepPreview() {
     }
 
     try {
-        const allImages = [];
+        const previewImages = [];
         let cursor = null;
         let hasMore = true;
+        let totalCount = 0;
 
-        while (hasMore) {
-            const result = await API.getImages({
-                generators: filters.generators?.length > 0 ? filters.generators : null,
-                tags: filters.tags?.length > 0 ? filters.tags : null,
-                ratings: filters.ratings?.length < 4 ? filters.ratings : null,
-                checkpoints: filters.checkpoints?.length > 0 ? filters.checkpoints : null,
-                loras: filters.loras?.length > 0 ? filters.loras : null,
-                prompts: filters.prompts?.length > 0 ? filters.prompts : null,
-                search: filters.search?.trim() || null,
-                minWidth: filters.minWidth,
-                maxWidth: filters.maxWidth,
-                minHeight: filters.minHeight,
-                maxHeight: filters.maxHeight,
-                aspectRatio: filters.aspectRatio,
-                minAesthetic: filters.minAesthetic,
-                maxAesthetic: filters.maxAesthetic,
-                limit: 500,
-                cursor,
-            });
+        while (hasMore && previewImages.length < AUTOSEP_PREVIEW_FETCH_LIMIT) {
+            const remaining = AUTOSEP_PREVIEW_FETCH_LIMIT - previewImages.length;
+            const result = await API.getImages(
+                _buildAutoSepImageQuery(filters, cursor, Math.min(AUTOSEP_OVERFLOW_PAGE_SIZE, remaining))
+            );
 
             const rows = Array.isArray(result?.images) ? result.images : [];
-            allImages.push(...rows);
+            previewImages.push(...rows.slice(0, remaining));
+            if (Number.isFinite(result?.total) && result.total >= 0) {
+                totalCount = result.total;
+            } else {
+                totalCount = Math.max(totalCount, previewImages.length + (result?.has_more ? 1 : 0));
+            }
             cursor = result?.next_cursor || null;
             hasMore = Boolean(result?.has_more && cursor);
             if (requestId !== _previewRequestId) return;
         }
 
         if (requestId !== _previewRequestId) return; // Stale request, discard
-        AutoSepState.matchCount = allImages.length;
-        AutoSepState.previewImages = allImages;
+        AutoSepState.matchCount = Math.max(totalCount, previewImages.length);
+        AutoSepState.previewImages = previewImages;
         AutoSepState.previewSignature = currentSignature;
+        _resetAutoSepOverflowState(currentSignature);
         $('#autosep-preview .stat-number').textContent = AutoSepState.matchCount;
         renderAutoSepPreviewList(AutoSepState.previewImages, AutoSepState.matchCount);
 
@@ -761,6 +873,7 @@ function invalidateAutoSepPreview() {
     AutoSepState.matchCount = 0;
     AutoSepState.previewImages = [];
     AutoSepState.previewSignature = null;
+    _resetAutoSepOverflowState(null);
     if (statNumber) statNumber.textContent = '0';
     renderAutoSepPreviewList([], 0);
 
@@ -784,6 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for use by app.js filter modal
 window.updateAutoSepSummary = updateAutoSepSummary;
 window.invalidateAutoSepPreview = invalidateAutoSepPreview;
+window.maybeAdoptAutoSepFiltersFromGallery = maybeAdoptAutoSepFiltersFromGallery;
 
 
 // ============== Enhanced Execute with Progress ==============
@@ -935,6 +1049,7 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
                         AutoSepState.matchCount = 0;
                         AutoSepState.previewImages = [];
                         AutoSepState.previewSignature = null;
+                        _resetAutoSepOverflowState(null);
                         document.querySelector('#autosep-preview .stat-number').textContent = '0';
                         renderAutoSepPreviewList([], 0);
 
@@ -998,7 +1113,10 @@ async function executeAutoSeparateWithProgress() {
     }
 
     if (AutoSepState.matchCount === 0) {
-        showToast('No images match the current filters', 'error');
+        showToast(
+            tKey('autosep.noMatchingImages', 'No images match Auto-Separate filters', '没有图片匹配自动分类筛选'),
+            'error'
+        );
         return;
     }
 

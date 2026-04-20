@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.4-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.5-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-linux-mac.tar.gz"><b>Download for Linux / macOS</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -147,18 +147,18 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.0.4-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.0.5-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
 
 ### Linux / macOS
 
-1. 下载 [sd-image-sorter-v3.0.4-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-linux-mac.tar.gz)
+1. 下载 [sd-image-sorter-v3.0.5-linux-mac.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-linux-mac.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.0.4-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.5-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -189,6 +189,7 @@ run.bat
 - `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
 - `v3.0.3` 修了 portable launcher 无视 `SD_IMAGE_SORTER_PORT` 打开错误 URL、Civitai 下载 403、艺术家识别诊断接口一直回 `available:false`、ToriiGate 首次下载没有明确 5 GB 提示
 - `v3.0.4` 收口了 4 个发布阻塞：Reader 剪贴板图片会明确提示 metadata 可能丢失、`censor-legacy` prepare 改成结构化 `409` 登录墙错误、scan 会隔离 corrupt/truncated 图片、similarity 进度会点名跳过/坏图/失败项
+- `v3.0.5` 收口这轮发布前修正：移除了过时的 GPU 二次确认语义并统一为自动限流策略、修了 Censor 工作区队列侧栏布局、scan 改成真正两遍流式处理，同时把版本字符串和测试启动路径同步干净
 
 ### 大陆用户
 
@@ -237,6 +238,104 @@ Artist ID 和 SAM3 也支持 [ModelScope](https://modelscope.cn)。
 | Similar Images | 8 GB | 可无 |
 | Artist ID | 16 GB | 建议 |
 | SAM3 精修 | 16 GB | 必须 CUDA |
+
+</details>
+
+<details>
+<summary><b>Tagger Runtime Chunk 规则（当前实际生效）</b></summary>
+
+> 这些规则是后端最终会执行的安全上限，不只是界面提示。
+> 就算用户手动把 chunk 调大，后端也会按模型类型 + 当前可用 VRAM / RAM 把它压回安全范围。
+
+### 1. 模型分级
+
+| 分级 | 模型 |
+|:--|:--|
+| 轻量 | `wd-vit-tagger-v3` |
+| 均衡 | `wd-swinv2-tagger-v3` / `wd-convnext-tagger-v3` / `wd-vit-large-tagger-v3` |
+| 重型 | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` |
+| VLM | `toriigate-0.5` |
+| 自定义 ONNX | `custom` |
+
+### 2. GPU 规则
+
+#### 轻量 / 均衡 / 自定义 ONNX
+
+| 当前可用 / 总显存 | 最大 chunk |
+|:--|:--|
+| 可用显存 `< 2.5 GB` | `2` |
+| 总显存 `< 4 GB` | `4` |
+| 总显存 `< 8 GB` | `8` |
+| 总显存 `< 12 GB` | `12` |
+| 总显存 `< 16 GB` | `16` |
+| 总显存 `< 24 GB` | `24` |
+| 总显存 `>= 24 GB` | `32` |
+
+#### 重型模型
+
+| 当前可用显存 | 最大 chunk |
+|:--|:--|
+| `< 4 GB` | `2` |
+| `< 8 GB` | `4` |
+| `< 12 GB` | `6` |
+| `< 16 GB` | `8` |
+| `< 24 GB` | `12` |
+| `>= 24 GB` | `16` |
+
+#### ToriiGate
+
+| 模型 | 最大 chunk |
+|:--|:--|
+| `toriigate-0.5` | 永远固定 `1` |
+
+说明：
+- `ToriiGate` 不是 WD14 ONNX 模型，而是多模态 VLM。它的风险等级明显更高，所以现在强制 `chunk = 1`。
+- 之前 UI 里如果出现过 `32` 之类的值，那只是旧的通用显示逻辑，不代表 `ToriiGate` 真会按 32 跑。
+
+### 3. CPU 规则
+
+#### 轻量 / 均衡 / 自定义 ONNX
+
+| 当前可用内存 | 最大 chunk |
+|:--|:--|
+| `< 8 GB` | `4` |
+| `< 12 GB` | `6` |
+| `< 20 GB` | `10` |
+| `< 32 GB` | `14` |
+| `>= 32 GB` | `18` |
+
+#### 重型模型
+
+| 当前可用内存 | 最大 chunk |
+|:--|:--|
+| `< 8 GB` | `2` |
+| `< 12 GB` | `4` |
+| `< 20 GB` | `6` |
+| `< 32 GB` | `8` |
+| `>= 32 GB` | `10` |
+
+#### ToriiGate
+
+| 模型 | 最大 chunk |
+|:--|:--|
+| `toriigate-0.5` | 永远固定 `1` |
+
+### 4. 自定义 ONNX 模型怎么选
+
+自定义模型的结构和显存占用未知，所以应用不会给它做“按模型名识别”的额外收紧，只按你的硬件上限来限制。
+
+建议做法：
+
+1. 先看系统推荐的 chunk 值
+2. 把这个推荐值当成你这台机器的“最高尝试值”
+3. 第一次跑自定义模型时，先从 `1` 或较小值开始
+4. 如果稳定，再往上加；一旦不稳，就退回上一个值
+
+如果你只想记一句话：
+
+- **自定义 ONNX 的最大可选 chunk = 你当前硬件推荐值**
+- **重型内置模型会比这个更保守**
+- **ToriiGate 永远是 1**
 
 </details>
 
@@ -339,7 +438,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.0.4-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.4-windows-portable.zip)
+1. Download [sd-image-sorter-v3.0.5-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.0.5-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -347,7 +446,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 #### Linux / macOS
 
 ```bash
-tar xzf sd-image-sorter-v3.0.4-linux-mac.tar.gz
+tar xzf sd-image-sorter-v3.0.5-linux-mac.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -374,6 +473,90 @@ cd sd-image-sorter
 - Models download on first use
 - Mainland China users can set `HF_ENDPOINT=https://hf-mirror.com`
 - See [CHANGELOG.md](CHANGELOG.md) for recent fixes and release history
+
+### Runtime Chunk Rules
+
+The backend enforces the final runtime chunk cap. The UI may show a larger manual choice, but the server will still clamp it to a model-safe limit based on the current machine.
+
+#### Model tiers
+
+| Tier | Models |
+|:--|:--|
+| Light | `wd-vit-tagger-v3` |
+| Balanced | `wd-swinv2-tagger-v3` / `wd-convnext-tagger-v3` / `wd-vit-large-tagger-v3` |
+| Heavy | `wd-eva02-large-tagger-v3` / `camie-tagger-v2` / `pixai-tagger-v0.9` |
+| VLM | `toriigate-0.5` |
+| Custom ONNX | `custom` |
+
+#### GPU caps
+
+Light / balanced / custom ONNX:
+
+| Current free / total VRAM | Max chunk |
+|:--|:--|
+| Free VRAM `< 2.5 GB` | `2` |
+| Total VRAM `< 4 GB` | `4` |
+| Total VRAM `< 8 GB` | `8` |
+| Total VRAM `< 12 GB` | `12` |
+| Total VRAM `< 16 GB` | `16` |
+| Total VRAM `< 24 GB` | `24` |
+| Total VRAM `>= 24 GB` | `32` |
+
+Heavy models:
+
+| Current free VRAM | Max chunk |
+|:--|:--|
+| `< 4 GB` | `2` |
+| `< 8 GB` | `4` |
+| `< 12 GB` | `6` |
+| `< 16 GB` | `8` |
+| `< 24 GB` | `12` |
+| `>= 24 GB` | `16` |
+
+ToriiGate:
+
+| Model | Max chunk |
+|:--|:--|
+| `toriigate-0.5` | always fixed to `1` |
+
+#### CPU caps
+
+Light / balanced / custom ONNX:
+
+| Current free RAM | Max chunk |
+|:--|:--|
+| `< 8 GB` | `4` |
+| `< 12 GB` | `6` |
+| `< 20 GB` | `10` |
+| `< 32 GB` | `14` |
+| `>= 32 GB` | `18` |
+
+Heavy models:
+
+| Current free RAM | Max chunk |
+|:--|:--|
+| `< 8 GB` | `2` |
+| `< 12 GB` | `4` |
+| `< 20 GB` | `6` |
+| `< 32 GB` | `8` |
+| `>= 32 GB` | `10` |
+
+ToriiGate:
+
+| Model | Max chunk |
+|:--|:--|
+| `toriigate-0.5` | always fixed to `1` |
+
+#### Custom ONNX guidance
+
+Custom ONNX models do not get extra model-name-specific caps because the app cannot reliably know their real memory footprint in advance. Treat the hardware recommendation as the highest chunk value worth trying on your machine.
+
+Practical rule:
+
+1. Start from `1` or another small value
+2. Increase only after one stable run
+3. Do not go above the current hardware recommendation
+4. If it becomes unstable, go back to the previous value
 
 ### Credits
 

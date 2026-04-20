@@ -23,6 +23,8 @@ const ManualSortState = {
     startTime: null,
     actionTimestamps: [],  // For speed calculation
     filters: null,
+    hasSavedFilterState: false,
+    inheritedCurrentGalleryFilters: false,
 };
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
@@ -90,16 +92,19 @@ function loadManualSortFilters() {
     try {
         const raw = localStorage.getItem(MANUAL_SORT_FILTER_STATE_KEY);
         if (raw) {
+            ManualSortState.hasSavedFilterState = true;
             ManualSortState.filters = serializeManualSortFilters(JSON.parse(raw));
             return;
         }
     } catch (_) {
         // Ignore invalid saved state and fall back to a safe clone.
     }
+    ManualSortState.hasSavedFilterState = false;
     ManualSortState.filters = serializeManualSortFilters(window.App?.AppState?.filters || null);
 }
 
 function saveManualSortFilters() {
+    ManualSortState.hasSavedFilterState = true;
     localStorage.setItem(MANUAL_SORT_FILTER_STATE_KEY, JSON.stringify(serializeManualSortFilters(ManualSortState.filters || {})));
 }
 
@@ -113,6 +118,17 @@ function getManualSortFilters() {
         loadManualSortFilters();
     }
     return ManualSortState.filters;
+}
+
+function maybeAdoptManualSortFiltersFromGallery() {
+    if (ManualSortState.hasSavedFilterState || ManualSortState.inheritedCurrentGalleryFilters) {
+        return false;
+    }
+
+    ManualSortState.inheritedCurrentGalleryFilters = true;
+    setManualSortFilters(window.App?.cloneFilterState?.(window.App?.AppState?.filters || null));
+    updateManualSortFilterSummary();
+    return true;
 }
 
 // ============== Initialization ==============
@@ -321,7 +337,10 @@ async function startSorting() {
         );
 
         if (result.total_images === 0) {
-            showToast('No images to sort with current filters', 'error');
+            showToast(
+                manualSortText('manual.noImages', 'No images match Manual Sort filters', '没有图片匹配手动分类筛选'),
+                'error'
+            );
             return;
         }
 
@@ -1035,6 +1054,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Export for use by app.js and filter modal
 window.ManualSortState = ManualSortState;
 window.updateManualSortFilterSummary = updateManualSortFilterSummary;
+window.maybeAdoptManualSortFiltersFromGallery = maybeAdoptManualSortFiltersFromGallery;
 
 // ============== Touch Controls for Mobile ==============
 

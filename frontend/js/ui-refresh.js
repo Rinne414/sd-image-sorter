@@ -188,6 +188,7 @@
             this._setText('#view-autosep .panel-description', 'autosep.description');
             this._setText('#view-autosep .filter-header-compact h4', 'filter.criteria');
             this._setButton('#btn-autosep-filters', 'gallery.editFilters', '🔍', 'gallery.editFilters');
+            this._setText('#autosep-scope-note', 'autosep.scopeNote');
             this._setText('#view-autosep .filter-section:nth-of-type(2) h4', 'autosep.destination');
             this._setButton('#btn-browse-destination', 'common.browse', null, 'common.browse');
             this._setPlaceholder('#autosep-destination', 'modal.folderPath');
@@ -205,6 +206,7 @@
             this._setButton('#return-to-gallery-btn', 'manual.returnToGallery');
             this._setText('#view-manual .setup-title', 'manual.title');
             this._setText('#view-manual .setup-description', 'manual.description');
+            this._setText('#manual-sort-scope-note', 'manual.scopeNote');
             this._setText('#view-manual .space-indicator span', 'manual.skip');
             this._setText('#view-manual .filter-header-compact h4', 'filter.imagesToSort');
             this._setButton('#btn-manual-sort-filters', 'gallery.editFilters', '🔍', 'gallery.editFilters');
@@ -304,9 +306,15 @@
             this._setText('#scan-folder-path-label', 'modal.folderPath');
             this._setPlaceholder('#scan-folder-path', 'modal.folderPath');
             this._setText('#scan-modal .checkbox-text', 'modal.includeSubfolders');
-            this._setButton('#btn-cancel-scan', 'modal.cancel');
+            var scanCancelBtn = document.querySelector('#btn-cancel-scan');
+            if (!scanCancelBtn || scanCancelBtn.dataset.liveLabel !== '1') {
+                this._setButton('#btn-cancel-scan', 'modal.cancel');
+            }
             this._setButton('#btn-start-scan', 'modal.startScan');
-            this._setText('#scan-progress-text', 'modal.scanStarting');
+            // Do NOT reset #scan-progress-text here while a scan is live.
+            // The app removes data-i18n during active scans so progress polling
+            // can own this field without MutationObserver/i18n clobbering it.
+            this._setStaticText('#scan-progress-text', 'modal.scanStarting');
 
             this._setText('#tag-modal-title', 'modal.tagTitle');
             this._setText('#tag-modal .modal-description', 'modal.tagDescription');
@@ -329,8 +337,10 @@
             ]);
             this._setCheckboxTexts('#tag-modal', ['modal.tagRetagAll', 'modal.tagUseGpu']);
             this._setText('#tag-modal .form-group:last-of-type .helper-text', 'modal.tagUseGpuHelper');
-            // Do NOT reset #tag-progress-text here — it is a live progress field
-            // controlled by pollTagProgress() and should not be overwritten by i18n refresh.
+            // Do NOT reset #tag-progress-text here while tagging is live.
+            // The app removes data-i18n during active runs so progress polling
+            // can own this field without MutationObserver/i18n clobbering it.
+            this._setStaticText('#tag-progress-text', 'modal.tagLoadingModel');
             this._setButton('#btn-export-tags', 'modal.tagExport', '📤', 'modal.tagExport');
             this._setButton('#btn-import-tags', 'modal.tagImport', '📥', 'modal.tagImport');
             this._setButton('#btn-cancel-tag', 'modal.tagCancel');

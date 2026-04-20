@@ -158,7 +158,8 @@ class MetadataParser:
             "metadata": {},
             "width": 0,
             "height": 0,
-            "file_size": 0
+            "file_size": 0,
+            "parse_error": None,
         }
 
         try:
@@ -213,6 +214,7 @@ class MetadataParser:
                 }
 
         except Exception as e:
+            result["parse_error"] = str(e)
             logger.error("Error parsing %s: %s", image_path, e, exc_info=True)
 
         return result

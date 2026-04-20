@@ -107,6 +107,9 @@ def _load_yolo_class_names(model_path: Path) -> List[str]:
 
     for candidate in candidates:
         try:
+            from runtime_env import prepare_onnxruntime_environment
+
+            prepare_onnxruntime_environment()
             import onnxruntime as ort
 
             session = ort.InferenceSession(str(candidate), providers=["CPUExecutionProvider"])

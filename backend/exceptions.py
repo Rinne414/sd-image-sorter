@@ -54,6 +54,13 @@ class ScanError(SDImageSorterError):
         self.path = path
 
 
+class ScanCancelledError(ScanError):
+    """Raised when a folder scan is cancelled by the user."""
+
+    def __init__(self, message: str = "Scan cancelled by user", path: Optional[str] = None, details: Optional[Any] = None):
+        super().__init__(message=message, path=path, details=details)
+
+
 class ConfigurationError(SDImageSorterError):
     """Raised when there is a configuration or initialization error."""
 

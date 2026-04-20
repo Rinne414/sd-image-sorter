@@ -104,6 +104,7 @@ class TestCorruptedFileErrors:
 
         # Should handle truncation gracefully
         assert result is not None
+        assert result.get("parse_error")
 
     def test_parse_zero_byte_file(self, tmp_path: Path):
         """Parsing zero-byte file should be handled."""

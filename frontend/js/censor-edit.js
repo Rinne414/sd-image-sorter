@@ -16,6 +16,7 @@ function getCensorUndoDepth() {
 const CensorState = {
     // Queue of { id, originalFilename, outputFilename, originalUrl, currentDataUrl, regions, isProcessed, isModified }
     queue: [],
+    pendingQueueIds: new Set(),
     activeId: null, // ID of currently edited image
     selectedItems: new Set(), // IDs of selected items for multi-select
     lastSelectedIndex: -1, // Last clicked index for shift-select range
@@ -308,8 +309,8 @@ function bindEvents() {
     const clearQueueHandler = () => {
         if (CensorState.queue.length === 0) return;
         window.App.showConfirm(
-            'Clear Queue',
-            'Are you sure you want to remove all images from the queue?',
+            tKey('modal.confirm', 'Are you sure?', '确定吗？'),
+            tKey('modal.confirmAction', 'This action cannot be undone.', '此操作无法撤销。'),
             () => {
                 CensorState.queue = [];
                 CensorState.activeId = null;
@@ -325,7 +326,7 @@ function bindEvents() {
                 CensorState.originalImageData = null;
                 renderQueue();
                 clearCanvas();
-                window.App.showToast('Queue cleared', 'success');
+                window.App.showToast(tKey('censor.queueCleared', 'Queue cleared', '队列已清空'), 'success');
             }
         );
     };
@@ -601,30 +602,8 @@ function bindEvents() {
     document.addEventListener('keydown', boundHandlers.keydown);
 
     // Add to Queue (Hook for Gallery)
-    window.App._addToCensorQueue = (imageIds) => {
+    window.App._addToCensorQueue = async (imageIds) => {
         const { API } = window.App;
-        imageIds.forEach(id => {
-            if (!CensorState.queue.find(i => i.id === id)) {
-                // Fetch basic info if not available (async)
-                API.getImage(id).then(res => {
-                    CensorState.queue.push({
-                        id: id,
-                        originalFilename: res.image.filename,
-                        outputFilename: res.image.filename, // Default same name
-                        originalUrl: API.getImageUrl(id),
-                        currentDataUrl: null, // Will be loaded/generated
-                        regions: [],
-                        isProcessed: false,
-                        isModified: false
-                    });
-                    renderQueue();
-                    // Auto-select the first image if no active ID
-                    if (!CensorState.activeId && CensorState.queue.length > 0) {
-                        setTimeout(() => loadCanvasImage(CensorState.queue[0].id), 100);
-                    }
-                });
-            }
-        });
         // Switch view to censor tab - use nav tab click for reliable switching
         const censorTab = document.querySelector('.nav-tab[data-view="censor"]');
         if (censorTab) {
@@ -637,7 +616,66 @@ function bindEvents() {
         if (censorView) {
             censorView.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-        return true;
+
+        const requestedIds = Array.from(new Set((Array.isArray(imageIds) ? imageIds : [imageIds])
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value > 0)));
+        const queueIds = new Set(CensorState.queue.map((item) => item.id));
+        const idsToFetch = requestedIds.filter((id) => !queueIds.has(id) && !CensorState.pendingQueueIds.has(id));
+
+        if (!idsToFetch.length) {
+            if (!CensorState.activeId && CensorState.queue.length > 0) {
+                setTimeout(() => loadCanvasImage(CensorState.queue[0].id), 100);
+            }
+            return true;
+        }
+
+        idsToFetch.forEach((id) => CensorState.pendingQueueIds.add(id));
+
+        const settled = await Promise.allSettled(idsToFetch.map((id) => API.getImage(id)));
+        const nextItems = [];
+        const failedIds = [];
+
+        settled.forEach((entry, index) => {
+            const id = idsToFetch[index];
+            CensorState.pendingQueueIds.delete(id);
+
+            if (entry.status !== 'fulfilled' || !entry.value?.image) {
+                failedIds.push(id);
+                return;
+            }
+
+            const image = entry.value.image;
+            nextItems.push({
+                id,
+                originalFilename: image.filename,
+                outputFilename: image.filename,
+                originalUrl: API.getImageUrl(id),
+                currentDataUrl: null,
+                regions: [],
+                isProcessed: false,
+                isModified: false,
+            });
+        });
+
+        if (nextItems.length) {
+            CensorState.queue.push(...nextItems);
+            renderQueue();
+            if (!CensorState.activeId && CensorState.queue.length > 0) {
+                setTimeout(() => loadCanvasImage(CensorState.queue[0].id), 100);
+            }
+        }
+
+        if (failedIds.length) {
+            window.App?.showToast?.(
+                tText(
+                    `Failed to queue ${failedIds.length} image(s) for Censor.`,
+                    `有 ${failedIds.length} 张图片加入 Censor 队列失败。`
+                ),
+                'error'
+            );
+        }
+        return failedIds.length === 0;
     };
 
     // Collapse toggle listener for sections

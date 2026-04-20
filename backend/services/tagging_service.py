@@ -32,7 +32,8 @@ BATCH_EXPORT_LIMIT = 10000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
 TRUE_BATCH_MODEL_MAX = 32
 CPU_CHUNK_MAX = 64
-TORIIGATE_GPU_CHUNK_MAX = 2
+TORIIGATE_GPU_CHUNK_MAX = 1
+TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
 
 
 def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
@@ -91,6 +92,7 @@ def _build_tag_progress_state(
     runtime_backend_actual: str = "",
     runtime_backend_reason: str = "",
     memory_pressure_warning: str = "",
+    run_id: int = 0,
 ) -> Dict[str, Any]:
     """Build a normalized tag progress payload."""
     return {
@@ -105,6 +107,7 @@ def _build_tag_progress_state(
         "runtime_backend_actual": runtime_backend_actual,
         "runtime_backend_reason": runtime_backend_reason,
         "memory_pressure_warning": memory_pressure_warning,
+        "run_id": run_id,
     }
 
 
@@ -515,6 +518,7 @@ class TaggingService:
         self._cancel_requested = False
         self._worker_process: Optional[Any] = None
         self._worker_cancel_event: Optional[Any] = None
+        self._active_run_id = 0
 
     def set_tagger_getter(self, tagger_getter: Callable) -> None:
         """Set the tagger getter function from main module."""
@@ -555,10 +559,14 @@ class TaggingService:
             self._progress["status"] = "cancelling"
             current = self._progress.get("current", 0)
             total = self._progress.get("total", 0)
+            tagged = self._progress.get("tagged", 0)
+            errors = self._progress.get("errors", 0)
+            run_id = int(self._progress.get("run_id") or self._active_run_id or 0)
             self._progress["message"] = f"Cancelling... ({current}/{total})"
 
             worker = self._worker_process
 
+        worker_stopped = worker is None
         # If the worker is alive, give it a short grace period then forcefully terminate
         if worker is not None and worker.is_alive():
             worker.join(timeout=3.0)
@@ -573,17 +581,23 @@ class TaggingService:
                         worker.kill()
                     except Exception:
                         pass
-                with self._lock:
+            worker_stopped = not worker.is_alive()
+
+        if worker_stopped:
+            with self._lock:
+                if run_id == self._active_run_id:
                     self._progress = _build_tag_progress_state(
                         "cancelled",
                         current=current,
                         total=total,
-                        tagged=self._progress.get("tagged", 0),
-                        errors=self._progress.get("errors", 0),
-                        message=f"Tagging forcefully cancelled at {current}/{total}.",
+                        tagged=tagged,
+                        errors=errors,
+                        message=f"Tagging cancelled at {current}/{total}.",
+                        run_id=run_id,
                     )
                     self._worker_process = None
                     self._worker_cancel_event = None
+            return {"status": "cancelled", "message": "Tagging cancelled"}
 
         return {"status": "cancelling", "message": "Cancellation requested"}
 
@@ -804,6 +818,8 @@ class TaggingService:
 
     def _resolve_model_name(self, request: TagRequest) -> str:
         """Resolve the effective built-in model name for a request."""
+        if request.model_path:
+            return "custom"
         return (request.model_name or DEFAULT_TAGGER_MODEL).strip()
 
     def _validate_tag_request(self, request: TagRequest) -> None:
@@ -838,6 +854,84 @@ class TaggingService:
                     status_code=409,
                     detail=model_config.get("disabled_reason") or f"Model {model_name} is not available in the current build.",
                 )
+            self._validate_model_hardware_requirements(model_name, request.use_gpu)
+
+    def _validate_model_hardware_requirements(self, model_name: str, use_gpu: bool) -> None:
+        """Reject models that should not run on the detected hardware."""
+        model_config = TAGGER_MODELS.get(model_name, {})
+        runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
+        if runtime_backend != "toriigate":
+            return
+
+        from hardware_monitor import get_system_info
+
+        system_info = get_system_info()
+        total_ram_gb = float(system_info.get("total_ram_gb") or 0)
+        available_ram_gb = float(system_info.get("available_ram_gb") or 0)
+        gpu_vram_total_mb = float(system_info.get("gpu_vram_total_mb") or 0)
+        gpu_vram_available_mb = float(system_info.get("gpu_vram_available_mb") or 0)
+        torch_cuda_available = bool(system_info.get("torch_cuda_available"))
+
+        if use_gpu:
+            min_total_ram_gb = float(model_config.get("minimum_total_ram_gb") or 0)
+            min_available_ram_gb = float(model_config.get("minimum_available_ram_gb") or 0)
+            min_gpu_vram_mb = float(model_config.get("minimum_gpu_vram_mb") or 0)
+            min_gpu_available_vram_mb = float(model_config.get("minimum_gpu_available_vram_mb") or 0)
+
+            failures = []
+            if not torch_cuda_available:
+                failures.append("PyTorch CUDA runtime is unavailable")
+            if min_total_ram_gb and total_ram_gb and total_ram_gb < min_total_ram_gb:
+                failures.append(f"system RAM {total_ram_gb:.0f} GB < required {min_total_ram_gb:.0f} GB")
+            if min_available_ram_gb and available_ram_gb and available_ram_gb < min_available_ram_gb:
+                failures.append(f"free RAM {available_ram_gb:.1f} GB < required {min_available_ram_gb:.0f} GB")
+            if min_gpu_vram_mb and gpu_vram_total_mb and gpu_vram_total_mb < min_gpu_vram_mb:
+                failures.append(f"GPU VRAM {gpu_vram_total_mb/1024:.1f} GB < required {min_gpu_vram_mb/1024:.0f} GB")
+            if min_gpu_available_vram_mb and gpu_vram_available_mb and gpu_vram_available_mb < min_gpu_available_vram_mb:
+                failures.append(f"free VRAM {gpu_vram_available_mb/1024:.1f} GB < required {min_gpu_available_vram_mb/1024:.0f} GB")
+
+            if failures:
+                detected = []
+                if total_ram_gb:
+                    detected.append(f"{total_ram_gb:.0f} GB RAM")
+                if available_ram_gb:
+                    detected.append(f"{available_ram_gb:.1f} GB free RAM")
+                if gpu_vram_total_mb:
+                    detected.append(f"{gpu_vram_total_mb/1024:.1f} GB VRAM")
+                if gpu_vram_available_mb:
+                    detected.append(f"{gpu_vram_available_mb/1024:.1f} GB free VRAM")
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "ToriiGate GPU mode is blocked on this hardware. "
+                        f"Minimum: {min_total_ram_gb:.0f} GB RAM and {min_gpu_vram_mb/1024:.0f} GB VRAM. "
+                        f"Detected: {', '.join(detected) if detected else 'unknown hardware'}. "
+                        f"Reason: {'; '.join(failures)}."
+                    ),
+                )
+        else:
+            min_cpu_total_ram_gb = float(model_config.get("minimum_cpu_total_ram_gb") or 0)
+            min_cpu_available_ram_gb = float(model_config.get("minimum_cpu_available_ram_gb") or 0)
+            failures = []
+            if min_cpu_total_ram_gb and total_ram_gb and total_ram_gb < min_cpu_total_ram_gb:
+                failures.append(f"system RAM {total_ram_gb:.0f} GB < required {min_cpu_total_ram_gb:.0f} GB")
+            if min_cpu_available_ram_gb and available_ram_gb and available_ram_gb < min_cpu_available_ram_gb:
+                failures.append(f"free RAM {available_ram_gb:.1f} GB < required {min_cpu_available_ram_gb:.0f} GB")
+            if failures:
+                detected = []
+                if total_ram_gb:
+                    detected.append(f"{total_ram_gb:.0f} GB RAM")
+                if available_ram_gb:
+                    detected.append(f"{available_ram_gb:.1f} GB free RAM")
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "ToriiGate CPU mode is blocked on this hardware. "
+                        f"Minimum: {min_cpu_total_ram_gb:.0f} GB RAM. "
+                        f"Detected: {', '.join(detected) if detected else 'unknown hardware'}. "
+                        f"Reason: {'; '.join(failures)}."
+                    ),
+                )
 
     def _build_runtime_plan(self, request: TagRequest) -> Dict[str, Any]:
         """Translate a public tag request into a high-throughput runtime plan with adaptive safety."""
@@ -858,13 +952,21 @@ class TaggingService:
         system_info = get_system_info()
         hardware_rec = recommend_tagger_config(system_info, model_name=model_name, use_gpu=effective_use_gpu)
 
+        custom_runtime_notice = ""
+        if request.model_path:
+            custom_runtime_notice = (
+                "Custom ONNX model on GPU. Automatic hardware clamps stay active, but the app starts from a conservative runtime chunk until this model proves stable."
+                if effective_use_gpu
+                else "Custom ONNX model on CPU Safe Mode. Start here, then try GPU only after one stable run."
+            )
+
         if runtime_backend == "toriigate":
             if effective_use_gpu:
-                fetch_batch_size = 2 if (hardware_rec.get("recommended_use_gpu") and (system_info.get("gpu_vram_total_mb") or 0) >= 16000) else 1
+                fetch_batch_size = 1
                 session_refresh_interval = 0
                 startup_notice = (
                     "ToriiGate runs through the multimodal caption backend. "
-                    "GPU is strongly recommended, and runtime chunk size stays intentionally small to avoid VRAM spikes."
+                    "GPU is strongly recommended, and runtime chunk size is fixed to 1 in Safe Mode to avoid VRAM spikes."
                 )
             else:
                 fetch_batch_size = 1
@@ -877,7 +979,7 @@ class TaggingService:
             fetch_batch_size = int(hardware_rec.get("recommended_batch_size") or fetch_batch_size)
             session_refresh_interval = int(hardware_rec.get("recommended_session_refresh_interval") or session_refresh_interval)
         else:
-            fetch_batch_size = min(CPU_CHUNK_MAX, max(4, int(hardware_rec.get("recommended_cpu_chunk_size") or 12)))
+            fetch_batch_size = min(CPU_CHUNK_MAX, max(1, int(hardware_rec.get("recommended_cpu_chunk_size") or 12)))
             cpu_pause_seconds = 0.01 if fetch_batch_size >= 24 else 0.0
 
         if request.model_path:
@@ -886,11 +988,16 @@ class TaggingService:
             fetch_batch_size = min(fetch_batch_size, TORIIGATE_GPU_CHUNK_MAX if effective_use_gpu else 1)
 
         if requested_chunk_size:
+            safety_cap = int(
+                hardware_rec.get("recommended_batch_size")
+                if effective_use_gpu
+                else hardware_rec.get("recommended_cpu_chunk_size") or fetch_batch_size
+            )
             if runtime_backend == "toriigate":
                 chunk_cap = TORIIGATE_GPU_CHUNK_MAX if effective_use_gpu else 1
             else:
                 chunk_cap = TRUE_BATCH_MODEL_MAX if effective_use_gpu else CPU_CHUNK_MAX
-            applied_chunk_size = max(1, min(requested_chunk_size, chunk_cap))
+            applied_chunk_size = max(1, min(requested_chunk_size, chunk_cap, max(1, safety_cap)))
             if applied_chunk_size != requested_chunk_size:
                 clamp_notice = (
                     f"Requested runtime chunk size {requested_chunk_size} was reduced to {applied_chunk_size} "
@@ -899,9 +1006,11 @@ class TaggingService:
                 startup_notice = f"{startup_notice} {clamp_notice}".strip()
 
             fetch_batch_size = applied_chunk_size
+        elif request.model_path:
+            startup_notice = custom_runtime_notice
         elif runtime_backend == "toriigate":
             startup_notice = startup_notice or (
-                "ToriiGate uses the multimodal caption runtime. The app keeps the queue chunk small so long runs stay stable."
+                "ToriiGate uses the multimodal caption runtime. The app forces queue chunk 1 so long runs stay stable."
             )
         elif effective_use_gpu:
             startup_notice = (
@@ -933,9 +1042,12 @@ class TaggingService:
             "session_refresh_interval": session_refresh_interval,
         }
 
-    def _apply_worker_progress(self, payload: Dict[str, Any]) -> None:
+    def _apply_worker_progress(self, payload: Dict[str, Any], run_id: Optional[int] = None) -> None:
         """Merge a worker progress message into shared service state."""
         with self._lock:
+            if run_id is not None and run_id != self._active_run_id:
+                return
+            effective_run_id = int(payload.get("run_id") or run_id or self._progress.get("run_id") or self._active_run_id or 0)
             self._progress = {
                 "status": payload.get("status", self._progress.get("status", "idle")),
                 "current": payload.get("current", self._progress.get("current", 0)),
@@ -948,9 +1060,10 @@ class TaggingService:
                 "runtime_backend_actual": payload.get("runtime_backend_actual", self._progress.get("runtime_backend_actual", "")),
                 "runtime_backend_reason": payload.get("runtime_backend_reason", self._progress.get("runtime_backend_reason", "")),
                 "memory_pressure_warning": payload.get("memory_pressure_warning", self._progress.get("memory_pressure_warning", "")),
+                "run_id": effective_run_id,
             }
 
-    def _drain_worker_queue(self, progress_queue: Any) -> bool:
+    def _drain_worker_queue(self, progress_queue: Any, run_id: int) -> bool:
         """Drain queued worker progress messages. Returns True if a terminal state was seen."""
         saw_terminal_state = False
         while True:
@@ -958,18 +1071,19 @@ class TaggingService:
                 payload = progress_queue.get_nowait()
             except queue_module.Empty:
                 break
-            self._apply_worker_progress(payload)
+            self._apply_worker_progress(payload, run_id=run_id)
             if payload.get("status") in {"done", "error", "cancelled"}:
                 saw_terminal_state = True
         return saw_terminal_state
 
-    def _cleanup_worker_handles(self, progress_queue: Any = None) -> None:
+    def _cleanup_worker_handles(self, progress_queue: Any = None, run_id: Optional[int] = None) -> None:
         """Clear worker references and close IPC handles when possible."""
         with self._lock:
-            self._worker_process = None
-            self._worker_cancel_event = None
-            if self._progress["status"] != "cancelling":
-                self._cancel_requested = False
+            if run_id is None or run_id == self._active_run_id:
+                self._worker_process = None
+                self._worker_cancel_event = None
+                if self._progress["status"] != "cancelling":
+                    self._cancel_requested = False
 
         if progress_queue is not None:
             close = getattr(progress_queue, "close", None)
@@ -979,8 +1093,14 @@ class TaggingService:
             if callable(join_thread):
                 join_thread()
 
-    def _run_tagging_job(self, request: TagRequest) -> None:
+    def _run_tagging_job(self, request: TagRequest, run_id: Optional[int] = None) -> None:
         """Run a tagging job in an isolated worker process and mirror progress back to the API."""
+        if run_id is None:
+            with self._lock:
+                if self._active_run_id <= 0:
+                    self._active_run_id = 1
+                run_id = self._active_run_id
+
         runtime_plan = self._build_runtime_plan(request)
         ctx = multiprocessing.get_context("spawn")
         progress_queue = ctx.Queue()
@@ -991,13 +1111,25 @@ class TaggingService:
             daemon=True,
         )
 
+        should_abort = False
         with self._lock:
-            self._progress = _build_tag_progress_state("running", message="Preparing tagger...")
-            self._worker_process = worker_process
-            self._worker_cancel_event = cancel_event
-            self._cancel_requested = False
+            if run_id != self._active_run_id:
+                should_abort = True
+            else:
+                self._progress = _build_tag_progress_state("running", message="Preparing tagger...", run_id=run_id)
+                self._worker_process = worker_process
+                self._worker_cancel_event = cancel_event
+                self._cancel_requested = False
+
+        if should_abort:
+            self._cleanup_worker_handles(progress_queue, run_id=run_id)
+            return
 
         saw_terminal_state = False
+        last_worker_message_at = time.monotonic()
+        last_loading_heartbeat_at = last_worker_message_at
+        model_name = str(runtime_plan.get("model_name") or "")
+        runtime_backend = str(TAGGER_MODELS.get(model_name, {}).get("runtime_backend", "wd14")).lower()
 
         try:
             worker_process.start()
@@ -1007,19 +1139,55 @@ class TaggingService:
 
                 try:
                     payload = progress_queue.get(timeout=0.25)
-                    self._apply_worker_progress(payload)
+                    self._apply_worker_progress(payload, run_id=run_id)
+                    last_worker_message_at = time.monotonic()
                     if payload.get("status") in {"done", "error", "cancelled"}:
                         saw_terminal_state = True
                 except queue_module.Empty:
                     pass
 
+                now = time.monotonic()
+                if (
+                    worker_process.is_alive()
+                    and runtime_backend == "toriigate"
+                    and (now - last_worker_message_at) >= TORIIGATE_LOAD_HEARTBEAT_SECONDS
+                    and (now - last_loading_heartbeat_at) >= TORIIGATE_LOAD_HEARTBEAT_SECONDS
+                ):
+                    current_state = self.get_progress()
+                    if (
+                        current_state.get("status") == "running"
+                        and int(current_state.get("current", 0) or 0) == 0
+                        and int(current_state.get("total", 0) or 0) == 0
+                    ):
+                        elapsed_seconds = int(max(1, now - last_worker_message_at))
+                        self._apply_worker_progress(
+                            _build_tag_progress_state(
+                                "running",
+                                current=0,
+                                total=0,
+                                tagged=current_state.get("tagged", 0),
+                                errors=current_state.get("errors", 0),
+                                message=(
+                                    "ToriiGate is still loading. "
+                                    f"Elapsed {elapsed_seconds}s. This stage can use a lot of RAM/VRAM before the first image starts."
+                                ),
+                                runtime_backend_target=current_state.get("runtime_backend_target", ""),
+                                runtime_backend_actual=current_state.get("runtime_backend_actual", ""),
+                                runtime_backend_reason=current_state.get("runtime_backend_reason", ""),
+                                memory_pressure_warning=current_state.get("memory_pressure_warning", ""),
+                                run_id=run_id,
+                            ),
+                            run_id=run_id,
+                        )
+                        last_loading_heartbeat_at = now
+
                 if not worker_process.is_alive():
-                    saw_terminal_state = self._drain_worker_queue(progress_queue) or saw_terminal_state
+                    saw_terminal_state = self._drain_worker_queue(progress_queue, run_id=run_id) or saw_terminal_state
                     break
 
                 if saw_terminal_state:
                     worker_process.join(timeout=2.0)
-                    saw_terminal_state = self._drain_worker_queue(progress_queue) or saw_terminal_state
+                    saw_terminal_state = self._drain_worker_queue(progress_queue, run_id=run_id) or saw_terminal_state
                     if not worker_process.is_alive():
                         break
 
@@ -1036,7 +1204,9 @@ class TaggingService:
                             tagged=current_state.get("tagged", 0),
                             errors=current_state.get("errors", 0),
                             message="Tagging worker stopped during cancellation.",
-                        )
+                            run_id=run_id,
+                        ),
+                        run_id=run_id,
                     )
                 else:
                     self._apply_worker_progress(
@@ -1047,7 +1217,9 @@ class TaggingService:
                             tagged=current_state.get("tagged", 0),
                             errors=current_state.get("errors", 0),
                             message="Tagger worker crashed unexpectedly. The app stayed alive, but this tagging run was stopped.",
-                        )
+                            run_id=run_id,
+                        ),
+                        run_id=run_id,
                     )
         except Exception as error:
             current_state = self.get_progress()
@@ -1059,10 +1231,12 @@ class TaggingService:
                     tagged=current_state.get("tagged", 0),
                     errors=current_state.get("errors", 0),
                     message=f"Error monitoring tagging worker: {error}",
-                )
+                    run_id=run_id,
+                ),
+                run_id=run_id,
             )
         finally:
-            self._cleanup_worker_handles(progress_queue)
+            self._cleanup_worker_handles(progress_queue, run_id=run_id)
 
     def start_tagging(
         self,
@@ -1070,14 +1244,28 @@ class TaggingService:
         background_tasks: BackgroundTasks
     ) -> Dict[str, str]:
         """Start tagging images with WD14 tagger."""
-        if self._progress["status"] in {"running", "cancelling"}:
-            raise HTTPException(status_code=400, detail="Tagging already in progress")
-
         self._validate_tag_request(request)
 
         if self._get_tagger is None:
             raise HTTPException(status_code=500, detail="Tagger not initialized")
-        background_tasks.add_task(self._run_tagging_job, request)
+
+        with self._lock:
+            if self._progress["status"] in {"running", "cancelling"}:
+                worker_alive = bool(self._worker_process and self._worker_process.is_alive())
+                if worker_alive:
+                    raise HTTPException(status_code=400, detail="Tagging already in progress")
+                logger.warning(
+                    "Recovering from stale tagging state %r with no live worker; allowing a fresh start.",
+                    self._progress["status"],
+                )
+                self._worker_process = None
+                self._worker_cancel_event = None
+                self._cancel_requested = False
+
+            self._active_run_id += 1
+            run_id = self._active_run_id
+            self._progress = _build_tag_progress_state("running", message="Preparing tagger...", run_id=run_id)
+        background_tasks.add_task(self._run_tagging_job, request, run_id)
         return {"status": "started", "message": "Tagging started in background"}
 
     def export_tags_batch(self, request: BatchTagExportRequest) -> Dict[str, Any]:

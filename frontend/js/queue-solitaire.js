@@ -22,6 +22,7 @@
         undoStack: [],         // [{ description, snapshot }]
         filterActive: false,
         filterMatches: new Set(),
+        appliedFilterMode: 'none',
         hoverTimer: null,
         detailCache: new Map(),
         galleryFilterMode: false,
@@ -401,23 +402,64 @@
         let modeLabel = '';
         let parts = [];
 
-        if (state.galleryFilterMode && state.advancedFilters) {
+        if (state.appliedFilterMode === 'gallery' && state.advancedFilters) {
             modeLabel = t('queueSolitaire.filterSummaryGallery', 'Using Gallery filters');
             parts = buildFilterSummaryPartsFromState(state.advancedFilters);
-        } else if (state.advancedFilters) {
+        } else if (state.appliedFilterMode === 'advanced' && state.advancedFilters) {
             modeLabel = t('queueSolitaire.filterSummaryAdvanced', 'Advanced queue filters');
             parts = buildFilterSummaryPartsFromState(state.advancedFilters);
-        } else {
+        } else if (state.appliedFilterMode === 'quick') {
             modeLabel = t('queueSolitaire.filterSummaryQuick', 'Quick queue filters');
             parts = buildQuickFilterSummaryParts();
         }
 
-        if (!parts.length) {
+        if (!modeLabel) {
             summaryEl.textContent = t('queueSolitaire.filterSummaryIdle', 'No queue filters active yet.');
             return;
         }
 
+        if (!parts.length) {
+            summaryEl.textContent = state.appliedFilterMode === 'gallery'
+                ? t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.')
+                : (state.appliedFilterMode === 'advanced'
+                    ? t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.')
+                    : t('queueSolitaire.filterSummaryQuickAll', 'Quick queue filters are clear, so the whole queue is currently in scope.'));
+            return;
+        }
+
         summaryEl.textContent = `${modeLabel}: ${parts.join(' • ')}`;
+    }
+
+    function clearQuickFilterInputs() {
+        [
+            'qs-filter-tag',
+            'qs-filter-checkpoint',
+            'qs-filter-lora',
+            'qs-filter-minw',
+            'qs-filter-maxw',
+            'qs-filter-minh',
+            'qs-filter-maxh',
+            'qs-filter-aesthetic',
+            'qs-filter-aesthetic-max',
+        ].forEach((id) => {
+            const input = document.getElementById(id);
+            if (input) input.value = '';
+        });
+
+        [
+            'qs-filter-generator',
+            'qs-filter-rating',
+            'qs-filter-resolution',
+            'qs-filter-aspect',
+        ].forEach((id) => {
+            const select = document.getElementById(id);
+            if (select) select.value = '';
+        });
+
+        const countEl = document.getElementById('qs-filter-match-count');
+        if (countEl) {
+            countEl.textContent = t('queueSolitaire.initialMatching', '0 matching');
+        }
     }
 
     function createProfileSectionDraft() {
@@ -802,6 +844,8 @@
     async function applyFilter() {
         state.galleryFilterMode = false;
         state.advancedFilters = null;
+        state.appliedFilterMode = 'quick';
+        updateQueueFilterSummary();
         const keyword = document.getElementById('qs-filter-tag')?.value?.trim().toLowerCase();
         const generator = document.getElementById('qs-filter-generator')?.value || '';
         const rating = document.getElementById('qs-filter-rating')?.value || '';
@@ -863,8 +907,7 @@
     }
 
     async function applyGalleryFilters() {
-        const filters = window.App?.AppState?.filters;
-        if (!filters) return;
+        const filters = window.App?.AppState?.filters || createFilterState();
 
         state.advancedFilters = window.App?.cloneFilterState
             ? window.App.cloneFilterState(filters)
@@ -874,6 +917,8 @@
 
     async function applyFilterState(filters, fromGallery = false) {
         state.galleryFilterMode = fromGallery;
+        state.appliedFilterMode = fromGallery ? 'gallery' : 'advanced';
+        updateQueueFilterSummary();
         state.filterMatches.clear();
         const allIds = getAllImageIds();
         await ensureImageDetails(allIds);
@@ -930,38 +975,11 @@
     }
 
     function resetFilterForm() {
-        [
-            'qs-filter-tag',
-            'qs-filter-checkpoint',
-            'qs-filter-lora',
-            'qs-filter-minw',
-            'qs-filter-maxw',
-            'qs-filter-minh',
-            'qs-filter-maxh',
-            'qs-filter-aesthetic',
-            'qs-filter-aesthetic-max',
-        ].forEach((id) => {
-            const input = document.getElementById(id);
-            if (input) input.value = '';
-        });
-
-        [
-            'qs-filter-generator',
-            'qs-filter-rating',
-            'qs-filter-resolution',
-            'qs-filter-aspect',
-        ].forEach((id) => {
-            const select = document.getElementById(id);
-            if (select) select.value = '';
-        });
-
+        clearQuickFilterInputs();
         state.galleryFilterMode = false;
         state.advancedFilters = null;
+        state.appliedFilterMode = 'none';
         state.filterMatches.clear();
-        const countEl = document.getElementById('qs-filter-match-count');
-        if (countEl) {
-            countEl.textContent = t('queueSolitaire.initialMatching', '0 matching');
-        }
         updateQueueFilterSummary();
         render();
     }
@@ -1430,11 +1448,11 @@
         state.previewId = null;
         state.undoStack = [];
         state.filterMatches.clear();
+        state.appliedFilterMode = 'none';
         state.filterActive = true;
         state.detailCache.clear();
-        state.advancedFilters = window.App?.cloneFilterState
-            ? window.App.cloneFilterState(window.App?.AppState?.filters || {})
-            : JSON.parse(JSON.stringify(window.App?.AppState?.filters || {}));
+        state.galleryFilterMode = false;
+        state.advancedFilters = null;
         loadAutoSortProfiles();
         renderAutoSortProfileMenu();
 
@@ -1452,6 +1470,7 @@
             filterBar.classList.add('active');
             filterBar.style.display = 'flex';
         }
+        clearQuickFilterInputs();
 
         // Hide the normal censor workspace children
         document.querySelectorAll('.censor-sidebar-v2, .censor-main-v2').forEach(el => {

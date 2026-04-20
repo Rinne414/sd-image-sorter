@@ -6,6 +6,8 @@ import subprocess
 from importlib import metadata
 from typing import Any, Dict, List, Optional
 
+from config import TAGGER_MODELS
+
 logger = logging.getLogger(__name__)
 
 
@@ -264,6 +266,9 @@ def get_system_info() -> Dict[str, Any]:
 
     # --- ONNX Runtime providers ---
     try:
+        from runtime_env import prepare_onnxruntime_environment
+
+        prepare_onnxruntime_environment()
         import onnxruntime as ort  # type: ignore
 
         info["onnx_providers"] = ort.get_available_providers()
@@ -328,7 +333,70 @@ def recommend_tagger_config(
     ram_gb = system_info.get("total_ram_gb") or 8
     available_ram_gb = system_info.get("available_ram_gb") or ram_gb
     available_vram_mb = system_info.get("gpu_vram_available_mb") or vram_mb
-    is_heavy_model = "eva02" in model_key or "large" in model_key
+    model_config = TAGGER_MODELS.get(model_key, {})
+    is_custom_model = model_key == "custom"
+    runtime_backend = str(model_config.get("runtime_backend", "wd14")).lower()
+    safety_tier = str(model_config.get("runtime_safety_tier") or "").strip().lower()
+    if not safety_tier:
+        if runtime_backend == "toriigate":
+            safety_tier = "vlm"
+        elif "eva02" in model_key or model_key in {"camie-tagger-v2", "pixai-tagger-v0.9"}:
+            safety_tier = "heavy"
+        elif model_key == "wd-vit-tagger-v3":
+            safety_tier = "light"
+        else:
+            safety_tier = "balanced"
+
+    def apply_gpu_model_cap(batch_size_value: int) -> int:
+        if is_custom_model:
+            usable_vram_mb = available_vram_mb if available_vram_mb is not None else vram_mb
+            if usable_vram_mb is None or usable_vram_mb < 6000:
+                return min(batch_size_value, 2)
+            if usable_vram_mb < 10000:
+                return min(batch_size_value, 4)
+            return min(batch_size_value, 8)
+        if safety_tier == "vlm":
+            return 1
+        if safety_tier != "heavy":
+            return batch_size_value
+
+        usable_vram_mb = available_vram_mb if available_vram_mb is not None else vram_mb
+        if usable_vram_mb is None:
+            usable_vram_mb = vram_mb
+
+        if usable_vram_mb is None or usable_vram_mb < 4000:
+            return min(batch_size_value, 2)
+        if usable_vram_mb < 8000:
+            return min(batch_size_value, 4)
+        if usable_vram_mb < 12000:
+            return min(batch_size_value, 6)
+        if usable_vram_mb < 16000:
+            return min(batch_size_value, 8)
+        if usable_vram_mb < 24000:
+            return min(batch_size_value, 12)
+        return min(batch_size_value, 16)
+
+    def apply_cpu_model_cap(batch_size_value: int) -> int:
+        if is_custom_model:
+            if available_ram_gb < 10:
+                return min(batch_size_value, 2)
+            if available_ram_gb < 18:
+                return min(batch_size_value, 4)
+            return min(batch_size_value, 8)
+        if safety_tier == "vlm":
+            return 1
+        if safety_tier != "heavy":
+            return batch_size_value
+
+        if available_ram_gb < 8:
+            return min(batch_size_value, 2)
+        if available_ram_gb < 12:
+            return min(batch_size_value, 4)
+        if available_ram_gb < 20:
+            return min(batch_size_value, 6)
+        if available_ram_gb < 32:
+            return min(batch_size_value, 8)
+        return min(batch_size_value, 10)
 
     if use_gpu and vram_mb is not None:
         if available_vram_mb is not None and available_vram_mb < 2500:
@@ -345,8 +413,7 @@ def recommend_tagger_config(
             batch_size = 24
         else:
             batch_size = 32
-        if is_heavy_model:
-            batch_size = max(2, min(batch_size, 12 if (vram_mb or 0) < 16000 else 16))
+        batch_size = max(1, apply_gpu_model_cap(batch_size))
     else:
         # CPU / fallback runtimes: still keep a safety margin, but avoid tiny defaults on
         # modern 16-32GB desktops where users expect faster throughput.
@@ -364,6 +431,7 @@ def recommend_tagger_config(
         total_ram_gb = system_info.get("total_ram_gb") or available_ram_gb
         if total_ram_gb >= 24 and available_ram_gb >= 4:
             batch_size = max(batch_size, 8)
+        batch_size = max(1, apply_cpu_model_cap(batch_size))
 
     session_refresh_interval = 180 if use_gpu else 0
 
@@ -421,15 +489,20 @@ def recommend_tagger_config(
     ]
     if extra_devices:
         parts.append("Also detected: " + ", ".join(extra_devices[:3]) + ".")
+    if is_custom_model:
+        parts.append(
+            "Custom ONNX models stay on a conservative starting chunk until the model proves stable on this machine."
+        )
     message = " ".join(parts)
 
     return {
         "recommended_batch_size": batch_size,
-        "recommended_cpu_chunk_size": min(32, max(4, batch_size)),
+        "recommended_cpu_chunk_size": min(32, max(1, batch_size)),
         "recommended_use_gpu": use_gpu,
         "recommended_session_refresh_interval": session_refresh_interval,
         "risk_level": risk_level,
         "message": message,
+        "runtime_safety_tier": safety_tier,
     }
 
 

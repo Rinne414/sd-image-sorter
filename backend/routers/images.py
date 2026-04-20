@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 
 import database as db
-from metadata_parser import parse_image
+from metadata_parser import parse_image, verify_image_readable
 from services.image_service import ImageService
 
 
@@ -499,10 +499,24 @@ async def parse_uploaded_image(file: UploadFile = File(...)):
             contents = await file.read()
             tmp.write(contents)
 
+        readable, read_error = verify_image_readable(tmp_path)
+        if not readable:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid or unreadable image file: {read_error or 'image decode failed'}",
+            )
+
         # Parse metadata using the existing parser
         result = parse_image(tmp_path)
+        if result.get("parse_error") or result.get("width", 0) <= 0 or result.get("height", 0) <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Failed to parse image metadata: {result.get('parse_error') or 'image metadata could not be read'}",
+            )
 
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to parse uploaded image %s: %s", file.filename, e)
         raise HTTPException(

@@ -12,7 +12,7 @@ import json
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import add_image, update_image_path, get_images, add_tags, update_image_metadata, mark_image_unreadable_by_path
 from metadata_parser import parse_image, verify_image_readable
-from exceptions import ScanError, FileOperationError, ImageNotFoundError
+from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 def scan_folder(
     folder_path: str,
     recursive: bool = True,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    stop_requested: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -30,6 +31,7 @@ def scan_folder(
         folder_path: Path to scan
         recursive: Whether to scan subdirectories
         progress_callback: Optional callback(current, total, filename)
+        stop_requested: Optional callback returning True when the scan should stop
     
     Returns:
         {
@@ -49,8 +51,10 @@ def scan_folder(
         "recent_errors": [],
     }
     
-    # C5: Use a generator to avoid collecting all paths into memory at once.
-    # Count pass first (cheap — no file open) then stream-process.
+    # C5: Keep scans streaming even for large libraries.
+    # We still do a cheap count pass first so the UI gets a truthful total
+    # before the first image is processed, but we never materialize the
+    # full path list in memory.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
@@ -59,11 +63,17 @@ def scan_folder(
     if not folder.is_dir():
         raise ScanError("Path is not a directory", path=folder_path)
 
+    def _check_cancel() -> None:
+        if callable(stop_requested) and stop_requested():
+            raise ScanCancelledError(path=folder_path)
+
     def _iter_images():
         if recursive:
             for root, dirnames, filenames in os.walk(folder, followlinks=False):
+                _check_cancel()
                 dirnames[:] = [d for d in dirnames if not (Path(root) / d).is_symlink()]
                 for filename in filenames:
+                    _check_cancel()
                     file_path = Path(root) / filename
                     if file_path.is_symlink():
                         continue
@@ -71,14 +81,23 @@ def scan_folder(
                         yield str(file_path)
         else:
             for fp in folder.iterdir():
+                _check_cancel()
                 if fp.is_symlink() or not fp.is_file():
                     continue
                 if fp.suffix.lower() in IMAGE_EXTENSIONS:
                     yield str(fp)
 
-    # Two-pass: count then process.  Count is fast (stat only, no open).
-    image_files = list(_iter_images())
-    result["total"] = len(image_files)
+    # Two-pass: count then process. Count is fast (stat only, no open).
+    total_images = 0
+    for _image_path in _iter_images():
+        total_images += 1
+    result["total"] = total_images
+
+    if progress_callback:
+        try:
+            progress_callback(0, result["total"], "", {"errors": 0, "last_error": None, "phase": "counted"})
+        except TypeError:
+            progress_callback(0, result["total"], "")
 
     def _record_scan_error(filename: str, error: str, kind: str = "unreadable") -> Dict[str, str]:
         entry = {
@@ -91,8 +110,9 @@ def scan_folder(
         result["recent_errors"] = result["recent_errors"][-10:]
         return entry
 
-    # Process each image
-    for i, image_path in enumerate(image_files):
+    # Process each image in a second pass without retaining the whole list.
+    for i, image_path in enumerate(_iter_images()):
+        _check_cancel()
         filename = os.path.basename(image_path)
         progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
         try:
@@ -129,7 +149,7 @@ def scan_folder(
             model_hash = gen_params.get("model_hash")
 
             # Add to database
-            add_image(
+            _, write_status = add_image(
                 path=image_path,
                 filename=os.path.basename(image_path),
                 generator=metadata["generator"],
@@ -145,9 +165,13 @@ def scan_folder(
                 model_hash=model_hash,
                 is_readable=True,
                 read_error=None,
+                return_status=True,
             )
-            
-            result["new"] += 1
+
+            if write_status == "updated":
+                result["updated"] += 1
+            else:
+                result["new"] += 1
             
             # Track by generator
             gen = metadata["generator"]

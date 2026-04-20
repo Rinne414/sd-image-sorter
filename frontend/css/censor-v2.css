@@ -1271,17 +1271,20 @@
 
 /* Queue Actions — left sidebar layout */
 .queue-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
     margin-bottom: 6px;
 }
 
 .queue-manager-btn {
-    padding: 4px 10px !important;
+    padding: 6px 12px !important;
     font-size: 12px !important;
-    min-height: 28px !important;
+    min-height: 32px !important;
+    min-width: 132px !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
 }
 
 .queue-btn-rows {

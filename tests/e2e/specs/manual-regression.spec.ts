@@ -1,3 +1,4 @@
+import fsSync from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -7,7 +8,10 @@ import { expect, test } from '@playwright/test'
 test.describe.configure({ mode: 'serial' })
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
-const backendPython = path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
+const backendPython = process.env.PW_BACKEND_PYTHON || [
+  path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+  path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+].find((candidate) => fsSync.existsSync(candidate)) || path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
 const manualRoot = path.join(repoRoot, '.tmp', 'manual-test')
 
 const autoSepInbox = path.join(manualRoot, 'autosep-inbox')
@@ -589,7 +593,7 @@ test('censor workspace sidebars should stay readable without covering the canvas
     const main = document.querySelector('#view-censor .censor-main-v2')?.getBoundingClientRect()
     const right = document.querySelector('#view-censor .censor-sidebar-v2.right')?.getBoundingClientRect()
     const queueManagerButton = document.getElementById('btn-open-queue-manager')?.getBoundingClientRect()
-    const detectionSection = document.querySelector('#view-censor .property-section.collapsible')?.getBoundingClientRect()
+    const detectionSection = document.getElementById('censor-model-type')?.closest('.censor-side-card')?.getBoundingClientRect()
     return {
       left,
       main,
@@ -667,6 +671,11 @@ test('censor settings should open, explain model roles, and allow typing the pro
   }, { timeout: 15000 }).toMatch(/Prompt-guided segmentation/)
 
   const promptInput = page.locator('#censor-text-prompt')
+  await promptInput.evaluate((node) => {
+    const details = node.closest('details') as HTMLDetailsElement | null
+    if (details) details.open = true
+  })
+  await expect(page.locator('#censor-pro-segmentation-group')).toHaveAttribute('open', '')
   await expect(promptInput).toBeEnabled()
   await promptInput.click()
   await promptInput.pressSequentially('face')
@@ -677,6 +686,10 @@ test('censor settings should open, explain model roles, and allow typing the pro
   await expect(page.locator('#censor-simple-guide')).toContainText('NudeNet')
   await expect(page.locator('#censor-simple-guide')).toContainText('no text prompt')
 
+  await page.locator('#censor-model-file').evaluate((node) => {
+    const details = node.closest('details') as HTMLDetailsElement | null
+    if (details) details.open = true
+  })
   const defaultOptionTexts = await page.locator('#censor-model-file option').allTextContents()
   expect(defaultOptionTexts.some((text) => text.includes('Advanced test only'))).toBeFalsy()
   await page.locator('#censor-show-advanced-models').evaluate((node) => {
@@ -722,6 +735,11 @@ test('sam3 text segmentation should work through the real UI when the runtime is
   await expect(page.locator('#detect-modal.visible')).toBeVisible()
 
   const promptInput = page.locator('#censor-text-prompt')
+  await promptInput.evaluate((node) => {
+    const details = node.closest('details') as HTMLDetailsElement | null
+    if (details) details.open = true
+  })
+  await expect(page.locator('#censor-pro-segmentation-group')).toHaveAttribute('open', '')
   await promptInput.fill('')
   await promptInput.pressSequentially(prompt)
   await page.locator('#btn-segment-text-current').click()
@@ -769,6 +787,25 @@ test('artist identify selected should work on a real image', async ({ page, requ
 
 test('auto-separate should honor search and move the matching files', async ({ page, request }) => {
   await resetAutoSeparateFixture()
+  await page.addInitScript((search) => {
+    localStorage.setItem('autosep_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [],
+      checkpoints: [],
+      loras: [],
+      prompts: [],
+      artist: null,
+      search,
+      minWidth: null,
+      maxWidth: null,
+      minHeight: null,
+      maxHeight: null,
+      aspectRatio: '',
+      minAesthetic: null,
+      maxAesthetic: null,
+    }))
+  }, 'manual_test_autosep_token_20260405')
 
   await page.goto('/')
   await page.waitForLoadState('networkidle')
@@ -800,6 +837,27 @@ test('auto-separate should honor search and move the matching files', async ({ p
 
 test('manual sort should honor search and support move, skip, and undo', async ({ page }) => {
   await resetManualSortFixture()
+  await page.addInitScript((search) => {
+    localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify({
+      generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+      ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+      tags: [],
+      checkpoints: [],
+      loras: [],
+      prompts: [],
+      artist: null,
+      search,
+      sortBy: 'newest',
+      limit: 0,
+      minWidth: null,
+      maxWidth: null,
+      minHeight: null,
+      maxHeight: null,
+      aspectRatio: '',
+      minAesthetic: null,
+      maxAesthetic: null,
+    }))
+  }, 'manual_test_sort_token_20260405')
 
   await page.goto('/')
   await page.waitForLoadState('networkidle')
@@ -1047,37 +1105,130 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
 
   await expect(page.locator('#view-censor.active')).toBeVisible()
   await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(4, { timeout: 15000 })
+  const initialQueueOrder = await page.locator('#censor-queue-list .queue-thumb-v2').evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute('data-id')))
+  )
 
   await page.locator('#btn-open-queue-manager').click()
-  await expect(page.locator('#queue-manager-modal.visible')).toBeVisible()
+  await expect(page.locator('#queue-solitaire.active')).toBeVisible()
+  await expect(page.locator('#qs-filter-summary')).toContainText(
+    /No queue filters are active yet|当前还没有启用队列筛选/,
+  )
 
-  await page.locator('#queue-manager-search').fill(targetImage.filename)
-  await expect(page.locator('#queue-manager-list .queue-manager-grid-item')).toHaveCount(1)
+  await page.locator('#qs-filter-gallery').click()
+  await expect(page.locator('#qs-filter-summary')).toContainText(
+    /Gallery filters were copied|Gallery filters copied|已复制图库筛选/,
+  )
 
-  await page.locator('#queue-manager-search').fill('')
-  await expect(page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`)).toBeVisible()
+  await page.locator('#qs-filter-tag').fill(String(targetImage.generator || 'unknown'))
+  await page.locator('#qs-filter-apply').click()
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const state = (window as Window & { QueueSolitaire?: any }).QueueSolitaire?.state
+      return state?.filterMatches?.size ?? 0
+    })
+  }, { timeout: 10000 }).toBeGreaterThan(0)
+  await page.locator('#qs-filter-tag').fill('')
+  await page.locator('#qs-filter-apply').click()
 
-  await page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`).evaluate((node: HTMLElement) => node.click())
-  await page.locator('#queue-manager-position').fill('1')
-  await page.locator('#btn-queue-manager-move-position').click()
+  await page.locator('#qs-btn-add-section').click()
+  await expect(page.locator('#input-modal.visible')).toBeVisible()
+  await page.locator('#input-modal-field').fill('Review')
+  await page.locator('#btn-input-ok').click()
+  await expect(page.locator('#qs-sections .qs-section')).toHaveCount(2)
+  await page.locator(`.qs-thumb[data-id="${targetImage.id}"]`).click()
+  await page.keyboard.press('2')
 
   await expect.poll(async () => {
     return await page.evaluate(() => {
-      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.queue?.[0]?.id ?? null
+      const state = (window as Window & { QueueSolitaire?: any }).QueueSolitaire?.state
+      const sections = Array.isArray(state?.sections) ? state.sections : []
+      return sections[1]?.items?.[0] ?? null
     })
   }, { timeout: 10000 }).toBe(targetImage.id)
 
-  await expect(page.locator('#censor-queue-list .queue-thumb-v2').first()).toHaveAttribute('data-id', String(targetImage.id))
+  await page.locator('#qs-btn-done').click()
+  await expect(page.locator('#queue-solitaire.active')).toHaveCount(0)
 
-  await page.locator(`#queue-manager-list .queue-manager-grid-item[data-id="${targetImage.id}"]`).evaluate((node: HTMLElement) => {
-    node.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
+  const syncedQueueOrder = await page.locator('#censor-queue-list .queue-thumb-v2').evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute('data-id')))
+  )
+  expect(syncedQueueOrder).toHaveLength(4)
+  expect(syncedQueueOrder.at(-1)).toBe(targetImage.id)
+  expect(syncedQueueOrder).not.toEqual(initialQueueOrder)
+})
+
+test('tagger custom ONNX copy should stay coherent and localized on the real backend', async ({ page }) => {
+  test.setTimeout(60000)
+
+  const extractFirstNumber = (value: string | null) => {
+    const match = String(value || '').match(/(\d+)/)
+    return match ? Number.parseInt(match[1], 10) : null
+  }
+
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
+
+  if ((await page.locator('html').getAttribute('lang')) !== 'zh-CN') {
+    await page.locator('#btn-language-toggle').click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN')
+  }
+
+  await page.locator('#btn-tag').click()
+  await expect(page.locator('#tag-modal.visible')).toBeVisible()
+
+  await page.locator('#tag-model-select').selectOption('wd-eva02-large-tagger-v3')
+  await expect.poll(async () => {
+    return (await page.locator('#tag-model-help').textContent()) || ''
+  }, { timeout: 15000 }).not.toMatch(/Most accurate overall|Adaptive max-throughput runtime/)
+
+  await page.locator('#tag-model-select').selectOption('custom')
+  await page.locator('#tag-model-path').fill('C:/models/custom-model.onnx')
+  await page.locator('#tag-tags-path').fill('C:/models/selected_tags.csv')
+
+  await expect.poll(async () => {
+    return (await page.locator('#tag-runtime-summary').textContent()) || ''
+  }, { timeout: 15000 }).toMatch(/GPU/)
+
+  await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
+  await expect(page.locator('#tag-gpu-help')).not.toContainText(/GPU Preferred|provider/i)
+
+  let cpuRecommendation: number | null = null
+  await expect.poll(async () => {
+    cpuRecommendation = extractFirstNumber(await page.locator('#tag-batch-recommendation').textContent())
+    return cpuRecommendation
+  }, { timeout: 15000 }).not.toBeNull()
+  expect(cpuRecommendation).not.toBeNull()
+  expect(cpuRecommendation!).toBeLessThanOrEqual(8)
+
+  await page.locator('#tag-runtime-advanced summary').click()
+  await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
+  await page.locator('#tag-use-gpu').evaluate((node) => {
+    const input = node as HTMLInputElement
+    input.checked = false
+    input.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  await expect(page.locator('#queue-manager-modal.visible')).toHaveCount(0)
+  await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
+
+  await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode/)
+  await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
+  await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode/)
+
+  let gpuRecommendation: number | null = null
   await expect.poll(async () => {
-    return await page.evaluate(() => {
-      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.activeId ?? null
-    })
-  }, { timeout: 10000 }).toBe(targetImage.id)
+    gpuRecommendation = extractFirstNumber(await page.locator('#tag-batch-recommendation').textContent())
+    return gpuRecommendation
+  }, { timeout: 15000 }).not.toBeNull()
+  expect(gpuRecommendation).not.toBeNull()
+  expect(gpuRecommendation!).toBeLessThanOrEqual(8)
+
+  await page.locator('#tag-use-gpu').evaluate((node) => {
+    const input = node as HTMLInputElement
+    input.checked = true
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await expect(page.locator('#tag-use-gpu')).toBeChecked()
+  await expect(page.locator('#tag-runtime-summary')).toContainText(/GPU/)
 })
 
 test('scan then tag through the real UI should finish and write tags for the new fixture images', async ({ page, request }) => {

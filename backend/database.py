@@ -23,7 +23,7 @@ import os
 import json
 import re
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple, Union
 from contextlib import contextmanager
 import time
 import threading
@@ -505,8 +505,14 @@ def add_image(
     model_hash: Optional[str] = None,
     is_readable: bool = True,
     read_error: Optional[str] = None,
-) -> int:
-    """Add an image to the database. Returns the image ID."""
+    return_status: bool = False,
+) -> Union[int, Tuple[int, str]]:
+    """Add an image to the database.
+
+    Returns the image ID by default. When ``return_status`` is True, returns
+    ``(image_id, "new" | "updated")`` so callers can report truthful scan
+    summaries without duplicating the upsert logic.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         serialized_loras = _serialize_loras(loras)
@@ -517,6 +523,7 @@ def add_image(
 
         if existing:
             image_id = existing["id"]
+            write_status = "updated"
             cursor.execute(
                 """
                 UPDATE images
@@ -556,6 +563,7 @@ def add_image(
                 )
             )
         else:
+            write_status = "new"
             cursor.execute(
                 """
                 INSERT INTO images
@@ -585,6 +593,8 @@ def add_image(
 
         _sync_image_loras(cursor, image_id, loras, prompt)
 
+        if return_status:
+            return image_id, write_status
         return image_id
 
 

@@ -155,13 +155,25 @@ async def validate_path(
 async def get_system_info_endpoint():
     """Get system hardware info and recommended tagger configuration."""
     try:
+        from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
         from hardware_monitor import get_system_info, recommend_tagger_config
 
         system_info = get_system_info()
-        recommendation = recommend_tagger_config(system_info)
+        recommendation = recommend_tagger_config(system_info, model_name=DEFAULT_TAGGER_MODEL, use_gpu=True)
+        recommendations_by_model = {}
+        for model_name in TAGGER_MODELS.keys():
+            recommendations_by_model[model_name] = {
+                "gpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=True),
+                "cpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=False),
+            }
+        recommendations_by_model["custom"] = {
+            "gpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=True),
+            "cpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=False),
+        }
         return {
             "system_info": system_info,
             "recommendation": recommendation,
+            "recommendations_by_model": recommendations_by_model,
         }
     except Exception as e:
         return {
@@ -173,6 +185,7 @@ async def get_system_info_endpoint():
                 "risk_level": "medium",
                 "message": f"Hardware detection failed: {e}",
             },
+            "recommendations_by_model": {},
         }
 
 
@@ -248,6 +261,14 @@ async def get_scan_progress(
 ):
     """Get current scan progress."""
     return service.get_scan_progress()
+
+
+@router.post("/scan/cancel")
+async def cancel_scan(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Request cancellation of the current scan task."""
+    return service.cancel_scan()
 
 
 @router.post("/scan/reset")

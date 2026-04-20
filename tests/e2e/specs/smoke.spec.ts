@@ -43,6 +43,37 @@ async function seedAutoSepTagFilter(page, tags) {
   await seedAutoSepFilterState(page, { tags })
 }
 
+const DEFAULT_MANUAL_SORT_FILTER_STATE = {
+  generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+  ratings: ['general', 'sensitive', 'questionable', 'explicit'],
+  tags: [] as string[],
+  checkpoints: [] as string[],
+  loras: [] as string[],
+  prompts: [] as string[],
+  artist: null as string | null,
+  search: '',
+  sortBy: 'newest',
+  limit: 0,
+  minWidth: null as number | null,
+  maxWidth: null as number | null,
+  minHeight: null as number | null,
+  maxHeight: null as number | null,
+  aspectRatio: '',
+  minAesthetic: null as number | null,
+  maxAesthetic: null as number | null,
+}
+
+async function seedManualSortFilterState(page, overrides: Partial<typeof DEFAULT_MANUAL_SORT_FILTER_STATE> = {}) {
+  const state = { ...DEFAULT_MANUAL_SORT_FILTER_STATE, ...overrides }
+  await page.addInitScript((payload) => {
+    try {
+      localStorage.setItem('manual_sort_filter_state_v1', JSON.stringify(payload))
+    } catch (_) {
+      // Ignore storage errors in the test bootstrap.
+    }
+  }, state)
+}
+
 const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
 
 async function getGalleryScrollState(page) {
@@ -268,6 +299,14 @@ async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   }
 }
 
+async function setGallerySearch(page, search: string) {
+  await page.evaluate(async (value) => {
+    window.App.AppState.filters.search = value
+    window.App.updateFilterSummary()
+    await window.App.loadImages()
+  }, search)
+}
+
 /**
  * Smoke Tests for SD Image Sorter
  *
@@ -343,9 +382,15 @@ test.describe('Smoke Tests', () => {
 
     await openSortingSubView(page, 'autosep')
     await expect(page.locator('#autosep-destination')).toBeVisible()
+    await expect(page.locator('#autosep-scope-note')).toContainText(
+      /copies the current Gallery filters once|复制一次当前图库筛选/,
+    )
 
     await openSortingSubView(page, 'manual')
     await expect(page.locator('#btn-start-sorting')).toBeVisible()
+    await expect(page.locator('#manual-sort-scope-note')).toContainText(
+      /copies the current Gallery filters once|复制一次当前图库筛选/,
+    )
 
     await openView(page, 'censor')
     await expect(page.locator('#canvas-wrapper')).toBeVisible()
@@ -361,6 +406,32 @@ test.describe('Smoke Tests', () => {
 
     await openView(page, 'gallery')
     await expect(page.locator('#gallery-grid')).toBeVisible()
+  })
+
+  test('auto-separate and manual sort should inherit the current gallery search on first open only', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('sd-image-sorter-filter-state')
+      localStorage.removeItem('autosep_filter_state_v1')
+      localStorage.removeItem('manual_sort_filter_state_v1')
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await setGallerySearch(page, 'runtime_inherit_token_one')
+    await expect(page.locator('#summary-search')).toHaveText('runtime_inherit_token_one')
+
+    await openSortingSubView(page, 'autosep')
+    await expect(page.locator('#autosep-summary-search')).toHaveText('runtime_inherit_token_one')
+
+    await setGallerySearch(page, 'runtime_inherit_token_two')
+    await expect(page.locator('#summary-search')).toHaveText('runtime_inherit_token_two')
+
+    await openSortingSubView(page, 'manual')
+    await expect(page.locator('#manual-sort-summary-search')).toHaveText('runtime_inherit_token_two')
+
+    await openSortingSubView(page, 'autosep')
+    await expect(page.locator('#autosep-summary-search')).toHaveText('runtime_inherit_token_one')
   })
 
   test('reader workspace should switch between metadata reader and obfuscation tool', async ({ page }) => {
@@ -668,7 +739,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended (chunk|batch)|CPU Safe Mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
   })
 
-  test('should keep risky tagger models in adaptive runtime mode by default', async ({ page }) => {
+  test('should keep adaptive-throughput tagger models in adaptive runtime mode by default', async ({ page }) => {
     await page.route('**/api/system-info', async (route) => {
       await route.fulfill({
         status: 200,
@@ -690,6 +761,18 @@ test.describe('Smoke Tests', () => {
             risk_level: 'low',
             message: 'Sufficient VRAM for aggressive batched GPU inference.',
           },
+          recommendations_by_model: {
+            'wd-eva02-large-tagger-v3': {
+              gpu: {
+                recommended_batch_size: 12,
+                recommended_cpu_chunk_size: 12,
+                recommended_use_gpu: true,
+                recommended_session_refresh_interval: 180,
+                risk_level: 'low',
+                message: 'Adaptive EVA02 GPU path is ready.',
+              },
+            },
+          },
         }),
       })
     })
@@ -710,17 +793,17 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT|Provider unknown|providerUnknown/i)
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Adaptive GPU mode|recommended fast path|Recommended chunk|tagger\.runtime|tagger\.chunkHelp/i)
     await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Q\d\/5/i)
-    await expect(page.locator('#tag-gpu-help')).toContainText(/Adaptive runtime is active|gpuHelp/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/Adaptive runtime is active|Recommended GPU mode is active|gpuHelp/i)
 
     await page.locator('#tag-model-select').selectOption('custom')
     await expect(page.locator('#custom-model-group')).toBeVisible()
     await expect(page.locator('#custom-tags-group')).toBeVisible()
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode|tagger\.runtime|Custom model/i)
-    await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/GPU|tagger\.runtime|Custom model/i)
+    await expect(page.locator('#tag-use-gpu')).toBeChecked()
     await expect(page.locator('#tag-use-gpu')).toBeEnabled()
   })
 
-  test('should require confirmation before starting Max Quality on risky GPU runtime', async ({ page }) => {
+  test('should start Max Quality directly under automatic GPU safety limits', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
     await page.route('**/api/system-info', async (route) => {
@@ -780,8 +863,7 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#tag-model-select').selectOption('wd-eva02-large-tagger-v3')
     await page.locator('#btn-start-tag').click()
-    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await page.locator('#btn-confirm-ok').click()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
     await expect.poll(() => capturedPayload, {
       message: 'Expected the Max Quality tag start payload',
@@ -790,11 +872,11 @@ test.describe('Smoke Tests', () => {
     expect(capturedPayload).toMatchObject({
       model_name: 'wd-eva02-large-tagger-v3',
       use_gpu: true,
-      allow_unsafe_acceleration: true,
+      allow_unsafe_acceleration: false,
     })
   })
 
-  test('should require explicit confirmation before a risky custom GPU tagger run', async ({ page }) => {
+  test('should start a custom GPU tagger run directly under automatic limits', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
     await page.route('**/api/system-info', async (route) => {
@@ -818,6 +900,26 @@ test.describe('Smoke Tests', () => {
             recommended_session_refresh_interval: 180,
             risk_level: 'low',
             message: 'Sufficient VRAM for aggressive batched GPU inference.',
+          },
+          recommendations_by_model: {
+            custom: {
+              gpu: {
+                recommended_batch_size: 8,
+                recommended_cpu_chunk_size: 8,
+                recommended_use_gpu: true,
+                recommended_session_refresh_interval: 180,
+                risk_level: 'medium',
+                message: 'Custom ONNX models stay on a conservative starting chunk until the model proves stable on this machine.',
+              },
+              cpu: {
+                recommended_batch_size: 8,
+                recommended_cpu_chunk_size: 8,
+                recommended_use_gpu: false,
+                recommended_session_refresh_interval: 0,
+                risk_level: 'low',
+                message: 'Custom ONNX models stay on a conservative starting chunk until the model proves stable on this machine.',
+              },
+            },
           },
         }),
       })
@@ -856,15 +958,15 @@ test.describe('Smoke Tests', () => {
     await page.locator('#tag-model-select').selectOption('custom')
     await page.locator('#tag-model-path').fill('C:/models/custom-model.onnx')
     await page.locator('#tag-tags-path').fill('C:/models/selected_tags.csv')
+    await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
     await page.locator('#tag-runtime-advanced summary').click()
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
-    await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU|gpuHelpRiskyOverride|CPU Safe Mode|gpuHelpCustomCpu/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/GPU override is active|Automatic hardware limits|CPU Safe Mode|gpuHelpCustomCpu|gpuHelpRiskyOverride/i)
+    await expect(page.locator('#tag-batch-recommendation')).toContainText('8')
 
     await page.locator('#btn-start-tag').click()
-    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await page.locator('#btn-confirm-ok').click()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
     await expect.poll(() => capturedPayload, {
       message: 'Expected the tag start payload after confirming risky custom GPU mode',
@@ -874,7 +976,7 @@ test.describe('Smoke Tests', () => {
       model_path: 'C:/models/custom-model.onnx',
       tags_path: 'C:/models/selected_tags.csv',
       use_gpu: true,
-      allow_unsafe_acceleration: true,
+      allow_unsafe_acceleration: false,
     })
   })
 
@@ -992,7 +1094,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
   })
 
-  test('should downgrade a risky custom GPU tagger run to CPU Safe Mode when the user declines', async ({ page }) => {
+  test('should keep a custom tagger run in CPU Safe Mode when GPU stays off', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
     await page.route('**/api/system-info', async (route) => {
@@ -1054,18 +1156,18 @@ test.describe('Smoke Tests', () => {
     await page.locator('#tag-model-select').selectOption('custom')
     await page.locator('#tag-model-path').fill('C:/models/custom-model.onnx')
     await page.locator('#tag-tags-path').fill('C:/models/selected_tags.csv')
+    await expect(page.locator('#tag-use-gpu')).toBeChecked()
     await page.locator('#tag-runtime-advanced summary').click()
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
-    await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/High-risk GPU|gpuHelpRiskyOverride|CPU Safe Mode|gpuHelpCustomCpu/i)
+    await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
+    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode|gpuHelpCustomCpu/i)
 
     await page.locator('#btn-start-tag').click()
-    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await page.locator('#btn-confirm-cancel').click()
+    await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
     await expect.poll(() => capturedPayload, {
-      message: 'Expected the tag start payload after declining risky custom GPU mode',
+      message: 'Expected the tag start payload for custom CPU Safe Mode',
     }).not.toBeNull()
 
     expect(capturedPayload).toMatchObject({
@@ -1264,6 +1366,113 @@ test.describe('Smoke Tests', () => {
     await expect(errorToast).toContainText('Maximum allowed is 5000')
     expect(progressCalls).toBeLessThanOrEqual(1)
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText(String(MOCK_PREVIEW_COUNT))
+  })
+
+  test('auto-separate preview should cap rendered DOM and load overflow progressively', async ({ page }) => {
+    const MOCK_PREVIEW_COUNT = 600
+    const previewImages = Array.from({ length: MOCK_PREVIEW_COUNT }, (_, i) => ({
+      id: i + 1,
+      filename: `bulk-preview-${i + 1}.png`,
+      path: `L:/Antigravitiy code/sd-image-sorter/test-data/bulk-preview-${i + 1}.png`,
+    }))
+
+    await page.route('**/api/image-thumbnail/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+    await page.route('**/api/image-file/**', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
+    })
+
+    await page.route('**/api/images?**', async (route) => {
+      const url = new URL(route.request().url())
+      const limit = Number(url.searchParams.get('limit') || '0') || 0
+      const cursor = Number(url.searchParams.get('cursor') || '0') || 0
+      const startIndex = cursor > 0 ? previewImages.findIndex((image) => image.id === cursor) + 1 : 0
+      const effectiveLimit = Math.max(1, limit || 50)
+      const rows = previewImages.slice(startIndex, startIndex + effectiveLimit)
+      const nextRow = previewImages[startIndex + effectiveLimit] || null
+
+      await route.fulfill({
+        json: {
+          images: rows,
+          total: previewImages.length,
+          has_more: Boolean(nextRow),
+          next_cursor: nextRow ? String(rows.at(-1)?.id || '') : null,
+        },
+      })
+    })
+
+    await seedAutoSepFilterState(page, { tags: ['bulk_preview'] })
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openSortingSubView(page, 'autosep')
+    await page.locator('#btn-preview-autosep').click()
+
+    await expect(page.locator('#autosep-preview .stat-number')).toHaveText(String(MOCK_PREVIEW_COUNT))
+    await expect(page.locator('#autosep-preview-more')).toContainText('+')
+
+    const previewNodeCount = await page.locator('#autosep-preview-list .autosep-preview-item').count()
+    expect(previewNodeCount).toBeLessThan(40)
+
+    await page.locator('#autosep-preview-more').click()
+    await expect(page.locator('#autosep-overflow-modal.visible')).toBeVisible()
+    await expect(page.locator('#autosep-overflow-load-more')).toBeVisible()
+
+    const overflowNodeCount = await page.locator('#autosep-overflow-list .autosep-preview-item').count()
+    expect(overflowNodeCount).toBeLessThanOrEqual(200)
+  })
+
+  test('sending selected images to censor should preserve the user selection order', async ({ page }) => {
+    const orderedImages = [
+      { id: 11, filename: 'ordered-1.png', path: 'L:/ordered-1.png' },
+      { id: 22, filename: 'ordered-2.png', path: 'L:/ordered-2.png' },
+      { id: 33, filename: 'ordered-3.png', path: 'L:/ordered-3.png' },
+    ]
+
+    await Promise.all(orderedImages.map((image) => mockImageAsset(page, image.id)))
+
+    await page.route('**/api/images?**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: orderedImages,
+          total: orderedImages.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/images/11', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      await route.fulfill({ json: { image: orderedImages[0] } })
+    })
+    await page.route('**/api/images/22', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      await route.fulfill({ json: { image: orderedImages[1] } })
+    })
+    await page.route('**/api/images/33', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await route.fulfill({ json: { image: orderedImages[2] } })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="11"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="22"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="33"]').click()
+    await page.locator('#btn-send-to-censor').click()
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(3)
+
+    await expect.poll(async () => {
+      return await page.locator('#censor-queue-list .queue-thumb-v2').evaluateAll((nodes) =>
+        nodes.map((node) => Number(node.getAttribute('data-id')))
+      )
+    }).toEqual([11, 22, 33])
   })
 
   test('should populate prompt lab tag set selector from API data', async ({ page }) => {
@@ -1924,6 +2133,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should support manual sort skip, undo, and redo without desyncing the current image', async ({ page }) => {
+    await seedManualSortFilterState(page)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 

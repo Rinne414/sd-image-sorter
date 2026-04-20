@@ -4,7 +4,9 @@ Unit tests for tagging service runtime planning.
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
+from fastapi import BackgroundTasks, HTTPException
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -44,9 +46,9 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
-    assert runtime_plan["fetch_batch_size"] == 32
-    assert runtime_plan["commit_interval"] == min(32, 10)
-    assert runtime_plan["gc_interval"] == min(32, 8)
+    assert runtime_plan["fetch_batch_size"] == 12
+    assert runtime_plan["commit_interval"] == min(12, 10)
+    assert runtime_plan["gc_interval"] == min(12, 8)
 
 
 def test_runtime_adjustment_message_reports_gpu_backoff_and_cpu_fallback():
@@ -77,8 +79,59 @@ def test_runtime_plan_uses_small_gpu_chunks_for_toriigate():
     runtime_plan = service._build_runtime_plan(request)
 
     assert runtime_plan["effective_use_gpu"] is True
-    assert runtime_plan["fetch_batch_size"] == 2
+    assert runtime_plan["fetch_batch_size"] == 1
     assert "multimodal caption backend" in runtime_plan["startup_notice"]
+
+
+def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
+    service = TaggingService()
+
+    with patch(
+        "hardware_monitor.get_system_info",
+        return_value={
+            "total_ram_gb": 32,
+            "available_ram_gb": 20,
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 20000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        },
+    ):
+        try:
+            service._validate_tag_request(
+                TagRequest(
+                    model_name="toriigate-0.5",
+                    use_gpu=True,
+                )
+            )
+        except HTTPException as exc:
+            assert exc.status_code == 409
+            assert "ToriiGate GPU mode is blocked" in exc.detail
+            assert "48 GB RAM" in exc.detail
+        else:
+            raise AssertionError("Expected ToriiGate hardware validation to reject 32 GB RAM")
+
+
+def test_toriigate_validation_allows_gpu_when_minimums_are_met():
+    service = TaggingService()
+
+    with patch(
+        "hardware_monitor.get_system_info",
+        return_value={
+            "total_ram_gb": 64,
+            "available_ram_gb": 28,
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 20000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        },
+    ):
+        service._validate_tag_request(
+            TagRequest(
+                model_name="toriigate-0.5",
+                use_gpu=True,
+            )
+        )
 
 
 def test_progress_state_preserves_actual_runtime_and_memory_pressure_fields():
@@ -161,3 +214,166 @@ def test_hardware_recommendation_prefers_gpu_for_toriigate_with_torch_cuda_only(
 
     assert recommendation["recommended_use_gpu"] is True
     assert recommendation["risk_level"] == "low"
+
+
+def test_runtime_plan_uses_custom_profile_for_custom_model_paths():
+    service = TaggingService()
+
+    with patch(
+        "hardware_monitor.get_system_info",
+        return_value={
+            "gpu_name": "NVIDIA GeForce RTX 4090",
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 22000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+            "total_ram_gb": 64,
+            "available_ram_gb": 40,
+        },
+    ):
+        plan = service._build_runtime_plan(
+            TagRequest(
+                model_path="C:/models/custom-model.onnx",
+                tags_path="C:/models/selected_tags.csv",
+                use_gpu=True,
+            )
+        )
+
+    assert plan["model_name"] == "custom"
+    assert plan["fetch_batch_size"] == 8
+    assert "Custom ONNX model on GPU" in plan["startup_notice"]
+
+
+class _DeadWorker:
+    def is_alive(self) -> bool:
+        return False
+
+
+class _StoppingWorker:
+    def __init__(self):
+        self._alive = True
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def join(self, timeout=None) -> None:
+        self._alive = False
+
+    def terminate(self) -> None:
+        self._alive = False
+
+    def kill(self) -> None:
+        self._alive = False
+
+
+class _FakeCancelEvent:
+    def __init__(self):
+        self.was_set = False
+
+    def set(self) -> None:
+        self.was_set = True
+
+
+def test_start_tagging_recovers_from_stale_cancelling_state_when_worker_is_dead():
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    service._progress = _build_tag_progress_state(
+        "cancelling",
+        current=3,
+        total=10,
+        tagged=2,
+        errors=1,
+        message="Cancelling... (3/10)",
+    )
+    service._worker_process = _DeadWorker()
+
+    background_tasks = BackgroundTasks()
+    result = service.start_tagging(
+        TagRequest(
+            model_name="wd-swinv2-tagger-v3",
+            use_gpu=False,
+        ),
+        background_tasks,
+    )
+
+    progress = service.get_progress()
+    assert result["status"] == "started"
+    assert progress["status"] == "running"
+    assert "Preparing" in progress["message"]
+    assert len(background_tasks.tasks) == 1
+
+
+def test_start_tagging_still_rejects_when_worker_is_actually_alive():
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+    service._progress = _build_tag_progress_state("running", current=1, total=10, message="Tagging...")
+    service._worker_process = _StoppingWorker()
+
+    try:
+        service.start_tagging(
+            TagRequest(
+                model_name="wd-swinv2-tagger-v3",
+                use_gpu=False,
+            ),
+            BackgroundTasks(),
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert exc.detail == "Tagging already in progress"
+    else:
+        raise AssertionError("Expected start_tagging() to reject a live worker")
+
+
+def test_cancel_tagging_marks_run_cancelled_once_worker_stops():
+    service = TaggingService()
+    service._progress = _build_tag_progress_state(
+        "running",
+        current=4,
+        total=12,
+        tagged=3,
+        errors=1,
+        message="Tagging...",
+    )
+    service._worker_process = _StoppingWorker()
+    service._worker_cancel_event = _FakeCancelEvent()
+
+    result = service.cancel_tagging()
+    progress = service.get_progress()
+
+    assert result["status"] in {"cancelling", "cancelled"}
+    assert service._worker_cancel_event is None
+    assert service._worker_process is None
+    assert progress["status"] == "cancelled"
+    assert progress["current"] == 4
+    assert progress["total"] == 12
+    assert "cancelled" in progress["message"].lower()
+
+
+def test_stale_worker_progress_cannot_override_newer_run_state():
+    service = TaggingService()
+    service._progress = _build_tag_progress_state(
+        "running",
+        current=1,
+        total=8,
+        tagged=1,
+        message="New run still active",
+        run_id=2,
+    )
+    service._active_run_id = 2
+
+    service._apply_worker_progress(
+        _build_tag_progress_state(
+            "cancelled",
+            current=8,
+            total=8,
+            tagged=8,
+            message="Old run cancelled",
+            run_id=1,
+        ),
+        run_id=1,
+    )
+
+    progress = service.get_progress()
+    assert progress["run_id"] == 2
+    assert progress["status"] == "running"
+    assert progress["message"] == "New run still active"

@@ -40,6 +40,9 @@ def _ensure_imports():
     """Lazily import heavy dependencies."""
     global ort, hf_hub
     if ort is None:
+        from runtime_env import prepare_onnxruntime_environment
+
+        prepare_onnxruntime_environment()
         import onnxruntime as ort_module  # type: ignore
         ort = ort_module
         preload = getattr(ort, "preload_dlls", None)

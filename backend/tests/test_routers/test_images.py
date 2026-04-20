@@ -397,6 +397,25 @@ class TestUtilityImageEndpoints:
         assert data["width"] == 1024
         assert data["height"] == 768
 
+    def test_parse_uploaded_image_rejects_truncated_png(self, test_client, tmp_path):
+        from PIL import Image
+
+        truncated_path = tmp_path / "truncated.png"
+        Image.new("RGB", (64, 64), color="white").save(truncated_path)
+        payload = truncated_path.read_bytes()
+        truncated_path.write_bytes(payload[: max(1, len(payload) // 2)])
+
+        with open(truncated_path, "rb") as handle:
+            response = test_client.post(
+                "/api/parse-image",
+                files={"file": ("truncated.png", handle, "image/png")},
+            )
+
+        assert response.status_code == 422
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "parse" in detail.lower() or "image" in detail.lower()
+
     def test_open_folder_selects_existing_image(self, test_client, tmp_path, monkeypatch):
         import database as db
         from PIL import Image

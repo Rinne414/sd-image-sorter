@@ -4071,14 +4071,14 @@ html.lang-zh #view-censor .queue-action-btn span {
    Censor Workspace Fixes
    ========================================================================== */
 #view-censor .censor-sidebar-v2 {
-    width: clamp(280px, 20vw, 324px) !important;
-    min-width: clamp(280px, 20vw, 324px) !important;
+    width: clamp(304px, 23vw, 352px) !important;
+    min-width: clamp(304px, 23vw, 352px) !important;
     padding: 16px !important;
 }
 
 #view-censor .censor-sidebar-v2.right {
-    width: clamp(324px, 23vw, 390px) !important;
-    min-width: clamp(324px, 23vw, 390px) !important;
+    width: clamp(336px, 26vw, 392px) !important;
+    min-width: clamp(336px, 26vw, 392px) !important;
 }
 
 #view-censor .queue-control-card {

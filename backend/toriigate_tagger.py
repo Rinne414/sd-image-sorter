@@ -57,6 +57,10 @@ TORIIGATE_SHORT_QUERY = (
     "Avoid to guess names for characters.\n"
 )
 TORIIGATE_MAX_IMAGE_PIXELS = 1024 * 1024
+TORIIGATE_CUDA_MEMORY_FRACTION = max(
+    0.30,
+    min(0.95, float(os.environ.get("SD_TORIIGATE_CUDA_MEMORY_FRACTION", "0.80"))),
+)
 CAPTION_COUNT_PATTERNS = (
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?(?:girl|woman)\b"), "1girl"),
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?boy\b"), "1boy"),
@@ -207,6 +211,24 @@ class ToriiGateTagger:
             return torch.float16
         return torch.float32
 
+    def _apply_cuda_memory_guard(self) -> None:
+        assert torch is not None
+        if not (self.use_gpu and torch.cuda.is_available()):
+            return
+
+        setter = getattr(torch.cuda, "set_per_process_memory_fraction", None)
+        if not callable(setter):
+            return
+
+        try:
+            setter(TORIIGATE_CUDA_MEMORY_FRACTION, 0)
+            logger.info(
+                "ToriiGate CUDA memory guard set to %.0f%% of VRAM",
+                TORIIGATE_CUDA_MEMORY_FRACTION * 100.0,
+            )
+        except Exception as exc:
+            logger.debug("ToriiGate CUDA memory guard was unavailable: %s", exc)
+
     def _make_prompt(self) -> str:
         return TORIIGATE_SHORT_QUERY
 
@@ -223,6 +245,7 @@ class ToriiGateTagger:
 
         try:
             dtype = self._pick_torch_dtype()
+            self._apply_cuda_memory_guard()
             # SECURITY: trust_remote_code=True allows the model repo to execute
             # arbitrary Python.  This is required by the Qwen architecture but
             # means a compromised repo could run code on load.  Mitigate by
@@ -536,6 +559,7 @@ class ToriiGateTagger:
                 **inputs,
                 do_sample=False,
                 max_new_tokens=self.max_new_tokens,
+                use_cache=False,
             )
 
         prompt_tokens = inputs["input_ids"].shape[1]

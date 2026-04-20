@@ -152,32 +152,38 @@ TAGGER_MODELS: dict = {
     "wd-eva02-large-tagger-v3": {
         "repo_id": "SmilingWolf/wd-eva02-large-tagger-v3",
         "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
+        "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "heavy",
     },
     "wd-swinv2-tagger-v3": {
         "repo_id": "SmilingWolf/wd-swinv2-tagger-v3",
         "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
+        "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "balanced",
     },
     "wd-convnext-tagger-v3": {
         "repo_id": "SmilingWolf/wd-convnext-tagger-v3",
         "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
+        "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "balanced",
     },
     "wd-vit-tagger-v3": {
         "repo_id": "SmilingWolf/wd-vit-tagger-v3",
         "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
+        "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "light",
     },
     "wd-vit-large-tagger-v3": {
         "repo_id": "SmilingWolf/wd-vit-large-tagger-v3",
         "model_file": "model.onnx",
-        "tags_file": "selected_tags.csv"
+        "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "balanced",
     },
     "camie-tagger-v2": {
         "repo_id": "Camais03/camie-tagger-v2",
         "model_file": "camie-tagger-v2.onnx",
         "tags_file": "camie-tagger-v2-metadata.json",
+        "runtime_safety_tier": "heavy",
         "metadata_format": "camie_v2",
         "input_layout": "nchw",
         "input_normalization": "imagenet",
@@ -190,6 +196,7 @@ TAGGER_MODELS: dict = {
         "repo_id": "deepghs/pixai-tagger-v0.9-onnx",
         "model_file": "model.onnx",
         "tags_file": "selected_tags.csv",
+        "runtime_safety_tier": "heavy",
         "input_layout": "nchw",
         "input_normalization": "minus_one_to_one",
         "resize_mode": "stretch",
@@ -203,6 +210,13 @@ TAGGER_MODELS: dict = {
         "model_file": "config.json",
         "tags_file": "",
         "runtime_backend": "toriigate",
+        "runtime_safety_tier": "vlm",
+        "minimum_total_ram_gb": 48,
+        "minimum_available_ram_gb": 12,
+        "minimum_gpu_vram_mb": 16384,
+        "minimum_gpu_available_vram_mb": 12000,
+        "minimum_cpu_total_ram_gb": 64,
+        "minimum_cpu_available_ram_gb": 24,
         "default_threshold": 1.0,
         "default_character_threshold": 1.0,
         "supports_rating": True,

@@ -747,6 +747,7 @@
                                 <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
+                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">The first time you open Auto-Separate, it copies the current Gallery filters once. After that, Auto-Separate keeps its own scope here.</div>
                             <div class="filter-summary-compact" id="autosep-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
                                         id="autosep-summary-generators">All</span></span>
@@ -917,6 +918,7 @@
                                 <button class="btn btn-primary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
+                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">The first time you open Manual Sort, it copies the current Gallery filters once. After that, Manual Sort keeps its own scope here.</div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
                                         id="manual-sort-summary-generators">All</span></span>
@@ -2317,12 +2319,15 @@
                                     <option value="1">1</option>
                                     <option value="2">2</option>
                                     <option value="4">4</option>
+                                    <option value="6">6</option>
                                     <option value="8">8</option>
+                                    <option value="10">10</option>
+                                    <option value="12">12</option>
+                                    <option value="14">14</option>
                                     <option value="16">16</option>
+                                    <option value="18">18</option>
                                     <option value="24">24</option>
                                     <option value="32">32</option>
-                                    <option value="48">48</option>
-                                    <option value="64">64</option>
                                 </select>
                                 <small class="helper-text" id="tag-batch-help">This affects how many files the worker pulls per cycle. It is not true multi-image ONNX batching.</small>
                             </div>
@@ -2960,9 +2965,15 @@
         var manual = document.getElementById('view-manual');
         if (!autosep || !manual) return;
         if (sub === 'autosep') {
+            if (typeof window.maybeAdoptAutoSepFiltersFromGallery === 'function') {
+                window.maybeAdoptAutoSepFiltersFromGallery();
+            }
             autosep.style.display = '';
             manual.style.display = 'none';
         } else {
+            if (typeof window.maybeAdoptManualSortFiltersFromGallery === 'function') {
+                window.maybeAdoptManualSortFiltersFromGallery();
+            }
             autosep.style.display = 'none';
             manual.style.display = '';
         }

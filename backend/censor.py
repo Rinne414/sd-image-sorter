@@ -66,6 +66,9 @@ def _ensure_ort():
     """Lazily import onnxruntime."""
     global ort
     if ort is None:
+        from runtime_env import prepare_onnxruntime_environment
+
+        prepare_onnxruntime_environment()
         import onnxruntime as ort_module  # type: ignore
         ort = ort_module
         preload = getattr(ort, "preload_dlls", None)

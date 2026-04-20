@@ -156,6 +156,9 @@ class SortingService:
             "updated_at": None,
         }
         self._scan_lock = threading.Lock()
+        self._scan_cancel_event: Optional[threading.Event] = None
+        self._scan_worker_thread: Optional[threading.Thread] = None
+        self._scan_run_id = 0
 
         self._sort_session: Dict[str, Any] = {
             "active": False,
@@ -263,7 +266,10 @@ class SortingService:
     def reset_scan_progress(self) -> Dict[str, Any]:
         """Reset a stuck scan task back to idle."""
         with self._scan_lock:
-            if self._scan_progress["status"] == "running":
+            worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
+            if worker_alive:
+                return {"status": self._scan_progress["status"], "message": "Cannot reset while scan worker is still running"}
+            if self._scan_progress["status"] in {"running", "cancelling", "error", "done", "cancelled"}:
                 self._scan_progress = {
                     "status": "idle",
                     "step": "idle",
@@ -278,8 +284,74 @@ class SortingService:
                     "started_at": None,
                     "updated_at": time.time(),
                 }
+                self._scan_cancel_event = None
+                self._scan_worker_thread = None
                 return {"status": "reset", "message": "Scan progress reset to idle"}
             return {"status": self._scan_progress["status"], "message": "Nothing to reset (not running)"}
+
+    def cancel_scan(self) -> Dict[str, Any]:
+        """Request cooperative cancellation of the current scan task."""
+        with self._scan_lock:
+            if self._scan_progress["status"] not in {"running", "cancelling"}:
+                return {"status": self._scan_progress["status"], "message": "No scan task is running"}
+
+            current = int(self._scan_progress.get("current", 0) or 0)
+            total = int(self._scan_progress.get("total", 0) or 0)
+            worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
+
+            if self._scan_cancel_event is not None:
+                self._scan_cancel_event.set()
+
+            if worker_alive:
+                self._scan_progress["status"] = "cancelling"
+                self._scan_progress["step"] = "cancelling"
+                self._scan_progress["message"] = f"Cancelling scan... ({current}/{total or '?'})"
+                self._scan_progress["updated_at"] = time.time()
+                return {"status": "cancelling", "message": "Scan cancellation requested"}
+
+            self._scan_progress["status"] = "cancelled"
+            self._scan_progress["step"] = "cancelled"
+            self._scan_progress["message"] = f"Scan cancelled at {current}/{total or current}."
+            self._scan_progress["updated_at"] = time.time()
+            self._scan_cancel_event = None
+            self._scan_worker_thread = None
+            return {"status": "cancelled", "message": "Scan cancelled"}
+
+    def _set_scan_worker_refs_if_current(self, run_id: int, cancel_event: threading.Event, worker_thread: Optional[threading.Thread]) -> bool:
+        """Only the active scan run may own the shared worker references."""
+        with self._scan_lock:
+            if run_id != self._scan_run_id:
+                return False
+            self._scan_cancel_event = cancel_event
+            self._scan_worker_thread = worker_thread
+            return True
+
+    def _set_scan_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
+        """Only the active scan run may replace shared progress state."""
+        with self._scan_lock:
+            if run_id != self._scan_run_id:
+                return False
+            self._scan_progress = state
+            return True
+
+    def _update_scan_progress_if_current(self, run_id: int, **updates: Any) -> bool:
+        """Only the active scan run may mutate shared progress state."""
+        with self._scan_lock:
+            if run_id != self._scan_run_id:
+                return False
+            self._scan_progress = {
+                **self._scan_progress,
+                **updates,
+            }
+            return True
+
+    def _clear_scan_worker_refs_if_current(self, run_id: int) -> None:
+        """Release scan worker references when the active run ends."""
+        with self._scan_lock:
+            if run_id != self._scan_run_id:
+                return
+            self._scan_cancel_event = None
+            self._scan_worker_thread = None
 
     def get_sort_session(self) -> Dict[str, Any]:
         """Get the current sort session."""
@@ -369,64 +441,94 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid folder path")
 
-        if self._scan_progress["status"] == "running":
-            raise HTTPException(status_code=400, detail="Scan already in progress")
+        with self._scan_lock:
+            worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
+            if self._scan_progress["status"] in {"running", "cancelling"} and worker_alive:
+                raise HTTPException(status_code=400, detail="Scan already in progress")
+
+            self._scan_run_id += 1
+            run_id = self._scan_run_id
+            cancel_event = threading.Event()
+            started_at = time.time()
+            self._scan_cancel_event = cancel_event
+            self._scan_worker_thread = None
+            self._scan_progress = {
+                "status": "running",
+                "step": "starting",
+                "current": 0,
+                "processed": 0,
+                "total": 0,
+                "errors": 0,
+                "new": 0,
+                "updated": 0,
+                "message": "Counting image files...",
+                "current_item": None,
+                "started_at": started_at,
+                "updated_at": started_at,
+            }
 
         def run_scan():
-            with self._scan_lock:
-                started_at = time.time()
-                self._scan_progress = {
-                    "status": "running",
-                    "step": "starting",
-                    "current": 0,
-                    "processed": 0,
-                    "total": 0,
-                    "errors": 0,
-                    "new": 0,
-                    "updated": 0,
-                    "message": "Starting...",
-                    "current_item": None,
-                    "started_at": started_at,
-                    "updated_at": started_at,
-                }
+            if not self._set_scan_worker_refs_if_current(run_id, cancel_event, threading.current_thread()):
+                return
 
             try:
                 def progress_cb(current, total, filename, details=None):
-                    with self._scan_lock:
-                        now = time.time()
-                        details = details or {}
-                        last_error = details.get("last_error") if isinstance(details, dict) else None
-                        message = f"Processing: {filename}"
-                        if last_error:
-                            message = (
-                                f"Skipped unreadable image: {last_error.get('filename', filename)}"
-                                f" ({last_error.get('error', 'Unreadable image')})"
-                            )
-                        self._scan_progress["current"] = current
-                        self._scan_progress["processed"] = current
-                        self._scan_progress["total"] = total
-                        self._scan_progress["step"] = "scanning"
-                        self._scan_progress["errors"] = details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0)
-                        self._scan_progress["message"] = message
-                        self._scan_progress["current_item"] = filename
-                        self._scan_progress["updated_at"] = now
-
-                result = scan_folder(request.folder_path, request.recursive, progress_cb)
-                with self._scan_lock:
                     now = time.time()
-                    errors = result.get("errors", 0)
-                    new_count = result.get("new", 0)
-                    updated_count = result.get("updated", 0)
-                    summary = f"Completed! {new_count} images indexed."
-                    if updated_count:
-                        summary += f" {updated_count} updated."
-                    if errors:
-                        summary += f" {errors} failed."
-                    recent_errors = result.get("recent_errors") or []
-                    if recent_errors:
-                        filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
-                        summary += f" Bad files: {filenames}."
-                    self._scan_progress = {
+                    details = details or {}
+                    last_error = details.get("last_error") if isinstance(details, dict) else None
+                    phase = details.get("phase") if isinstance(details, dict) else None
+                    message = f"Processing: {filename}" if filename else "Scanning files..."
+                    current_item = filename or None
+                    step = "scanning"
+                    status = "running"
+                    if phase == "counted":
+                        message = f"Found {total} image(s). Starting scan..."
+                        current_item = None
+                        step = "counted"
+                    elif last_error:
+                        message = (
+                            f"Skipped unreadable image: {last_error.get('filename', filename)}"
+                            f" ({last_error.get('error', 'Unreadable image')})"
+                        )
+                    if cancel_event.is_set():
+                        status = "cancelling"
+                        step = "cancelling"
+                        message = f"Cancelling scan... ({current}/{total or '?'})"
+                    self._update_scan_progress_if_current(
+                        run_id,
+                        status=status,
+                        current=current,
+                        processed=current,
+                        total=total,
+                        step=step,
+                        errors=details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0),
+                        message=message,
+                        current_item=current_item,
+                        updated_at=now,
+                    )
+
+                result = scan_folder(
+                    request.folder_path,
+                    request.recursive,
+                    progress_cb,
+                    stop_requested=cancel_event.is_set,
+                )
+                now = time.time()
+                errors = result.get("errors", 0)
+                new_count = result.get("new", 0)
+                updated_count = result.get("updated", 0)
+                summary = f"Completed! {new_count} images indexed."
+                if updated_count:
+                    summary += f" {updated_count} updated."
+                if errors:
+                    summary += f" {errors} failed."
+                recent_errors = result.get("recent_errors") or []
+                if recent_errors:
+                    filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
+                    summary += f" Bad files: {filenames}."
+                self._set_scan_progress_if_current(
+                    run_id,
+                    {
                         "status": "done",
                         "step": "done",
                         "current": result["total"],
@@ -442,30 +544,60 @@ class SortingService:
                         "result": result,
                         "recent_errors": recent_errors,
                     }
+                )
             except Exception as e:
-                with self._scan_lock:
-                    now = time.time()
-                    self._scan_progress = {
-                        "status": "error",
-                        "step": "error",
-                        "current": self._scan_progress.get("current", 0),
-                        "processed": self._scan_progress.get("processed", self._scan_progress.get("current", 0)),
-                        "total": self._scan_progress.get("total", 0),
-                        "errors": self._scan_progress.get("errors", 0),
-                        "new": self._scan_progress.get("new", 0),
-                        "updated": self._scan_progress.get("updated", 0),
-                        "message": "Scan failed due to an internal error",
-                        "current_item": self._scan_progress.get("current_item"),
-                        "started_at": self._scan_progress.get("started_at"),
-                        "updated_at": now,
-                    }
+                from exceptions import ScanCancelledError
+
+                now = time.time()
+                if isinstance(e, ScanCancelledError):
+                    current_state = self.get_scan_progress()
+                    self._set_scan_progress_if_current(
+                        run_id,
+                        {
+                            "status": "cancelled",
+                            "step": "cancelled",
+                            "current": current_state.get("current", 0),
+                            "processed": current_state.get("processed", current_state.get("current", 0)),
+                            "total": current_state.get("total", 0),
+                            "errors": current_state.get("errors", 0),
+                            "new": current_state.get("new", 0),
+                            "updated": current_state.get("updated", 0),
+                            "message": f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0) or current_state.get('processed', current_state.get('current', 0))}.",
+                            "current_item": current_state.get("current_item"),
+                            "started_at": current_state.get("started_at"),
+                            "updated_at": now,
+                        }
+                    )
+                else:
+                    current_state = self.get_scan_progress()
+                    self._set_scan_progress_if_current(
+                        run_id,
+                        {
+                            "status": "error",
+                            "step": "error",
+                            "current": current_state.get("current", 0),
+                            "processed": current_state.get("processed", current_state.get("current", 0)),
+                            "total": current_state.get("total", 0),
+                            "errors": current_state.get("errors", 0),
+                            "new": current_state.get("new", 0),
+                            "updated": current_state.get("updated", 0),
+                            "message": "Scan failed due to an internal error",
+                            "current_item": current_state.get("current_item"),
+                            "started_at": current_state.get("started_at"),
+                            "updated_at": now,
+                        }
+                    )
             finally:
-                with self._scan_lock:
-                    if self._scan_progress["status"] == "running":
-                        self._scan_progress["status"] = "error"
-                        self._scan_progress["step"] = "error"
-                        self._scan_progress["message"] = "Scan ended unexpectedly"
-                        self._scan_progress["updated_at"] = time.time()
+                current_state = self.get_scan_progress()
+                if current_state["status"] == "running":
+                    self._update_scan_progress_if_current(
+                        run_id,
+                        status="error",
+                        step="error",
+                        message="Scan ended unexpectedly",
+                        updated_at=time.time(),
+                    )
+                self._clear_scan_worker_refs_if_current(run_id)
 
         background_tasks.add_task(run_scan)
         return {"status": "started", "message": "Scan started in background"}

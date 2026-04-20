@@ -163,16 +163,29 @@ function _attachFolderBrowserEvents(container, data) {
 
 // ============== System Info ==============
 
+let _loadSystemInfoPromise = null;
+
 /**
  * Load system hardware info and display it in the tagger modal.
  * Called when the tag-modal is opened. Fails silently (info is optional).
  */
 async function loadSystemInfo() {
+    if (_loadSystemInfoPromise) {
+        return _loadSystemInfoPromise;
+    }
+
+    window.__taggerSystemInfoStatus = 'loading';
+
+    _loadSystemInfoPromise = (async () => {
     try {
         const resp = await fetch('/api/system-info');
-        if (!resp.ok) return;
+        if (!resp.ok) {
+            window.__taggerSystemInfoStatus = 'error';
+            return null;
+        }
         const data = await resp.json();
         window.__taggerSystemInfo = data;
+        window.__taggerSystemInfoStatus = 'loaded';
         const panel = document.getElementById('system-info-panel');
         const contentEl = document.getElementById('system-info-content');
         const hardwareChip = document.getElementById('tag-hardware-chip');
@@ -182,7 +195,11 @@ async function loadSystemInfo() {
         const batchEl = document.getElementById('tag-batch-recommendation');
         if (!panel || !contentEl) return;
         const sys = data.system_info || {};
-        const rec = data.recommendation || {};
+        const modelSelect = document.getElementById('tag-model-select');
+        const isCustom = modelSelect?.value === 'custom';
+        const selectedModel = isCustom ? 'custom' : String(modelSelect?.value || 'wd-swinv2-tagger-v3');
+        const useGpu = document.getElementById('tag-use-gpu')?.checked ?? true;
+        const rec = data.recommendations_by_model?.[selectedModel]?.[useGpu ? 'gpu' : 'cpu'] || data.recommendation || {};
         const providers = Array.isArray(sys.onnx_providers) ? sys.onnx_providers.map(String) : [];
         const gpuDevices = Array.isArray(sys.gpu_devices) ? sys.gpu_devices : [];
         const hasCuda = providers.indexOf('CUDAExecutionProvider') !== -1;
@@ -262,15 +279,25 @@ async function loadSystemInfo() {
         // Set recommended runtime chunk size in the advanced dropdown
         const batchSelect = document.getElementById('tagger-batch-size');
         if (batchSelect && rec.recommended_batch_size && batchSelect.dataset.userChosen !== '1') {
-            batchSelect.value = String(rec.recommended_batch_size);
+            const clamp = window.clampTaggerChunkToAvailableOption;
+            batchSelect.value = typeof clamp === 'function'
+                ? clamp(rec.recommended_batch_size)
+                : String(rec.recommended_batch_size);
         }
 
         if (typeof syncTaggerModelUi === 'function') {
             syncTaggerModelUi({ applyModelDefaults: true });
         }
+        return data;
     } catch (e) {
-        // Silent fail - system info is optional
+        window.__taggerSystemInfoStatus = 'error';
+        return null;
     }
+    })().finally(() => {
+        _loadSystemInfoPromise = null;
+    });
+
+    return _loadSystemInfoPromise;
 }
 
 

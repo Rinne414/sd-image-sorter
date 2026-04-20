@@ -93,7 +93,7 @@ class TestTaggerModels:
 
         assert "toriigate-0.5" in models
         assert models["toriigate-0.5"]["disabled"] is False
-        assert models["toriigate-0.5"]["gpu_confirmation_required"] is True
+        assert models["toriigate-0.5"]["gpu_confirmation_required"] is False
 
 
 class TestTagsLibrary:
@@ -442,7 +442,7 @@ class TestTaggingPipeline:
         assert models_by_name["wd-swinv2-tagger-v3"]["recommended"] is True
         assert models_by_name["wd-swinv2-tagger-v3"]["gpu_default"] is True
         assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_locked"] is False
-        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is True
+        assert models_by_name["wd-eva02-large-tagger-v3"]["gpu_confirmation_required"] is False
         assert models_by_name["wd-eva02-large-tagger-v3"]["memory"] == "High"
 
     def test_build_runtime_plan_keeps_max_quality_model_on_adaptive_gpu_when_requested(self):
@@ -484,7 +484,14 @@ class TestTaggingPipeline:
 
         tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
 
-        with patch.object(tags_router.TaggingService, "_run_tagging_job", return_value=None):
+        with patch("hardware_monitor.get_system_info", return_value={
+            "total_ram_gb": 64,
+            "available_ram_gb": 28,
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 20000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        }), patch.object(tags_router.TaggingService, "_run_tagging_job", return_value=None):
             response = test_client.post(
                 "/api/tag/start",
                 json={
@@ -496,6 +503,29 @@ class TestTaggingPipeline:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "started"
+
+    def test_start_tagging_rejects_toriigate_when_hardware_is_below_minimum(self, test_client):
+        response = None
+        with patch("hardware_monitor.get_system_info", return_value={
+            "total_ram_gb": 32,
+            "available_ram_gb": 20,
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 20000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        }):
+            response = test_client.post(
+                "/api/tag/start",
+                json={
+                    "model_name": "toriigate-0.5",
+                    "use_gpu": True,
+                }
+            )
+
+        assert response is not None
+        assert response.status_code == 409
+        data = response.json()
+        assert "ToriiGate GPU mode is blocked" in (data.get("detail") or data.get("error") or "")
 
     def test_start_tagging_rejects_non_onnx_custom_model_with_path(self, test_client):
         """Custom tagger path with tags_path should also reject unsupported model formats."""

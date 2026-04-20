@@ -90,6 +90,48 @@ def test_capped_vram_still_recommends_small_batch():
     assert rec["recommended_batch_size"] == 8
 
 
+def test_heavy_models_are_capped_below_balanced_models_on_same_gpu():
+    info = {
+        "gpu_name": "NVIDIA GeForce RTX 3090",
+        "gpu_vram_total_mb": 24576,
+        "gpu_vram_available_mb": 21617,
+        "torch_cuda_available": False,
+        "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "total_ram_gb": 32,
+        "available_ram_gb": 20,
+        "gpu_devices": [
+            {"name": "NVIDIA GeForce RTX 3090", "vendor": "nvidia", "vram_total_mb": 24576}
+        ],
+    }
+
+    balanced = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3")
+    heavy = recommend_tagger_config(info, model_name="wd-eva02-large-tagger-v3")
+
+    assert balanced["recommended_batch_size"] == 32
+    assert heavy["recommended_batch_size"] == 12
+    assert heavy["runtime_safety_tier"] == "heavy"
+
+
+def test_custom_model_gpu_recommendation_stays_conservative_on_large_gpus():
+    info = {
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_vram_total_mb": 24576,
+        "gpu_vram_available_mb": 22000,
+        "torch_cuda_available": False,
+        "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "total_ram_gb": 64,
+        "available_ram_gb": 40,
+        "gpu_devices": [
+            {"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia", "vram_total_mb": 24576}
+        ],
+    }
+
+    rec = recommend_tagger_config(info, model_name="custom", use_gpu=True)
+
+    assert rec["recommended_batch_size"] == 8
+    assert "Custom ONNX models stay on a conservative starting chunk" in rec["message"]
+
+
 def _fake_powershell_dual_nvidia_capped(*_args, **_kwargs):
     # WMI returns RTX 3060 first, then RTX 3090 — reversed from nvidia-smi below.
     return (

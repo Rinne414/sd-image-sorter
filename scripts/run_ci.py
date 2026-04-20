@@ -6,34 +6,76 @@ from __future__ import annotations
 import subprocess
 import sys
 import os
+import shutil
+import socket
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-if sys.platform == "win32":
-    BACKEND_PYTHON = ROOT / "backend" / "venv" / "Scripts" / "python.exe"
-    E2E_PLAYWRIGHT = ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright.cmd"
-else:
-    BACKEND_PYTHON = ROOT / "backend" / "venv" / "bin" / "python"
-    E2E_PLAYWRIGHT = ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright"
+
+def _first_existing(*candidates: Path) -> Path:
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+BACKEND_PYTHON = _first_existing(
+    ROOT / "backend" / "venv" / "Scripts" / "python.exe",
+    ROOT / "backend" / "venv" / "bin" / "python",
+)
+E2E_PLAYWRIGHT = _first_existing(
+    ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright.cmd",
+    ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright",
+)
+PLAYWRIGHT_CLI = ROOT / "tests" / "e2e" / "node_modules" / "playwright" / "cli.js"
+
+
+def _first_executable(*candidates: str | Path) -> str:
+    for candidate in candidates:
+        if isinstance(candidate, Path):
+            if candidate.exists():
+                return str(candidate)
+        else:
+            found = shutil.which(candidate)
+            if found:
+                return found
+    return str(candidates[0])
+
+
+NODE_EXECUTABLE = _first_executable(
+    "node",
+    Path("/mnt/c/Program Files/nodejs/node.exe"),
+    Path("C:/Program Files/nodejs/node.exe"),
+    Path("/usr/bin/node"),
+    Path("/usr/local/bin/node"),
+)
+
+
+def _find_available_port(*preferred_ports: int) -> str:
+    for port in preferred_ports:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return str(port)
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return str(sock.getsockname()[1])
 
 
 def main() -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
-            "backend regression",
+            "backend full suite",
             [
                 str(BACKEND_PYTHON),
                 "-m",
                 "pytest",
-                "backend/tests/test_model_health.py",
-                "backend/tests/test_tagger.py",
-                "backend/tests/test_tagging_service.py",
-                "backend/tests/test_routers/test_images.py",
-                "backend/tests/test_routers/test_sorting.py",
-                "backend/tests/test_routers/test_obfuscation.py",
-                "backend/tests/test_routers/test_tags.py",
-                "backend/tests/test_routers/test_prompts_censor_similarity_artists.py",
+                "backend/tests",
                 "-q",
             ],
             ROOT,
@@ -41,7 +83,8 @@ def main() -> int:
         (
             "playwright e2e",
             [
-                str(E2E_PLAYWRIGHT),
+                str(NODE_EXECUTABLE),
+                "./node_modules/playwright/cli.js" if PLAYWRIGHT_CLI.exists() else str(E2E_PLAYWRIGHT),
                 "test",
             ],
             ROOT / "tests" / "e2e",
@@ -53,7 +96,8 @@ def main() -> int:
         print(f"[CI] Working directory: {cwd}")
         env = os.environ.copy()
         if name == "playwright e2e":
-            env.setdefault("PW_REUSE_SERVER", "1")
+            env["PW_REUSE_SERVER"] = "1"
+            env.setdefault("PW_WEB_SERVER_PORT", _find_available_port(19087, 19187, 19287))
         result = subprocess.run(command, cwd=cwd, env=env)
         if result.returncode != 0:
             print(f"[CI] FAILED: {name}")

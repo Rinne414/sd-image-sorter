@@ -1,8 +1,17 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { defineConfig, devices } from '@playwright/test'
 
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
 const basePort = Number(new URL(baseURL).port || defaultPort)
+const repoRoot = path.resolve(__dirname, '..', '..')
+const backendPython = process.env.PW_BACKEND_PYTHON || [
+  path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+  path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+].find((candidate) => fs.existsSync(candidate)) || path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
+const backendMain = path.join(repoRoot, 'backend', 'main.py')
+const webServerCommand = `"${backendPython}" "${backendMain}" --port ${basePort}`
 
 /**
  * E2E Test Configuration for SD Image Sorter
@@ -36,7 +45,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `..\\..\\backend\\venv\\Scripts\\python.exe ..\\..\\backend\\main.py --port ${basePort}`,
+    command: webServerCommand,
     url: baseURL,
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120000,

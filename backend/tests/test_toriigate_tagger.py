@@ -4,11 +4,13 @@ Unit tests for the ToriiGate multimodal tagger adapter.
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import toriigate_tagger as toriigate_module  # noqa: E402
 from toriigate_tagger import ToriiGateTagger  # noqa: E402
 
 
@@ -113,3 +115,25 @@ def test_build_result_marks_breasts_and_nipples_caption_as_explicit():
     assert any(tag["tag"] == "1girl" for tag in result["general_tags"])
     assert any(tag["tag"] == "breasts" for tag in result["general_tags"])
     assert any(tag["tag"] == "nipples" for tag in result["general_tags"])
+
+
+def test_apply_cuda_memory_guard_caps_toriigate_gpu_fraction(monkeypatch):
+    calls = []
+
+    fake_cuda = SimpleNamespace(
+        is_available=lambda: True,
+        set_per_process_memory_fraction=lambda fraction, device=0: calls.append((fraction, device)),
+    )
+    monkeypatch.setattr(
+        toriigate_module,
+        "torch",
+        SimpleNamespace(cuda=fake_cuda),
+    )
+
+    tagger = ToriiGateTagger(use_gpu=True)
+    tagger._apply_cuda_memory_guard()
+
+    assert calls
+    fraction, device = calls[0]
+    assert 0.3 <= fraction <= 0.95
+    assert device == 0

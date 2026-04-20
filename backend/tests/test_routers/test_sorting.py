@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
+from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
 # Add parent directories to path for imports
@@ -256,6 +257,74 @@ class TestScan:
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
+
+    def test_cancel_scan_marks_idle_worker_as_cancelled(self, isolated_sorting_service):
+        """Cancel should flip the shared scan state to cancelled when no live worker remains."""
+        import threading
+        from services.sorting_service import ScanRequest
+
+        bg = BackgroundTasks()
+        isolated_sorting_service.start_scan(
+            ScanRequest(folder_path=os.getcwd(), recursive=False),
+            bg,
+        )
+
+        isolated_sorting_service._scan_progress = {
+            "status": "running",
+            "step": "scanning",
+            "current": 3,
+            "processed": 3,
+            "total": 10,
+            "errors": 1,
+            "new": 2,
+            "updated": 0,
+            "message": "Processing files...",
+            "current_item": "demo.png",
+            "started_at": 1.0,
+            "updated_at": 2.0,
+        }
+        isolated_sorting_service._scan_cancel_event = threading.Event()
+        isolated_sorting_service._scan_worker_thread = None
+
+        result = isolated_sorting_service.cancel_scan()
+        progress = isolated_sorting_service.get_scan_progress()
+
+        assert result["status"] == "cancelled"
+        assert progress["status"] == "cancelled"
+        assert progress["current"] == 3
+        assert "cancelled" in progress["message"].lower()
+
+    def test_cancel_scan_sets_cancelling_when_worker_is_alive(self, isolated_sorting_service):
+        """Cancel should request cooperative stop and leave the run in cancelling until the worker exits."""
+        import threading
+
+        class AliveThread:
+            def is_alive(self):
+                return True
+
+        isolated_sorting_service._scan_progress = {
+            "status": "running",
+            "step": "scanning",
+            "current": 4,
+            "processed": 4,
+            "total": 12,
+            "errors": 0,
+            "new": 4,
+            "updated": 0,
+            "message": "Processing files...",
+            "current_item": "demo.png",
+            "started_at": 1.0,
+            "updated_at": 2.0,
+        }
+        isolated_sorting_service._scan_cancel_event = threading.Event()
+        isolated_sorting_service._scan_worker_thread = AliveThread()
+
+        result = isolated_sorting_service.cancel_scan()
+        progress = isolated_sorting_service.get_scan_progress()
+
+        assert result["status"] == "cancelling"
+        assert isolated_sorting_service._scan_cancel_event.is_set() is True
+        assert progress["status"] == "cancelling"
 
 
 class TestMove:
