@@ -841,6 +841,60 @@ class CensorService:
         return clean_image
 
     @staticmethod
+    def _png_text_to_exif(original_img: Image.Image) -> Optional[bytes]:
+        """Convert PNG text chunks to EXIF UserComment for non-PNG formats.
+
+        Priority: 'parameters' (WebUI/A1111), then 'prompt' (ComfyUI).
+        """
+        text_chunks = {}
+        for key, value in original_img.info.items():
+            if isinstance(key, str) and isinstance(value, str) and key not in {
+                'exif', 'icc_profile', 'dpi', 'interlace', 'gamma', 'chromaticity',
+            }:
+                text_chunks[key] = value
+
+        if not text_chunks:
+            return None
+
+        comment = text_chunks.get('parameters') or text_chunks.get('prompt', '')
+        if not comment:
+            return None
+
+        try:
+            import struct
+            ascii_prefix = b'ASCII\x00\x00\x00'
+            encoded = comment.encode('utf-8', errors='replace')
+            user_comment = ascii_prefix + encoded
+
+            # Build a minimal EXIF with UserComment (tag 0x9286) in Exif IFD
+            # Header: "Exif\0\0" + TIFF header (little-endian)
+            bo = b'II'  # little-endian
+            tiff_header = bo + struct.pack('<H', 42) + struct.pack('<I', 8)
+
+            # IFD0: one entry pointing to Exif IFD
+            ifd0_count = struct.pack('<H', 1)
+            # Tag 0x8769 (ExifIFD), type LONG(4), count 1, value = offset to Exif IFD
+            exif_ifd_offset_placeholder = 8 + 2 + 12 + 4  # after IFD0
+            ifd0_entry = struct.pack('<HHI', 0x8769, 4, 1) + struct.pack('<I', exif_ifd_offset_placeholder)
+            ifd0_next = struct.pack('<I', 0)
+
+            # Exif IFD: one entry for UserComment
+            exif_ifd_count = struct.pack('<H', 1)
+            uc_data_offset = exif_ifd_offset_placeholder + 2 + 12 + 4
+            exif_ifd_entry = struct.pack('<HHI', 0x9286, 7, len(user_comment)) + struct.pack('<I', uc_data_offset)
+            exif_ifd_next = struct.pack('<I', 0)
+
+            tiff_body = (ifd0_count + ifd0_entry + ifd0_next +
+                         exif_ifd_count + exif_ifd_entry + exif_ifd_next +
+                         user_comment)
+
+            exif_bytes = b'Exif\x00\x00' + tiff_header + tiff_body
+            return exif_bytes
+        except Exception as e:
+            logger.warning("Failed to build EXIF from PNG text chunks: %s", e)
+            return None
+
+    @staticmethod
     def _copy_png_text_metadata(original_img: Image.Image) -> Optional[PngImagePlugin.PngInfo]:
         """Copy PNG text metadata chunks from original image."""
         pnginfo = PngImagePlugin.PngInfo()
@@ -908,6 +962,14 @@ class CensorService:
                 pnginfo = self._copy_png_text_metadata(original_img)
                 if pnginfo:
                     save_kwargs['pnginfo'] = pnginfo
+
+            # For non-PNG outputs, convert PNG text chunks to EXIF so SD
+            # metadata survives the format change.  Many SD tools read
+            # the "parameters" key from EXIF UserComment.
+            if metadata_option == "keep" and output_format != 'png' and 'exif' not in save_kwargs:
+                exif_bytes = self._png_text_to_exif(original_img)
+                if exif_bytes:
+                    save_kwargs['exif'] = exif_bytes
 
         except Exception as e:
             logger.warning("Could not copy metadata from original: %s", e)

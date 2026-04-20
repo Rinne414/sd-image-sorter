@@ -191,8 +191,8 @@ class MetadataParser:
                     xmp_data = self._extract_webp_xmp(image_path)
                     metadata.update(xmp_data)
 
-                # Check for JPEG EXIF UserComment that might contain SD params
-                if img.format in ('JPEG', 'JPG'):
+                # Check for JPEG/WebP EXIF UserComment that might contain SD params
+                if img.format in ('JPEG', 'JPG', 'WEBP'):
                     jpeg_data = self._extract_jpeg_sd_metadata(img)
                     metadata.update(jpeg_data)
 
@@ -2879,6 +2879,38 @@ class MetadataParser:
             # Check for parameters in ImageDescription
             if img_desc and "Steps:" in str(img_desc) and "Sampler:" in str(img_desc):
                 metadata["parameters"] = str(img_desc)
+
+            # Check UserComment in Exif IFD for ComfyUI / WebUI params
+            ifd = exif.get_ifd(0x8769)
+            if ifd:
+                uc = ifd.get(0x9286)  # UserComment
+                if uc:
+                    text = None
+                    if isinstance(uc, bytes):
+                        for prefix in (b'ASCII\x00\x00\x00', b'UNICODE\x00', b'\x00' * 8):
+                            if uc.startswith(prefix):
+                                text = uc[len(prefix):].decode('utf-8', errors='replace')
+                                break
+                        if text is None:
+                            text = uc.decode('utf-8', errors='replace')
+                    elif isinstance(uc, str):
+                        text = uc
+
+                    if text and text.strip():
+                        text = text.strip()
+                        if text.startswith('{'):
+                            try:
+                                obj = json.loads(text)
+                                if isinstance(obj, dict) and any(
+                                    isinstance(v, dict) and "class_type" in v
+                                    for v in obj.values()
+                                ):
+                                    metadata["prompt"] = text
+                            except (json.JSONDecodeError, ValueError):
+                                pass
+                        if "prompt" not in metadata and "Steps:" in text and "Sampler:" in text:
+                            metadata["parameters"] = text
+
         except Exception as e:
             logger.debug("Error extracting JPEG SD metadata: %s", e)
         return metadata
