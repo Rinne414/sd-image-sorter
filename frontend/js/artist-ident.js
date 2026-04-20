@@ -624,7 +624,7 @@ const ArtistIdent = {
     async identifyAll() {
         if (this.isIdentifying) return;
 
-        const { showToast, showGlobalLoading, hideGlobalLoading } = window.App;
+        const { showToast, hideGlobalLoading } = window.App;
         const progressContainer = document.getElementById('artist-progress-container');
         const progressFill = document.getElementById('artist-progress-fill');
         const progressText = document.getElementById('artist-progress-text');
@@ -634,8 +634,12 @@ const ArtistIdent = {
         this.progressTracker = window.App.createProgressTracker();
         window.App.resetProgressTracker(this.progressTracker);
 
-        // Show global loading for initial setup
-        showGlobalLoading('Starting artist identification...');
+        // Show progress bar immediately instead of a blocking overlay
+        if (progressContainer) progressContainer.style.display = 'block';
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = this.tText(
+            'Collecting image list...', '正在收集图片列表...'
+        );
 
         let handedOffToExistingTask = false;
 
@@ -650,6 +654,13 @@ const ArtistIdent = {
                 const imagesResult = await window.App.API.get(`/api/images?${query.toString()}`);
                 imageIds = imageIds.concat((imagesResult.images || []).map(img => img.id));
 
+                if (progressText) {
+                    progressText.textContent = this.tText(
+                        `Collected ${imageIds.length} images...`,
+                        `已收集 ${imageIds.length} 张图片...`
+                    );
+                }
+
                 if (!imagesResult.has_more || !imagesResult.next_cursor) {
                     break;
                 }
@@ -661,12 +672,12 @@ const ArtistIdent = {
                 return;
             }
 
-            hideGlobalLoading();
-
-            // Show progress
-            if (progressContainer) progressContainer.style.display = 'block';
-            if (progressFill) progressFill.style.width = '0%';
-            if (progressText) progressText.textContent = `Identifying ${imageIds.length} images...`;
+            if (progressText) {
+                progressText.textContent = this.tText(
+                    `Starting identification of ${imageIds.length} images...`,
+                    `正在启动 ${imageIds.length} 张图片的识别...`
+                );
+            }
 
             // Start batch identification
             await window.App.API.post('/api/artists/identify-batch', this._getIdentifyPayload(imageIds));
