@@ -1229,14 +1229,33 @@ class MetadataParser:
         model_assets = self._merge_model_assets(model_assets, workflow_assets)
         model_assets = self._merge_model_assets(model_assets, self._extract_comfyui_yolo_assets_from_full_graph(nodes))
 
+        # Collect disabled LoRA names from rgthree-style nodes so workflow
+        # widget data (which lacks the on/off flag) doesn't re-introduce them.
+        disabled_loras: Set[str] = set()
+        for node in nodes.values():
+            if not isinstance(node, dict):
+                continue
+            for key, val in node.get("inputs", {}).items():
+                if isinstance(val, dict) and val.get("on") is False:
+                    lr_name = val.get("lora", val.get("lora_name", ""))
+                    if lr_name and isinstance(lr_name, str):
+                        disabled_loras.add(lr_name)
+
         if checkpoint is None and model_assets:
             checkpoint = model_assets.get("primary_model_name")
         loras = self._normalize_lora_names([
             *loras,
             *((model_assets or {}).get("loras") or []),
         ])
+        if disabled_loras:
+            loras = [lr for lr in loras if lr not in disabled_loras]
         if model_assets is not None:
             model_assets["loras"] = list(loras)
+            if disabled_loras:
+                for key in ("lora_candidates", "global_lora_candidates"):
+                    candidates = model_assets.get(key)
+                    if candidates:
+                        model_assets[key] = [c for c in candidates if c.get("name") not in disabled_loras]
 
         return (positive_text, negative_text, checkpoint, loras,
                 gen_params if gen_params else None,
@@ -1653,6 +1672,8 @@ class MetadataParser:
     ) -> None:
         """Recursively scan the full graph for secondary LoRA evidence."""
         if isinstance(value, dict):
+            if value.get("on") is False:
+                return
             for key, nested_value in value.items():
                 next_path = f"{key_path}.{key}" if key_path else str(key)
                 self._scan_comfyui_global_lora_candidates(
@@ -1975,6 +1996,8 @@ class MetadataParser:
     ) -> None:
         """Recursively scan a node input tree for model / LoRA asset candidates."""
         if isinstance(value, dict):
+            if value.get("on") is False:
+                return
             for key, nested_value in value.items():
                 next_path = f"{key_path}.{key}" if key_path else str(key)
                 self._scan_comfyui_asset_candidates(
