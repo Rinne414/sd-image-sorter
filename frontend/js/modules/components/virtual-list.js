@@ -503,17 +503,10 @@ class VirtualList {
      */
     _renderEmptyState() {
         this.container.innerHTML = '';
-        this.container.style.display = 'grid';
+        this.container.style.display = '';
         this.container.style.position = '';
         this.container.style.minHeight = '';
         this.container.style.gridTemplateColumns = '';
-
-        this.container.innerHTML = `
-            <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary, #64748b);">
-                <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
-                <p>No images found.</p>
-            </div>
-        `;
     }
 
     /**

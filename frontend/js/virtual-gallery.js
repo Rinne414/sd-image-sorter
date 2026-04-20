@@ -159,19 +159,12 @@ const VirtualGallery = {
         if (!this.containerEl || !this.scrollEl) return;
 
         if (this.images.length === 0) {
-            // Clear any virtual rows
             this.containerEl.innerHTML = '';
             this.renderedItems.clear();
-            this.containerEl.style.display = 'grid';
+            this.containerEl.style.display = '';
             this.containerEl.style.position = '';
             this.containerEl.style.minHeight = '';
             this.containerEl.style.gridTemplateColumns = '';
-            this.containerEl.innerHTML = `
-                <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--text-secondary);">
-                    <div style="font-size: 48px; margin-bottom: 16px;">📷</div>
-                    <p>No images found. Click "Scan Folder" to add images.</p>
-                </div>
-            `;
             return;
         }
 
