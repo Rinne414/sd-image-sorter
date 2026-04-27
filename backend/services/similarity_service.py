@@ -3,10 +3,10 @@ Similarity service for SD Image Sorter.
 
 Handles business logic for image embedding, similarity search, and duplicate detection.
 """
-import threading
 from typing import Optional, List
 
 from fastapi import HTTPException, UploadFile, File, Query, BackgroundTasks
+from starlette.concurrency import run_in_threadpool
 
 import database as db
 from model_health import get_model_health
@@ -47,11 +47,7 @@ class SimilarityService:
         except Exception as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-        def _run_embed():
-            index.embed_batch(image_ids)
-
-        thread = threading.Thread(target=_run_embed, daemon=True)
-        thread.start()
+        background_tasks.add_task(index.embed_batch, image_ids)
 
         return {"status": "started", "message": "Embedding started in background"}
 
@@ -104,17 +100,30 @@ class SimilarityService:
         the database for visually/semantically similar images.
         """
         MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
-        image_data = await file.read()
+        image_data = bytearray()
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            image_data.extend(chunk)
+            if len(image_data) > MAX_UPLOAD_SIZE:
+                raise HTTPException(status_code=413, detail="File too large (max 50MB)")
         if not image_data:
             raise HTTPException(status_code=400, detail="Empty file uploaded")
-        if len(image_data) > MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=413, detail="File too large (max 50MB)")
 
         index = get_similarity_index(db)
         try:
-            result = index.search_by_upload(image_data, limit=limit, threshold=threshold, offset=offset)
+            result = await run_in_threadpool(
+                index.search_by_upload,
+                bytes(image_data),
+                limit,
+                threshold,
+                offset,
+            )
         except SimilarityInvalidImageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        finally:
+            await file.close()
         return {
             "results": result["results"],
             "count": len(result["results"]),

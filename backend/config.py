@@ -5,9 +5,11 @@ All configurable values are centralized here with environment variable support.
 Copy .env.example to .env and customize as needed.
 """
 import os
-import platform
+import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
+from app_info import GITHUB_LATEST_RELEASE_API_URL, GITHUB_REPOSITORY_URL
 
 
 # =============================================================================
@@ -24,8 +26,98 @@ def _get_backend_dir() -> Path:
     return Path(__file__).parent.resolve()
 
 
+_INITIAL_ENV_KEYS = set(os.environ.keys())
+
+
+def _parse_env_line(line: str) -> Optional[Tuple[str, str]]:
+    """Parse a single KEY=VALUE .env line."""
+    text = line.strip()
+    if not text or text.startswith("#"):
+        return None
+    if text.startswith("export "):
+        text = text[7:].lstrip()
+    if "=" not in text:
+        return None
+
+    key, value = text.split("=", 1)
+    key = key.strip()
+    if not key:
+        return None
+
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    return key, value
+
+
+def _load_env_file(path: Path, *, override_loaded_values: bool = False) -> None:
+    """Load package-local .env files without overriding real process env."""
+    if not path.exists() or not path.is_file():
+        return
+
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+
+    for line in lines:
+        parsed = _parse_env_line(line)
+        if not parsed:
+            continue
+        key, value = parsed
+        if key in _INITIAL_ENV_KEYS:
+            continue
+        if not override_loaded_values and key in os.environ:
+            continue
+        os.environ[key] = value
+
+
+def _bootstrap_package_env() -> None:
+    """Support both legacy backend/.env and package-root .env files."""
+    backend_env = _get_backend_dir() / ".env"
+    package_env = _get_project_root() / ".env"
+
+    _load_env_file(backend_env, override_loaded_values=False)
+    _load_env_file(package_env, override_loaded_values=True)
+
+
+_bootstrap_package_env()
+
+
 PROJECT_ROOT: Path = _get_project_root()
 BACKEND_DIR: Path = _get_backend_dir()
+PACKAGE_ROOT: Path = PROJECT_ROOT
+DATA_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_DATA_DIR",
+        str(PACKAGE_ROOT / "data"),
+    )
+).expanduser()
+CONFIG_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_CONFIG_DIR",
+        str(DATA_DIR / "config"),
+    )
+).expanduser()
+TEMP_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_TMP_DIR",
+        str(DATA_DIR / "tmp"),
+    )
+).expanduser()
+UPDATE_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_UPDATE_DIR",
+        str(PACKAGE_ROOT / "update"),
+    )
+).expanduser()
+THUMBNAIL_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_THUMBNAIL_DIR",
+        str(DATA_DIR / "thumbnails"),
+    )
+).expanduser()
+UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 
 
 # =============================================================================
@@ -35,7 +127,7 @@ BACKEND_DIR: Path = _get_backend_dir()
 # Database file path
 DATABASE_PATH: str = os.environ.get(
     "SD_IMAGE_SORTER_DB_PATH",
-    str(BACKEND_DIR / "images.db")
+    str(DATA_DIR / "images.db")
 )
 
 # Favorites collection defaults
@@ -43,7 +135,7 @@ FAVORITES_COLLECTION_SLUG: str = "favorites"
 FAVORITES_COLLECTION_NAME: str = "Favorites"
 FAVORITES_FOLDER_PATH: str = os.environ.get(
     "SD_IMAGE_SORTER_FAVORITES_PATH",
-    str(BACKEND_DIR / "favorites")
+    str(DATA_DIR / "favorites")
 )
 
 
@@ -57,6 +149,53 @@ SERVER_PORT: int = int(os.environ.get("SD_IMAGE_SORTER_PORT", "8487"))
 
 # CORS allowed origins (regex pattern for localhost)
 CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
+
+# Lightweight API rate limiting
+RATE_LIMIT_ENABLED: bool = os.environ.get(
+    "SD_IMAGE_SORTER_ENABLE_RATE_LIMIT",
+    "true",
+).lower() in ("true", "1", "yes")
+RATE_LIMIT_WINDOW_SECONDS: int = max(
+    1,
+    int(os.environ.get("SD_IMAGE_SORTER_RATE_LIMIT_WINDOW_SECONDS", "60")),
+)
+RATE_LIMIT_MAX_REQUESTS: int = max(
+    1,
+    int(os.environ.get("SD_IMAGE_SORTER_RATE_LIMIT_MAX_REQUESTS", "1000")),
+)
+RATE_LIMIT_APPLY_TO_LOOPBACK: bool = os.environ.get(
+    "SD_IMAGE_SORTER_RATE_LIMIT_LOOPBACK",
+    "false",
+).lower() in ("true", "1", "yes")
+
+
+# =============================================================================
+# Update Channel Configuration
+# =============================================================================
+
+UPDATE_API_URL: str = (
+    str(
+        os.environ.get(
+            "SD_IMAGE_SORTER_UPDATE_API_URL",
+            GITHUB_LATEST_RELEASE_API_URL,
+        )
+        or ""
+    ).strip()
+    or GITHUB_LATEST_RELEASE_API_URL
+)
+UPDATE_WEB_URL: str = (
+    str(
+        os.environ.get(
+            "SD_IMAGE_SORTER_UPDATE_WEB_URL",
+            f"{GITHUB_REPOSITORY_URL}/releases/latest",
+        )
+        or ""
+    ).strip()
+    or f"{GITHUB_REPOSITORY_URL}/releases/latest"
+)
+UPDATE_DOWNLOAD_URL_PREFIX: str = str(
+    os.environ.get("SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX", "") or ""
+).strip()
 
 
 # =============================================================================
@@ -83,41 +222,41 @@ if HF_ENDPOINT:
 # WD14 Tagger model directory
 WD14_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_WD14_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "wd14-tagger")
+    str(DATA_DIR / "models" / "wd14-tagger")
 )
 
 # YOLO/Censor model directory
 YOLO_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_YOLO_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "yolo")
+    str(DATA_DIR / "models" / "yolo")
 )
 
 # Default model cache directory (fallback)
 DEFAULT_CACHE_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_CACHE_DIR",
-    str(Path.home() / ".cache" / "sd-image-sorter")
+    str(DATA_DIR / "cache")
 )
 
 # Shared local model directories
 CLIP_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_CLIP_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "clip")
+    str(DATA_DIR / "models" / "clip")
 )
 ARTIST_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_ARTIST_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "artist")
+    str(DATA_DIR / "models" / "artist")
 )
 SAM3_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_SAM3_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "sam3")
+    str(DATA_DIR / "models" / "sam3")
 )
 NUDENET_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_NUDENET_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "nudenet")
+    str(DATA_DIR / "models" / "nudenet")
 )
 TORIIGATE_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR",
-    str(PROJECT_ROOT / "models" / "toriigate")
+    str(DATA_DIR / "models" / "toriigate")
 )
 
 
@@ -419,27 +558,74 @@ LOG_LEVEL: str = os.environ.get(
 # Helper Functions
 # =============================================================================
 
+def configure_runtime_temp_env() -> str:
+    """Force Python temp files into the package-local temp directory."""
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    temp_dir = str(TEMP_DIR)
+    os.environ["TMPDIR"] = temp_dir
+    os.environ["TEMP"] = temp_dir
+    os.environ["TMP"] = temp_dir
+    tempfile.tempdir = temp_dir
+    return temp_dir
+
+
+def get_data_dir() -> str:
+    """Get the package-local data directory, creating it if necessary."""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return str(DATA_DIR)
+
+
+def get_config_dir() -> str:
+    """Get the package-local config directory, creating it if necessary."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return str(CONFIG_DIR)
+
+
+def get_temp_dir() -> str:
+    """Get the package-local temp directory, creating it if necessary."""
+    configure_runtime_temp_env()
+    return str(TEMP_DIR)
+
+
+def get_update_dir() -> str:
+    """Get the package-local update directory, creating it if necessary."""
+    UPDATE_DIR.mkdir(parents=True, exist_ok=True)
+    return str(UPDATE_DIR)
+
+
+def get_thumbnail_cache_dir() -> str:
+    """Get the thumbnail cache directory, creating it if necessary."""
+    THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
+    return str(THUMBNAIL_DIR)
+
+
+def get_update_channel_config_path() -> str:
+    """Get the package-local update channel config path."""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    return str(UPDATE_CHANNEL_CONFIG_PATH)
+
+
 def get_wd14_model_dir() -> str:
     """
     Get the WD14 model directory, creating it if necessary.
 
     Priority:
     1. SD_IMAGE_SORTER_WD14_MODEL_DIR env var
-    2. Project models/wd14-tagger folder
-    3. User cache directory (fallback)
+    2. Package-local data/models/wd14-tagger folder
+    3. Package-local cache directory (fallback)
     """
     model_dir = Path(WD14_MODEL_DIR)
 
     if model_dir.exists():
         return str(model_dir)
 
-    # Try to create project folder
+    # Try to create package-local folder
     try:
         model_dir.mkdir(parents=True, exist_ok=True)
         print(f"Created model directory: {model_dir}")
         return str(model_dir)
     except Exception as e:
-        print(f"Could not create project model dir: {e}")
+        print(f"Could not create package-local model dir: {e}")
 
     # Fallback to user cache
     cache_dir = Path(DEFAULT_CACHE_DIR) / "wd14-tagger"
@@ -499,6 +685,13 @@ def ensure_directories():
     # Database directory
     db_path = Path(DATABASE_PATH)
     db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Core package-local runtime directories
+    get_data_dir()
+    get_config_dir()
+    get_temp_dir()
+    get_update_dir()
+    get_thumbnail_cache_dir()
 
     # Favorites folder
     Path(FAVORITES_FOLDER_PATH).mkdir(parents=True, exist_ok=True)

@@ -7,10 +7,13 @@ assertions that do not require heavy model execution.
 import base64
 import io
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
 import pytest
+from fastapi import BackgroundTasks
+from PIL import Image, ImageDraw
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -225,6 +228,366 @@ class TestCensorRouterValidation:
         assert data["filename"].endswith(".jpg")
         assert (output_folder / data["filename"]).exists()
 
+    def test_save_data_overwrite_refreshes_indexed_state(self, test_client, tmp_path):
+        from image_fingerprint import compute_image_content_fingerprint
+
+        source_path = tmp_path / "save-data-overwrite.png"
+        Image.new("RGB", (32, 32), color="white").save(source_path)
+
+        image_id = test_client.test_db.add_image(
+            path=str(source_path),
+            filename="save-data-overwrite.png",
+            metadata_json="{}",
+        )
+
+        original_fingerprint = compute_image_content_fingerprint(str(source_path))
+        test_client.test_db.add_tags(
+            image_id,
+            [{"tag": "stale_tag", "confidence": 0.9}],
+            content_fingerprint=original_fingerprint,
+        )
+        with test_client.test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+                WHERE id = ?
+                """,
+                ("stale caption", 0.88, b"embedding", original_fingerprint, image_id),
+            )
+            conn.commit()
+
+        edited_path = tmp_path / "save-data-updated.png"
+        Image.new("RGB", (32, 32), color="black").save(edited_path)
+        payload_image = base64.b64encode(edited_path.read_bytes()).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": source_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+                "original_image_id": image_id,
+            },
+        )
+
+        assert response.status_code == 200
+        assert Path(response.json()["output_path"]).resolve() == source_path.resolve()
+
+        refreshed_fingerprint = compute_image_content_fingerprint(str(source_path))
+        with test_client.test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ai_caption, aesthetic_score, embedding, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            )
+            row = cursor.fetchone()
+            cursor.execute("SELECT COUNT(*) FROM tags WHERE image_id = ?", (image_id,))
+            tag_count = cursor.fetchone()[0]
+
+        assert tag_count == 0
+        assert row["ai_caption"] is None
+        assert row["aesthetic_score"] is None
+        assert row["embedding"] is None
+        assert row["content_fingerprint"] == refreshed_fingerprint
+        assert refreshed_fingerprint != original_fingerprint
+
+    def test_save_data_rejects_oversized_decoded_payload(self, test_client, monkeypatch):
+        from services import censor_service as censor_service_module
+
+        monkeypatch.setattr(censor_service_module, "MAX_SAVE_DATA_BYTES", 32)
+        payload_image = base64.b64encode(b"x" * 33).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": "saved-image.png",
+                "output_folder": tempfile.gettempdir(),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 413
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "too large" in detail.lower()
+
+    def test_save_data_rejects_oversized_pixel_dimensions(self, test_client, tmp_path, monkeypatch):
+        from services import censor_service as censor_service_module
+
+        monkeypatch.setattr(censor_service_module, "MAX_SAVE_DATA_PIXELS", 1000)
+        image_path = tmp_path / "large-ish.png"
+        Image.new("RGB", (40, 40), color="green").save(image_path)
+        payload_image = base64.b64encode(image_path.read_bytes()).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": "saved-image.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 413
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "too large" in detail.lower()
+
+    def test_save_operations_applies_pen_stroke(self, test_client, tmp_path):
+        image_path = tmp_path / "operations-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="operations-source.png",
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "stroke",
+                        "tool": "pen",
+                        "brush_size": 12,
+                        "pen_color": "#00ff00",
+                        "pen_opacity": 1,
+                        "points": [{"x": 16, "y": 16}],
+                    }
+                ],
+                "filename": "operations-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        output_path = Path(response.json()["output_path"])
+        assert output_path.exists()
+
+        with Image.open(output_path) as result:
+            pixel = result.convert("RGBA").getpixel((16, 16))
+            assert pixel[1] > 200
+            assert pixel[0] < 80
+
+    def test_save_operations_mosaic_stroke_spans_multiple_blocks(self, test_client, tmp_path):
+        image_path = tmp_path / "mosaic-stroke-source.png"
+        source = Image.new("RGB", (64, 64), color="black")
+        for x in range(source.width):
+            stripe = 255 if x % 2 else 0
+            for y in range(source.height):
+                source.putpixel((x, y), (stripe, stripe, stripe))
+        source.save(image_path)
+
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="mosaic-stroke-source.png",
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "stroke",
+                        "tool": "brush",
+                        "style": "mosaic",
+                        "brush_size": 16,
+                        "block_size": 8,
+                        "points": [
+                            {"x": 4, "y": 32},
+                            {"x": 60, "y": 32},
+                        ],
+                    }
+                ],
+                "filename": "mosaic-stroke-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        output_path = Path(response.json()["output_path"])
+        assert output_path.exists()
+
+        with Image.open(output_path) as result:
+            result_rgb = result.convert("RGB")
+            touched_samples = [result_rgb.getpixel((x, 32))[0] for x in (8, 16, 24, 32, 40, 48, 56)]
+            untouched_sample = result_rgb.getpixel((8, 4))[0]
+
+        assert untouched_sample in {0, 255}
+        assert all(30 < value < 225 for value in touched_samples)
+        assert len(set(touched_samples)) >= 2
+
+    def test_save_operations_applies_cached_mask_ref(self, test_client, tmp_path, monkeypatch):
+        from services import censor_service as censor_service_module
+        from services.censor_service import CensorService
+
+        monkeypatch.setattr(censor_service_module, "MASK_INLINE_DATA_PIXEL_THRESHOLD", 1)
+        monkeypatch.setattr(CensorService, "_mask_cache_dir", tmp_path / "mask-cache")
+        with CensorService._mask_cache_lock:
+            CensorService._mask_cache_index = {}
+
+        image_path = tmp_path / "mask-ref-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="mask-ref-source.png",
+            metadata_json="{}",
+        )
+
+        mask_image = Image.new("L", (32, 32), 0)
+        ImageDraw.Draw(mask_image).rectangle([8, 8, 24, 24], fill=255)
+        mask_payload = CensorService._build_mask_payload(mask_image)
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "mask_effect",
+                        "style": "black_bar",
+                        "mask_ref": mask_payload["mask_ref"],
+                        "mask_bounds": mask_payload["mask_bounds"],
+                    }
+                ],
+                "filename": "mask-ref-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        output_path = Path(response.json()["output_path"])
+        assert output_path.exists()
+
+        with Image.open(output_path) as result:
+            rgba = result.convert("RGBA")
+            assert rgba.getpixel((16, 16))[:3] == (0, 0, 0)
+            assert rgba.getpixel((2, 2))[:3] == (255, 255, 255)
+
+    def test_save_operations_applies_box_geometry_effect(self, test_client, tmp_path):
+        image_path = tmp_path / "geometry-source.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="geometry-source.png",
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "geometry_effect",
+                        "style": "black_bar",
+                        "block_size": 8,
+                        "blur_radius": 4,
+                        "regions": [{"box": [4, 4, 20, 20]}],
+                    }
+                ],
+                "filename": "geometry-output.png",
+                "output_folder": str(tmp_path / "out"),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        output_path = Path(response.json()["output_path"])
+        assert output_path.exists()
+
+        with Image.open(output_path) as result:
+            pixel = result.convert("RGBA").getpixel((10, 10))
+            assert pixel[:3] == (0, 0, 0)
+
+    def test_save_operations_overwrite_refreshes_indexed_state(self, test_client, tmp_path):
+        from image_fingerprint import compute_image_content_fingerprint
+
+        image_path = tmp_path / "save-operations-overwrite.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="save-operations-overwrite.png",
+            metadata_json="{}",
+        )
+
+        original_fingerprint = compute_image_content_fingerprint(str(image_path))
+        test_client.test_db.add_tags(
+            image_id,
+            [{"tag": "stale_tag", "confidence": 0.9}],
+            content_fingerprint=original_fingerprint,
+        )
+        with test_client.test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+                WHERE id = ?
+                """,
+                ("stale caption", 0.91, b"embedding", original_fingerprint, image_id),
+            )
+            conn.commit()
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [
+                    {
+                        "kind": "geometry_effect",
+                        "style": "black_bar",
+                        "block_size": 8,
+                        "blur_radius": 4,
+                        "regions": [{"box": [4, 4, 20, 20]}],
+                    }
+                ],
+                "filename": image_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 200
+        assert Path(response.json()["output_path"]).resolve() == image_path.resolve()
+
+        refreshed_fingerprint = compute_image_content_fingerprint(str(image_path))
+        with test_client.test_db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ai_caption, aesthetic_score, embedding, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            )
+            row = cursor.fetchone()
+            cursor.execute("SELECT COUNT(*) FROM tags WHERE image_id = ?", (image_id,))
+            tag_count = cursor.fetchone()[0]
+
+        assert tag_count == 0
+        assert row["ai_caption"] is None
+        assert row["aesthetic_score"] is None
+        assert row["embedding"] is None
+        assert row["content_fingerprint"] == refreshed_fingerprint
+        assert refreshed_fingerprint != original_fingerprint
+
     def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
         from PIL import Image
         import censor as censor_module
@@ -263,6 +626,72 @@ class TestCensorRouterValidation:
         assert response.status_code == 200
         assert captured["model_path"].endswith("wenaka_yolov8s-seg.onnx")
         assert response.json()["detections"][0]["class"] == "breasts"
+
+    def test_detect_resolves_backend_relative_source_paths(self, test_client, monkeypatch, tmp_path):
+        from PIL import Image
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+
+        backend_root = Path(__file__).resolve().parents[2]
+        captured = {}
+
+        class FakeDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, image_path, _threshold):
+                captured["image_path"] = image_path
+                return [{"class": "breasts", "confidence": 0.9, "box": [0, 0, 16, 16]}]
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", FakeDetector)
+
+        with tempfile.TemporaryDirectory(dir=backend_root) as relative_dir:
+            image_path = Path(relative_dir) / "relative-censor.png"
+            Image.new("RGB", (64, 64), color="green").save(image_path)
+
+            image_id = test_client.test_db.add_image(
+                path=str(image_path.relative_to(backend_root)),
+                filename="relative-censor.png",
+                metadata_json="{}",
+            )
+
+            response = test_client.post(
+                "/api/censor/detect",
+                json={"image_id": image_id, "model_type": "legacy", "confidence_threshold": 0.5},
+            )
+
+        assert response.status_code == 200
+        assert captured["image_path"] == str(image_path.resolve())
+        assert response.json()["detections"][0]["class"] == "breasts"
+
+    def test_detect_reports_missing_source_path_with_actionable_detail(self, test_client, tmp_path):
+        missing_path = tmp_path / "missing-source.png"
+        image_id = test_client.test_db.add_image(
+            path=str(missing_path),
+            filename="missing-source.png",
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={"image_id": image_id, "model_type": "nudenet", "confidence_threshold": 0.5},
+        )
+
+        assert response.status_code == 404
+        error_text = response.json()["error"]
+        assert "source file is missing on disk" in error_text
+        assert "Auto Censor needs the original file" in error_text
+        assert str(missing_path) in error_text
+        assert "Reconnect it and rescan that folder" in error_text
 
     def test_combined_mask_uses_transparent_alpha_png(self):
         from io import BytesIO
@@ -373,6 +802,180 @@ class TestCensorRouterValidation:
         assert [d["class"] for d in data["detections"]] == ["anus"]
         assert data["geometry_mode"] == "box"
         assert data["combined_mask"].startswith("data:image/png;base64,")
+        assert data["combined_mask_ref"] is None
+        assert data["combined_mask_bounds"] == [40, 40, 61, 61]
+        assert data["image_width"] == 80
+        assert data["image_height"] == 80
+
+    def test_detect_returns_cached_mask_ref_for_large_combined_masks(self, test_client, monkeypatch, tmp_path):
+        import censor as censor_module
+        from services import censor_service as censor_service_module
+        from services.censor_service import CensorService
+
+        monkeypatch.setattr(censor_service_module, "MASK_INLINE_DATA_PIXEL_THRESHOLD", 1)
+        monkeypatch.setattr(CensorService, "_mask_cache_dir", tmp_path / "mask-cache")
+        with CensorService._mask_cache_lock:
+            CensorService._mask_cache_index = {}
+
+        image_path = tmp_path / "detect-large-mask.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="detect-large-mask.png",
+            metadata_json="{}",
+        )
+
+        class FakeDetector:
+            def __init__(self, model_path):
+                self.model_path = model_path
+                self.session = None
+
+            def load(self):
+                self.session = object()
+
+            def detect(self, _image_path, _threshold):
+                return [
+                    {
+                        "class": "breasts",
+                        "confidence": 0.96,
+                        "box": [12, 10, 40, 44],
+                        "polygon": [[12, 10], [40, 10], [40, 44], [12, 44]],
+                    },
+                ]
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_default_legacy_model_path",
+            lambda: str(tmp_path / "wenaka_yolov8s-seg.onnx"),
+        )
+        monkeypatch.setattr(censor_module, "CensorDetector", FakeDetector)
+
+        response = test_client.post(
+            "/api/censor/detect",
+            json={
+                "image_id": image_id,
+                "model_type": "legacy",
+                "confidence_threshold": 0.5,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["combined_mask"] is None
+        assert data["combined_mask_ref"]
+        assert data["combined_mask_bounds"] == [12, 10, 41, 45]
+        assert data["image_width"] == 64
+        assert data["image_height"] == 64
+
+        preview_response = test_client.get(
+            f"/api/censor/mask-cache/{data['combined_mask_ref']}?width=14&height=18"
+        )
+        assert preview_response.status_code == 200
+        assert preview_response.headers["content-type"].startswith("image/png")
+        preview_image = Image.open(io.BytesIO(preview_response.content)).convert("RGBA")
+        assert preview_image.size == (14, 18)
+        assert preview_image.getpixel((7, 9))[3] > 0
+
+    def test_segment_text_keeps_inline_mask_for_small_images(self, test_client, monkeypatch, tmp_path):
+        from services import censor_service as censor_service_module
+
+        image_path = tmp_path / "segment-small.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="segment-small.png",
+            metadata_json="{}",
+        )
+
+        class FakeRefiner:
+            def segment_by_text(self, image, text_prompt):
+                assert image.size == (64, 64)
+                assert text_prompt == "face"
+                mask = np.zeros((64, 64), dtype=np.uint8)
+                mask[12:48, 20:44] = 1
+                return mask
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_model_health",
+            lambda: {"censor": {"sam3": {"available": True, "message": "ready"}}},
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "sam3_refiner",
+            type("FakeSam3Module", (), {"get_sam3_refiner": staticmethod(lambda: FakeRefiner())})(),
+        )
+
+        response = test_client.post(
+            "/api/censor/segment-text",
+            json={"image_id": image_id, "text_prompt": "face"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["mask"].startswith("data:image/png;base64,")
+        assert data["mask_ref"] is None
+        assert data["mask_bounds"] == [20, 12, 44, 48]
+        assert data["image_width"] == 64
+        assert data["image_height"] == 64
+
+    def test_segment_text_returns_cached_mask_ref_for_large_masks(self, test_client, monkeypatch, tmp_path):
+        from services import censor_service as censor_service_module
+        from services.censor_service import CensorService
+
+        monkeypatch.setattr(censor_service_module, "MASK_INLINE_DATA_PIXEL_THRESHOLD", 1)
+        monkeypatch.setattr(CensorService, "_mask_cache_dir", tmp_path / "mask-cache")
+        with CensorService._mask_cache_lock:
+            CensorService._mask_cache_index = {}
+
+        image_path = tmp_path / "segment-large.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="segment-large.png",
+            metadata_json="{}",
+        )
+
+        class FakeRefiner:
+            def segment_by_text(self, image, text_prompt):
+                assert image.size == (64, 64)
+                assert text_prompt == "face"
+                mask = np.zeros((64, 64), dtype=np.uint8)
+                mask[12:48, 20:44] = 1
+                return mask
+
+        monkeypatch.setattr(
+            censor_service_module,
+            "get_model_health",
+            lambda: {"censor": {"sam3": {"available": True, "message": "ready"}}},
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "sam3_refiner",
+            type("FakeSam3Module", (), {"get_sam3_refiner": staticmethod(lambda: FakeRefiner())})(),
+        )
+
+        response = test_client.post(
+            "/api/censor/segment-text",
+            json={"image_id": image_id, "text_prompt": "face"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["mask"] is None
+        assert data["mask_ref"]
+        assert data["mask_bounds"] == [20, 12, 44, 48]
+        assert data["image_width"] == 64
+        assert data["image_height"] == 64
+
+        preview_response = test_client.get(f"/api/censor/mask-cache/{data['mask_ref']}?width=12&height=18")
+        assert preview_response.status_code == 200
+        assert preview_response.headers["content-type"].startswith("image/png")
+        preview_image = Image.open(io.BytesIO(preview_response.content)).convert("RGBA")
+        assert preview_image.size == (12, 18)
+        assert preview_image.getpixel((6, 9))[3] > 0
 
     def test_censor_models_returns_recommended_backend(self, test_client):
         response = test_client.get("/api/censor/models")
@@ -384,6 +987,35 @@ class TestCensorRouterValidation:
 
 
 class TestSimilarityRouterValidation:
+    def test_embed_images_uses_background_tasks_instead_of_daemon_thread(self, monkeypatch):
+        from services.similarity_service import SimilarityService
+
+        class FakeIndex:
+            def get_progress(self):
+                return {"running": False}
+
+            def embed_batch(self, image_ids):
+                return image_ids
+
+        fake_index = FakeIndex()
+        monkeypatch.setattr(
+            "services.similarity_service.get_similarity_index",
+            lambda _db: fake_index,
+        )
+        monkeypatch.setattr(
+            "services.similarity_service.ensure_clip_model_ready",
+            lambda: "fastembed:in-memory",
+        )
+
+        service = SimilarityService()
+        background_tasks = BackgroundTasks()
+        result = service.embed_images(background_tasks, [1, 2, 3])
+
+        assert result["status"] == "started"
+        assert len(background_tasks.tasks) == 1
+        assert background_tasks.tasks[0].func == fake_index.embed_batch
+        assert background_tasks.tasks[0].args == ([1, 2, 3],)
+
     def test_search_similar_returns_pagination_metadata(self, test_client):
         from routers import similarity as similarity_router
 

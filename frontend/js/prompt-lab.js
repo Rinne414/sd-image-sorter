@@ -71,35 +71,38 @@ const PromptLab = {
         }
     },
 
+    dismissFirstUseCard() {
+        localStorage.setItem('promptlab-guide-seen', 'true');
+        const card = document.getElementById('promptlab-start-card');
+        if (card) card.hidden = true;
+    },
+
+    refreshFirstUseCard() {
+        const card = document.getElementById('promptlab-start-card');
+        const dismissBtn = document.getElementById('promptlab-start-dismiss');
+        if (!card) return;
+        if (dismissBtn && dismissBtn.dataset.bound !== 'true') {
+            dismissBtn.addEventListener('click', () => this.dismissFirstUseCard());
+            dismissBtn.dataset.bound = 'true';
+        }
+        card.hidden = localStorage.getItem('promptlab-guide-seen') === 'true';
+    },
+
+    activateMode(mode) {
+        const safeMode = ['stats', 'compare', 'build', 'random'].includes(mode) ? mode : 'stats';
+        document.querySelectorAll('.promptlab-tab').forEach((tab) => {
+            tab.classList.toggle('active', tab.dataset.mode === safeMode);
+        });
+        document.querySelectorAll('.promptlab-mode').forEach((panel) => {
+            panel.classList.toggle('active', panel.id === `promptlab-mode-${safeMode}`);
+        });
+        if (safeMode === 'stats') this.loadStats();
+        if (safeMode === 'compare') this.populateImageSelectors();
+        if (safeMode === 'build') this.populateBuildSelector();
+    },
+
     showFirstUseGuide() {
-        if (localStorage.getItem('promptlab-guide-seen')) return;
-
-        const view = document.getElementById('view-promptlab');
-        if (!view) return;
-
-        const t = (key) => (window.I18n ? window.I18n.t(key) : key);
-        const overlay = window.App.createGuideOverlay({
-            id: 'promptlab-first-use-guide',
-            storageKey: 'promptlab-guide-seen',
-            title: t('guide.promptlabTitle'),
-            description: t('guide.promptlabDescription'),
-            steps: [
-                { title: t('guide.promptlabStep1Title'), text: t('guide.promptlabStep1Text') },
-                { title: t('guide.promptlabStep2Title'), text: t('guide.promptlabStep2Text') },
-                { title: t('guide.promptlabStep3Title'), text: t('guide.promptlabStep3Text') },
-                { title: t('guide.promptlabStep4Title'), text: t('guide.promptlabStep4Text') },
-            ],
-            closeLabel: t('guide.closeLabel'),
-            maxWidth: '520px',
-        });
-
-        view.style.position = 'relative';
-        view.appendChild(overlay);
-
-        overlay.querySelector('[data-guide-close]')?.addEventListener('click', () => {
-            overlay.remove();
-            localStorage.setItem('promptlab-guide-seen', 'true');
-        });
+        this.refreshFirstUseCard();
     },
 
     // ============== Data Loading ==============
@@ -158,6 +161,10 @@ const PromptLab = {
 
     _t(key, fallback, params) {
         return window.I18n?.t?.(key, params) || fallback || key;
+    },
+
+    _renderStatsEmpty(message) {
+        return `<div class="promptlab-empty-note">${escapeHtml(message)}</div>`;
     },
 
     _getImageThumbUrl(imageId, size = 320) {
@@ -253,7 +260,7 @@ const PromptLab = {
                 <img class="promptlab-image-preview-thumb" src="${escapeHtml(this._getImageThumbUrl(image.id, 320))}" alt="${escapeHtml(image.filename || '')}" loading="lazy">
                 <div class="promptlab-image-preview-info">
                     <div class="promptlab-image-preview-title">${escapeHtml(image.filename || `Image ${image.id}`)}</div>
-                    <div class="promptlab-image-preview-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick metadata'))}</div>
+                    <div class="promptlab-image-preview-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick info yet'))}</div>
                 </div>
             </div>
         `;
@@ -335,7 +342,7 @@ const PromptLab = {
                 <img src="${escapeHtml(this._getImageThumbUrl(image.id, 320))}" alt="${escapeHtml(image.filename || '')}" loading="lazy">
                 <div class="promptlab-image-picker-info">
                     <div class="promptlab-image-picker-name">${escapeHtml(image.filename || `Image ${image.id}`)}</div>
-                    <div class="promptlab-image-picker-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick metadata'))}</div>
+                    <div class="promptlab-image-picker-meta">${escapeHtml(this._formatPromptlabImageMeta(image) || this._t('promptlab.noImageMeta', 'No quick info yet'))}</div>
                 </div>
             </div>
         `).join('');
@@ -779,13 +786,12 @@ const PromptLab = {
 
             if (result.warnings?.length > 0) {
                 showToast(
-                    this._t('promptlab.generatedWarnings', 'Generated with {count} warning(s)', { count: result.warnings.length })
-                        .replace('{count}', result.warnings.length),
+                    this._t('promptlab.generatedWarnings', 'Generated with {count} warning(s)', { count: result.warnings.length }),
                     'info'
                 );
             }
         } catch (e) {
-            showToast(formatUserError(e, "Generation failed"), "error");
+            showToast(formatUserError(e, this._t('promptlab.generateFailed', 'Prompt generation failed')), 'error');
         }
     },
 
@@ -850,15 +856,14 @@ const PromptLab = {
 
             if (violations.length > 0 || result.valid === false) {
                 showToast(
-                    this._t('promptlab.conflictsFound', 'Found {count} conflict(s)', { count: violations.length })
-                        .replace('{count}', violations.length),
+                    this._t('promptlab.conflictsFound', 'Found {count} conflict(s)', { count: violations.length }),
                     'error'
                 );
             } else {
                 showToast(this._t('promptlab.noConflicts', 'No conflicts detected'), 'success');
             }
         } catch (e) {
-            showToast(formatUserError(e, "Validation failed"), "error");
+            showToast(formatUserError(e, this._t('promptlab.validateFailed', 'Prompt validation failed')), 'error');
         }
     },
 
@@ -884,11 +889,11 @@ const PromptLab = {
             await this.loadPresets();
             this.renderPresetList();
             window.App.showToast(
-                this._t('promptlab.presetSaved', 'Preset "{name}" saved', { name }).replace('{name}', name),
+                this._t('promptlab.presetSaved', 'Preset "{name}" saved', { name }),
                 'success'
             );
         } catch (e) {
-            window.App.showToast(formatUserError(e, "Failed to save preset"), "error");
+            window.App.showToast(formatUserError(e, this._t('promptlab.presetSaveFailed', 'Failed to save preset')), 'error');
         }
     },
 
@@ -905,11 +910,14 @@ const PromptLab = {
             this.renderCategoryBrowser();
             this.renderSlotBuilder();
             window.App.showToast(
-                this._t('promptlab.presetLoaded', 'Loaded preset "{name}"', { name: preset.name }).replace('{name}', preset.name),
+                this._t('promptlab.presetLoaded', 'Loaded preset "{name}"', { name: preset.name }),
                 'success'
             );
         } catch (e) {
-            window.App.showToast(this._t('promptlab.presetLoadFailed', 'Failed to load preset'), 'error');
+            window.App.showToast(
+                formatUserError(e, this._t('promptlab.presetLoadFailed', 'Failed to load preset')),
+                'error'
+            );
         }
     },
 
@@ -926,7 +934,10 @@ const PromptLab = {
                     this.renderPresetList();
                     showToast(this._t('promptlab.presetDeleted', 'Preset deleted'), 'info');
                 } catch (e) {
-                    showToast(this._t('promptlab.presetDeleteFailed', 'Failed to delete preset'), 'error');
+                    showToast(
+                        formatUserError(e, this._t('promptlab.presetDeleteFailed', 'Failed to delete preset')),
+                        'error'
+                    );
                 }
             }
         );
@@ -954,7 +965,7 @@ const PromptLab = {
         this.renderCategoryBrowser();
         this.renderSlotBuilder();
         window.App.showToast(
-            this._t('promptlab.tagSetApplied', 'Applied tag set "{name}"', { name: set.name }).replace('{name}', set.name),
+            this._t('promptlab.tagSetApplied', 'Applied tag set "{name}"', { name: set.name }),
             'success'
         );
     },
@@ -969,7 +980,7 @@ const PromptLab = {
     copyPrompt() {
         const output = document.getElementById('promptlab-output');
         if (!output?.value) return;
-        copyTextToClipboard(output.value, 'Prompt copied to clipboard');
+        copyTextToClipboard(output.value, this._t('promptlab.promptCopied', 'Prompt copied'));
     },
 
     clearAll() {
@@ -1050,15 +1061,14 @@ const PromptLab = {
         // Tab switching
         document.querySelectorAll('.promptlab-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('.promptlab-tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.promptlab-mode').forEach(m => m.classList.remove('active'));
-                tab.classList.add('active');
-                const mode = tab.dataset.mode;
-                const panel = document.getElementById(`promptlab-mode-${mode}`);
-                if (panel) panel.classList.add('active');
-                if (mode === 'stats') self.loadStats();
-                if (mode === 'compare') self.populateImageSelectors();
-                if (mode === 'build') self.populateBuildSelector();
+                self.activateMode(tab.dataset.mode);
+            });
+        });
+
+        document.querySelectorAll('[data-promptlab-mode-target]').forEach((button) => {
+            button.addEventListener('click', () => {
+                self.dismissFirstUseCard();
+                self.activateMode(button.dataset.promptlabModeTarget);
             });
         });
 
@@ -1294,18 +1304,20 @@ const PromptLab = {
             if (topTagsEl && stats.top_tags) {
                 const visible = stats.top_tags.slice(0, this.statsVisibleCounts.topTags);
                 const maxCount = stats.top_tags[0]?.count || 1;
-                topTagsEl.innerHTML = visible.map(t =>
-                    `<div class="promptlab-tag-item">
-                        <span class="tag-name">${escapeHtml(t.tag)}</span>
-                        <div class="tag-bar"><div class="tag-bar-fill" style="width:${(t.count / maxCount * 100).toFixed(0)}%"></div></div>
-                        <span class="tag-count">${t.pct}%</span>
-                        <div class="promptlab-inline-actions">
-                            <button class="btn btn-ghost btn-small" data-action="gallery-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.filterGallery', 'Filter Gallery')}</button>
-                            <button class="btn btn-ghost btn-small" data-action="random-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
-                            <button class="btn btn-secondary btn-small" data-action="build-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.addToBuild', 'Add to Build')}</button>
-                        </div>
-                    </div>`
-                ).join('');
+                topTagsEl.innerHTML = visible.length
+                    ? visible.map(t =>
+                        `<div class="promptlab-tag-item">
+                            <span class="tag-name">${escapeHtml(t.tag)}</span>
+                            <div class="tag-bar"><div class="tag-bar-fill" style="width:${(t.count / maxCount * 100).toFixed(0)}%"></div></div>
+                            <span class="tag-count">${t.pct}%</span>
+                            <div class="promptlab-inline-actions">
+                                <button class="btn btn-ghost btn-small" data-action="gallery-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.filterGallery', 'Filter Gallery')}</button>
+                                <button class="btn btn-ghost btn-small" data-action="random-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.useInRandom', 'Use in Random')}</button>
+                                <button class="btn btn-secondary btn-small" data-action="build-tag" data-tag="${escapeHtml(t.tag)}">${this._t('promptlab.addToBuild', 'Add to Build')}</button>
+                            </div>
+                        </div>`
+                    ).join('')
+                    : this._renderStatsEmpty(this._t('promptlab.noTopTagsYet', 'Import more images to see your strongest recurring tags here.'));
             }
 
             const highEl = document.getElementById('pl-high-tags');
@@ -1325,15 +1337,18 @@ const PromptLab = {
                             </div>
                         </div>`
                     ).join('')
-                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noScoredImagesYet', 'No scored images yet')}</div>`;
+                    : this._renderStatsEmpty(this._t('promptlab.noScoredImagesYet', 'No scored images yet'));
             }
 
             const cpEl = document.getElementById('pl-top-checkpoints');
             if (cpEl && stats.top_checkpoints) {
-                cpEl.innerHTML = stats.top_checkpoints.slice(0, this.statsVisibleCounts.checkpoints).map(c => {
-                    const name = c.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || c.name;
-                    return `<div class="promptlab-tag-item"><span class="tag-name">🧠 ${escapeHtml(name)}</span><span class="tag-count">${c.count}</span></div>`;
-                }).join('');
+                const visible = stats.top_checkpoints.slice(0, this.statsVisibleCounts.checkpoints);
+                cpEl.innerHTML = visible.length
+                    ? visible.map(c => {
+                        const name = c.name.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') || c.name;
+                        return `<div class="promptlab-tag-item"><span class="tag-name">🧠 ${escapeHtml(name)}</span><span class="tag-count">${c.count}</span></div>`;
+                    }).join('')
+                    : this._renderStatsEmpty(this._t('promptlab.noCheckpointsYet', 'Checkpoint patterns will appear here after you import more prompt metadata.'));
             }
 
             const bestCheckpointEl = document.getElementById('pl-best-checkpoints');
@@ -1358,7 +1373,7 @@ const PromptLab = {
                             </div>
                         </div>`;
                     }).join('')
-                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.notEnoughScoredData', 'Not enough scored data yet')}</div>`;
+                    : this._renderStatsEmpty(this._t('promptlab.notEnoughScoredData', 'Not enough scored data yet'));
             }
 
             const topScoredEl = document.getElementById('pl-top-scored-images');
@@ -1385,7 +1400,7 @@ const PromptLab = {
                             </div>
                         </div>`;
                     }).join('')
-                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noScoredExamples', 'No scored examples yet')}</div>`;
+                    : this._renderStatsEmpty(this._t('promptlab.noScoredExamples', 'No scored examples yet'));
             }
 
             const recipeEl = document.getElementById('pl-recipe-suggestions');
@@ -1409,7 +1424,7 @@ const PromptLab = {
                             </div>
                         </div>`;
                     }).join('')
-                    : `<div style="color:var(--text-muted);font-size:12px;">${this._t('promptlab.noRecipeSuggestions', 'No recipe suggestions yet')}</div>`;
+                    : this._renderStatsEmpty(this._t('promptlab.noRecipeSuggestions', 'No recipe suggestions yet'));
             }
 
             this._syncStatsLoadMore('pl-top-tags-more', stats.top_tags_total ?? stats.top_tags?.length ?? 0, this.statsVisibleCounts.topTags);

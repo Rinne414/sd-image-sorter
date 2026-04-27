@@ -166,6 +166,92 @@ Use this structure for future confirmed-debt entries:
 - Deferred because:
   Recent fixes improved normalization and source-path resolution, but the abstraction is still not narrow enough to make misuse difficult.
 
+### Debt-08: Frontend bilingual error/copy behavior is still entry-point dependent
+- Status: partially mitigated
+- Type: UX contract + frontend architecture debt
+- Impact: high
+- Risk if ignored:
+  Future release polish can easily regress into mixed-language toasts, English fallback errors, or untranslated hover/help text even when the main UI looks translated.
+- Related files:
+  `frontend/index.html`
+  `frontend/js/app.js`
+  `frontend/js/autosep.js`
+  `frontend/js/manual-sort.js`
+  `frontend/js/censor-edit.js`
+  `frontend/js/similar.js`
+  `frontend/js/artist-ident.js`
+  `frontend/js/prompt-lab.js`
+  `frontend/js/modules/utils/errors.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+- Observed problem:
+  This release-hardening pass had to patch many separate modules just to stop common user flows from leaking English through toasts, empty states, progress text, confirm copy, hover titles, and generic error formatting.
+- Why this is debt:
+  The bilingual UX contract is real product behavior, but it is enforced by scattered per-feature strings and ad hoc overrides rather than one narrow translation/error path.
+- Better long-term shape:
+  Centralize user-facing toast/error helpers, define one policy for fallback text, and add a repeatable audit for hardcoded user-facing English in HTML attributes and JS strings.
+- Revisit trigger:
+  Revisit before larger UI refresh work, before adding new frontend tools/views, or before release-polish passes that touch multiple tabs.
+- Deferred because:
+  The most user-visible leaks were fixed now, but fully centralizing this would cut across many frontend modules and translation bindings.
+
+### Debt-09: Censor layout ownership is split across multiple CSS layers
+- Status: partially mitigated
+- Type: frontend layout debt
+- Impact: high
+- Risk if ignored:
+  Small UI text or control changes can re-break the Censor status/footer/sidebar layout, especially on tighter desktop screens, because the same shell is being steered by competing CSS layers.
+- Related files:
+  `frontend/css/styles.css`
+  `frontend/css/censor-v2.css`
+  `frontend/css/ui-refresh.css`
+  `frontend/index.html`
+- Observed problem:
+  The recent Censor footer/status-bar fix required override-style surgery because multiple stylesheets currently own the same layout surface with different assumptions about height, separators, wrapping, and sidebar behavior.
+- Why this is debt:
+  Layout stability depends too much on cascade order and local overrides instead of one clearly owned Censor layout system.
+- Better long-term shape:
+  Pick one stylesheet as the owner of the Censor shell layout, push shared tokens into variables, and remove duplicate selector ownership for the same structural elements.
+- Revisit trigger:
+  Revisit before adding more Censor controls, changing sidebar density, or doing a broader desktop layout pass.
+- Deferred because:
+  The immediate user-visible breakage was fixed without taking on a risky full CSS consolidation during release work.
+
+### Debt-10: Release/update path ownership rules are still duplicated across packaging and updater layers
+- Status: partially mitigated
+- Type: release + operability debt
+- Impact: medium
+- Risk if ignored:
+  A future package-local folder change can drift between release packing rules, manifest generation, updater protection rules, and docs. That can cause rejected updates, missing files in release assets, or confusing "why did this update refuse/apply differently?" failures.
+- Related files:
+  `scripts/build_release_packages.py`
+  `backend/update_worker.py`
+  `docs/RELEASE_PACKS.md`
+  `backend/tests/test_release_build.py`
+  `backend/tests/test_update_worker.py`
+- Observed problem:
+  The release builder decides which paths are excluded from public assets, while the detached update worker separately decides which package-local paths are protected from replacement/deletion. Both layers currently encode the same ownership boundary in different places.
+- Why this is debt:
+  The current safety story is much better than before because the worker now hard-blocks protected runtime paths and tests cover key cases, but the rule itself is still copy-maintained instead of defined once. Adding a new package-local runtime directory would require coordinated edits across build script, updater logic, tests, and docs.
+- Better long-term shape:
+  Define one shared "release-managed vs user/runtime-managed" contract that packaging, updater validation, and docs can derive from, or generate/update those surfaces from one canonical source.
+- Revisit trigger:
+  Revisit before adding new package-local runtime directories, changing portable package layout, or expanding updater asset types/channels.
+- Deferred because:
+  The immediate user-facing risk is mitigated by worker-side hard protection and regression tests, so centralizing the contract can wait until the release/update pipeline gets a broader hardening pass.
+
+
+## Quick Debt Reductions Applied On 2026-04-27
+
+These do not close the major structural debts from the whole-repo audit, but they reduce small confirmed drift without risky rewrites.
+
+- LoRA selected filters now use exact normalized `image_loras.lora_name = ?` matching instead of substring `LIKE`; checkpoint cross-generator normalization remains open.
+- Aspect-ratio validation now imports one shared backend constant instead of copy-maintaining the same list in image and sorting services.
+- Update archives are validated for unsafe member names before staging, and the detached worker uses platform-independent archive-entry path checks.
+- Release package default version now follows `backend/app_info.py` instead of a hardcoded script-local value.
+- Production and test dependencies are split into `backend/requirements.txt` and `backend/requirements-dev.txt`; full dependency locking is still open.
+- Gallery large-card labels moved into the main i18n packs for the visible card metadata touched in this cleanup.
+
 ## Suggested Follow-Up Work
 
 These are not "drop everything now" items.
@@ -178,6 +264,10 @@ They are the next reasonable debt-reduction steps if the goal shifts from bug fi
 4. Define one manual-sort session contract covering backend memory, persisted JSON, and frontend storage.
 5. Define and document gallery selection scopes explicitly.
 6. Tighten path identity behind fewer public helpers and fewer direct path writes.
+7. Centralize the release/update ownership contract for package-local runtime paths instead of copy-maintaining it across scripts, updater code, tests, and docs.
+8. Introduce a real schema migration ledger before the next schema semantics change.
+9. Generate a reproducible dependency lock for release builds, with dev/test tooling kept out of production installs.
+10. Split the largest frontend state modules only behind explicit selection/filter/scope contracts and regression coverage.
 
 ## Audit Targets Suggested But Not Yet Confirmed As Debt
 

@@ -38,9 +38,26 @@ function throttle(func, limit) {
 }
 
 // i18n helper for app-level dynamic strings.
-function appT(key, fallback) {
-    const val = window.I18n?.t?.(key);
+function appT(key, fallback, params) {
+    const val = window.I18n?.t?.(key, params);
     return (val && val !== key) ? val : (fallback || key);
+}
+
+function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
+    const normalized = String(generator || 'unknown').trim().toLowerCase();
+    const keyMap = {
+        all: 'generator.all',
+        nai: 'generator.nai',
+        comfyui: 'generator.comfyui',
+        forge: 'generator.forge',
+        webui: 'generator.webui',
+        unknown: 'generator.unknown'
+    };
+    const translationKey = keyMap[normalized];
+    if (translationKey) {
+        return appT(translationKey, normalized === 'unknown' ? fallbackUnknown : normalized);
+    }
+    return String(generator || appT('generator.unknown', fallbackUnknown));
 }
 
 // ============== Request Manager (Cancellation Support) ==============
@@ -80,6 +97,26 @@ const RequestManager = {
 
 const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
+const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
+const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
+
+function readStoredBoolean(storageKey, fallback = false) {
+    try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw == null) return fallback;
+        return raw === '1' || raw === 'true';
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function writeStoredBoolean(storageKey, value) {
+    try {
+        localStorage.setItem(storageKey, value ? '1' : '0');
+    } catch (error) {
+        // Ignore localStorage failures.
+    }
+}
 
 function getDefaultGalleryPageSize(mode = null) {
     const resolvedMode = mode || localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid';
@@ -208,6 +245,7 @@ const AppState = {
     filters: savedFilters || createDefaultFilterState(),
     selectedImage: null,
     isLoading: false,
+    galleryNeedsRefresh: false,
 
     // Pagination state
     pagination: {
@@ -221,12 +259,21 @@ const AppState = {
     // Multi-select state
     selectionMode: false,
     selectedIds: new Set(),
+    selectionDataCache: {
+        key: null,
+        data: null
+    },
 
     // Analytics data
     analytics: {
         checkpoints: [],
         loras: [],
         top_tags: []
+    },
+
+    update: {
+        checking: false,
+        status: null,
     },
 
     // Current modal selection state
@@ -478,12 +525,27 @@ const API = {
         return this.get(`/api/images/${id}`);
     },
 
+    async getSelectionData(imageIds) {
+        return this.post('/api/images/export-data', { image_ids: imageIds });
+    },
+
+    async getExportSelectionData(imageIds) {
+        return this.getSelectionData(imageIds);
+    },
+
     async reparseImage(id) {
         return this.post(`/api/images/${id}/reparse`);
     },
 
     async openFolder(imageId) {
         return this.post('/api/open-folder', { image_id: imageId });
+    },
+
+    async deleteSelectedImages(imageIds) {
+        return this.post('/api/images/delete-selected', {
+            image_ids: imageIds,
+            confirm_delete_files: true
+        });
     },
 
     getImageUrl(id) {
@@ -553,9 +615,26 @@ const API = {
         });
     },
 
+    async getUpdateStatus(force = false) {
+        return this.get(`/api/updates/status?force=${force ? 'true' : 'false'}`);
+    },
+
+    async applyUpdate(options = {}) {
+        return this.post('/api/updates/apply', {
+            force_check: options.forceCheck ?? true,
+            relaunch: options.relaunch ?? true,
+        });
+    },
+
     // Scan
-    async startScan(folderPath, recursive = true) {
-        return this.post('/api/scan', { folder_path: folderPath, recursive });
+    async startScan(folderPath, options = {}) {
+        return this.post('/api/scan', {
+            folder_path: folderPath,
+            recursive: options.recursive ?? true,
+            quick_import: options.quickImport ?? true,
+            force_reparse: options.forceReparse ?? false,
+            cleanup_missing: options.cleanupMissing ?? false,
+        });
     },
 
     async getScanProgress() {
@@ -599,11 +678,11 @@ const API = {
     },
 
     // Move
-    async moveImages(imageIds, destinationFolder) {
-        return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder });
+    async moveImages(imageIds, destinationFolder, operation = 'move') {
+        return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder, operation });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move') {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -619,12 +698,13 @@ const API = {
             aspect_ratio: dimensions?.aspectRatio || null,
             min_aesthetic: aesthetic?.min ?? null,
             max_aesthetic: aesthetic?.max ?? null,
-            destination_folder: destinationFolder
+            destination_folder: destinationFolder,
+            operation,
         });
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move') {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -641,6 +721,7 @@ const API = {
         if (aesthetic?.min != null) params.set('min_aesthetic', aesthetic.min);
         if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
         if (folders) params.set('folders', JSON.stringify(folders));
+        if (operationMode) params.set('operation_mode', operationMode);
         return this.post(`/api/sort/start?${params}`);
     },
 
@@ -920,12 +1001,15 @@ function showModal(modalId) {
                     .map(f => '<option value="' + f.replace(/"/g, '&quot;') + '">')
                     .join('');
             }
+            syncScanAdvancedUi({ resetToPreference: true });
+            resetScanFolderValidation();
         }
 
         // Load system hardware info when tag modal opens
         if (modalId === 'tag-modal') {
             _tagMinimizedToBackground = false;
             _hideBgTagProgress();
+            syncTaggerModelUi({ applyModelDefaults: false, resetAdvancedToPreference: true });
             if (typeof loadSystemInfo === 'function') loadSystemInfo();
         }
 
@@ -987,6 +1071,15 @@ function hideModal(modalId) {
             modal._escapeHandler = null;
         }
 
+        if (modalId === 'confirm-modal') {
+            unlockDynamicI18nText('#confirm-title', 'modal.confirm', 'Are you sure?');
+            unlockDynamicI18nText('#confirm-message', 'modal.confirmAction', 'This action cannot be undone.');
+        } else if (modalId === 'input-modal') {
+            unlockDynamicI18nText('#input-modal-title', 'modal.enterValue', 'Enter Value');
+            const messageEl = $('#input-modal-message');
+            if (messageEl) messageEl.textContent = '';
+        }
+
         // Release focus trap and restore focus
         releaseFocus();
     }
@@ -1013,7 +1106,8 @@ function showInputModal(title, message, defaultValue = '') {
         const messageEl = $('#input-modal-message');
         const inputEl = $('#input-modal-field');
 
-        if (titleEl) titleEl.textContent = title || 'Enter Value';
+        lockDynamicI18nText('#input-modal-title', 'modal.enterValue');
+        if (titleEl) titleEl.textContent = title || appT('modal.enterValue', 'Enter Value');
         if (messageEl) messageEl.textContent = message || '';
         if (inputEl) {
             inputEl.value = defaultValue;
@@ -1084,6 +1178,160 @@ function hideGlobalLoading() {
     const overlay = $('#global-loading');
     if (overlay) {
         overlay.style.display = 'none';
+    }
+}
+
+function getUpdateActionButtons() {
+    return ['#btn-app-update', '#mobile-btn-app-update']
+        .map((selector) => $(selector))
+        .filter(Boolean);
+}
+
+function setUpdateButtonState(status = AppState.update.status, checking = false) {
+    AppState.update.checking = Boolean(checking);
+    AppState.update.status = status || null;
+
+    const buttons = getUpdateActionButtons();
+    const currentVersion = status?.current_version || appT('update.versionUnknown', 'current');
+    let state = 'idle';
+    let label = appT('update.check', 'Check Updates');
+    let title = appT('update.checkTitle', 'Check for application updates');
+
+    if (checking) {
+        state = 'checking';
+        label = appT('update.checking', 'Checking...');
+        title = appT('update.checkingTitle', 'Checking the configured update channel for a new version');
+    } else if (status?.has_update) {
+        state = 'available';
+        label = appT('update.availableShort', 'Update {version}', { version: status.latest_version || '' });
+        title = appT('update.availableTitle', 'Update from {current} to {latest}', {
+            current: currentVersion,
+            latest: status.latest_version || '',
+        });
+    } else if (status?.error || status?.update_unavailable_reason) {
+        label = appT('update.retry', 'Retry Update Check');
+        title = status?.update_unavailable_reason || status?.error || title;
+    } else if (status) {
+        label = appT('update.current', 'Latest');
+        title = appT('update.currentTitle', 'You are already on version {version}', {
+            version: currentVersion,
+        });
+    }
+
+    buttons.forEach((button) => {
+        button.dataset.updateState = state;
+        button.disabled = Boolean(checking);
+        button.title = title;
+        button.setAttribute('aria-label', title);
+        const textNode = button.querySelector('span:last-child');
+        if (textNode) {
+            textNode.textContent = label;
+        }
+    });
+}
+
+async function refreshUpdateStatus({ force = false, silent = false } = {}) {
+    if (AppState.update.checking) {
+        return AppState.update.status;
+    }
+
+    setUpdateButtonState(AppState.update.status, true);
+    try {
+        const status = await API.getUpdateStatus(force);
+        setUpdateButtonState(status, false);
+
+        if (!silent) {
+            if (status?.has_update) {
+                showToast(
+                    appT('update.availableToast', 'New version {version} is ready to install.', {
+                        version: status.latest_version || '',
+                    }),
+                    'info'
+                );
+            } else if (status?.update_unavailable_reason) {
+                showToast(status.update_unavailable_reason, 'warning');
+            } else if (status?.error) {
+                showToast(status.error, 'error');
+            } else {
+                showToast(
+                    appT('update.none', 'You are already on the latest version.'),
+                    'success'
+                );
+            }
+        }
+
+        return status;
+    } catch (error) {
+        setUpdateButtonState(AppState.update.status, false);
+        if (!silent) {
+            showToast(
+                formatUserError(error, appT('update.checkFailed', 'Failed to check for updates')),
+                'error'
+            );
+        }
+        throw error;
+    }
+}
+
+function buildUpdateConfirmMessage(status) {
+    const currentVersion = status?.current_version || appT('update.versionUnknown', 'current version');
+    const latestVersion = status?.latest_version || appT('update.versionUnknown', 'latest version');
+    return appT('update.confirmMessage', 'Update from {current} to {latest} now? The app will restart when the patch is ready.', {
+        current: currentVersion,
+        latest: latestVersion,
+    });
+}
+
+async function applyAppUpdate(status = AppState.update.status) {
+    if (!status?.has_update) {
+        return null;
+    }
+
+    showGlobalLoading(appT('update.downloading', 'Downloading update...'));
+    setUpdateButtonState(status, true);
+    try {
+        const result = await API.applyUpdate({ forceCheck: true, relaunch: true });
+        if (result?.status !== 'scheduled') {
+            hideGlobalLoading();
+            setUpdateButtonState(result, false);
+            return result;
+        }
+
+        showGlobalLoading(appT('update.applying', 'Applying update and restarting...'));
+        showToast(
+            appT('update.restartSoon', 'Update downloaded. Restarting the app now...'),
+            'info'
+        );
+        return result;
+    } catch (error) {
+        hideGlobalLoading();
+        setUpdateButtonState(status, false);
+        showToast(
+            formatUserError(error, appT('update.applyFailed', 'Failed to apply the update')),
+            'error'
+        );
+        throw error;
+    }
+}
+
+async function handleAppUpdateButtonClick() {
+    try {
+        let status = AppState.update.status;
+        if (!status?.has_update) {
+            status = await refreshUpdateStatus({ force: true, silent: false });
+        }
+
+        if (status?.has_update) {
+            showConfirm(
+                appT('update.confirmTitle', 'Install Update'),
+                buildUpdateConfirmMessage(status),
+                () => {
+                    void applyAppUpdate(status);
+                }
+            );
+        }
+    } catch (error) {
+        // refreshUpdateStatus already surfaced a user-facing toast
     }
 }
 
@@ -1198,17 +1446,17 @@ function buildOperationProgressText({
     return parts.join(' · ');
 }
 
-function lockLiveProgressText(selector) {
+function lockDynamicI18nText(selector, fallbackKey = '') {
     const el = $(selector);
     if (!el) return;
-    if (!el.dataset.i18nOriginal && el.hasAttribute('data-i18n')) {
-        el.dataset.i18nOriginal = el.getAttribute('data-i18n') || '';
+    if (!el.dataset.i18nOriginal && (el.hasAttribute('data-i18n') || fallbackKey)) {
+        el.dataset.i18nOriginal = el.getAttribute('data-i18n') || fallbackKey || '';
     }
     el.removeAttribute('data-i18n');
     el.dataset.i18nLocked = '1';
 }
 
-function unlockLiveProgressText(selector, fallbackKey, fallbackText) {
+function unlockDynamicI18nText(selector, fallbackKey, fallbackText) {
     const el = $(selector);
     if (!el) return;
     const originalKey = el.dataset.i18nOriginal || fallbackKey || '';
@@ -1217,6 +1465,14 @@ function unlockLiveProgressText(selector, fallbackKey, fallbackText) {
     }
     delete el.dataset.i18nLocked;
     el.textContent = originalKey ? appT(originalKey, fallbackText || originalKey) : (fallbackText || '');
+}
+
+function lockLiveProgressText(selector) {
+    lockDynamicI18nText(selector);
+}
+
+function unlockLiveProgressText(selector, fallbackKey, fallbackText) {
+    unlockDynamicI18nText(selector, fallbackKey, fallbackText);
 }
 
 function setScanCancelButtonState(mode = 'idle') {
@@ -1395,20 +1651,14 @@ function describeTaggerModel(meta) {
     }
 
     const summary = meta.description || meta.summary || appT('tagger.defaultSummary', 'WD14 tagger model');
-    const bestFor = meta.best_for
-        ? appT('tagger.bestForPrefix', ' Best for: {bestFor}.').replace('{bestFor}', meta.best_for)
-        : '';
     const quality = Number(meta.quality_score || 0);
     const speed = Number(meta.speed_score || 0);
     const stability = Number(meta.stability_score || 0);
-    const runtimeNote = meta.runtime_note ? ` ${meta.runtime_note}` : '';
-    return appT('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.{bestFor}{runtimeNote}')
+    return appT('tagger.descSummaryFormat', '{summary} Q{quality}/5 \u2022 S{speed}/5 \u2022 Stable {stability}/5.')
         .replace('{summary}', summary)
         .replace('{quality}', quality)
         .replace('{speed}', speed)
-        .replace('{stability}', stability)
-        .replace('{bestFor}', bestFor)
-        .replace('{runtimeNote}', runtimeNote);
+        .replace('{stability}', stability);
 }
 
 function describeTaggerRuntime(options = {}) {
@@ -1651,9 +1901,10 @@ function renderTaggerModelSnapshot(meta, options = {}) {
 
     const minimumHardwareText = getTaggerMinimumHardwareText(meta);
     noteEl.textContent = meta?.disabled_reason
-        || [meta?.runtime_note, meta?.safe_mode_note, minimumHardwareText, appT('tagger.defaultNote', 'The selected model decides quality, tag density, and hardware pressure.')]
-            .filter(Boolean)
-            .join(' ');
+        || meta?.safe_mode_note
+        || meta?.runtime_note
+        || minimumHardwareText
+        || appT('tagger.defaultNote', 'The selected model changes speed, quality, and load.');
 }
 
 function applyTaggerModelThresholdDefaults(meta) {
@@ -1662,6 +1913,9 @@ function applyTaggerModelThresholdDefaults(meta) {
     const characterThresholdInput = $('#tag-character-threshold');
     const characterThresholdValue = $('#tag-character-threshold-value');
     if (!thresholdInput || !characterThresholdInput) return;
+
+    delete thresholdInput.dataset.userChosen;
+    delete characterThresholdInput.dataset.userChosen;
 
     const generalThreshold = Number(meta?.default_threshold);
     const characterThreshold = Number(meta?.default_character_threshold);
@@ -1674,6 +1928,66 @@ function applyTaggerModelThresholdDefaults(meta) {
     if (Number.isFinite(characterThreshold) && characterThreshold > 0) {
         characterThresholdInput.value = String(characterThreshold);
         if (characterThresholdValue) characterThresholdValue.textContent = characterThresholdInput.value;
+    }
+}
+
+function hasActiveScanAdvancedOptions() {
+    return Boolean(
+        $('#scan-force-reparse')?.checked ||
+        $('#scan-cleanup-missing')?.checked ||
+        $('#scan-auto-tag')?.checked
+    );
+}
+
+function syncScanAdvancedUi(options = {}) {
+    const { resetToPreference = false } = options;
+    const advancedDetails = $('#scan-advanced-options');
+    if (!advancedDetails) return;
+
+    if (resetToPreference) {
+        advancedDetails.open = hasActiveScanAdvancedOptions() || readStoredBoolean(SCAN_ADVANCED_OPEN_KEY, false);
+        return;
+    }
+
+    if (hasActiveScanAdvancedOptions()) {
+        advancedDetails.open = true;
+    }
+}
+
+function hasActiveTagAdvancedOptions() {
+    return Boolean(
+        ($('#tag-model-select')?.value || '') === 'custom' ||
+        $('#tag-retag-all')?.checked ||
+        $('#tag-use-gpu')?.dataset.userChosen === '1' ||
+        $('#tagger-batch-size')?.dataset.userChosen === '1' ||
+        $('#tag-threshold')?.dataset.userChosen === '1' ||
+        $('#tag-character-threshold')?.dataset.userChosen === '1'
+    );
+}
+
+function syncTagAdvancedUi(options = {}) {
+    const { resetToPreference = false } = options;
+    const advancedDetails = $('#tag-advanced-options');
+    const advancedHint = $('#tag-advanced-options-hint');
+    const isCustom = ($('#tag-model-select')?.value || '') === 'custom';
+    const hasActiveAdvanced = hasActiveTagAdvancedOptions();
+    if (!advancedDetails) return;
+
+    if (advancedHint) {
+        advancedHint.textContent = isCustom
+            ? appT('tagger.advancedHintCustomPanel', 'Custom local model selected. Fill in these fields before starting.')
+            : (hasActiveAdvanced
+                ? appT('tagger.advancedHintActivePanel', 'Advanced settings are active for this run.')
+                : appT('tagger.advancedHintPanel', 'Optional. Open this only if you want more control.'));
+    }
+
+    if (resetToPreference) {
+        advancedDetails.open = isCustom || hasActiveAdvanced || readStoredBoolean(TAG_ADVANCED_OPEN_KEY, false);
+        return;
+    }
+
+    if (isCustom || hasActiveAdvanced) {
+        advancedDetails.open = true;
     }
 }
 
@@ -1801,7 +2115,7 @@ function syncTaggerRuntimeChunkUi(options = {}) {
 }
 
 function syncTaggerModelUi(options = {}) {
-    const { applyModelDefaults = false, toastOnAutoSafe = false } = options;
+    const { applyModelDefaults = false, toastOnAutoSafe = false, resetAdvancedToPreference = false } = options;
     const modelSelect = $('#tag-model-select');
     const useGpu = $('#tag-use-gpu');
     const modelHelp = $('#tag-model-help');
@@ -1927,15 +2241,6 @@ function syncTaggerModelUi(options = {}) {
                 summary += ` ${liveMemoryPressure}`;
             }
         }
-        if (hardwareHighRisk && !gpuLocked && !gpuEnabled) {
-            summary += appT('tagger.highRiskSuffix', ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.');
-        }
-        summary += (isCustom
-            ? appT('tagger.customRecommendedChunkSuffix', ' Recommended starting chunk: {chunk}.').replace('{chunk}', recommendedChunk)
-            : appT('tagger.recommendedChunkSuffix', ' Recommended chunk: {chunk}.').replace('{chunk}', recommendedChunk));
-        summary += ' ' + (isCustom
-            ? appT('tagger.customHardCapSuffix', 'The app keeps custom ONNX runs on a conservative in-app cap until the model proves stable.')
-            : appT('tagger.currentHardCapSuffix', 'This is the current hard cap for this model on this machine.'));
         runtimeSummary.textContent = summary;
     }
 
@@ -2076,6 +2381,8 @@ function syncTaggerModelUi(options = {}) {
         isCustom,
         isToriiGate
     });
+
+    syncTagAdvancedUi({ resetToPreference: resetAdvancedToPreference || applyModelDefaults });
 }
 
 function syncSelectionModeButton() {
@@ -2107,12 +2414,12 @@ function syncSelectionModeButton() {
 }
 
 function emitSelectionStateChanged() {
-    window.dispatchEvent(new CustomEvent('selection-state-changed', {
-        detail: {
-            selectionMode: Boolean(AppState.selectionMode),
-            selectedCount: AppState.selectedIds.size,
-        }
-    }));
+    const detail = {
+        selectionMode: Boolean(AppState.selectionMode),
+        selectedCount: AppState.selectedIds.size,
+    };
+    window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
+    document.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
 }
 
 function ensureSelectionPanelVisible(panel) {
@@ -2136,6 +2443,9 @@ function setSelectionMode(enabled, options = {}) {
 
     if (!AppState.selectionMode && clearSelectionWhenDisabled) {
         AppState.selectedIds.clear();
+        if (window.Gallery) {
+            window.Gallery.lastSelectedIndex = null;
+        }
     }
 
     updateSelectionUI();
@@ -2228,7 +2538,14 @@ function switchView(viewName) {
     if (viewName === 'gallery') {
         setGalleryViewMode(AppState.viewMode);
         // Re-render existing images immediately, only reload from API if needed
-        if (AppState.images.length > 0 && window.Gallery) {
+        if (AppState.galleryNeedsRefresh) {
+            loadImages({
+                silent: AppState.images.length > 0,
+                preserveExisting: AppState.images.length > 0,
+                coalesce: true,
+            });
+            AppState.galleryNeedsRefresh = false;
+        } else if (AppState.images.length > 0 && window.Gallery) {
             Gallery.setImages(AppState.images);
         } else {
             loadImages();
@@ -2255,34 +2572,113 @@ function switchView(viewName) {
     }
 }
 
+function getSelectedGalleryExamples(ids, limit = 5) {
+    return ids
+        .slice(0, limit)
+        .map((id) => AppState.images.find((image) => image.id === id)?.filename || `Image ${id}`)
+        .join(', ');
+}
+
+function deleteSelectedGalleryImages() {
+    const ids = Array.from(AppState.selectedIds)
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id));
+
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select Visible.'), 'info');
+        return;
+    }
+
+    const examples = getSelectedGalleryExamples(ids);
+    const title = appT('selection.deleteConfirmTitle', 'Delete selected image files?');
+    const message = appT(
+        'selection.deleteConfirmBody',
+        'This will permanently delete {count} files from disk. Examples: {examples}'
+    )
+        .replace('{count}', ids.length)
+        .replace('{examples}', examples || ids.slice(0, 5).join(', '));
+
+    showConfirm(title, message, async () => {
+        try {
+            const result = await API.deleteSelectedImages(ids);
+            const failed = Array.isArray(result.failed) ? result.failed : [];
+            const failedIds = new Set(failed.map((item) => Number(item.image_id)));
+
+            ids
+                .filter((id) => !failedIds.has(id))
+                .forEach((id) => AppState.selectedIds.delete(id));
+
+            updateSelectionUI();
+            emitSelectionStateChanged();
+            if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
+                window.Gallery.syncSelectionState();
+            }
+
+            await loadImages();
+            loadStats();
+
+            if (failed.length > 0) {
+                showToast(
+                    appT('selection.deletePartial', 'Deleted {deleted} file(s). {failed} failed.')
+                        .replace('{deleted}', result.deleted || 0)
+                        .replace('{failed}', failed.length),
+                    'warning'
+                );
+                return;
+            }
+
+            showToast(
+                appT('selection.deleteSuccess', 'Deleted {count} image file(s).')
+                    .replace('{count}', result.deleted || 0),
+                'success'
+            );
+        } catch (error) {
+            showToast(
+                formatUserError(error, appT('selection.deleteFailed', 'Failed to delete selected image files')),
+                'error'
+            );
+        }
+    });
+}
+
 function updateNavigationOverflowState() {
     const navBar = $('.nav-bar');
     const navTabs = $('.nav-tabs');
     if (!navBar || !navTabs) return window.innerWidth <= 768;
 
     const forceMobileLayout = window.innerWidth <= 768;
+    navBar.classList.remove('nav-tabs-overflow', 'nav-actions-compact');
     if (forceMobileLayout) {
         navBar.classList.add('nav-tabs-overflow');
         return true;
     }
 
-    navBar.classList.remove('nav-tabs-overflow');
-
     const navActions = $('.nav-actions');
     const navBrand = $('.nav-brand');
-    const availableWidth = Math.max(
-        0,
-        navBar.clientWidth - (navBrand?.offsetWidth || 0) - (navActions?.offsetWidth || 0) - 72
-    );
+    const needsOverflow = () => {
+        const availableWidth = Math.max(
+            0,
+            navBar.clientWidth - (navBrand?.offsetWidth || 0) - (navActions?.offsetWidth || 0) - 72
+        );
+        return availableWidth > 0 && navTabs.scrollWidth > availableWidth + 24;
+    };
 
-    const shouldCollapse = availableWidth > 0 && navTabs.scrollWidth > availableWidth + 24;
-    navBar.classList.toggle('nav-tabs-overflow', shouldCollapse);
-
-    if (!shouldCollapse) {
+    if (!needsOverflow()) {
         closeMobileMenu();
+        return false;
     }
 
-    return shouldCollapse;
+    // Compact the utility buttons first. Only collapse the primary tabs when
+    // the compact desktop header still cannot fit the navigation.
+    navBar.classList.add('nav-actions-compact');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.remove('nav-actions-compact');
+    navBar.classList.add('nav-tabs-overflow');
+    return true;
 }
 
 // ============== Event Listeners ==============
@@ -2307,6 +2703,13 @@ function initEventListeners() {
     $('#btn-score-aesthetic')?.addEventListener('click', async () => {
         await refreshAestheticStatus();
         await startAestheticScoring(false);
+    });
+    $('#btn-app-update')?.addEventListener('click', () => {
+        void handleAppUpdateButtonClick();
+    });
+    $('#mobile-btn-app-update')?.addEventListener('click', () => {
+        closeMobileMenu();
+        void handleAppUpdateButtonClick();
     });
 
     // Modal backdrops
@@ -2351,11 +2754,16 @@ function initEventListeners() {
 
     // Tag threshold sliders
     $('#tag-threshold').addEventListener('input', (e) => {
+        e.target.dataset.userChosen = '1';
         $('#tag-threshold-value').textContent = e.target.value;
+        syncTagAdvancedUi();
     });
     $('#tag-character-threshold').addEventListener('input', (e) => {
+        e.target.dataset.userChosen = '1';
         $('#tag-character-threshold-value').textContent = e.target.value;
+        syncTagAdvancedUi();
     });
+    $('#tag-retag-all')?.addEventListener('change', () => syncTagAdvancedUi());
 
     // Model selection toggle for custom model
     $('#tag-model-select').addEventListener('change', () => {
@@ -2370,6 +2778,16 @@ function initEventListeners() {
         event.target.dataset.userChosen = '1';
         syncTaggerModelUi({ applyModelDefaults: false });
     });
+    $('#scan-advanced-options')?.addEventListener('toggle', (event) => {
+        writeStoredBoolean(SCAN_ADVANCED_OPEN_KEY, Boolean(event.currentTarget?.open));
+    });
+    $('#tag-advanced-options')?.addEventListener('toggle', (event) => {
+        writeStoredBoolean(TAG_ADVANCED_OPEN_KEY, Boolean(event.currentTarget?.open));
+    });
+    ['scan-force-reparse', 'scan-cleanup-missing', 'scan-auto-tag'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('change', () => syncScanAdvancedUi());
+    });
+    syncScanAdvancedUi({ resetToPreference: true });
     syncTaggerModelUi({ applyModelDefaults: true });
 
     // Image modal
@@ -2452,16 +2870,16 @@ function initEventListeners() {
     // Clear DB button
     $('#btn-clear-db').addEventListener('click', () => {
         showConfirm(
-            'Clear Gallery',
-            'Are you sure you want to clear all images from the database? This will NOT delete your physical files.',
+            appT('gallery.clearTitle', 'Clear Gallery'),
+            appT('gallery.clearMessage', 'Are you sure you want to clear all images from the database? This will NOT delete your physical files.'),
             async () => {
                 try {
                     await API.clearGallery();
-                    showToast('Gallery cleared successfully');
+                    showToast(appT('gallery.clearSuccess', 'Gallery cleared successfully'));
                     loadImages();
                     loadStats();
                 } catch (e) {
-                    showToast(formatUserError(e, "Failed to clear gallery"), "error");
+                    showToast(formatUserError(e, appT('gallery.clearFailed', 'Failed to clear gallery')), "error");
                 }
             }
         );
@@ -2476,27 +2894,36 @@ function initEventListeners() {
     });
 
     // Export selected
-    $('#btn-export-selected').addEventListener('click', showExportModal);
+    $('#btn-export-selected').addEventListener('click', () => {
+        resetSelectionDataCache();
+        showExportModal();
+    });
 
     // Clear selection
     $('#btn-clear-selection').addEventListener('click', () => {
-        AppState.selectedIds.clear();
-        updateSelectionUI();
-        emitSelectionStateChanged();
-        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
-            Gallery.syncSelectionState();
+        if (window.Gallery && typeof Gallery.clearSelection === 'function') {
+            Gallery.clearSelection();
+        } else {
+            AppState.selectedIds.clear();
+            updateSelectionUI();
+            emitSelectionStateChanged();
         }
     });
 
-    // Select All - select all currently visible/filtered images
+    // Select visible gallery items
     $('#btn-select-all').addEventListener('click', () => {
-        AppState.images.forEach(img => AppState.selectedIds.add(img.id));
-        updateSelectionUI();
-        emitSelectionStateChanged();
-        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
-            Gallery.syncSelectionState();
+        if (window.Gallery && typeof Gallery.selectAllVisible === 'function') {
+            Gallery.selectAllVisible();
         }
     });
+
+    $('#btn-invert-selection-visible')?.addEventListener('click', () => {
+        if (window.Gallery && typeof Gallery.invertVisibleSelection === 'function') {
+            Gallery.invertVisibleSelection();
+        }
+    });
+
+    $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
 
 
     // Confirm modal
@@ -2516,28 +2943,24 @@ function initEventListeners() {
     $('#btn-close-export')?.addEventListener('click', () => hideModal('export-modal'));
     $('#btn-copy-export')?.addEventListener('click', () => {
         const text = $('#export-text')?.value || '';
-        copyTextToClipboard(text, 'Copied to clipboard!').catch(() => {
-            showToast('Failed to copy', 'error');
+        copyTextToClipboard(text, appT('export.copied', 'Copied to clipboard!')).catch(() => {
+            showToast(appT('export.copyFailed', 'Failed to copy'), 'error');
         });
     });
     // --- Export Tags from FAB ---
     $('#btn-export-tags-selected').addEventListener('click', () => {
+        resetSelectionDataCache();
         showExportTagsModal();
-        const exportAltBtn = $('#btn-export-tags-alt');
-        if (exportAltBtn) exportAltBtn.innerHTML = '📤 Export Prompts Instead';
     });
 
     // --- Alt export button in modal ---
     const exportTagsAlt = $('#btn-export-tags-alt');
     if (exportTagsAlt) {
         exportTagsAlt.addEventListener('click', () => {
-            const btn = exportTagsAlt;
-            if (btn.textContent.includes('Tags')) {
+            if (exportTagsAlt.dataset.exportView === 'prompts') {
                 showExportTagsModal();
-                btn.innerHTML = '📤 Export Prompts Instead';
             } else {
                 showExportModal();
-                btn.innerHTML = '🏷️ Export Tags Instead';
             }
         });
     }
@@ -2707,23 +3130,33 @@ function initEventListeners() {
 
             // Ask user about overwrite preference using custom modal
             showConfirm(
-                'Import Tags',
-                `Found ${data.images.length} images in file.\n\nOverwrite existing tags? (Cancel = skip already-tagged images)`,
+                appT('tag.importTitle', 'Import Tags'),
+                appT(
+                    'tag.importMessage',
+                    'Found {count} images in the file.\n\nOverwrite existing tags?\nOK = overwrite existing tags\nCancel = keep existing tags',
+                    { count: data.images.length }
+                ),
                 async () => {
                     // Overwrite = true
                     const result = await API.importTags(data.images, true);
-                    showToast(`Imported tags for ${result.imported} images (${result.skipped} skipped)`, 'success');
+                    showToast(appT('tag.importSuccess', 'Imported tags for {imported} images ({skipped} skipped)', {
+                        imported: result.imported,
+                        skipped: result.skipped,
+                    }), 'success');
                     loadImages();
                 },
                 async () => {
                     // Overwrite = false (skip already-tagged)
                     const result = await API.importTags(data.images, false);
-                    showToast(`Imported tags for ${result.imported} images (${result.skipped} skipped)`, 'success');
+                    showToast(appT('tag.importSuccess', 'Imported tags for {imported} images ({skipped} skipped)', {
+                        imported: result.imported,
+                        skipped: result.skipped,
+                    }), 'success');
                     loadImages();
                 }
             );
         } catch (err) {
-            showToast(formatUserError(err, "Failed to import tags"), "error");
+            showToast(formatUserError(err, appT('tag.importFailed', 'Failed to import tags')), 'error');
         }
         e.target.value = ''; // Reset file input
     });
@@ -3017,58 +3450,114 @@ function filterModalList(listId, query) {
 
 // ============== Scanning ==============
 
+function resetScanFolderValidation() {
+    const input = $('#scan-folder-path');
+    const feedback = $('#scan-folder-feedback');
+    if (input) {
+        input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    }
+    if (feedback) {
+        feedback.className = 'validation-feedback';
+        feedback.textContent = '';
+    }
+}
+
+function setScanFolderValidation(state, message = '') {
+    const input = $('#scan-folder-path');
+    const feedback = $('#scan-folder-feedback');
+    if (!input || !feedback) return;
+
+    input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    feedback.className = 'validation-feedback';
+
+    if (state === 'success') {
+        input.classList.add('input-valid');
+        feedback.classList.add('success');
+    } else if (state === 'error') {
+        input.classList.add('input-invalid');
+        feedback.classList.add('error');
+    } else if (state === 'checking') {
+        input.classList.add('input-checking');
+        feedback.classList.add('checking');
+    }
+
+    feedback.textContent = message;
+}
+
+function mapScanPathError(error) {
+    const rawMessage = (error instanceof Error ? error.message : String(error || '')).trim();
+    const message = rawMessage.toLowerCase();
+
+    if (!rawMessage) {
+        return appT('scan.invalidPath', 'Path format is invalid');
+    }
+    if (message.includes('invalid filename characters')) {
+        return appT('scan.invalidFolderName', 'Folder name contains unsupported characters');
+    }
+    if (message.includes('invalid or suspicious characters')) {
+        return appT('scan.invalidPathChars', 'Path contains invalid characters');
+    }
+    if (message.includes('does not exist') || message.includes('not exist') || message.includes('not found')) {
+        return appT('scan.folderNotFound', 'Folder not found');
+    }
+    if (message.includes('not a directory')) {
+        return appT('scan.pathNotFolder', 'This path is not a folder');
+    }
+    if (message.includes('maximum length')) {
+        return appT('scan.pathTooLong', 'Path is too long');
+    }
+    if (message.includes('cannot resolve path') || message.includes('invalid path format')) {
+        return appT('scan.invalidPath', 'Path format is invalid');
+    }
+
+    return rawMessage;
+}
+
+function isScanPathError(error) {
+    const rawMessage = (error instanceof Error ? error.message : String(error || '')).toLowerCase();
+    return rawMessage.includes('path')
+        || rawMessage.includes('directory')
+        || rawMessage.includes('folder')
+        || rawMessage.includes('filename');
+}
+
 // UI-02: Validate scan folder path with inline feedback
 function validateScanFolderPath() {
     const input = $('#scan-folder-path');
+    if (!input) return true;
     const value = input.value.trim();
-    const feedbackEl = $('#scan-folder-feedback');
 
-    // Clear previous state
-    input.classList.remove('input-valid', 'input-invalid');
-    if (feedbackEl) feedbackEl.remove();
+    resetScanFolderValidation();
 
     if (!value) {
         return; // Empty is neutral state
     }
 
-    // Create feedback element if needed
-    const feedback = document.createElement('small');
-    feedback.id = 'scan-folder-feedback';
-    feedback.className = 'validation-feedback';
-    input.parentNode.appendChild(feedback);
-
     // Basic path validation — exclude `:` so Windows drive letters (C:\) are allowed
     const invalidChars = /[<>"|?*]/;
     if (invalidChars.test(value)) {
-        input.classList.add('input-invalid');
-        feedback.className = 'validation-feedback error';
-        feedback.textContent = 'Path contains invalid characters';
+        setScanFolderValidation('error', appT('scan.invalidPathChars', 'Path contains invalid characters'));
         return false;
     }
 
     // Show checking state
-    input.classList.add('input-checking');
-    feedback.className = 'validation-feedback checking';
-    feedback.textContent = 'Checking path...';
+    setScanFolderValidation('checking', appT('scan.pathChecking', 'Checking path...'));
+    const requestValue = value;
 
     // Use API to validate (server-side)
     API.post('/api/validate-path', { path: value })
         .then(result => {
-            input.classList.remove('input-checking');
+            if (input.value.trim() !== requestValue) return;
             if (result.valid) {
-                input.classList.add('input-valid');
-                feedback.className = 'validation-feedback success';
-                feedback.textContent = 'Folder found';
+                setScanFolderValidation('success', appT('scan.folderFound', 'Folder found'));
             } else {
-                input.classList.add('input-invalid');
-                feedback.className = 'validation-feedback error';
-                feedback.textContent = result.error || 'Invalid path';
+                setScanFolderValidation('error', mapScanPathError(result.error || appT('scan.invalidPath', 'Path format is invalid')));
             }
         })
-        .catch(() => {
-            input.classList.remove('input-checking');
+        .catch((error) => {
+            if (input.value.trim() !== requestValue) return;
             // If validation endpoint doesn't exist, just clear checking state
-            feedback.textContent = '';
+            setScanFolderValidation('', isScanPathError(error) ? mapScanPathError(error) : '');
         });
 
     return true;
@@ -3077,15 +3566,23 @@ function validateScanFolderPath() {
 async function startScan() {
     const folderPath = $('#scan-folder-path')?.value?.trim() || '';
     if (!folderPath) {
-        showToast('Please enter a folder path', 'error');
+        showToast(appT('scan.enterFolder', 'Please choose a folder first'), 'error');
         return;
     }
 
     const recursive = $('#scan-recursive')?.checked ?? true;
+    const quickImport = $('#scan-quick-import')?.checked ?? true;
+    const forceReparse = $('#scan-force-reparse')?.checked ?? false;
+    const cleanupMissing = $('#scan-cleanup-missing')?.checked ?? false;
 
     try {
         addRecentFolder(folderPath);
-        await API.startScan(folderPath, recursive);
+        await API.startScan(folderPath, {
+            recursive,
+            quickImport,
+            forceReparse,
+            cleanupMissing,
+        });
 
         const progressContainer = $('#scan-progress-container');
         const startBtn = $('#btn-start-scan');
@@ -3094,22 +3591,25 @@ async function startScan() {
         setScanCancelButtonState('running');
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
-        $('#scan-progress-text').textContent = 'Scan · waiting for first update...';
+        _scanLibraryReadyHandled = false;
+        _scanLastAutoRefreshAt = 0;
+        $('#scan-progress-text').textContent = appT('scan.waitingForUpdate', 'Import · waiting for first update...');
+        showToast(
+            appT('scan.startedToast', 'Import started. The first images will appear soon, and the rest of the details will keep filling in.'),
+            'info'
+        );
 
         pollScanProgress();
     } catch (error) {
-        // UI-02: Show inline validation feedback on error
-        const input = $('#scan-folder-path');
-        const feedbackEl = $('#scan-folder-feedback');
-        if (input) {
-            input.classList.remove('input-valid', 'input-checking');
-            input.classList.add('input-invalid');
+        const userMessage = mapScanPathError(error);
+        if (isScanPathError(error)) {
+            setScanFolderValidation('error', userMessage);
         }
-        if (feedbackEl) {
-            feedbackEl.className = 'validation-feedback error';
-            feedbackEl.textContent = error.message;
-        }
-        showToast(formatUserError(error, "Failed to start scan"), "error");
+        const rawMessage = error instanceof Error ? error.message : String(error || '');
+        const toastMessage = userMessage !== rawMessage
+            ? userMessage
+            : formatUserError(error, appT('scan.failedStart', 'Failed to start import'));
+        showToast(toastMessage, "error");
     }
 }
 
@@ -3125,12 +3625,15 @@ async function requestStopScan() {
         const result = await API.cancelScan();
         const processed = Number(progress.processed ?? progress.current ?? 0);
         const total = Number(progress.total || 0);
+        const totalFinal = progress?.total_final !== false;
         setScanCancelButtonState(result?.status === 'cancelled' ? 'idle' : 'cancelling');
         $('#scan-progress-text').textContent = (result?.status === 'cancelled')
             ? appT('scan.cancelled', 'Scan cancelled')
-            : appT('scan.cancelling', 'Cancelling scan... {current}/{total}')
-                .replace('{current}', String(processed))
-                .replace('{total}', String(total || '?'));
+            : totalFinal
+                ? appT('scan.cancelling', 'Cancelling scan... {current}/{total}')
+                    .replace('{current}', String(processed))
+                    .replace('{total}', String(total || '?'))
+                : appT('scan.backgroundCancelling', 'Stopping scan...');
         showToast(
             result?.status === 'cancelled'
                 ? appT('scan.cancelled', 'Scan cancelled')
@@ -3143,9 +3646,105 @@ async function requestStopScan() {
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            _hideBgScanProgress();
         }
     } catch (error) {
-        showToast(formatUserError(error, 'Failed to cancel scan'), 'error');
+        showToast(formatUserError(error, appT('scan.failedCancel', 'Failed to stop import')), 'error');
+    }
+}
+
+function _refreshScanDrivenViews(force = false, options = {}) {
+    const {
+        refreshGallery = true,
+    } = options;
+    const now = Date.now();
+    if (!force && now - _scanLastAutoRefreshAt < 2500) {
+        return;
+    }
+    _scanLastAutoRefreshAt = now;
+    promptsLibraryCache = null;
+    if (refreshGallery) {
+        if (AppState.currentView === 'gallery') {
+            loadImages({
+                silent: true,
+                preserveExisting: true,
+                coalesce: true,
+            });
+            AppState.galleryNeedsRefresh = false;
+        } else {
+            AppState.galleryNeedsRefresh = true;
+        }
+    }
+    loadStats();
+}
+
+function _updateBgScanProgress(progress) {
+    const bar = $('#bg-scan-progress');
+    if (!bar) return;
+
+    if (!['running', 'cancelling'].includes(progress?.status)) {
+        bar.style.display = 'none';
+        return;
+    }
+
+    const scanModal = $('#scan-modal');
+    const modalOpen = scanModal && scanModal.classList.contains('visible');
+    bar.style.display = modalOpen ? 'none' : 'flex';
+
+    const processed = Number(progress?.processed ?? progress?.current ?? 0);
+    const total = Number(progress?.total || 0);
+    const totalFinal = progress?.total_final !== false;
+    const metadataProcessed = Number(progress?.metadata_processed || 0);
+    const metadataTotal = Number(progress?.metadata_total || 0);
+    const percentBase = progress?.step === 'metadata' && metadataTotal > 0
+        ? (metadataProcessed / metadataTotal) * 100
+        : (totalFinal && total > 0 ? (processed / total) * 100 : 0);
+
+    const fill = $('#bg-scan-progress-fill');
+    const textEl = $('#bg-scan-progress-text');
+    const isIndeterminate = ['running', 'cancelling'].includes(progress?.status) && (
+        progress?.step === 'metadata'
+            ? (!percentBase || percentBase === 0)
+            : (!totalFinal || !percentBase || percentBase === 0)
+    );
+    if (fill) {
+        fill.classList.toggle('is-indeterminate', isIndeterminate);
+        fill.style.width = isIndeterminate ? '' : (Math.min(100, percentBase) + '%');
+    }
+
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
+        } else if (progress?.step === 'metadata') {
+            textEl.textContent = `${appT('scan.backgroundMetadata', 'Filling in image details...')} ${metadataProcessed}/${metadataTotal || '?'}`;
+        } else if (!totalFinal) {
+            textEl.textContent = appT('scan.backgroundDiscovering', '{count} scanned. Discovering more images...')
+                .replace('{count}', String(processed));
+        } else {
+            textEl.textContent = progress?.message || appT('scan.backgroundImporting', 'Bringing images into your library...');
+        }
+    }
+}
+
+function _hideBgScanProgress() {
+    const bar = $('#bg-scan-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _initBgScanProgressButtons() {
+    const cancelBtn = $('#bg-scan-cancel');
+    const openBtn = $('#bg-scan-open');
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', async () => {
+            await requestStopScan();
+        });
+    }
+
+    if (openBtn) {
+        openBtn.addEventListener('click', () => {
+            showModal('scan-modal');
+        });
     }
 }
 
@@ -3155,9 +3754,13 @@ async function pollScanProgress(retryCount = 0) {
 
         const processed = Number(progress.processed ?? progress.current ?? 0);
         const total = Number(progress.total || 0);
-        const percent = total > 0 ? Math.min(100, (processed / total) * 100) : 0;
+        const totalFinal = progress.total_final !== false;
+        const metadataProcessed = Number(progress.metadata_processed || 0);
+        const metadataTotal = Number(progress.metadata_total || 0);
+        const effectiveTotal = totalFinal ? total : 0;
+        const percent = effectiveTotal > 0 ? Math.min(100, (processed / effectiveTotal) * 100) : 0;
         const scanFillEl = $('#scan-progress-fill');
-        const scanIndeterminate = progress.status === 'running' && total === 0;
+        const scanIndeterminate = progress.status === 'running' && (!totalFinal || effectiveTotal === 0);
         if (scanFillEl) {
             scanFillEl.classList.toggle('is-indeterminate', scanIndeterminate);
             scanFillEl.style.width = scanIndeterminate ? '' : (percent + '%');
@@ -3166,40 +3769,79 @@ async function pollScanProgress(retryCount = 0) {
         const errorCount = Number(progress.errors || 0);
         const newCount = Number(progress.new || 0);
         const updatedCount = Number(progress.updated || 0);
-        const remaining = total > 0 ? Math.max(0, total - processed) : 0;
+        const removedCount = Number(progress.removed || 0);
+        const remaining = totalFinal && total > 0 ? Math.max(0, total - processed) : 0;
         const extraParts = [];
-        if (total > 0) extraParts.push(appT('progress.left', '{count} left').replace('{count}', remaining));
+        if (totalFinal && total > 0) {
+            extraParts.push(appT('progress.left', '{count} left').replace('{count}', remaining));
+        } else if (processed > 0) {
+            extraParts.push(appT('progress.discoveredCount', '{count} scanned').replace('{count}', processed));
+        }
+        if (progress.step === 'metadata' && metadataTotal > 0) {
+            extraParts.push(
+                appT('progress.metadataCount', '{current}/{total} metadata')
+                    .replace('{current}', metadataProcessed)
+                    .replace('{total}', metadataTotal)
+            );
+        }
         if (newCount > 0) extraParts.push(appT('progress.newCount', '{count} new').replace('{count}', newCount));
         if (updatedCount > 0) extraParts.push(appT('progress.updatedCount', '{count} updated').replace('{count}', updatedCount));
+        if (removedCount > 0) extraParts.push(appT('progress.removedCount', '{count} removed').replace('{count}', removedCount));
         if (errorCount > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errorCount));
 
-        let scanDetail = progress.current_item || progress.message || 'Scanning files...';
-        if (progress.step === 'counted' && total > 0 && processed === 0) {
-            scanDetail = appT('progress.foundStarting', 'Found {total} images. Starting scan...').replace('{total}', total);
+        let scanDetail = progress.current_item || progress.message || 'Importing images...';
+        if (progress.step === 'importing' && !totalFinal) {
+            scanDetail = appT('progress.discoveringMore', '{count} scanned. Discovering more images...')
+                .replace('{count}', processed);
         }
 
         $('#scan-progress-text').textContent = buildOperationProgressText({
             completed: processed,
-            total,
+            total: effectiveTotal,
             tracker: _scanProgressTracker,
-            primaryLabel: appT('scan.progressLabel', 'Scan'),
+            primaryLabel: appT('scan.progressLabel', 'Import'),
             extraParts,
             detail: scanDetail,
-            defaultMessage: 'Scanning files...',
+            defaultMessage: 'Importing images...',
         });
+
+        _updateBgScanProgress(progress);
+
+        if (progress.library_ready && !_scanLibraryReadyHandled && progress.status === 'running') {
+            _scanLibraryReadyHandled = true;
+            hideModal('scan-modal');
+            _refreshScanDrivenViews(true, { refreshGallery: true });
+            showToast(
+                appT('scan.libraryReadyToast', 'Library is ready. Metadata is still loading in the background.'),
+                'info'
+            );
+        }
+
+        if (progress.status === 'running' && progress.library_ready) {
+            // Keep the gallery stable while import continues in the background.
+            // Re-rendering the grid every few seconds made large scans feel like
+            // the gallery was stuck loading again.
+            if (AppState.currentView !== 'gallery') {
+                AppState.galleryNeedsRefresh = true;
+            }
+        }
 
         if (progress.status === 'done') {
             const errorCount = Number(progress.errors || progress.result?.errors || 0);
-            showToast(progress.message, errorCount > 0 ? 'warning' : 'success');
+            const completionMessage = _scanLibraryReadyHandled
+                ? appT('scan.completedBackgroundToast', 'The remaining image details are ready now.')
+                : (progress.message || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
+            showToast(completionMessage, errorCount > 0 ? 'warning' : 'success');
             hideModal('scan-modal');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
-            promptsLibraryCache = null; // Invalidate cache after scan
-            loadImages();
-            loadStats();
+            _scanLibraryReadyHandled = false;
+            _scanLastAutoRefreshAt = 0;
+            _hideBgScanProgress();
+            _refreshScanDrivenViews(true, { refreshGallery: true });
             // Auto-tag: if checkbox was on, trigger tagging with current settings
             const autoTagCheckbox = document.getElementById('scan-auto-tag');
             if (autoTagCheckbox && autoTagCheckbox.checked) {
@@ -3221,13 +3863,19 @@ async function pollScanProgress(retryCount = 0) {
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            _scanLibraryReadyHandled = false;
+            _scanLastAutoRefreshAt = 0;
+            _hideBgScanProgress();
         } else if (progress.status === 'error') {
-            showToast(progress.message || 'Scan failed', 'error');
+            showToast(progress.message || appT('scan.failedStatus', 'Import failed'), 'error');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            _scanLibraryReadyHandled = false;
+            _scanLastAutoRefreshAt = 0;
+            _hideBgScanProgress();
         } else if (progress.status === 'running') {
             setScanCancelButtonState('running');
             setTimeout(() => pollScanProgress(0), 500);
@@ -3243,18 +3891,24 @@ async function pollScanProgress(retryCount = 0) {
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            _scanLibraryReadyHandled = false;
+            _scanLastAutoRefreshAt = 0;
+            _hideBgScanProgress();
         }
     } catch (error) {
         Logger.error('Poll error:', error);
         if (retryCount < 3) {
             setTimeout(() => pollScanProgress(retryCount + 1), 1000);
         } else {
-            showToast('Error checking scan progress', 'error');
+            showToast(appT('scan.failedProgress', 'Could not update import progress'), 'error');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            _scanLibraryReadyHandled = false;
+            _scanLastAutoRefreshAt = 0;
+            _hideBgScanProgress();
         }
     }
 }
@@ -3264,6 +3918,14 @@ async function resumeScanProgress() {
         const progress = await API.getScanProgress();
         const hasMeaningfulProgress = Number(progress?.current || 0) > 0 || Number(progress?.total || 0) > 0;
         if (progress?.status !== 'running' && !(progress?.status === 'idle' && hasMeaningfulProgress)) {
+            _hideBgScanProgress();
+            return;
+        }
+
+        if (progress?.library_ready && progress?.status === 'running') {
+            _scanLibraryReadyHandled = true;
+            _updateBgScanProgress(progress);
+            pollScanProgress();
             return;
         }
 
@@ -3275,6 +3937,7 @@ async function resumeScanProgress() {
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
         $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
+        _updateBgScanProgress(progress);
         pollScanProgress();
     } catch (error) {
         Logger.warn('Failed to resume scan progress:', error);
@@ -3291,6 +3954,8 @@ let _tagLastProgressText = '';
 let _tagLastCurrent = 0;
 let _tagLastTotal = 0;
 let _scanProgressTracker = createProgressTracker();
+let _scanLibraryReadyHandled = false;
+let _scanLastAutoRefreshAt = 0;
 let _tagProgressTracker = createProgressTracker();
 
 function clearTagProgressTimer() {
@@ -3445,9 +4110,9 @@ async function exportTagLibraryJson() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showToast('Tags exported', 'success');
+        showToast(appT('tag.tagsExported', 'Tags exported'), 'success');
     } catch (error) {
-        showToast(formatUserError(error, 'Failed to export tags'), 'error');
+        showToast(formatUserError(error, appT('tag.exportFailed', 'Failed to export tags')), 'error');
     }
 }
 
@@ -3466,7 +4131,7 @@ async function startTagging() {
     const isCustomModel = modelSelectRaw === 'custom';
     const modelMeta = getTaggerModelMeta(modelSelect);
     if (!isCustomModel && modelMeta?.disabled) {
-        showToast(modelMeta.disabled_reason || 'This tagger model is not available in the current build.', 'warning');
+        showToast(modelMeta.disabled_reason || appT('tag.modelUnavailable', 'This tagger model is not available in the current build.'), 'warning');
         return;
     }
     const useGpuCheckbox = $('#tag-use-gpu');
@@ -3484,12 +4149,12 @@ async function startTagging() {
         const tagsPath = $('#tag-tags-path')?.value?.trim() || '';
 
         if (!modelPath) {
-            showToast('Please enter a model path', 'error');
+            showToast(appT('tag.modelPathRequired', 'Please enter a model path'), 'error');
             return;
         }
 
         if (!tagsPath) {
-            showToast('Please enter a Tags CSV path', 'error');
+            showToast(appT('tag.tagsCsvRequired', 'Please enter a Tags CSV path'), 'error');
             return;
         }
 
@@ -3543,7 +4208,7 @@ async function startTagging() {
     } catch (error) {
         _tagPollingActive = false;
         clearTagProgressTimer();
-        showToast(formatUserError(error, "Failed to start tagging"), "error");
+        showToast(formatUserError(error, appT('tag.startFailed', 'Failed to start tagging')), 'error');
     }
 }
 
@@ -3846,7 +4511,7 @@ async function refreshAestheticStatus() {
     } catch (error) {
         _aestheticStatus = {
             available: false,
-            message: formatUserError(error, 'Aesthetic scoring is unavailable'),
+            message: formatUserError(error, appT('gallery.aestheticStatusFailed', 'Could not check aesthetic scoring status')),
             scored_count: 0,
         };
     }
@@ -3901,7 +4566,7 @@ async function pollAestheticProgress() {
         }
     } catch (error) {
         updateAestheticUi({ running: false });
-        showToast(formatUserError(error, 'Failed to read aesthetic progress'), 'error');
+        showToast(formatUserError(error, appT('gallery.aestheticProgressFailed', 'Failed to read aesthetic progress')), 'error');
     }
 }
 
@@ -3928,13 +4593,14 @@ async function startAestheticScoring(force = false) {
             await pollAestheticProgress();
         }
     } catch (error) {
-        showToast(formatUserError(error, 'Failed to start aesthetic scoring'), 'error');
+        showToast(formatUserError(error, appT('gallery.aestheticStartFailed', 'Failed to start aesthetic scoring')), 'error');
     }
 }
 
 // ============== Image Loading ==============
 
 const IMAGE_LOAD_KEY = 'images-load';
+let _pendingImageReload = null;
 
 // Generate skeleton items for loading state
 function generateSkeletonItems(count = 20) {
@@ -3963,13 +4629,31 @@ function generateSkeletonItems(count = 20) {
     return fragment;
 }
 
-async function loadImages(appendMode = false) {
-    // Cancel any pending image load request
-    RequestManager.cancel(IMAGE_LOAD_KEY);
+async function loadImages(appendMode = false, options = {}) {
+    if (typeof appendMode === 'object') {
+        options = appendMode;
+        appendMode = false;
+    }
+
+    const {
+        silent = false,
+        preserveExisting = false,
+        coalesce = false,
+    } = options;
+
+    if (AppState.isLoading && coalesce) {
+        _pendingImageReload = { appendMode, options: { ...options } };
+        return;
+    }
+
+    // Cancel any pending user-facing image load request
+    if (!coalesce) {
+        RequestManager.cancel(IMAGE_LOAD_KEY);
+    }
 
     const galleryGrid = $('#gallery-grid');
 
-    if (!appendMode) {
+    if (!appendMode && !preserveExisting) {
         AppState.pagination.cursor = null;
         AppState.pagination.offset = 0;
         AppState.pagination.hasMore = true;
@@ -3983,9 +4667,9 @@ async function loadImages(appendMode = false) {
 
     AppState.isLoading = true;
     const galleryLoading = $('#gallery-loading');
-    if (galleryLoading) galleryLoading.style.display = 'flex';
+    if (galleryLoading && !silent) galleryLoading.style.display = 'flex';
     const imageCount = $('#image-count');
-    if (imageCount && !appendMode) imageCount.textContent = 'Loading...';
+    if (imageCount && !appendMode && !silent) imageCount.textContent = appT('gallery.loading', 'Loading images...');
 
     try {
         const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
@@ -4011,13 +4695,15 @@ async function loadImages(appendMode = false) {
         } else {
             AppState.images = result.images;
         }
+        resetSelectionDataCache();
 
         AppState.pagination.offset = Number.isFinite(result.next_offset)
             ? result.next_offset
             : AppState.images.length;
 
         if (imageCount) {
-            imageCount.textContent = `${AppState.pagination.total || AppState.images.length} images`;
+            imageCount.textContent = appT('gallery.imageCount', '{count} images')
+                .replace('{count}', String(AppState.pagination.total || AppState.images.length));
         }
 
         // Clean stale selections on fresh load
@@ -4048,10 +4734,12 @@ async function loadImages(appendMode = false) {
         if (error.name === 'AbortError' || error.cancelled) {
             return;
         }
-        showToast(formatUserError(error, "Failed to load images"), "error");
+        showToast(formatUserError(error, appT('gallery.loadImagesFailed', 'Failed to load images')), 'error');
     } finally {
         AppState.isLoading = false;
-        $('#gallery-loading').style.display = 'none';
+        if (galleryLoading && !silent) {
+            galleryLoading.style.display = 'none';
+        }
 
         // Show/hide "Load More" button based on pagination state
         const loadMoreContainer = $('#gallery-load-more');
@@ -4063,6 +4751,14 @@ async function loadImages(appendMode = false) {
             attachGalleryPaginationListener();
             _onGalleryScroll();
         });
+
+        const pendingReload = _pendingImageReload;
+        _pendingImageReload = null;
+        if (pendingReload) {
+            queueMicrotask(() => {
+                loadImages(pendingReload.appendMode, pendingReload.options);
+            });
+        }
     }
 }
 
@@ -4152,7 +4848,9 @@ function openModelSelect(type) {
     AppState.modalSelection.search = '';
     AppState.modalSelection.tempSelected = new Set(AppState.filters[`${type}s`]);
 
-    $('#model-select-title').textContent = type === 'checkpoint' ? 'Select Checkpoints' : 'Select Loras';
+    $('#model-select-title').textContent = type === 'checkpoint'
+        ? appT('modelSelect.checkpointsTitle', 'Select Models')
+        : appT('modelSelect.lorasTitle', 'Select LoRAs');
     $('#model-select-search').value = '';
 
     renderModelSelectList();
@@ -4165,7 +4863,7 @@ function renderModelSelectList() {
     const list = $('#model-select-list');
 
     if (!items || items.length === 0) {
-        list.innerHTML = '<div class="filter-empty" style="text-align: center; padding: 20px; color: var(--text-muted);">No models found</div>';
+        list.innerHTML = `<div class="filter-empty" style="text-align: center; padding: 20px; color: var(--text-muted);">${escapeHtml(appT('modelSelect.empty', 'No models found'))}</div>`;
         return;
     }
 
@@ -4440,7 +5138,7 @@ function renderLibraryPrompts(prompts) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     if (!prompts || prompts.length === 0) {
-        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.promptsEmpty', 'No prompts found. Extract prompts from metadata first.')) + '</p>';
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.promptsEmpty', 'No prompts yet. Import images with prompt info first.')) + '</p>';
         return;
     }
     const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
@@ -4472,7 +5170,7 @@ function renderLibraryLoras(loras) {
     const content = $('#library-content');
     content.style.flexDirection = 'row';
     if (!loras || loras.length === 0) {
-        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.lorasEmpty', 'No LoRAs found. Extract metadata from images first.')) + '</p>';
+        content.innerHTML = '<p class="empty-state-text" style="width:100%;text-align:center;padding:32px;color:var(--text-muted)">' + escapeHtml(appT('library.lorasEmpty', 'No LoRA info yet. Import images with LoRA info first.')) + '</p>';
         return;
     }
     const addHint = escapeHtml(appT('library.clickToAddFilter', 'Click to add as filter'));
@@ -4534,7 +5232,8 @@ function updateSelectionUI() {
         'btn-export-selected',
         'btn-export-tags-selected',
         'btn-batch-export-tags',
-        'btn-send-to-censor'
+        'btn-send-to-censor',
+        'btn-delete-selected-files'
     ];
 
     syncSelectionModeButton();
@@ -4546,6 +5245,11 @@ function updateSelectionUI() {
     const selectAllBtn = $('#btn-select-all');
     if (selectAllBtn) {
         selectAllBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+    }
+
+    const invertVisibleBtn = $('#btn-invert-selection-visible');
+    if (invertVisibleBtn) {
+        invertVisibleBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
     }
 
     const clearSelectionBtn = $('#btn-clear-selection');
@@ -4577,8 +5281,10 @@ function updateSelectionUI() {
 let _confirmAbort = null;
 
 function showConfirm(title, message, onOk, onCancel) {
-    $('#confirm-title').textContent = title;
-    $('#confirm-message').textContent = message;
+    lockDynamicI18nText('#confirm-title', 'modal.confirm');
+    lockDynamicI18nText('#confirm-message', 'modal.confirmAction');
+    $('#confirm-title').textContent = title || appT('modal.confirm', 'Are you sure?');
+    $('#confirm-message').textContent = message || appT('modal.confirmAction', 'This action cannot be undone.');
 
     // Abort previous confirm listeners
     if (_confirmAbort) _confirmAbort.abort();
@@ -4605,7 +5311,7 @@ function showConfirm(title, message, onOk, onCancel) {
 
 function showRandomImage() {
     if (AppState.images.length === 0) {
-        showToast('No images available', 'info');
+        showToast(appT('gallery.noImagesAvailable', 'No images available'), 'info');
         return;
     }
 
@@ -4629,7 +5335,7 @@ async function showAnalytics() {
                     <span class="item-name">${escapeHtml(c.checkpoint)}</span>
                     <span class="item-count">${c.count}</span>
                 </div>
-            `).join('') : '<p>No checkpoints found</p>';
+            `).join('') : `<p>${escapeHtml(appT('analytics.noCheckpoints', 'No checkpoints found'))}</p>`;
 
         $('#analytics-loras').innerHTML = data.loras.length ?
             data.loras.map(l => `
@@ -4637,7 +5343,7 @@ async function showAnalytics() {
                     <span class="item-name">${escapeHtml(l.lora)}</span>
                     <span class="item-count">${l.count}</span>
                 </div>
-            `).join('') : '<p>No Loras found</p>';
+            `).join('') : `<p>${escapeHtml(appT('analytics.noLoras', 'No LoRAs found'))}</p>`;
 
         $('#analytics-tags').innerHTML = data.top_tags.length ?
             data.top_tags.map(t => `
@@ -4645,7 +5351,7 @@ async function showAnalytics() {
                     <span class="item-name">${escapeHtml(t.tag)}</span>
                     <span class="item-count">${t.count}</span>
                 </div>
-            `).join('') : '<p>No tags found</p>';
+            `).join('') : `<p>${escapeHtml(appT('analytics.noTags', 'No tags found'))}</p>`;
 
         // Add click handlers to all analytics items
         $$('#analytics-modal .analytics-item.clickable').forEach(el => {
@@ -4658,7 +5364,7 @@ async function showAnalytics() {
 
         showModal('analytics-modal');
     } catch (e) {
-        showToast(formatUserError(e, "Failed to load analytics"), "error");
+        showToast(formatUserError(e, appT('analytics.loadFailed', 'Failed to load analytics')), 'error');
     }
 }
 
@@ -4677,7 +5383,7 @@ function applyAnalyticsFilter(type, value) {
     }
     hideModal('analytics-modal');
     loadImages();
-    showToast(`Filter applied: ${value}`, 'success');
+    showToast(appT('filter.appliedValue', 'Filter applied: {value}', { value }), 'success');
 }
 
 function addTagToUI(tag) {
@@ -4698,77 +5404,166 @@ function addTagToUI(tag) {
 async function showExportModal() {
     if (AppState.selectedIds.size === 0) return;
 
-    $('#export-title').textContent = '📤 Export Prompts';
-    $('#export-count').textContent = `${AppState.selectedIds.size} images selected`;
-    const exportAltBtn = $('#btn-export-tags-alt');
-    if (exportAltBtn) exportAltBtn.innerHTML = '🏷️ Export Tags Instead';
+    $('#export-title').textContent = `📤 ${appT('export.promptsTitle', 'Export Prompts')}`;
+    $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
+        count: AppState.selectedIds.size,
+    });
+    setExportModalMode('prompts');
     const textArea = $('#export-text');
-    textArea.value = 'Loading prompts...';
+    textArea.value = appT('export.loadingPrompts', 'Loading prompts...');
 
     showModal('export-modal');
 
     try {
         const ids = Array.from(AppState.selectedIds);
-
-        // Fetch all images in parallel for better performance
-        const results = await Promise.all(ids.map(id => API.getImage(id)));
-        const prompts = results
-            .filter(r => r.image.prompt)
-            .map(r => r.image.prompt);
+        const exportData = await loadSelectionData(ids);
+        const prompts = exportData.images
+            .map((image) => image.prompt?.trim())
+            .filter(Boolean);
 
         textArea.value = prompts.join('\n\n');
     } catch (e) {
-        textArea.value = 'Error loading prompts: ' + e.message;
+        textArea.value = appT('export.errorLoadingPrompts', 'Error loading prompts: {message}', {
+            message: e.message,
+        });
     }
 }
 
 async function showExportTagsModal() {
     if (AppState.selectedIds.size === 0) return;
 
-    $('#export-title').textContent = '🏷️ Export Tags';
-    $('#export-count').textContent = `${AppState.selectedIds.size} images selected`;
-    const exportAltBtn = $('#btn-export-tags-alt');
-    if (exportAltBtn) exportAltBtn.innerHTML = '📤 Export Prompts Instead';
+    $('#export-title').textContent = `🏷️ ${appT('export.tagsTitle', 'Export Tags')}`;
+    $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
+        count: AppState.selectedIds.size,
+    });
+    setExportModalMode('tags');
     const textArea = $('#export-text');
-    textArea.value = 'Loading tags...';
+    textArea.value = appT('export.loadingTags', 'Loading tags...');
 
     showModal('export-modal');
     try {
-        const allTags = new Set();
         const ids = Array.from(AppState.selectedIds);
+        const exportData = await loadSelectionData(ids);
+        const allTags = new Set();
 
-        // Fetch all images in parallel for better performance
-        const results = await Promise.all(ids.map(id => API.getImage(id)));
-        results.forEach(result => {
-            if (result.tags) {
-                result.tags.forEach(t => allTags.add(t.tag));
-            }
+        exportData.images.forEach((image) => {
+            (image.tags || []).forEach((tag) => {
+                allTags.add(tag);
+            });
         });
 
         // Sort alphabetically and join
         const sortedTags = Array.from(allTags).sort();
         textArea.value = sortedTags.join(', ');
     } catch (e) {
-        textArea.value = 'Error loading tags: ' + e.message;
+        textArea.value = appT('export.errorLoadingTags', 'Error loading tags: {message}', {
+            message: e.message,
+        });
     }
 }
 
 function showBatchExportModal() {
     if (AppState.selectedIds.size === 0) {
-        showToast('Please select images first', 'error');
+        showToast(appT('export.selectImagesFirst', 'Please select images first'), 'error');
         return;
     }
 
-    $('#batch-export-count').textContent = `${AppState.selectedIds.size} images selected`;
+    $('#batch-export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
+        count: AppState.selectedIds.size,
+    });
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
 }
 
+function getExportDataCacheKey(imageIds) {
+    return imageIds.map((id) => String(id)).join(',');
+}
+
+function resetSelectionDataCache() {
+    AppState.selectionDataCache = {
+        key: null,
+        data: null
+    };
+}
+
+function buildSelectionDataPayload(imageIds, data) {
+    const normalizedIds = imageIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    const requestedIdSet = new Set(normalizedIds);
+    const cachedImages = new Map(
+        (AppState.images || [])
+            .filter((image) => requestedIdSet.has(Number(image?.id)))
+            .map((image) => [Number(image.id), image])
+    );
+    const fetchedImages = new Map(
+        (Array.isArray(data?.images) ? data.images : [])
+            .map((image) => [Number(image.id), image])
+    );
+    const images = [];
+    const resolvedIds = new Set();
+
+    normalizedIds.forEach((id) => {
+        const cached = cachedImages.get(id) || null;
+        const fetched = fetchedImages.get(id) || null;
+        if (!cached && !fetched) {
+            return;
+        }
+
+        images.push({
+            ...(cached || {}),
+            ...(fetched || {}),
+            id,
+            prompt: fetched?.prompt ?? cached?.prompt ?? '',
+            tags: Array.isArray(fetched?.tags)
+                ? fetched.tags
+                : (Array.isArray(cached?.tags) ? cached.tags : []),
+        });
+        resolvedIds.add(id);
+    });
+
+    const missingFromApi = Array.isArray(data?.missing_ids)
+        ? data.missing_ids
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value > 0)
+        : [];
+    const missingIds = Array.from(new Set([
+        ...missingFromApi,
+        ...normalizedIds.filter((id) => !resolvedIds.has(id)),
+    ]));
+
+    return { images, missing_ids: missingIds };
+}
+
+async function loadSelectionData(imageIds) {
+    const cacheKey = getExportDataCacheKey(imageIds);
+    if (AppState.selectionDataCache.key === cacheKey && AppState.selectionDataCache.data) {
+        return AppState.selectionDataCache.data;
+    }
+
+    const data = buildSelectionDataPayload(imageIds, await API.getSelectionData(imageIds));
+    AppState.selectionDataCache = {
+        key: cacheKey,
+        data
+    };
+    return data;
+}
+
+function setExportModalMode(mode) {
+    const exportAltBtn = $('#btn-export-tags-alt');
+    if (!exportAltBtn) return;
+
+    exportAltBtn.dataset.exportView = mode;
+    exportAltBtn.innerHTML = mode === 'prompts'
+        ? `🏷️ ${appT('export.tagsInstead', 'Export Tags Instead')}`
+        : `📤 ${appT('export.promptsInstead', 'Export Prompts Instead')}`;
+}
+
 async function executeBatchExport() {
     const outputFolder = $('#batch-export-folder')?.value?.trim() || '';
     if (!outputFolder) {
-        showToast('Please enter an output folder', 'error');
+        showToast(appT('export.outputFolderRequired', 'Please enter an output folder'), 'error');
         return;
     }
 
@@ -4785,7 +5580,7 @@ async function executeBatchExport() {
     const startBtn = $('#btn-start-batch-export');
     if (progressEl) progressEl.style.display = 'block';
     if (progressFill) progressFill.style.width = '0%';
-    if (progressText) progressText.textContent = 'Exporting...';
+    if (progressText) progressText.textContent = appT('export.inProgress', 'Exporting...');
     if (startBtn) startBtn.disabled = true;
 
     try {
@@ -4794,13 +5589,17 @@ async function executeBatchExport() {
         $('#batch-export-progress-fill').style.width = '100%';
 
         if (result.status === 'ok') {
-            showToast(`Exported ${result.exported} tag files successfully!`, 'success');
+            showToast(appT('export.success', 'Exported {count} tag files successfully.', {
+                count: result.exported,
+            }), 'success');
             hideModal('batch-export-modal');
         } else {
-            showToast('Export failed: ' + (result.errors?.join(', ') || 'Unknown error'), 'error');
+            showToast(appT('export.failedReason', 'Export failed: {reason}', {
+                reason: result.errors?.join(', ') || appT('common.unknownError', 'Unknown error'),
+            }), 'error');
         }
     } catch (e) {
-        showToast(formatUserError(e, "Export failed"), "error");
+        showToast(formatUserError(e, appT('export.failed', 'Export failed')), "error");
     } finally {
         $('#batch-export-progress').style.display = 'none';
         $('#btn-start-batch-export').disabled = false;
@@ -5042,7 +5841,9 @@ function renderModalActivePrompts() {
 async function openModelManager() {
     const summaryEl = $('#model-manager-summary');
     const gridEl = $('#model-manager-grid');
-    if (summaryEl) summaryEl.innerHTML = '<div class="model-manager-stat"><strong>Loading</strong><span>Checking local model inventory…</span></div>';
+    if (summaryEl) {
+        summaryEl.innerHTML = `<div class="model-manager-stat"><strong>${escapeHtml(appT('models.loadingTitle', 'Checking'))}</strong><span>${escapeHtml(appT('models.loadingBody', 'Checking what is ready on this computer...'))}</span></div>`;
+    }
     if (gridEl) gridEl.innerHTML = '';
     showModal('model-manager-modal');
 
@@ -5051,7 +5852,7 @@ async function openModelManager() {
         renderModelManager(result.models || []);
     } catch (error) {
         if (summaryEl) {
-            summaryEl.innerHTML = `<div class="model-manager-stat"><strong>Failed</strong><span>${escapeHtml(error.message || 'Could not load model inventory.')}</span></div>`;
+            summaryEl.innerHTML = `<div class="model-manager-stat"><strong>${escapeHtml(appT('models.failedTitle', 'Load failed'))}</strong><span>${escapeHtml(error.message || appT('models.failedBody', 'Could not read local feature status right now.'))}</span></div>`;
         }
     }
 }
@@ -5101,31 +5902,31 @@ function renderModelManager(models = []) {
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
             : '';
         const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => `
-            <a class="btn btn-ghost btn-small" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || 'Open Source')}</a>
+            <a class="btn btn-ghost btn-small" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || appT('models.openSource', 'Open source'))}</a>
         `).join('') : '';
 
         return `
             <article class="model-card ${statusClass}" data-model-id="${safeId}">
                 <div class="model-card-header">
                     <div>
-                        <div class="model-card-group">${escapeHtml(model.group || 'Model')}</div>
+                        <div class="model-card-group">${escapeHtml(model.group || appT('models.groupFallback', 'Feature'))}</div>
                         <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="model-card-message">${escapeHtml(model.message || '')}</div>
-                ${model.path ? `<div class="model-card-path">Current path:<code>${escapeHtml(model.path)}</code></div>` : ''}
-                ${model.runtime_path ? `<div class="model-card-path">Runtime:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
+                ${model.path ? `<div class="model-card-path">${escapeHtml(appT('models.path', 'Current path'))}:<code>${escapeHtml(model.path)}</code></div>` : ''}
+                ${model.runtime_path ? `<div class="model-card-path">${escapeHtml(appT('models.runtimePath', 'Runtime files'))}:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
                 ${installedVariants}
                 ${sourceOptions ? `
                     <label class="model-card-hint">
-                        Source
+                        ${escapeHtml(appT('models.source', 'Source'))}
                         <select class="input-field model-source-select" data-model-id="${safeId}">${sourceOptions}</select>
                     </label>
                 ` : ''}
                 ${variantOptions ? `
                     <label class="model-card-hint">
-                        Variant
+                        ${escapeHtml(appT('models.variant', 'Variant'))}
                         <select class="input-field model-variant-select" data-model-id="${safeId}">${variantOptions}</select>
                     </label>
                 ` : ''}
@@ -5144,17 +5945,17 @@ function renderModelManager(models = []) {
             const variant = gridEl.querySelector(`.model-variant-select[data-model-id="${CSS.escape(modelId)}"]`)?.value || null;
             const originalLabel = button.textContent;
             button.disabled = true;
-            button.textContent = 'Working...';
+            button.textContent = appT('models.working', 'Working...');
             try {
                 const result = await API.prepareModel(modelId, { source, variant });
-                showToast(result.message || `${modelId} is ready.`, 'success');
+                showToast(result.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
                 const refreshed = await API.getModelStatus();
                 renderModelManager(refreshed.models || []);
                 // Notify other tabs (e.g. Similar Images) that a model changed
                 document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
             } catch (error) {
                 const apiData = error?.apiData || {};
-                const userMessage = apiData.message || formatUserError(error, 'Model preparation failed');
+                const userMessage = apiData.message || formatUserError(error, appT('models.prepareFailed', 'Model setup failed'));
                 const manualSteps = Array.isArray(apiData.manual_steps) ? apiData.manual_steps : [];
                 if (apiData.type === 'CivitaiLoginRequired' && manualSteps.length > 0) {
                     const card = button.closest('.model-card');
@@ -5555,7 +6356,7 @@ function applyModalFilters() {
 
     if (FilterModalController.onApply) {
         FilterModalController.onApply(cloneFilterState(FilterModalController.targetState || filterState));
-        showToast('Filters applied', 'success');
+        showToast(appT('filter.appliedToast', 'Filters applied'), 'success');
         resetFilterModalController();
         return;
     }
@@ -5568,7 +6369,7 @@ function applyModalFilters() {
 
     syncGenTabsWithFilters();
     loadImages();
-    showToast('Filters applied', 'success');
+    showToast(appT('filter.appliedToast', 'Filters applied'), 'success');
     resetFilterModalController();
 }
 
@@ -5634,7 +6435,7 @@ function resetAllFilters() {
 
     if (FilterModalController.onReset) {
         FilterModalController.onReset(cloneFilterState(FilterModalController.targetState || filterState));
-        showToast('Filters cleared', 'success');
+        showToast(appT('filter.clearedToast', 'Filters cleared'), 'success');
         resetFilterModalController();
         return;
     }
@@ -5645,7 +6446,7 @@ function resetAllFilters() {
 
     syncGenTabsWithFilters();
     loadImages();
-    showToast('Filters cleared', 'success');
+    showToast(appT('filter.clearedToast', 'Filters cleared'), 'success');
     resetFilterModalController();
 }
 
@@ -5664,7 +6465,7 @@ function getFilterPresets() {
 
 function saveFilterPreset(name) {
     if (!name || !name.trim()) {
-        showToast('Please enter a preset name', 'error');
+        showToast(appT('filter.presetNameRequired', 'Please enter a preset name'), 'error');
         return false;
     }
 
@@ -5687,10 +6488,10 @@ function saveFilterPreset(name) {
 
     try {
         localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
-        showToast(`Preset "${name}" saved`, 'success');
+        showToast(appT('filter.presetSaved', 'Preset "{name}" saved', { name }), 'success');
         return true;
     } catch (e) {
-        showToast('Failed to save preset', 'error');
+        showToast(appT('filter.presetSaveFailed', 'Failed to save preset'), 'error');
         return false;
     }
 }
@@ -5700,7 +6501,7 @@ function loadFilterPreset(name) {
     const preset = presets[name];
 
     if (!preset) {
-        showToast(`Preset "${name}" not found`, 'error');
+        showToast(appT('filter.presetMissing', 'Preset "{name}" not found', { name }), 'error');
         return false;
     }
 
@@ -5723,7 +6524,7 @@ function loadFilterPreset(name) {
 
     closeFilterModal();
     loadImages();
-    showToast(`Preset "${name}" loaded`, 'success');
+    showToast(appT('filter.presetLoaded', 'Preset "{name}" loaded', { name }), 'success');
     return true;
 }
 
@@ -5732,7 +6533,7 @@ function deleteFilterPreset(name) {
     if (presets[name]) {
         delete presets[name];
         localStorage.setItem(FILTER_PRESETS_KEY, JSON.stringify(presets));
-        showToast(`Preset "${name}" deleted`, 'success');
+        showToast(appT('filter.presetDeleted', 'Preset "{name}" deleted', { name }), 'success');
         return true;
     }
     return false;
@@ -5746,7 +6547,7 @@ function renderFilterPresets() {
     const presetNames = Object.keys(presets);
 
     if (presetNames.length === 0) {
-        container.innerHTML = '<div class="presets-empty">No saved presets</div>';
+        container.innerHTML = `<div class="presets-empty">${escapeHtml(appT('filter.presetsEmpty', 'No saved presets'))}</div>`;
         return;
     }
 
@@ -5756,7 +6557,7 @@ function renderFilterPresets() {
         <div class="preset-item">
             <span class="preset-name">${safeName}</span>
             <div class="preset-actions">
-                <button class="btn-small" data-preset-action="load" data-preset-name="${safeName}">Load</button>
+                <button class="btn-small" data-preset-action="load" data-preset-name="${safeName}">${escapeHtml(appT('filter.loadPreset', 'Load'))}</button>
                 <button class="btn-small btn-danger" data-preset-action="delete" data-preset-name="${safeName}">×</button>
             </div>
         </div>
@@ -5805,7 +6606,7 @@ function clearArtistFilter() {
     if (artistRow) artistRow.style.display = 'none';
     updateFilterSummary();
     loadImages();
-    showToast('Artist filter cleared', 'info');
+    showToast(appT('filter.artistCleared', 'Artist filter cleared'), 'info');
 }
 
 // Save filter state to localStorage
@@ -5886,6 +6687,42 @@ function updateFilterSummary() {
     if (typeof updateMobileFilterBadge === 'function') {
         updateMobileFilterBadge();
     }
+
+    const detail = { filters: cloneFilterState(AppState.filters) };
+    window.dispatchEvent(new CustomEvent('gallery-filters-changed', { detail }));
+    document.dispatchEvent(new CustomEvent('gallery-filters-changed', { detail }));
+}
+
+function refreshLocalizedImageCount() {
+    const imageCount = $('#image-count');
+    if (!imageCount) return;
+
+    if (AppState.isLoading) {
+        imageCount.textContent = appT('gallery.loading', 'Loading images...');
+        return;
+    }
+
+    const total = AppState.pagination.total || AppState.images.length || 0;
+    imageCount.textContent = appT('gallery.imageCount', '{count} images')
+        .replace('{count}', String(total));
+}
+
+function refreshLocalizedDynamicUi() {
+    refreshLocalizedImageCount();
+    updateFilterSummary();
+    if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
+    if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
+    if (AppState.modalSelection.type) {
+        const titleEl = $('#model-select-title');
+        if (titleEl) {
+            titleEl.textContent = AppState.modalSelection.type === 'checkpoint'
+                ? appT('modelSelect.checkpointsTitle', 'Select Models')
+                : appT('modelSelect.lorasTitle', 'Select LoRAs');
+        }
+        renderModelSelectList();
+    }
+    updateAestheticUi();
+    window.Gallery?.refreshLocalizedContent?.();
 }
 
 // ============== Initialization ==============
@@ -5907,19 +6744,19 @@ function initGlobalKeyboardShortcuts() {
         if (e.key === 'g' || e.key === 'G') {
             e.preventDefault();
             setGalleryViewMode('grid');
-            showToast('Grid view', 'info');
+            showToast(appT('gallery.viewGrid', 'Grid view'), 'info');
         }
         // L - Toggle large view
         else if (e.key === 'l' || e.key === 'L') {
             e.preventDefault();
             setGalleryViewMode('large');
-            showToast('Large view', 'info');
+            showToast(appT('gallery.viewLarge', 'Large view'), 'info');
         }
         // W - Toggle waterfall view
         else if (e.key === 'w' || e.key === 'W') {
             e.preventDefault();
             setGalleryViewMode('waterfall');
-            showToast('Waterfall view', 'info');
+            showToast(appT('gallery.viewWaterfall', 'Waterfall view'), 'info');
         }
         // F - Open filter modal
         else if (e.key === 'f' || e.key === 'F') {
@@ -5935,7 +6772,12 @@ function initGlobalKeyboardShortcuts() {
         else if (e.key === 's' || e.key === 'S') {
             e.preventDefault();
             setSelectionMode(!AppState.selectionMode);
-            showToast(AppState.selectionMode ? 'Selection mode ON' : 'Selection mode OFF', 'info');
+            showToast(
+                AppState.selectionMode
+                    ? appT('gallery.selectionModeOn', 'Selection mode ON')
+                    : appT('gallery.selectionModeOff', 'Selection mode OFF'),
+                'info'
+            );
         }
         // Escape - Clear selection
         else if (e.key === 'Escape') {
@@ -5947,23 +6789,14 @@ function initGlobalKeyboardShortcuts() {
                 if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
                     Gallery.syncSelectionState();
                 }
-                showToast('Selection cleared', 'info');
+                showToast(appT('gallery.selectionCleared', 'Selection cleared'), 'info');
             }
         }
         // Delete - Clear gallery (with confirmation)
         else if (e.key === 'Delete') {
             if (AppState.selectedIds.size > 0) {
                 e.preventDefault();
-                showConfirm(
-                    'Clear Selected Images',
-                    `Clear ${AppState.selectedIds.size} selected images from gallery?`,
-                    () => {
-                        AppState.selectedIds.clear();
-                        updateSelectionUI();
-                        emitSelectionStateChanged();
-                        showToast('Selection cleared', 'success');
-                    }
-                );
+                deleteSelectedGalleryImages();
             }
         }
     });
@@ -5987,6 +6820,10 @@ document.addEventListener('DOMContentLoaded', () => {
     resumeScanProgress();
     resumeTaggingProgress();
     _initBgTagProgressButtons();
+    _initBgScanProgressButtons();
+    document.addEventListener('languageChanged', refreshLocalizedDynamicUi);
+    document.addEventListener('languageChanged', () => setUpdateButtonState(AppState.update.status, AppState.update.checking));
+    setUpdateButtonState();
 
     // Initialize gallery keyboard navigation for accessibility
     if (window.Gallery && typeof window.Gallery.initKeyboardNavigation === 'function') {
@@ -6012,6 +6849,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', _onGalleryScroll, { passive: true });
     document.addEventListener('languageChanged', updateNavigationOverflowState);
     updateNavigationOverflowState();
+    window.addEventListener('load', updateNavigationOverflowState, { once: true });
+    document.fonts?.ready?.then?.(() => updateNavigationOverflowState()).catch?.(() => {});
 });
 
 function addToCensorQueue(imageIds = []) {
@@ -6114,6 +6953,9 @@ function buildAppContext() {
         copyFilterState,
         updateSortReverseButton,
         syncGallerySortLabels,
+        formatGeneratorLabel,
+        loadSelectionData,
+        resetSelectionDataCache,
         openTagsLibrary,
         switchLibraryTab,
         filterLibraryContent,

@@ -23,39 +23,60 @@ function formatFilterSummary(filters) {
     const f = filters || {};
     const allGens = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
     const allRatings = ['general', 'sensitive', 'questionable', 'explicit'];
+    const t = window.I18n?.t?.bind(window.I18n);
+    const allLabel = t ? t('common.all') : 'All';
+    const noneLabel = t ? t('common.none') : 'None';
+    const selectedSuffix = t ? t('common.selected') : 'selected';
+    const tagLabel = t ? t('modal.tags') : 'tags';
+    const promptLabel = t ? t('library.prompts') : 'prompts';
+    const anyLabel = t ? t('filter.any') : 'Any';
+    const infinityLabel = '∞';
+    const customLabel = t ? t('filter.custom') : 'Custom';
+    const formatGenerator = (generator) => {
+        const normalized = String(generator || 'unknown').trim().toLowerCase();
+        const key = `generator.${normalized}`;
+        const translated = t ? t(key) : null;
+        return translated && translated !== key ? translated : String(generator || 'unknown');
+    };
+    const formatRating = (rating) => {
+        const normalized = String(rating || '').trim().toLowerCase();
+        const key = `common.${normalized}`;
+        const translated = t ? t(key) : null;
+        return translated && translated !== key ? translated : String(rating || '');
+    };
 
     return {
         generators:
-            !f.generators || f.generators.length === allGens.length ? 'All' :
-                f.generators.length === 0 ? 'None' :
-                    f.generators.length > 2 ? `${f.generators.length} selected` : f.generators.join(', '),
+            !f.generators || f.generators.length === allGens.length ? allLabel :
+                f.generators.length === 0 ? noneLabel :
+                    f.generators.length > 2 ? `${f.generators.length} ${selectedSuffix}` : f.generators.map(formatGenerator).join(', '),
 
         ratings:
-            !f.ratings || f.ratings.length === allRatings.length ? 'All' :
-                f.ratings.length === 0 ? 'None' :
-                    f.ratings.length > 2 ? `${f.ratings.length} selected` : f.ratings.join(', '),
+            !f.ratings || f.ratings.length === allRatings.length ? allLabel :
+                f.ratings.length === 0 ? noneLabel :
+                    f.ratings.length > 2 ? `${f.ratings.length} ${selectedSuffix}` : f.ratings.map(formatRating).join(', '),
 
         tags:
-            !f.tags || f.tags.length === 0 ? 'None' :
-                f.tags.length > 2 ? `${f.tags.length} tags` : f.tags.join(', '),
+            !f.tags || f.tags.length === 0 ? noneLabel :
+                f.tags.length > 2 ? `${f.tags.length} ${tagLabel}` : f.tags.join(', '),
 
         checkpoints:
-            !f.checkpoints || f.checkpoints.length === 0 ? 'None' :
-                f.checkpoints.length > 2 ? `${f.checkpoints.length} selected` : f.checkpoints.join(', '),
+            !f.checkpoints || f.checkpoints.length === 0 ? noneLabel :
+                f.checkpoints.length > 2 ? `${f.checkpoints.length} ${selectedSuffix}` : f.checkpoints.join(', '),
 
         loras:
-            !f.loras || f.loras.length === 0 ? 'None' :
-                f.loras.length > 2 ? `${f.loras.length} selected` : f.loras.join(', '),
+            !f.loras || f.loras.length === 0 ? noneLabel :
+                f.loras.length > 2 ? `${f.loras.length} ${selectedSuffix}` : f.loras.join(', '),
 
         prompts:
-            !f.prompts || f.prompts.length === 0 ? 'None' :
-                f.prompts.length > 2 ? `${f.prompts.length} prompts` : f.prompts.join(', '),
+            !f.prompts || f.prompts.length === 0 ? noneLabel :
+                f.prompts.length > 2 ? `${f.prompts.length} ${promptLabel}` : f.prompts.join(', '),
 
         search:
-            !f.search || !String(f.search).trim() ? 'None' :
+            !f.search || !String(f.search).trim() ? noneLabel :
                 String(f.search).trim().length > 40 ? `${String(f.search).trim().slice(0, 37)}...` : String(f.search).trim(),
 
-        dimensions: formatDimensionsSummary(f),
+        dimensions: formatDimensionsSummary(f, { anyLabel, infinityLabel, customLabel }),
 
         artist: f.artist ? formatArtistName(f.artist) : null
     };
@@ -67,26 +88,26 @@ function formatFilterSummary(filters) {
  * @param {Object} filters - The filters object
  * @returns {string} Formatted dimensions string
  */
-function formatDimensionsSummary(filters) {
+function formatDimensionsSummary(filters, labels = {}) {
     const f = filters || {};
     const hasDimFilter = f.minWidth || f.maxWidth || f.minHeight || f.maxHeight || f.aspectRatio;
 
     if (!hasDimFilter) {
-        return 'Any';
+        return labels.anyLabel || 'Any';
     }
 
     const parts = [];
     if (f.minWidth || f.maxWidth) {
-        parts.push(`W: ${f.minWidth || 0}-${f.maxWidth || 'infinity'}`);
+        parts.push(`W: ${f.minWidth || 0}-${f.maxWidth || labels.infinityLabel || 'infinity'}`);
     }
     if (f.minHeight || f.maxHeight) {
-        parts.push(`H: ${f.minHeight || 0}-${f.maxHeight || 'infinity'}`);
+        parts.push(`H: ${f.minHeight || 0}-${f.maxHeight || labels.infinityLabel || 'infinity'}`);
     }
     if (f.aspectRatio) {
         parts.push(f.aspectRatio);
     }
 
-    return parts.join(', ') || 'Custom';
+    return parts.join(', ') || labels.customLabel || 'Custom';
 }
 
 /**

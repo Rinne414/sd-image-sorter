@@ -16,6 +16,7 @@ import json
 import tempfile
 import shutil
 from pathlib import Path
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -258,6 +259,51 @@ class TestScan:
         data = response.json()
         assert "status" in data
 
+    def test_scan_cleanup_missing_removes_stale_entries_in_scope(self, test_client, tmp_path: Path):
+        """Folder sync should remove indexed rows whose files no longer exist under the scanned scope."""
+        import database as db
+        from PIL import Image
+
+        valid_path = tmp_path / "valid.png"
+        Image.new("RGB", (64, 64), color="green").save(valid_path)
+        missing_path = tmp_path / "missing.png"
+
+        db.add_image(
+            path=str(valid_path),
+            filename=valid_path.name,
+            metadata_json="{}",
+            width=64,
+            height=64,
+            file_size=valid_path.stat().st_size,
+            created_at=datetime.fromtimestamp(valid_path.stat().st_mtime),
+        )
+        db.add_image(
+            path=str(missing_path),
+            filename=missing_path.name,
+            metadata_json="{}",
+            width=64,
+            height=64,
+            file_size=123,
+            created_at=datetime.now(),
+        )
+
+        response = test_client.post(
+            "/api/scan",
+            json={
+                "folder_path": str(tmp_path),
+                "recursive": False,
+                "cleanup_missing": True,
+            }
+        )
+
+        assert response.status_code == 200
+
+        progress = test_client.get("/api/scan/progress").json()
+        assert progress["status"] == "done"
+        assert progress["removed"] == 1
+        assert "removed" in progress["message"].lower()
+        assert [img["filename"] for img in db.get_images(limit=20, include_unreadable=True)] == ["valid.png"]
+
     def test_cancel_scan_marks_idle_worker_as_cancelled(self, isolated_sorting_service):
         """Cancel should flip the shared scan state to cancelled when no live worker remains."""
         import threading
@@ -419,6 +465,101 @@ class TestMove:
         # Verify file was moved
         assert not img_path.exists()
         assert (dest_dir / "move_me.png").exists()
+
+    def test_copy_image_file_keeps_source_and_creates_indexed_copy(self, test_client, test_db, tmp_path: Path):
+        """Copy mode should preserve the source file and create a second indexed row."""
+        import database as db
+        from PIL import Image
+
+        source_dir = tmp_path / "copy_source"
+        source_dir.mkdir()
+        dest_dir = tmp_path / "copy_dest"
+        dest_dir.mkdir()
+
+        img_path = source_dir / "copy_me.png"
+        Image.new("RGB", (96, 96), color="purple").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            generator="unknown",
+            prompt="copy flow",
+            metadata_json="{}",
+            created_at=datetime(2024, 1, 2, 3, 4, 5),
+        )
+        db.add_tags(image_id, [{"tag": "copied_tag", "confidence": 0.91}])
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE images
+                SET tagged_at = ?, ai_caption = ?, aesthetic_score = ?, embedding = ?
+                WHERE id = ?
+                """,
+                ("2024-02-03 04:05:06", "copy caption", 7.25, b"\x01\x02\x03\x04", image_id),
+            )
+            cursor.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    image_id,
+                    "artist_copy",
+                    0.93,
+                    json.dumps([{"artist": "artist_copy", "confidence": 0.93}]),
+                ),
+            )
+
+        response = test_client.post(
+            "/api/move",
+            json={
+                "image_ids": [image_id],
+                "destination_folder": str(dest_dir),
+                "operation": "copy",
+            }
+        )
+
+        assert response.status_code == 200
+        payload = response.json()["results"][0]
+        assert payload["success"] is True
+        assert payload["operation"] == "copy"
+        assert img_path.exists()
+        copied_path = dest_dir / "copy_me.png"
+        assert copied_path.exists()
+
+        original_row = db.get_image_by_id(image_id)
+        copied_row = db.get_image_by_id(payload["new_image_id"])
+        assert original_row["path"] == str(img_path)
+        assert copied_row["path"] == str(copied_path)
+        assert copied_row["prompt"] == "copy flow"
+        assert copied_row["created_at"] == original_row["created_at"]
+        assert copied_row["ai_caption"] == original_row["ai_caption"]
+        assert copied_row["aesthetic_score"] == original_row["aesthetic_score"]
+        assert {tag["tag"] for tag in db.get_image_tags(copied_row["id"])} == {"copied_tag"}
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            original_derived = cursor.execute(
+                "SELECT tagged_at, embedding FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+            copied_derived = cursor.execute(
+                "SELECT tagged_at, embedding FROM images WHERE id = ?",
+                (copied_row["id"],),
+            ).fetchone()
+            original_artist = cursor.execute(
+                "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()
+            copied_artist = cursor.execute(
+                "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
+                (copied_row["id"],),
+            ).fetchone()
+        assert copied_derived["tagged_at"] == original_derived["tagged_at"]
+        assert copied_derived["embedding"] == original_derived["embedding"]
+        assert copied_artist["artist"] == original_artist["artist"]
+        assert copied_artist["confidence"] == pytest.approx(original_artist["confidence"])
+        assert copied_artist["top_predictions"] == original_artist["top_predictions"]
 
     def test_move_rejects_unreadable_image_even_if_file_exists(self, test_client, test_db, tmp_path: Path):
         """A truncated image should not be moved just because the file still exists on disk."""
@@ -878,6 +1019,62 @@ class TestSortSession:
         assert data["sorted_count"] == 0
         assert data["skipped_count"] == 0
         assert data["redo_available"] is True
+
+    def test_sort_copy_undo_and_redo_keep_original_file_intact(self, test_client, tmp_path: Path):
+        """Manual sort copy mode should undo by removing the copied file while keeping the source."""
+        from PIL import Image
+
+        source_dir = tmp_path / "copy_sort_source"
+        source_dir.mkdir()
+        destination = tmp_path / "copy_sort_dest"
+        destination.mkdir()
+
+        image_path = source_dir / "copy_sort.png"
+        Image.new("RGB", (80, 80), color="orange").save(image_path)
+
+        db = test_client.test_db
+        db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator="unknown",
+            prompt="copy me",
+            metadata_json="{}",
+        )
+
+        test_client.delete("/api/sort/session")
+        start_response = test_client.post("/api/sort/start?generators=unknown&operation_mode=copy")
+        assert start_response.status_code == 200
+        assert start_response.json()["operation_mode"] == "copy"
+
+        test_client.post("/api/sort/set-folders", json={"folders": {"a": str(destination)}})
+
+        copy_response = test_client.post("/api/sort/action?action=move&folder_key=a")
+        assert copy_response.status_code == 200
+        copy_payload = copy_response.json()
+        assert copy_payload["done"] is True
+        assert copy_payload["operation_mode"] == "copy"
+        assert image_path.exists()
+        copied_path = destination / image_path.name
+        assert copied_path.exists()
+        assert db.get_image_count() == 2
+
+        undo_response = test_client.post("/api/sort/action?action=undo")
+        assert undo_response.status_code == 200
+        undo_payload = undo_response.json()
+        assert undo_payload["status"] == "undone"
+        assert undo_payload["operation_mode"] == "copy"
+        assert image_path.exists()
+        assert not copied_path.exists()
+        assert db.get_image_count() == 1
+
+        redo_response = test_client.post("/api/sort/action?action=redo")
+        assert redo_response.status_code == 200
+        redo_payload = redo_response.json()
+        assert redo_payload["status"] == "redone"
+        assert redo_payload["operation_mode"] == "copy"
+        assert image_path.exists()
+        assert copied_path.exists()
+        assert db.get_image_count() == 2
 
     def test_sort_redo_replays_persisted_skip(self, test_client, isolated_sorting_service, tmp_path: Path):
         """Redo should be driven by backend session state so it survives resume/reload."""

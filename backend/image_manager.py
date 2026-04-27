@@ -4,18 +4,350 @@ Image manager for file operations (scanning, moving, copying).
 import logging
 import os
 import shutil
-from typing import List, Dict, Any, Optional, Callable
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from typing import List, Dict, Any, Optional, Callable, Iterator
 from datetime import datetime
 from pathlib import Path
 import json
 
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
-from database import add_image, update_image_path, get_images, add_tags, update_image_metadata, mark_image_unreadable_by_path
-from metadata_parser import parse_image, verify_image_readable
+from database import (
+    add_images_batch,
+    add_image,
+    add_tags,
+    copy_image_derived_state,
+    get_image_tags,
+    update_image_path,
+    update_image_metadata,
+    get_image_scan_state_by_paths,
+    get_images_in_folder_scope,
+    delete_images_by_ids,
+    delete_images_by_paths,
+)
+from image_fingerprint import compute_image_content_fingerprint
+from metadata_parser import parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
+from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
+
+SCAN_DB_BATCH_SIZE = 200
+DEFAULT_METADATA_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
+
+
+def _chunked(items: Iterator[Any], size: int) -> Iterator[List[Any]]:
+    """Yield fixed-size batches from an iterator without buffering the full stream."""
+    batch: List[Any] = []
+    for item in items:
+        batch.append(item)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def _deserialize_loras(value: Any) -> Optional[List[str]]:
+    """Best-effort deserialize of the stored loras JSON column."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
+def _source_fingerprint_matches(existing: Optional[Dict[str, Any]], stat_result: os.stat_result) -> bool:
+    """Return True when the indexed source fingerprint matches the current file."""
+    if not existing:
+        return False
+
+    try:
+        source_mtime_ns = int(existing.get("source_mtime_ns"))
+        source_size = int(existing.get("source_size"))
+    except (TypeError, ValueError):
+        return False
+
+    return source_mtime_ns == int(stat_result.st_mtime_ns) and source_size == int(stat_result.st_size)
+
+
+def _has_source_fingerprint(existing: Optional[Dict[str, Any]]) -> bool:
+    """Return True when the row already stores a usable source fingerprint."""
+    if not existing:
+        return False
+    try:
+        int(existing.get("source_mtime_ns"))
+        int(existing.get("source_size"))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_unchanged_scan_hit(existing: Optional[Dict[str, Any]], stat_result: os.stat_result) -> bool:
+    """Skip reparsing files whose source fingerprint and metadata status still match."""
+    if not existing or not existing.get("is_readable", 1):
+        return False
+    if existing.get("metadata_status") != "complete":
+        return False
+    if _needs_content_fingerprint_backfill(existing):
+        return False
+    return _source_fingerprint_matches(existing, stat_result)
+
+
+def _has_cached_derived_state(existing: Optional[Dict[str, Any]]) -> bool:
+    """Return True when the indexed row already has derived data that may need preservation."""
+    if not existing:
+        return False
+    return any([
+        existing.get("tagged_at") is not None,
+        existing.get("ai_caption") is not None,
+        existing.get("aesthetic_score") is not None,
+        bool(existing.get("has_embedding")),
+        bool(existing.get("has_artist_predictions")),
+    ])
+
+
+def _needs_content_fingerprint_backfill(existing: Optional[Dict[str, Any]]) -> bool:
+    """Return True when the row has derived state but still lacks a content fingerprint."""
+    if not _has_cached_derived_state(existing):
+        return False
+    return not bool(existing.get("content_fingerprint"))
+
+
+def _should_compute_content_fingerprint(existing: Optional[Dict[str, Any]]) -> bool:
+    """Only compute fingerprints when they are needed for derived-state safety."""
+    if not existing:
+        return False
+    return bool(existing.get("content_fingerprint")) or _needs_content_fingerprint_backfill(existing)
+
+
+def _build_placeholder_record(
+    image_path: str,
+    filename: str,
+    stat_result: os.stat_result,
+    existing: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Create a fast-import placeholder row before metadata backfill starts."""
+    preserve_existing_metadata = bool(existing) and bool(existing.get("is_readable", 1))
+    if preserve_existing_metadata and _has_source_fingerprint(existing):
+        preserve_existing_metadata = _source_fingerprint_matches(existing, stat_result)
+    created_at = datetime.fromtimestamp(stat_result.st_mtime)
+
+    if preserve_existing_metadata:
+        return {
+            "path": image_path,
+            "filename": filename,
+            "generator": existing.get("generator"),
+            "prompt": existing.get("prompt"),
+            "negative_prompt": existing.get("negative_prompt"),
+            "metadata_json": existing.get("metadata_json"),
+            "width": existing.get("width"),
+            "height": existing.get("height"),
+            "file_size": int(stat_result.st_size),
+            "checkpoint": existing.get("checkpoint"),
+            "loras": _deserialize_loras(existing.get("loras")),
+            "created_at": created_at,
+            "model_hash": existing.get("model_hash"),
+            "is_readable": bool(existing.get("is_readable", 1)),
+            "read_error": existing.get("read_error"),
+            "source_mtime_ns": int(stat_result.st_mtime_ns),
+            "source_size": int(stat_result.st_size),
+            "metadata_status": "pending",
+            "content_fingerprint": existing.get("content_fingerprint"),
+        }
+
+    return {
+        "path": image_path,
+        "filename": filename,
+        "generator": "unknown",
+        "prompt": None,
+        "negative_prompt": None,
+        "metadata_json": "{}",
+        "width": None,
+        "height": None,
+        "file_size": int(stat_result.st_size),
+        "checkpoint": None,
+        "loras": [],
+        "created_at": created_at,
+        "model_hash": None,
+        "is_readable": True,
+        "read_error": None,
+        "source_mtime_ns": int(stat_result.st_mtime_ns),
+        "source_size": int(stat_result.st_size),
+        "metadata_status": "pending",
+        "content_fingerprint": None,
+    }
+
+
+def _build_metadata_success_record(
+    image_path: str,
+    filename: str,
+    stat_result: os.stat_result,
+    metadata: Dict[str, Any],
+    *,
+    content_fingerprint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Convert parsed metadata into a database row update."""
+    try:
+        metadata_json = json.dumps(metadata["metadata"])
+    except (TypeError, ValueError) as exc:
+        logger.warning("Could not serialize metadata for %s: %s", image_path, exc)
+        metadata_json = "{}"
+
+    gen_params = metadata.get("metadata", {}).get("_parsed", {}).get("generation_params") or {}
+    model_hash = gen_params.get("model_hash")
+
+    return {
+        "path": image_path,
+        "filename": filename,
+        "generator": metadata["generator"],
+        "prompt": metadata["prompt"],
+        "negative_prompt": metadata["negative_prompt"],
+        "metadata_json": metadata_json,
+        "width": metadata["width"],
+        "height": metadata["height"],
+        "file_size": int(stat_result.st_size),
+        "checkpoint": metadata["checkpoint"],
+        "loras": metadata["loras"],
+        "created_at": datetime.fromtimestamp(stat_result.st_mtime),
+        "model_hash": model_hash,
+        "is_readable": True,
+        "read_error": None,
+        "source_mtime_ns": int(stat_result.st_mtime_ns),
+        "source_size": int(stat_result.st_size),
+        "metadata_status": "complete",
+        "content_fingerprint": content_fingerprint,
+    }
+
+
+def _build_metadata_error_record(
+    image_path: str,
+    filename: str,
+    stat_result: Optional[os.stat_result],
+    error_message: str,
+) -> Dict[str, Any]:
+    """Build a DB record for files that failed metadata parsing."""
+    created_at = datetime.fromtimestamp(stat_result.st_mtime) if stat_result else None
+    source_mtime_ns = int(stat_result.st_mtime_ns) if stat_result else None
+    source_size = int(stat_result.st_size) if stat_result else None
+
+    return {
+        "path": image_path,
+        "filename": filename,
+        "generator": "unknown",
+        "prompt": None,
+        "negative_prompt": None,
+        "metadata_json": "{}",
+        "width": None,
+        "height": None,
+        "file_size": source_size,
+        "checkpoint": None,
+        "loras": [],
+        "created_at": created_at,
+        "model_hash": None,
+        "is_readable": False,
+        "read_error": error_message,
+        "source_mtime_ns": source_mtime_ns,
+        "source_size": source_size,
+        "metadata_status": "error",
+        "content_fingerprint": None,
+    }
+
+
+def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Parse one file for the background metadata backfill stage."""
+    image_path = job["path"]
+    filename = job["filename"]
+    compute_content_fingerprint = bool(job.get("compute_content_fingerprint"))
+
+    try:
+        stat_result = os.stat(image_path)
+        metadata = parse_image(image_path, validate_image_data=True)
+        parse_error = metadata.get("parse_error")
+        if parse_error:
+            return {
+                "filename": filename,
+                "generator": None,
+                "record": _build_metadata_error_record(image_path, filename, stat_result, parse_error),
+                "error": {"filename": filename, "error": parse_error, "kind": "unreadable"},
+            }
+
+        if metadata["width"] <= 0 or metadata["height"] <= 0:
+            error_message = "Metadata parse returned no dimensions"
+            return {
+                "filename": filename,
+                "generator": None,
+                "record": _build_metadata_error_record(image_path, filename, stat_result, error_message),
+                "error": {"filename": filename, "error": error_message, "kind": "unreadable"},
+            }
+
+        content_fingerprint = None
+        if compute_content_fingerprint:
+            try:
+                content_fingerprint = compute_image_content_fingerprint(image_path)
+            except Exception as exc:
+                logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
+
+        return {
+            "filename": filename,
+            "generator": metadata["generator"],
+            "record": _build_metadata_success_record(
+                image_path,
+                filename,
+                stat_result,
+                metadata,
+                content_fingerprint=content_fingerprint,
+            ),
+            "error": None,
+        }
+    except PermissionError as exc:
+        return {
+            "filename": filename,
+            "generator": None,
+            "record": _build_metadata_error_record(image_path, filename, None, str(exc)),
+            "error": {"filename": filename, "error": str(exc), "kind": "permission"},
+        }
+    except OSError as exc:
+        return {
+            "filename": filename,
+            "generator": None,
+            "record": _build_metadata_error_record(image_path, filename, None, str(exc)),
+            "error": {"filename": filename, "error": str(exc), "kind": "os_error"},
+        }
+    except Exception as exc:
+        logger.error("Unexpected error processing %s: %s", image_path, exc, exc_info=True)
+        return {
+            "filename": filename,
+            "generator": None,
+            "record": _build_metadata_error_record(image_path, filename, None, str(exc)),
+            "error": {"filename": filename, "error": str(exc), "kind": "unexpected"},
+        }
+
+
+def _cleanup_missing_scope_entries(
+    folder_path: str,
+    recursive: bool,
+    stop_requested: Optional[Callable[[], bool]] = None,
+) -> int:
+    """Delete indexed rows whose files no longer exist inside the scan scope."""
+    removed_ids: List[int] = []
+    for row in get_images_in_folder_scope(folder_path, recursive):
+        if callable(stop_requested) and stop_requested():
+            raise ScanCancelledError(path=folder_path)
+        candidate_path = row.get("path")
+        if not candidate_path:
+            continue
+        resolved_path = resolve_existing_indexed_image_path(candidate_path, backend_file=__file__, allow_symlink=True)
+        if not resolved_path or os.path.islink(resolved_path):
+            removed_ids.append(int(row["id"]))
+
+    return delete_images_by_ids(removed_ids)
 
 
 def scan_folder(
@@ -23,6 +355,10 @@ def scan_folder(
     recursive: bool = True,
     progress_callback: Optional[Callable] = None,
     stop_requested: Optional[Callable[[], bool]] = None,
+    force_reparse: bool = False,
+    cleanup_missing: bool = False,
+    quick_import: bool = True,
+    metadata_workers: int = DEFAULT_METADATA_WORKERS,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -37,24 +373,30 @@ def scan_folder(
         {
             "total": int,
             "new": int,
-            "updated": int,
-            "errors": int,
-            "by_generator": {generator: count}
+        "updated": int,
+        "removed": int,
+        "errors": int,
+        "by_generator": {generator: count}
         }
     """
     result: Dict[str, Any] = {
         "total": 0,
+        "total_final": False,
         "new": 0,
         "updated": 0,
+        "removed": 0,
         "errors": 0,
         "by_generator": {},
         "recent_errors": [],
+        "metadata_total": 0,
+        "metadata_processed": 0,
+        "library_ready": False,
     }
     
     # C5: Keep scans streaming even for large libraries.
-    # We still do a cheap count pass first so the UI gets a truthful total
-    # before the first image is processed, but we never materialize the
-    # full path list in memory.
+    # Do not pre-count the full tree. We start importing on the first
+    # discovered file and let the UI treat totals as "still growing"
+    # until directory traversal finishes.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
@@ -63,41 +405,73 @@ def scan_folder(
     if not folder.is_dir():
         raise ScanError("Path is not a directory", path=folder_path)
 
+    normalized_folder_path = os.path.abspath(folder_path)
+
     def _check_cancel() -> None:
         if callable(stop_requested) and stop_requested():
             raise ScanCancelledError(path=folder_path)
 
     def _iter_images():
-        if recursive:
-            for root, dirnames, filenames in os.walk(folder, followlinks=False):
-                _check_cancel()
-                dirnames[:] = [d for d in dirnames if not (Path(root) / d).is_symlink()]
-                for filename in filenames:
-                    _check_cancel()
-                    file_path = Path(root) / filename
-                    if file_path.is_symlink():
-                        continue
-                    if file_path.suffix.lower() in IMAGE_EXTENSIONS:
-                        yield str(file_path)
-        else:
-            for fp in folder.iterdir():
-                _check_cancel()
-                if fp.is_symlink() or not fp.is_file():
-                    continue
-                if fp.suffix.lower() in IMAGE_EXTENSIONS:
-                    yield str(fp)
+        pending_dirs = [os.fspath(folder)]
+        root_dir = os.path.abspath(os.fspath(folder))
 
-    # Two-pass: count then process. Count is fast (stat only, no open).
-    total_images = 0
-    for _image_path in _iter_images():
-        total_images += 1
-    result["total"] = total_images
+        while pending_dirs:
+            current_dir = pending_dirs.pop()
+            _check_cancel()
+            try:
+                with os.scandir(current_dir) as entries:
+                    for entry in entries:
+                        _check_cancel()
+                        try:
+                            if entry.is_symlink():
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                if recursive:
+                                    pending_dirs.append(entry.path)
+                                continue
+                            if not entry.is_file(follow_symlinks=False):
+                                continue
+                            if Path(entry.name).suffix.lower() not in IMAGE_EXTENSIONS:
+                                continue
+                            try:
+                                stat_result = entry.stat(follow_symlinks=False)
+                            except OSError:
+                                stat_result = None
+                            yield {
+                                "path": entry.path,
+                                "stat": stat_result,
+                            }
+                        except FileNotFoundError:
+                            continue
+            except PermissionError:
+                if os.path.abspath(current_dir) == root_dir:
+                    raise
+                logger.warning("Permission denied listing directory during scan: %s", current_dir)
+                continue
 
-    if progress_callback:
-        try:
-            progress_callback(0, result["total"], "", {"errors": 0, "last_error": None, "phase": "counted"})
-        except TypeError:
-            progress_callback(0, result["total"], "")
+    if cleanup_missing:
+        _check_cancel()
+        result["removed"] = _cleanup_missing_scope_entries(
+            normalized_folder_path,
+            recursive,
+            stop_requested=stop_requested,
+        )
+        if progress_callback:
+            try:
+                progress_callback(
+                    0,
+                    0,
+                    "",
+                    {
+                        "errors": 0,
+                        "last_error": None,
+                        "phase": "cleanup",
+                        "removed": result["removed"],
+                        "total_final": False,
+                    },
+                )
+            except TypeError:
+                progress_callback(0, 0, "")
 
     def _record_scan_error(filename: str, error: str, kind: str = "unreadable") -> Dict[str, str]:
         entry = {
@@ -110,93 +484,275 @@ def scan_folder(
         result["recent_errors"] = result["recent_errors"][-10:]
         return entry
 
-    # Process each image in a second pass without retaining the whole list.
-    for i, image_path in enumerate(_iter_images()):
-        _check_cancel()
-        filename = os.path.basename(image_path)
-        progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
+    def _flush_placeholder_records(pending_records: List[Dict[str, Any]]) -> None:
+        if not pending_records:
+            return
+        counts = add_images_batch(pending_records, return_statuses=True)
+        result["new"] += counts["new"]
+        result["updated"] += counts["updated"]
+        placeholder_status_by_path.update(counts.get("statuses") or {})
+        pending_records.clear()
+
+    def _flush_metadata_records(pending_records: List[Dict[str, Any]]) -> None:
+        if not pending_records:
+            return
+        add_images_batch(pending_records)
+        pending_records.clear()
+
+    def _flush_deleted_new_paths(paths: List[str]) -> None:
+        if not paths:
+            return
+        delete_images_by_paths(paths)
+        paths.clear()
+
+    def _emit_library_ready() -> None:
+        if result["library_ready"] or not quick_import or not progress_callback:
+            return
+        result["library_ready"] = True
         try:
-            readable, read_error = verify_image_readable(image_path)
-            if not readable:
-                logger.warning("Skipping unreadable image during scan: %s (%s)", image_path, read_error)
-                mark_image_unreadable_by_path(image_path, read_error)
-                progress_details["last_error"] = _record_scan_error(filename, read_error or "Unreadable image")
-                progress_details["errors"] = result["errors"]
-                continue
+            progress_callback(
+                processed_count,
+                result["total"],
+                "",
+                {
+                    "errors": result["errors"],
+                    "last_error": None,
+                    "phase": "library_ready",
+                    "library_ready": True,
+                    "metadata_processed": result["metadata_processed"],
+                    "metadata_total": result["metadata_total"],
+                    "total_final": result["total_final"],
+                },
+            )
+        except TypeError:
+            progress_callback(processed_count, result["total"], "")
 
-            # Parse metadata
-            metadata = parse_image(image_path)
-            if metadata["width"] <= 0 or metadata["height"] <= 0:
-                logger.warning("Skipping unreadable image during scan: %s", image_path)
-                mark_image_unreadable_by_path(image_path, "Metadata parse returned no dimensions")
-                progress_details["last_error"] = _record_scan_error(filename, "Metadata parse returned no dimensions")
-                progress_details["errors"] = result["errors"]
-                continue
-            
-            # Get file timestamps
-            stat = os.stat(image_path)
-            created_at = datetime.fromtimestamp(stat.st_mtime)
-            
-            # Serialize metadata safely
-            try:
-                metadata_json = json.dumps(metadata["metadata"])
-            except (TypeError, ValueError) as e:
-                logger.warning("Could not serialize metadata for %s: %s", image_path, e)
-                metadata_json = "{}"
-            
-            # Extract model_hash from generation_params if available
-            gen_params = metadata.get("metadata", {}).get("_parsed", {}).get("generation_params") or {}
-            model_hash = gen_params.get("model_hash")
+    pending_placeholder_records: List[Dict[str, Any]] = []
+    pending_metadata_records: List[Dict[str, Any]] = []
+    pending_deleted_new_paths: List[str] = []
+    placeholder_status_by_path: Dict[str, str] = {}
+    processed_count = 0
+    worker_count = max(1, int(metadata_workers or DEFAULT_METADATA_WORKERS))
+    in_flight = {}
 
-            # Add to database
-            _, write_status = add_image(
-                path=image_path,
-                filename=os.path.basename(image_path),
-                generator=metadata["generator"],
-                prompt=metadata["prompt"],
-                negative_prompt=metadata["negative_prompt"],
-                metadata_json=metadata_json,
-                width=metadata["width"],
-                height=metadata["height"],
-                file_size=metadata["file_size"],
-                checkpoint=metadata["checkpoint"],
-                loras=metadata["loras"],
-                created_at=created_at,
-                model_hash=model_hash,
-                is_readable=True,
-                read_error=None,
-                return_status=True,
+    def _submit_metadata_job(executor: ThreadPoolExecutor, job: Dict[str, Any]) -> None:
+        future = executor.submit(_parse_metadata_job, job)
+        in_flight[future] = job
+        result["metadata_total"] += 1
+
+    def _handle_metadata_job_result(job_result: Dict[str, Any]) -> None:
+        filename = job_result["filename"]
+        progress_details = {
+            "phase": "metadata",
+            "library_ready": result["library_ready"],
+            "metadata_total": result["metadata_total"],
+            "last_error": None,
+            "total_final": result["total_final"],
+        }
+
+        pending_metadata_records.append(job_result["record"])
+        if job_result.get("generator"):
+            generator = job_result["generator"] or "unknown"
+            result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
+
+        if job_result.get("error"):
+            job_status = placeholder_status_by_path.get(os.path.abspath(job_result["record"]["path"]))
+            if job_status == "new":
+                result["new"] = max(0, result["new"] - 1)
+                pending_metadata_records.pop()
+                pending_deleted_new_paths.append(job_result["record"]["path"])
+            elif job_status == "updated":
+                result["updated"] = max(0, result["updated"] - 1)
+            progress_details["last_error"] = _record_scan_error(
+                filename,
+                job_result["error"]["error"],
+                kind=job_result["error"]["kind"],
             )
 
-            if write_status == "updated":
-                result["updated"] += 1
-            else:
-                result["new"] += 1
-            
-            # Track by generator
-            gen = metadata["generator"]
-            result["by_generator"][gen] = result["by_generator"].get(gen, 0) + 1
-            
-        except PermissionError as e:
-            logger.warning("Permission denied processing %s: %s", image_path, e)
-            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="permission")
-            progress_details["errors"] = result["errors"]
-        except OSError as e:
-            logger.warning("OS error processing %s: %s", image_path, e)
-            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="os_error")
-            progress_details["errors"] = result["errors"]
-        except Exception as e:
-            logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
-            progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
-            progress_details["errors"] = result["errors"]
-        finally:
-            if progress_callback:
+        result["metadata_processed"] += 1
+        progress_details["errors"] = result["errors"]
+        progress_details["metadata_processed"] = result["metadata_processed"]
+
+        if len(pending_metadata_records) >= SCAN_DB_BATCH_SIZE:
+            _flush_metadata_records(pending_metadata_records)
+        if len(pending_deleted_new_paths) >= SCAN_DB_BATCH_SIZE:
+            _flush_deleted_new_paths(pending_deleted_new_paths)
+
+        if progress_callback:
+            try:
+                progress_callback(
+                    result["metadata_processed"],
+                    result["metadata_total"],
+                    filename,
+                    progress_details,
+                )
+            except TypeError:
+                progress_callback(result["metadata_processed"], result["metadata_total"], filename)
+
+    def _drain_metadata_futures(wait_for_all: bool = False) -> None:
+        while in_flight:
+            _check_cancel()
+            timeout = 0.2 if wait_for_all else 0
+            done, _pending = wait(tuple(in_flight.keys()), timeout=timeout, return_when=FIRST_COMPLETED)
+            if not done:
+                break
+
+            for future in done:
+                in_flight.pop(future, None)
+                _handle_metadata_job_result(future.result())
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        # Pipeline: placeholder import and metadata backfill overlap.
+        for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
+            _check_cancel()
+            image_paths = [entry["path"] for entry in image_batch]
+            existing_rows = get_image_scan_state_by_paths(image_paths)
+            batch_metadata_jobs: List[Dict[str, Any]] = []
+
+            for image_entry in image_batch:
+                _check_cancel()
+                image_path = image_entry["path"]
+                cached_stat = image_entry.get("stat")
+                result["total"] += 1
+                processed_count += 1
+                filename = os.path.basename(image_path)
+                progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
                 try:
-                    progress_callback(i + 1, result["total"], filename, progress_details)
-                except TypeError:
-                    progress_callback(i + 1, result["total"], filename)
-    
+                    stat = cached_stat if cached_stat is not None else os.stat(image_path)
+                    existing = existing_rows.get(os.path.abspath(image_path))
+                    if not force_reparse and _is_unchanged_scan_hit(existing, stat):
+                        result["updated"] += 1
+                        generator = existing.get("generator") or "unknown"
+                        result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
+                        continue
+
+                    pending_placeholder_records.append(
+                        _build_placeholder_record(image_path, filename, stat, existing)
+                    )
+                    batch_metadata_jobs.append(
+                        {
+                            "path": image_path,
+                            "filename": filename,
+                            "compute_content_fingerprint": _should_compute_content_fingerprint(existing),
+                        }
+                    )
+                except PermissionError as e:
+                    logger.warning("Permission denied processing %s: %s", image_path, e)
+                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="permission")
+                    progress_details["errors"] = result["errors"]
+                except OSError as e:
+                    logger.warning("OS error processing %s: %s", image_path, e)
+                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="os_error")
+                    progress_details["errors"] = result["errors"]
+                except Exception as e:
+                    logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
+                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
+                    progress_details["errors"] = result["errors"]
+                finally:
+                    if progress_callback:
+                        try:
+                            progress_callback(
+                                processed_count,
+                                result["total"],
+                                filename,
+                                {
+                                    **progress_details,
+                                    "phase": "importing",
+                                    "library_ready": result["library_ready"],
+                                    "metadata_processed": result["metadata_processed"],
+                                    "metadata_total": result["metadata_total"],
+                                    "total_final": result["total_final"],
+                                },
+                            )
+                        except TypeError:
+                            progress_callback(processed_count, result["total"], filename)
+
+            _flush_placeholder_records(pending_placeholder_records)
+            for job in batch_metadata_jobs:
+                _submit_metadata_job(executor, job)
+
+            if batch_metadata_jobs or processed_count > 0:
+                _emit_library_ready()
+            _drain_metadata_futures(wait_for_all=False)
+
+        result["total_final"] = True
+        _flush_placeholder_records(pending_placeholder_records)
+        if result["total"] > 0:
+            _emit_library_ready()
+        _drain_metadata_futures(wait_for_all=True)
+
+    _flush_metadata_records(pending_metadata_records)
+    _flush_deleted_new_paths(pending_deleted_new_paths)
+    result["recent_errors"] = sorted(
+        result["recent_errors"],
+        key=lambda entry: (entry.get("filename") or "", entry.get("error") or ""),
+    )[-10:]
+
     return result
+
+
+def _prepare_destination_path(
+    image_path: str,
+    destination_folder: str,
+    operation: str,
+) -> tuple[str, str]:
+    """Validate destination folder and build a conflict-free output path."""
+    destination_folder = os.path.abspath(destination_folder)
+    image_path = os.path.abspath(image_path)
+
+    is_valid, error = validate_folder_path(destination_folder, allow_create=True)
+    if not is_valid:
+        raise FileOperationError(
+            f"Invalid destination: {error}",
+            path=destination_folder,
+            operation=operation,
+        )
+
+    os.makedirs(destination_folder, exist_ok=True)
+
+    filename = os.path.basename(image_path)
+    new_path = os.path.abspath(os.path.join(destination_folder, filename))
+
+    if os.path.exists(new_path) and (new_path != image_path or operation == "copy"):
+        base, ext = os.path.splitext(filename)
+        counter = 1
+        while os.path.exists(new_path):
+            new_filename = f"{base}_{counter}{ext}"
+            new_path = os.path.abspath(os.path.join(destination_folder, new_filename))
+            counter += 1
+
+    return image_path, new_path
+
+
+def _build_copied_image_record(
+    source_row: Dict[str, Any],
+    new_path: str,
+    stat_result: os.stat_result,
+) -> Dict[str, Any]:
+    """Create a new database row for a copied image using source metadata."""
+    return {
+        "path": new_path,
+        "filename": os.path.basename(new_path),
+        "generator": source_row.get("generator") or "unknown",
+        "prompt": source_row.get("prompt"),
+        "negative_prompt": source_row.get("negative_prompt"),
+        "metadata_json": source_row.get("metadata_json") or "{}",
+        "width": source_row.get("width"),
+        "height": source_row.get("height"),
+        "file_size": int(stat_result.st_size),
+        "checkpoint": source_row.get("checkpoint"),
+        "loras": _deserialize_loras(source_row.get("loras")) or [],
+        # Preserve the original gallery sort date so copy workflows do not
+        # scramble chronology when users need a reversible export.
+        "created_at": source_row.get("created_at") or datetime.fromtimestamp(stat_result.st_mtime),
+        "model_hash": source_row.get("model_hash"),
+        "is_readable": bool(source_row.get("is_readable", 1)),
+        "read_error": source_row.get("read_error"),
+        "source_mtime_ns": int(stat_result.st_mtime_ns),
+        "source_size": int(stat_result.st_size),
+        "metadata_status": source_row.get("metadata_status") or "complete",
+        "content_fingerprint": source_row.get("content_fingerprint"),
+    }
 
 
 def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
@@ -215,26 +771,7 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
         FileOperationError: If the move operation fails
     """
     try:
-        destination_folder = os.path.abspath(destination_folder)
-        image_path = os.path.abspath(image_path)
-
-        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
-        if not is_valid:
-            raise FileOperationError(f"Invalid destination: {error}", path=destination_folder, operation="move")
-
-        os.makedirs(destination_folder, exist_ok=True)
-
-        filename = os.path.basename(image_path)
-        new_path = os.path.abspath(os.path.join(destination_folder, filename))
-
-        # Handle filename conflicts
-        if os.path.exists(new_path) and new_path != image_path:
-            base, ext = os.path.splitext(filename)
-            counter = 1
-            while os.path.exists(new_path):
-                new_filename = f"{base}_{counter}{ext}"
-                new_path = os.path.abspath(os.path.join(destination_folder, new_filename))
-                counter += 1
+        image_path, new_path = _prepare_destination_path(image_path, destination_folder, "move")
 
         # Move file
         shutil.move(image_path, new_path)
@@ -263,44 +800,51 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
         ) from e
 
 
-def copy_image(image_path: str, destination_folder: str) -> str:
+def copy_image(
+    image_id: int,
+    destination_folder: str,
+    image_path: str,
+    source_row: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Copy an image to a new folder.
 
     Args:
+        image_id: Database ID of the source image
         image_path: Path of the image to copy
         destination_folder: Target folder path
+        source_row: Optional already-fetched DB row for the source image
 
     Returns:
-        Path of the copied image
+        Dict with the copied path and database ID
 
     Raises:
         FileOperationError: If the copy operation fails
     """
     try:
-        destination_folder = os.path.abspath(destination_folder)
-        image_path = os.path.abspath(image_path)
-
-        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
-        if not is_valid:
-            raise FileOperationError(f"Invalid destination: {error}", path=destination_folder, operation="copy")
-
-        os.makedirs(destination_folder, exist_ok=True)
-
-        filename = os.path.basename(image_path)
-        new_path = os.path.abspath(os.path.join(destination_folder, filename))
-
-        # Handle filename conflicts
-        if os.path.exists(new_path):
-            base, ext = os.path.splitext(filename)
-            counter = 1
-            while os.path.exists(new_path):
-                new_filename = f"{base}_{counter}{ext}"
-                new_path = os.path.abspath(os.path.join(destination_folder, new_filename))
-                counter += 1
+        image_path, new_path = _prepare_destination_path(image_path, destination_folder, "copy")
 
         shutil.copy2(image_path, new_path)
-        return new_path
+        stat_result = os.stat(new_path)
+        source = source_row or {}
+        copied_image_id = add_image(return_status=False, **_build_copied_image_record(source, new_path, stat_result))
+
+        source_tags = get_image_tags(image_id)
+        if source_tags:
+            add_tags(
+                copied_image_id,
+                [
+                    {"tag": tag.get("tag"), "confidence": tag.get("confidence", 1.0)}
+                    for tag in source_tags
+                    if tag.get("tag")
+                ],
+            )
+        copy_image_derived_state(image_id, copied_image_id)
+
+        return {
+            "new_path": new_path,
+            "new_image_id": copied_image_id,
+        }
     except PermissionError as e:
         raise FileOperationError(
             f"Permission denied: {e}",
@@ -322,14 +866,49 @@ def copy_image(image_path: str, destination_folder: str) -> str:
 
 
 
-def reparse_image_metadata(image_id: int, image_path: str) -> Dict[str, Any]:
+def reparse_image_metadata(
+    image_id: int,
+    image_path: str,
+    preserve_derived_state: bool = False,
+) -> Dict[str, Any]:
     """Re-parse a single image and update its stored metadata fields."""
-    metadata = parse_image(image_path)
+    stat_result = os.stat(image_path)
+    metadata = parse_image(image_path, validate_image_data=True)
+    content_fingerprint = None
+
+    parse_error = metadata.get("parse_error")
+    if not parse_error and (metadata["width"] <= 0 or metadata["height"] <= 0):
+        parse_error = "Metadata parse returned no dimensions"
+    if parse_error:
+        update_image_metadata(
+            image_id=image_id,
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            metadata_json="{}",
+            width=None,
+            height=None,
+            file_size=stat_result.st_size,
+            checkpoint=None,
+            loras=[],
+            is_readable=False,
+            read_error=parse_error,
+            source_mtime_ns=stat_result.st_mtime_ns,
+            source_size=stat_result.st_size,
+            metadata_status="error",
+            preserve_derived_state=preserve_derived_state,
+        )
+        return metadata
 
     try:
         metadata_json = json.dumps(metadata["metadata"])
     except (TypeError, ValueError):
         metadata_json = "{}"
+
+    try:
+        content_fingerprint = compute_image_content_fingerprint(image_path)
+    except Exception as exc:
+        logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
 
     update_image_metadata(
         image_id=image_id,
@@ -344,6 +923,11 @@ def reparse_image_metadata(image_id: int, image_path: str) -> Dict[str, Any]:
         loras=metadata["loras"],
         is_readable=True,
         read_error=None,
+        source_mtime_ns=stat_result.st_mtime_ns,
+        source_size=stat_result.st_size,
+        metadata_status="complete",
+        content_fingerprint=content_fingerprint,
+        preserve_derived_state=preserve_derived_state,
     )
 
     return metadata

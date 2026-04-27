@@ -4,7 +4,8 @@ Prevents directory traversal attacks and validates file paths.
 """
 import os
 import re
-from pathlib import Path
+from dataclasses import dataclass
+from pathlib import Path, PureWindowsPath
 from typing import Optional, Tuple
 from urllib.parse import unquote
 
@@ -28,6 +29,69 @@ SUSPICIOUS_PATTERNS = [
 
 # Invalid characters for filename components (not full paths)
 INVALID_FILENAME_CHARS = r'[<>:"|?*]'
+SUPPORTED_OUTPUT_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+WINDOWS_DRIVE_PATH_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+class PathValidationError(ValueError):
+    """Raised when a requested file path fails security validation."""
+
+
+@dataclass(frozen=True)
+class ImageOutputPath:
+    """Validated destination for writing an image file."""
+
+    path: Path
+    parent: Path
+    extension: str
+    exists: bool
+
+
+def translate_windows_drive_path_to_posix(raw_path: str) -> Optional[str]:
+    """
+    Map a Windows drive path to /mnt/<drive>/... when running on non-Windows systems.
+
+    This keeps WSL users from having valid Windows paths rejected or treated as
+    relative filenames on POSIX.
+    """
+    if os.name == "nt":
+        return None
+
+    text = str(raw_path or "").strip()
+    if not WINDOWS_DRIVE_PATH_RE.match(text):
+        return None
+
+    try:
+        windows_path = PureWindowsPath(text)
+    except Exception:
+        return None
+
+    drive = windows_path.drive.rstrip(":")
+    if len(drive) != 1 or not drive.isalpha():
+        return None
+
+    parts = [part for part in windows_path.parts[1:] if part not in ("\\", "/")]
+    return os.path.join("/mnt", drive.lower(), *parts)
+
+
+def normalize_user_path(path: Optional[str]) -> str:
+    """Normalize user-entered paths so the rest of validation sees a real filesystem path."""
+    text = str(path or "").strip()
+    if not text:
+        return text
+
+    translated = translate_windows_drive_path_to_posix(text)
+    return translated or text
+
+
+def _extract_path_leaf(path_str: str) -> str:
+    """Return the last real path segment, handling both POSIX and Windows separators."""
+    text = str(path_str or "").strip()
+    if re.fullmatch(r"[A-Za-z]:[\\/]*", text):
+        return ""
+
+    parts = [part for part in re.split(r"[\\/]+", text) if part]
+    return parts[-1] if parts else ""
 
 
 def _contains_suspicious_patterns(path_str: str) -> bool:
@@ -76,8 +140,9 @@ def _contains_invalid_filename_chars(path_str: str) -> bool:
     Returns:
         True if filename contains invalid characters, False otherwise
     """
-    # Extract just the filename component
-    filename = os.path.basename(path_str)
+    filename = _extract_path_leaf(path_str)
+    if not filename:
+        return False
 
     # Check for invalid characters in the filename only
     if re.search(INVALID_FILENAME_CHARS, filename):
@@ -185,8 +250,8 @@ def is_safe_path(base_path: str, user_path: str) -> bool:
         return False
 
     try:
-        base = Path(base_path).resolve()
-        target = Path(user_path)
+        base = Path(normalize_user_path(base_path)).resolve()
+        target = Path(normalize_user_path(user_path))
 
         # Check path depth before resolving
         if not _validate_path_depth(target):
@@ -242,7 +307,8 @@ def validate_folder_path(
 
     # Resolve to absolute path
     try:
-        path_obj = Path(path)
+        normalized_path = normalize_user_path(path)
+        path_obj = Path(normalized_path)
     except (ValueError, OSError) as e:
         return False, f"Invalid path format: {str(e)}"
 
@@ -263,7 +329,7 @@ def validate_folder_path(
     # If allowed_base is specified, verify the path is within it
     if allowed_base:
         try:
-            base_resolved = Path(allowed_base).resolve()
+            base_resolved = Path(normalize_user_path(allowed_base)).resolve()
             if not _is_same_or_subpath(base_resolved, resolved):
                 return False, "Path is outside allowed directory"
         except (ValueError, OSError) as e:
@@ -291,7 +357,7 @@ def validate_folder_path(
 
         # Check for symlink safety
         if resolved.exists() and resolved.is_symlink():
-            if allowed_base and not _validate_symlink_target(resolved, Path(allowed_base)):
+            if allowed_base and not _validate_symlink_target(resolved, Path(normalize_user_path(allowed_base))):
                 return False, "Symlink target is outside allowed directory"
 
         return True, None
@@ -303,7 +369,7 @@ def validate_folder_path(
 
         # Check for symlink safety
         if resolved.is_symlink():
-            if allowed_base and not _validate_symlink_target(resolved, Path(allowed_base)):
+            if allowed_base and not _validate_symlink_target(resolved, Path(normalize_user_path(allowed_base))):
                 return False, "Symlink target is outside allowed directory"
 
         return True, None
@@ -341,7 +407,8 @@ def validate_file_path(
         return False, f"Path exceeds maximum length of {MAX_PATH_LENGTH} characters"
 
     try:
-        path_obj = Path(path)
+        normalized_path = normalize_user_path(path)
+        path_obj = Path(normalized_path)
     except (ValueError, OSError) as e:
         return False, f"Invalid path format: {str(e)}"
 
@@ -362,7 +429,7 @@ def validate_file_path(
     # If allowed_base is specified, verify the path is within it
     if allowed_base:
         try:
-            base_resolved = Path(allowed_base).resolve()
+            base_resolved = Path(normalize_user_path(allowed_base)).resolve()
             if not _is_same_or_subpath(base_resolved, resolved):
                 return False, "Path is outside allowed directory"
         except (ValueError, OSError) as e:
@@ -376,7 +443,7 @@ def validate_file_path(
 
     # Validate symlink target if applicable
     if resolved.is_symlink():
-        if allowed_base and not _validate_symlink_target(resolved, Path(allowed_base)):
+        if allowed_base and not _validate_symlink_target(resolved, Path(normalize_user_path(allowed_base))):
             return False, "Symlink target is outside allowed directory"
         elif not allowed_base:
             # Even without a base, validate the symlink resolves to an existing file
@@ -411,7 +478,7 @@ def sanitize_filename(filename: str) -> str:
         return "unnamed"
 
     # Remove path separators (handles both forward and backslash)
-    filename = os.path.basename(filename)
+    filename = _extract_path_leaf(filename)
 
     # Check for suspicious patterns in the filename itself
     if _contains_suspicious_patterns(filename):
@@ -443,6 +510,105 @@ def sanitize_filename(filename: str) -> str:
     return sanitized
 
 
+def validate_image_output_path(
+    path: str,
+    allow_overwrite: bool = False,
+    allowed_base: Optional[str] = None,
+) -> ImageOutputPath:
+    """
+    Validate a full output image path for safe write operations.
+
+    Unlike validate_output_path(), this accepts the final path directly and is
+    intended for save-as workflows where the client chooses both directory and
+    filename up front.
+
+    Raises:
+        PathValidationError: When the requested path is unsafe or unsupported.
+    """
+    if not path or not isinstance(path, str):
+        raise PathValidationError("Output path cannot be empty")
+
+    if _contains_suspicious_patterns(path):
+        raise PathValidationError("Output path contains invalid or suspicious characters")
+
+    if _contains_invalid_filename_chars(path):
+        raise PathValidationError("Output path contains invalid filename characters")
+
+    if len(path) > MAX_PATH_LENGTH:
+        raise PathValidationError(f"Output path exceeds maximum length of {MAX_PATH_LENGTH} characters")
+
+    try:
+        requested_path = Path(normalize_user_path(path))
+    except (ValueError, OSError) as exc:
+        raise PathValidationError(f"Invalid output path format: {exc}") from exc
+
+    if not _validate_path_depth(requested_path):
+        raise PathValidationError(f"Output path depth exceeds maximum of {MAX_PATH_DEPTH}")
+
+    extension = requested_path.suffix.lower()
+    if extension not in SUPPORTED_OUTPUT_IMAGE_EXTENSIONS:
+        raise PathValidationError("Unsupported output format. Use PNG, JPG/JPEG, or WebP")
+
+    parent = requested_path.parent if str(requested_path.parent) not in ("", ".") else Path.cwd()
+    try:
+        if not parent.exists():
+            raise PathValidationError("Output parent directory does not exist")
+        if not parent.is_dir():
+            raise PathValidationError("Output parent path is not a directory")
+        if parent.is_symlink():
+            raise PathValidationError("Output parent directory cannot be a symlink")
+        resolved_parent = parent.resolve()
+    except PathValidationError:
+        raise
+    except (ValueError, OSError) as exc:
+        raise PathValidationError(f"Cannot resolve output parent directory: {exc}") from exc
+
+    if allowed_base:
+        try:
+            base_resolved = Path(normalize_user_path(allowed_base)).resolve()
+        except (ValueError, OSError) as exc:
+            raise PathValidationError(f"Invalid base directory: {exc}") from exc
+        if not _is_same_or_subpath(base_resolved, resolved_parent):
+            raise PathValidationError("Output path is outside the allowed directory")
+
+    candidate_output = resolved_parent / requested_path.name
+    if candidate_output.exists() and candidate_output.is_symlink():
+        raise PathValidationError("Output file cannot be a symlink")
+
+    try:
+        resolved_output = candidate_output.resolve(strict=False)
+    except (ValueError, OSError) as exc:
+        raise PathValidationError(f"Cannot resolve output file path: {exc}") from exc
+
+    if not _is_same_or_subpath(resolved_parent, resolved_output) or resolved_output.parent != resolved_parent:
+        raise PathValidationError("Resolved output path escapes the target directory")
+
+    if not _validate_path_depth(resolved_output):
+        raise PathValidationError(f"Output path depth exceeds maximum of {MAX_PATH_DEPTH}")
+
+    if len(str(resolved_output)) > MAX_PATH_LENGTH:
+        raise PathValidationError(f"Output path exceeds maximum length of {MAX_PATH_LENGTH} characters")
+
+    exists = resolved_output.exists()
+    if exists:
+        if resolved_output.is_dir():
+            raise PathValidationError("Output path points to a directory, not a file")
+        if not allow_overwrite:
+            return ImageOutputPath(
+                path=resolved_output,
+                parent=resolved_parent,
+                extension=extension,
+                exists=True,
+            )
+
+    return ImageOutputPath(
+        path=resolved_output,
+        parent=resolved_parent,
+        extension=extension,
+        exists=exists,
+    )
+
+
 def validate_output_path(
     path: str,
     filename: str,
@@ -459,14 +625,16 @@ def validate_output_path(
     Returns:
         Tuple of (is_valid, error_message, full_output_path)
     """
-    is_valid, error = validate_folder_path(path, allow_create=True, allowed_base=allowed_base)
+    normalized_path = normalize_user_path(path)
+    normalized_allowed_base = normalize_user_path(allowed_base) if allowed_base else None
+    is_valid, error = validate_folder_path(normalized_path, allow_create=True, allowed_base=normalized_allowed_base)
     if not is_valid:
         return False, error, None
 
     safe_filename = sanitize_filename(filename)
 
     try:
-        resolved_dir = Path(path).resolve()
+        resolved_dir = Path(normalized_path).resolve()
         full_path = resolved_dir / safe_filename
 
         # Resolve to check the final path
@@ -495,7 +663,7 @@ def validate_output_path(
 
         # Validate symlink target if the resolved path exists and is a symlink
         if resolved_full.exists() and resolved_full.is_symlink():
-            if allowed_base and not _validate_symlink_target(resolved_full, Path(allowed_base)):
+            if normalized_allowed_base and not _validate_symlink_target(resolved_full, Path(normalized_allowed_base)):
                 return False, "Symlink target is outside allowed directory", None
 
         return True, None, str(resolved_full)

@@ -13,16 +13,19 @@ Supports:
 import json
 import logging
 import re
+import struct
 from typing import Optional, Dict, Any, Tuple, List, Set
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import os
+import zlib
 
 
 logger = logging.getLogger(__name__)
 
 
 PARSED_METADATA_VERSION = 5
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 class MetadataParser:
@@ -136,7 +139,7 @@ class MetadataParser:
         "ultralytics_model_name": "yolo",
     }
 
-    def parse(self, image_path: str) -> Dict[str, Any]:
+    def parse(self, image_path: str, validate_image_data: bool = False) -> Dict[str, Any]:
         """
         Parse image metadata and return structured data.
 
@@ -168,60 +171,194 @@ class MetadataParser:
 
         try:
             result["file_size"] = os.path.getsize(image_path)
+            metadata = self._load_image_metadata(image_path)
+            result["width"] = metadata["width"]
+            result["height"] = metadata["height"]
 
-            with Image.open(image_path) as img:
-                result["width"] = img.width
-                result["height"] = img.height
+            if validate_image_data:
+                # Full decode is much slower on large PNG/WebP files and is not
+                # required for scan-time metadata ingestion. Re-open + verify()
+                # still catches common corruption/truncation without paying the
+                # full pixel decode cost. Workflows that need deep decode already
+                # use verify_image_readable() separately.
+                with Image.open(image_path) as verify_img:
+                    verify_img.verify()
 
-                # Get all metadata
-                metadata = {}
-                if hasattr(img, 'info'):
-                    metadata = dict(img.info)
+            result["metadata"] = self._serialize_metadata(metadata["metadata"])
 
-                # Extract EXIF for all formats (not just WebP)
-                exif_data = self._extract_exif(img)
-                metadata.update(exif_data)
+            # Detect generator and extract prompts, checkpoint, loras + extras
+            parsed = self._detect_and_parse(metadata["metadata"])
+            result["generator"] = parsed["generator"]
+            result["prompt"] = parsed["prompt"]
+            result["negative_prompt"] = parsed["negative_prompt"]
+            result["checkpoint"] = parsed["checkpoint"]
+            result["loras"] = parsed["loras"]
 
-                # Extract EXIF IFD (UserComment etc.) for all formats
-                exif_ifd_data = self._extract_exif_ifd(img)
-                metadata.update(exif_ifd_data)
-
-                # Check for WebP XMP
-                if img.format == 'WEBP':
-                    xmp_data = self._extract_webp_xmp(image_path)
-                    metadata.update(xmp_data)
-
-                # Check for JPEG/WebP EXIF UserComment that might contain SD params
-                if img.format in ('JPEG', 'JPG', 'WEBP'):
-                    jpeg_data = self._extract_jpeg_sd_metadata(img)
-                    metadata.update(jpeg_data)
-
-                result["metadata"] = self._serialize_metadata(metadata)
-
-                # Detect generator and extract prompts, checkpoint, loras + extras
-                parsed = self._detect_and_parse(metadata)
-                result["generator"] = parsed["generator"]
-                result["prompt"] = parsed["prompt"]
-                result["negative_prompt"] = parsed["negative_prompt"]
-                result["checkpoint"] = parsed["checkpoint"]
-                result["loras"] = parsed["loras"]
-
-                # Store structured parsed data in metadata for frontend access
-                result["metadata"]["_parsed"] = {
-                    "version": PARSED_METADATA_VERSION,
-                    "generation_params": parsed.get("generation_params"),
-                    "is_img2img": parsed.get("is_img2img", False),
-                    "img2img_info": parsed.get("img2img_info"),
-                    "character_prompts": parsed.get("character_prompts"),
-                    "prompt_nodes": parsed.get("prompt_nodes"),
-                    "model_assets": parsed.get("model_assets"),
-                }
+            # Store structured parsed data in metadata for frontend access
+            result["metadata"]["_parsed"] = {
+                "version": PARSED_METADATA_VERSION,
+                "generation_params": parsed.get("generation_params"),
+                "is_img2img": parsed.get("is_img2img", False),
+                "img2img_info": parsed.get("img2img_info"),
+                "character_prompts": parsed.get("character_prompts"),
+                "prompt_nodes": parsed.get("prompt_nodes"),
+                "model_assets": parsed.get("model_assets"),
+            }
 
         except Exception as e:
             result["parse_error"] = str(e)
             logger.error("Error parsing %s: %s", image_path, e, exc_info=True)
 
         return result
+
+    def _load_image_metadata(self, image_path: str) -> Dict[str, Any]:
+        """Load dimensions and raw metadata with format-specific fast paths."""
+        if os.path.splitext(image_path)[1].lower() == ".png":
+            try:
+                return self._load_png_metadata_fast(image_path)
+            except Exception as exc:
+                logger.debug("PNG fast-path fell back to Pillow for %s: %s", image_path, exc)
+
+        return self._load_image_metadata_via_pillow(image_path)
+
+    def _load_image_metadata_via_pillow(self, image_path: str) -> Dict[str, Any]:
+        """Load metadata through Pillow for formats without a custom fast path."""
+        with Image.open(image_path) as img:
+            metadata = {}
+            if hasattr(img, 'info'):
+                metadata = dict(img.info)
+
+            metadata.update(self._extract_exif(img))
+            metadata.update(self._extract_exif_ifd(img))
+
+            if img.format == 'WEBP':
+                metadata.update(self._extract_webp_xmp(image_path))
+
+            if img.format in ('JPEG', 'JPG', 'WEBP'):
+                metadata.update(self._extract_jpeg_sd_metadata(img))
+
+            return {
+                "width": img.width,
+                "height": img.height,
+                "metadata": metadata,
+            }
+
+    def _load_png_metadata_fast(self, image_path: str) -> Dict[str, Any]:
+        """Read PNG dimensions + text metadata without a full Pillow open."""
+        metadata: Dict[str, Any] = {}
+        width = 0
+        height = 0
+
+        with open(image_path, "rb") as png_file:
+            if png_file.read(len(PNG_SIGNATURE)) != PNG_SIGNATURE:
+                raise ValueError("Invalid PNG signature")
+
+            while True:
+                chunk_length_raw = png_file.read(4)
+                if not chunk_length_raw:
+                    break
+                if len(chunk_length_raw) != 4:
+                    raise ValueError("Truncated PNG chunk length")
+
+                chunk_length = struct.unpack(">I", chunk_length_raw)[0]
+                chunk_type = png_file.read(4)
+                if len(chunk_type) != 4:
+                    raise ValueError("Truncated PNG chunk type")
+
+                chunk_data = png_file.read(chunk_length)
+                if len(chunk_data) != chunk_length:
+                    raise ValueError("Truncated PNG chunk data")
+
+                chunk_crc = png_file.read(4)
+                if len(chunk_crc) != 4:
+                    raise ValueError("Truncated PNG chunk CRC")
+
+                if chunk_type == b"IHDR":
+                    if chunk_length < 8:
+                        raise ValueError("Invalid PNG IHDR chunk")
+                    width, height = struct.unpack(">II", chunk_data[:8])
+                elif chunk_type == b"tEXt":
+                    text_item = self._decode_png_text_chunk(chunk_data)
+                    if text_item:
+                        metadata[text_item[0]] = text_item[1]
+                elif chunk_type == b"zTXt":
+                    text_item = self._decode_png_ztxt_chunk(chunk_data)
+                    if text_item:
+                        metadata[text_item[0]] = text_item[1]
+                elif chunk_type == b"iTXt":
+                    text_item = self._decode_png_itxt_chunk(chunk_data)
+                    if text_item:
+                        metadata[text_item[0]] = text_item[1]
+                elif chunk_type == b"eXIf":
+                    metadata.update(self._extract_exif_from_bytes(chunk_data))
+                    metadata.update(self._extract_exif_ifd_from_bytes(chunk_data))
+                    metadata.update(self._extract_sd_metadata_from_exif_bytes(chunk_data))
+                elif chunk_type == b"IEND":
+                    break
+
+        if width <= 0 or height <= 0:
+            raise ValueError("PNG dimensions missing")
+
+        return {
+            "width": width,
+            "height": height,
+            "metadata": metadata,
+        }
+
+    def _decode_png_text_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
+        """Decode a PNG tEXt chunk into a key/value pair."""
+        if b"\x00" not in chunk_data:
+            return None
+        keyword, text = chunk_data.split(b"\x00", 1)
+        return (
+            keyword.decode("latin-1", errors="replace"),
+            text.decode("utf-8", errors="replace"),
+        )
+
+    def _decode_png_ztxt_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
+        """Decode a PNG zTXt chunk into a key/value pair."""
+        if b"\x00" not in chunk_data:
+            return None
+        keyword, remainder = chunk_data.split(b"\x00", 1)
+        if len(remainder) < 2:
+            return None
+        compression_method = remainder[0]
+        if compression_method != 0:
+            return None
+        text = zlib.decompress(remainder[1:])
+        return (
+            keyword.decode("latin-1", errors="replace"),
+            text.decode("utf-8", errors="replace"),
+        )
+
+    def _decode_png_itxt_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
+        """Decode a PNG iTXt chunk into a key/value pair."""
+        if b"\x00" not in chunk_data:
+            return None
+        keyword, remainder = chunk_data.split(b"\x00", 1)
+        if len(remainder) < 2:
+            return None
+
+        compression_flag = remainder[0]
+        compression_method = remainder[1]
+        remainder = remainder[2:]
+
+        if b"\x00" not in remainder:
+            return None
+        _language_tag, remainder = remainder.split(b"\x00", 1)
+        if b"\x00" not in remainder:
+            return None
+        _translated_keyword, text_bytes = remainder.split(b"\x00", 1)
+
+        if compression_flag == 1:
+            if compression_method != 0:
+                return None
+            text_bytes = zlib.decompress(text_bytes)
+
+        return (
+            keyword.decode("latin-1", errors="replace"),
+            text_bytes.decode("utf-8", errors="replace"),
+        )
 
     def _serialize_metadata(self, metadata: dict) -> dict:
         """Serialize metadata to JSON-safe format."""
@@ -291,6 +428,66 @@ class MetadataParser:
                 return text
 
         return None
+
+    def _parse_explicit_saved_metadata(self, metadata: dict) -> Optional[Dict[str, Any]]:
+        """Parse simple text metadata fields written by the Reader metadata editor."""
+        prompt = self._flatten_text_value(metadata.get("prompt"))
+        negative_prompt = self._flatten_text_value(
+            metadata.get("negative_prompt") if "negative_prompt" in metadata else metadata.get("negative prompt")
+        )
+        checkpoint = (
+            self._flatten_text_value(metadata.get("model"))
+            or self._flatten_text_value(metadata.get("checkpoint"))
+            or self._extract_metadata_model_identifier(metadata)
+        )
+
+        loras: List[str] = []
+        lora_value = metadata.get("loras") or metadata.get("LoRAs") or metadata.get("lora")
+        if isinstance(lora_value, (list, tuple, set)):
+            loras = [str(item).strip() for item in lora_value if str(item).strip()]
+        elif lora_value is not None:
+            loras = [
+                part.strip() for part in re.split(r"[,\n]", str(lora_value))
+                if str(part).strip()
+            ]
+
+        generation_params: Dict[str, Any] = {}
+        if "seed" in metadata:
+            try:
+                generation_params["seed"] = int(str(metadata["seed"]).strip())
+            except (TypeError, ValueError):
+                generation_params["seed"] = metadata["seed"]
+        if "steps" in metadata:
+            try:
+                generation_params["steps"] = int(str(metadata["steps"]).strip())
+            except (TypeError, ValueError):
+                generation_params["steps"] = metadata["steps"]
+        if "sampler" in metadata:
+            generation_params["sampler"] = metadata["sampler"]
+        if "cfg_scale" in metadata or "cfg scale" in metadata:
+            cfg_value = metadata.get("cfg_scale", metadata.get("cfg scale"))
+            try:
+                generation_params["cfg_scale"] = float(str(cfg_value).strip())
+            except (TypeError, ValueError):
+                generation_params["cfg_scale"] = cfg_value
+        if "size" in metadata:
+            generation_params["size"] = metadata["size"]
+        if checkpoint:
+            generation_params["model"] = checkpoint
+        if loras:
+            generation_params["loras"] = ", ".join(loras)
+
+        if not any((prompt, negative_prompt, checkpoint, loras, generation_params)):
+            return None
+
+        return {
+            "generator": "unknown",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "checkpoint": checkpoint,
+            "loras": self._normalize_lora_names(loras),
+            "generation_params": generation_params or None,
+        }
 
     @staticmethod
     def _dedupe_non_empty_strings(values: List[Any]) -> List[str]:
@@ -820,6 +1017,16 @@ class MetadataParser:
                             "source": "img2img",
                         }
                     return base
+
+        explicit_saved = self._parse_explicit_saved_metadata(metadata)
+        if explicit_saved:
+            base.update(explicit_saved)
+            base["model_assets"] = self._build_explicit_model_assets(
+                source="explicit_metadata",
+                checkpoint=base["checkpoint"],
+                loras=base["loras"],
+            )
+            return base
 
         # === Check Software tag for generator identification ===
         if "Software" in metadata:
@@ -2730,6 +2937,12 @@ class MetadataParser:
                 if key_lower.startswith("addnet_model_") or key_lower.startswith("addnet module_"):
                     push(value)
 
+            for key in ("loras", "lora", "lora_names"):
+                value = gen_params.get(key)
+                if isinstance(value, str):
+                    for part in re.split(r"[,\n]", value):
+                        push(part)
+
         # Some exports store AddNet names only in the raw parameters blob.
         for match in re.finditer(r"AddNet Model \d+:\s*([^,\n]+)", params, re.IGNORECASE):
             push(match.group(1))
@@ -2809,9 +3022,16 @@ class MetadataParser:
 
     def _extract_exif(self, img: Image.Image) -> dict:
         """Extract top-level EXIF data from image."""
+        try:
+            return self._extract_exif_mapping(img.getexif())
+        except Exception as e:
+            logger.debug("Error extracting EXIF: %s", e)
+        return {}
+
+    def _extract_exif_mapping(self, exif: Any) -> dict:
+        """Extract top-level EXIF tags from an Exif mapping object."""
         metadata = {}
         try:
-            exif = img.getexif()
             if exif:
                 from PIL import ExifTags
                 for tag_id, value in exif.items():
@@ -2828,14 +3048,33 @@ class MetadataParser:
             logger.debug("Error extracting EXIF: %s", e)
         return metadata
 
+    def _extract_exif_from_bytes(self, exif_bytes: bytes) -> dict:
+        """Extract top-level EXIF tags from raw EXIF bytes."""
+        try:
+            exif = Image.Exif()
+            exif.load(exif_bytes)
+            return self._extract_exif_mapping(exif)
+        except Exception as e:
+            logger.debug("Error extracting EXIF bytes: %s", e)
+            return {}
+
     def _extract_exif_ifd(self, img: Image.Image) -> dict:
+        """
+        Extract EXIF IFD (sub-directory) data, specifically UserComment.
+        NovelAI V4+ stores prompt data here for WebP images.
+        """
+        try:
+            return self._extract_exif_ifd_mapping(img.getexif())
+        except Exception:
+            return {}
+
+    def _extract_exif_ifd_mapping(self, exif: Any) -> dict:
         """
         Extract EXIF IFD (sub-directory) data, specifically UserComment.
         NovelAI V4+ stores prompt data here for WebP images.
         """
         metadata: Dict[str, Any] = {}
         try:
-            exif = img.getexif()
             if not exif:
                 return metadata
 
@@ -2862,11 +3101,37 @@ class MetadataParser:
             pass
         return metadata
 
+    def _extract_exif_ifd_from_bytes(self, exif_bytes: bytes) -> dict:
+        """Extract EXIF IFD tags from raw EXIF bytes."""
+        try:
+            exif = Image.Exif()
+            exif.load(exif_bytes)
+            return self._extract_exif_ifd_mapping(exif)
+        except Exception:
+            return {}
+
     def _extract_jpeg_sd_metadata(self, img: Image.Image) -> dict:
         """Extract SD metadata from JPEG EXIF fields."""
+        try:
+            return self._extract_sd_metadata_from_exif(img.getexif())
+        except Exception as e:
+            logger.debug("Error extracting JPEG SD metadata: %s", e)
+            return {}
+
+    def _extract_sd_metadata_from_exif_bytes(self, exif_bytes: bytes) -> dict:
+        """Extract SD-style metadata from raw EXIF bytes."""
+        try:
+            exif = Image.Exif()
+            exif.load(exif_bytes)
+            return self._extract_sd_metadata_from_exif(exif)
+        except Exception as e:
+            logger.debug("Error extracting SD metadata from EXIF bytes: %s", e)
+            return {}
+
+    def _extract_sd_metadata_from_exif(self, exif: Any) -> dict:
+        """Extract SD metadata from an Exif mapping object."""
         metadata: Dict[str, Any] = {}
         try:
-            exif = img.getexif()
             if not exif:
                 return metadata
 
@@ -2910,7 +3175,6 @@ class MetadataParser:
                                 pass
                         if "prompt" not in metadata and "Steps:" in text and "Sampler:" in text:
                             metadata["parameters"] = text
-
         except Exception as e:
             logger.debug("Error extracting JPEG SD metadata: %s", e)
         return metadata
@@ -2977,9 +3241,9 @@ def get_parser() -> MetadataParser:
     return _parser
 
 
-def parse_image(image_path: str) -> Dict[str, Any]:
+def parse_image(image_path: str, validate_image_data: bool = False) -> Dict[str, Any]:
     """Convenience function to parse a single image."""
-    return get_parser().parse(image_path)
+    return get_parser().parse(image_path, validate_image_data=validate_image_data)
 
 
 def verify_image_readable(image_path: str) -> Tuple[bool, Optional[str]]:

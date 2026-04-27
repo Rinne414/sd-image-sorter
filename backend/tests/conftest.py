@@ -205,7 +205,7 @@ def test_client(test_db):
     with patch.dict(os.environ, {"SD_SORTER_TESTING": "1", "TESTING": "1"}):
         # Patch database path before importing main
         original_path = db.DATABASE_PATH
-        db.DATABASE_PATH = str(test_db.DATABASE_PATH).replace("images.db", "test_client_images.db")
+        db.DATABASE_PATH = str(Path(test_db.DATABASE_PATH).with_name("test_client_images.db"))
         db._pragmas_initialized = set()
         db.init_db()
 

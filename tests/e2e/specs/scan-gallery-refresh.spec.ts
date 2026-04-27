@@ -1,0 +1,189 @@
+import fs from 'fs/promises'
+import path from 'path'
+import { expect, test, type Page } from '@playwright/test'
+
+import { createTestImage } from '../fixtures/test-helpers'
+
+const SCAN_FIXTURE_ROOT = path.resolve(__dirname, '../../../.tmp/e2e-scan-gallery-refresh')
+
+type ScanDomSample = {
+  loadingVisible: boolean
+  skeletons: number
+  realItems: number
+  imageCount: string
+  currentView: string | null
+  galleryNeedsRefresh: boolean | null
+}
+
+async function ensureScanFixture(dirName: string, copies: number) {
+  const fixtureDir = path.join(SCAN_FIXTURE_ROOT, dirName)
+  await fs.rm(fixtureDir, { recursive: true, force: true })
+  await fs.mkdir(fixtureDir, { recursive: true })
+
+  const seed = await createTestImage(fixtureDir, 'seed.png', {
+    generator: 'webui',
+    prompt: 'scan gallery stability fixture',
+    negativePrompt: 'bad anatomy',
+    checkpoint: 'scan_gallery_refresh_test.safetensors',
+    color: 'teal',
+  })
+
+  for (let index = 1; index <= copies; index += 1) {
+    const nextFile = path.join(fixtureDir, `scan_gallery_refresh_${String(index).padStart(4, '0')}.png`)
+    await fs.copyFile(seed, nextFile)
+  }
+
+  return fixtureDir
+}
+
+async function installFetchLog(page: Page) {
+  await page.evaluate(() => {
+    ;(window as any).__scanFetchLog = []
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = async (...args) => {
+      const url = String(args[0] ?? '')
+      if (url.includes('/api/images') || url.includes('/api/stats') || url.includes('/api/scan/progress')) {
+        ;(window as any).__scanFetchLog.push({ ts: Date.now(), url })
+      }
+      return originalFetch(...args)
+    }
+  })
+}
+
+async function sampleScanDom(page: Page): Promise<ScanDomSample> {
+  return page.evaluate(() => ({
+    loadingVisible: (() => {
+      const el = document.querySelector<HTMLElement>('#gallery-loading')
+      return Boolean(el) && getComputedStyle(el).display !== 'none'
+    })(),
+    skeletons: document.querySelectorAll('#gallery-grid .skeleton-item, #gallery-grid .skeleton-gallery-item').length,
+    realItems: document.querySelectorAll('#gallery-grid .gallery-item').length,
+    imageCount: document.querySelector<HTMLElement>('#image-count')?.textContent?.trim() || '',
+    currentView: (window as any).App?.AppState?.currentView || null,
+    galleryNeedsRefresh: (window as any).App?.AppState?.galleryNeedsRefresh ?? null,
+  }))
+}
+
+async function startScanFromUi(page: Page, folderPath: string) {
+  await page.locator('#btn-scan').click()
+  await expect(page.locator('#scan-modal.visible')).toBeVisible()
+  await page.locator('#scan-folder-path').fill(folderPath)
+
+  const autoTag = page.locator('#scan-auto-tag')
+  if (await autoTag.isChecked().catch(() => false)) {
+    await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
+    await expect(autoTag).not.toBeChecked()
+  }
+
+  const quickImport = page.locator('#scan-quick-import')
+  if (!(await quickImport.isChecked())) {
+    await quickImport.check()
+  }
+
+  await page.locator('#btn-start-scan').click()
+}
+
+test.describe('Scan gallery refresh stability', () => {
+  test.setTimeout(180000)
+
+  test.afterAll(async () => {
+    await fs.rm(SCAN_FIXTURE_ROOT, { recursive: true, force: true }).catch(() => {})
+  })
+
+  test('gallery should stay populated while a quick-import scan keeps running in the background', async ({
+    page,
+    request,
+  }) => {
+    const fixtureDir = await ensureScanFixture('gallery-stays-stable', 1500)
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await installFetchLog(page)
+    await startScanFromUi(page, fixtureDir)
+
+    const samples: Array<{ progress: any; dom: ScanDomSample }> = []
+    let done = false
+
+    for (let attempts = 0; attempts < 360; attempts += 1) {
+      const response = await request.get('/api/scan/progress')
+      expect(response.ok()).toBeTruthy()
+      const progress = await response.json()
+      const dom = await sampleScanDom(page)
+      samples.push({ progress, dom })
+
+      if (progress.status === 'done') {
+        done = true
+        break
+      }
+
+      await page.waitForTimeout(250)
+    }
+
+    expect(done).toBeTruthy()
+
+    await page.waitForTimeout(1200)
+
+    const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
+    const imageFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?'))
+    const runningSamples = samples.filter((entry) => entry.progress?.status === 'running')
+    const postReadySamples = runningSamples.filter((entry) => entry.progress?.library_ready)
+
+    expect(postReadySamples.length).toBeGreaterThan(0)
+    expect(runningSamples.filter((entry) => entry.dom.loadingVisible)).toHaveLength(0)
+    expect(runningSamples.filter((entry) => entry.dom.skeletons > 0)).toHaveLength(0)
+    expect(postReadySamples.every((entry) => entry.dom.realItems > 0)).toBeTruthy()
+    expect(imageFetches.length).toBeLessThanOrEqual(2)
+  })
+
+  test('scan started outside the gallery should wait until the user returns before fetching gallery images', async ({
+    page,
+    request,
+  }) => {
+    const fixtureDir = await ensureScanFixture('return-from-other-view', 600)
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await installFetchLog(page)
+    await page.evaluate(() => (window as any).App.switchView('sorting'))
+    await startScanFromUi(page, fixtureDir)
+
+    let libraryReadySeen = false
+    let done = false
+    let imageFetchesBeforeReturn = -1
+
+    for (let attempts = 0; attempts < 360; attempts += 1) {
+      const response = await request.get('/api/scan/progress')
+      expect(response.ok()).toBeTruthy()
+      const progress = await response.json()
+
+      if (progress.library_ready && !libraryReadySeen) {
+        libraryReadySeen = true
+        const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
+        imageFetchesBeforeReturn = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?')).length
+        await page.evaluate(() => (window as any).App.switchView('gallery'))
+      }
+
+      if (progress.status === 'done') {
+        done = true
+        break
+      }
+
+      await page.waitForTimeout(250)
+    }
+
+    expect(libraryReadySeen).toBeTruthy()
+    expect(done).toBeTruthy()
+    expect(imageFetchesBeforeReturn).toBe(0)
+
+    await page.waitForTimeout(1200)
+
+    const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
+    const imageFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?'))
+    const finalDom = await sampleScanDom(page)
+
+    expect(imageFetches.length).toBeLessThanOrEqual(2)
+    expect(finalDom.currentView).toBe('gallery')
+    expect(finalDom.loadingVisible).toBeFalsy()
+    expect(finalDom.realItems).toBeGreaterThan(0)
+  })
+})

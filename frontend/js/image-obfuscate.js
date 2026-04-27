@@ -131,8 +131,8 @@
 
         _actionLabel(action) {
             const labels = {
-                encode: this._t('tools.encode', 'Encode'),
-                decode: this._t('tools.decode', 'Decode'),
+                encode: this._t('tools.encode', 'Protect'),
+                decode: this._t('tools.decode', 'Restore'),
             };
             return labels[action] || action;
         },
@@ -163,11 +163,11 @@
                 compatHelp.textContent = isSmallTomato
                     ? this._t(
                         'tools.compatSmallTomatoHelp',
-                        'Simple mode uses pure pixel scrambling with no password. Copy stays PNG, Download converts to JPG.'
+                        'Best when you just want a quick share-safe version. No password, and no PNG Info is kept.'
                     )
                     : this._t(
                         'tools.compatBigTomatoHelp',
-                        'Standard mode supports password-based scrambling and preserves SD metadata in PNG Info.'
+                        'Best when you want password support and to keep image info.'
                     );
             }
 
@@ -558,7 +558,7 @@
                 window.App?.showToast?.(
                     this._t(
                         mode === 'encode' ? 'tools.encodeSummary' : 'tools.decodeSummary',
-                        `${mode === 'encode' ? 'Encoded' : 'Decoded'} ${completed}/${this._queue.length} images`,
+                        `${mode === 'encode' ? 'Protected' : 'Restored'} ${completed}/${this._queue.length} images`,
                         { current: completed, total: this._queue.length }
                     ),
                     completed > 0 ? 'success' : 'warning'

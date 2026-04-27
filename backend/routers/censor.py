@@ -12,6 +12,7 @@ Refactored to use Service Layer pattern with dependency injection.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, UploadFile, Query
+from starlette.concurrency import run_in_threadpool
 
 from services.censor_service import (
     CensorService,
@@ -22,6 +23,7 @@ from services.censor_service import (
     CensorApplyRequest,
     CensorSaveRequest,
     CensorSaveDataRequest,
+    CensorSaveOperationsRequest,
 )
 
 
@@ -93,7 +95,7 @@ async def censor_detect(
     service: CensorService = Depends(get_censor_service),
 ):
     """Run detection on an image to find regions to censor."""
-    return service.detect(request)
+    return await run_in_threadpool(service.detect, request)
 
 
 @router.post(
@@ -131,7 +133,7 @@ async def censor_preview(
     service: CensorService = Depends(get_censor_service),
 ):
     """Apply censoring and return base64 preview image."""
-    return service.preview(request)
+    return await run_in_threadpool(service.preview, request)
 
 
 @router.post("/save")
@@ -140,7 +142,7 @@ async def censor_save(
     service: CensorService = Depends(get_censor_service),
 ):
     """Apply censoring and save to output folder."""
-    return service.save(request)
+    return await run_in_threadpool(service.save, request)
 
 
 @router.post("/save-data")
@@ -153,7 +155,20 @@ async def censor_save_data(
     Used for saving canvas-edited images.
     Supports metadata handling: 'keep' preserves original metadata, 'strip' removes all metadata.
     """
-    return service.save_data(request)
+    return await run_in_threadpool(service.save_data, request)
+
+
+@router.post("/save-operations")
+async def censor_save_operations(
+    request: CensorSaveOperationsRequest,
+    service: CensorService = Depends(get_censor_service),
+):
+    """
+    Save a non-destructive edit operation list on top of the original image.
+    Used by the large-image proxy editor so the browser does not need to upload
+    a full rasterized canvas snapshot.
+    """
+    return await run_in_threadpool(service.save_operations, request)
 
 
 @router.post("/refine-mask")
@@ -168,7 +183,7 @@ async def refine_mask(
     that follows the actual contours of the detected region.
     Falls back gracefully if SAM3 is unavailable.
     """
-    return service.refine_mask(request)
+    return await run_in_threadpool(service.refine_mask, request)
 
 
 @router.post("/batch-refine-mask")
@@ -183,7 +198,7 @@ async def batch_refine_mask(
     presents as a single batch operation. Returns results and errors
     for each item.
     """
-    return service.batch_refine_mask(request)
+    return await run_in_threadpool(service.batch_refine_mask, request)
 
 
 @router.post("/segment-text")
@@ -197,7 +212,23 @@ async def segment_text(
     Allows users to describe what they want to censor in natural language,
     e.g. "exposed breasts", "person's face", "tattoo on arm".
     """
-    return service.segment_text(request)
+    return await run_in_threadpool(service.segment_text, request)
+
+
+@router.get("/mask-cache/{mask_ref}")
+async def get_cached_mask_preview(
+    mask_ref: str,
+    width: Optional[int] = Query(default=None, ge=1, le=8192),
+    height: Optional[int] = Query(default=None, ge=1, le=8192),
+    service: CensorService = Depends(get_censor_service),
+):
+    """
+    Fetch a cached SAM3 mask crop by reference.
+
+    Large-image flows use this to avoid shipping giant base64 masks through the
+    browser. Optional width/height resize is intended for proxy-canvas previews.
+    """
+    return await run_in_threadpool(service.get_cached_mask_preview, mask_ref, width, height)
 
 
 @router.get("/models")

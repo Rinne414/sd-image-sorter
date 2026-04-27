@@ -21,6 +21,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import metadata_parser as metadata_parser_module
 from metadata_parser import MetadataParser, parse_image
 
 
@@ -60,6 +61,56 @@ class TestMetadataParserBase:
         assert "width" in result
         assert "height" in result
         assert "file_size" in result
+
+    def test_parse_png_text_metadata_uses_fast_path_without_pillow_open(self, tmp_path: Path, monkeypatch):
+        """PNG text metadata should parse without calling Pillow open in the common path."""
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        img_path = tmp_path / "fast-path-webui.png"
+        metadata = PngInfo()
+        metadata.add_text(
+            "parameters",
+            "masterpiece\nNegative prompt: lowres\nSteps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1, Size: 320x240, Model: demo.safetensors",
+        )
+        Image.new("RGB", (320, 240), color="white").save(img_path, pnginfo=metadata)
+
+        def fail_open(*args, **kwargs):
+            raise AssertionError("PNG fast-path should not call Pillow open")
+
+        monkeypatch.setattr(metadata_parser_module.Image, "open", fail_open)
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["width"] == 320
+        assert result["height"] == 240
+        assert result["checkpoint"] == "demo.safetensors"
+
+    def test_parse_png_validation_still_runs_verify_open(self, tmp_path: Path, monkeypatch):
+        """Scan-time validation should still perform a single verify open after fast metadata parsing."""
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        img_path = tmp_path / "validated-fast-path.png"
+        metadata = PngInfo()
+        metadata.add_text("prompt", json.dumps({"1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "demo.safetensors"}}}))
+        Image.new("RGB", (128, 96), color="white").save(img_path, pnginfo=metadata)
+
+        open_calls = {"count": 0}
+        original_open = metadata_parser_module.Image.open
+
+        def tracking_open(*args, **kwargs):
+            open_calls["count"] += 1
+            return original_open(*args, **kwargs)
+
+        monkeypatch.setattr(metadata_parser_module.Image, "open", tracking_open)
+
+        result = parse_image(str(img_path), validate_image_data=True)
+
+        assert result["width"] == 128
+        assert result["height"] == 96
+        assert open_calls["count"] == 1
 
 
 class TestComfyUIMetadata:

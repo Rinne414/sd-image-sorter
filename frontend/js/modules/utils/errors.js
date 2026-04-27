@@ -7,65 +7,79 @@
  * Map technical error messages to user-friendly messages
  * @constant {Object.<string, string>}
  */
-const ERROR_MESSAGE_MAP = {
-    // Network errors
-    'Failed to fetch': 'Unable to connect to server. Please check if the server is running.',
-    'NetworkError': 'Network connection error. Please check your internet connection.',
-    'Network request failed': 'Network request failed. Please try again.',
-    
-    // Server errors
-    'Internal Server Error': 'Server encountered an error. Please try again later.',
-    'Service Unavailable': 'Service temporarily unavailable. Please wait and try again.',
-    'Bad Gateway': 'Server is temporarily unavailable. Please try again.',
-    'Gateway Timeout': 'Server response timed out. Please try again.',
-    
-    // Client errors
-    'Unauthorized': 'Authentication required. Please refresh the page.',
-    'Forbidden': 'Access denied. You do not have permission for this action.',
-    'Not Found': 'The requested resource was not found.',
-    'Bad Request': 'Invalid request. Please check your input.',
-    
-    // File operations
-    'ENOENT': 'File or folder not found.',
-    'EACCES': 'Permission denied. Please check folder permissions.',
-    'EPERM': 'Operation not permitted. Please check permissions.',
-    'ENOSPC': 'Not enough disk space for this operation.',
-    'EMFILE': 'Too many files open. Please close other applications.',
-    
-    // Image operations
-    'Invalid image': 'The image file is invalid or corrupted.',
-    'Image too large': 'The image is too large to process.',
-    'Unsupported format': 'This image format is not supported.',
-    
-    // Tagging/AI operations
-    'Model not loaded': 'AI model is not loaded. Please wait for initialization.',
-    'Model loading': 'AI model is loading. Please wait.',
-    'CUDA out of memory': 'Not enough GPU memory. Try closing other applications.',
-    'Out of memory': 'Not enough memory. Try closing other applications.',
-    
-    // Generic
-    'timeout': 'Operation timed out. Please try again.',
-    'cancelled': 'Operation was cancelled.',
-    'abort': 'Operation was cancelled.',
-};
+function isZhCn() {
+    return window.I18n?.getLang?.() === 'zh-CN';
+}
+
+function localizeErrorText(enText, zhText) {
+    return isZhCn() ? zhText : enText;
+}
+
+function getErrorMessageMap() {
+    return {
+        // Network errors
+        'Failed to fetch': localizeErrorText('Unable to connect to server. Please check if the server is running.', '无法连接到服务器。请检查软件是否已经启动。'),
+        'NetworkError': localizeErrorText('Network connection error. Please check your internet connection.', '网络连接异常。请检查当前网络。'),
+        'Network request failed': localizeErrorText('Network request failed. Please try again.', '网络请求失败，请重试。'),
+
+        // Server errors
+        'Internal Server Error': localizeErrorText('Server encountered an error. Please try again later.', '服务器发生错误，请稍后重试。'),
+        'Service Unavailable': localizeErrorText('Service temporarily unavailable. Please wait and try again.', '服务暂时不可用，请稍后再试。'),
+        'Bad Gateway': localizeErrorText('Server is temporarily unavailable. Please try again.', '服务器暂时不可用，请重试。'),
+        'Gateway Timeout': localizeErrorText('Server response timed out. Please try again.', '服务器响应超时，请重试。'),
+
+        // Client errors
+        'Unauthorized': localizeErrorText('Authentication required. Please refresh the page.', '需要重新验证，请刷新页面。'),
+        'Forbidden': localizeErrorText('Access denied. You do not have permission for this action.', '访问被拒绝，你没有执行此操作的权限。'),
+        'Not Found': localizeErrorText('The requested resource was not found.', '找不到请求的资源。'),
+        'Bad Request': localizeErrorText('Invalid request. Please check your input.', '请求无效，请检查输入内容。'),
+
+        // File operations
+        'ENOENT': localizeErrorText('File or folder not found.', '找不到文件或文件夹。'),
+        'EACCES': localizeErrorText('Permission denied. Please check folder permissions.', '权限不足，请检查文件夹权限。'),
+        'EPERM': localizeErrorText('Operation not permitted. Please check permissions.', '当前操作不被允许，请检查权限。'),
+        'ENOSPC': localizeErrorText('Not enough disk space for this operation.', '磁盘空间不足，无法完成此操作。'),
+        'EMFILE': localizeErrorText('Too many files open. Please close other applications.', '当前打开的文件过多，请先关闭其他程序。'),
+
+        // Image operations
+        'Invalid image': localizeErrorText('The image file is invalid or corrupted.', '图片文件无效或已损坏。'),
+        'Image too large': localizeErrorText('The image is too large to process.', '图片过大，暂时无法处理。'),
+        'Unsupported format': localizeErrorText('This image format is not supported.', '当前图片格式不受支持。'),
+
+        // Tagging/AI operations
+        'Model not loaded': localizeErrorText('AI model is not loaded. Please wait for initialization.', 'AI 模型还没加载完成，请稍等。'),
+        'Model loading': localizeErrorText('AI model is loading. Please wait.', 'AI 模型正在加载，请稍等。'),
+        'CUDA out of memory': localizeErrorText('Not enough GPU memory. Try closing other applications.', 'GPU 显存不足，建议先关闭其他程序再试。'),
+        'Out of memory': localizeErrorText('Not enough memory. Try closing other applications.', '内存不足，建议先关闭其他程序再试。'),
+
+        // Generic
+        'timeout': localizeErrorText('Operation timed out. Please try again.', '操作超时，请重试。'),
+        'cancelled': localizeErrorText('Operation was cancelled.', '操作已取消。'),
+        'abort': localizeErrorText('Operation was cancelled.', '操作已取消。'),
+    };
+}
 
 /**
  * Patterns to match error messages and map to user-friendly versions
  * @constant {Array.<{pattern: RegExp, message: string}>}
  */
-const ERROR_PATTERNS = [
-    { pattern: /Failed to fetch/i, message: 'Unable to connect to server. Please check if the server is running.' },
-    { pattern: /NetworkError/i, message: 'Network connection error. Please check your connection.' },
-    { pattern: /ENOENT.*no such file/i, message: 'File or folder not found.' },
-    { pattern: /EACCES|EPERM/i, message: 'Permission denied. Please check folder permissions.' },
-    { pattern: /ENOSPC/i, message: 'Not enough disk space for this operation.' },
-    { pattern: /CUDA.*memory|out of memory/i, message: 'Not enough memory. Try closing other applications.' },
-    { pattern: /timeout/i, message: 'Operation timed out. Please try again.' },
-    { pattern: /abort|cancelled/i, message: 'Operation was cancelled.' },
-    { pattern: /invalid.*path/i, message: 'Invalid file path. Please check the path is correct.' },
-    { pattern: /path.*not.*exist/i, message: 'The specified folder does not exist.' },
-    { pattern: /connection.*refused/i, message: 'Cannot connect to server. Please ensure the server is running.' },
-];
+function getErrorPatterns() {
+    return [
+        { pattern: /Failed to fetch/i, message: localizeErrorText('Unable to connect to server. Please check if the server is running.', '无法连接到服务器。请检查软件是否已经启动。') },
+        { pattern: /NetworkError/i, message: localizeErrorText('Network connection error. Please check your connection.', '网络连接异常。请检查当前网络。') },
+        { pattern: /ENOENT.*no such file/i, message: localizeErrorText('File or folder not found.', '找不到文件或文件夹。') },
+        { pattern: /EACCES|EPERM/i, message: localizeErrorText('Permission denied. Please check folder permissions.', '权限不足，请检查文件夹权限。') },
+        { pattern: /ENOSPC/i, message: localizeErrorText('Not enough disk space for this operation.', '磁盘空间不足，无法完成此操作。') },
+        { pattern: /CUDA.*memory|out of memory/i, message: localizeErrorText('Not enough memory. Try closing other applications.', '内存不足，建议先关闭其他程序再试。') },
+        { pattern: /timeout/i, message: localizeErrorText('Operation timed out. Please try again.', '操作超时，请重试。') },
+        { pattern: /abort|cancelled/i, message: localizeErrorText('Operation was cancelled.', '操作已取消。') },
+        { pattern: /source file is missing on disk/i, message: localizeErrorText('The original image file is no longer available. Reconnect that drive or folder, then rescan the library.', '原始图片文件已经不在磁盘上。请重新连接对应磁盘或文件夹后再重新扫描图库。') },
+        { pattern: /library entry does not contain a source image path/i, message: localizeErrorText('This library item no longer has a usable source path. Rescan the folder to rebuild it.', '这个图库项目已经没有可用的原图路径。请重新扫描文件夹来重建它。') },
+        { pattern: /invalid.*path/i, message: localizeErrorText('Invalid file path. Please check the path is correct.', '路径无效，请检查填写是否正确。') },
+        { pattern: /path.*not.*exist/i, message: localizeErrorText('The specified folder does not exist.', '指定的文件夹不存在。') },
+        { pattern: /connection.*refused/i, message: localizeErrorText('Cannot connect to server. Please ensure the server is running.', '无法连接到服务器。请确认软件已经启动。') },
+    ];
+}
 
 /**
  * Convert technical error to user-friendly message
@@ -76,16 +90,18 @@ const ERROR_PATTERNS = [
 function formatUserError(error, context = '') {
     // Get error message string
     const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorMessageMap = getErrorMessageMap();
+    const errorPatterns = getErrorPatterns();
     
     // Check for exact match first
-    if (ERROR_MESSAGE_MAP[errorMsg]) {
-        return context ? `${context}: ${ERROR_MESSAGE_MAP[errorMsg]}` : ERROR_MESSAGE_MAP[errorMsg];
+    if (errorMessageMap[errorMsg]) {
+        return context ? `${context}${isZhCn() ? '：' : ': '}${errorMessageMap[errorMsg]}` : errorMessageMap[errorMsg];
     }
     
     // Check patterns
-    for (const { pattern, message } of ERROR_PATTERNS) {
+    for (const { pattern, message } of errorPatterns) {
         if (pattern.test(errorMsg)) {
-            return context ? `${context}: ${message}` : message;
+            return context ? `${context}${isZhCn() ? '：' : ': '}${message}` : message;
         }
     }
     
@@ -93,19 +109,22 @@ function formatUserError(error, context = '') {
     const hasTechnicalJargon = /(?:\b(?:ENOENT|EACCES|EPERM|ENOSPC|CUDA|undefined|null|TypeError|ReferenceError|SyntaxError)\b|https?:\/\/|\/api\/|[A-Za-z]:\\| at .+\(|stack trace)/i.test(errorMsg);
 
     if (!hasTechnicalJargon && errorMsg.length < 180) {
-        return context ? `${context}: ${errorMsg}` : errorMsg;
+        return context ? `${context}${isZhCn() ? '：' : ': '}${errorMsg}` : errorMsg;
     }
     
     // Return generic message with context
     if (context) {
         const normalizedContext = String(context).trim();
+        if (isZhCn()) {
+            return `${normalizedContext}。请重试。`;
+        }
         const prefix = /^failed to\b/i.test(normalizedContext)
             ? normalizedContext
             : `Failed to ${normalizedContext}`;
         return `${prefix}. Please try again.`;
     }
 
-    return 'An unexpected error occurred. Please try again.';
+    return localizeErrorText('An unexpected error occurred. Please try again.', '发生了未预期的错误，请重试。');
 }
 
 /**
@@ -150,12 +169,18 @@ if (typeof window !== 'undefined') {
     window.formatUserError = formatUserError;
     window.showUserError = showUserError;
     window.isCancellationError = isCancellationError;
-    window.ERROR_MESSAGE_MAP = ERROR_MESSAGE_MAP;
+    window.ERROR_MESSAGE_MAP = getErrorMessageMap();
+    window.ERROR_PATTERNS = getErrorPatterns();
     window.errorUtils = {
         formatUserError,
         showUserError,
         isCancellationError,
-        ERROR_MESSAGE_MAP,
-        ERROR_PATTERNS,
+        getErrorMessageMap,
+        getErrorPatterns,
     };
+
+    document.addEventListener('languageChanged', () => {
+        window.ERROR_MESSAGE_MAP = getErrorMessageMap();
+        window.ERROR_PATTERNS = getErrorPatterns();
+    });
 }

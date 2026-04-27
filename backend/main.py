@@ -27,10 +27,15 @@ from runtime_env import prepare_onnxruntime_environment
 
 prepare_onnxruntime_environment()
 
+from app_info import APP_VERSION
 from config import (
     SERVER_HOST,
     SERVER_PORT,
     CORS_ORIGIN_REGEX,
+    RATE_LIMIT_ENABLED as CONFIG_RATE_LIMIT_ENABLED,
+    RATE_LIMIT_WINDOW_SECONDS as CONFIG_RATE_LIMIT_WINDOW_SECONDS,
+    RATE_LIMIT_MAX_REQUESTS as CONFIG_RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_APPLY_TO_LOOPBACK as CONFIG_RATE_LIMIT_APPLY_TO_LOOPBACK,
     LOG_LEVEL,
     BACKEND_DIR,
     validate_config,
@@ -69,7 +74,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates
 
 # Import services
 from services import (
@@ -245,7 +250,7 @@ A local web application for managing, tagging, sorting, and censoring Stable Dif
 
 For detailed documentation, see `docs/API.md`.
     """,
-    version="3.0.6",
+    version=APP_VERSION,
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -258,13 +263,16 @@ For detailed documentation, see `docs/API.md`.
         {"name": "similarity", "description": "Image similarity search and duplicate detection"},
         {"name": "artists", "description": "Artist/style identification"},
         {"name": "models", "description": "Model inventory and first-run preparation"},
+        {"name": "updates", "description": "Package-local application update checks and apply flow"},
     ]
 )
 
 
 LOCALHOST_ALIASES = {"127.0.0.1", "localhost", "::1", "[::1]"}
-RATE_LIMIT_WINDOW_SECONDS = 60
-RATE_LIMIT_MAX_REQUESTS = 1000
+RATE_LIMIT_ENABLED = CONFIG_RATE_LIMIT_ENABLED
+RATE_LIMIT_WINDOW_SECONDS = CONFIG_RATE_LIMIT_WINDOW_SECONDS
+RATE_LIMIT_MAX_REQUESTS = CONFIG_RATE_LIMIT_MAX_REQUESTS
+RATE_LIMIT_APPLY_TO_LOOPBACK = CONFIG_RATE_LIMIT_APPLY_TO_LOOPBACK
 RATE_LIMIT_EXEMPT_PATHS = {"/docs", "/redoc", "/openapi.json"}
 RATE_LIMIT_EXEMPT_PREFIXES = ("/static", "/api/image-file", "/api/image-thumbnail")
 _rate_limit_lock = threading.Lock()
@@ -318,11 +326,17 @@ async def localhost_only_middleware(request: Request, call_next):
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     """Apply a lightweight in-memory rate limit to API requests."""
+    if not RATE_LIMIT_ENABLED:
+        return await call_next(request)
+
     path = request.url.path
     if _is_rate_limit_exempt(path):
         return await call_next(request)
 
     client_host = request.client.host if request.client else "unknown"
+    if client_host and _is_loopback_host(client_host) and not RATE_LIMIT_APPLY_TO_LOOPBACK:
+        return await call_next(request)
+
     now = time.monotonic()
     cutoff = now - RATE_LIMIT_WINDOW_SECONDS
 
@@ -375,6 +389,7 @@ app.include_router(artists.router)
 app.include_router(models.router)
 app.include_router(obfuscation.router)
 app.include_router(aesthetic.router)
+app.include_router(updates.router)
 
 
 # ============================================================

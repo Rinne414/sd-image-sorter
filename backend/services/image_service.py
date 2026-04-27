@@ -3,17 +3,20 @@ Image service for SD Image Sorter.
 
 Handles business logic for image retrieval, filtering, and file operations.
 """
+import logging
 import io
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from typing import Optional, Dict, Any, List
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, PngImagePlugin, UnidentifiedImageError
 
 import database as db
+from constants import VALID_ASPECT_RATIOS
 from image_manager import reparse_image_metadata
 from thumbnail_cache import (
     get_thumbnail,
@@ -24,8 +27,16 @@ from thumbnail_cache import (
     get_cache_stats,
     SUPPORTED_SIZES,
 )
-from utils.path_validation import validate_file_path, ALLOWED_IMAGE_EXTENSIONS
+from utils.path_validation import (
+    ALLOWED_IMAGE_EXTENSIONS,
+    PathValidationError,
+    validate_file_path,
+    validate_image_output_path,
+)
+from utils.source_paths import resolve_existing_indexed_image_path
 
+
+logger = logging.getLogger(__name__)
 
 # Validation constants
 DIMENSION_MIN = 1
@@ -43,7 +54,35 @@ VALID_SORT_OPTIONS = [
     "aesthetic", "aesthetic_asc",
     "random", "file_size", "file_size_asc"
 ]
-VALID_ASPECT_RATIOS = ["square", "landscape", "portrait"]
+JPEG_LIMITATION_WARNING = "JPEG metadata support is limited; use PNG for the most reliable SD prompt preservation."
+WEBP_LIMITATION_WARNING = "WebP metadata support depends on the viewer; use PNG if another tool fails to read the saved prompt."
+JPEG_ALPHA_WARNING = "JPEG does not support transparency; transparent pixels were flattened onto a white background."
+EDITED_METADATA_KEY_ALIASES = {
+    "negative prompt": "negative_prompt",
+    "negative_prompt": "negative_prompt",
+    "checkpoint": "model",
+    "model_name": "model",
+    "cfg": "cfg_scale",
+    "cfg_scale": "cfg_scale",
+    "cfg scale": "cfg_scale",
+    "lora": "loras",
+    "lora_text": "loras",
+    "lora metadata": "loras",
+    "lora_metadata": "loras",
+}
+PARAMETER_EXPORT_ORDER = [
+    ("steps", "Steps"),
+    ("sampler", "Sampler"),
+    ("cfg_scale", "CFG scale"),
+    ("seed", "Seed"),
+    ("size", "Size"),
+    ("model", "Model"),
+    ("model_hash", "Model hash"),
+    ("clip_skip", "Clip skip"),
+    ("denoising_strength", "Denoising strength"),
+    ("schedule_type", "Schedule type"),
+    ("loras", "LoRAs"),
+]
 
 
 
@@ -81,9 +120,187 @@ def _sanitize_filter_list(items: Optional[str]) -> Optional[List[str]]:
     return result if result else None
 
 
+def _normalize_edited_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalize metadata keys from the editor into a stable backend shape."""
+    normalized: Dict[str, Any] = {}
+
+    for raw_key, raw_value in (metadata or {}).items():
+        key = str(raw_key or "").strip()
+        if not key:
+            continue
+
+        canonical_key = EDITED_METADATA_KEY_ALIASES.get(key.lower().replace("-", "_"), key.lower().replace("-", "_"))
+        value: Any = raw_value
+        if isinstance(value, (list, tuple, set)):
+            parts = [str(item).strip() for item in value if str(item).strip()]
+            value = ", ".join(parts) if parts else None
+        elif isinstance(value, str):
+            stripped = value.strip()
+            value = stripped if stripped else None
+
+        if value is None:
+            continue
+
+        normalized[canonical_key] = value
+
+    if "size" not in normalized:
+        width = normalized.get("width")
+        height = normalized.get("height")
+        if width is not None and height is not None:
+            normalized["size"] = f"{width}x{height}"
+
+    return normalized
+
+
+def _build_sd_parameters_text(metadata: Dict[str, Any]) -> str:
+    """Build a WebUI-style parameters blob that the existing parser can read back."""
+    prompt = str(metadata.get("prompt") or "").strip()
+    negative_prompt = str(metadata.get("negative_prompt") or "").strip()
+    lines: List[str] = []
+    if prompt:
+        lines.append(prompt)
+    if negative_prompt:
+        lines.append(f"Negative prompt: {negative_prompt}")
+
+    parts: List[str] = []
+    emitted_keys = set()
+    for key, label in PARAMETER_EXPORT_ORDER:
+        value = metadata.get(key)
+        if value is None or value == "":
+            continue
+        emitted_keys.add(key)
+        parts.append(f"{label}: {value}")
+
+    extra_keys = sorted(
+        key for key in metadata.keys()
+        if key not in emitted_keys and key not in {"prompt", "negative_prompt", "width", "height"}
+    )
+    for key in extra_keys:
+        value = metadata.get(key)
+        if value is None or value == "":
+            continue
+        label = " ".join(part.capitalize() for part in key.split("_"))
+        parts.append(f"{label}: {value}")
+
+    if parts:
+        lines.append(", ".join(parts))
+
+    return "\n".join(lines).strip()
+
+
+def _build_pnginfo(metadata: Dict[str, Any], parameters_text: str) -> PngImagePlugin.PngInfo:
+    pnginfo = PngImagePlugin.PngInfo()
+    if parameters_text:
+        pnginfo.add_text("parameters", parameters_text)
+
+    pnginfo.add_text("Software", "SD Image Sorter")
+
+    for key, value in metadata.items():
+        if value is None or value == "":
+            continue
+        pnginfo.add_text(str(key), str(value))
+
+    return pnginfo
+
+
+def _build_exif_bytes(image: Image.Image, parameters_text: str) -> Optional[bytes]:
+    try:
+        exif = image.getexif()
+        if parameters_text:
+            exif[0x010E] = parameters_text  # ImageDescription
+        exif[0x0131] = "SD Image Sorter"  # Software
+        return exif.tobytes()
+    except Exception:
+        return None
+
+
+def _prepare_image_for_save(image: Image.Image, pil_format: str, warnings: List[str]) -> Image.Image:
+    """Prepare image mode conversions required by the target output format."""
+    if pil_format != "JPEG":
+        return image.copy()
+
+    if image.mode in ("RGB", "L", "CMYK"):
+        return image.copy()
+
+    converted = image.convert("RGBA")
+    background = Image.new("RGBA", converted.size, (255, 255, 255, 255))
+    background.alpha_composite(converted)
+    warnings.append(JPEG_ALPHA_WARNING)
+    return background.convert("RGB")
+
 
 class ImageService:
     """Service for image retrieval, filtering, and file operations."""
+
+    def _filter_and_mark_missing_images(self, images: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
+        """Drop rows whose backing files no longer exist and persist that state in SQLite."""
+        live_images: List[Dict[str, Any]] = []
+        missing_count = 0
+
+        for image in images:
+            image_id = int(image.get("id") or 0)
+            primary_path = str(image.get("path") or "")
+            resolved_path = resolve_existing_indexed_image_path(primary_path, backend_file=__file__)
+            if resolved_path:
+                live_images.append(image)
+                continue
+
+            missing_count += 1
+            if image_id > 0:
+                db.mark_image_unreadable(image_id, "File not found on disk")
+
+        return live_images, missing_count
+
+    def delete_selected_image_files(self, image_ids: List[int]) -> Dict[str, Any]:
+        """Delete image files from disk and remove their database rows.
+
+        Returns a partial-failure payload so the frontend can show a truthful
+        summary instead of pretending the whole batch succeeded.
+        """
+        deleted = 0
+        failed: List[Dict[str, Any]] = []
+        seen_ids = set()
+
+        for raw_image_id in image_ids or []:
+            image_id = int(raw_image_id)
+            if image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+
+            image = db.get_image_by_id(image_id)
+            if not image:
+                failed.append({
+                    "image_id": image_id,
+                    "filename": None,
+                    "error": "Image not found",
+                })
+                continue
+
+            filename = image.get("filename") or Path(str(image.get("path") or "")).name or f"image_{image_id}"
+
+            try:
+                source_path = self.resolve_image_source_path(image_id, image.get("path", ""))
+                Path(source_path).unlink()
+                db.delete_image(image_id)
+                deleted += 1
+            except HTTPException as exc:
+                failed.append({
+                    "image_id": image_id,
+                    "filename": filename,
+                    "error": exc.detail or "Image file not found on disk",
+                })
+            except Exception as exc:
+                failed.append({
+                    "image_id": image_id,
+                    "filename": filename,
+                    "error": str(exc),
+                })
+
+        return {
+            "deleted": deleted,
+            "failed": failed,
+            "permanent_delete": True,
+        }
 
     def get_images(
         self,
@@ -183,7 +400,72 @@ class ImageService:
         supports_cursor_pagination = sort_by in {"newest", "oldest"} and offset is None
 
         if supports_cursor_pagination:
-            result = db.get_images_paginated(
+            collected: List[Dict[str, Any]] = []
+            current_cursor = cursor_id
+            total = -1
+            total_missing = 0
+            fetch_limit = min(max(limit * 2, 32), LIMIT_MAX)
+
+            while len(collected) < limit + 1:
+                result = db.get_images_paginated(
+                    generators=gen_list,
+                    tags=tag_list,
+                    ratings=rating_list,
+                    checkpoints=cp_list,
+                    loras=lr_list,
+                    search_query=search,
+                    prompt_terms=prompt_list,
+                    artist=artist,
+                    sort_by=sort_by,
+                    limit=fetch_limit,
+                    cursor_id=current_cursor,
+                    min_width=min_width,
+                    max_width=max_width,
+                    min_height=min_height,
+                    max_height=max_height,
+                    aspect_ratio=aspect_ratio,
+                    min_aesthetic=min_aesthetic,
+                    max_aesthetic=max_aesthetic,
+                    skip_count=total >= 0,
+                )
+                if total < 0:
+                    total = result.get("total", -1)
+
+                live_images, missing_count = self._filter_and_mark_missing_images(result.get("images", []))
+                total_missing += missing_count
+                collected.extend(live_images)
+
+                if len(collected) >= limit + 1 or not result.get("has_more") or not result.get("images"):
+                    break
+
+                next_cursor_value = result.get("next_cursor")
+                if next_cursor_value is None:
+                    break
+                current_cursor = int(next_cursor_value)
+
+            has_more = len(collected) > limit
+            if has_more:
+                collected = collected[:limit]
+
+            if total >= 0:
+                total = max(0, total - total_missing)
+
+            return {
+                "images": collected,
+                "next_cursor": str(collected[-1]["id"]) if has_more and collected else None,
+                "next_offset": None,
+                "has_more": has_more,
+                "total": total,
+            }
+
+        page_offset = max(0, offset or 0)
+        fetch_limit = min(max(limit * 2, 32), LIMIT_MAX)
+        scan_offset = page_offset
+        images: List[Dict[str, Any]] = []
+        total_missing = 0
+
+        while len(images) < limit + 1:
+            batch = db.get_images(
                 generators=gen_list,
                 tags=tag_list,
                 ratings=rating_list,
@@ -193,8 +475,8 @@ class ImageService:
                 prompt_terms=prompt_list,
                 artist=artist,
                 sort_by=sort_by,
-                limit=limit,
-                cursor_id=cursor_id,
+                limit=fetch_limit,
+                offset=scan_offset,
                 min_width=min_width,
                 max_width=max_width,
                 min_height=min_height,
@@ -203,30 +485,16 @@ class ImageService:
                 min_aesthetic=min_aesthetic,
                 max_aesthetic=max_aesthetic,
             )
-            result["next_offset"] = None
-            return result
+            if not batch:
+                break
 
-        page_offset = max(0, offset or 0)
-        images = db.get_images(
-            generators=gen_list,
-            tags=tag_list,
-            ratings=rating_list,
-            checkpoints=cp_list,
-            loras=lr_list,
-            search_query=search,
-            prompt_terms=prompt_list,
-            artist=artist,
-            sort_by=sort_by,
-            limit=limit + 1,
-            offset=page_offset,
-            min_width=min_width,
-            max_width=max_width,
-            min_height=min_height,
-            max_height=max_height,
-            aspect_ratio=aspect_ratio,
-            min_aesthetic=min_aesthetic,
-            max_aesthetic=max_aesthetic,
-        )
+            live_batch, missing_count = self._filter_and_mark_missing_images(batch)
+            total_missing += missing_count
+            images.extend(live_batch)
+            scan_offset += len(batch)
+
+            if len(images) >= limit + 1 or len(batch) < fetch_limit:
+                break
 
         has_more = len(images) > limit
         if has_more:
@@ -278,6 +546,39 @@ class ImageService:
         tags = db.get_image_tags(image_id)
         return {"image": image, "tags": tags}
 
+    def get_export_selection_data(self, image_ids: List[int]) -> Dict[str, Any]:
+        """Return prompt and tag export data for multiple images in one request."""
+        images_map = db.get_images_by_ids(image_ids)
+        tags_map = db.get_image_tags_map(image_ids)
+
+        export_images: List[Dict[str, Any]] = []
+        missing_ids: List[int] = []
+
+        for image_id in image_ids:
+            image = images_map.get(image_id)
+            if not image:
+                missing_ids.append(image_id)
+                continue
+
+            export_images.append(
+                {
+                    "id": image_id,
+                    "filename": image.get("filename") or "",
+                    "generator": image.get("generator"),
+                    "prompt": image.get("prompt") or "",
+                    "checkpoint": image.get("checkpoint"),
+                    "width": image.get("width"),
+                    "height": image.get("height"),
+                    "aesthetic_score": image.get("aesthetic_score"),
+                    "tags": [tag["tag"] for tag in tags_map.get(image_id, [])],
+                }
+            )
+
+        return {
+            "images": export_images,
+            "missing_ids": missing_ids,
+        }
+
     def resolve_image_source_path(self, image_id: int, primary_path: str) -> str:
         """
         Resolve the best available image source path.
@@ -292,28 +593,9 @@ class ImageService:
         Raises:
             HTTPException 404: Image file not found on disk
         """
-        candidate_paths = []
-
-        if primary_path:
-            candidate_paths.append(primary_path)
-            if not os.path.isabs(primary_path):
-                backend_root = os.path.dirname(os.path.dirname(__file__))
-                project_root = os.path.dirname(backend_root)
-                candidate_paths.append(os.path.abspath(os.path.join(backend_root, primary_path)))
-                candidate_paths.append(os.path.abspath(os.path.join(project_root, primary_path)))
-
-        for candidate in candidate_paths:
-            if not candidate:
-                continue
-            try:
-                candidate_path = os.path.abspath(candidate)
-                if not os.path.exists(candidate_path):
-                    continue
-                if os.path.realpath(candidate_path) != candidate_path:
-                    continue
-                return candidate_path
-            except OSError:
-                continue
+        resolved_path = resolve_existing_indexed_image_path(primary_path, backend_file=__file__)
+        if resolved_path:
+            return resolved_path
 
         raise HTTPException(status_code=404, detail="Image file not found on disk")
 
@@ -343,6 +625,94 @@ class ImageService:
             raise HTTPException(status_code=500, detail="Failed to reparse metadata") from exc
 
         return self.get_image_by_id(image_id)
+
+    def save_image_with_edited_metadata(
+        self,
+        source_path: str,
+        output_path: str,
+        image_format: str,
+        metadata: Optional[Dict[str, Any]],
+        allow_overwrite: bool = False,
+        quality: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Save a copy of an image with edited SD metadata."""
+        is_valid, error = validate_file_path(source_path, ALLOWED_IMAGE_EXTENSIONS)
+        if not is_valid:
+            raise PathValidationError(error or "Invalid source image path")
+
+        source = Path(source_path).resolve()
+        output = validate_image_output_path(output_path, allow_overwrite=allow_overwrite)
+
+        normalized_output_format = output.extension.lstrip(".").lower()
+        if normalized_output_format == "jpeg":
+            normalized_output_format = "jpg"
+
+        requested_format = str(image_format or normalized_output_format).strip().lower()
+        if requested_format == "jpeg":
+            requested_format = "jpg"
+        if requested_format not in {"png", "webp", "jpg"}:
+            raise ValueError("Unsupported output format")
+        if requested_format != normalized_output_format:
+            raise ValueError("Output path extension does not match the selected format")
+
+        if source == output.path and not allow_overwrite:
+            raise FileExistsError("Output path is the same as the source image. Confirm overwrite before saving.")
+
+        if output.exists and not allow_overwrite:
+            raise FileExistsError("Output file already exists. Confirm overwrite before saving.")
+
+        if quality is not None and (quality < 1 or quality > 100):
+            raise ValueError("Quality must be between 1 and 100")
+
+        normalized_metadata = _normalize_edited_metadata(metadata)
+        parameters_text = _build_sd_parameters_text(normalized_metadata)
+        warnings: List[str] = []
+
+        pil_format = "PNG"
+        if requested_format == "webp":
+            pil_format = "WEBP"
+            warnings.append(WEBP_LIMITATION_WARNING)
+        elif requested_format == "jpg":
+            pil_format = "JPEG"
+            warnings.append(JPEG_LIMITATION_WARNING)
+
+        with Image.open(source) as image:
+            save_image = _prepare_image_for_save(image, pil_format, warnings)
+            save_kwargs: Dict[str, Any] = {}
+            icc_profile = image.info.get("icc_profile")
+            if icc_profile:
+                save_kwargs["icc_profile"] = icc_profile
+
+            if pil_format == "PNG":
+                save_kwargs["pnginfo"] = _build_pnginfo(normalized_metadata, parameters_text)
+            else:
+                exif_bytes = _build_exif_bytes(image, parameters_text)
+                if exif_bytes:
+                    save_kwargs["exif"] = exif_bytes
+                save_kwargs["quality"] = int(quality if quality is not None else (92 if pil_format == "JPEG" else 95))
+
+            try:
+                save_image.save(output.path, format=pil_format, **save_kwargs)
+            finally:
+                save_image.close()
+
+        indexed_output_row = db.get_image_by_path(str(output.path))
+        if indexed_output_row:
+            try:
+                reparse_image_metadata(
+                    int(indexed_output_row["id"]),
+                    str(output.path),
+                    preserve_derived_state=(source == output.path),
+                )
+            except Exception:
+                logger.warning("Failed to refresh indexed metadata after saving %s", output.path, exc_info=True)
+                warnings.append("Saved file, but the library entry did not refresh. Use Reparse if metadata looks stale.")
+
+        return {
+            "output_path": str(output.path),
+            "format": requested_format,
+            "warnings": warnings,
+        }
 
     def get_image_file(self, image_id: int) -> FileResponse:
         """

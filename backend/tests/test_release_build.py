@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
 from pathlib import Path
 
 
@@ -26,6 +28,9 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"\r\r\n" not in launcher_bytes
     assert b"setlocal enabledelayedexpansion\r\n" in launcher_bytes
     assert b"set \"PIP_CMD=!PYTHON_DIR!\\Scripts\\pip.exe\"" in launcher_bytes
+    assert b"set \"SD_IMAGE_SORTER_DATA_DIR=!DATA_DIR!\"" in launcher_bytes
+    assert b"set \"SD_IMAGE_SORTER_LAUNCHER=run-portable.bat\"" in launcher_bytes
+    assert b"set \"TEMP=!TMP_DIR!\"" in launcher_bytes
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL" in launcher_bytes
     assert b"Installing dependencies - first run may take a few minutes" in launcher_bytes
@@ -39,5 +44,39 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path(".tmp_probe_browse.py")) is True
     assert release_builder.should_skip_path(Path(".tmp_move_target") / "note.txt") is True
     assert release_builder.should_skip_path(Path("docs") / "screenshots" / "gallery.png") is True
+    assert release_builder.should_skip_path(Path("data") / "images.db") is True
+    assert release_builder.should_skip_path(Path("update") / "downloads" / "patch.zip") is True
     assert release_builder.should_skip_path(Path(".env.example")) is False
     assert release_builder.should_skip_path(Path("README.md")) is False
+
+
+def test_release_default_version_follows_app_info():
+    release_builder = load_release_builder()
+    match = re.search(
+        r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']',
+        (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+
+    assert match is not None
+    assert release_builder.DEFAULT_VERSION == match.group(1)
+
+
+def test_write_package_manifest_excludes_runtime_files(tmp_path):
+    release_builder = load_release_builder()
+
+    (tmp_path / "backend").mkdir()
+    (tmp_path / "backend" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    (tmp_path / "frontend").mkdir()
+    (tmp_path / "frontend" / "index.html").write_text("<html></html>\n", encoding="utf-8")
+    (tmp_path / "python").mkdir()
+    (tmp_path / "python" / "python.exe").write_text("binary\n", encoding="utf-8")
+
+    manifest_path = release_builder.write_package_manifest(tmp_path, "9.9.9")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert payload["version"] == "9.9.9"
+    assert "backend/main.py" in payload["managed_paths"]
+    assert "frontend/index.html" in payload["managed_paths"]
+    assert "python/python.exe" not in payload["managed_paths"]
+    assert "update/package-manifest.json" in payload["managed_paths"]

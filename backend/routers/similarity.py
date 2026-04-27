@@ -8,6 +8,7 @@ Refactored to use Service Layer pattern with dependency injection.
 from typing import Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Query, BackgroundTasks
+from starlette.concurrency import run_in_threadpool
 
 from services.similarity_service import SimilarityService
 
@@ -61,7 +62,7 @@ async def embed_images(
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Start embedding images in the background."""
-    return service.embed_images(background_tasks, image_ids)
+    return await run_in_threadpool(service.embed_images, background_tasks, image_ids)
 
 
 @router.get("/progress")
@@ -112,7 +113,7 @@ async def search_similar(
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find images similar to a given image ID."""
-    return service.search_similar(image_id, limit, threshold, offset)
+    return await run_in_threadpool(service.search_similar, image_id, limit, threshold, offset)
 
 
 @router.post(
@@ -195,7 +196,7 @@ async def find_duplicates(
     service: SimilarityService = Depends(get_similarity_service),
 ):
     """Find near-duplicate image pairs above similarity threshold."""
-    return service.find_duplicates(threshold, limit, offset)
+    return await run_in_threadpool(service.find_duplicates, threshold, limit, offset)
 
 
 @router.get("/stats")

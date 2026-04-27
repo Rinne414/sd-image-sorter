@@ -25,6 +25,7 @@ from config import (
     EMBEDDING_BATCH_SIZE,
     DUPLICATE_CHUNK_SIZE,
 )
+from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
 
@@ -360,7 +361,12 @@ class SimilarityIndex:
                     embedding = embed_image_file(img_path, model=model)
                     self._progress["processed"] += 1
                     if embedding is not None:
-                        updates.append((embedding_to_bytes(embedding), img_id))
+                        content_fingerprint = None
+                        try:
+                            content_fingerprint = compute_image_content_fingerprint(img_path)
+                        except Exception as exc:
+                            logger.warning("Could not compute content fingerprint for %s: %s", img_path, exc)
+                        updates.append((embedding_to_bytes(embedding), content_fingerprint, img_id))
                         self._progress["embedded"] += 1
                     else:
                         self._progress["errors"] += 1
@@ -372,7 +378,7 @@ class SimilarityIndex:
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
                         cursor.executemany(
-                            "UPDATE images SET embedding = ? WHERE id = ?",
+                            "UPDATE images SET embedding = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
                             updates
                         )
 

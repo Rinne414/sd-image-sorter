@@ -701,6 +701,47 @@
     color: var(--text-primary);
 }
 
+.model-health-banner .model-health-title {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+    font-weight: 700;
+}
+
+.model-health-banner .model-health-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.model-health-banner .model-health-details {
+    margin-top: 10px;
+    border-top: 1px solid rgba(191, 219, 254, 0.1);
+    padding-top: 10px;
+}
+
+.model-health-banner .model-health-details summary {
+    cursor: pointer;
+    list-style: none;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.model-health-banner .model-health-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.model-health-banner .model-health-details ul {
+    margin: 8px 0 0 18px;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 .model-health-banner.model-health-banner-warning {
     border-color: rgba(255, 138, 61, 0.32);
     background: rgba(255, 138, 61, 0.08);

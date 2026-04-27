@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 import database as db
+from image_fingerprint import compute_image_content_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,16 @@ def score_single_image(image_id: int):
         if score is None:
             raise HTTPException(status_code=500, detail="Scoring failed")
 
-        conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (score, image_id))
+        content_fingerprint = None
+        try:
+            content_fingerprint = compute_image_content_fingerprint(row["path"])
+        except Exception as exc:
+            logger.warning("Could not compute content fingerprint for %s: %s", row["path"], exc)
+
+        conn.execute(
+            "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+            (score, content_fingerprint, image_id),
+        )
         conn.commit()
         return {"image_id": image_id, "aesthetic_score": score}
     finally:
@@ -131,7 +141,15 @@ def _score_batch(force: bool = False):
             try:
                 score = predict_score(row["path"])
                 if score is not None:
-                    conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (score, row["id"]))
+                    content_fingerprint = None
+                    try:
+                        content_fingerprint = compute_image_content_fingerprint(row["path"])
+                    except Exception as exc:
+                        logger.warning("Could not compute content fingerprint for %s: %s", row["path"], exc)
+                    conn.execute(
+                        "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+                        (score, content_fingerprint, row["id"]),
+                    )
                     pending_commits += 1
                 else:
                     _scoring_state["errors"] += 1

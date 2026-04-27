@@ -195,6 +195,18 @@ When reorganizing the UI, move, regroup, collapse, or progressively disclose fea
 
 Do not silently delete existing capability just to make the interface cleaner.
 
+### 11. Package-local self-updates must stay user-controlled and state-preserving
+
+For this product, in-app updates are a manual convenience workflow, not a silent app-store style mechanism.
+
+Keep these rules aligned unless the user explicitly changes product direction:
+
+- do not auto-check for updates on startup
+- do not auto-download or auto-apply updates without an explicit user action
+- preserve package-local user/runtime state such as `data/`, downloaded models, caches, and updater working files
+- keep advanced update-channel override as an opt-in path for advanced users or forks, not as forced complexity for normal users
+- if the default GitHub update path is unreachable, say so honestly and tell the user to use VPN rather than pretending there is a seamless default mirror
+
 ## Core Principles
 
 ### 1. Preserve deliberate local intent

@@ -20,7 +20,9 @@ from pydantic import BaseModel, Field, field_validator
 
 import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
+from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -302,8 +304,9 @@ def _tagging_worker_main(
 
             for img in batch_images:
                 image_path = img["path"]
-                image_name = os.path.basename(image_path)
-                if not os.path.exists(image_path):
+                resolved_path = resolve_existing_indexed_image_path(image_path, backend_file=__file__)
+                image_name = os.path.basename(resolved_path or image_path)
+                if not resolved_path:
                     total_errors += 1
                     total_processed += 1
                     worker_db.mark_image_unreadable(img["id"], "File not found")
@@ -313,7 +316,7 @@ def _tagging_worker_main(
                     )
                     continue
 
-                readable, read_error = verify_image_readable(image_path)
+                readable, read_error = verify_image_readable(resolved_path)
                 if not readable:
                     total_errors += 1
                     total_processed += 1
@@ -324,8 +327,8 @@ def _tagging_worker_main(
                     )
                     continue
 
-                existing_images.append(img)
-                batch_paths.append(image_path)
+                existing_images.append({**img, "_resolved_path": resolved_path})
+                batch_paths.append(resolved_path)
 
             if existing_images:
                 processed_in_batch = 0
@@ -377,9 +380,9 @@ def _tagging_worker_main(
                         pass  # hardware_monitor not available
 
                     # Show which images are being tagged
-                    first_name = os.path.basename(existing_images[0]["path"])
+                    first_name = os.path.basename(batch_paths[0])
                     if len(existing_images) > 1:
-                        last_name = os.path.basename(existing_images[-1]["path"])
+                        last_name = os.path.basename(batch_paths[-1])
                         send(
                             "running",
                             f"Tagging {total_processed + 1}-{total_processed + len(existing_images)}/{total}: {first_name} ... {last_name}",
@@ -419,11 +422,18 @@ def _tagging_worker_main(
 
                         if result.get("error"):
                             total_errors += 1
-                            logger.error("Error tagging %s: %s", img["path"], result["error"])
+                            logger.error("Error tagging %s: %s", img.get("_resolved_path") or img["path"], result["error"])
                         else:
+                            content_fingerprint = None
+                            resolved_path = img.get("_resolved_path") or img["path"]
+                            try:
+                                content_fingerprint = compute_image_content_fingerprint(resolved_path)
+                            except Exception as exc:
+                                logger.warning("Could not compute content fingerprint for %s: %s", resolved_path, exc)
                             entry = {
                                 "image_id": img["id"],
                                 "tags": result["all_tags"],
+                                "content_fingerprint": content_fingerprint,
                             }
                             if result.get("raw_text"):
                                 entry["ai_caption"] = result["raw_text"]
@@ -432,7 +442,7 @@ def _tagging_worker_main(
 
                         total_processed += 1
                         processed_in_batch += 1
-                        current_filename = os.path.basename(img["path"])
+                        current_filename = os.path.basename(img.get("_resolved_path") or img["path"])
                         send_with_eta(
                             f"{total_processed}/{total} ({total_tagged} tagged{f', {total_errors} failed' if total_errors else ''}) - {current_filename}",
                         )

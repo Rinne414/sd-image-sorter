@@ -10,11 +10,15 @@
     const ImageReader = {
         _currentImage: null,
         _currentResult: null,
+        _currentSourcePath: '',
+        _currentOriginalSourcePath: '',
         _promptFormat: 'original', // 'original' | 'sd' | 'nai'
         _histogramMode: 'rgb',
         _languageBound: false,
         _currentSourceKind: 'file',
         _awaitingClipboardPaste: false,
+        _lastSuggestedOutputPath: '',
+        _metadataEditorStorageKey: 'reader_metadata_editor_last_dir_v1',
         _collapsedState: {
             prompt: true,
             negative: false,
@@ -22,6 +26,7 @@
             modelAssets: false,
             loras: false,
             hashes: false,
+            editor: false,
         },
 
         init() {
@@ -117,6 +122,7 @@
                 });
             });
             this._bindSectionToggles();
+            this._bindMetadataEditor();
 
             this._syncStaticLabels();
 
@@ -125,6 +131,8 @@
                     this._syncStaticLabels();
                     if (this._currentResult) {
                         this._renderResult(this._currentResult, this._currentImage?.name || '', { resetFormat: false });
+                        this._updateMetadataEditorFormatWarning();
+                        this._updateMetadataEditorOutputHint();
                     }
                 });
                 this._languageBound = true;
@@ -159,13 +167,18 @@
             return window.I18n?.t?.(key, params) || fallback;
         },
 
+        _formatGeneratorLabel(generator) {
+            return window.App?.formatGeneratorLabel?.(generator, 'Unknown')
+                || String(generator || 'unknown');
+        },
+
         _formatLabel(format) {
             const labels = {
                 original: this._t('reader.formatOriginal', 'Original'),
                 sd: this._t('reader.formatSd', 'SD / A1111'),
                 nai: this._t('reader.formatNai', 'NAI'),
             };
-            return this._t('reader.formatLabel', `Format: ${labels[format] || labels.original}`, {
+            return this._t('reader.formatLabel', `View: ${labels[format] || labels.original}`, {
                 format: labels[format] || labels.original,
             });
         },
@@ -181,7 +194,7 @@
             this._updateFormatButton();
             const copySdBtn = document.getElementById('reader-copy-sd');
             if (copySdBtn) {
-                copySdBtn.textContent = this._t('reader.copySd', 'Copy as SD Format');
+                copySdBtn.textContent = this._t('reader.copySd', 'Copy as SD Text');
             }
         },
 
@@ -194,6 +207,17 @@
                     this._collapsedState[key] = !this._collapsedState[key];
                     this._applySectionState(toggle, target, this._collapsedState[key]);
                 });
+            });
+        },
+
+        _bindMetadataEditor() {
+            document.getElementById('reader-edit-format')?.addEventListener('change', () => {
+                this._updateMetadataEditorFormatWarning();
+                this._updateMetadataEditorOutputPath();
+            });
+
+            document.getElementById('reader-save-metadata-as')?.addEventListener('click', () => {
+                this._saveEditedMetadata(false);
             });
         },
 
@@ -212,6 +236,315 @@
                 const expanded = this._collapsedState[key] !== false;
                 this._applySectionState(toggle, target, expanded);
             });
+        },
+
+        _isReaderTempSourcePath(path) {
+            return /sd_image_sorter_reader_uploads/i.test(String(path || '').replace(/\\/g, '/'));
+        },
+
+        _getBaseSourcePathForSuggestions() {
+            if (this._currentOriginalSourcePath) {
+                return this._currentOriginalSourcePath;
+            }
+            if (this._currentSourcePath && !this._isReaderTempSourcePath(this._currentSourcePath)) {
+                return this._currentSourcePath;
+            }
+            return '';
+        },
+
+        _getDefaultEditorFormat() {
+            const sourcePath = this._getBaseSourcePathForSuggestions() || this._currentImage?.name || this._currentSourcePath || '';
+            const ext = String(sourcePath).split('.').pop()?.toLowerCase() || '';
+            if (ext === 'jpeg') return 'jpg';
+            if (['png', 'webp', 'jpg'].includes(ext)) return ext;
+            return 'png';
+        },
+
+        _getSuggestedOutputFilename(format) {
+            const sourcePath = this._getBaseSourcePathForSuggestions() || this._currentImage?.name || 'image.png';
+            const filename = String(sourcePath).split(/[/\\]/).pop() || 'image.png';
+            const stem = filename.replace(/\.[^.]+$/, '') || 'image';
+            const ext = format === 'jpg' ? '.jpg' : `.${format}`;
+            return `${stem}.edited${ext}`;
+        },
+
+        _getPreferredOutputDirectory() {
+            const sourcePath = this._getBaseSourcePathForSuggestions();
+            if (sourcePath) {
+                const normalized = String(sourcePath);
+                const cutIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+                if (cutIndex > 0) {
+                    return normalized.slice(0, cutIndex);
+                }
+            }
+
+            try {
+                return localStorage.getItem(this._metadataEditorStorageKey) || '';
+            } catch (_) {
+                return '';
+            }
+        },
+
+        _joinPath(directory, filename) {
+            if (!directory) return '';
+            const trimmed = String(directory).replace(/[\\/]+$/, '');
+            const useBackslash = trimmed.includes('\\') && !trimmed.includes('/');
+            return `${trimmed}${useBackslash ? '\\' : '/'}${filename}`;
+        },
+
+        _replacePathExtension(path, format) {
+            if (!path) return '';
+            const ext = format === 'jpg' ? '.jpg' : `.${format}`;
+            const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+            const prefix = lastSlash >= 0 ? path.slice(0, lastSlash + 1) : '';
+            const filename = lastSlash >= 0 ? path.slice(lastSlash + 1) : path;
+            const stem = filename.replace(/\.[^.]+$/, '') || filename;
+            return `${prefix}${stem}${ext}`;
+        },
+
+        _normalizePathForComparison(path) {
+            const normalized = String(path || '').trim().replace(/\\/g, '/');
+            if (!normalized) return '';
+            if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith('//')) {
+                return normalized.toLowerCase();
+            }
+            return normalized;
+        },
+
+        _pathsReferToSameFile(left, right) {
+            const normalizedLeft = this._normalizePathForComparison(left);
+            const normalizedRight = this._normalizePathForComparison(right);
+            return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+        },
+
+        _confirmMetadataOverwrite(outputPath) {
+            const title = this._t('reader.editOverwriteTitle', 'Replace this file?');
+            const message = this._t(
+                'reader.editOverwriteMessage',
+                '{path} already exists, or it is the image you are editing. Replace it?',
+                { path: outputPath },
+            );
+            if (window.App?.showConfirm) {
+                window.App.showConfirm(title, message, () => this._saveEditedMetadata(true));
+            } else if (window.confirm(message)) {
+                this._saveEditedMetadata(true);
+            }
+        },
+
+        _buildSuggestedOutputPath(format) {
+            const directory = this._getPreferredOutputDirectory();
+            const filename = this._getSuggestedOutputFilename(format);
+            return directory ? this._joinPath(directory, filename) : '';
+        },
+
+        _updateMetadataEditorFormatWarning() {
+            const warningEl = document.getElementById('reader-edit-format-warning');
+            const format = document.getElementById('reader-edit-format')?.value || 'png';
+            if (!warningEl) return;
+
+            let warning = '';
+            if (format === 'jpg') {
+                warning = this._t(
+                    'reader.editFormatWarningJpg',
+                    'JPG is great for sharing, but it will not keep the full image info. Transparent areas will also be flattened.',
+                );
+            } else if (format === 'webp') {
+                warning = this._t(
+                    'reader.editFormatWarningWebp',
+                    'WebP usually keeps more image info than JPG, but some apps still fail to read every prompt field back.',
+                );
+            }
+
+            warningEl.textContent = warning;
+            warningEl.hidden = !warning;
+        },
+
+        _updateMetadataEditorOutputHint() {
+            const hintEl = document.getElementById('reader-edit-output-hint');
+            if (!hintEl) return;
+
+            const directory = this._getPreferredOutputDirectory();
+            hintEl.textContent = directory
+                ? this._t(
+                    'reader.editOutputHintUsingFolder',
+                    'Default save folder: {path}',
+                    { path: directory },
+                )
+                : this._t(
+                    'reader.editOutputHint',
+                    'If this image came from the browser, the app does not know the original folder yet. Enter one full save path once, and it will remember the folder.',
+                );
+        },
+
+        _updateMetadataEditorOutputPath(force = false) {
+            const format = document.getElementById('reader-edit-format')?.value || 'png';
+            const outputInput = document.getElementById('reader-edit-output-path');
+            if (!outputInput) return;
+
+            const suggestedPath = this._buildSuggestedOutputPath(format);
+            const currentValue = outputInput.value.trim();
+
+            if (force) {
+                outputInput.value = suggestedPath || '';
+            } else if (!currentValue) {
+                outputInput.value = suggestedPath || '';
+            } else if (currentValue === this._lastSuggestedOutputPath) {
+                outputInput.value = suggestedPath || '';
+            } else {
+                outputInput.value = this._replacePathExtension(currentValue, format);
+            }
+
+            outputInput.placeholder = this._getSuggestedOutputFilename(format);
+            this._lastSuggestedOutputPath = suggestedPath || '';
+            this._updateMetadataEditorOutputHint();
+        },
+
+        _populateMetadataEditor(result) {
+            const editor = document.getElementById('reader-metadata-editor');
+            const promptInput = document.getElementById('reader-edit-prompt');
+            const negativeInput = document.getElementById('reader-edit-negative');
+            const seedInput = document.getElementById('reader-edit-seed');
+            const modelInput = document.getElementById('reader-edit-model');
+            const samplerInput = document.getElementById('reader-edit-sampler');
+            const stepsInput = document.getElementById('reader-edit-steps');
+            const cfgInput = document.getElementById('reader-edit-cfg');
+            const sizeInput = document.getElementById('reader-edit-size');
+            const lorasInput = document.getElementById('reader-edit-loras');
+            const formatSelect = document.getElementById('reader-edit-format');
+            if (!editor || !promptInput || !negativeInput || !seedInput || !modelInput || !samplerInput || !stepsInput || !cfgInput || !sizeInput || !lorasInput || !formatSelect) {
+                return;
+            }
+
+            const gp = this._getGenParams(result);
+            const loras = this._getLoras(result);
+            const format = this._getDefaultEditorFormat();
+
+            editor.hidden = false;
+            promptInput.value = result?.prompt || '';
+            negativeInput.value = result?.negative_prompt || '';
+            seedInput.value = gp.seed ?? gp.noise_seed ?? '';
+            modelInput.value = result?.checkpoint || gp.model || '';
+            samplerInput.value = gp.sampler || '';
+            stepsInput.value = gp.steps ?? '';
+            cfgInput.value = gp.cfg_scale ?? '';
+            sizeInput.value = gp.size || ((result?.width && result?.height) ? `${result.width}x${result.height}` : '');
+            lorasInput.value = Array.isArray(loras) ? loras.join(', ') : '';
+            formatSelect.value = format;
+
+            this._updateMetadataEditorOutputPath(true);
+            this._updateMetadataEditorFormatWarning();
+        },
+
+        _collectEditedMetadataPayload() {
+            const payload = {};
+            const putText = (key, id) => {
+                const value = document.getElementById(id)?.value?.trim();
+                if (value) payload[key] = value;
+            };
+
+            putText('prompt', 'reader-edit-prompt');
+            putText('negative_prompt', 'reader-edit-negative');
+            putText('seed', 'reader-edit-seed');
+            putText('model', 'reader-edit-model');
+            putText('sampler', 'reader-edit-sampler');
+            putText('size', 'reader-edit-size');
+            putText('loras', 'reader-edit-loras');
+
+            const stepsValue = document.getElementById('reader-edit-steps')?.value?.trim();
+            if (stepsValue !== '') {
+                payload.steps = Number.parseInt(stepsValue, 10);
+            }
+
+            const cfgValue = document.getElementById('reader-edit-cfg')?.value?.trim();
+            if (cfgValue !== '') {
+                payload.cfg_scale = Number.parseFloat(cfgValue);
+            }
+
+            return payload;
+        },
+
+        _rememberMetadataEditorDirectory(outputPath) {
+            if (!outputPath) return;
+            const cutIndex = Math.max(outputPath.lastIndexOf('/'), outputPath.lastIndexOf('\\'));
+            if (cutIndex <= 0) return;
+            try {
+                localStorage.setItem(this._metadataEditorStorageKey, outputPath.slice(0, cutIndex));
+            } catch (_) {
+                // Ignore storage failures in private/incognito contexts.
+            }
+        },
+
+        _extractApiErrorMessage(payload, fallback) {
+            return payload?.detail || payload?.error || payload?.message || fallback;
+        },
+
+        async _saveEditedMetadata(allowOverwrite = false) {
+            const format = document.getElementById('reader-edit-format')?.value || 'png';
+            const outputInput = document.getElementById('reader-edit-output-path');
+            const outputPath = outputInput?.value?.trim() || '';
+
+            if (!this._currentSourcePath) {
+                window.App?.showToast?.(this._t('reader.editSaveMissingSource', 'This image no longer has a readable source to save from. Reload it first.'), 'error');
+                return;
+            }
+
+            if (!outputPath) {
+                window.App?.showToast?.(this._t('reader.editOutputNeedPath', 'Enter a full output path before saving.'), 'error');
+                outputInput?.focus?.();
+                return;
+            }
+
+            // Same-path overwrite is predictable on the client, so confirm first
+            // instead of spamming a guaranteed 409 into the browser console.
+            if (!allowOverwrite && this._pathsReferToSameFile(outputPath, this._currentSourcePath)) {
+                this._confirmMetadataOverwrite(outputPath);
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/image-metadata/save-edited', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_path: this._currentSourcePath,
+                        output_path: outputPath,
+                        format,
+                        metadata: this._collectEditedMetadataPayload(),
+                        allow_overwrite: allowOverwrite,
+                    }),
+                });
+
+                const payload = await response.json().catch(() => ({}));
+
+                if (response.status === 409 && !allowOverwrite) {
+                    this._confirmMetadataOverwrite(outputPath);
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(this._extractApiErrorMessage(payload, this._t('reader.editSaveFailed', 'Failed to save edited image.')));
+                }
+
+                const savedOutputPath = payload.output_path || outputPath;
+                this._currentSourcePath = savedOutputPath;
+                this._currentOriginalSourcePath = savedOutputPath;
+                this._rememberMetadataEditorDirectory(savedOutputPath);
+                this._lastSuggestedOutputPath = savedOutputPath;
+                if (outputInput) {
+                    outputInput.value = savedOutputPath;
+                }
+                this._updateMetadataEditorOutputHint();
+
+                window.App?.showToast?.(this._t('reader.editSaveSuccess', 'Saved edited image copy'), 'success');
+                if (Array.isArray(payload.warnings) && payload.warnings.length) {
+                    window.App?.showToast?.(payload.warnings.join(' '), 'warning');
+                }
+            } catch (error) {
+                window.App?.showToast?.(
+                    this._extractApiErrorMessage(error, this._t('reader.editSaveFailed', 'Failed to save edited image.')),
+                    'error',
+                );
+            }
         },
 
         /**
@@ -281,9 +614,9 @@
             const promptText = clipboardMetadataMissing
                 ? t(
                     'reader.clipboardWarningPromptFallback',
-                    'Clipboard image likely lost SD metadata. Open the original PNG file to read the prompt.',
+                    'This clipboard image likely lost the original image info. Open the original PNG to read the full prompt.',
                 )
-                : (promptView?.promptText || t('reader.noPrompt', 'No prompt found'));
+                : (promptView?.promptText || t('reader.noPrompt', 'No prompt found in this image'));
             this._setText('reader-prompt-text', promptText);
             this._setText('reader-negative-text', promptView?.negativeText || t('reader.noNegative', 'No negative prompt'));
 
@@ -406,7 +739,7 @@
                     const avgB = Math.round(bucket.sumB / bucket.count);
                     const hex = `#${[avgR, avgG, avgB].map(v => v.toString(16).padStart(2, '0')).join('')}`;
                     const pct = ((bucket.count / total) * 100).toFixed(1);
-                    return `<div class="reader-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Click to copy ${hex}">
+                    return `<div class="reader-color-swatch" onclick="navigator.clipboard.writeText('${hex}')" title="Copy ${hex}">
                         <span class="swatch-dot" style="background:${hex}"></span>
                         <span>${this._escapeHtml(hex)}</span>
                         <span class="reader-color-share">${this._escapeHtml(pct)}%</span>
@@ -477,13 +810,13 @@
             if (!hasPrompt && !hasCheckpoint && !hasParams && generator === 'unknown') {
                 return this._t(
                     'reader.clipboardWarningMissingMeta',
-                    'This clipboard image did not include original SD metadata. Drag or browse the PNG file itself to read prompt, checkpoint, and params.',
+                    'This clipboard image did not keep the original image info. Drag in the real PNG file to read the prompt, model, and settings.',
                 );
             }
 
             return this._t(
                 'reader.clipboardWarning',
-                'Clipboard images may lose original SD PNG metadata. If prompt or checkpoint looks incomplete, drag-drop the original file instead.',
+                'Clipboard paste often loses the original image info. If something looks incomplete, open the original file instead.',
             );
         },
 
@@ -512,7 +845,7 @@
             if (statusEl) {
                 statusEl.textContent = this._t(
                     'reader.pasteArmed',
-                    'Clipboard capture is ready. Press Ctrl+V now. Clipboard images may lose SD metadata; drag-drop the original PNG for guaranteed metadata.',
+                    'Ready. Press Ctrl+V now. If you want the full prompt and image settings, the original PNG is still best.',
                 );
                 statusEl.className = 'reader-status warning';
                 statusEl.style.display = 'block';
@@ -527,6 +860,7 @@
 
             const sourceKind = options.sourceKind || 'file';
             this._currentSourceKind = sourceKind;
+            this._currentOriginalSourcePath = options.originalSourcePath || '';
             this._setClipboardPasteState(false);
 
             // Show preview immediately (no need to clear first)
@@ -546,7 +880,7 @@
             // Show loading
             const statusEl = document.getElementById('reader-status');
             if (statusEl) {
-                statusEl.textContent = this._t('reader.parsing', 'Parsing metadata...');
+                statusEl.textContent = this._t('reader.parsing', 'Reading image info...');
                 statusEl.className = 'reader-status';
                 statusEl.style.display = 'block';
             }
@@ -569,6 +903,7 @@
                 const result = await response.json();
                 this._currentResult = result;
                 this._currentImage = file;
+                this._currentSourcePath = result?.source_temp_path || '';
                 this._renderResult(result, file.name, { resetFormat: true, sourceKind });
 
                 const clipboardWarning = this._getClipboardWarning(result, sourceKind);
@@ -585,7 +920,7 @@
                 if (resultPanel) resultPanel.style.display = 'block';
             } catch (error) {
                 if (statusEl) {
-                    statusEl.textContent = this._t('reader.parseFailed', `Failed to parse: ${error.message}`, {
+                    statusEl.textContent = this._t('reader.parseFailed', `Could not read this image: ${error.message}`, {
                         message: error.message,
                     });
                     statusEl.className = 'reader-status error';
@@ -601,22 +936,29 @@
 
             try {
                 this._switchWorkspaceTool('reader');
-                const response = await fetch(`/api/image-file/${id}`);
+                const [response, detailResponse] = await Promise.all([
+                    fetch(`/api/image-file/${id}`),
+                    fetch(`/api/images/${id}`),
+                ]);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
 
                 const blob = await response.blob();
+                const detailPayload = detailResponse.ok ? await detailResponse.json().catch(() => null) : null;
                 const safeFilename = filename || `image-${id}.${(blob.type || 'image/png').split('/').pop() || 'png'}`;
                 const file = new File([blob], safeFilename, {
                     type: blob.type || 'image/png',
                     lastModified: Date.now(),
                 });
-                await this._handleFile(file, { sourceKind: 'library' });
+                await this._handleFile(file, {
+                    sourceKind: 'library',
+                    originalSourcePath: detailPayload?.image?.path || '',
+                });
                 return true;
             } catch (error) {
                 window.App?.showToast?.(
-                    this._t('reader.loadLibraryFailed', 'Failed to load image into Reader'),
+                    this._t('reader.loadLibraryFailed', 'Could not open this image in Reader'),
                     'error'
                 );
                 return false;
@@ -789,11 +1131,12 @@
             };
 
             if (assets.primary_model_name) {
+                const primaryModelType = assets.primary_model_type || this._t('generator.unknown', 'Unknown');
                 blocks.push(`
                     <div class="reader-model-asset-block">
                         <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModel', 'Primary Model'))}</div>
                         <div class="reader-model-asset-value">${this._escapeHtml(assets.primary_model_name)}</div>
-                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModelType', 'Primary Model Type'))}: ${this._escapeHtml(assets.primary_model_type || 'unknown')}</div>
+                        <div class="reader-model-asset-title">${this._escapeHtml(this._t('reader.primaryModelType', 'Primary Model Type'))}: ${this._escapeHtml(primaryModelType)}</div>
                     </div>
                 `);
             }
@@ -831,8 +1174,8 @@
             // Generator badge
             const genEl = document.getElementById('reader-generator');
             if (genEl) {
-                const gen = result.generator || 'unknown';
-                genEl.textContent = gen.toUpperCase();
+                const gen = String(result.generator || 'unknown').toLowerCase();
+                genEl.textContent = this._formatGeneratorLabel(gen);
                 genEl.className = `reader-generator-badge gen-${gen}`;
             }
 
@@ -935,6 +1278,7 @@
                 }
             }
 
+            this._populateMetadataEditor(result);
             this._renderModelAssetsSection(result);
 
             const negativeSection = document.getElementById('reader-negative-section');
@@ -1009,8 +1353,11 @@
         _clear() {
             this._currentImage = null;
             this._currentResult = null;
+            this._currentSourcePath = '';
+            this._currentOriginalSourcePath = '';
             this._currentSourceKind = 'file';
             this._setClipboardPasteState(false);
+            this._lastSuggestedOutputPath = '';
 
             const preview = document.getElementById('reader-image-preview');
             const dropZone = document.getElementById('reader-drop-zone');
@@ -1029,11 +1376,37 @@
                 statusEl.style.display = 'none';
             }
             const colorSection = document.getElementById('reader-color-section');
+            const metadataEditor = document.getElementById('reader-metadata-editor');
+            const metadataEditorBody = document.getElementById('reader-editor-body');
+            const metadataWarning = document.getElementById('reader-edit-format-warning');
             if (colorSection) colorSection.style.display = 'none';
             const modelAssetsSection = document.getElementById('reader-model-assets-section');
             const modelAssets = document.getElementById('reader-model-assets');
             if (modelAssetsSection) modelAssetsSection.style.display = 'none';
             if (modelAssets) modelAssets.innerHTML = '';
+            if (metadataEditor) metadataEditor.hidden = true;
+            if (metadataEditorBody) metadataEditorBody.style.display = 'none';
+            if (metadataWarning) {
+                metadataWarning.textContent = '';
+                metadataWarning.hidden = true;
+            }
+            [
+                'reader-edit-prompt',
+                'reader-edit-negative',
+                'reader-edit-seed',
+                'reader-edit-model',
+                'reader-edit-sampler',
+                'reader-edit-steps',
+                'reader-edit-cfg',
+                'reader-edit-size',
+                'reader-edit-loras',
+                'reader-edit-output-path',
+            ].forEach((id) => {
+                const input = document.getElementById(id);
+                if (input) input.value = '';
+            });
+            const formatSelect = document.getElementById('reader-edit-format');
+            if (formatSelect) formatSelect.value = 'png';
             this._updateFormatButton();
         },
 

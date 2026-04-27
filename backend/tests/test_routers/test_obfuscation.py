@@ -144,3 +144,41 @@ class TestObfuscationPreview:
         body = response.json()
         error_msg = body.get("detail") or body.get("error") or ""
         assert "Unsupported compat mode" in error_msg
+
+    def test_preview_rejects_oversized_upload_bytes(self, test_client, tmp_path, monkeypatch):
+        from routers import obfuscation as obfuscation_router
+
+        source_path = tmp_path / "source.png"
+        _create_png_with_metadata(source_path, "byte limit")
+        monkeypatch.setattr(obfuscation_router, "MAX_OBFUSCATE_SOURCE_BYTES", 32)
+
+        with open(source_path, "rb") as handle:
+            response = test_client.post(
+                "/api/obfuscate/preview",
+                files={"file": ("source.png", handle, "image/png")},
+                data={"mode": "encode"},
+            )
+
+        assert response.status_code == 413
+        body = response.json()
+        error_msg = body.get("detail") or body.get("error") or ""
+        assert "too large" in error_msg.lower()
+
+    def test_preview_rejects_oversized_pixel_dimensions(self, test_client, tmp_path, monkeypatch):
+        import obfuscation as obfuscation_module
+
+        source_path = tmp_path / "source.png"
+        Image.new("RGB", (40, 40), color="orange").save(source_path)
+        monkeypatch.setattr(obfuscation_module, "MAX_OBFUSCATE_SOURCE_PIXELS", 1000)
+
+        with open(source_path, "rb") as handle:
+            response = test_client.post(
+                "/api/obfuscate/preview",
+                files={"file": ("source.png", handle, "image/png")},
+                data={"mode": "encode"},
+            )
+
+        assert response.status_code == 413
+        body = response.json()
+        error_msg = body.get("detail") or body.get("error") or ""
+        assert "too large" in error_msg.lower()

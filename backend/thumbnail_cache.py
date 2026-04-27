@@ -14,6 +14,7 @@ import asyncio
 from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw
+from config import get_thumbnail_cache_dir
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 SUPPORTED_SIZES = {256, 384, 512}
 DEFAULT_SIZE = 256
 
-# Cache directory relative to backend folder
-CACHE_DIR = Path(__file__).parent / "thumbnails"
+# Cache directory relative to the package-local data root
+CACHE_DIR = Path(get_thumbnail_cache_dir())
 
 # Cache settings
 CACHE_MAX_AGE_DAYS = 30  # Invalidate cached thumbnails older than this

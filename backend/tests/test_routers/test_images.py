@@ -14,10 +14,12 @@ import sys
 import json
 import tempfile
 from pathlib import Path
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -152,6 +154,82 @@ class TestGetImages:
             assert img["generator"] == "comfyui"
             assert img["width"] >= 500
 
+    def test_get_images_skips_missing_files_and_backfills_cursor_page(self, test_client, tmp_path):
+        """Newest gallery pages should skip stale rows instead of returning an empty broken grid."""
+        import database as db
+
+        live_old = tmp_path / "live-old.png"
+        live_new = tmp_path / "live-new.png"
+        Image.new("RGB", (32, 32), color="blue").save(live_old)
+        Image.new("RGB", (32, 32), color="green").save(live_new)
+
+        live_old_id = db.add_image(path=str(live_old), filename=live_old.name, metadata_json="{}")
+        live_new_id = db.add_image(path=str(live_new), filename=live_new.name, metadata_json="{}")
+        missing_ids = [
+            db.add_image(path=str(tmp_path / f"missing-{index}.png"), filename=f"missing-{index}.png", metadata_json="{}")
+            for index in range(3)
+        ]
+
+        response = test_client.get("/api/images?limit=2")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == [live_new_id, live_old_id]
+        assert data["total"] == 2
+
+        for image_id in missing_ids:
+            row = db.get_image_by_id(image_id)
+            assert row["is_readable"] == 0
+            assert "file not found" in (row["read_error"] or "").lower()
+
+    def test_get_images_skips_missing_files_for_offset_sorts(self, test_client, tmp_path):
+        """Offset pagination should also backfill around stale rows for non-cursor sorts."""
+        import database as db
+
+        live_a = tmp_path / "live-c.png"
+        live_b = tmp_path / "live-d.png"
+        Image.new("RGB", (32, 32), color="red").save(live_a)
+        Image.new("RGB", (32, 32), color="yellow").save(live_b)
+
+        db.add_image(path=str(tmp_path / "aaa-missing.png"), filename="aaa-missing.png", metadata_json="{}")
+        db.add_image(path=str(tmp_path / "bbb-missing.png"), filename="bbb-missing.png", metadata_json="{}")
+        live_a_id = db.add_image(path=str(live_a), filename=live_a.name, metadata_json="{}")
+        live_b_id = db.add_image(path=str(live_b), filename=live_b.name, metadata_json="{}")
+
+        response = test_client.get("/api/images?sort_by=name_asc&limit=2")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == [live_a_id, live_b_id]
+        assert data["total"] == 2
+
+    def test_get_images_sanitizes_non_utf8_bytes_in_listing(self, test_client, test_db, tmp_path):
+        """List payloads should not crash when historical rows contain raw bytes."""
+        import database as db
+
+        image_path = tmp_path / "listing-bytes.png"
+        Image.new("RGB", (32, 32), color="purple").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE images SET filename = ?, generator = ? WHERE id = ?",
+                (b"listing-\xff.png", b"comfy\xffui", image_id),
+            )
+
+        response = test_client.get("/api/images?limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        image = next(item for item in data["images"] if item["id"] == image_id)
+        assert image["filename"] == "listing-\ufffd.png"
+        assert image["generator"] == "comfy\ufffdui"
+
 
 class TestGetSingleImage:
     """Tests for GET /api/images/{image_id} endpoint."""
@@ -206,6 +284,93 @@ class TestGetSingleImage:
         assert data["image"]["id"] == image_id
         assert "embedding" not in data["image"]
 
+    def test_get_existing_image_sanitizes_non_utf8_bytes_fields(self, test_client, test_db):
+        """Image detail payload should replace undecodable bytes instead of crashing."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/bytes-detail.png",
+            filename="bytes-detail.png",
+            metadata_json="{}",
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE images SET prompt = ?, metadata_json = ? WHERE id = ?",
+                (b"city\xffnight", b'{"raw":"\xff"}', image_id),
+            )
+
+        response = test_client.get(f"/api/images/{image_id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["image"]["prompt"] == "city\ufffdnight"
+        assert data["image"]["metadata_json"] == '{"raw":"\ufffd"}'
+
+
+class TestExportSelectionData:
+    """Tests for POST /api/images/export-data endpoint."""
+
+    def test_export_selection_data_returns_prompts_and_tags(self, test_client, test_db_with_images):
+        """Batch export payload should include prompt and tag data in request order."""
+        image_ids = test_db_with_images["image_ids"][:2]
+
+        response = test_client.post("/api/images/export-data", json={"image_ids": image_ids})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == image_ids
+        assert data["images"][0]["filename"]
+        assert "prompt" in data["images"][0]
+        assert isinstance(data["images"][0]["tags"], list)
+        assert data["missing_ids"] == []
+
+    def test_export_selection_data_reports_missing_ids(self, test_client, test_db_with_images):
+        """Missing images should not fail the whole export payload."""
+        existing_id = test_db_with_images["image_ids"][0]
+
+        response = test_client.post(
+            "/api/images/export-data",
+            json={"image_ids": [existing_id, 999999]},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == [existing_id]
+        assert data["missing_ids"] == [999999]
+
+    def test_export_selection_data_sanitizes_non_utf8_bytes(self, test_client, test_db):
+        """Export payloads should replace undecodable bytes instead of failing validation."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/export-bytes.png",
+            filename="export-bytes.png",
+            metadata_json="{}",
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE images SET filename = ?, prompt = ? WHERE id = ?",
+                (b"export-\xff.png", b"prompt\xffbytes", image_id),
+            )
+
+        response = test_client.post("/api/images/export-data", json={"image_ids": [image_id]})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["missing_ids"] == []
+        assert data["images"][0]["filename"] == "export-\ufffd.png"
+        assert data["images"][0]["prompt"] == "prompt\ufffdbytes"
+
+    def test_export_selection_data_rejects_empty_ids(self, test_client):
+        """Validation should reject empty export selections."""
+        response = test_client.post("/api/images/export-data", json={"image_ids": []})
+
+        assert response.status_code == 400
+
 
 class TestImageFileServing:
     """Tests for GET /api/image-file/{image_id} endpoint."""
@@ -252,6 +417,38 @@ class TestThumbnailGeneration:
         response = test_client.get(f"/api/image-thumbnail/{image_id}")
 
         assert response.status_code == 404
+
+    @pytest.mark.skipif(os.name == "nt", reason="WSL Windows-path remap is only relevant on POSIX hosts")
+    def test_thumbnail_windows_drive_path_resolves_under_wsl_mount(self, test_client, test_db):
+        """Windows drive paths stored in SQLite should resolve to /mnt/<drive>/ files under WSL."""
+        import database as db
+
+        repo_root = Path(__file__).resolve().parents[3]
+        if len(repo_root.parts) < 3 or repo_root.parts[1] != "mnt":
+            pytest.skip("Repository is not mounted from /mnt/<drive> in this environment")
+
+        drive = repo_root.parts[2]
+        mount_root = Path("/mnt") / drive
+        temp_dir = repo_root / ".tmp" / "pytest-wsl-paths"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        image_path = temp_dir / "windows-drive-thumb.png"
+
+        try:
+            Image.new("RGB", (64, 64), color="purple").save(image_path)
+            rest_parts = image_path.relative_to(mount_root).parts
+            windows_path = f"{drive.upper()}:\\{'\\'.join(rest_parts)}"
+
+            image_id = db.add_image(
+                path=windows_path,
+                filename=image_path.name,
+            )
+
+            response = test_client.get(f"/api/image-thumbnail/{image_id}")
+
+            assert response.status_code == 200
+            assert response.headers.get("content-type") in ["image/png", "image/jpeg", "image/webp"]
+        finally:
+            image_path.unlink(missing_ok=True)
 
 
 class TestAestheticEndpoints:
@@ -355,6 +552,94 @@ class TestAestheticEndpoints:
         assert response.headers.get("X-Thumbnail-Placeholder") == "UNREADABLE"
 
 
+class TestDeleteSelectedImages:
+    """Tests for POST /api/images/delete-selected endpoint."""
+
+    def test_delete_selected_images_requires_explicit_confirmation(self, test_client, test_db, tmp_path):
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "delete-confirm.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": False},
+        )
+
+        assert response.status_code == 400
+        error_text = response.json().get("detail") or response.json().get("error") or ""
+        assert "explicit confirmation" in error_text
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is not None
+
+    def test_delete_selected_images_removes_files_and_database_rows(self, test_client, test_db, tmp_path):
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "delete-success.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": True},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted"] == 1
+        assert payload["failed"] == []
+        assert payload["permanent_delete"] is True
+        assert not image_path.exists()
+        assert db.get_image_by_id(image_id) is None
+
+    def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path):
+        import database as db
+        from PIL import Image
+
+        existing_path = tmp_path / "delete-partial-existing.png"
+        missing_path = tmp_path / "delete-partial-missing.png"
+        Image.new("RGB", (8, 8), color="white").save(existing_path)
+
+        existing_id = db.add_image(
+            path=str(existing_path),
+            filename=existing_path.name,
+            metadata_json="{}",
+        )
+        missing_id = db.add_image(
+            path=str(missing_path),
+            filename=missing_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [existing_id, missing_id], "confirm_delete_files": True},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted"] == 1
+        assert payload["permanent_delete"] is True
+        assert len(payload["failed"]) == 1
+        assert payload["failed"][0]["image_id"] == missing_id
+        assert payload["failed"][0]["filename"] == missing_path.name
+        assert "not found on disk" in payload["failed"][0]["error"].lower()
+        assert not existing_path.exists()
+        assert db.get_image_by_id(existing_id) is None
+        assert db.get_image_by_id(missing_id) is not None
+
+
 class TestReparseImage:
     """Tests for POST /api/images/{image_id}/reparse endpoint."""
 
@@ -397,9 +682,21 @@ class TestUtilityImageEndpoints:
         assert data["width"] == 1024
         assert data["height"] == 768
 
-    def test_parse_uploaded_image_rejects_truncated_png(self, test_client, tmp_path):
-        from PIL import Image
+    def test_parse_uploaded_image_returns_temp_source_path_for_followup_save(self, test_client, mock_comfyui_image):
+        with open(mock_comfyui_image, "rb") as handle:
+            response = test_client.post(
+                "/api/parse-image",
+                files={"file": ("comfyui_image.png", handle, "image/png")},
+            )
 
+        assert response.status_code == 200
+        data = response.json()
+        temp_source_path = data.get("source_temp_path")
+        assert temp_source_path
+        assert Path(temp_source_path).exists()
+        assert temp_source_path.lower().endswith(".png")
+
+    def test_parse_uploaded_image_rejects_truncated_png(self, test_client, tmp_path):
         truncated_path = tmp_path / "truncated.png"
         Image.new("RGB", (64, 64), color="white").save(truncated_path)
         payload = truncated_path.read_bytes()
@@ -416,9 +713,180 @@ class TestUtilityImageEndpoints:
         detail = data.get("detail") or data.get("error") or data.get("message") or ""
         assert "parse" in detail.lower() or "image" in detail.lower()
 
+    def test_parse_uploaded_image_rejects_oversized_upload(self, test_client, monkeypatch):
+        from routers import images as images_router
+
+        monkeypatch.setattr(images_router, "PARSE_IMAGE_UPLOAD_MAX_BYTES", 1024)
+
+        response = test_client.post(
+            "/api/parse-image",
+            files={"file": ("too-large.png", b"x" * 1025, "image/png")},
+        )
+
+        assert response.status_code == 413
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "too large" in detail.lower()
+
+
+class TestImageMetadataEditor:
+    """Tests for POST /api/image-metadata/save-edited endpoint."""
+
+    def test_reader_metadata_edit_saves_new_png_without_overwriting(self, test_client, tmp_path):
+        from metadata_parser import parse_image
+
+        source = tmp_path / "source.png"
+        output = tmp_path / "source.metadata-edited.png"
+        Image.new("RGBA", (16, 16), (255, 255, 255, 180)).save(source)
+
+        response = test_client.post("/api/image-metadata/save-edited", json={
+            "source_path": str(source),
+            "output_path": str(output),
+            "format": "png",
+            "metadata": {
+                "prompt": "cat",
+                "negative_prompt": "bad anatomy",
+                "seed": "123",
+                "sampler": "Euler a",
+                "steps": 28,
+                "cfg_scale": 7.0,
+                "model": "fooModel.safetensors",
+                "size": "16x16",
+                "loras": "detail_tweaker, add_detail",
+            },
+            "allow_overwrite": False,
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert output.exists()
+        assert payload["output_path"] == str(output.resolve())
+        assert payload["format"] == "png"
+        assert payload["warnings"] == []
+
+        with Image.open(output) as saved:
+            parameters = saved.info.get("parameters") or ""
+            assert "cat" in parameters
+            assert "Negative prompt: bad anatomy" in parameters
+            assert "Steps: 28" in parameters
+
+        reparsed = parse_image(str(output))
+        assert reparsed["prompt"] == "cat"
+        assert reparsed["negative_prompt"] == "bad anatomy"
+        assert reparsed["checkpoint"] == "fooModel.safetensors"
+        assert reparsed["loras"] == ["detail_tweaker", "add_detail"]
+
+    def test_reader_metadata_edit_refuses_existing_output_without_confirmation(self, test_client, tmp_path):
+        source = tmp_path / "source.png"
+        output = tmp_path / "existing.png"
+        Image.new("RGB", (16, 16), "white").save(source)
+        Image.new("RGB", (16, 16), "black").save(output)
+
+        response = test_client.post("/api/image-metadata/save-edited", json={
+            "source_path": str(source),
+            "output_path": str(output),
+            "format": "png",
+            "metadata": {"prompt": "cat"},
+            "allow_overwrite": False,
+        })
+
+        assert response.status_code == 409
+        detail = response.json().get("detail") or response.json().get("error") or response.json().get("message") or ""
+        assert "already exists" in detail.lower()
+
+    def test_reader_metadata_edit_refuses_same_path_without_confirmation(self, test_client, tmp_path):
+        source = tmp_path / "same-path-source.png"
+        Image.new("RGB", (16, 16), "white").save(source)
+
+        response = test_client.post("/api/image-metadata/save-edited", json={
+            "source_path": str(source),
+            "output_path": str(source),
+            "format": "png",
+            "metadata": {"prompt": "cat"},
+            "allow_overwrite": False,
+        })
+
+        assert response.status_code == 409
+        detail = response.json().get("detail") or response.json().get("error") or response.json().get("message") or ""
+        assert "same as the source" in detail.lower() or "overwrite" in detail.lower()
+
+    def test_reader_metadata_edit_same_path_overwrite_refreshes_index_without_clearing_derived_state(
+        self,
+        test_client,
+        test_db,
+        tmp_path,
+    ):
+        import database as db
+
+        source = tmp_path / "same-path-refresh.png"
+        Image.new("RGBA", (16, 16), (255, 255, 255, 180)).save(source)
+
+        original_created_at = datetime(2024, 1, 2, 3, 4, 5)
+        image_id = db.add_image(
+            path=str(source),
+            filename=source.name,
+            generator="unknown",
+            prompt="before overwrite",
+            metadata_json="{}",
+            width=16,
+            height=16,
+            file_size=source.stat().st_size,
+            created_at=original_created_at,
+        )
+        db.add_tags(image_id, [{"tag": "kept_tag", "confidence": 0.88}])
+        with db.get_db() as conn:
+            conn.execute(
+                """
+                UPDATE images
+                SET tagged_at = ?, ai_caption = ?, aesthetic_score = ?, embedding = ?
+                WHERE id = ?
+                """,
+                ("2024-02-03 04:05:06", "keep caption", 6.5, b"\xaa\xbb\xcc", image_id),
+            )
+
+        response = test_client.post("/api/image-metadata/save-edited", json={
+            "source_path": str(source),
+            "output_path": str(source),
+            "format": "png",
+            "metadata": {
+                "prompt": "cat",
+                "negative_prompt": "bad anatomy",
+                "steps": 28,
+                "cfg_scale": 7.0,
+                "model": "fooModel.safetensors",
+                "size": "16x16",
+                "loras": "detail_tweaker, add_detail",
+            },
+            "allow_overwrite": True,
+        })
+
+        assert response.status_code == 200
+        image = db.get_image_by_id(image_id)
+        assert image["prompt"] == "cat"
+        assert image["negative_prompt"] == "bad anatomy"
+        assert image["checkpoint"] == "fooModel.safetensors"
+        assert str(image["created_at"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
+        assert {tag["tag"] for tag in db.get_image_tags(image_id)} == {"kept_tag"}
+
+        with db.get_db() as conn:
+            row = conn.execute(
+                """
+                SELECT tagged_at, ai_caption, aesthetic_score, embedding, source_mtime_ns, source_size
+                FROM images
+                WHERE id = ?
+                """,
+                (image_id,),
+            ).fetchone()
+
+        assert row["tagged_at"] == "2024-02-03 04:05:06"
+        assert row["ai_caption"] == "keep caption"
+        assert row["aesthetic_score"] == pytest.approx(6.5)
+        assert row["embedding"] == b"\xaa\xbb\xcc"
+        assert row["source_mtime_ns"] == source.stat().st_mtime_ns
+        assert row["source_size"] == source.stat().st_size
+
     def test_open_folder_selects_existing_image(self, test_client, tmp_path, monkeypatch):
         import database as db
-        from PIL import Image
         from routers import images as images_router
 
         image_path = tmp_path / "open-folder-test.png"

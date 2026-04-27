@@ -14,8 +14,36 @@
     const BIG_TOMATO_MODE = 'big_tomato';
     const SMALL_TOMATO_MODE = 'small_tomato';
     const PNG_SIGNATURE = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    const OBFUSCATE_MAX_FILE_BYTES_DEFAULT = 50 * 1024 * 1024;
+    const OBFUSCATE_MAX_IMAGE_PIXELS_DEFAULT = 40_000_000;
     const textEncoder = new TextEncoder();
     const textDecoder = new TextDecoder();
+
+    function getObfuscateTestFlag(name, fallback) {
+        const value = window?.__SD_SORTER_TEST_FLAGS__?.[name];
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function getObfuscateMaxFileBytes() {
+        return getObfuscateTestFlag('obfuscateMaxFileBytes', OBFUSCATE_MAX_FILE_BYTES_DEFAULT);
+    }
+
+    function getObfuscateMaxImagePixels() {
+        return getObfuscateTestFlag('obfuscateMaxImagePixels', OBFUSCATE_MAX_IMAGE_PIXELS_DEFAULT);
+    }
+
+    function tText(key, fallback, params) {
+        return window.I18n?.t?.(key, params) || fallback;
+    }
+
+    function formatMegapixelLimit(pixels) {
+        return `${(pixels / 1_000_000).toFixed(1)} MP`;
+    }
+
+    function formatMegabyteLimit(bytes) {
+        return `${Math.round(bytes / (1024 * 1024))} MB`;
+    }
 
     function normalizeCompatMode(value) {
         return value === SMALL_TOMATO_MODE ? SMALL_TOMATO_MODE : BIG_TOMATO_MODE;
@@ -466,12 +494,36 @@
     }
 
     async function blobToImageData(blob) {
+        const maxBytes = getObfuscateMaxFileBytes();
+        if (blob.size > maxBytes) {
+            throw new Error(
+                tText(
+                    'tools.obfuscateFileTooLarge',
+                    `Image file is too large for safe browser processing (max ${formatMegabyteLimit(maxBytes)}).`,
+                    { limit: formatMegabyteLimit(maxBytes) }
+                )
+            );
+        }
+
         const objectUrl = URL.createObjectURL(blob);
         try {
             const image = await loadImage(objectUrl);
+            const width = image.naturalWidth || image.width;
+            const height = image.naturalHeight || image.height;
+            const maxPixels = getObfuscateMaxImagePixels();
+            if ((width * height) > maxPixels) {
+                throw new Error(
+                    tText(
+                        'tools.obfuscatePixelsTooLarge',
+                        `Image dimensions are too large for safe browser processing (${width}x${height}, max ${formatMegapixelLimit(maxPixels)}).`,
+                        { width, height, limit: formatMegapixelLimit(maxPixels) }
+                    )
+                );
+            }
+
             const canvas = document.createElement('canvas');
-            canvas.width = image.naturalWidth || image.width;
-            canvas.height = image.naturalHeight || image.height;
+            canvas.width = width;
+            canvas.height = height;
             const context = canvas.getContext('2d');
             context.drawImage(image, 0, 0);
             return context.getImageData(0, 0, canvas.width, canvas.height);
@@ -497,8 +549,9 @@
         const preserveMetadata = compatMode === BIG_TOMATO_MODE && Boolean(options?.preserveMetadata);
         const legacyPngInfo = compatMode === BIG_TOMATO_MODE && Boolean(options?.legacyPngInfo);
         const sourceBlob = await resolveSourceBlob(source);
-        const sourceBytes = new Uint8Array(await sourceBlob.arrayBuffer());
-        const textChunks = preserveMetadata ? extractPngTextChunksFromBytes(sourceBytes) : [];
+        const textChunks = preserveMetadata
+            ? extractPngTextChunksFromBytes(new Uint8Array(await sourceBlob.arrayBuffer()))
+            : [];
         const imageData = await blobToImageData(sourceBlob);
         const { width, height } = imageData;
 

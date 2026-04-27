@@ -9,6 +9,7 @@ const ManualSortState = {
     currentImage: null,
     currentTags: [],
     folders: { w: '', a: '', s: '', d: '' },
+    operationMode: 'move',
     index: 0,
     total: 0,
     combo: 0,
@@ -25,9 +26,12 @@ const ManualSortState = {
     filters: null,
     hasSavedFilterState: false,
     inheritedCurrentGalleryFilters: false,
+    scopeMeta: null,
 };
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
+const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
+const MANUAL_SORT_OPERATION_MODE_KEY = 'manual_sort_operation_mode_v1';
 
 // Key mappings
 const KEY_MAP = {
@@ -59,6 +63,66 @@ function manualSortText(key, enText, zhText = enText) {
     const translated = window.I18n?.t?.(key);
     if (translated && translated !== key) return translated;
     return window.I18n?.getLang?.() === 'zh-CN' ? zhText : enText;
+}
+
+function formatManualSortI18n(key, fallback, replacements = {}) {
+    const raw = window.I18n?.t?.(key) || fallback;
+    return Object.entries(replacements).reduce(
+        (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
+        raw
+    );
+}
+
+function normalizeManualSortOperationMode(mode) {
+    return mode === 'copy' ? 'copy' : 'move';
+}
+
+function getManualSortOperationMode() {
+    return normalizeManualSortOperationMode(ManualSortState.operationMode);
+}
+
+function getManualSortOperationLabel(mode = getManualSortOperationMode()) {
+    return mode === 'copy'
+        ? manualSortText('manual.actionModeCopy', 'Copy and keep originals', '复制并保留原图')
+        : manualSortText('manual.actionModeMove', 'Move originals', '移动原图');
+}
+
+function getManualSortOperationVerb(mode = getManualSortOperationMode()) {
+    return mode === 'copy'
+        ? manualSortText('manual.actionVerbCopy', 'copy', '复制')
+        : manualSortText('manual.actionVerbMove', 'move', '移动');
+}
+
+function setManualSortOperationMode(mode, { persist = true, updateUi = true } = {}) {
+    ManualSortState.operationMode = normalizeManualSortOperationMode(mode);
+    if (persist) {
+        localStorage.setItem(MANUAL_SORT_OPERATION_MODE_KEY, ManualSortState.operationMode);
+    }
+    if (updateUi) {
+        document.querySelectorAll('input[name="manual-sort-operation"]').forEach((input) => {
+            input.checked = input.value === ManualSortState.operationMode;
+        });
+        const helper = document.getElementById('manual-sort-operation-help');
+        if (helper) {
+            helper.textContent = ManualSortState.operationMode === 'copy'
+                ? manualSortText(
+                    'manual.actionModeCopyHelp',
+                    'Copies into the sort folders and keeps the originals in place. Safer when date-based library order matters.',
+                    '复制到目标文件夹，同时保留原图不动。需要保住按日期整理的库时更安全。'
+                )
+                : manualSortText(
+                    'manual.actionModeMoveHelp',
+                    'Moves the original files into the sort folders.',
+                    '把原文件直接移动到目标文件夹。'
+                );
+        }
+        const summary = document.getElementById('manual-sort-execution-mode');
+        if (summary) {
+            summary.textContent = formatManualSortI18n('manual.executionMode', 'Action mode: {mode}', {
+                mode: getManualSortOperationLabel(),
+            });
+        }
+    }
 }
 
 function serializeManualSortFilters(filters) {
@@ -108,6 +172,33 @@ function saveManualSortFilters() {
     localStorage.setItem(MANUAL_SORT_FILTER_STATE_KEY, JSON.stringify(serializeManualSortFilters(ManualSortState.filters || {})));
 }
 
+function createDefaultManualSortScopeMeta() {
+    return {
+        lastSyncedAt: null,
+        acknowledgedGallerySignature: null,
+    };
+}
+
+function loadManualSortScopeMeta() {
+    try {
+        const raw = localStorage.getItem(MANUAL_SORT_SCOPE_META_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        ManualSortState.scopeMeta = {
+            ...createDefaultManualSortScopeMeta(),
+            ...(parsed && typeof parsed === 'object' ? parsed : {}),
+        };
+    } catch (_) {
+        ManualSortState.scopeMeta = createDefaultManualSortScopeMeta();
+    }
+}
+
+function saveManualSortScopeMeta() {
+    if (!ManualSortState.scopeMeta) {
+        ManualSortState.scopeMeta = createDefaultManualSortScopeMeta();
+    }
+    localStorage.setItem(MANUAL_SORT_SCOPE_META_KEY, JSON.stringify(ManualSortState.scopeMeta));
+}
+
 function setManualSortFilters(nextFilters) {
     ManualSortState.filters = serializeManualSortFilters(nextFilters || {});
     saveManualSortFilters();
@@ -120,14 +211,197 @@ function getManualSortFilters() {
     return ManualSortState.filters;
 }
 
+function getCurrentGalleryManualSortFilters() {
+    const clone = window.App?.cloneFilterState;
+    if (typeof clone === 'function') {
+        return serializeManualSortFilters(clone(window.App?.AppState?.filters || null));
+    }
+    return serializeManualSortFilters({});
+}
+
+function formatManualSortScopeTime(isoString) {
+    if (!isoString) return '';
+    const parsed = new Date(isoString);
+    if (Number.isNaN(parsed.getTime())) return '';
+    const locale = window.I18n?.getLang?.() === 'zh-CN' ? 'zh-CN' : 'en-US';
+    return parsed.toLocaleString(locale, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function markManualSortScopeCustomized() {
+    ManualSortState.scopeMeta = createDefaultManualSortScopeMeta();
+    saveManualSortScopeMeta();
+}
+
+function markManualSortScopeSyncedFromGallery() {
+    ManualSortState.scopeMeta = {
+        lastSyncedAt: new Date().toISOString(),
+        acknowledgedGallerySignature: null,
+    };
+    saveManualSortScopeMeta();
+}
+
+function getManualSortToolLabel() {
+    return manualSortText('nav.manual', 'Manual Sort', '手动分类');
+}
+
+function getManualSortScopeSignature(filters) {
+    return JSON.stringify({
+        generators: filters.generators || [],
+        tags: filters.tags || [],
+        ratings: filters.ratings || [],
+        checkpoints: filters.checkpoints || [],
+        loras: filters.loras || [],
+        prompts: filters.prompts || [],
+        search: filters.search || '',
+        minWidth: filters.minWidth || null,
+        maxWidth: filters.maxWidth || null,
+        minHeight: filters.minHeight || null,
+        maxHeight: filters.maxHeight || null,
+        aspectRatio: filters.aspectRatio || null,
+        minAesthetic: filters.minAesthetic ?? null,
+        maxAesthetic: filters.maxAesthetic ?? null,
+    });
+}
+
+function getManualSortScopeStatus() {
+    if (!ManualSortState.scopeMeta) {
+        loadManualSortScopeMeta();
+    }
+
+    const savedFilters = getManualSortFilters();
+    const galleryFilters = getCurrentGalleryManualSortFilters();
+    const savedSignature = getManualSortScopeSignature(savedFilters || {});
+    const gallerySignature = getManualSortScopeSignature(galleryFilters || {});
+    const lastSyncedAt = ManualSortState.scopeMeta?.lastSyncedAt || null;
+    const lastSyncedLabel = formatManualSortScopeTime(lastSyncedAt);
+    const matchesGallery = savedSignature === gallerySignature;
+    const isAcknowledged = Boolean(
+        gallerySignature &&
+        ManualSortState.scopeMeta?.acknowledgedGallerySignature === gallerySignature
+    );
+
+    return {
+        gallerySignature,
+        lastSyncedAt,
+        lastSyncedLabel,
+        matchesGallery,
+        isAcknowledged,
+    };
+}
+
+function updateManualSortExecutionScopeSummary() {
+    const summaryEl = document.getElementById('manual-sort-execution-scope');
+    if (!summaryEl) return;
+
+    const status = getManualSortScopeStatus();
+    const tool = getManualSortToolLabel();
+    summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
+        ? formatManualSortI18n('scope.sessionSynced', 'Session will use the {tool} scope synced from Gallery at {time}.', {
+            tool,
+            time: status.lastSyncedLabel,
+        })
+        : formatManualSortI18n('scope.sessionSaved', 'Session will use the saved {tool} scope, not the live Gallery filters.', {
+            tool,
+        });
+}
+
+function updateManualSortScopeStatus() {
+    const card = document.getElementById('manual-sort-scope-status');
+    const badge = document.getElementById('manual-sort-scope-badge');
+    const meta = document.getElementById('manual-sort-scope-meta');
+    const detail = document.getElementById('manual-sort-scope-detail');
+    const useBtn = document.getElementById('btn-manual-sort-use-gallery-scope');
+    const resyncBtn = document.getElementById('btn-manual-sort-resync-scope');
+    const keepBtn = document.getElementById('btn-manual-sort-keep-scope');
+    if (!card || !badge || !meta || !detail || !useBtn || !resyncBtn || !keepBtn) return;
+
+    const tool = getManualSortToolLabel();
+    const status = getManualSortScopeStatus();
+
+    badge.textContent = formatManualSortI18n('scope.usingSaved', 'Using saved {tool} scope', { tool });
+    meta.textContent = status.lastSyncedLabel
+        ? formatManualSortI18n('scope.syncedAt', 'Synced from current Gallery filters at {time}', {
+            time: status.lastSyncedLabel,
+        })
+        : formatManualSortI18n('scope.standalone', 'This saved scope will not change when Gallery filters change later.');
+
+    if (status.matchesGallery && status.lastSyncedLabel) {
+        detail.textContent = formatManualSortI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
+    } else if (status.matchesGallery) {
+        detail.textContent = formatManualSortI18n(
+            'scope.alignedUnsynced',
+            '{tool} currently matches the Gallery filters, but future Gallery changes will not update it automatically.',
+            { tool }
+        );
+    } else if (status.isAcknowledged) {
+        detail.textContent = formatManualSortI18n(
+            'scope.kept',
+            'Continuing with the saved {tool} scope. Current Gallery filters were not copied.',
+            { tool }
+        );
+    } else {
+        detail.textContent = formatManualSortI18n(
+            'scope.mismatch',
+            'Gallery filters changed. {tool} will keep using its saved scope until you resync.',
+            { tool }
+        );
+    }
+
+    card.classList.toggle('is-synced', status.matchesGallery);
+    card.classList.toggle('is-warning', !status.matchesGallery && !status.isAcknowledged);
+
+    useBtn.hidden = Boolean(status.lastSyncedAt);
+    resyncBtn.hidden = !Boolean(status.lastSyncedAt);
+    keepBtn.hidden = status.matchesGallery || status.isAcknowledged;
+}
+
+function syncManualSortFiltersFromGallery(options = {}) {
+    const { toastKey = 'scope.copiedToast' } = options;
+    ManualSortState.inheritedCurrentGalleryFilters = true;
+    setManualSortFilters(getCurrentGalleryManualSortFilters());
+    markManualSortScopeSyncedFromGallery();
+    updateManualSortFilterSummary();
+
+    if (toastKey) {
+        window.App?.showToast?.(
+            formatManualSortI18n(toastKey, 'Copied current Gallery filters into {tool}.', {
+                tool: getManualSortToolLabel(),
+            }),
+            'success'
+        );
+    }
+}
+
+function keepManualSortSavedScope() {
+    const status = getManualSortScopeStatus();
+    if (!status.gallerySignature) return;
+    ManualSortState.scopeMeta = {
+        ...(ManualSortState.scopeMeta || createDefaultManualSortScopeMeta()),
+        acknowledgedGallerySignature: status.gallerySignature,
+    };
+    saveManualSortScopeMeta();
+    updateManualSortScopeStatus();
+    updateManualSortExecutionScopeSummary();
+    window.App?.showToast?.(
+        formatManualSortI18n('scope.keptToast', 'Kept the saved {tool} scope.', {
+            tool: getManualSortToolLabel(),
+        }),
+        'info'
+    );
+}
+
 function maybeAdoptManualSortFiltersFromGallery() {
     if (ManualSortState.hasSavedFilterState || ManualSortState.inheritedCurrentGalleryFilters) {
         return false;
     }
 
-    ManualSortState.inheritedCurrentGalleryFilters = true;
-    setManualSortFilters(window.App?.cloneFilterState?.(window.App?.AppState?.filters || null));
-    updateManualSortFilterSummary();
+    syncManualSortFiltersFromGallery({ toastKey: null });
     return true;
 }
 
@@ -138,6 +412,12 @@ async function initManualSort() {
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
     loadManualSortFilters();
+    loadManualSortScopeMeta();
+    setManualSortOperationMode(localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'move', {
+        persist: false,
+        updateUi: true,
+    });
+    updateManualSortFilterSummary();
 
     // Folder path inputs
     $$('.folder-path-input').forEach(input => {
@@ -176,6 +456,14 @@ async function initManualSort() {
         });
     });
 
+    document.querySelectorAll('input[name="manual-sort-operation"]').forEach((input) => {
+        input.addEventListener('change', () => {
+            if (input.checked) {
+                setManualSortOperationMode(input.value);
+            }
+        });
+    });
+
     // Edit Filters button - open unified filter modal
     const filterBtn = $('#btn-manual-sort-filters');
     if (filterBtn) {
@@ -189,16 +477,26 @@ async function initManualSort() {
                     filterState: getManualSortFilters(),
                     onApply: (filters) => {
                         setManualSortFilters(filters);
+                        markManualSortScopeCustomized();
                         updateManualSortFilterSummary();
                     },
                     onReset: (filters) => {
                         setManualSortFilters(filters);
+                        markManualSortScopeCustomized();
                         updateManualSortFilterSummary();
                     },
                 });
             }
         });
     }
+
+    $('#btn-manual-sort-use-gallery-scope')?.addEventListener('click', () => {
+        syncManualSortFiltersFromGallery({ toastKey: 'scope.copiedToast' });
+    });
+    $('#btn-manual-sort-resync-scope')?.addEventListener('click', () => {
+        syncManualSortFiltersFromGallery({ toastKey: 'scope.resyncedToast' });
+    });
+    $('#btn-manual-sort-keep-scope')?.addEventListener('click', keepManualSortSavedScope);
 
     // Start sorting button
     const startBtn = $('#btn-start-sorting');
@@ -223,17 +521,30 @@ async function initManualSort() {
     if (discardBtn) {
         discardBtn.addEventListener('click', () => {
             window.App.showConfirm(
-                'Discard Saved Session',
-                'Delete the saved manual-sort session and lose the remaining progress? This cannot be undone.',
+                manualSortText('manual.discardSessionTitle', 'Discard Saved Session', '丢弃已保存会话'),
+                manualSortText(
+                    'manual.discardSessionMessage',
+                    'Delete the saved manual-sort session and lose the remaining progress? This cannot be undone.',
+                    '要删除已保存的手动分类会话，并丢失剩余进度吗？此操作无法撤销。'
+                ),
                 async () => {
                     try {
                         await window.App.API.delete('/api/sort/session');
                         const banner = $('#sort-resume-banner');
                         if (banner) banner.style.display = 'none';
-                        window.App.showToast('Saved session discarded', 'success');
+                        window.App.showToast(
+                            manualSortText('manual.discardSessionSuccess', 'Saved session discarded', '已丢弃已保存会话'),
+                            'success'
+                        );
                     } catch (e) {
                         if (window.Logger) Logger.warn('Failed to discard session:', e);
-                        window.App.showToast(formatUserError(e, 'Failed to discard saved session'), 'error');
+                        window.App.showToast(
+                            formatUserError(
+                                e,
+                                manualSortText('manual.discardSessionFailed', 'Failed to discard saved session', '丢弃已保存会话失败')
+                            ),
+                            'error'
+                        );
                     }
                 }
             );
@@ -249,6 +560,15 @@ async function initManualSort() {
         }
     }, 100);
 
+    document.addEventListener('gallery-filters-changed', () => {
+        updateManualSortScopeStatus();
+        updateManualSortExecutionScopeSummary();
+    });
+    document.addEventListener('languageChanged', () => {
+        updateManualSortFilterSummary();
+        setManualSortOperationMode(ManualSortState.operationMode, { persist: false, updateUi: true });
+    });
+
     // Check for saved session on the server
     try {
         const session = await window.App.API.get('/api/sort/current').catch(e => {
@@ -260,7 +580,11 @@ async function initManualSort() {
             if (banner) {
                 banner.style.display = 'flex';
                 const countEl = banner.querySelector('.resume-count');
-                if (countEl) countEl.textContent = `${session.remaining} images remaining`;
+                if (countEl) {
+                    countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
+                        count: session.remaining,
+                    });
+                }
             }
         }
     } catch(e) {
@@ -272,6 +596,8 @@ async function initManualSort() {
 
 async function startSorting() {
     const { $, $$, API, showToast } = window.App;
+    const operationMode = getManualSortOperationMode();
+    const operationLabel = getManualSortOperationLabel(operationMode);
 
     // Collect folder paths
     const folders = {};
@@ -283,17 +609,38 @@ async function startSorting() {
 
     // Validate at least one folder
     if (Object.keys(folders).length === 0) {
-        showToast('Please configure at least one destination folder', 'error');
+        showToast(manualSortText('manual.configureFolder', 'Please configure at least one destination folder', '请至少配置一个目标文件夹'), 'error');
         return;
     }
 
-    // Confirmation dialog before starting (files will be moved)
+    // Confirmation dialog before starting (files will be moved/copied)
+    const scopeStatus = getManualSortScopeStatus();
+    const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
+        ? formatManualSortI18n('scope.executeSynced', 'Scope: saved {tool} filters (last synced from Gallery at {time})', {
+            tool: getManualSortToolLabel(),
+            time: scopeStatus.lastSyncedLabel,
+        })
+        : formatManualSortI18n('scope.executeSaved', 'Scope: saved {tool} filters', {
+            tool: getManualSortToolLabel(),
+        });
     const confirmMessage = window.I18n?.getLang?.() === 'zh-CN'
-        ? '开始排序后，图片将被移动到对应文件夹。确定开始吗？'
-        : 'Starting a sort session will move images to the configured folders. Are you sure?';
+        ? formatManualSortI18n(
+            operationMode === 'copy' ? 'manual.startSortingConfirmCopy' : 'manual.startSortingConfirmMove',
+            operationMode === 'copy'
+                ? '开始排序后，图片会被复制到对应文件夹，原图保持不动。\n\n操作模式：{mode}\n{scope}\n确定开始吗？'
+                : '开始排序后，图片将被移动到对应文件夹。\n\n操作模式：{mode}\n{scope}\n确定开始吗？',
+            { scope: scopeLine, mode: operationLabel }
+        )
+        : formatManualSortI18n(
+            operationMode === 'copy' ? 'manual.startSortingConfirmCopy' : 'manual.startSortingConfirmMove',
+            operationMode === 'copy'
+                ? 'Starting a sort session will copy images to the configured folders and keep the originals in place.\n\nAction mode: {mode}\n{scope}\nAre you sure?'
+                : 'Starting a sort session will move images to the configured folders.\n\nAction mode: {mode}\n{scope}\nAre you sure?',
+            { scope: scopeLine, mode: operationLabel }
+        );
     const confirmed = await new Promise(resolve => {
         window.App.showConfirm(
-            window.I18n?.getLang?.() === 'zh-CN' ? '确认开始排序' : 'Start Sorting',
+            manualSortText('manual.startSortingTitle', 'Start Sorting', '确认开始排序'),
             confirmMessage,
             () => resolve(true),
             () => resolve(false)
@@ -302,6 +649,7 @@ async function startSorting() {
     if (!confirmed) return;
 
     ManualSortState.folders = folders;
+    setManualSortOperationMode(operationMode, { persist: true, updateUi: true });
 
     // Save destination folders for quick access later
     Object.keys(folders).forEach(key => {
@@ -347,7 +695,8 @@ async function startSorting() {
             {
                 min: f.minAesthetic,
                 max: f.maxAesthetic,
-            }
+            },
+            operationMode,
         );
 
         if (result.total_images === 0) {
@@ -426,7 +775,7 @@ async function startSorting() {
         window.AudioManager?.play('start');
 
     } catch (error) {
-        showToast(formatUserError(error, "Failed to start sorting"), "error");
+        showToast(formatUserError(error, manualSortText('manual.startFailed', 'Failed to start sorting', '开始排序失败')), "error");
     }
 }
 
@@ -516,6 +865,10 @@ function applyCurrentSortPayload(result, options = {}) {
     const { $, API } = window.App;
     const { cacheBust = false } = options;
 
+    if (result?.operation_mode) {
+        setManualSortOperationMode(result.operation_mode, { persist: true, updateUi: true });
+    }
+
     if (result?.folders && typeof result.folders === 'object') {
         ManualSortState.folders = { ...ManualSortState.folders, ...result.folders };
         restoreFolderInputs();
@@ -580,7 +933,7 @@ async function resumeSavedSession() {
         if (!session || session.done || !session.image) {
             const banner = $('#sort-resume-banner');
             if (banner) banner.style.display = 'none';
-            showToast('No saved sorting session to resume', 'info');
+            showToast(manualSortText('manual.noSavedSession', 'No saved sorting session to resume', '没有可恢复的已保存排序会话'), 'info');
             return;
         }
 
@@ -597,6 +950,7 @@ async function resumeSavedSession() {
         ManualSortState.skippedCount = 0;
         ManualSortState.undoAvailable = false;
         ManualSortState.redoAvailable = false;
+        setManualSortOperationMode(session.operation_mode || ManualSortState.operationMode, { persist: true, updateUi: true });
         RedoStack.clear();
 
         if (!Object.keys(ManualSortState.folders).length) {
@@ -615,7 +969,7 @@ async function resumeSavedSession() {
         const banner = $('#sort-resume-banner');
         if (banner) banner.style.display = 'flex';
         Logger.error('Failed to resume saved session:', error);
-        showToast(formatUserError(error, 'Failed to resume saved session'), 'error');
+        showToast(formatUserError(error, manualSortText('manual.resumeFailed', 'Failed to resume saved session', '恢复已保存会话失败')), 'error');
     }
 }
 
@@ -663,7 +1017,7 @@ function updateProgress() {
         const speed = recentActions.length > 1
             ? (recentActions.length / ((now - recentActions[0]) / 1000)).toFixed(1)
             : '0.0';
-        speedEl.textContent = speed + '/s';
+        speedEl.textContent = formatManualSortI18n('manual.actionsPerSecond', '{speed}/s', { speed });
     }
 
     // Segmented progress bar
@@ -694,7 +1048,7 @@ function updateGalleryPreview() {
     const endIdx = Math.min(ManualSortState.images?.length || 0, ManualSortState.index + 11);
 
     if (!ManualSortState.images || ManualSortState.images.length === 0) {
-        container.innerHTML = '<span style="color: var(--text-muted); font-size: 12px;">No images loaded</span>';
+        container.innerHTML = `<span style="color: var(--text-muted); font-size: 12px;">${manualSortText('manual.noImagesLoaded', 'No images loaded', '还没有载入图片')}</span>`;
         return;
     }
 
@@ -711,7 +1065,7 @@ function updateGalleryPreview() {
         }
 
         thumbsHTML.push(`
-            <div class="${className}" data-index="${i}" title="Image ${i + 1}">
+            <div class="${className}" data-index="${i}" title="${escapeHtml(formatManualSortI18n('manual.previewImageTitle', 'Image {index}', { index: i + 1 }))}">
                 <img src="${API?.getThumbnailUrl?.(img.id) ?? `/api/image-thumbnail/${img.id}?size=256`}" alt="" loading="lazy">
             </div>
         `);
@@ -770,6 +1124,7 @@ function handleSortKeypress(e) {
 
 async function performMove(folderKey) {
     const { $, API, showToast } = window.App;
+    const operationVerb = getManualSortOperationVerb();
 
     // Prevent race condition from rapid keypresses
     if (ManualSortState.isProcessing) return;
@@ -778,7 +1133,9 @@ async function performMove(folderKey) {
     try {
         // Check if folder is configured
         if (!ManualSortState.folders[folderKey]) {
-            showToast(`Folder ${folderKey.toUpperCase()} not configured`, 'error');
+            showToast(formatManualSortI18n('manual.folderNotConfigured', 'Folder {key} is not configured', {
+                key: folderKey.toUpperCase(),
+            }), 'error');
             return;
         }
 
@@ -803,7 +1160,13 @@ async function performMove(folderKey) {
 
         if (result.error) {
             updateHistoryControlState(result);
-            showToast('Failed to move image: ' + result.error, 'error');
+            showToast(
+                formatManualSortI18n('manual.operationFailedWithReason', 'Failed to {operation} image: {reason}', {
+                    operation: operationVerb,
+                    reason: result.error,
+                }),
+                'error'
+            );
             return;
         }
 
@@ -815,8 +1178,13 @@ async function performMove(folderKey) {
         await loadCurrentImage(result);
 
     } catch (error) {
-        Logger.error('Failed to move image:', error);
-        showToast('Failed to move image', 'error');
+        Logger.error(`Failed to ${operationVerb} image:`, error);
+        showToast(
+            formatManualSortI18n('manual.operationFailed', 'Failed to {operation} image', {
+                operation: operationVerb,
+            }),
+            'error'
+        );
     } finally {
         ManualSortState.isProcessing = false;
     }
@@ -846,7 +1214,12 @@ async function performSkip() {
         const result = await API.sortAction('skip');
         if (result.error) {
             updateHistoryControlState(result);
-            showToast('Failed to skip image: ' + result.error, 'error');
+            showToast(
+                formatManualSortI18n('manual.skipFailedWithReason', 'Failed to skip image: {reason}', {
+                    reason: result.error,
+                }),
+                'error'
+            );
             return;
         }
 
@@ -858,7 +1231,7 @@ async function performSkip() {
 
     } catch (error) {
         Logger.error('Failed to skip:', error);
-        showToast('Failed to skip image', 'error');
+        showToast(manualSortText('manual.skipFailed', 'Failed to skip image', '跳过图片失败'), 'error');
     } finally {
         ManualSortState.isProcessing = false;
     }
@@ -880,15 +1253,15 @@ async function undoLastAction() {
         // Check if there was nothing to undo
         if (result.status === 'no_history') {
             updateHistoryControlState(result);
-            showToast('Nothing to undo', 'info');
+            showToast(manualSortText('manual.undoEmpty', 'Nothing to undo', '没有可撤销的操作'), 'info');
             return;
         }
 
         await loadCurrentImage(result);
-        showToast('Undid last action', 'info');
+        showToast(manualSortText('manual.undoSuccess', 'Undid last action', '已撤销上一步'), 'info');
     } catch (error) {
         Logger.error('Failed to undo:', error);
-        showToast('Failed to undo', 'error');
+        showToast(manualSortText('manual.undoFailed', 'Failed to undo', '撤销失败'), 'error');
     }
 }
 
@@ -963,7 +1336,11 @@ function finishSorting() {
     const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 
     showToast(
-        `Sorting complete! ${ManualSortState.sortedCount} sorted, ${ManualSortState.skippedCount} skipped in ${timeStr}`,
+        formatManualSortI18n('manual.finishSummary', 'Sorting complete. {sorted} sorted, {skipped} skipped in {time}.', {
+            sorted: ManualSortState.sortedCount,
+            skipped: ManualSortState.skippedCount,
+            time: timeStr,
+        }),
         'success'
     );
 
@@ -999,10 +1376,14 @@ function exitSorting() {
     if (banner && remaining > 0) {
         banner.style.display = 'flex';
         const countEl = banner.querySelector('.resume-count');
-        if (countEl) countEl.textContent = `${remaining} images remaining`;
+        if (countEl) {
+            countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
+                count: remaining,
+            });
+        }
     }
 
-    showToast('Sorting paused. You can resume later.', 'info');
+    showToast(manualSortText('manual.sortingPaused', 'Sorting paused. You can resume later.', '排序已暂停，稍后可以继续。'), 'info');
 
     // Refresh gallery to show updated image locations
     if (window.App && window.App.loadImages) {
@@ -1051,6 +1432,9 @@ function updateManualSortFilterSummary() {
     // Dimensions
     const dimEl = $('#manual-sort-summary-dimensions');
     if (dimEl) dimEl.textContent = summary.dimensions;
+
+    updateManualSortScopeStatus();
+    updateManualSortExecutionScopeSummary();
 }
 
 // ============== Utilities ==============
@@ -1193,7 +1577,7 @@ async function redoLastAction() {
 
         if (result.status === 'no_redo') {
             updateHistoryControlState(result);
-            showToast('Nothing to redo', 'info');
+            showToast(manualSortText('manual.redoEmpty', 'Nothing to redo', '没有可重做的操作'), 'info');
             return;
         }
 
@@ -1211,13 +1595,22 @@ async function redoLastAction() {
         await loadCurrentImage(result);
 
         if (result.redone_action === 'move' && result.folder_key) {
-            showToast('Redid move to ' + result.folder_key.toUpperCase(), 'info');
+            showToast(
+                formatManualSortI18n(
+                    getManualSortOperationMode() === 'copy' ? 'manual.redoCopy' : 'manual.redoMove',
+                    getManualSortOperationMode() === 'copy' ? 'Redid copy to {key}' : 'Redid move to {key}',
+                    {
+                    key: result.folder_key.toUpperCase(),
+                    }
+                ),
+                'info'
+            );
         } else {
-            showToast('Redid skip', 'info');
+            showToast(manualSortText('manual.redoSkip', 'Redid skip', '已重做跳过'), 'info');
         }
     } catch (error) {
         Logger.error('Failed to redo:', error);
-        showToast('Failed to redo', 'error');
+        showToast(manualSortText('manual.redoFailed', 'Failed to redo', '重做失败'), 'error');
     }
 }
 

@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/static/css/image-obfuscate.css">
     <link rel="stylesheet" href="/static/css/new-views.css">
     <link rel="stylesheet" href="/static/css/ui-refresh.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
         .folder-path-row { display: flex; gap: 8px; align-items: stretch; }
@@ -89,7 +89,7 @@
 
 <body>
     <!-- Skip Link for Keyboard Users -->
-    <a href="#main-content" class="skip-link" aria-label="Skip to main content">
+    <a href="#main-content" class="skip-link" aria-label="Skip to main content" data-i18n="a11y.skipToMain" data-i18n-aria="a11y.skipToMain">
         Skip to main content
     </a>
 
@@ -110,35 +110,36 @@
                 <span class="hamburger-line" aria-hidden="true"></span>
             </button>
 
-            <div class="nav-tabs" role="tablist" aria-label="Application views">
-                <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
-                    <span class="tab-icon" aria-hidden="true">🖼️</span>
-                    <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
-                </button>
-                <button class="nav-tab" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
-                    <span class="tab-text" data-i18n="nav.reader">Image Reader</span>
-                </button>
-                <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
-                    <span class="tab-icon" aria-hidden="true">🔳</span>
-                    <span class="tab-text" data-i18n="nav.censor">Edit</span>
-                </button>
-                <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
-                    <span class="tab-icon" aria-hidden="true">🔍</span>
-                    <span class="tab-text" data-i18n="nav.similar">Similar</span>
-                </button>
-                <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
-                    <span class="tab-icon" aria-hidden="true">🎨</span>
-                    <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
-                </button>
-                <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
-                    <span class="tab-icon" aria-hidden="true">🧪</span>
-                    <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
-                </button>
-                <button class="nav-tab" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
-                    <span class="tab-icon" aria-hidden="true">📁</span>
-                    <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
-                </button>
-            </div>
+                <div class="nav-tabs" role="tablist" aria-label="Application views">
+                    <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
+                        <span class="tab-icon" aria-hidden="true">🖼️</span>
+                        <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
+                    </button>
+                    <button class="nav-tab" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
+                        <span class="tab-text" data-i18n="nav.reader">Reader</span>
+                    </button>
+                    <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
+                        <span class="tab-icon" aria-hidden="true">🔳</span>
+                        <span class="tab-text" data-i18n="nav.censor">Edit</span>
+                    </button>
+                    <button class="nav-tab" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
+                        <span class="tab-icon" aria-hidden="true">📁</span>
+                        <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
+                    </button>
+                    <span class="nav-divider" aria-hidden="true"></span>
+                    <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
+                        <span class="tab-icon" aria-hidden="true">🔍</span>
+                        <span class="tab-text" data-i18n="nav.similar">Similar</span>
+                    </button>
+                    <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
+                        <span class="tab-icon" aria-hidden="true">🎨</span>
+                        <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
+                    </button>
+                    <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
+                        <span class="tab-icon" aria-hidden="true">🧪</span>
+                        <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
+                    </button>
+                </div>
 
             <!-- Mobile Navigation Menu (Overlay) -->
             <div class="mobile-nav-overlay" id="mobile-nav-overlay" role="dialog" aria-modal="true" aria-labelledby="mobile-nav-title-text">
@@ -154,14 +155,19 @@
                             <span class="mobile-nav-icon" aria-hidden="true">🖼️</span>
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="reader" aria-label="Image Reader view">
+                        <button class="mobile-nav-item" data-view="reader" aria-label="Reader view">
                             <span class="mobile-nav-icon" aria-hidden="true">📋</span>
-                            <span class="mobile-nav-text" data-i18n="nav.reader">Image Reader</span>
+                            <span class="mobile-nav-text" data-i18n="nav.reader">Reader</span>
                         </button>
                         <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
                             <span class="mobile-nav-text" data-i18n="nav.censor">Edit</span>
                         </button>
+                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
+                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
+                        </button>
+                        <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
                             <span class="mobile-nav-icon" aria-hidden="true">🔍</span>
                             <span class="mobile-nav-text" data-i18n="nav.similar">Similar</span>
@@ -174,15 +180,11 @@
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
-                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
-                        </button>
                     </div>
                     <div class="mobile-nav-actions">
-                        <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Scan folder for images">
+                        <button class="btn btn-primary btn-large full-width" id="mobile-btn-scan" aria-label="Import images from a folder">
                             <span aria-hidden="true">📂</span>
-                            <span data-i18n="action.scan">Scan Folder</span>
+                            <span data-i18n="action.scan">Import Images</span>
                         </button>
                         <button class="btn btn-secondary full-width" id="mobile-btn-tag" aria-label="Tag images with AI">
                             <span>🏷️</span>
@@ -195,6 +197,10 @@
                         <button class="btn btn-ghost full-width" id="mobile-btn-language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
                             <span aria-hidden="true">🌐</span>
                             <span data-i18n="lang.toggle">中文</span>
+                        </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-app-update" aria-label="Check for application updates">
+                            <span aria-hidden="true">⬆️</span>
+                            <span data-i18n="update.check">Check Updates</span>
                         </button>
                     </div>
                 </div>
@@ -212,13 +218,17 @@
                     <span aria-hidden="true">🌐</span>
                     <span data-i18n="lang.toggle">中文</span>
                 </button>
+                <button id="btn-app-update" class="btn btn-ghost" title="Check for application updates" aria-label="Check for application updates">
+                    <span aria-hidden="true">⬆️</span>
+                    <span data-i18n="update.check">Check Updates</span>
+                </button>
                 <button id="btn-help" class="btn-help" title="Open guide for current tab" aria-label="Open guide for current tab">
                     <span aria-hidden="true">❓</span>
                     <span data-i18n="guide.label">Guide</span>
                 </button>
-                <button id="btn-scan" class="btn btn-primary" aria-label="Scan folder for images">
+                <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder">
                     <span aria-hidden="true">📂</span>
-                    <span data-i18n="action.scan">Scan Folder</span>
+                    <span data-i18n="action.scan">Import Images</span>
                 </button>
                 <button id="btn-tag" class="btn btn-secondary" aria-label="Tag images with AI">
                     <span aria-hidden="true">🏷️</span>
@@ -235,6 +245,16 @@
             <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
             <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle">⏹ <span data-i18n="tagger.bgStop">Stop</span></button>
             <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal" data-i18n-title="tagger.bgDetailsTitle"><span data-i18n="tagger.bgDetails">Details</span></button>
+        </div>
+
+        <!-- Background Scan Progress Bar (visible when scanning runs in background) -->
+        <div id="bg-scan-progress" class="bg-tag-progress bg-scan-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-scan-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-scan-progress-text">Importing images...</span>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-scan-cancel" title="Stop scan" data-i18n-title="scan.bgStopTitle">⏹ <span data-i18n="scan.bgStop">Stop</span></button>
+            <button class="bg-tag-progress-btn bg-scan-open-btn" id="bg-scan-open" title="Open scan details" data-i18n-title="scan.bgDetailsTitle"><span data-i18n="scan.bgDetails">Details</span></button>
         </div>
 
         <!-- Main Content Area -->
@@ -257,23 +277,23 @@
                     <div class="filter-summary" id="filter-summary">
                         <div class="summary-row">
                             <span class="summary-label">Generators:</span>
-                            <span class="summary-value" id="summary-generators">All</span>
+                            <span class="summary-value" id="summary-generators" data-i18n="common.all">All</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Ratings:</span>
-                            <span class="summary-value" id="summary-ratings">All</span>
+                            <span class="summary-value" id="summary-ratings" data-i18n="common.all">All</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Tags:</span>
-                            <span class="summary-value" id="summary-tags">None</span>
+                            <span class="summary-value" id="summary-tags" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Checkpoints:</span>
-                            <span class="summary-value" id="summary-checkpoints">None</span>
+                            <span class="summary-value" id="summary-checkpoints" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Loras:</span>
-                            <span class="summary-value" id="summary-loras">None</span>
+                            <span class="summary-value" id="summary-loras" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Prompt:</span>
@@ -281,7 +301,7 @@
                         </div>
                         <div class="summary-row">
                             <span class="summary-label">Search:</span>
-                            <span class="summary-value" id="summary-search">None</span>
+                            <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
                         </div>
                         <div class="summary-row" id="artist-filter-row" style="display: none;">
                             <span class="summary-label">Artist:</span>
@@ -310,11 +330,13 @@
                             <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Deselect All</button>
                         </div>
                         <div class="selection-panel-actions">
-                            <button id="btn-select-all" class="btn btn-secondary full-width"><span>✓✓</span> <span data-i18n="selection.selectAll">Select All</span></button>
+                            <button id="btn-select-all" class="btn btn-secondary full-width"><span>✓✓</span> <span data-i18n="selection.selectVisible">Select Visible</span></button>
+                            <button id="btn-invert-selection-visible" class="btn btn-secondary full-width"><span>⇄</span> <span data-i18n="selection.invertVisible">Invert Visible</span></button>
                             <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Export Prompts</span></button>
                             <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Export Tags</span></button>
                             <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Export Tags to Files</span></button>
                             <button id="btn-send-to-censor" class="btn btn-primary full-width"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
+                            <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Delete Selected Files</span></button>
                         </div>
                     </div>
                 </aside>
@@ -338,19 +360,19 @@
                                 <span aria-hidden="true">🔍</span>
                                 <span data-i18n="gallery.filters">Filters</span>
                             </button>
-                            <span class="image-count" id="image-count" aria-live="polite">0 images</span>
-                            <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image" aria-label="Show random image">
+                            <span class="image-count" id="image-count" aria-live="polite">0</span>
+                            <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image" aria-label="Show random image" data-i18n-title="gallery.random" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true">🎲</span>
                                 <span data-i18n="gallery.random">Random</span>
                             </button>
-                            <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics">
+                            <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
                                 <span aria-hidden="true">✨</span>
                                 <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
                             </button>
                             <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
-                                <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true">All <span class="gen-count" id="count-all">0</span></button>
+                                <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
                                 <button class="gen-tab" data-gen="nai" role="tab" aria-selected="false">NovelAI <span class="gen-count" id="count-nai">0</span></button>
                                 <button class="gen-tab" data-gen="comfyui" role="tab" aria-selected="false">ComfyUI <span class="gen-count" id="count-comfyui">0</span></button>
                                 <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
@@ -369,19 +391,19 @@
                                 <option value="character_count">Characters</option>
                                 <option value="file_size">File Size</option>
                                 <option value="aesthetic">Aesthetic Score</option>
-                                <option value="random">Random</option>
+                                <option value="random" data-i18n="sort.random">Random</option>
                             </select>
                             <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
                                 <span aria-hidden="true">↕</span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
-                            <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true">
+                            <button class="view-btn" data-size="grid" title="Grid view" aria-label="Grid view" aria-pressed="true" data-i18n-title="gallery.viewGrid" data-i18n-aria="gallery.viewGrid">
                                 <span>◼◼</span>
                             </button>
-                            <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false">
+                            <button class="view-btn" data-size="large" title="Large view" aria-label="Large view" aria-pressed="false" data-i18n-title="gallery.viewLarge" data-i18n-aria="gallery.viewLarge">
                                 <span aria-hidden="true">◼</span>
                             </button>
-                            <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false">
+                            <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
                             </button>
                         </div>
@@ -465,11 +487,11 @@
                     <div id="gallery-empty-state" style="display:none" role="status">
                         <div class="empty-state-card">
                             <span class="empty-icon">🖼️</span>
-                            <h3 data-i18n="gallery.noImages">No Images Loaded</h3>
-                            <p data-i18n="gallery.scanPrompt">Scan a folder to start managing your AI-generated images</p>
+                            <h3 data-i18n="gallery.noImages">No images yet</h3>
+                            <p data-i18n="gallery.scanPrompt">Import an image folder to start browsing, filtering, and organizing your images</p>
                             <div class="empty-actions">
                                 <button class="btn btn-primary" id="empty-state-scan-btn">
-                                    <span aria-hidden="true">📂</span> <span data-i18n="action.scanFolder">Scan Folder</span>
+                                    <span aria-hidden="true">📂</span> <span data-i18n="action.scanFolder">Import Images</span>
                                 </button>
                             </div>
                         </div>
@@ -485,7 +507,7 @@
                     </div>
                     <button id="btn-open-model-manager" class="gallery-model-manager-fab" type="button" aria-label="Open model manager">
                         <span aria-hidden="true">🧰</span>
-                        <span data-i18n="models.manager">Models</span>
+                        <span data-i18n="models.manager">Setup</span>
                     </button>
                 </div>
             </section>
@@ -494,17 +516,17 @@
             <div id="view-reader" class="view" style="display: none;">
                 <div class="reader-tools-header">
                     <div class="reader-tools-copy">
-                        <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Reader Workspace</h2>
-                        <p class="reader-tools-subtitle" data-i18n="reader.workspaceSubtitle">Read metadata fast, then switch to privacy-safe obfuscation without hunting for another hidden panel.</p>
+                        <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Read / Edit Image Info</h2>
+                        <p class="reader-tools-subtitle" data-i18n="reader.workspaceSubtitle">Drop in an image to see prompts, model, and parameters right away, then save a cleaned-up copy if needed.</p>
                     </div>
                     <div class="reader-tools-tabs" role="tablist" aria-label="Reader tools">
                         <button class="reader-tool-tab active" id="reader-tool-tab-reader" type="button" data-reader-tool="reader" role="tab" aria-selected="true" aria-controls="reader-tool-panel-reader">
                             <span aria-hidden="true">📖</span>
-                            <span data-i18n="nav.reader">Image Reader</span>
+                            <span data-i18n="nav.reader">Read Image</span>
                         </button>
                         <button class="reader-tool-tab" id="reader-tool-tab-obfuscation" type="button" data-reader-tool="obfuscation" role="tab" aria-selected="false" aria-controls="reader-tool-panel-obfuscation">
                             <span aria-hidden="true">🕶️</span>
-                            <span data-i18n="tools.obfuscation">Image Obfuscation</span>
+                            <span data-i18n="tools.obfuscation">Privacy Tools</span>
                         </button>
                     </div>
                 </div>
@@ -515,13 +537,13 @@
                         <div id="reader-drop-zone" class="reader-drop-zone" tabindex="0">
                             <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 6C12.9 6 12 6.9 12 8v32c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V16l-10-10H14z" fill="rgba(245,158,11,0.15)" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M26 6v10h10" fill="none" stroke="rgba(245,158,11,0.5)" stroke-width="1.5"/><path d="M18 26h12M18 30h8" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" stroke-linecap="round"/></svg></div>
                             <div class="drop-text" data-i18n="reader.dropText">Drop an image here</div>
-                            <div class="drop-hint" data-i18n="reader.dropHint">or click to browse</div>
-                            <button type="button" id="reader-paste-btn" class="reader-paste-btn" data-i18n-title="reader.pasteHint" title="Arm clipboard paste capture (Ctrl+V)">
+                            <div class="drop-hint" data-i18n="reader.dropHint">or click to choose one</div>
+                            <button type="button" id="reader-paste-btn" class="reader-paste-btn" data-i18n-title="reader.pasteHint" title="Click, then press Ctrl+V">
                                 <span aria-hidden="true">📋</span>
-                                <span data-i18n="reader.pasteButton">Paste via Ctrl+V</span>
+                                <span data-i18n="reader.pasteButton">Paste from Clipboard</span>
                             </button>
                             <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteHint">click the button, then press Ctrl+V</div>
-                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteLimitation">Clipboard images may lose SD metadata. Drag-drop the original PNG for exact prompt and checkpoint data.</div>
+                            <div class="drop-hint reader-paste-hint" data-i18n="reader.pasteLimitation">Clipboard images often lose prompt details. Drag the original PNG if you want the full image info.</div>
                         </div>
                         <img id="reader-image-preview" style="display: none;" alt="Preview">
                         <input type="file" id="reader-file-input" accept="image/*" style="display: none;">
@@ -540,7 +562,7 @@
                                         <span class="reader-section-title" data-i18n="reader.prompt">Prompt</span>
                                         <span class="collapse-icon">▼</span>
                                     </button>
-                                    <button id="reader-toggle-format" class="reader-copy-btn">Format: Original</button>
+                                    <button id="reader-toggle-format" class="reader-copy-btn">View: Original</button>
                                     <button id="reader-copy-prompt" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
                                 </div>
                                 <div id="reader-prompt-text" class="reader-section-text"></div>
@@ -577,7 +599,7 @@
                             <div class="reader-section">
                                 <div class="reader-section-header">
                                     <button type="button" class="reader-section-toggle" data-target="reader-params" data-collapse-key="params">
-                                        <span class="reader-section-title" data-i18n="reader.params">Generation Parameters</span>
+                                        <span class="reader-section-title" data-i18n="reader.params">Image Parameters</span>
                                         <span class="collapse-icon">▼</span>
                                     </button>
                                     <button id="reader-copy-params" class="reader-copy-btn" data-i18n="reader.copy">Copy</button>
@@ -587,7 +609,7 @@
                             <div class="reader-section" id="reader-model-assets-section" style="display: none;">
                                 <div class="reader-section-header">
                                     <button type="button" class="reader-section-toggle" data-target="reader-model-assets" data-collapse-key="modelAssets">
-                                        <span class="reader-section-title" data-i18n="reader.modelAssets">Model Asset Details</span>
+                                        <span class="reader-section-title" data-i18n="reader.modelAssets">Detected Model Info</span>
                                         <span class="collapse-icon">▼</span>
                                     </button>
                                 </div>
@@ -617,8 +639,74 @@
                                 <div class="reader-color-histogram"><canvas id="reader-color-histogram-canvas"></canvas></div>
                                 <div id="reader-color-palette" class="reader-color-palette"></div>
                             </div>
+                            <div class="reader-section reader-editor-section" id="reader-metadata-editor" hidden>
+                                <div class="reader-section-header">
+                                    <button type="button" class="reader-section-toggle is-collapsed" data-target="reader-editor-body" data-collapse-key="editor">
+                                        <span class="reader-section-title" data-i18n="reader.editMetadata">Edit Image Info</span>
+                                        <span class="collapse-icon">▶</span>
+                                    </button>
+                                </div>
+                                <div id="reader-editor-body" class="reader-editor-body" style="display: none;">
+                                    <p class="reader-editor-note" data-i18n="reader.editMetadataHint">Save a new copy after cleaning up the fields. PNG keeps the most image info.</p>
+                                    <div class="reader-editor-grid">
+                                        <label class="reader-editor-field reader-editor-field-full">
+                                            <span data-i18n="reader.prompt">Prompt</span>
+                                            <textarea id="reader-edit-prompt" class="input-field" rows="5"></textarea>
+                                        </label>
+                                        <label class="reader-editor-field reader-editor-field-full">
+                                            <span data-i18n="reader.negative">Negative Prompt</span>
+                                            <textarea id="reader-edit-negative" class="input-field" rows="4"></textarea>
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editSeed">Seed</span>
+                                            <input id="reader-edit-seed" class="input-field" type="text">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editModel">Model / Checkpoint</span>
+                                            <input id="reader-edit-model" class="input-field" type="text">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editSampler">Sampler</span>
+                                            <input id="reader-edit-sampler" class="input-field" type="text">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editSteps">Steps</span>
+                                            <input id="reader-edit-steps" class="input-field" type="number" min="0" step="1">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editCfg">CFG Scale</span>
+                                            <input id="reader-edit-cfg" class="input-field" type="number" min="0" step="0.1">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.editSize">Size</span>
+                                            <input id="reader-edit-size" class="input-field" type="text" placeholder="1024x1536">
+                                        </label>
+                                        <label class="reader-editor-field reader-editor-field-full">
+                                            <span data-i18n="reader.editLoras">LoRAs</span>
+                                            <input id="reader-edit-loras" class="input-field" type="text" placeholder="detail_tweaker, add_detail">
+                                        </label>
+                                        <label class="reader-editor-field">
+                                            <span data-i18n="reader.outputFormat">Output Format</span>
+                                            <select id="reader-edit-format" class="input-field">
+                                                <option value="png">PNG</option>
+                                                <option value="webp">WebP</option>
+                                                <option value="jpg">JPG</option>
+                                            </select>
+                                        </label>
+                                        <label class="reader-editor-field reader-editor-field-full">
+                                            <span data-i18n="reader.outputPath">Save Location</span>
+                                            <input id="reader-edit-output-path" class="input-field" type="text" data-i18n-placeholder="reader.editOutputPlaceholder" placeholder="Enter the full save path">
+                                        </label>
+                                    </div>
+                                    <p id="reader-edit-output-hint" class="reader-editor-note" data-i18n="reader.editOutputHint">If the image came from the browser, the app does not know the original folder. Enter the full save path once, and it will remember the folder.</p>
+                                    <p id="reader-edit-format-warning" class="reader-editor-warning" hidden></p>
+                                    <div class="reader-editor-actions">
+                                        <button id="reader-save-metadata-as" class="btn btn-primary btn-sm" type="button" data-i18n="reader.saveAsNewImage">Save New Image</button>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="reader-actions">
-                                <button id="reader-copy-sd" class="btn btn-secondary btn-sm" data-i18n="reader.copySd">Copy as SD Format</button>
+                                <button id="reader-copy-sd" class="btn btn-secondary btn-sm" data-i18n="reader.copySd">Copy as SD Text</button>
                                 <button id="reader-copy-all" class="btn btn-primary btn-sm" data-i18n="reader.copyAll">Copy All</button>
                             </div>
                         </div>
@@ -642,15 +730,15 @@
                         <div class="obfuscate-controls-bar">
                             <div class="obfuscate-mode-group">
                                 <select id="obfuscate-compat-mode" class="input-field obfuscate-mode-select" title="Compatibility mode">
-                                    <option value="big_tomato" data-i18n="tools.compatBigTomato">🍅 Standard (password + metadata)</option>
+                                    <option value="big_tomato" data-i18n="tools.compatBigTomato">🍅 Standard (password + image info)</option>
                                     <option value="small_tomato" data-i18n="tools.compatSmallTomato">🍅 Simple (no password)</option>
                                 </select>
                                 <input type="password" id="obfuscate-password" class="input-field obfuscate-password-input" placeholder="Password (optional)" data-i18n-placeholder="tools.password">
                                 <button class="btn btn-ghost btn-small obfuscate-settings-toggle" id="obfuscate-settings-toggle" title="Advanced settings" type="button">⚙️</button>
                             </div>
                             <div class="obfuscate-action-group">
-                                <button id="obfuscate-btn-encode" class="btn btn-primary" data-i18n="tools.encode">🔒 Encode</button>
-                                <button id="obfuscate-btn-decode" class="btn btn-secondary" data-i18n="tools.decode">🔓 Decode</button>
+                                <button id="obfuscate-btn-encode" class="btn btn-primary" data-i18n="tools.encode">🔒 Protect</button>
+                                <button id="obfuscate-btn-decode" class="btn btn-secondary" data-i18n="tools.decode">🔓 Restore</button>
                                 <button id="obfuscate-btn-clear" class="btn btn-ghost" data-i18n="tools.clearQueue">Clear</button>
                             </div>
                         </div>
@@ -660,7 +748,7 @@
                             <small id="obfuscate-compat-help" data-i18n="tools.compatBigTomatoHelp">Standard mode uses password / PNG Info compatible processing.</small>
                             <label class="obfuscate-checkbox-row" id="obfuscate-metadata-row">
                                 <input type="checkbox" id="obfuscate-preserve-metadata" checked>
-                                <span data-i18n="tools.preserveMetadata">Preserve metadata (SD prompts in PNG Info)</span>
+                                <span data-i18n="tools.preserveMetadata">Keep image info</span>
                             </label>
                             <label class="obfuscate-checkbox-row" id="obfuscate-legacy-row">
                                 <input type="checkbox" id="obfuscate-use-legacy-pnginfo">
@@ -747,22 +835,34 @@
                                 <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">The first time you open Auto-Separate, it copies the current Gallery filters once. After that, Auto-Separate keeps its own scope here.</div>
+                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">First open copies Gallery filters once. After that, it uses its own scope.</div>
+                            <div class="scope-status-card" id="autosep-scope-status">
+                                <div class="scope-status-header">
+                                    <span class="scope-status-badge" id="autosep-scope-badge">Using saved Auto-Separate scope</span>
+                                    <span class="scope-status-meta" id="autosep-scope-meta">Synced from current Gallery filters at --</span>
+                                </div>
+                                <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will keep using its saved scope until you resync.</div>
+                                <div class="scope-status-actions">
+                                    <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Use Current Gallery Filters</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Resync from Gallery</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Keep Saved Scope</button>
+                                </div>
+                            </div>
                             <div class="filter-summary-compact" id="autosep-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
-                                        id="autosep-summary-generators">All</span></span>
+                                        id="autosep-summary-generators" data-i18n="common.all">All</span></span>
                                 <span class="summary-item"><strong>Tags:</strong> <span
-                                        id="autosep-summary-tags">None</span></span>
+                                        id="autosep-summary-tags" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Ratings:</strong> <span
-                                        id="autosep-summary-ratings">All</span></span>
+                                        id="autosep-summary-ratings" data-i18n="common.all">All</span></span>
                                 <span class="summary-item"><strong>Checkpoints:</strong> <span
-                                        id="autosep-summary-checkpoints">None</span></span>
+                                        id="autosep-summary-checkpoints" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Loras:</strong> <span
-                                        id="autosep-summary-loras">None</span></span>
+                                        id="autosep-summary-loras" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Prompts:</strong> <span
-                                        id="autosep-summary-prompts">None</span></span>
+                                        id="autosep-summary-prompts" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Search:</strong> <span
-                                        id="autosep-summary-search">None</span></span>
+                                        id="autosep-summary-search" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Dimensions:</strong> <span
                                         id="autosep-summary-dimensions">Any</span></span>
                             </div>
@@ -787,6 +887,7 @@
                             <div class="autosep-preview-list" id="autosep-preview-list">
                                 <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
                             </div>
+                            <div class="helper-text" id="autosep-preview-scope-summary">Preview uses the saved Auto-Separate scope, not the live Gallery filters.</div>
                             <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</div>
                             <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
                         </div>
@@ -838,9 +939,24 @@
                         <label class="checkbox-label">
                             <input type="checkbox" id="autosep-confirm-move" checked>
                             <span class="checkbox-custom"></span>
-                            <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before moving files</span>
+                            <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
                         </label>
-                        <small class="helper-text" data-i18n="autosep.confirmMoveHelp">Keep a confirmation step before the move starts.</small>
+                        <small class="helper-text" data-i18n="autosep.confirmMoveHelp">Keep a confirmation step before the file action starts.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label data-i18n="autosep.operationModeTitle">File Action Mode</label>
+                        <div class="segmented-control" role="radiogroup" aria-label="Auto-Separate action mode">
+                            <label class="segmented-option">
+                                <input type="radio" name="autosep-operation-mode" value="move" checked>
+                                <span data-i18n="autosep.operationModeMove">Move originals</span>
+                            </label>
+                            <label class="segmented-option">
+                                <input type="radio" name="autosep-operation-mode" value="copy">
+                                <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
+                            </label>
+                        </div>
+                        <small class="helper-text" data-i18n="autosep.operationModeCopyHelp">Copy keeps the source library untouched, which is safer when your folders depend on date order.</small>
                     </div>
 
                     <div class="modal-actions" style="justify-content: space-between;">
@@ -918,27 +1034,57 @@
                                 <button class="btn btn-primary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">The first time you open Manual Sort, it copies the current Gallery filters once. After that, Manual Sort keeps its own scope here.</div>
+                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">First open copies Gallery filters once. After that, it uses its own scope.</div>
+                            <div class="scope-status-card" id="manual-sort-scope-status">
+                                <div class="scope-status-header">
+                                    <span class="scope-status-badge" id="manual-sort-scope-badge">Using saved Manual Sort scope</span>
+                                    <span class="scope-status-meta" id="manual-sort-scope-meta">Synced from current Gallery filters at --</span>
+                                </div>
+                                <div class="scope-status-detail" id="manual-sort-scope-detail">Gallery filters changed. Manual Sort will keep using its saved scope until you resync.</div>
+                                <div class="scope-status-actions">
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-use-gallery-scope" type="button" data-i18n="scope.useGallery">Use Current Gallery Filters</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-resync-scope" type="button" data-i18n="scope.resyncGallery">Resync from Gallery</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-manual-sort-keep-scope" type="button" data-i18n="scope.keepSaved">Keep Saved Scope</button>
+                                </div>
+                            </div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
                                 <span class="summary-item"><strong>Generators:</strong> <span
-                                        id="manual-sort-summary-generators">All</span></span>
+                                        id="manual-sort-summary-generators" data-i18n="common.all">All</span></span>
                                 <span class="summary-item"><strong>Tags:</strong> <span
-                                        id="manual-sort-summary-tags">None</span></span>
+                                        id="manual-sort-summary-tags" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Ratings:</strong> <span
-                                        id="manual-sort-summary-ratings">All</span></span>
+                                        id="manual-sort-summary-ratings" data-i18n="common.all">All</span></span>
                                 <span class="summary-item"><strong>Checkpoints:</strong> <span
-                                        id="manual-sort-summary-checkpoints">None</span></span>
+                                        id="manual-sort-summary-checkpoints" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Loras:</strong> <span
-                                        id="manual-sort-summary-loras">None</span></span>
+                                        id="manual-sort-summary-loras" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Prompts:</strong> <span
-                                        id="manual-sort-summary-prompts">None</span></span>
+                                        id="manual-sort-summary-prompts" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Search:</strong> <span
-                                        id="manual-sort-summary-search">None</span></span>
+                                        id="manual-sort-summary-search" data-i18n="common.none">None</span></span>
                                 <span class="summary-item"><strong>Dimensions:</strong> <span
                                         id="manual-sort-summary-dimensions">Any</span></span>
                             </div>
                         </div>
 
+                        <div class="helper-text" id="manual-sort-execution-scope">Session will use the saved Manual Sort scope, not the live Gallery filters.</div>
+                        <div class="filter-section">
+                            <div class="filter-header-compact">
+                                <h4 data-i18n="manual.actionModeTitle">File Action Mode</h4>
+                            </div>
+                            <div class="segmented-control" role="radiogroup" aria-label="Manual sort action mode">
+                                <label class="segmented-option">
+                                    <input type="radio" name="manual-sort-operation" value="move" checked>
+                                    <span data-i18n="manual.actionModeMove">Move originals</span>
+                                </label>
+                                <label class="segmented-option">
+                                    <input type="radio" name="manual-sort-operation" value="copy">
+                                    <span data-i18n="manual.actionModeCopy">Copy and keep originals</span>
+                                </label>
+                            </div>
+                            <div class="helper-text" id="manual-sort-operation-help" data-i18n="manual.actionModeMoveHelp">Moves the original files into the sort folders.</div>
+                            <div class="helper-text" id="manual-sort-execution-mode" data-i18n="manual.executionMode">Action mode: Move originals</div>
+                        </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
                         </button>
@@ -1209,7 +1355,7 @@
                         <div class="sidebar-header-v2">
                             <div class="queue-title-row">
                                 <h4 class="sidebar-title-v2" data-i18n="censor.queue">Queue</h4>
-                                <button class="btn btn-primary btn-small queue-manager-btn" id="btn-open-queue-manager" title="Queue Manager" type="button">🗂️ <span data-i18n="censor.queueManager">Manager</span></button>
+                                <button class="btn btn-primary btn-small queue-manager-btn" id="btn-open-queue-manager" title="Queue Manager" type="button" data-i18n-title="censor.queueManager">🗂️ <span data-i18n="censor.queueManager">Manager</span></button>
                             </div>
                             <div class="queue-btn-rows">
                                 <div class="queue-btn-row">
@@ -1304,15 +1450,25 @@
                             <div id="cursor-overlay"></div>
                             <!-- No Image State -->
                             <div id="censor-no-image" class="no-image-state-v2">
-                                <span class="empty-canvas-icon">🖼️</span>
-                                <p data-i18n="censor.selectToEdit">Select an image from the queue to edit</p>
+                                <div class="censor-empty-card">
+                                    <span class="empty-canvas-icon">🖼️</span>
+                                    <h4 data-i18n="censor.emptyTitle">Nothing is ready to edit yet</h4>
+                                    <p data-i18n="censor.selectToEdit">Select an image from the queue to edit</p>
+                                    <ol class="censor-empty-steps">
+                                        <li data-i18n="censor.emptyStep1">Go back to Gallery and turn on Select Images.</li>
+                                        <li data-i18n="censor.emptyStep2">Send the images you want to edit into Censor Edit, then pick one from the queue.</li>
+                                    </ol>
+                                    <div class="censor-empty-actions">
+                                        <button class="btn btn-primary btn-small" id="btn-censor-empty-open-gallery" type="button" data-i18n="censor.backToGallery">Open Gallery</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- Footer Bars -->
                         <div class="censor-footer-bars">
                             <div class="censor-status-bar">
-                                <div class="status-filename" id="censor-filename">No image selected</div>
+                                <div class="status-filename" id="censor-filename" data-i18n="censor.noImageSelected">No image selected</div>
                                 <button class="btn-icon-small" id="btn-rename-single"
                                     title="Rename this image (R)">✏️</button>
                                 <div class="status-divider-h"></div>
@@ -1375,9 +1531,9 @@
                                     <option value="both" data-i18n="censor.both">Both</option>
                                 </select>
                                 <div class="censor-detect-actions-inline">
-                                    <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)">🎯 <kbd>D</kbd></button>
-                                    <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All">⚡</button>
-                                    <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings">⚙️</button>
+                                    <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent">🎯 <kbd>D</kbd></button>
+                                    <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll">⚡</button>
+                                    <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings" data-i18n-title="censor.autoDetectSettings">⚙️</button>
                                 </div>
                             </div>
                             <div class="censor-side-row">
@@ -1471,7 +1627,7 @@
                                 </button>
                                 <button class="btn btn-ghost btn-small censor-save-secondary" id="btn-batch-rename" title="Batch Rename" data-i18n-title="censor.batchRename">📝 <span data-i18n="censor.batchRename">Batch Rename</span></button>
                             </div>
-                            <button class="btn btn-ghost btn-small censor-clear-queue-btn" id="btn-clear-queue" title="Clear Queue">🗑️ <span data-i18n="censor.clearQueue">Clear</span></button>
+                            <button class="btn btn-ghost btn-small censor-clear-queue-btn" id="btn-clear-queue" title="Clear Queue" data-i18n-title="censor.clearQueue">🗑️ <span data-i18n="censor.clearQueue">Clear</span></button>
                         </div>
                     </aside>
                 </div>
@@ -1618,6 +1774,30 @@
             <!-- ========== Similar Images View ========== -->
             <section id="view-similar" class="view">
                 <div class="similar-container">
+                    <div class="workspace-start-card" id="similar-start-card" hidden>
+                        <div class="workspace-start-copy">
+                            <span class="workspace-start-eyebrow" data-i18n="similar.startEyebrow">Start Here</span>
+                            <h3 data-i18n="similar.startTitle">Find similar images in three simple steps</h3>
+                            <p class="workspace-start-description" data-i18n="similar.startDescription">Build the local index once, then search by image ID or upload a reference image when you need it.</p>
+                        </div>
+                        <ol class="workspace-start-steps">
+                            <li>
+                                <strong data-i18n="similar.startStep1Title">1. Build the local index</strong>
+                                <span data-i18n="similar.startStep1Text">Use the setup card below to prepare the similarity index for your current library.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="similar.startStep2Title">2. Search by library image</strong>
+                                <span data-i18n="similar.startStep2Text">Paste an image ID when you want look-alikes for something already in your gallery.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="similar.startStep3Title">3. Or drop a new image</strong>
+                                <span data-i18n="similar.startStep3Text">Upload any outside reference image to compare it against your local library.</span>
+                            </li>
+                        </ol>
+                        <div class="workspace-start-actions">
+                            <button class="btn btn-ghost btn-small" id="similar-start-dismiss" type="button" data-i18n="guide.closeLabel">Got it</button>
+                        </div>
+                    </div>
                     <!-- Header with stats -->
                     <div class="similar-header">
                         <h3 data-i18n="similar.title">Similar Images</h3>
@@ -1635,6 +1815,16 @@
                                     <div class="progress-fill" id="similar-embed-fill" style="width: 0%"></div>
                                 </div>
                                 <span class="progress-text" id="similar-embed-text">0/0</span>
+                            </div>
+                        </div>
+                        <div class="scope-status-card" id="similar-workflow-status">
+                            <div class="scope-status-header">
+                                <span class="scope-status-badge" id="similar-workflow-badge">Similarity search needs indexing first</span>
+                                <span class="scope-status-meta" id="similar-workflow-meta">0 / 0 embedded</span>
+                            </div>
+                            <div class="scope-status-detail" id="similar-workflow-detail">Start indexing to build the local similarity index before searching or finding duplicates.</div>
+                            <div class="scope-status-actions">
+                                <button class="btn btn-secondary btn-small" id="btn-similar-status-embed" type="button" data-i18n="similar.startIndexing">Start Indexing</button>
                             </div>
                         </div>
                     </div>
@@ -1696,6 +1886,30 @@
             <!-- ========== Prompt Lab View ========== -->
             <section id="view-promptlab" class="view">
                 <div class="promptlab-container">
+                    <div class="workspace-start-card workspace-start-card-compact" id="promptlab-start-card" hidden>
+                        <div class="workspace-start-copy">
+                            <span class="workspace-start-eyebrow" data-i18n="promptlab.startEyebrow">Start Here</span>
+                            <h3 data-i18n="promptlab.startTitle">Use your own library as a prompt helper</h3>
+                            <p class="workspace-start-description" data-i18n="promptlab.startDescription">Stats shows what is working in your library. Compare, Build, and Random then turn that insight into usable prompts.</p>
+                        </div>
+                        <ol class="workspace-start-steps">
+                            <li>
+                                <strong data-i18n="promptlab.startStep1Title">1. Start with Stats</strong>
+                                <span data-i18n="promptlab.startStep1Text">See your strongest tags, checkpoints, and recipe patterns first.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="promptlab.startStep2Title">2. Compare or Build</strong>
+                                <span data-i18n="promptlab.startStep2Text">Use Compare to learn from two images, or Build to turn one image into a clean draft.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="promptlab.startStep3Title">3. Use Random for variation</strong>
+                                <span data-i18n="promptlab.startStep3Text">When you want controlled variety instead of an exact draft, switch to Random.</span>
+                            </li>
+                        </ol>
+                        <div class="workspace-start-actions">
+                            <button class="btn btn-ghost btn-small" id="promptlab-start-dismiss" type="button" data-i18n="guide.closeLabel">Got it</button>
+                        </div>
+                    </div>
                     <!-- Mode Tabs -->
                     <div class="promptlab-tabs">
                         <button class="promptlab-tab active" data-mode="stats">📊 <span data-i18n="promptlab.stats">Stats</span></button>
@@ -1706,19 +1920,31 @@
 
                     <!-- Stats Mode -->
                     <div class="promptlab-mode active" id="promptlab-mode-stats">
-                        <div class="promptlab-stats-grid" id="promptlab-stats-grid">
-                            <div class="promptlab-stat-card">
-                                <div class="promptlab-stat-number" id="pl-total-images">-</div>
-                                <div class="promptlab-stat-label" data-i18n="promptlab.totalImages">Total Images</div>
+                        <div class="promptlab-stats-hero">
+                            <div class="promptlab-stats-grid" id="promptlab-stats-grid">
+                                <div class="promptlab-stat-card">
+                                    <div class="promptlab-stat-number" id="pl-total-images">-</div>
+                                    <div class="promptlab-stat-label" data-i18n="promptlab.totalImages">Total Images</div>
+                                </div>
+                                <div class="promptlab-stat-card">
+                                    <div class="promptlab-stat-number" id="pl-scored-images">-</div>
+                                    <div class="promptlab-stat-label" data-i18n="promptlab.scoredImages">Scored</div>
+                                </div>
+                                <div class="promptlab-stat-card">
+                                    <div class="promptlab-stat-number" id="pl-avg-prompt-len">-</div>
+                                    <div class="promptlab-stat-label" data-i18n="promptlab.avgPromptLen">Avg Prompt Len</div>
+                                </div>
                             </div>
-                            <div class="promptlab-stat-card">
-                                <div class="promptlab-stat-number" id="pl-scored-images">-</div>
-                                <div class="promptlab-stat-label" data-i18n="promptlab.scoredImages">Scored</div>
-                            </div>
-                            <div class="promptlab-stat-card">
-                                <div class="promptlab-stat-number" id="pl-avg-prompt-len">-</div>
-                                <div class="promptlab-stat-label" data-i18n="promptlab.avgPromptLen">Avg Prompt Len</div>
-                            </div>
+                            <aside class="promptlab-summary-card">
+                                <span class="workspace-start-eyebrow" data-i18n="promptlab.summaryEyebrow">What Next</span>
+                                <h4 data-i18n="promptlab.summaryTitle">Turn these stats into something useful</h4>
+                                <p class="promptlab-summary-text" data-i18n="promptlab.summaryDescription">Use Compare to learn from two images, Build to make a clean prompt draft, or Random when you want fast variation.</p>
+                                <div class="promptlab-summary-actions">
+                                    <button class="btn btn-secondary btn-small" type="button" data-promptlab-mode-target="compare" data-i18n="promptlab.compare">Compare</button>
+                                    <button class="btn btn-secondary btn-small" type="button" data-promptlab-mode-target="build" data-i18n="promptlab.build">Build</button>
+                                    <button class="btn btn-secondary btn-small" type="button" data-promptlab-mode-target="random" data-i18n="promptlab.random">Random</button>
+                                </div>
+                            </aside>
                         </div>
 
                         <div class="promptlab-stats-columns">
@@ -1856,8 +2082,8 @@
                                 <div class="promptlab-builder-header">
                                     <h4 data-i18n="promptlab.slots">Prompt Slots</h4>
                                     <div class="promptlab-builder-actions">
-                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots">🎲 <span data-i18n="promptlab.randomize">Randomize</span></button>
-                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots">🗑️ <span data-i18n="promptlab.clear">Clear</span></button>
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-random" title="Randomize unlocked slots" data-i18n-title="promptlab.randomize">🎲 <span data-i18n="promptlab.randomize">Randomize</span></button>
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-clear" title="Clear all slots" data-i18n-title="promptlab.clear">🗑️ <span data-i18n="promptlab.clear">Clear</span></button>
                                     </div>
                                 </div>
                                 <div class="promptlab-slots-container" id="promptlab-slots">
@@ -1870,10 +2096,10 @@
                                 <div class="promptlab-output-header">
                                     <h4 data-i18n="promptlab.output">Generated Prompt</h4>
                                     <div class="promptlab-gen-buttons">
-                                        <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters">🔎 <span data-i18n="promptlab.useInGallery">Gallery</span></button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-use-gallery" title="Send prompt to Gallery filters" data-i18n-title="promptlab.useInGallery">🔎 <span data-i18n="promptlab.useInGallery">Gallery</span></button>
                                         <button class="btn btn-primary" id="btn-promptlab-generate" data-i18n="promptlab.generate">Generate</button>
-                                        <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy">📋</button>
-                                        <button class="btn btn-secondary" id="btn-promptlab-validate" title="Validate">✅</button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-copy" title="Copy" aria-label="Copy" data-i18n-title="promptlab.copy" data-i18n-aria="promptlab.copy">📋</button>
+                                        <button class="btn btn-secondary" id="btn-promptlab-validate" title="Validate" aria-label="Validate" data-i18n-title="promptlab.validate" data-i18n-aria="promptlab.validate">✅</button>
                                     </div>
                                 </div>
                                 <div class="promptlab-output-body">
@@ -1883,7 +2109,7 @@
                                 <div class="promptlab-presets-section">
                                     <div class="promptlab-presets-header">
                                         <h5 data-i18n="promptlab.presets">Presets</h5>
-                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save preset">💾 <span data-i18n="promptlab.savePreset">Save</span></button>
+                                        <button class="btn btn-small btn-secondary" id="btn-promptlab-save-preset" title="Save preset" data-i18n-title="promptlab.savePreset">💾 <span data-i18n="promptlab.savePreset">Save</span></button>
                                     </div>
                                     <div id="promptlab-presets">
                                         <div class="preset-empty" data-i18n="promptlab.noPresets">No presets saved yet.</div>
@@ -1898,6 +2124,30 @@
             <!-- Artist Identification View -->
             <section id="view-artist" class="view">
                 <div class="artist-container">
+                    <div class="workspace-start-card" id="artist-start-card" hidden>
+                        <div class="workspace-start-copy">
+                            <span class="workspace-start-eyebrow" data-i18n="artist.startEyebrow">Start Here</span>
+                            <h3 data-i18n="artist.startTitle">Find repeated artist or style patterns in your library</h3>
+                            <p class="workspace-start-description" data-i18n="artist.startDescription">Set a confidence threshold, run identification, then jump back to Gallery with that artist filter applied.</p>
+                        </div>
+                        <ol class="workspace-start-steps">
+                            <li>
+                                <strong data-i18n="artist.startStep1Title">1. Check readiness first</strong>
+                                <span data-i18n="artist.startStep1Text">If setup is not ready yet, fix that first instead of starting a batch that cannot run.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="artist.startStep2Title">2. Start with a low threshold</strong>
+                                <span data-i18n="artist.startStep2Text">Kaloscope usually works better around 0.02-0.08 than with an aggressive threshold.</span>
+                            </li>
+                            <li>
+                                <strong data-i18n="artist.startStep3Title">3. Review then jump to Gallery</strong>
+                                <span data-i18n="artist.startStep3Text">After the run, open an artist card and use the Gallery shortcut to inspect the actual images.</span>
+                            </li>
+                        </ol>
+                        <div class="workspace-start-actions">
+                            <button class="btn btn-ghost btn-small" id="artist-start-dismiss" type="button" data-i18n="guide.closeLabel">Got it</button>
+                        </div>
+                    </div>
                     <div class="artist-results-header-note" data-i18n="artist.experimental">Experimental feature — model availability and result quality may vary.</div>
                     <div class="model-health-banner" id="artist-model-health"></div>
                     <!-- Stats Header -->
@@ -1987,7 +2237,7 @@
                                 <div class="empty-state">
                                     <div class="empty-icon">🎨</div>
                                     <p>No artists identified yet.</p>
-                                    <p class="empty-hint">Click "Identify All Images" to start.</p>
+                                    <p class="empty-hint" data-i18n="artist.noArtistsHint">Click "Identify All" to start.</p>
                                 </div>
                             </div>
                         </div>
@@ -2019,8 +2269,8 @@
                 </button>
                 <div class="modal-header">
                     <div>
-                        <h2 id="model-manager-title">Model Manager</h2>
-                        <p class="modal-description">Check which runtimes are ready, see where they live, and trigger first-run preparation.</p>
+                        <h2 id="model-manager-title" data-i18n="models.title">Feature Setup</h2>
+                        <p class="modal-description" data-i18n="models.description">See which features are ready to use. If something is missing, download or repair it here.</p>
                     </div>
                 </div>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
@@ -2051,9 +2301,9 @@
                     <div class="modal-info modal-info-workspace">
                         <div class="modal-sticky-actions">
                             <div class="modal-action-primary">
-                                <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all metadata to clipboard" data-i18n="modal.copyAll">Copy All</button>
+                                <button class="btn btn-primary btn-small" id="btn-copy-all" aria-label="Copy all image info to clipboard" data-i18n="modal.copyAll">Copy All</button>
                                 <button class="btn btn-secondary btn-small" id="btn-toggle-prompt-format" aria-label="Toggle prompt format" data-i18n="modal.viewAsSD">View as SD</button>
-                                <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Reparse image metadata" data-i18n="modal.reparse">Reparse</button>
+                                <button class="btn btn-ghost btn-small" id="btn-reparse-metadata" aria-label="Read image info again" data-i18n="modal.reparse">Read Again</button>
                             </div>
                             <div class="modal-action-secondary modal-copy-shortcuts">
                                 <button class="btn btn-ghost btn-small" id="btn-copy-prompt" aria-label="Copy prompt" title="Copy prompt only">📋 <span data-i18n="modal.prompt">Prompt</span></button>
@@ -2126,11 +2376,11 @@
                     </div>
 
                     <div class="modal-section" id="modal-params-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-params-grid" data-collapse-key="params" data-i18n="modal.generationParameters">Generation Parameters <span class="collapse-icon">▼</span></h4>
+                        <h4 class="section-toggle" data-target="modal-params-grid" data-collapse-key="params" data-i18n="modal.generationParameters">Image Settings <span class="collapse-icon">▼</span></h4>
                         <div id="modal-params-grid" class="params-grid"></div>
                     </div>
                     <div class="modal-section" id="modal-model-assets-section" style="display:none">
-                        <h4 class="section-toggle" data-target="modal-model-assets-grid" data-collapse-key="modelAssets" data-i18n="modal.modelAssets">Model Asset Details <span class="collapse-icon">▼</span></h4>
+                        <h4 class="section-toggle" data-target="modal-model-assets-grid" data-collapse-key="modelAssets" data-i18n="modal.modelAssets">Detected Model Info <span class="collapse-icon">▼</span></h4>
                         <div id="modal-model-assets-grid" class="params-grid model-assets-grid"></div>
                     </div>
 
@@ -2166,38 +2416,70 @@
         <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-small">
-                <h3 id="scan-modal-title" data-i18n="modal.scanFolder">Scan Folder</h3>
+                <h3 id="scan-modal-title" data-i18n="modal.scanFolder">Import Image Folder</h3>
+                <p class="modal-description" data-i18n="modal.scanDescription">Choose a folder and import.</p>
                 <div class="form-group">
-                    <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Folder Path</label>
+                    <label for="scan-folder-path" id="scan-folder-path-label" data-i18n="modal.folderPath">Image Folder</label>
                     <div class="folder-path-row">
-                        <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label">
+                        <input type="text" id="scan-folder-path" class="input-field" placeholder="D:\images\outputs" aria-describedby="scan-folder-path-label scan-folder-feedback">
                         <button type="button" class="btn-browse" id="btn-browse-folder" aria-label="Browse for folder" title="Browse folders" onmousedown="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); }" onclick="if (window.showFolderBrowser) { window.showFolderBrowser(document.getElementById('scan-folder-path')); } return false;" data-i18n="scan.browse">Browse</button>
                     </div>
+                    <small id="scan-folder-feedback" class="validation-feedback" aria-live="polite"></small>
                     <div id="folder-browser-container"></div>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="scan-recursive" checked>
                         <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text" data-i18n="modal.includeSubfolders">Include subfolders</span>
+                        <span class="checkbox-text" id="scan-recursive-label" data-i18n="modal.includeSubfolders">Include subfolders</span>
                     </label>
                 </div>
                 <div class="form-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="scan-auto-tag" checked>
+                        <input type="checkbox" id="scan-quick-import" checked>
                         <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text" data-i18n="scan.autoTagLabel">Auto-tag after scan</span>
+                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Show images first, fill details in background (recommended)</span>
                     </label>
                 </div>
+                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keep the default settings for large libraries.</div>
+                <details class="guided-advanced-panel" id="scan-advanced-options">
+                    <summary class="guided-advanced-summary">
+                        <span data-i18n="scan.advancedSummary">Advanced options</span>
+                        <span class="guided-advanced-hint" id="scan-advanced-options-hint" data-i18n="scan.advancedHint">Open only if needed.</span>
+                    </summary>
+                    <div class="guided-advanced-body">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="scan-force-reparse">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" id="scan-force-reparse-label" data-i18n="scan.forceReparseLabel">Re-read info for imported images (slower)</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="scan-cleanup-missing">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" id="scan-cleanup-missing-label" data-i18n="scan.cleanupMissingLabel">Remove records for missing files</span>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="scan-auto-tag">
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" id="scan-auto-tag-label" data-i18n="scan.autoTagLabel">Auto-tag after import (slower)</span>
+                            </label>
+                        </div>
+                    </div>
+                </details>
                 <div class="progress-container" id="scan-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Scan progress">
                     <div class="progress-bar">
                         <div class="progress-fill" id="scan-progress-fill"></div>
                     </div>
-                    <span class="progress-text" id="scan-progress-text" data-i18n="modal.scanStarting">Starting...</span>
+                    <span class="progress-text" id="scan-progress-text" data-i18n="modal.scanStarting">Starting import...</span>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n="modal.cancel">Cancel</button>
-                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start scanning folder" data-i18n="modal.startScan">Start Scan</button>
+                    <button class="btn btn-primary" id="btn-start-scan" aria-label="Start importing folder" data-i18n="modal.startScan">Start Import</button>
                 </div>
             </div>
         </div>
@@ -2218,126 +2500,134 @@
                         <option value="wd-vit-tagger-v3">wd-vit-tagger-v3</option>
                         <option value="wd-vit-large-tagger-v3">wd-vit-large-tagger-v3</option>
                         <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3</option>
-                        <option value="custom">Custom Local Model...</option>
+                        <option value="custom" data-i18n="modal.tagCustomModel">Custom Local Model...</option>
                     </select>
-                    <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good speed, good quality, and less likely to freeze your PC.</small>
+                    <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good if you are not sure.</small>
                 </div>
 
-                <div class="form-group custom-model-group" id="custom-model-group" style="display: none;">
-                    <label>Custom Model Path (.onnx)</label>
-                    <input type="text" id="tag-model-path" class="input-field"
-                        placeholder="I:\ComfyUI\custom_nodes\comfyui-WD14-Tagger\models\wd-eva02-large-tagger-v3.onnx">
-                    <small class="helper-text">Path to your local .onnx model file</small>
+                <div class="tagger-model-panel" id="tagger-model-panel" role="status" aria-live="polite">
+                    <div class="tagger-model-panel-title" data-i18n="modal.tagModelSnapshot">Current Plan</div>
+                    <div class="tagger-model-panel-subtitle" id="tag-model-subtitle">Balanced default. Good if you are not sure.</div>
+                    <div class="tagger-model-badges" id="tag-model-badges"></div>
+                    <div class="tagger-model-note" id="tag-model-note">The selected model changes speed, quality, and load.</div>
                 </div>
 
-                <div class="form-group custom-model-group" id="custom-tags-group" style="display: none;">
-                    <label>Tags CSV Path</label>
-                    <input type="text" id="tag-tags-path" class="input-field"
-                        placeholder="Path to selected_tags.csv (required)">
-                    <small class="helper-text">Required when using custom model</small>
-                </div>
+                <details class="guided-advanced-panel" id="tag-advanced-options">
+                    <summary class="guided-advanced-summary">
+                        <span data-i18n="tagger.advancedSummary">Advanced settings</span>
+                        <span class="guided-advanced-hint" id="tag-advanced-options-hint" data-i18n="tagger.advancedHintPanel">Optional. Open this only if you want more control.</span>
+                    </summary>
+                    <div class="guided-advanced-body">
+                        <div class="form-group custom-model-group" id="custom-model-group" style="display: none;">
+                            <label for="tag-model-path" data-i18n="modal.tagCustomModelPath">Custom Model Path (.onnx)</label>
+                            <input type="text" id="tag-model-path" class="input-field"
+                                data-i18n-placeholder="modal.tagCustomModelPathPlaceholder"
+                                placeholder="I:\ComfyUI\custom_nodes\comfyui-WD14-Tagger\models\wd-eva02-large-tagger-v3.onnx">
+                            <small class="helper-text" data-i18n="modal.tagCustomModelPathHelper">Path to your local .onnx model file</small>
+                        </div>
 
-                <div class="tagger-intel-grid">
-                    <div class="system-info-panel" id="system-info-panel" style="display:none">
-                        <div class="system-info-content">
-                            <div class="system-info-chip-row">
-                                <span class="system-info-chip" id="tag-hardware-chip" data-i18n="tag.hardwareDetect">Detecting hardware...</span>
-                                <span class="system-info-chip" id="tag-risk-chip" data-i18n="tag.riskUnknown">Risk unknown</span>
-                                <span class="system-info-chip" id="tag-provider-chip" data-i18n="tag.providerUnknown">Provider unknown</span>
+                        <div class="form-group custom-model-group" id="custom-tags-group" style="display: none;">
+                            <label for="tag-tags-path" data-i18n="modal.tagTagsCsvPath">Tags CSV Path</label>
+                            <input type="text" id="tag-tags-path" class="input-field"
+                                data-i18n-placeholder="modal.tagTagsCsvPlaceholder"
+                                placeholder="Path to selected_tags.csv (required)">
+                            <small class="helper-text" data-i18n="modal.tagTagsCsvHelper">Required when using custom model</small>
+                        </div>
+
+                        <div class="system-info-panel" id="system-info-panel" style="display:none">
+                            <div class="system-info-content">
+                                <div class="system-info-chip-row">
+                                    <span class="system-info-chip" id="tag-hardware-chip" data-i18n="tag.hardwareDetect">Detecting hardware...</span>
+                                    <span class="system-info-chip" id="tag-risk-chip" data-i18n="tag.riskUnknown">Risk unknown</span>
+                                    <span class="system-info-chip" id="tag-provider-chip" data-i18n="tag.providerUnknown">Provider unknown</span>
+                                </div>
+                                <div class="system-info-line" id="system-info-content" data-i18n="tag.hardwareDetect">Detecting hardware...</div>
+                                <div class="system-info-line system-info-line-strong" id="tag-system-recommendation" data-i18n="tag.systemRecommendation">Loading the recommended runtime...</div>
+                                <div class="system-info-line" id="tag-batch-recommendation" data-i18n="tag.batchRecommendation">Recommended batch size will appear here.</div>
                             </div>
-                            <div class="system-info-line" id="system-info-content" data-i18n="tag.hardwareDetect">Detecting hardware...</div>
-                            <div class="system-info-line system-info-line-strong" id="tag-system-recommendation" data-i18n="tag.systemRecommendation">Loading the recommended runtime...</div>
-                            <div class="system-info-line" id="tag-batch-recommendation" data-i18n="tag.batchRecommendation">Recommended runtime chunk size will appear here.</div>
                         </div>
-                    </div>
 
-                    <div class="tagger-model-panel" id="tagger-model-panel" role="status" aria-live="polite">
-                        <div class="tagger-model-panel-title" data-i18n="modal.tagModelSnapshot">Model Snapshot</div>
-                        <div class="tagger-model-panel-subtitle" id="tag-model-subtitle">Balanced default. Good speed, good quality, and less likely to freeze your PC.</div>
-                        <div class="tagger-model-badges" id="tag-model-badges"></div>
-                        <div class="tagger-model-note" id="tag-model-note">The selected model decides quality, tag density, and hardware pressure.</div>
-                    </div>
-                </div>
+                        <div class="tag-threshold-section" id="tag-threshold-section">
+                            <div class="form-group">
+                                <label data-i18n="modal.tagGeneralThreshold">General Tag Threshold</label>
+                                <div class="range-row">
+                                    <input type="range" id="tag-threshold" min="0.0" max="1.0" step="0.01" value="0.35">
+                                    <span class="range-value" id="tag-threshold-value">0.35</span>
+                                </div>
+                            </div>
 
-                <div class="tag-threshold-section" id="tag-threshold-section">
-                    <div class="form-group">
-                        <label data-i18n="modal.tagGeneralThreshold">General Tag Threshold</label>
-                        <div class="range-row">
-                            <input type="range" id="tag-threshold" min="0.0" max="1.0" step="0.01" value="0.35">
-                            <span class="range-value" id="tag-threshold-value">0.35</span>
+                            <div class="form-group">
+                                <label data-i18n="modal.tagCharacterThreshold">Character Tag Threshold</label>
+                                <div class="range-row">
+                                    <input type="range" id="tag-character-threshold" min="0.0" max="1.0" step="0.01" value="0.85">
+                                    <span class="range-value" id="tag-character-threshold-value">0.85</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label data-i18n="modal.tagCharacterThreshold">Character Tag Threshold</label>
-                        <div class="range-row">
-                            <input type="range" id="tag-character-threshold" min="0.0" max="1.0" step="0.01" value="0.85">
-                            <span class="range-value" id="tag-character-threshold-value">0.85</span>
+                        <div class="tag-threshold-note" id="tag-threshold-note" hidden>
+                            <div class="tag-threshold-note-title" data-i18n="modal.tagThresholdNotUsedTitle">This model does not use WD14 thresholds.</div>
+                            <div class="tag-threshold-note-body" data-i18n="modal.tagThresholdNotUsedBody">ToriiGate generates tags directly. There is nothing to tune here, so just start the run.</div>
                         </div>
-                    </div>
-                </div>
 
-                <div class="tag-threshold-note" id="tag-threshold-note" hidden>
-                    <div class="tag-threshold-note-title" data-i18n="modal.tagThresholdNotUsedTitle">This model does not use WD14 thresholds.</div>
-                    <div class="tag-threshold-note-body" data-i18n="modal.tagThresholdNotUsedBody">ToriiGate generates tags directly. There is nothing to tune here, so just start the run.</div>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="tag-retag-all">
-                        <span class="checkbox-custom"></span>
-                        <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag already tagged images?</span>
-                    </label>
-                </div>
-
-                <div class="form-group">
-                    <div class="tag-runtime-card" role="status" aria-live="polite">
-                        <div class="tag-runtime-eyebrow" data-i18n="modal.tagRuntimePlan">Runtime Plan</div>
-                        <div class="tag-runtime-chip-row">
-                            <span class="tag-runtime-chip" id="tag-runtime-mode-chip" data-i18n="tag.autoRuntime">Auto Runtime</span>
-                            <span class="tag-runtime-chip" id="tag-runtime-provider-chip" data-i18n="tag.providerUnknown">Provider Unknown</span>
-                            <span class="tag-runtime-chip" id="tag-runtime-chunk-chip" data-i18n="tag.chunkUnknown">Chunk --</span>
-                        </div>
-                        <p class="tag-runtime-summary" id="tag-runtime-summary">The app will automatically use the recommended runtime mode for this model.</p>
-                        <p class="tag-runtime-detail" id="tag-runtime-detail">The final provider is decided when the model session is created.</p>
-                    </div>
-                    <details class="tag-runtime-advanced" id="tag-runtime-advanced">
-                        <summary class="tag-runtime-advanced-summary">
-                            <span data-i18n="modal.tagAdvancedOverride">Advanced Override</span>
-                            <span class="tag-runtime-advanced-hint" id="tag-runtime-advanced-hint" data-i18n="modal.tagAdvancedHint">Optional. Most runs do not need this.</span>
-                        </summary>
-                        <div class="tag-runtime-advanced-body">
+                        <div class="form-group">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="tag-use-gpu" checked>
+                                <input type="checkbox" id="tag-retag-all">
                                 <span class="checkbox-custom"></span>
-                                <span class="checkbox-text" data-i18n="modal.tagUseGpu">Run this tagging job on GPU</span>
+                                <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag already tagged images?</span>
                             </label>
-                            <small class="helper-text" id="tag-gpu-help" aria-live="polite">Recommended runtime mode is active. You usually do not need to change anything here.</small>
-                            <div class="tag-runtime-chunk-row">
-                                <label for="tagger-batch-size" id="tagger-batch-size-label" data-i18n="modal.tagRuntimeChunk">Runtime chunk size</label>
-                                <select id="tagger-batch-size" class="input-field" aria-describedby="tagger-batch-size-label tag-batch-help">
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="4">4</option>
-                                    <option value="6">6</option>
-                                    <option value="8">8</option>
-                                    <option value="10">10</option>
-                                    <option value="12">12</option>
-                                    <option value="14">14</option>
-                                    <option value="16">16</option>
-                                    <option value="18">18</option>
-                                    <option value="24">24</option>
-                                    <option value="32">32</option>
-                                </select>
-                                <small class="helper-text" id="tag-batch-help">This affects how many files the worker pulls per cycle. It is not true multi-image ONNX batching.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="tag-runtime-card" role="status" aria-live="polite">
+                                <div class="tag-runtime-eyebrow" data-i18n="modal.tagRuntimePlan">How This Run Will Work</div>
+                                <div class="tag-runtime-chip-row">
+                                    <span class="tag-runtime-chip" id="tag-runtime-mode-chip" data-i18n="tag.autoRuntime">Automatic</span>
+                                    <span class="tag-runtime-chip" id="tag-runtime-provider-chip" data-i18n="tag.providerUnknown">Provider Unknown</span>
+                                    <span class="tag-runtime-chip" id="tag-runtime-chunk-chip" data-i18n="tag.chunkUnknown">Chunk --</span>
+                                </div>
+                                <p class="tag-runtime-summary" id="tag-runtime-summary">The recommended runtime mode will be used automatically.</p>
+                                <p class="tag-runtime-detail" id="tag-runtime-detail">Batch size is auto-limited by free VRAM/RAM.</p>
+                            </div>
+                            <details class="tag-runtime-advanced" id="tag-runtime-advanced">
+                                <summary class="tag-runtime-advanced-summary">
+                                    <span data-i18n="modal.tagAdvancedOverride">Advanced Override</span>
+                                    <span class="tag-runtime-advanced-hint" id="tag-runtime-advanced-hint" data-i18n="modal.tagAdvancedHint">Optional. Most runs do not need this.</span>
+                                </summary>
+                                <div class="tag-runtime-advanced-body">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="tag-use-gpu" checked>
+                                        <span class="checkbox-custom"></span>
+                                        <span class="checkbox-text" data-i18n="modal.tagUseGpu">Run this tagging job on GPU</span>
+                                    </label>
+                                    <small class="helper-text" id="tag-gpu-help" aria-live="polite">Recommended GPU mode is active.</small>
+                                    <div class="tag-runtime-chunk-row">
+                                        <label for="tagger-batch-size" id="tagger-batch-size-label" data-i18n="modal.tagRuntimeChunk">Batch size for this run</label>
+                                        <select id="tagger-batch-size" class="input-field" aria-describedby="tagger-batch-size-label tag-batch-help">
+                                            <option value="1">1</option>
+                                            <option value="2">2</option>
+                                            <option value="4">4</option>
+                                            <option value="6">6</option>
+                                            <option value="8">8</option>
+                                            <option value="10">10</option>
+                                            <option value="12">12</option>
+                                            <option value="14">14</option>
+                                            <option value="16">16</option>
+                                            <option value="18">18</option>
+                                            <option value="24">24</option>
+                                            <option value="32">32</option>
+                                        </select>
+                                        <small class="helper-text" id="tag-batch-help">This is the real WD14 batch size.</small>
+                                    </div>
+                                </div>
+                            </details>
+                            <div class="tagger-disabled-notice" id="tagger-disabled-notice" hidden>
+                                <div class="tagger-disabled-title" id="tagger-disabled-title">This catalog entry is not runnable in the current build.</div>
+                                <div class="tagger-disabled-body" id="tagger-disabled-body">Use one of the ONNX taggers above for now.</div>
                             </div>
                         </div>
-                    </details>
-                    <div class="tagger-disabled-notice" id="tagger-disabled-notice" hidden>
-                        <div class="tagger-disabled-title" id="tagger-disabled-title">This catalog entry is not runnable in the current build.</div>
-                        <div class="tagger-disabled-body" id="tagger-disabled-body">Use one of the ONNX taggers above for now.</div>
                     </div>
-                </div>
+                </details>
 
                 <div class="progress-container" id="tag-progress-container" style="display: none;">
                     <div class="progress-bar">
@@ -2767,13 +3057,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label data-i18n="save.metadataHandling">Metadata Handling</label>
+                        <label data-i18n="save.metadataHandling">Image Info</label>
                         <select id="save-metadata-option" class="input-field">
-                            <option value="strip" data-i18n="save.metadataStrip">Strip All Metadata (Recommended for sharing)</option>
-                            <option value="keep" data-i18n="save.metadataKeep">Keep Original Metadata</option>
-                            <option value="minimal" data-i18n="save.metadataMinimal">Keep Only Color Profile / DPI</option>
+                            <option value="strip" data-i18n="save.metadataStrip">Remove Image Info</option>
+                            <option value="keep" data-i18n="save.metadataKeep">Keep Original Image Info</option>
+                            <option value="minimal" data-i18n="save.metadataMinimal">Keep Only Basic Info</option>
                         </select>
-                        <small class="helper-text" data-i18n="save.metadataHelper">Choose how to handle image metadata/EXIF data</small>
+                        <small class="helper-text" data-i18n="save.metadataHelper">Choose whether to keep, trim, or remove image info</small>
                     </div>
 
                     <div class="form-group">

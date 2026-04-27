@@ -26,6 +26,8 @@ from PIL import Image
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 BIG_TOMATO_MODE = "big_tomato"
 SMALL_TOMATO_MODE = "small_tomato"
+MAX_OBFUSCATE_SOURCE_BYTES = 50 * 1024 * 1024
+MAX_OBFUSCATE_SOURCE_PIXELS = 40_000_000
 
 COMPAT_MODE_ALIASES = {
     "": BIG_TOMATO_MODE,
@@ -38,6 +40,40 @@ COMPAT_MODE_ALIASES = {
     "singularpoint": SMALL_TOMATO_MODE,
     "hideimg1": SMALL_TOMATO_MODE,
 }
+
+
+class ImageTooLargeError(ValueError):
+    """Raised when obfuscation input exceeds safe memory limits."""
+
+
+def _obfuscate_max_bytes_message() -> str:
+    return f"Image file too large (max {MAX_OBFUSCATE_SOURCE_BYTES // (1024 * 1024)}MB)"
+
+
+def _obfuscate_max_pixels_message() -> str:
+    megapixels = MAX_OBFUSCATE_SOURCE_PIXELS / 1_000_000
+    return f"Image too large for safe processing (max {megapixels:.1f}MP)"
+
+
+def _validate_obfuscation_source_byte_length(byte_length: int) -> None:
+    if byte_length > MAX_OBFUSCATE_SOURCE_BYTES:
+        raise ImageTooLargeError(_obfuscate_max_bytes_message())
+
+
+def _validate_obfuscation_source_dimensions(width: int, height: int) -> None:
+    if width * height > MAX_OBFUSCATE_SOURCE_PIXELS:
+        raise ImageTooLargeError(_obfuscate_max_pixels_message())
+
+
+def _validate_obfuscation_source_bytes(image_bytes: bytes) -> None:
+    _validate_obfuscation_source_byte_length(len(image_bytes))
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        width, height = image.size
+    _validate_obfuscation_source_dimensions(width, height)
+
+
+def _validate_obfuscation_source_file(path: str) -> None:
+    _validate_obfuscation_source_byte_length(Path(path).stat().st_size)
 
 
 @dataclass(frozen=True)
@@ -406,6 +442,7 @@ def encode_image_bytes(
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
 ) -> bytes:
+    _validate_obfuscation_source_bytes(image_bytes)
     normalized_mode = normalize_compat_mode(compat_mode)
     parsed_password = _resolve_password(password, normalized_mode)
     should_preserve_metadata = preserve_metadata and _supports_metadata(normalized_mode)
@@ -442,6 +479,7 @@ def decode_image_bytes(
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
 ) -> bytes:
+    _validate_obfuscation_source_bytes(image_bytes)
     normalized_mode = normalize_compat_mode(compat_mode)
     parsed_password = _resolve_password(password, normalized_mode)
     should_preserve_metadata = preserve_metadata and _supports_metadata(normalized_mode)
@@ -486,6 +524,7 @@ def encode_image(
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
 ) -> dict:
+    _validate_obfuscation_source_file(input_path)
     source_bytes = Path(input_path).read_bytes()
     normalized_mode = normalize_compat_mode(compat_mode)
     text_chunks = extract_png_text_chunks_from_bytes(source_bytes) if preserve_metadata and _supports_metadata(normalized_mode) else []
@@ -521,6 +560,7 @@ def decode_image(
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
 ) -> dict:
+    _validate_obfuscation_source_file(input_path)
     source_bytes = Path(input_path).read_bytes()
     normalized_mode = normalize_compat_mode(compat_mode)
     text_chunks = extract_png_text_chunks_from_bytes(source_bytes) if preserve_metadata and _supports_metadata(normalized_mode) else []

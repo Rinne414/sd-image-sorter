@@ -7,6 +7,44 @@ echo
 
 # Change to script directory
 cd "$(dirname "$0")"
+ROOT_DIR="$(pwd)"
+
+# ── Package-local runtime paths ──────────────────────────────────
+DATA_DIR="${ROOT_DIR}/data"
+UPDATE_DIR="${ROOT_DIR}/update"
+TMP_DIR="${DATA_DIR}/tmp"
+CACHE_DIR="${DATA_DIR}/cache"
+MODELS_DIR="${DATA_DIR}/models"
+FAVORITES_DIR="${DATA_DIR}/favorites"
+CONFIG_DIR="${DATA_DIR}/config"
+THUMBNAIL_DIR="${DATA_DIR}/thumbnails"
+
+mkdir -p "${DATA_DIR}" "${UPDATE_DIR}" "${TMP_DIR}" "${CACHE_DIR}" "${MODELS_DIR}" "${FAVORITES_DIR}" "${CONFIG_DIR}" "${THUMBNAIL_DIR}"
+
+export SD_IMAGE_SORTER_LAUNCHER="run.sh"
+export SD_IMAGE_SORTER_DATA_DIR="${DATA_DIR}"
+export SD_IMAGE_SORTER_CONFIG_DIR="${CONFIG_DIR}"
+export SD_IMAGE_SORTER_TMP_DIR="${TMP_DIR}"
+export SD_IMAGE_SORTER_UPDATE_DIR="${UPDATE_DIR}"
+export SD_IMAGE_SORTER_THUMBNAIL_DIR="${THUMBNAIL_DIR}"
+export SD_IMAGE_SORTER_DB_PATH="${DATA_DIR}/images.db"
+export SD_IMAGE_SORTER_FAVORITES_PATH="${FAVORITES_DIR}"
+export SD_IMAGE_SORTER_WD14_MODEL_DIR="${MODELS_DIR}/wd14-tagger"
+export SD_IMAGE_SORTER_YOLO_MODEL_DIR="${MODELS_DIR}/yolo"
+export SD_IMAGE_SORTER_CLIP_MODEL_DIR="${MODELS_DIR}/clip"
+export SD_IMAGE_SORTER_ARTIST_MODEL_DIR="${MODELS_DIR}/artist"
+export SD_IMAGE_SORTER_SAM3_MODEL_DIR="${MODELS_DIR}/sam3"
+export SD_IMAGE_SORTER_NUDENET_MODEL_DIR="${MODELS_DIR}/nudenet"
+export SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR="${MODELS_DIR}/toriigate"
+export SD_IMAGE_SORTER_CACHE_DIR="${CACHE_DIR}"
+export HF_HOME="${DATA_DIR}/hf"
+export TRANSFORMERS_CACHE="${DATA_DIR}/hf/transformers"
+export XDG_CACHE_HOME="${CACHE_DIR}"
+export TORCH_HOME="${DATA_DIR}/torch"
+export PIP_CACHE_DIR="${DATA_DIR}/pip-cache"
+export TMPDIR="${TMP_DIR}"
+export TEMP="${TMP_DIR}"
+export TMP="${TMP_DIR}"
 
 # ── Check if Python is available ─────────────────────────────────
 PYTHON_CMD=""

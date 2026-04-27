@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -18,8 +19,20 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
-DEFAULT_VERSION = "3.0.6"
 DEFAULT_SPLIT_SIZE_MB = 1900
+
+
+def _read_default_version() -> str:
+    app_info_path = ROOT / "backend" / "app_info.py"
+    match = re.search(
+        r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']',
+        app_info_path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    return match.group(1) if match else "0.0.0"
+
+
+DEFAULT_VERSION = _read_default_version()
 
 # Python embeddable package URL template (Windows amd64)
 PYTHON_EMBED_VERSION = "3.11.9"
@@ -47,6 +60,8 @@ EXCLUDED_PREFIXES = (
     "backend/test_",
     "node_modules",
     "python",
+    "data",
+    "update",
     "tests",
     "test-results",
     "docs",
@@ -224,6 +239,37 @@ def copy_project(destination_root: Path) -> None:
         shutil.copy2(item, destination)
 
 
+def write_package_manifest(stage_dir: Path, version: str) -> Path:
+    managed_paths: list[str] = []
+    for file_path in sorted(stage_dir.rglob("*")):
+        if file_path.is_dir():
+            continue
+        relative = file_path.relative_to(stage_dir).as_posix()
+        if relative.startswith("python/"):
+            continue
+        if relative == "update/installed-manifest.json":
+            continue
+        managed_paths.append(relative)
+
+    manifest_relative = "update/package-manifest.json"
+    if manifest_relative not in managed_paths:
+        managed_paths.append(manifest_relative)
+
+    manifest_path = stage_dir / manifest_relative
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "version": version,
+                "managed_paths": managed_paths,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return manifest_path
+
+
 def create_zip_with_python(source_dir: Path, archive_path: Path) -> None:
     with ZipFile(archive_path, "w", compression=ZIP_DEFLATED, compresslevel=6, allowZip64=True) as zf:
         for file_path in sorted(source_dir.rglob("*")):
@@ -301,6 +347,41 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "\n"
             "set \"ROOT_DIR=%~dp0\"\n"
             "cd /d \"!ROOT_DIR!\"\n"
+            "\n"
+            "set \"DATA_DIR=!ROOT_DIR!data\"\n"
+            "set \"UPDATE_DIR=!ROOT_DIR!update\"\n"
+            "set \"TMP_DIR=!DATA_DIR!\\tmp\"\n"
+            "set \"CACHE_DIR=!DATA_DIR!\\cache\"\n"
+            "set \"MODELS_DIR=!DATA_DIR!\\models\"\n"
+            "set \"FAVORITES_DIR=!DATA_DIR!\\favorites\"\n"
+            "set \"CONFIG_DIR=!DATA_DIR!\\config\"\n"
+            "set \"THUMBNAIL_DIR=!DATA_DIR!\\thumbnails\"\n"
+            "for %%D in (\"!DATA_DIR!\" \"!UPDATE_DIR!\" \"!TMP_DIR!\" \"!CACHE_DIR!\" \"!MODELS_DIR!\" \"!FAVORITES_DIR!\" \"!CONFIG_DIR!\" \"!THUMBNAIL_DIR!\") do (\n"
+            "    if not exist \"%%~D\" mkdir \"%%~D\"\n"
+            ")\n"
+            "set \"SD_IMAGE_SORTER_LAUNCHER=run-portable.bat\"\n"
+            "set \"SD_IMAGE_SORTER_DATA_DIR=!DATA_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_CONFIG_DIR=!CONFIG_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_TMP_DIR=!TMP_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_UPDATE_DIR=!UPDATE_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_THUMBNAIL_DIR=!THUMBNAIL_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_DB_PATH=!DATA_DIR!\\images.db\"\n"
+            "set \"SD_IMAGE_SORTER_FAVORITES_PATH=!FAVORITES_DIR!\"\n"
+            "set \"SD_IMAGE_SORTER_WD14_MODEL_DIR=!MODELS_DIR!\\wd14-tagger\"\n"
+            "set \"SD_IMAGE_SORTER_YOLO_MODEL_DIR=!MODELS_DIR!\\yolo\"\n"
+            "set \"SD_IMAGE_SORTER_CLIP_MODEL_DIR=!MODELS_DIR!\\clip\"\n"
+            "set \"SD_IMAGE_SORTER_ARTIST_MODEL_DIR=!MODELS_DIR!\\artist\"\n"
+            "set \"SD_IMAGE_SORTER_SAM3_MODEL_DIR=!MODELS_DIR!\\sam3\"\n"
+            "set \"SD_IMAGE_SORTER_NUDENET_MODEL_DIR=!MODELS_DIR!\\nudenet\"\n"
+            "set \"SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR=!MODELS_DIR!\\toriigate\"\n"
+            "set \"SD_IMAGE_SORTER_CACHE_DIR=!CACHE_DIR!\"\n"
+            "set \"HF_HOME=!DATA_DIR!\\hf\"\n"
+            "set \"TRANSFORMERS_CACHE=!DATA_DIR!\\hf\\transformers\"\n"
+            "set \"XDG_CACHE_HOME=!CACHE_DIR!\"\n"
+            "set \"TORCH_HOME=!DATA_DIR!\\torch\"\n"
+            "set \"PIP_CACHE_DIR=!DATA_DIR!\\pip-cache\"\n"
+            "set \"TEMP=!TMP_DIR!\"\n"
+            "set \"TMP=!TMP_DIR!\"\n"
             "\n"
             "set \"PYTHON_DIR=!ROOT_DIR!python\"\n"
             "set \"PYTHON_CMD=!PYTHON_DIR!\\python.exe\"\n"
@@ -491,12 +572,22 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     def populate_windows_portable(stage_dir: Path) -> None:
         copy_project(stage_dir)
         prepare_embedded_python(stage_dir)
+        write_package_manifest(stage_dir, version)
 
     assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 
     # === Linux/Mac: app only, no models, no Python (uses system Python) ===
     def populate_linux_mac(stage_dir: Path) -> None:
         copy_project(stage_dir)
+        write_package_manifest(stage_dir, version)
+
+    # === App patch: app files only, safe for in-app updater ===
+    def populate_app_patch(stage_dir: Path) -> None:
+        copy_project(stage_dir)
+        write_portable_launcher(stage_dir)
+        write_package_manifest(stage_dir, version)
+
+    assets.append(stage_archive("app-patch", version, seven_zip, populate=populate_app_patch))
 
     # Build as tar.gz for Linux/Mac
     linux_stage = STAGING_ROOT / "linux-mac"

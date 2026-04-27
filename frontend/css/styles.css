@@ -1368,6 +1368,58 @@ body::before {
         color: var(--text-muted);
     }
 
+    .segmented-control {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        padding: 8px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .segmented-option {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .segmented-option input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .segmented-option span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 12px;
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid transparent;
+        transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    .segmented-option:hover span {
+        color: var(--text-primary);
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .segmented-option input:checked + span {
+        color: #fff;
+        background: linear-gradient(135deg, rgba(58, 171, 255, 0.34), rgba(0, 209, 178, 0.28));
+        border-color: rgba(115, 222, 255, 0.55);
+        box-shadow: 0 8px 22px rgba(20, 120, 170, 0.2);
+        transform: translateY(-1px);
+    }
+
     .preview-section {
         background: rgba(9, 21, 30, 0.72);
         padding: 20px;

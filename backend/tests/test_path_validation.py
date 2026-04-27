@@ -19,10 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.path_validation import (
     is_safe_path,
+    normalize_user_path,
     validate_folder_path,
     validate_file_path,
     sanitize_filename,
     validate_output_path,
+    validate_image_output_path,
     ALLOWED_IMAGE_EXTENSIONS,
     ALLOWED_MODEL_EXTENSIONS,
     MAX_PATH_DEPTH,
@@ -192,6 +194,33 @@ class TestValidateFolderPath:
         is_valid, error = validate_folder_path(long_path)
         assert is_valid is False
         assert "length" in error.lower() or "long" in error.lower() or "invalid" in error.lower()
+
+    def test_wsl_windows_drive_path_is_normalized_and_valid(self):
+        """Windows drive paths should map to /mnt/<drive>/... under WSL-like environments."""
+        if os.name == "nt":
+            pytest.skip("Windows path translation is only needed on non-Windows systems")
+
+        repo_root = Path(__file__).resolve().parents[2]
+        repo_parts = repo_root.parts
+        if len(repo_parts) < 3 or repo_parts[1] != "mnt" or len(repo_parts[2]) != 1:
+            pytest.skip("Repository is not mounted from /mnt/<drive> in this environment")
+
+        drive = repo_parts[2].upper()
+        remainder = repo_parts[3:]
+        windows_style = drive + ":\\" + "\\".join(remainder)
+
+        normalized = normalize_user_path(windows_style)
+
+        assert normalized == str(repo_root)
+        is_valid, error = validate_folder_path(windows_style)
+        assert is_valid is True
+        assert error is None
+
+    def test_windows_drive_letter_is_not_mistaken_for_invalid_filename(self):
+        """Drive-letter colons should not trigger the invalid filename guard."""
+        is_valid, error = validate_folder_path(r"L:\folder:name")
+        assert is_valid is False
+        assert "invalid filename" in error.lower()
 
 
 class TestValidateFilePath:
@@ -363,6 +392,44 @@ class TestValidateOutputPath:
         )
         # Should fail due to null byte or other invalid characters
         assert is_valid is False or error is not None
+
+
+class TestValidateImageOutputPath:
+    """Tests for safe output image path validation used by metadata editing."""
+
+    def test_valid_image_output_path(self, tmp_path: Path):
+        candidate = tmp_path / "edited.png"
+
+        result = validate_image_output_path(str(candidate))
+
+        assert result.path == candidate.resolve()
+        assert result.exists is False
+        assert result.extension == ".png"
+
+    def test_rejects_missing_parent_directory(self, tmp_path: Path):
+        candidate = tmp_path / "missing" / "edited.png"
+
+        with pytest.raises(ValueError, match="parent directory"):
+            validate_image_output_path(str(candidate))
+
+    def test_rejects_unsupported_extension(self, tmp_path: Path):
+        candidate = tmp_path / "edited.gif"
+
+        with pytest.raises(ValueError, match="Unsupported output format"):
+            validate_image_output_path(str(candidate))
+
+    def test_rejects_symlink_output_target(self, tmp_path: Path):
+        real_target = tmp_path / "real.png"
+        real_target.write_bytes(b"png")
+        link_target = tmp_path / "link.png"
+
+        try:
+            link_target.symlink_to(real_target)
+        except OSError:
+            pytest.skip("Symlinks not supported on this system")
+
+        with pytest.raises(ValueError, match="symlink"):
+            validate_image_output_path(str(link_target), allow_overwrite=True)
 
 
 class TestDirectoryTraversalAttacks:

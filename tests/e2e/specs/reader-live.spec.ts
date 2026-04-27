@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test'
 
 const SAMPLE_IMAGE = path.resolve(__dirname, '../../../backend/favorites/ComfyUI_00208_.png')
 
@@ -82,6 +82,21 @@ function datasetAvailable(): boolean {
   return fs.existsSync(DATASET_DIR) && fs.existsSync(path.join(DATASET_DIR, 'comfy_good.png'))
 }
 
+async function parseImageViaApi(request: APIRequestContext, imagePath: string) {
+  const response = await request.post('/api/parse-image', {
+    multipart: {
+      file: {
+        name: path.basename(imagePath),
+        mimeType: 'image/png',
+        buffer: fs.readFileSync(imagePath),
+      },
+    },
+  })
+
+  expect(response.ok()).toBeTruthy()
+  return response.json()
+}
+
 test.describe('Image Reader live parse', () => {
   test('file input parses real ComfyUI metadata and clipboard paste keeps the parsed content while showing the warning', async ({
     page,
@@ -145,6 +160,94 @@ test.describe('Image Reader live parse', () => {
     await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('stelle', { timeout: 10000 })
     await expect(page.locator('#reader-checkpoint')).toContainText('z_image_turbo_bf16', { timeout: 10000 })
+  })
+
+  test('metadata editor saves a copy and same-path overwrite confirms before any 409 round-trip', async ({
+    page,
+    request,
+  }) => {
+    test.skip(!fs.existsSync(SAMPLE_IMAGE), 'Live metadata sample is missing in this workspace')
+    test.setTimeout(120000)
+
+    const outputPath = path.resolve(__dirname, '../../../.tmp/e2e-output/reader-e2e-edited.png')
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true })
+    fs.rmSync(outputPath, { force: true })
+
+    const saveStatuses: number[] = []
+    const conflictResponses: string[] = []
+    const consoleErrors: string[] = []
+    const pageErrors: string[] = []
+
+    page.on('response', (response) => {
+      if (!response.url().includes('/api/image-metadata/save-edited')) return
+      saveStatuses.push(response.status())
+      if (response.status() === 409) {
+        conflictResponses.push(response.url())
+      }
+    })
+    page.on('console', (message) => {
+      if (message.type() === 'error') {
+        consoleErrors.push(message.text())
+      }
+    })
+    page.on('pageerror', (error) => {
+      pageErrors.push(String(error))
+    })
+
+    await openReaderView(page)
+    await page.setInputFiles('#reader-file-input', SAMPLE_IMAGE)
+
+    await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
+    await expect(page.locator('#reader-metadata-editor')).toBeVisible({ timeout: 10000 })
+    if (!(await page.locator('#reader-editor-body').isVisible().catch(() => false))) {
+      await page.locator('#reader-metadata-editor .reader-section-toggle').click()
+    }
+    await expect(page.locator('#reader-editor-body')).toBeVisible({ timeout: 10000 })
+
+    await page.locator('#reader-edit-prompt').fill('browser real test prompt v1')
+    await page.locator('#reader-edit-negative').fill('browser real test negative v1')
+    await page.locator('#reader-edit-output-path').fill(outputPath)
+    await page.locator('#reader-save-metadata-as').click()
+
+    await expect.poll(() => fs.existsSync(outputPath), { timeout: 30000 }).toBe(true)
+    await expect.poll(() => saveStatuses.join(','), { timeout: 30000 }).toBe('200')
+
+    const firstSaved = await parseImageViaApi(request, outputPath)
+    expect(firstSaved.generator).toBe('webui')
+    expect(firstSaved.prompt).toBe('browser real test prompt v1')
+    expect(firstSaved.negative_prompt).toBe('browser real test negative v1')
+    expect(String(firstSaved.checkpoint || '')).toContain('z_image_turbo_bf16')
+
+    saveStatuses.length = 0
+    conflictResponses.length = 0
+    consoleErrors.length = 0
+    pageErrors.length = 0
+
+    await page.locator('#reader-edit-prompt').fill('browser real test prompt v2 overwrite')
+    await page.locator('#reader-edit-negative').fill('browser real test negative v2 overwrite')
+    await page.locator('#reader-save-metadata-as').click()
+
+    const confirmModal = page.locator('#confirm-modal')
+    await expect(confirmModal).toHaveClass(/visible/, { timeout: 10000 })
+    await expect(page.locator('#confirm-title')).toContainText(/Overwrite existing file\?|覆盖/i)
+    await expect(page.locator('#confirm-message')).toContainText(outputPath)
+
+    await page.waitForTimeout(800)
+    expect(saveStatuses).toEqual([])
+
+    await page.locator('#btn-confirm-ok').click()
+    await expect.poll(() => saveStatuses.join(','), { timeout: 30000 }).toBe('200')
+
+    await expect.poll(async () => {
+      const parsed = await parseImageViaApi(request, outputPath)
+      return parsed.prompt
+    }, { timeout: 30000 }).toBe('browser real test prompt v2 overwrite')
+
+    const overwritten = await parseImageViaApi(request, outputPath)
+    expect(overwritten.negative_prompt).toBe('browser real test negative v2 overwrite')
+    expect(conflictResponses).toEqual([])
+    expect(consoleErrors.filter((entry) => entry.includes('409') || entry.includes('Conflict'))).toEqual([])
+    expect(pageErrors).toEqual([])
   })
 })
 

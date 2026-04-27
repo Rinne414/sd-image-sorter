@@ -8,15 +8,21 @@ import logging
 import os
 import subprocess
 import sys
-import tempfile
-from typing import Optional
+import time
+import uuid
+from pathlib import Path
+from typing import Optional, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 import database as db
+from config import get_temp_dir
 from metadata_parser import parse_image, verify_image_readable
 from services.image_service import ImageService
+from utils.path_validation import PathValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -26,6 +32,57 @@ router = APIRouter(prefix="/api", tags=["images"])
 
 # Service instance - will be set via dependency injection
 _image_service: Optional[ImageService] = None
+READER_UPLOAD_TEMP_DIR = Path(get_temp_dir()) / "reader_uploads"
+READER_UPLOAD_TTL_SECONDS = 24 * 60 * 60
+PARSE_IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024
+PARSE_IMAGE_UPLOAD_CHUNK_SIZE = 1024 * 1024
+
+
+class DeleteSelectedImagesRequest(BaseModel):
+    image_ids: List[int] = Field(..., min_length=1)
+    confirm_delete_files: bool = False
+
+
+class ExportSelectionRequest(BaseModel):
+    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+
+
+class ExportSelectionImage(BaseModel):
+    id: int
+    filename: str = ""
+    generator: Optional[str] = None
+    prompt: str = ""
+    checkpoint: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    aesthetic_score: Optional[float] = None
+    tags: List[str] = Field(default_factory=list)
+
+
+class ExportSelectionResponse(BaseModel):
+    images: List[ExportSelectionImage] = Field(default_factory=list)
+    missing_ids: List[int] = Field(default_factory=list)
+
+
+class DeleteSelectedImagesResponse(BaseModel):
+    deleted: int
+    failed: List[dict[str, Any]]
+    permanent_delete: bool = True
+
+
+class SaveEditedMetadataRequest(BaseModel):
+    source_path: str
+    output_path: str
+    format: str = "png"
+    quality: Optional[int] = Field(default=None, ge=1, le=100)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    allow_overwrite: bool = False
+
+
+class SaveEditedMetadataResponse(BaseModel):
+    output_path: str
+    format: str
+    warnings: List[str] = Field(default_factory=list)
 
 
 def get_image_service() -> ImageService:
@@ -40,6 +97,29 @@ def set_image_service(service: ImageService) -> None:
     """Set the image service instance (for testing or custom configuration)."""
     global _image_service
     _image_service = service
+
+
+def _cleanup_stale_reader_uploads() -> None:
+    """Best-effort cleanup for temporary Reader uploads kept for follow-up save actions."""
+    try:
+        READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        cutoff = time.time() - READER_UPLOAD_TTL_SECONDS
+        for candidate in READER_UPLOAD_TEMP_DIR.iterdir():
+            try:
+                if candidate.is_file() and candidate.stat().st_mtime < cutoff:
+                    candidate.unlink()
+            except OSError:
+                continue
+    except OSError:
+        logger.debug("Failed to prepare Reader temp directory", exc_info=True)
+
+
+def _allocate_reader_upload_path(filename: str) -> Path:
+    suffix = Path(filename or "").suffix.lower() or ".png"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}:
+        suffix = ".png"
+    READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    return READER_UPLOAD_TEMP_DIR / f"{uuid.uuid4().hex}{suffix}"
 
 
 @router.get(
@@ -278,6 +358,50 @@ async def get_image(
 
 
 @router.post(
+    "/images/export-data",
+    response_model=ExportSelectionResponse,
+    summary="Get prompt and tag export data for selected images",
+    description="""
+Return prompt text and tags for a selected image batch in one request.
+
+Used by the export modal so the frontend does not spam one request per image.
+Missing image IDs are reported in `missing_ids` instead of failing the whole export.
+    """,
+)
+async def export_selection_data(
+    request: ExportSelectionRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Get export-ready prompt and tag data for multiple selected images."""
+    return service.get_export_selection_data(request.image_ids)
+
+
+@router.post(
+    "/images/delete-selected",
+    response_model=DeleteSelectedImagesResponse,
+    summary="Delete selected image files from disk",
+    description="""
+Delete the selected image files from disk and remove their database rows.
+
+This is a destructive action and requires explicit confirmation from the client.
+The response reports partial failures per image instead of hiding them.
+    """,
+)
+async def delete_selected_images(
+    request: DeleteSelectedImagesRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Delete selected image files from disk with partial-failure reporting."""
+    if not request.confirm_delete_files:
+        raise HTTPException(
+            status_code=400,
+            detail="Deleting image files requires explicit confirmation",
+        )
+
+    return service.delete_selected_image_files(request.image_ids)
+
+
+@router.post(
     "/images/{image_id}/reparse",
     summary="Re-parse image metadata",
     description="""
@@ -302,6 +426,54 @@ async def reparse_image(
 ):
     """Re-parse metadata for a single image and update the database."""
     return service.reparse_image(image_id)
+
+
+@router.post(
+    "/image-metadata/save-edited",
+    response_model=SaveEditedMetadataResponse,
+    summary="Save an image copy with edited metadata",
+    description="""
+Save a copy of an image to a caller-selected path after editing common SD metadata fields.
+
+This endpoint is used by the Single Image Reader metadata editor. It defaults to
+save-as-new behavior and returns format-specific warnings where metadata support
+is limited (notably JPEG / some WebP viewers).
+    """,
+    responses={
+        200: {
+            "description": "Edited image saved successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "output_path": "/path/to/image.metadata-edited.png",
+                        "format": "png",
+                        "warnings": [],
+                    }
+                }
+            }
+        },
+        400: {"description": "Invalid path, format, or metadata payload"},
+        409: {"description": "Output path already exists and overwrite was not confirmed"},
+    },
+)
+async def save_edited_image_metadata(
+    request: SaveEditedMetadataRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Save a new image with edited metadata."""
+    try:
+        return service.save_image_with_edited_metadata(
+            source_path=request.source_path,
+            output_path=request.output_path,
+            image_format=request.format,
+            metadata=request.metadata,
+            allow_overwrite=request.allow_overwrite,
+            quality=request.quality,
+        )
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (PathValidationError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get(
@@ -402,7 +574,10 @@ Supports Windows (explorer), Linux (xdg-open), and macOS (open -R).
         }
     }
 )
-async def open_folder(body: dict):
+async def open_folder(
+    body: dict,
+    service: ImageService = Depends(get_image_service),
+):
     """Open the containing folder of an image in the OS file explorer."""
     image_id = body.get("image_id")
     if image_id is None:
@@ -412,14 +587,8 @@ async def open_folder(body: dict):
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    file_path = image.get("path", "")
-    if not file_path or not os.path.isfile(file_path):
-        raise HTTPException(
-            status_code=404,
-            detail="Image file not found on disk"
-        )
-
     try:
+        file_path = service.resolve_image_source_path(image_id, image.get("path", ""))
         normalized_path = os.path.normpath(file_path)
 
         if sys.platform == "win32":
@@ -432,6 +601,8 @@ async def open_folder(body: dict):
             subprocess.Popen(["xdg-open", parent_dir])
 
         return {"success": True, "path": normalized_path}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to open folder for image %s: %s", image_id, e)
         raise HTTPException(
@@ -490,16 +661,25 @@ async def parse_uploaded_image(file: UploadFile = File(...)):
         ext = ".png"
 
     tmp_path = None
+    cleanup_tmp = True
     try:
-        # Save upload to a temporary file
-        with tempfile.NamedTemporaryFile(
-            delete=False, suffix=ext
-        ) as tmp:
-            tmp_path = tmp.name
-            contents = await file.read()
-            tmp.write(contents)
+        _cleanup_stale_reader_uploads()
+        tmp_path = _allocate_reader_upload_path(file.filename)
+        with open(tmp_path, "wb") as tmp:
+            total_bytes = 0
+            while True:
+                chunk = await file.read(PARSE_IMAGE_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > PARSE_IMAGE_UPLOAD_MAX_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Uploaded image is too large to parse (max 64MB)",
+                    )
+                tmp.write(chunk)
 
-        readable, read_error = verify_image_readable(tmp_path)
+        readable, read_error = await run_in_threadpool(verify_image_readable, str(tmp_path))
         if not readable:
             raise HTTPException(
                 status_code=422,
@@ -507,13 +687,15 @@ async def parse_uploaded_image(file: UploadFile = File(...)):
             )
 
         # Parse metadata using the existing parser
-        result = parse_image(tmp_path)
+        result = await run_in_threadpool(parse_image, str(tmp_path))
         if result.get("parse_error") or result.get("width", 0) <= 0 or result.get("height", 0) <= 0:
             raise HTTPException(
                 status_code=422,
                 detail=f"Failed to parse image metadata: {result.get('parse_error') or 'image metadata could not be read'}",
             )
 
+        result["source_temp_path"] = str(tmp_path.resolve())
+        cleanup_tmp = False
         return result
     except HTTPException:
         raise
@@ -524,8 +706,9 @@ async def parse_uploaded_image(file: UploadFile = File(...)):
             detail=f"Failed to parse image metadata: {e}"
         )
     finally:
+        await file.close()
         # Clean up temp file
-        if tmp_path and os.path.exists(tmp_path):
+        if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
             try:
                 os.unlink(tmp_path)
             except OSError:

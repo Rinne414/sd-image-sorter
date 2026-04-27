@@ -101,11 +101,7 @@
         return window.I18n?.t?.(key, params) || fallback;
     }
 
-    async function ensureImageDetail(id) {
-        if (state.detailCache.has(id)) {
-            return state.detailCache.get(id);
-        }
-
+    async function fetchImageDetailFallback(id) {
         const cachedMeta = getImageMeta(id) || {};
 
         try {
@@ -129,8 +125,53 @@
         }
     }
 
+    async function ensureImageDetail(id) {
+        if (state.detailCache.has(id)) {
+            return state.detailCache.get(id);
+        }
+
+        await ensureImageDetails([id]);
+        return state.detailCache.get(id) || {
+            ...(getImageMeta(id) || {}),
+            tags: [],
+        };
+    }
+
     async function ensureImageDetails(ids) {
-        await Promise.all(ids.map(id => ensureImageDetail(id)));
+        const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : [ids])
+            .map((value) => Number(value))
+            .filter((value) => Number.isFinite(value) && value > 0)));
+        const missingIds = uniqueIds.filter((id) => !state.detailCache.has(id));
+        if (!missingIds.length) {
+            return;
+        }
+
+        const selectionLoader = window.App?.loadSelectionData;
+        if (typeof selectionLoader === 'function') {
+            const payload = await selectionLoader(missingIds);
+            const resolvedIds = new Set();
+
+            (payload?.images || []).forEach((image) => {
+                state.detailCache.set(image.id, {
+                    ...(getImageMeta(image.id) || {}),
+                    ...image,
+                    tags: Array.isArray(image.tags) ? image.tags : [],
+                });
+                resolvedIds.add(image.id);
+            });
+
+            missingIds
+                .filter((id) => !resolvedIds.has(id))
+                .forEach((id) => {
+                    state.detailCache.set(id, {
+                        ...(getImageMeta(id) || {}),
+                        tags: [],
+                    });
+                });
+            return;
+        }
+
+        await Promise.all(missingIds.map((id) => fetchImageDetailFallback(id)));
     }
 
     function getRatingLabel(item) {
@@ -322,29 +363,32 @@
         if (!filters || !window.formatFilterSummary) return [];
         const summary = window.formatFilterSummary(filters);
         const parts = [];
+        const allLabel = t('common.all', 'All');
+        const noneLabel = t('common.none', 'None');
+        const anyLabel = t('filter.any', 'Any');
 
-        if (summary.generators && summary.generators !== 'All') {
+        if (summary.generators && summary.generators !== allLabel) {
             parts.push(`${t('filter.generators', 'Generators')}: ${summary.generators}`);
         }
-        if (summary.ratings && summary.ratings !== 'All') {
+        if (summary.ratings && summary.ratings !== allLabel) {
             parts.push(`${t('filter.ratings', 'Ratings')}: ${summary.ratings}`);
         }
-        if (summary.tags && summary.tags !== 'None') {
+        if (summary.tags && summary.tags !== noneLabel) {
             parts.push(`${t('filter.tags', 'Tags')}: ${summary.tags}`);
         }
-        if (summary.prompts && summary.prompts !== 'None') {
+        if (summary.prompts && summary.prompts !== noneLabel) {
             parts.push(`${t('filter.prompts', 'Prompts')}: ${summary.prompts}`);
         }
-        if (summary.search && summary.search !== 'None') {
+        if (summary.search && summary.search !== noneLabel) {
             parts.push(`${t('filter.search', 'Search')}: ${summary.search}`);
         }
-        if (summary.checkpoints && summary.checkpoints !== 'None') {
+        if (summary.checkpoints && summary.checkpoints !== noneLabel) {
             parts.push(`${t('filter.checkpoints', 'Checkpoints')}: ${summary.checkpoints}`);
         }
-        if (summary.loras && summary.loras !== 'None') {
+        if (summary.loras && summary.loras !== noneLabel) {
             parts.push(`${t('filter.loras', 'LoRAs')}: ${summary.loras}`);
         }
-        if (summary.dimensions && summary.dimensions !== 'Any') {
+        if (summary.dimensions && summary.dimensions !== anyLabel) {
             parts.push(`${t('filter.sizeRules', 'Size Rules')}: ${summary.dimensions}`);
         }
 

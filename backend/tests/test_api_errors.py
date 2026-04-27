@@ -382,11 +382,31 @@ class TestRateLimiting:
             # Should not be rate limited (429)
             assert response.status_code != 429
 
+    def test_loopback_requests_skip_rate_limit_by_default(self, test_client, monkeypatch):
+        """Local-only traffic should not trip the safety limiter during normal app use."""
+        import main
+
+        monkeypatch.setattr(main, "RATE_LIMIT_MAX_REQUESTS", 1)
+        monkeypatch.setattr(main, "RATE_LIMIT_APPLY_TO_LOOPBACK", False)
+
+        with main._rate_limit_lock:
+            main._rate_limit_buckets.clear()
+
+        first = test_client.get("/api/images?limit=1")
+        second = test_client.get("/api/images?limit=1")
+
+        assert first.status_code != 429
+        assert second.status_code != 429
+
+        with main._rate_limit_lock:
+            main._rate_limit_buckets.clear()
+
     def test_excess_requests_are_rate_limited(self, test_client, monkeypatch):
         """Rapid requests beyond the bucket size should return 429."""
         import main
 
         monkeypatch.setattr(main, "RATE_LIMIT_MAX_REQUESTS", 3)
+        monkeypatch.setattr(main, "RATE_LIMIT_APPLY_TO_LOOPBACK", True)
 
         with main._rate_limit_lock:
             main._rate_limit_buckets.clear()

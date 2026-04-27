@@ -18,6 +18,8 @@ from starlette.background import BackgroundTask
 
 from obfuscation import (
     BIG_TOMATO_MODE,
+    MAX_OBFUSCATE_SOURCE_BYTES,
+    ImageTooLargeError,
     batch_process,
     decode_image,
     decode_image_bytes,
@@ -36,6 +38,7 @@ from utils.path_validation import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/obfuscate", tags=["obfuscation"])
+PREVIEW_UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
 
 
 def _safe_unlink(path: Optional[str]) -> None:
@@ -46,6 +49,25 @@ def _safe_unlink(path: Optional[str]) -> None:
         os.unlink(path)
     except OSError:
         pass
+
+
+async def _read_preview_upload(file: UploadFile) -> bytes:
+    """Read preview uploads incrementally so oversized files fail before full buffering."""
+    chunks = []
+    total = 0
+
+    while True:
+        chunk = await file.read(PREVIEW_UPLOAD_READ_CHUNK_SIZE)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_OBFUSCATE_SOURCE_BYTES:
+            raise ImageTooLargeError(
+                f"Image file too large (max {MAX_OBFUSCATE_SOURCE_BYTES // (1024 * 1024)}MB)"
+            )
+        chunks.append(chunk)
+
+    return b"".join(chunks)
 
 
 def _validate_source_image(path: str) -> str:
@@ -114,6 +136,8 @@ async def encode_single(request: SingleProcessRequest):
             compat_mode=compat_mode,
         )
         return result
+    except ImageTooLargeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -137,6 +161,8 @@ async def decode_single(request: SingleProcessRequest):
             compat_mode=compat_mode,
         )
         return result
+    except ImageTooLargeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -168,6 +194,8 @@ async def batch(request: BatchProcessRequest):
             compat_mode=compat_mode,
         )
         return result
+    except ImageTooLargeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -194,7 +222,7 @@ async def preview_process(
     tmp_out_path = None
     try:
         normalized_mode = normalize_compat_mode(compat_mode)
-        content = await file.read()
+        content = await _read_preview_upload(file)
         text_chunks = extract_png_text_chunks_from_bytes(content) if preserve_metadata and normalized_mode == BIG_TOMATO_MODE else []
 
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_out:
@@ -218,6 +246,8 @@ async def preview_process(
             filename=f"{'encoded' if mode == 'encode' else 'decoded'}_{stem}.png",
             background=BackgroundTask(_safe_unlink, tmp_out_path),
         )
+    except ImageTooLargeError as e:
+        raise HTTPException(status_code=413, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

@@ -27,6 +27,38 @@ const ArtistIdent = {
         return window.I18n?.getLang?.() === 'zh-CN' ? zhText : enText;
     },
 
+    tKey(key, enText, zhText = enText, params = null) {
+        const translated = window.I18n?.t?.(key, params || undefined);
+        if (translated && translated !== key) return translated;
+        let fallback = this.tText(enText, zhText);
+        if (params && typeof params === 'object') {
+            Object.entries(params).forEach(([token, value]) => {
+                fallback = fallback.replaceAll(`{${token}}`, String(value));
+            });
+        }
+        return fallback;
+    },
+
+    localizeDiagnosticsMessage(message) {
+        const raw = String(message || '').trim();
+        if (!raw) return '';
+
+        if (raw === 'Kaloscope runtime is ready.') {
+            return this.tText(raw, 'Kaloscope 运行环境已就绪。');
+        }
+        if (raw === 'Artist identification still needs the LSNet runtime, Kaloscope files, or Python dependencies.') {
+            return this.tText(raw, '还缺少 LSNet / Kaloscope / Python 依赖。');
+        }
+        if (raw === "On Windows, comfyui-lsnet may log 'SkaFn failed; falling back to PyTorchSkaFn'. That fallback is usually okay if artist predictions still appear.") {
+            return this.tText(
+                raw,
+                'Windows 下若出现 “SkaFn failed; falling back to PyTorchSkaFn”，但结果仍能出来，通常可以先忽略。'
+            );
+        }
+
+        return raw;
+    },
+
     getThresholdValue() {
         const rawValue = parseFloat(document.getElementById('artist-threshold')?.value || this.thresholdDefaults.value);
         return Number.isFinite(rawValue) ? rawValue : this.thresholdDefaults.value;
@@ -43,6 +75,23 @@ const ArtistIdent = {
         return this.stats?.artist_stats?.[artist] || { count: 0, avg_confidence: 0, max_confidence: 0 };
     },
 
+    dismissFirstUseCard() {
+        localStorage.setItem('artist-guide-seen', 'true');
+        const card = document.getElementById('artist-start-card');
+        if (card) card.hidden = true;
+    },
+
+    refreshFirstUseCard() {
+        const card = document.getElementById('artist-start-card');
+        const dismissBtn = document.getElementById('artist-start-dismiss');
+        if (!card) return;
+        if (dismissBtn && dismissBtn.dataset.bound !== 'true') {
+            dismissBtn.addEventListener('click', () => this.dismissFirstUseCard());
+            dismissBtn.dataset.bound = 'true';
+        }
+        card.hidden = localStorage.getItem('artist-guide-seen') === 'true';
+    },
+
     formatConfidencePercent(value) {
         const numeric = Number(value || 0);
         return `${(numeric * 100).toFixed(1)}%`;
@@ -51,7 +100,7 @@ const ArtistIdent = {
     init() {
         this.bindEvents();
         this._syncControls();
-        this.syncSelectionActionState();
+        this.refreshAvailabilityState();
         this.loadDiagnostics();
         this.loadStats();
         this.resumeBatchProgress();
@@ -246,7 +295,7 @@ const ArtistIdent = {
             localModelGroup.style.display = modelSource.value === 'local' ? 'block' : 'none';
         }
 
-        this.syncSelectionActionState();
+        this.refreshAvailabilityState();
     },
 
     syncSelectionActionState() {
@@ -256,18 +305,60 @@ const ArtistIdent = {
         const selectedIds = window.App?.AppState?.selectedIds;
         const normalizedSelectedIds = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
         const hasSelection = normalizedSelectedIds.size > 0;
-        const disabled = this.isIdentifying || !hasSelection;
+        const isAvailable = this.diagnostics ? this.diagnostics.available !== false : true;
+        const disabled = this.isIdentifying || !hasSelection || !isAvailable;
 
         identifySelectedBtn.disabled = disabled;
         identifySelectedBtn.setAttribute('aria-disabled', String(disabled));
 
         if (this.isIdentifying) {
-            identifySelectedBtn.title = 'Artist identification is already running';
+            identifySelectedBtn.dataset.dynamicTitle = 'true';
+            identifySelectedBtn.title = this.tText(
+                'Artist identification is already running',
+                '画师识别已经在运行中'
+            );
+        } else if (!isAvailable) {
+            identifySelectedBtn.dataset.dynamicTitle = 'true';
+            identifySelectedBtn.title = this.tText(
+                'Finish the setup in the status card above before identifying images.',
+                '请先按上方状态卡完成准备，再开始识别。'
+            );
         } else if (!hasSelection) {
-            identifySelectedBtn.title = 'Select images in Gallery first';
+            identifySelectedBtn.dataset.dynamicTitle = 'true';
+            identifySelectedBtn.title = this.tText(
+                'Select images in Gallery first',
+                '请先在图库里选中图片'
+            );
         } else {
+            delete identifySelectedBtn.dataset.dynamicTitle;
             identifySelectedBtn.removeAttribute('title');
         }
+    },
+
+    refreshAvailabilityState() {
+        const isAvailable = this.diagnostics ? this.diagnostics.available !== false : true;
+        const identifyAllBtn = document.getElementById('btn-identify-all');
+        const controls = document.querySelector('#view-artist .artist-controls');
+
+        controls?.classList.toggle('is-disabled', !isAvailable);
+
+        if (identifyAllBtn) {
+            const disabled = this.isIdentifying || !isAvailable;
+            identifyAllBtn.disabled = disabled;
+            identifyAllBtn.setAttribute('aria-disabled', String(disabled));
+            if (!isAvailable) {
+                identifyAllBtn.dataset.dynamicTitle = 'true';
+                identifyAllBtn.title = this.tText(
+                    'Finish the setup in the status card above before identifying images.',
+                    '请先按上方状态卡完成准备，再开始识别。'
+                );
+            } else if (!this.isIdentifying) {
+                delete identifyAllBtn.dataset.dynamicTitle;
+                identifyAllBtn.removeAttribute('title');
+            }
+        }
+
+        this.syncSelectionActionState();
     },
 
     async loadDiagnostics() {
@@ -283,23 +374,50 @@ const ArtistIdent = {
                 classes.push('model-health-banner-warning');
             }
 
-            const extras = [];
-            if (result.runtime_path) extras.push(`Runtime: ${result.runtime_path}`);
-            if (result.checkpoint_path) extras.push(`Checkpoint: ${result.checkpoint_path}`);
+            const title = result.available
+                ? this.tText('Style Finder is ready', '画师识别已就绪')
+                : this.tText('Style Finder needs setup first', '画师识别还需要先完成准备');
+            const summary = result.available
+                ? this.tText(
+                    'You can start identification now, then review the strongest matches in the center panel.',
+                    '现在可以开始识别，然后在中间结果区查看最强匹配。'
+                )
+                : this.tText(
+                    'Finish the missing runtime or model setup first. Do not start a full library run before it is ready.',
+                    '先补齐缺少的运行环境或模型，再回来开始识别。不要在没准备好时直接跑整库。'
+                );
+            const detailItems = [];
+            if (result.message) detailItems.push(this.localizeDiagnosticsMessage(result.message));
             if (result.missing_dependencies?.length) {
-                extras.push(`Missing: ${result.missing_dependencies.join(', ')}`);
+                detailItems.push(`${this.tText('Missing dependencies', '缺少依赖')}: ${result.missing_dependencies.join(', ')}`);
             }
-            if (result.runtime_note) {
-                extras.push(result.runtime_note);
-            }
-
+            if (result.runtime_note) detailItems.push(this.localizeDiagnosticsMessage(result.runtime_note));
+            if (result.runtime_path) detailItems.push(`${this.tText('Runtime path', '运行时路径')}: ${result.runtime_path}`);
+            if (result.checkpoint_path) detailItems.push(`${this.tText('Checkpoint path', '检查点路径')}: ${result.checkpoint_path}`);
             banner.className = classes.join(' ');
-            banner.innerHTML = `<strong>Kaloscope</strong> ${this._escapeHtml(result.message || '')}${
-                extras.length ? `<br><small>${this._escapeHtml(extras.join(' | '))}</small>` : ''
-            }`;
+            banner.innerHTML = `
+                <div class="model-health-copy">
+                    <span class="model-health-title">${this._escapeHtml(title)}</span>
+                    <span>${this._escapeHtml(summary)}</span>
+                    ${detailItems.length ? `
+                        <details class="model-health-details">
+                            <summary>${this._escapeHtml(this.tText('Technical details', '技术细节'))}</summary>
+                            <ul>${detailItems.map((item) => `<li>${this._escapeHtml(item)}</li>`).join('')}</ul>
+                        </details>
+                    ` : ''}
+                </div>
+            `;
+            this.refreshAvailabilityState();
         } catch (e) {
             banner.className = 'model-health-banner is-visible model-health-banner-warning';
-            banner.textContent = this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。');
+            banner.innerHTML = `
+                <div class="model-health-copy">
+                    <span class="model-health-title">${this._escapeHtml(this.tText('Style Finder needs setup first', '画师识别还需要先完成准备'))}</span>
+                    <span>${this._escapeHtml(this.tText('Artist runtime status could not be loaded.', '画师识别运行状态无法加载。'))}</span>
+                </div>
+            `;
+            this.diagnostics = { available: false };
+            this.refreshAvailabilityState();
         }
     },
 
@@ -598,7 +716,7 @@ const ArtistIdent = {
             this.progressTracker = window.App.createProgressTracker();
             window.App.resetProgressTracker(this.progressTracker);
             this.isIdentifying = true;
-            this.syncSelectionActionState();
+            this.refreshAvailabilityState();
             this.updateProgressUi(progress);
 
             const finalProgress = await this.pollProgress();
@@ -613,7 +731,7 @@ const ArtistIdent = {
             }
 
             this.isIdentifying = false;
-            this.syncSelectionActionState();
+            this.refreshAvailabilityState();
             if (this.progressTracker) {
                 window.App.resetProgressTracker(this.progressTracker);
             }
@@ -629,8 +747,14 @@ const ArtistIdent = {
         const progressFill = document.getElementById('artist-progress-fill');
         const progressText = document.getElementById('artist-progress-text');
 
+        if (this.diagnostics && this.diagnostics.available === false) {
+            showToast(this.tText('Finish setup first, then start identification.', '请先完成准备，再开始识别。'), 'warning');
+            return;
+        }
+
         this.isIdentifying = true;
-        this.syncSelectionActionState();
+        this.dismissFirstUseCard();
+        this.refreshAvailabilityState();
         this.progressTracker = window.App.createProgressTracker();
         window.App.resetProgressTracker(this.progressTracker);
 
@@ -668,7 +792,7 @@ const ArtistIdent = {
             }
 
             if (imageIds.length === 0) {
-                showToast('No images to identify', 'warning');
+                showToast(this.tKey('artist.noImagesToIdentify', 'No images to identify', '没有可识别的图片'), 'warning');
                 return;
             }
 
@@ -691,15 +815,18 @@ const ArtistIdent = {
         } catch (e) {
             if (/already in progress/i.test(String(e?.message || ''))) {
                 handedOffToExistingTask = true;
-                showToast('Artist identification is already running in the background', 'info');
+                showToast(this.tText(
+                    'Artist identification is already running in the background',
+                    '画师识别已经在后台运行中'
+                ), 'info');
                 await this.resumeBatchProgress();
             } else {
-                showToast(formatUserError(e, "Artist identification failed"), "error");
+                showToast(formatUserError(e, this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败')), "error");
             }
         } finally {
             if (!handedOffToExistingTask) {
                 this.isIdentifying = false;
-                this.syncSelectionActionState();
+                this.refreshAvailabilityState();
                 if (this.progressTracker) {
                     window.App.resetProgressTracker(this.progressTracker);
                 }
@@ -727,15 +854,23 @@ const ArtistIdent = {
                     if (progressFill) progressFill.style.width = `${percent}%`;
                     if (progressText) {
                         if (processed === 0 && progress.step === 'loading_runtime') {
-                            progressText.textContent = progress.message || 'Loading artist model...';
+                            progressText.textContent = progress.message || this.tKey('artist.loadingModel', 'Loading artist model...', '正在载入画师模型...');
                         } else {
                             const progressLabel = window.App.buildProgressText({
                                 progress,
                                 completed,
                                 total: Number(progress.total || 0),
                                 tracker: this.progressTracker,
-                                defaultMessage: `${processed} identified${errors > 0 ? `, ${errors} error(s)` : ''}`,
-                                primaryLabel: 'Artist ID'
+                                defaultMessage: errors > 0
+                                    ? this.tKey('artist.progressDefault', '{processed} identified, {errors} failed', '已识别 {processed} 张，失败 {errors} 张', {
+                                        processed,
+                                        errors,
+                                    })
+                                    : this.tKey('artist.progressDefault', '{processed} identified, {errors} failed', '已识别 {processed} 张，失败 {errors} 张', {
+                                        processed,
+                                        errors: 0,
+                                    }),
+                                primaryLabel: this.tKey('artist.progressPrimary', 'Artist ID', '画师识别')
                             });
                             const currentItem = progress.current_item ? ` · ${progress.current_item}` : '';
                             progressText.textContent = `${progressLabel}${currentItem}`;
@@ -775,8 +910,14 @@ const ArtistIdent = {
             return;
         }
 
+        if (this.diagnostics && this.diagnostics.available === false) {
+            showToast(this.tText('Finish setup first, then start identification.', '请先完成准备，再开始识别。'), 'warning');
+            return;
+        }
+
         this.isIdentifying = true;
-        this.syncSelectionActionState();
+        this.dismissFirstUseCard();
+        this.refreshAvailabilityState();
         this.progressTracker = window.App.createProgressTracker();
         window.App.resetProgressTracker(this.progressTracker);
 
@@ -785,7 +926,14 @@ const ArtistIdent = {
         try {
             if (progressContainer) progressContainer.style.display = 'block';
             if (progressFill) progressFill.style.width = '0%';
-            if (progressText) progressText.textContent = `Identifying ${normalizedSelectedIds.size} selected image(s)...`;
+            if (progressText) {
+                progressText.textContent = this.tKey(
+                    'artist.identifyingSelected',
+                    'Identifying {count} selected image(s)...',
+                    '正在识别 {count} 张已选图片...',
+                    { count: normalizedSelectedIds.size }
+                );
+            }
 
             await window.App.API.post(
                 '/api/artists/identify-batch',
@@ -800,15 +948,18 @@ const ArtistIdent = {
         } catch (e) {
             if (/already in progress/i.test(String(e?.message || ''))) {
                 handedOffToExistingTask = true;
-                showToast('Artist identification is already running in the background', 'info');
+                showToast(this.tText(
+                    'Artist identification is already running in the background',
+                    '画师识别已经在后台运行中'
+                ), 'info');
                 await this.resumeBatchProgress();
             } else {
-                showToast(formatUserError(e, "Artist identification failed"), "error");
+                showToast(formatUserError(e, this.tKey('artist.identificationFailed', 'Artist identification failed', '画师识别失败')), "error");
             }
         } finally {
             if (!handedOffToExistingTask) {
                 this.isIdentifying = false;
-                this.syncSelectionActionState();
+                this.refreshAvailabilityState();
                 if (this.progressTracker) {
                     window.App.resetProgressTracker(this.progressTracker);
                 }
@@ -822,15 +973,15 @@ const ArtistIdent = {
         const { showToast, showConfirm, API } = window.App;
 
         showConfirm(
-            'Clear Artist Predictions',
-            'Clear all artist predictions? This cannot be undone.',
+            this.tKey('artist.clearConfirmTitle', 'Clear Artist Predictions', '清空画师识别结果'),
+            this.tKey('artist.clearConfirmMessage', 'Clear all artist predictions? This cannot be undone.', '要清空全部画师识别结果吗？此操作无法撤销。'),
             async () => {
                 try {
                     await API.delete('/api/artists/clear');
                     showToast(this.tText('All predictions cleared', '已清除所有预测'), 'success');
                     this.loadStats();
                 } catch (e) {
-                    showToast(formatUserError(e, "Failed to clear data"), "error");
+                    showToast(formatUserError(e, this.tKey('artist.clearDataFailed', 'Failed to clear data', '清空数据失败')), "error");
                 }
             }
         );
@@ -895,7 +1046,11 @@ const ArtistIdent = {
         });
 
         document.addEventListener('selection-state-changed', () => {
-            this.syncSelectionActionState();
+            this.refreshAvailabilityState();
+        });
+
+        document.addEventListener('languageChanged', () => {
+            requestAnimationFrame(() => this.refreshAvailabilityState());
         });
     },
 
@@ -903,32 +1058,7 @@ const ArtistIdent = {
     // ============== First Use Guide ==============
 
     showFirstUseGuide() {
-        if (localStorage.getItem('artist-guide-seen')) return;
-        if (document.getElementById('artist-first-use-guide')) return;
-
-        const view = document.getElementById('view-artist');
-        if (!view) return;
-
-        const t = (key) => (window.I18n ? window.I18n.t(key) : key);
-        const overlay = window.App.createGuideOverlay({
-            id: 'artist-first-use-guide',
-            storageKey: 'artist-guide-seen',
-            title: t('guide.artistTitle'),
-            description: t('guide.artistDescription'),
-            steps: [
-                { title: t('guide.artistStep1Title'), text: t('guide.artistStep1Text') },
-                { title: t('guide.artistStep2Title'), text: t('guide.artistStep2Text') },
-                { title: t('guide.artistStep3Title'), text: t('guide.artistStep3Text') },
-                { title: t('guide.artistStep4Title'), text: t('guide.artistStep4Text') },
-                { title: t('guide.artistStep5Title'), text: t('guide.artistStep5Text') },
-            ],
-            note: t('guide.artistNote'),
-            closeLabel: t('guide.closeLabel'),
-            maxWidth: '480px',
-        });
-
-        view.style.position = 'relative';
-        view.appendChild(overlay);
+        this.refreshFirstUseCard();
     },
 
 };

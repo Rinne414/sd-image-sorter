@@ -23,6 +23,7 @@ import os
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Union
 from contextlib import contextmanager
 import time
@@ -33,6 +34,12 @@ from config import (
     FAVORITES_COLLECTION_SLUG,
     FAVORITES_COLLECTION_NAME,
     FAVORITES_FOLDER_PATH,
+)
+from utils.source_paths import (
+    build_indexed_image_lookup_candidates,
+    indexed_image_path_match_key,
+    is_case_insensitive_indexed_path,
+    normalize_indexed_image_path,
 )
 
 
@@ -49,6 +56,82 @@ def _invalidate_tags_cache():
     with _tags_cache_lock:
         _tags_cache_data = None
         _tags_cache_timestamp = 0
+
+
+def _normalize_indexed_image_path(path: Optional[str]) -> str:
+    """Normalize image paths consistently across Windows and POSIX runtimes."""
+    return normalize_indexed_image_path(path)
+
+
+def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
+    """Build a SQL clause plus candidate list for equivalent indexed paths."""
+    normalized_paths = [_normalize_indexed_image_path(path) for path in paths if path]
+    if not normalized_paths:
+        return "", []
+
+    candidates: List[str] = []
+    seen: set[str] = set()
+    casefold_candidates: List[str] = []
+    seen_casefold: set[str] = set()
+    for path in normalized_paths:
+        for candidate in build_indexed_image_lookup_candidates(path):
+            match_key = indexed_image_path_match_key(candidate)
+            if match_key in seen:
+                continue
+            seen.add(match_key)
+            candidates.append(candidate)
+            if is_case_insensitive_indexed_path(candidate) and match_key not in seen_casefold:
+                seen_casefold.add(match_key)
+                casefold_candidates.append(match_key)
+
+    clauses: List[str] = []
+    params: List[str] = []
+    if candidates:
+        placeholders = ",".join("?" * len(candidates))
+        clauses.append(f"path IN ({placeholders})")
+        params.extend(candidates)
+    if casefold_candidates:
+        placeholders = ",".join("?" * len(casefold_candidates))
+        clauses.append(f"LOWER(path) IN ({placeholders})")
+        params.extend(casefold_candidates)
+
+    if not clauses:
+        return "", []
+
+    return " OR ".join(clauses), params
+
+
+def _ensure_content_fingerprint_value(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    content_fingerprint: Optional[str],
+) -> Optional[str]:
+    """Return a usable content fingerprint, computing it on demand if needed."""
+    normalized = _normalize_content_fingerprint(content_fingerprint)
+    if normalized:
+        return normalized
+
+    row = cursor.execute(
+        "SELECT path, content_fingerprint FROM images WHERE id = ?",
+        (image_id,),
+    ).fetchone()
+    if not row:
+        return None
+
+    existing = _normalize_content_fingerprint(row["content_fingerprint"])
+    if existing:
+        return existing
+
+    try:
+        from image_fingerprint import compute_image_content_fingerprint
+        from utils.source_paths import resolve_existing_indexed_image_path
+
+        resolved_path = resolve_existing_indexed_image_path(row["path"], backend_file=__file__)
+        if not resolved_path:
+            return None
+        return compute_image_content_fingerprint(resolved_path)
+    except Exception:
+        return None
 
 
 def normalize_prompt_token(token: str) -> str:
@@ -175,6 +258,170 @@ def _serialize_loras(loras: Optional[List[str]]) -> Optional[str]:
     return json.dumps(loras) if loras is not None else None
 
 
+def _deserialize_loras(loras: Any) -> Optional[List[str]]:
+    """Best-effort deserialize of stored LoRA JSON."""
+    if loras is None:
+        return None
+    if isinstance(loras, list):
+        return loras
+    if isinstance(loras, str):
+        try:
+            value = json.loads(loras)
+            return value if isinstance(value, list) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+
+def _normalize_source_fingerprint(value: Any) -> Optional[int]:
+    """Convert stored source fingerprint values to integers when possible."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_content_fingerprint(value: Any) -> Optional[str]:
+    """Normalize stored image content fingerprints."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _row_value(row: Optional[Any], key: str) -> Any:
+    """Read a field from either sqlite rows or plain dictionaries."""
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return row.get(key)
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _json_safe_db_value(value: Any) -> Any:
+    """Convert SQLite row values into JSON-safe Python values."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, bytearray):
+        return bytes(value).decode("utf-8", errors="replace")
+    if isinstance(value, memoryview):
+        return value.tobytes().decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {key: _json_safe_db_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_db_value(item) for item in value]
+    return value
+
+
+def _row_to_dict(row: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Convert sqlite3.Row objects into JSON-safe dictionaries."""
+    if row is None:
+        return None
+    return {
+        key: _json_safe_db_value(value)
+        for key, value in dict(row).items()
+    }
+
+
+def _rows_to_dicts(rows: List[Any]) -> List[Dict[str, Any]]:
+    """Convert a sequence of sqlite3.Row objects into JSON-safe dictionaries."""
+    return [_row_to_dict(row) for row in rows if row is not None]
+
+
+def _has_source_fingerprint(row: Optional[Dict[str, Any]]) -> bool:
+    """Return True when a row has both source fingerprint fields populated."""
+    if not row:
+        return False
+    return (
+        _normalize_source_fingerprint(_row_value(row, "source_mtime_ns")) is not None
+        and _normalize_source_fingerprint(_row_value(row, "source_size")) is not None
+    )
+
+
+def _is_source_fingerprint_changed(existing_row: Optional[Dict[str, Any]], record: Dict[str, Any]) -> bool:
+    """Check whether the stored source fingerprint differs from the incoming record."""
+    if not existing_row or not _has_source_fingerprint(existing_row):
+        return False
+
+    incoming_mtime_ns = _normalize_source_fingerprint(record.get("source_mtime_ns"))
+    incoming_size = _normalize_source_fingerprint(record.get("source_size"))
+    if incoming_mtime_ns is None or incoming_size is None:
+        return False
+
+    return (
+        _normalize_source_fingerprint(_row_value(existing_row, "source_mtime_ns")) != incoming_mtime_ns
+        or _normalize_source_fingerprint(_row_value(existing_row, "source_size")) != incoming_size
+    )
+
+
+def _has_derived_state(row: Optional[Dict[str, Any]]) -> bool:
+    """Return True when the row currently has derived data cached."""
+    if not row:
+        return False
+    return any([
+        _row_value(row, "tagged_at") is not None,
+        _row_value(row, "ai_caption") is not None,
+        _row_value(row, "aesthetic_score") is not None,
+        bool(_row_value(row, "has_embedding")),
+        bool(_row_value(row, "has_artist_predictions")),
+    ])
+
+
+def _should_clear_derived_state(
+    existing_row: Optional[Dict[str, Any]],
+    record: Dict[str, Any],
+    *,
+    source_changed: bool,
+    mark_unreadable: bool,
+) -> bool:
+    """Decide whether the source change invalidates cached derived data."""
+    if mark_unreadable:
+        return True
+    if not _has_derived_state(existing_row):
+        return False
+
+    metadata_status = str(record.get("metadata_status") or "complete").strip().lower()
+    if metadata_status == "pending":
+        # Placeholder scan rows do not know yet whether pixel data changed.
+        return False
+
+    previous_fingerprint = _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint"))
+    incoming_fingerprint = _normalize_content_fingerprint(record.get("content_fingerprint"))
+    if previous_fingerprint is not None and incoming_fingerprint is not None:
+        return previous_fingerprint != incoming_fingerprint
+
+    if not source_changed:
+        return False
+
+    if previous_fingerprint is None or incoming_fingerprint is None:
+        return True
+
+    return False
+
+
+def _clear_image_derived_state(cursor: sqlite3.Cursor, image_id: int) -> None:
+    """Remove derived data that becomes stale when the source image changes."""
+    cursor.execute(
+        """
+        UPDATE images
+        SET content_fingerprint = NULL,
+            embedding = NULL,
+            tagged_at = NULL,
+            ai_caption = NULL,
+            aesthetic_score = NULL
+        WHERE id = ?
+        """,
+        (image_id,),
+    )
+    cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+    cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (image_id,))
+
+
 def _sync_image_loras(
     cursor: sqlite3.Cursor,
     image_id: int,
@@ -249,6 +496,10 @@ def init_db() -> None:
                 loras TEXT, -- JSON array of lora names
                 is_readable INTEGER DEFAULT 1,
                 read_error TEXT,
+                source_mtime_ns INTEGER,
+                source_size INTEGER,
+                metadata_status TEXT DEFAULT 'complete',
+                content_fingerprint TEXT,
                 created_at DATETIME,
                 indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 tagged_at DATETIME
@@ -274,7 +525,16 @@ def init_db() -> None:
             cursor.execute("ALTER TABLE images ADD COLUMN is_readable INTEGER DEFAULT 1")
         if 'read_error' not in columns:
             cursor.execute("ALTER TABLE images ADD COLUMN read_error TEXT")
+        if 'source_mtime_ns' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN source_mtime_ns INTEGER")
+        if 'source_size' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN source_size INTEGER")
+        if 'metadata_status' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN metadata_status TEXT DEFAULT 'complete'")
+        if 'content_fingerprint' not in columns:
+            cursor.execute("ALTER TABLE images ADD COLUMN content_fingerprint TEXT")
         cursor.execute("UPDATE images SET is_readable = 1 WHERE is_readable IS NULL")
+        cursor.execute("UPDATE images SET metadata_status = 'complete' WHERE metadata_status IS NULL")
 
         # Collections table (Favorites MVP uses a built-in collection)
         cursor.execute("""
@@ -442,6 +702,7 @@ def init_db() -> None:
 
         # Readability index: normal library queries filter on COALESCE(is_readable, 1) = 1
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_readable ON images(is_readable)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_metadata_status ON images(metadata_status)")
 
         # Remove redundant simple indexes superseded by composite ones
         # idx_tags_tag is redundant with idx_tags_tag_image(tag, image_id)
@@ -505,6 +766,10 @@ def add_image(
     model_hash: Optional[str] = None,
     is_readable: bool = True,
     read_error: Optional[str] = None,
+    source_mtime_ns: Optional[int] = None,
+    source_size: Optional[int] = None,
+    metadata_status: str = "complete",
+    content_fingerprint: Optional[str] = None,
     return_status: bool = False,
 ) -> Union[int, Tuple[int, str]]:
     """Add an image to the database.
@@ -513,98 +778,393 @@ def add_image(
     ``(image_id, "new" | "updated")`` so callers can report truthful scan
     summaries without duplicating the upsert logic.
     """
+    record = {
+        "path": path,
+        "filename": filename,
+        "generator": generator,
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "metadata_json": metadata_json,
+        "width": width,
+        "height": height,
+        "file_size": file_size,
+        "checkpoint": checkpoint,
+        "loras": loras,
+        "created_at": created_at,
+        "model_hash": model_hash,
+        "is_readable": is_readable,
+        "read_error": read_error,
+        "source_mtime_ns": source_mtime_ns,
+        "source_size": source_size,
+        "metadata_status": metadata_status,
+        "content_fingerprint": content_fingerprint,
+    }
+
     with get_db() as conn:
         cursor = conn.cursor()
-        serialized_loras = _serialize_loras(loras)
-        existing = cursor.execute(
-            "SELECT id FROM images WHERE path = ?",
-            (path,)
-        ).fetchone()
-
-        if existing:
-            image_id = existing["id"]
-            write_status = "updated"
-            cursor.execute(
-                """
-                UPDATE images
-                SET filename = ?,
-                    generator = ?,
-                    prompt = ?,
-                    negative_prompt = ?,
-                    metadata_json = ?,
-                    width = ?,
-                    height = ?,
-                    file_size = ?,
-                    checkpoint = ?,
-                    loras = ?,
-                    model_hash = COALESCE(?, model_hash),
-                    is_readable = ?,
-                    read_error = ?,
-                    created_at = COALESCE(?, created_at),
-                    indexed_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (
-                    filename,
-                    generator,
-                    prompt,
-                    negative_prompt,
-                    metadata_json,
-                    width,
-                    height,
-                    file_size,
-                    checkpoint,
-                    serialized_loras,
-                    model_hash,
-                    1 if is_readable else 0,
-                    read_error,
-                    created_at,
-                    image_id,
-                )
-            )
-        else:
-            write_status = "new"
-            cursor.execute(
-                """
-                INSERT INTO images
-                (path, filename, generator, prompt, negative_prompt, metadata_json,
-                 width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error, created_at, indexed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """,
-                (
-                    path,
-                    filename,
-                    generator,
-                    prompt,
-                    negative_prompt,
-                    metadata_json,
-                    width,
-                    height,
-                    file_size,
-                    checkpoint,
-                    serialized_loras,
-                    model_hash,
-                    1 if is_readable else 0,
-                    read_error,
-                    created_at,
-                )
-            )
-            image_id = cursor.lastrowid
-
-        _sync_image_loras(cursor, image_id, loras, prompt)
+        image_id, write_status = _upsert_image_record(cursor, record)
+        _invalidate_tags_cache()
 
         if return_status:
             return image_id, write_status
         return image_id
 
 
-def add_tags(image_id: int, tags: List[Dict[str, Any]]) -> None:
+def _get_existing_images_by_paths(
+    cursor: sqlite3.Cursor,
+    paths: List[str],
+) -> Dict[str, sqlite3.Row]:
+    """Fetch existing image rows keyed by normalized indexed path."""
+    normalized_paths = [_normalize_indexed_image_path(path) for path in paths if path]
+    if not normalized_paths:
+        return {}
+
+    requested_candidates = {
+        path: build_indexed_image_lookup_candidates(path)
+        for path in normalized_paths
+    }
+    existing_rows: Dict[str, sqlite3.Row] = {}
+    chunk_size = 100
+    for start in range(0, len(normalized_paths), chunk_size):
+        chunk_paths = normalized_paths[start:start + chunk_size]
+        query_clause, query_params = _path_query_match_clause(chunk_paths)
+        if not query_clause:
+            continue
+        cursor.execute(
+            f"""
+            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
+                   width, height, file_size, checkpoint, loras, model_hash,
+                   created_at, is_readable, read_error, source_mtime_ns, source_size, metadata_status,
+                   content_fingerprint, tagged_at, ai_caption, aesthetic_score,
+                   CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
+                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+            FROM images
+            WHERE {query_clause}
+            """,
+            query_params,
+        )
+        for row in cursor.fetchall():
+            existing_rows[row["path"]] = row
+
+    existing: Dict[str, sqlite3.Row] = {}
+    rows_by_match_key = {
+        indexed_image_path_match_key(path): row
+        for path, row in existing_rows.items()
+    }
+    for requested_path, candidates in requested_candidates.items():
+        for candidate in candidates:
+            row = existing_rows.get(candidate)
+            if not row:
+                row = rows_by_match_key.get(indexed_image_path_match_key(candidate))
+            if row:
+                existing[requested_path] = row
+                break
+
+    return existing
+
+
+def _upsert_image_record(
+    cursor: sqlite3.Cursor,
+    record: Dict[str, Any],
+    existing_row: Optional[sqlite3.Row] = None,
+) -> Tuple[int, str]:
+    """Insert or update a single image row using an existing transaction."""
+    path = _normalize_indexed_image_path(record["path"])
+    serialized_loras = _serialize_loras(record.get("loras"))
+    metadata_status = record.get("metadata_status") or "complete"
+    source_changed = False
+    mark_unreadable = not record.get("is_readable", True)
+
+    if existing_row is None:
+        candidates = build_indexed_image_lookup_candidates(path)
+        if candidates:
+            query_clause, query_params = _path_query_match_clause(candidates)
+            existing_rows = cursor.execute(
+                f"""
+                SELECT id, path, source_mtime_ns, source_size, content_fingerprint,
+                       tagged_at, ai_caption, aesthetic_score,
+                       CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
+                       EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+                FROM images
+                WHERE {query_clause}
+                """,
+                query_params,
+            ).fetchall()
+            rows_by_path = {row["path"]: row for row in existing_rows}
+            rows_by_match_key = {
+                indexed_image_path_match_key(row["path"]): row
+                for row in existing_rows
+            }
+            for candidate in candidates:
+                existing_row = rows_by_path.get(candidate)
+                if not existing_row:
+                    existing_row = rows_by_match_key.get(indexed_image_path_match_key(candidate))
+                if existing_row:
+                    break
+
+    if existing_row:
+        image_id = existing_row["id"]
+        write_status = "updated"
+        source_changed = _is_source_fingerprint_changed(existing_row, record)
+        incoming_source_mtime_ns = record.get("source_mtime_ns")
+        incoming_source_size = record.get("source_size")
+        if metadata_status == "pending":
+            # Placeholder scan rows should not consume the new source fingerprint
+            # before the final metadata backfill has a chance to compare pixels.
+            incoming_source_mtime_ns = None
+            incoming_source_size = None
+        if _should_clear_derived_state(
+            existing_row,
+            record,
+            source_changed=source_changed,
+            mark_unreadable=mark_unreadable,
+        ):
+            _clear_image_derived_state(cursor, image_id)
+
+        cursor.execute(
+            """
+            UPDATE images
+            SET filename = ?,
+                generator = ?,
+                prompt = ?,
+                negative_prompt = ?,
+                metadata_json = ?,
+                width = ?,
+                height = ?,
+                file_size = ?,
+                checkpoint = ?,
+                loras = ?,
+                model_hash = COALESCE(?, model_hash),
+                is_readable = ?,
+                read_error = ?,
+                source_mtime_ns = COALESCE(?, source_mtime_ns),
+                source_size = COALESCE(?, source_size),
+                metadata_status = ?,
+                content_fingerprint = COALESCE(?, content_fingerprint),
+                created_at = COALESCE(created_at, ?),
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                record["filename"],
+                record.get("generator", "unknown"),
+                record.get("prompt"),
+                record.get("negative_prompt"),
+                record.get("metadata_json"),
+                record.get("width"),
+                record.get("height"),
+                record.get("file_size"),
+                record.get("checkpoint"),
+                serialized_loras,
+                record.get("model_hash"),
+                1 if record.get("is_readable", True) else 0,
+                record.get("read_error"),
+                incoming_source_mtime_ns,
+                incoming_source_size,
+                metadata_status,
+                record.get("content_fingerprint"),
+                record.get("created_at"),
+                image_id,
+            ),
+        )
+    else:
+        write_status = "new"
+        cursor.execute(
+            """
+            INSERT INTO images
+            (path, filename, generator, prompt, negative_prompt, metadata_json,
+             width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error,
+             source_mtime_ns, source_size, metadata_status, content_fingerprint, created_at, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (
+                path,
+                record["filename"],
+                record.get("generator", "unknown"),
+                record.get("prompt"),
+                record.get("negative_prompt"),
+                record.get("metadata_json"),
+                record.get("width"),
+                record.get("height"),
+                record.get("file_size"),
+                record.get("checkpoint"),
+                serialized_loras,
+                record.get("model_hash"),
+                1 if record.get("is_readable", True) else 0,
+                record.get("read_error"),
+                record.get("source_mtime_ns"),
+                record.get("source_size"),
+                metadata_status,
+                record.get("content_fingerprint"),
+                record.get("created_at"),
+            ),
+        )
+        image_id = cursor.lastrowid
+
+    _sync_image_loras(cursor, image_id, record.get("loras"), record.get("prompt"))
+    return image_id, write_status
+
+
+def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool = False) -> Dict[str, Any]:
+    """Insert or update many images in a single transaction."""
+    if not image_records:
+        empty_result: Dict[str, Any] = {"new": 0, "updated": 0}
+        if return_statuses:
+            empty_result["statuses"] = {}
+        return empty_result
+
+    normalized_records = []
+    for record in image_records:
+        normalized = dict(record)
+        normalized["path"] = _normalize_indexed_image_path(record["path"])
+        normalized_records.append(normalized)
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        existing_by_path = _get_existing_images_by_paths(
+            cursor,
+            [record["path"] for record in normalized_records],
+        )
+        counts = {"new": 0, "updated": 0}
+        statuses: Dict[str, str] = {}
+
+        for record in normalized_records:
+            _image_id, status = _upsert_image_record(
+                cursor,
+                record,
+                existing_row=existing_by_path.get(record["path"]),
+            )
+            counts[status] += 1
+            statuses[record["path"]] = status
+
+        _invalidate_tags_cache()
+        if return_statuses:
+            return {
+                **counts,
+                "statuses": statuses,
+            }
+        return counts
+
+
+def get_image_scan_state_by_paths(paths: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Fetch lightweight row state used by folder scan optimizations."""
+    if not paths:
+        return {}
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        rows = _get_existing_images_by_paths(cursor, paths)
+        return {
+            path: _row_to_dict(row)
+            for path, row in rows.items()
+        }
+
+
+def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List[Dict[str, Any]]:
+    """Return lightweight image rows that fall under a scan root."""
+    normalized_folder = _normalize_indexed_image_path(folder_path)
+    folder_candidates = build_indexed_image_lookup_candidates(normalized_folder)
+    if not folder_candidates:
+        return []
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        conditions: List[str] = []
+        params: List[str] = []
+        for candidate in folder_candidates:
+            windows_style = "\\" in candidate and not candidate.startswith("/")
+            separator = "\\" if windows_style else "/"
+            prefix = candidate.rstrip("\\/") + separator
+            conditions.append("(path = ? OR path LIKE ?)")
+            params.extend([candidate, f"{prefix}%"])
+
+        cursor.execute(
+            f"""
+            SELECT id, path, filename
+            FROM images
+            WHERE {" OR ".join(conditions)}
+            """,
+            params,
+        )
+        rows = _rows_to_dicts(cursor.fetchall())
+
+    if recursive:
+        return rows
+
+    scoped_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        for candidate in folder_candidates:
+            candidate_path = row["path"]
+            if candidate_path == candidate:
+                scoped_rows.append(row)
+                break
+
+            windows_style = "\\" in candidate and not candidate.startswith("/")
+            separator = "\\" if windows_style else "/"
+            prefix = candidate.rstrip("\\/") + separator
+            if not candidate_path.startswith(prefix):
+                continue
+
+            remainder = candidate_path[len(prefix):]
+            if remainder and separator not in remainder and (separator == "/" or "/" not in remainder):
+                scoped_rows.append(row)
+                break
+
+    return scoped_rows
+
+
+def delete_images_by_ids(image_ids: List[int]) -> int:
+    """Delete many image rows in chunks and return the removed count."""
+    if not image_ids:
+        return 0
+
+    removed = 0
+    batch_size = 500
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for start in range(0, len(image_ids), batch_size):
+            batch = image_ids[start:start + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            cursor.execute(
+                f"DELETE FROM images WHERE id IN ({placeholders})",
+                batch,
+            )
+            removed += cursor.rowcount or 0
+
+    if removed:
+        _invalidate_tags_cache()
+
+    return removed
+
+
+def delete_images_by_paths(paths: List[str]) -> int:
+    """Delete image rows by absolute file path."""
+    clause, params = _path_query_match_clause(paths)
+    if not clause:
+        return 0
+
+    removed = 0
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM images WHERE {clause}", params)
+        removed += cursor.rowcount or 0
+
+    if removed:
+        _invalidate_tags_cache()
+
+    return removed
+
+
+def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Optional[str] = None) -> None:
     """Add tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
 
     Uses executemany for batch insert performance.
     """
     with get_db() as conn:
         cursor = conn.cursor()
+        content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, content_fingerprint)
         # Clear existing tags
         cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
         # Batch insert new tags (N+1 fix: use executemany instead of loop)
@@ -620,8 +1180,8 @@ def add_tags(image_id: int, tags: List[Dict[str, Any]]) -> None:
             )
         # Update tagged timestamp
         cursor.execute(
-            "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (image_id,)
+            "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+            (content_fingerprint, image_id)
         )
     _invalidate_tags_cache()
 
@@ -637,6 +1197,7 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
             - image_id: int
             - tags: List[Dict] with 'tag' and 'confidence' keys
             - ai_caption: Optional[str] - natural language caption from VLM models
+            - content_fingerprint: Optional[str] - metadata-independent image hash
     """
     if not image_tags_list:
         return
@@ -648,6 +1209,7 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
             image_id = item["image_id"]
             tags = item["tags"]
             ai_caption = item.get("ai_caption")
+            content_fingerprint = _ensure_content_fingerprint_value(cursor, image_id, item.get("content_fingerprint"))
 
             # Clear existing tags
             cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
@@ -667,13 +1229,13 @@ def add_tags_batch(image_tags_list: List[Dict[str, Any]]) -> None:
             # Update tagged timestamp and caption
             if ai_caption:
                 cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ? WHERE id = ?",
-                    (ai_caption, image_id)
+                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, ai_caption = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+                    (ai_caption, content_fingerprint, image_id)
                 )
             else:
                 cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (image_id,)
+                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+                    (content_fingerprint, image_id)
                 )
         
         # Single commit at the end (automatic with context manager)
@@ -697,22 +1259,26 @@ VALID_SORT_OPTIONS = {
 _IMAGE_COLUMNS_FULL = (
     "i.id, i.path, i.filename, i.generator, i.prompt, i.negative_prompt, i.metadata_json, "
     "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.source_mtime_ns, i.source_size, i.metadata_status, "
     "i.created_at, i.indexed_at, i.tagged_at, i.ai_caption, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_WITH_PROMPT = (
     "i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, "
     "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.source_mtime_ns, i.source_size, i.metadata_status, "
     "i.created_at, i.tagged_at, i.aesthetic_score"
 )
 _IMAGE_COLUMNS_LIGHTWEIGHT = (
     "i.id, i.filename, i.path, i.generator, i.width, i.height, "
     "i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
+    "i.source_mtime_ns, i.source_size, i.metadata_status, "
     "i.created_at, i.tagged_at, i.aesthetic_score"
 )
 # Bare-table version (no alias prefix) for single-table queries
 _IMAGE_COLUMNS_BARE = (
     "id, path, filename, generator, prompt, negative_prompt, metadata_json, "
     "width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error, "
+    "source_mtime_ns, source_size, metadata_status, "
     "created_at, indexed_at, tagged_at, ai_caption, aesthetic_score"
 )
 
@@ -878,9 +1444,9 @@ def _apply_lora_filter(conditions: List[str], params: List[Any],
     for lora in loras:
         lora_normalized = normalize_lora_name(lora)
         lora_conditions.append(
-            "EXISTS (SELECT 1 FROM image_loras il WHERE il.image_id = i.id AND LOWER(il.lora_name) LIKE ? ESCAPE '\\')"
+            "EXISTS (SELECT 1 FROM image_loras il WHERE il.image_id = i.id AND LOWER(il.lora_name) = ?)"
         )
-        params.append(f"%{escape_like_pattern(lora_normalized)}%")
+        params.append(lora_normalized)
 
     conditions.append(f"({' OR '.join(lora_conditions)})")
 
@@ -1108,7 +1674,7 @@ def _fetch_post_filtered_page(
         if not rows:
             break
 
-        batch = _post_filter_results([dict(row) for row in rows], prompt_terms, loras, 0, 0)
+        batch = _post_filter_results(_rows_to_dicts(rows), prompt_terms, loras, 0, 0)
         collected.extend(batch)
         if limit and len(collected) > limit:
             break
@@ -1278,7 +1844,7 @@ def get_images(
             params.extend([limit, offset])
             cursor.execute(query, params)
             rows = cursor.fetchall()
-            results = [dict(row) for row in rows]
+            results = _rows_to_dicts(rows)
 
         return results
 
@@ -1660,7 +2226,7 @@ def get_images_paginated(
 
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        results = [dict(row) for row in rows]
+        results = _rows_to_dicts(rows)
 
         # Apply post-filtering for exact matching if needed
         if needs_post_filter:
@@ -1774,7 +2340,39 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
             (image_id,),
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return _row_to_dict(row) if row else None
+
+
+def get_image_by_path(path: str) -> Optional[Dict[str, Any]]:
+    """Get a single image by any equivalent indexed path representation."""
+    if not path:
+        return None
+
+    candidates = build_indexed_image_lookup_candidates(path)
+    if not candidates:
+        return None
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        clause, params = _path_query_match_clause(candidates)
+        cursor.execute(
+            f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE {clause}",
+            params,
+        )
+        rows = cursor.fetchall()
+
+    rows_by_path = {row["path"]: row for row in rows}
+    rows_by_match_key = {
+        indexed_image_path_match_key(row["path"]): row
+        for row in rows
+    }
+    for candidate in candidates:
+        row = rows_by_path.get(candidate)
+        if not row:
+            row = rows_by_match_key.get(indexed_image_path_match_key(candidate))
+        if row:
+            return _row_to_dict(row)
+    return None
 
 
 def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
@@ -1804,7 +2402,7 @@ def get_images_by_ids(image_ids: List[int]) -> Dict[int, Dict[str, Any]]:
                 batch
             )
             for row in cursor.fetchall():
-                result[row['id']] = dict(row)
+                result[row['id']] = _row_to_dict(row)
 
     return result
 
@@ -1817,7 +2415,104 @@ def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
             "SELECT tag, confidence FROM tags WHERE image_id = ? ORDER BY confidence DESC",
             (image_id,)
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return _rows_to_dicts(cursor.fetchall())
+
+
+def copy_image_derived_state(source_image_id: int, target_image_id: int) -> None:
+    """Copy cached derived fields that remain valid for file duplicates."""
+    if source_image_id == target_image_id:
+        return
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        source_row = cursor.execute(
+            """
+            SELECT tagged_at, ai_caption, aesthetic_score, embedding, content_fingerprint
+            FROM images
+            WHERE id = ?
+            """,
+            (source_image_id,),
+        ).fetchone()
+        if source_row:
+            cursor.execute(
+                """
+                UPDATE images
+                SET tagged_at = ?,
+                    ai_caption = ?,
+                    aesthetic_score = ?,
+                    embedding = ?,
+                    content_fingerprint = COALESCE(?, content_fingerprint)
+                WHERE id = ?
+                """,
+                (
+                    source_row["tagged_at"],
+                    source_row["ai_caption"],
+                    source_row["aesthetic_score"],
+                    source_row["embedding"],
+                    source_row["content_fingerprint"],
+                    target_image_id,
+                ),
+            )
+
+        artist_row = cursor.execute(
+            """
+            SELECT artist, confidence, top_predictions, identified_at
+            FROM artist_predictions
+            WHERE image_id = ?
+            """,
+            (source_image_id,),
+        ).fetchone()
+        if artist_row:
+            cursor.execute(
+                """
+                INSERT INTO artist_predictions (
+                    image_id, artist, confidence, top_predictions, identified_at
+                )
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(image_id) DO UPDATE SET
+                    artist = excluded.artist,
+                    confidence = excluded.confidence,
+                    top_predictions = excluded.top_predictions,
+                    identified_at = excluded.identified_at
+                """,
+                (
+                    target_image_id,
+                    artist_row["artist"],
+                    artist_row["confidence"],
+                    artist_row["top_predictions"],
+                    artist_row["identified_at"],
+                ),
+            )
+
+
+def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
+    """Get tags for multiple images with batched queries."""
+    if not image_ids:
+        return {}
+
+    result: Dict[int, List[Dict[str, Any]]] = {}
+    batch_size = 500
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for i in range(0, len(image_ids), batch_size):
+            batch = image_ids[i:i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            cursor.execute(
+                f"""
+                SELECT image_id, tag, confidence
+                FROM tags
+                WHERE image_id IN ({placeholders})
+                ORDER BY image_id ASC, confidence DESC, tag ASC
+                """,
+                batch,
+            )
+            for row in cursor.fetchall():
+                result.setdefault(row["image_id"], []).append(
+                    {"tag": row["tag"], "confidence": row["confidence"]}
+                )
+
+    return result
 
 
 def get_all_tags() -> List[Dict[str, Any]]:
@@ -1844,7 +2539,7 @@ def get_all_tags() -> List[Dict[str, Any]]:
             GROUP BY tag 
             ORDER BY count DESC
         """)
-        result = [dict(row) for row in cursor.fetchall()]
+        result = _rows_to_dicts(cursor.fetchall())
     
     # Update cache
     with _tags_cache_lock:
@@ -1865,7 +2560,7 @@ def get_all_generators() -> List[Dict[str, Any]]:
             GROUP BY generator 
             ORDER BY count DESC
         """)
-        return [dict(row) for row in cursor.fetchall()]
+        return _rows_to_dicts(cursor.fetchall())
 
 
 def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
@@ -1876,7 +2571,7 @@ def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
             f"SELECT {_IMAGE_COLUMNS_BARE} FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 LIMIT ?",
             (limit,)
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return _rows_to_dicts(cursor.fetchall())
 
 
 def get_all_image_ids() -> List[int]:
@@ -1907,7 +2602,7 @@ def update_image_path(image_id: int, new_path: str):
     """Update the path of an image (after moving)."""
     with get_db() as conn:
         cursor = conn.cursor()
-        normalized_path = os.path.abspath(new_path)
+        normalized_path = _normalize_indexed_image_path(new_path)
         new_filename = os.path.basename(normalized_path)
         cursor.execute(
             "UPDATE images SET path = ?, filename = ? WHERE id = ?",
@@ -1919,34 +2614,48 @@ def mark_image_unreadable(image_id: int, read_error: Optional[str]) -> None:
     """Mark an indexed image as unreadable so normal workflows exclude it."""
     with get_db() as conn:
         cursor = conn.cursor()
+        _clear_image_derived_state(cursor, image_id)
         cursor.execute(
             """
             UPDATE images
             SET is_readable = 0,
                 read_error = ?,
-                embedding = NULL,
+                metadata_status = 'error',
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
             (read_error, image_id),
         )
+    _invalidate_tags_cache()
 
 
 def mark_image_unreadable_by_path(path: str, read_error: Optional[str]) -> None:
     """Mark an existing image row as unreadable based on its file path."""
+    candidates = build_indexed_image_lookup_candidates(path)
+    if not candidates:
+        return
+
     with get_db() as conn:
         cursor = conn.cursor()
+        clause, params = _path_query_match_clause(candidates)
+        row = cursor.execute(
+            f"SELECT id FROM images WHERE {clause} LIMIT 1",
+            params,
+        ).fetchone()
+        if row:
+            _clear_image_derived_state(cursor, row["id"])
         cursor.execute(
-            """
+            f"""
             UPDATE images
             SET is_readable = 0,
                 read_error = ?,
-                embedding = NULL,
+                metadata_status = 'error',
                 indexed_at = CURRENT_TIMESTAMP
-            WHERE path = ?
+            WHERE {clause}
             """,
-            (read_error, os.path.abspath(path)),
+            [read_error, *params],
         )
+    _invalidate_tags_cache()
 
 
 def mark_image_readable(image_id: int) -> None:
@@ -1958,6 +2667,7 @@ def mark_image_readable(image_id: int) -> None:
             UPDATE images
             SET is_readable = 1,
                 read_error = NULL,
+                metadata_status = 'complete',
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -1979,11 +2689,49 @@ def update_image_metadata(
     model_hash: Optional[str] = None,
     is_readable: Optional[bool] = None,
     read_error: Optional[str] = None,
+    source_mtime_ns: Optional[int] = None,
+    source_size: Optional[int] = None,
+    metadata_status: Optional[str] = None,
+    content_fingerprint: Optional[str] = None,
+    preserve_derived_state: bool = False,
 ):
     """Update parsed metadata fields for an existing image without replacing the row."""
     with get_db() as conn:
         cursor = conn.cursor()
         serialized_loras = _serialize_loras(loras)
+        existing_row = cursor.execute(
+            """
+            SELECT id, source_mtime_ns, source_size, content_fingerprint,
+                   tagged_at, ai_caption, aesthetic_score,
+                   CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
+                   EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
+            FROM images
+            WHERE id = ?
+            """,
+            (image_id,),
+        ).fetchone()
+        source_changed = _is_source_fingerprint_changed(
+            existing_row,
+            {
+                "source_mtime_ns": source_mtime_ns,
+                "source_size": source_size,
+            },
+        )
+        if (
+            not preserve_derived_state
+            and _should_clear_derived_state(
+                existing_row,
+                {
+                    "source_mtime_ns": source_mtime_ns,
+                    "source_size": source_size,
+                    "metadata_status": metadata_status,
+                    "content_fingerprint": content_fingerprint,
+                },
+                source_changed=source_changed,
+                mark_unreadable=(is_readable is False),
+            )
+        ):
+            _clear_image_derived_state(cursor, image_id)
         cursor.execute(
             """
             UPDATE images
@@ -1999,6 +2747,10 @@ def update_image_metadata(
                 model_hash = COALESCE(?, model_hash),
                 is_readable = COALESCE(?, is_readable),
                 read_error = ?,
+                source_mtime_ns = COALESCE(?, source_mtime_ns),
+                source_size = COALESCE(?, source_size),
+                metadata_status = COALESCE(?, metadata_status),
+                content_fingerprint = COALESCE(?, content_fingerprint),
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -2015,10 +2767,15 @@ def update_image_metadata(
                 model_hash,
                 None if is_readable is None else (1 if is_readable else 0),
                 read_error,
+                source_mtime_ns,
+                source_size,
+                metadata_status,
+                content_fingerprint,
                 image_id,
             )
         )
         _sync_image_loras(cursor, image_id, loras, prompt)
+    _invalidate_tags_cache()
 
 
 def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
@@ -2027,7 +2784,7 @@ def get_collection_by_slug(slug: str) -> Optional[Dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM collections WHERE slug = ?", (slug,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return _row_to_dict(row) if row else None
 
 
 def get_collection_item(collection_id: int, source_image_id: int) -> Optional[Dict[str, Any]]:
@@ -2039,7 +2796,7 @@ def get_collection_item(collection_id: int, source_image_id: int) -> Optional[Di
             (collection_id, source_image_id)
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return _row_to_dict(row) if row else None
 
 
 def add_collection_item(

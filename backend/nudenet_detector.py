@@ -8,7 +8,6 @@ Requires: pip install nudenet
 """
 import logging
 import os
-import tempfile
 import threading
 from typing import Dict, List, Optional
 
@@ -123,7 +122,7 @@ class NudeNetDetector:
             List of detection dicts with keys:
                 class, class_id, confidence, box [x1,y1,x2,y2], label
         """
-        raw_detections = self.detector.detect(image_path)
+        raw_detections = self.detector.detect(self._prepare_detector_input(image_path))
         return self._filter_detections(raw_detections, conf_threshold, exposed_only)
 
     def detect_from_pil(
@@ -133,24 +132,31 @@ class NudeNetDetector:
         exposed_only: bool = True,
     ) -> List[Dict]:
         """Run NudeNet detection on a PIL Image."""
-        tmp_path = None
         try:
-            # NudeNet requires a file path
-            # Use delete=False and manual cleanup to ensure file is closed before deletion
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                image.save(tmp, format="PNG")
-                tmp_path = tmp.name
-
-            raw_detections = self.detector.detect(tmp_path)
+            raw_detections = self.detector.detect(self._pil_to_detector_input(image))
             return self._filter_detections(raw_detections, conf_threshold, exposed_only)
-        finally:
-            # Clean up temp file with existence check
-            if tmp_path is not None:
-                try:
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-                except OSError as e:
-                    logger.debug("Failed to delete temp file %s: %s", tmp_path, e)
+        except Exception as exc:
+            raise RuntimeError(f"NudeNet could not read the image input: {exc}") from exc
+
+    @staticmethod
+    def _pil_to_detector_input(image: Image.Image):
+        """Convert a PIL image into the RGBA ndarray NudeNet expects internally."""
+        import numpy as np
+
+        return np.array(image.convert("RGBA"))
+
+    def _prepare_detector_input(self, image_path: str):
+        """
+        Read image data with Pillow first, then pass an RGBA array to NudeNet.
+
+        This avoids NudeNet's internal `cv2.imread(path)` path handling, which can
+        fail on some Windows paths even when the file exists and Pillow can open it.
+        """
+        try:
+            with Image.open(image_path) as image:
+                return self._pil_to_detector_input(image)
+        except Exception as exc:
+            raise RuntimeError(f"NudeNet could not read image file '{image_path}': {exc}") from exc
 
     def _filter_detections(
         self,

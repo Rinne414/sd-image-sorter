@@ -215,6 +215,69 @@
     user-select: text;
 }
 
+.reader-editor-section {
+    border-color: rgba(245, 158, 11, 0.16);
+    background: linear-gradient(180deg, rgba(245, 158, 11, 0.06), rgba(255, 255, 255, 0.025));
+}
+
+.reader-editor-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reader-editor-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.reader-editor-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.reader-editor-field span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.reader-editor-field-full {
+    grid-column: 1 / -1;
+}
+
+.reader-editor-field textarea.input-field {
+    min-height: 110px;
+    resize: vertical;
+}
+
+.reader-editor-note {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.reader-editor-warning {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    color: #fbbf24;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.reader-editor-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* Copy button — small, ghost style */
 .reader-copy-btn {
     background: transparent;
@@ -260,6 +323,16 @@
     line-height: 1.4;
     overflow-wrap: anywhere;
     word-break: break-word;
+}
+
+@media (max-width: 900px) {
+    .reader-editor-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .reader-editor-field-full {
+        grid-column: auto;
+    }
 }
 
 .reader-compact-header {

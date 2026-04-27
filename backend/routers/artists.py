@@ -7,6 +7,7 @@ import os
 import threading
 import logging
 import time
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -17,6 +18,7 @@ from artist_identifier import (
     ARTIST_THRESHOLD_DEFAULT,
 )
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
+from image_fingerprint import compute_image_content_fingerprint
 from model_health import get_model_health
 
 logger = logging.getLogger(__name__)
@@ -44,10 +46,10 @@ class ArtistModelConfig(BaseModel):
             if not self.model_path:
                 raise ValueError("Local model path is required when model_source is 'local'")
 
-            normalized_path = os.path.abspath(os.path.expanduser(self.model_path))
-            if not os.path.isfile(normalized_path):
+            normalized_path = Path(os.path.expanduser(self.model_path)).resolve()
+            if not normalized_path.is_file():
                 raise ValueError("Local model file not found")
-            self.model_path = normalized_path
+            self.model_path = str(normalized_path)
         return self
 
 
@@ -226,9 +228,19 @@ async def identify_artist(request: IdentifyRequest):
     if result.get("error"):
         raise HTTPException(status_code=503, detail=result["error"])
 
+    content_fingerprint = None
+    try:
+        content_fingerprint = compute_image_content_fingerprint(image_path)
+    except Exception as exc:
+        logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
+
     # Store result in database
     with db.get_db() as conn:
         cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+            (content_fingerprint, request.image_id),
+        )
         cursor.execute(
             """INSERT OR REPLACE INTO artist_predictions
                (image_id, artist, confidence, top_predictions)
@@ -399,11 +411,17 @@ def _run_batch_identification(
                     raise RuntimeError(result["error"])
 
                 # Collect for batch insert
+                content_fingerprint = None
+                try:
+                    content_fingerprint = compute_image_content_fingerprint(image_path)
+                except Exception as exc:
+                    logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
                 predictions_to_insert.append({
                     "image_id": image_id,
                     "artist": result["artist"],
                     "confidence": result["confidence"],
                     "top_predictions": str(result["top_predictions"]),
+                    "content_fingerprint": content_fingerprint,
                 })
 
                 with _batch_lock:
@@ -427,6 +445,10 @@ def _run_batch_identification(
         if predictions_to_insert:
             with db.get_db() as conn:
                 cursor = conn.cursor()
+                cursor.executemany(
+                    "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+                    [(p["content_fingerprint"], p["image_id"]) for p in predictions_to_insert],
+                )
                 cursor.executemany(
                     """INSERT OR REPLACE INTO artist_predictions
                        (image_id, artist, confidence, top_predictions)

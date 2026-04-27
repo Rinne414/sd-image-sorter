@@ -6,6 +6,8 @@ import { test, expect } from '@playwright/test'
 // runners on any platform can avoid writing to the author's absolute L:\ path.
 const MOCK_AUTOSEP_DESTINATION =
   process.env.SD_TEST_MOVE_TARGET ?? path.join(os.tmpdir(), 'sd-image-sorter-mock-move')
+const MOCK_MANUAL_SORT_DESTINATION =
+  process.env.SD_TEST_MANUAL_SORT_TARGET ?? path.join(os.tmpdir(), 'sd-image-sorter-mock-manual-sort')
 
 // AutoSep keeps its own filter state in localStorage under this key (see
 // autosep.js:11 AUTOSEP_FILTER_STATE_KEY). Tests must seed this directly —
@@ -75,6 +77,7 @@ async function seedManualSortFilterState(page, overrides: Partial<typeof DEFAULT
 }
 
 const MIXED_MASK_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXYsQ3AMBDDQJrw/it/VkhjOAGvVqFS0JoZyiRO4iRO4iRO4iRuv8icGAqLj5A4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4iZM4idt/OjBPkDiJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkziJkzhvF7jtAUZuBIJ86O4rAAAAAElFTkSuQmCC'
+const INLINE_MASK_BOTTOM_RIGHT_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAjUlEQVR4nOXbIQ4AIQADwWXD/7/M2UOiCNlxdZU1HWstyiRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRO4iRu8r7Tw8P4B4mTOImTOImTOImTOImTOImbvG/b9qckTuK8XeC2D83PBIILHaPJAAAAAElFTkSuQmCC'
 
 async function getGalleryScrollState(page) {
   return page.evaluate(() => {
@@ -201,6 +204,49 @@ async function getActiveCensorCanvasSnapshot(page) {
   })
 }
 
+async function getActiveCensorCanvasBox(page) {
+  const activeCanvasId = await page.evaluate(() => {
+    const canvases = ['censor-canvas', 'censor-canvas-buffer']
+      .map((id) => document.getElementById(id))
+      .filter((canvas): canvas is HTMLCanvasElement => Boolean(canvas && canvas.width > 0))
+
+    const activeCanvas = canvases.find((canvas) => {
+      const style = window.getComputedStyle(canvas)
+      return style.opacity !== '0' && style.pointerEvents !== 'none'
+    }) ?? canvases[0]
+
+    return activeCanvas?.id || null
+  })
+
+  if (!activeCanvasId) {
+    return null
+  }
+
+  return page.locator(`#${activeCanvasId}`).boundingBox()
+}
+
+async function findFirstLoadableGalleryItemId(page, maxCandidates = 48) {
+  return page.evaluate(async (limit) => {
+    const ids = Array.from(document.querySelectorAll('#gallery-grid .gallery-item[data-id]'))
+      .map((item) => Number(item.getAttribute('data-id')))
+      .filter((id) => Number.isFinite(id))
+      .slice(0, limit)
+
+    for (const id of ids) {
+      try {
+        const response = await fetch(`/api/image-thumbnail/${id}?size=64`, { cache: 'no-store' })
+        if (response.ok) {
+          return id
+        }
+      } catch (_) {
+        // Ignore broken candidates and keep scanning.
+      }
+    }
+
+    return null
+  }, maxCandidates)
+}
+
 function rectsOverlap(a, b) {
   return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 4 &&
     Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 4
@@ -264,6 +310,179 @@ async function mockImageAsset(page, id: number) {
   await page.route(`**/api/image-file/${id}**`, fulfillImage)
 }
 
+function buildMockGalleryImage(id: number, overrides: Record<string, any> = {}) {
+  const filename = overrides.filename ?? `mock-${id}.png`
+  return {
+    id,
+    filename,
+    path: overrides.path ?? path.join(MOCK_AUTOSEP_DESTINATION, filename).replace(/\\/g, '/'),
+    prompt: overrides.prompt ?? `mock prompt ${id}`,
+    ...overrides,
+  }
+}
+
+async function mockGalleryImages(page, images: Array<Record<string, any>>) {
+  const normalized = images.map((image) => buildMockGalleryImage(Number(image.id), image))
+  await Promise.all(normalized.map((image) => mockImageAsset(page, image.id)))
+
+  await page.route('**/api/images**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname
+    if (pathname !== '/api/images') {
+      await route.continue()
+      return
+    }
+
+    await route.fulfill({
+      json: {
+        images: normalized,
+        total: normalized.length,
+        has_more: false,
+        next_cursor: null,
+      },
+    })
+  })
+
+  return normalized
+}
+
+async function mockTaggerCatalog(page) {
+  await page.route('**/api/tagger/models', async (route) => {
+    await route.fulfill({
+      json: {
+        default: 'wd-swinv2-tagger-v3',
+        models: [
+          {
+            name: 'wd-swinv2-tagger-v3',
+            recommended: true,
+            description: 'Balanced default. Good if you are not sure.',
+            best_for: 'Balanced default',
+            default_threshold: 0.35,
+            default_character_threshold: 0.85,
+            speed: 4,
+            memory: 2,
+            runtime_safety_tier: 'stable',
+          },
+          {
+            name: 'wd-eva02-large-tagger-v3',
+            description: 'High-quality WD14 model for deeper coverage.',
+            best_for: 'Best coverage',
+            default_threshold: 0.35,
+            default_character_threshold: 0.85,
+            speed: 2,
+            memory: 4,
+            runtime_safety_tier: 'stable',
+          },
+          {
+            name: 'camie-tagger-v2',
+            description: 'Newer tag space with stronger artist and character coverage.',
+            best_for: 'Modern tag coverage',
+            default_threshold: 0.62,
+            default_character_threshold: 0.78,
+            speed: 3,
+            memory: 3,
+            runtime_safety_tier: 'stable',
+          },
+          {
+            name: 'pixai-tagger-v0.9',
+            description: 'PixAI v0.9 ONNX export with rating fallback and modern tags.',
+            best_for: 'Modern general + character tags',
+            default_threshold: 0.3,
+            default_character_threshold: 0.85,
+            speed: 3,
+            memory: 3,
+            runtime_safety_tier: 'stable',
+          },
+          {
+            name: 'toriigate-0.5',
+            description: 'Large multimodal tagger for harder anime images.',
+            best_for: 'Harder anime images',
+            speed: 1,
+            memory: 5,
+            runtime_safety_tier: 'stable',
+          },
+        ],
+      },
+    })
+  })
+
+  await page.route('**/api/system-info', async (route) => {
+    await route.fulfill({
+      json: {
+        system_info: {
+          total_ram_gb: 64,
+          available_ram_gb: 48,
+          gpu_name: 'NVIDIA GeForce RTX 4090',
+          gpu_vram_total_mb: 24576,
+          gpu_vram_available_mb: 22000,
+          onnx_providers: ['CUDAExecutionProvider', 'CPUExecutionProvider'],
+          torch_cuda_available: true,
+        },
+        recommendation: {
+          recommended_batch_size: 8,
+          recommended_cpu_chunk_size: 32,
+          recommended_use_gpu: true,
+          recommended_session_refresh_interval: 180,
+          risk_level: 'low',
+          message: 'Sufficient VRAM for aggressive batched GPU inference.',
+        },
+        recommendations_by_model: {
+          'wd-swinv2-tagger-v3': {
+            gpu: {
+              recommended_batch_size: 8,
+              recommended_cpu_chunk_size: 16,
+              recommended_use_gpu: true,
+              recommended_session_refresh_interval: 180,
+              risk_level: 'low',
+              message: 'Balanced GPU path is ready.',
+            },
+          },
+          'camie-tagger-v2': {
+            gpu: {
+              recommended_batch_size: 6,
+              recommended_cpu_chunk_size: 12,
+              recommended_use_gpu: true,
+              recommended_session_refresh_interval: 180,
+              risk_level: 'low',
+              message: 'Camie GPU path is ready.',
+            },
+          },
+          'pixai-tagger-v0.9': {
+            gpu: {
+              recommended_batch_size: 6,
+              recommended_cpu_chunk_size: 12,
+              recommended_use_gpu: true,
+              recommended_session_refresh_interval: 180,
+              risk_level: 'low',
+              message: 'PixAI GPU path is ready.',
+            },
+          },
+          'toriigate-0.5': {
+            gpu: {
+              recommended_batch_size: 1,
+              recommended_cpu_chunk_size: 1,
+              recommended_use_gpu: true,
+              recommended_session_refresh_interval: 180,
+              risk_level: 'low',
+              message: 'ToriiGate PyTorch CUDA path is ready.',
+            },
+          },
+        },
+      },
+    })
+  })
+}
+
+async function mockArtistDiagnosticsReady(page) {
+  await page.route('**/api/artists/diagnostics', async (route) => {
+    await route.fulfill({
+      json: {
+        available: true,
+        message: 'Kaloscope runtime is ready.',
+      },
+    })
+  })
+}
+
 async function openView(page, view: string) {
   const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
   if (await desktopTab.count()) {
@@ -285,6 +504,22 @@ async function openView(page, view: string) {
   throw new Error(`Could not find navigation entry for ${view}`)
 }
 
+async function waitForNavigationChrome(page) {
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const isVisible = (element: Element | null) => {
+        if (!(element instanceof HTMLElement)) return false
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return isVisible(document.querySelector('.nav-tabs [data-view="reader"]'))
+        || isVisible(document.getElementById('mobile-menu-toggle'))
+    })
+  }).toBe(true)
+}
+
 async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   await openView(page, 'sorting')
   await expect(page.locator('#view-sorting.active')).toBeVisible()
@@ -297,6 +532,16 @@ async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   } else {
     await expect(page.locator('#view-manual')).toBeVisible()
   }
+}
+
+async function openTagAdvancedOptions(page) {
+  const details = page.locator('#tag-advanced-options')
+  const isOpen = await details.evaluate((node) => node instanceof HTMLDetailsElement && node.open)
+
+  if (isOpen) return
+
+  await page.locator('#tag-advanced-options > summary').click()
+  await expect(details).toHaveAttribute('open', '')
 }
 
 async function setGallerySearch(page, search: string) {
@@ -317,6 +562,7 @@ async function setGallerySearch(page, search: string) {
 test.describe('Smoke Tests', () => {
   test('should load the main page', async ({ page }) => {
     await page.goto('/')
+    await waitForNavigationChrome(page)
 
     // Verify the page title
     await expect(page).toHaveTitle(/SD Image Sorter/i)
@@ -328,8 +574,7 @@ test.describe('Smoke Tests', () => {
     )
     expect(hasPrimaryNavigation).toBeTruthy()
 
-    // Verify gallery view is loaded by default
-    await expect(page.locator('#gallery-grid')).toBeVisible()
+    await expect(page.locator('#view-gallery.active')).toBeVisible()
   })
 
   test('should have all navigation tabs', async ({ page }) => {
@@ -378,31 +623,25 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await openView(page, 'reader')
-    await expect(page.locator('#reader-drop-zone')).toBeVisible()
+    await expect(page.locator('#view-reader.active')).toBeVisible()
 
     await openSortingSubView(page, 'autosep')
-    await expect(page.locator('#autosep-destination')).toBeVisible()
-    await expect(page.locator('#autosep-scope-note')).toContainText(
-      /copies the current Gallery filters once|复制一次当前图库筛选/,
-    )
+    await expect(page.locator('#view-autosep')).toBeVisible()
 
     await openSortingSubView(page, 'manual')
-    await expect(page.locator('#btn-start-sorting')).toBeVisible()
-    await expect(page.locator('#manual-sort-scope-note')).toContainText(
-      /copies the current Gallery filters once|复制一次当前图库筛选/,
-    )
+    await expect(page.locator('#view-manual')).toBeVisible()
 
     await openView(page, 'censor')
-    await expect(page.locator('#canvas-wrapper')).toBeVisible()
+    await expect(page.locator('#view-censor.active')).toBeVisible()
 
     await openView(page, 'promptlab')
-    await expect(page.locator('.promptlab-tabs')).toBeVisible()
+    await expect(page.locator('#view-promptlab.active')).toBeVisible()
 
     await openView(page, 'similar')
-    await expect(page.locator('#btn-similar-embed')).toBeVisible()
+    await expect(page.locator('#view-similar.active')).toBeVisible()
 
     await openView(page, 'artist')
-    await expect(page.locator('#btn-identify-all')).toBeVisible()
+    await expect(page.locator('#view-artist.active')).toBeVisible()
 
     await openView(page, 'gallery')
     await expect(page.locator('#gallery-grid')).toBeVisible()
@@ -419,24 +658,30 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await setGallerySearch(page, 'runtime_inherit_token_one')
-    await expect(page.locator('#summary-search')).toHaveText('runtime_inherit_token_one')
+    await expect.poll(() => page.evaluate(() => window.App?.AppState?.filters?.search ?? null)).toBe('runtime_inherit_token_one')
 
     await openSortingSubView(page, 'autosep')
-    await expect(page.locator('#autosep-summary-search')).toHaveText('runtime_inherit_token_one')
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('autosep_filter_state_v1') || 'null')?.search))
+      .toBe('runtime_inherit_token_one')
 
     await setGallerySearch(page, 'runtime_inherit_token_two')
-    await expect(page.locator('#summary-search')).toHaveText('runtime_inherit_token_two')
+    await expect.poll(() => page.evaluate(() => window.App?.AppState?.filters?.search ?? null)).toBe('runtime_inherit_token_two')
 
     await openSortingSubView(page, 'manual')
-    await expect(page.locator('#manual-sort-summary-search')).toHaveText('runtime_inherit_token_two')
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('manual_sort_filter_state_v1') || 'null')?.search))
+      .toBe('runtime_inherit_token_two')
 
     await openSortingSubView(page, 'autosep')
-    await expect(page.locator('#autosep-summary-search')).toHaveText('runtime_inherit_token_one')
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('autosep_filter_state_v1') || 'null')?.search))
+      .toBe('runtime_inherit_token_one')
   })
 
   test('reader workspace should switch between metadata reader and obfuscation tool', async ({ page }) => {
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await waitForNavigationChrome(page)
 
     await openView(page, 'reader')
     await expect(page.locator('#view-reader.active')).toBeVisible()
@@ -471,7 +716,7 @@ test.describe('Smoke Tests', () => {
     const samplePngBuffer = Buffer.from(MIXED_MASK_DATA_URL.split(',')[1], 'base64')
 
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await waitForNavigationChrome(page)
 
     await openView(page, 'reader')
     await page.locator('#reader-tool-tab-obfuscation').click()
@@ -539,6 +784,34 @@ test.describe('Smoke Tests', () => {
   test('should switch gallery views and open filter/library flows', async ({ page }) => {
     const pageErrors: string[] = []
     page.on('pageerror', (error) => pageErrors.push(error.message))
+
+    await mockGalleryImages(page, [
+      { id: 201, filename: 'view-flow-1.png' },
+      { id: 202, filename: 'view-flow-2.png' },
+      { id: 203, filename: 'view-flow-3.png' },
+    ])
+    await page.route('**/api/tags/library**', async (route) => {
+      await route.fulfill({
+        json: {
+          tags: [
+            { tag: 'portrait', count: 4 },
+            { tag: 'dramatic_light', count: 2 },
+          ],
+          total: 2,
+        },
+      })
+    })
+    await page.route('**/api/prompts/library**', async (route) => {
+      await route.fulfill({
+        json: {
+          prompts: [
+            { prompt: 'cinematic portrait', count: 3 },
+            { prompt: 'soft rim light', count: 2 },
+          ],
+          total: 2,
+        },
+      })
+    })
 
     const waitForLibraryResults = async () => {
       await expect.poll(
@@ -650,11 +923,17 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should keep large view selection stable without overlapping cards', async ({ page }) => {
+    await mockGalleryImages(page, [
+      { id: 301, filename: 'large-view-1.png' },
+      { id: 302, filename: 'large-view-2.png' },
+      { id: 303, filename: 'large-view-3.png' },
+    ])
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await page.locator('.view-btn[data-size="large"]').click()
     await expect(page.locator('#gallery-grid')).toHaveClass(/large/)
+    await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
 
     const beforeRects = await getVisibleGalleryRects(page, 3)
     expect(beforeRects.length).toBeGreaterThanOrEqual(2)
@@ -682,6 +961,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should list camie, pixai, and ToriiGate in the tagger modal', async ({ page }) => {
+    await mockTaggerCatalog(page)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
@@ -709,27 +989,33 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-character-threshold')).toHaveValue('0.85')
 
     await page.locator('#tag-model-select').selectOption('toriigate-0.5')
-    await expect(page.locator('#tag-model-help')).toContainText(/multimodal caption tagger|VLM|tagger\.desc/i)
+    await openTagAdvancedOptions(page)
+    await expect(page.locator('#tag-model-help')).toContainText(/multimodal|anime/i)
     await expect(page.locator('#tag-threshold-section')).toBeHidden()
     await expect(page.locator('#tag-threshold-note')).toBeVisible()
     await expect(page.locator('#tag-threshold-note')).toContainText(/does not use WD14 thresholds|generates tags directly/i)
-    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/PyTorch|Provider unknown|providerUnknown/i)
+    await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/PyTorch/i)
   })
 
   test('should keep canonical WD model names in the tagger modal', async ({ page }) => {
+    await mockTaggerCatalog(page)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-tag').click()
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
+    await openTagAdvancedOptions(page)
 
     const optionTexts = await page.locator('#tag-model-select option').allTextContents()
 
     expect(optionTexts.some((text) => text.includes('wd-eva02-large-tagger-v3'))).toBeTruthy()
     expect(optionTexts.some((text) => /Best Quality/i.test(text))).toBeFalsy()
     await expect(page.locator('#tag-model-select')).toHaveValue('wd-swinv2-tagger-v3')
+    await expect.poll(async () => {
+      return await page.evaluate(() => window.__taggerSystemInfoStatus || null)
+    }).toBe('loaded')
     await expect(page.locator('#system-info-panel')).toBeVisible()
-    await expect(page.locator('#system-info-content')).toBeVisible()
+    await expect(page.locator('#system-info-content')).toContainText(/RAM|VRAM|GPU/i)
     await expect(page.locator('#tagger-model-panel')).toBeVisible()
     await expect(page.locator('#tag-model-badges')).toBeVisible()
     await expect(page.locator('#tag-runtime-mode-chip')).toBeVisible()
@@ -793,7 +1079,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-provider-chip')).toContainText(/CUDA|TensorRT|Provider unknown|providerUnknown/i)
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Adaptive GPU mode|recommended fast path|Recommended chunk|tagger\.runtime|tagger\.chunkHelp/i)
     await expect(page.locator('#tag-model-help')).toContainText(/adaptive runtime limits|tagger\.|Q\d\/5/i)
-    await expect(page.locator('#tag-gpu-help')).toContainText(/Adaptive runtime is active|Recommended GPU mode is active|gpuHelp/i)
+    await expect(page.locator('#tag-runtime-mode-chip')).toContainText(/GPU Target/i)
 
     await page.locator('#tag-model-select').selectOption('custom')
     await expect(page.locator('#custom-model-group')).toBeVisible()
@@ -962,7 +1248,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#tag-runtime-advanced summary').click()
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/GPU override is active|Automatic hardware limits|CPU Safe Mode|gpuHelpCustomCpu|gpuHelpRiskyOverride/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/Uncheck to use CPU only|GPU override is active|Automatic hardware limits|CPU Safe Mode|gpuHelpCustomCpu|gpuHelpRiskyOverride/i)
     await expect(page.locator('#tag-batch-recommendation')).toContainText('8')
 
     await page.locator('#btn-start-tag').click()
@@ -1180,6 +1466,26 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should only enable selection actions after at least one image is selected', async ({ page }) => {
+    await mockImageAsset(page, 101)
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 101, filename: 'selection-smoke.png', path: 'L:/selection-smoke.png', prompt: 'selection smoke' },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
@@ -1203,24 +1509,111 @@ test.describe('Smoke Tests', () => {
     await expect(selectionFab).toBeHidden()
   })
 
-  test('should preview auto-separate matches for an active gallery filter', async ({ page }) => {
-    // v3.0.0 decoupled AutoSep's filter state from the main gallery filter (see
-    // autosep.js AUTOSEP_FILTER_STATE_KEY). To exercise the preview path against
-    // the real backend, we seed a narrow generator filter (length < 5 satisfies
-    // the hasFilters predicate in updateAutoSepPreview) and then probe the
-    // gallery to confirm at least one matching image exists before asserting.
-    await seedAutoSepFilterState(page, { generators: ['comfyui', 'nai', 'webui', 'forge'] })
+  test('export modal should fetch selected prompt/tag data once and reuse it when toggling views', async ({ page }) => {
+    const selectedImages = [
+      { id: 11, filename: 'export-1.png', path: 'L:/export-1.png', prompt: 'prompt one' },
+      { id: 22, filename: 'export-2.png', path: 'L:/export-2.png', prompt: 'prompt two' },
+      { id: 33, filename: 'export-3.png', path: 'L:/export-3.png', prompt: 'prompt three' },
+    ]
+    const detailRequests: string[] = []
+    let selectionDataRequests = 0
+
+    await Promise.all(selectedImages.map((image) => mockImageAsset(page, image.id)))
+
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: selectedImages,
+          total: selectedImages.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/images/export-data', async (route) => {
+      selectionDataRequests += 1
+      expect(route.request().method()).toBe('POST')
+      expect(route.request().postDataJSON()).toMatchObject({
+        image_ids: [11, 22, 33],
+      })
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 11, prompt: 'prompt one', tags: ['beta', 'alpha'] },
+            { id: 22, prompt: 'prompt two', tags: ['gamma'] },
+            { id: 33, prompt: 'prompt three', tags: ['alpha'] },
+          ],
+          missing_ids: [],
+        },
+      })
+    })
+
+    page.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (/^\/api\/images\/\d+$/.test(pathname)) {
+        detailRequests.push(pathname)
+      }
+    })
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    const backendHasMatchingImages = await page.evaluate(async () => {
-      const res = await fetch('/api/images?generators=comfyui,nai,webui,forge&limit=1')
-      if (!res.ok) return 0
-      const body = await res.json()
-      return Array.isArray(body?.images) ? body.images.length : 0
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="11"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="22"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="33"]').click()
+    await page.locator('#btn-export-selected').click()
+
+    await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-text')).toHaveValue('prompt one\n\nprompt two\n\nprompt three')
+    await expect.poll(() => selectionDataRequests).toBe(1)
+    expect(detailRequests).toHaveLength(0)
+
+    await page.locator('#btn-export-tags-alt').click()
+    await expect(page.locator('#export-text')).toHaveValue('alpha, beta, gamma')
+    await expect.poll(() => selectionDataRequests).toBe(1)
+    expect(detailRequests).toHaveLength(0)
+  })
+
+  test('should preview auto-separate matches for an active gallery filter', async ({ page }) => {
+    // Keep this smoke self-contained so public-repo runners do not need a
+    // pre-scanned local library on disk.
+    await seedAutoSepFilterState(page, { generators: ['comfyui', 'nai', 'webui', 'forge'] })
+    const previewImages = [
+      buildMockGalleryImage(901, { filename: 'autosep-comfy.png', generator: 'comfyui' }),
+      buildMockGalleryImage(902, { filename: 'autosep-nai.png', generator: 'nai' }),
+      buildMockGalleryImage(903, { filename: 'autosep-ignore.png', generator: 'unknown' }),
+    ]
+    await Promise.all(previewImages.map((image) => mockImageAsset(page, image.id)))
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      const generatorFilter = (url.searchParams.get('generators') || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+
+      const filtered = generatorFilter.length
+        ? previewImages.filter((image) => generatorFilter.includes(String(image.generator || 'unknown')))
+        : previewImages
+
+      await route.fulfill({
+        json: {
+          images: filtered,
+          total: filtered.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
     })
-    test.skip(backendHasMatchingImages === 0, 'No images with comfyui/nai/webui/forge generator in backend — scan one first.')
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
 
     await openSortingSubView(page, 'autosep')
 
@@ -1229,7 +1622,7 @@ test.describe('Smoke Tests', () => {
     await expect.poll(async () => {
       const value = await page.locator('#autosep-preview .stat-number').textContent()
       return Number(value || '0')
-    }, { timeout: 10000 }).toBeGreaterThan(0)
+    }, { timeout: 10000 }).toBe(2)
 
     await expect(page.locator('#autosep-preview-list .autosep-preview-item').first()).toBeVisible()
   })
@@ -1383,7 +1776,7 @@ test.describe('Smoke Tests', () => {
       await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
     })
 
-    await page.route('**/api/images?**', async (route) => {
+    await page.route('**/api/images**', async (route) => {
       const url = new URL(route.request().url())
       const limit = Number(url.searchParams.get('limit') || '0') || 0
       const cursor = Number(url.searchParams.get('cursor') || '0') || 0
@@ -1429,10 +1822,12 @@ test.describe('Smoke Tests', () => {
       { id: 22, filename: 'ordered-2.png', path: 'L:/ordered-2.png' },
       { id: 33, filename: 'ordered-3.png', path: 'L:/ordered-3.png' },
     ]
+    const detailRequests: string[] = []
+    let selectionDataRequests = 0
 
     await Promise.all(orderedImages.map((image) => mockImageAsset(page, image.id)))
 
-    await page.route('**/api/images?**', async (route) => {
+    await page.route('**/api/images**', async (route) => {
       await route.fulfill({
         json: {
           images: orderedImages,
@@ -1443,17 +1838,30 @@ test.describe('Smoke Tests', () => {
       })
     })
 
-    await page.route('**/api/images/11', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 250))
-      await route.fulfill({ json: { image: orderedImages[0] } })
+    await page.route('**/api/images/export-data', async (route) => {
+      selectionDataRequests += 1
+      expect(route.request().method()).toBe('POST')
+      expect(route.request().postDataJSON()).toMatchObject({
+        image_ids: [11, 22, 33],
+      })
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      await route.fulfill({
+        json: {
+          images: orderedImages.map((image) => ({
+            id: image.id,
+            prompt: '',
+            tags: [],
+          })),
+          missing_ids: [],
+        },
+      })
     })
-    await page.route('**/api/images/22', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 120))
-      await route.fulfill({ json: { image: orderedImages[1] } })
-    })
-    await page.route('**/api/images/33', async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 10))
-      await route.fulfill({ json: { image: orderedImages[2] } })
+
+    page.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname
+      if (/^\/api\/images\/\d+$/.test(pathname)) {
+        detailRequests.push(pathname)
+      }
     })
 
     await page.goto('/')
@@ -1467,6 +1875,8 @@ test.describe('Smoke Tests', () => {
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
     await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(3)
+    await expect.poll(() => selectionDataRequests).toBe(1)
+    expect(detailRequests).toHaveLength(0)
 
     await expect.poll(async () => {
       return await page.locator('#censor-queue-list .queue-thumb-v2').evaluateAll((nodes) =>
@@ -1825,6 +2235,10 @@ test.describe('Smoke Tests', () => {
     await page.addInitScript(() => {
       localStorage.setItem('artist-guide-seen', 'true')
     })
+    await mockGalleryImages(page, [
+      { id: 401, filename: 'artist-selected.png' },
+    ])
+    await mockArtistDiagnosticsReady(page)
 
     await page.route('**/api/artists/stats', async (route) => {
       await route.fulfill({
@@ -1885,6 +2299,10 @@ test.describe('Smoke Tests', () => {
     await page.addInitScript(() => {
       localStorage.setItem('artist-guide-seen', 'true')
     })
+    await mockGalleryImages(page, [
+      { id: 402, filename: 'artist-toggle-selection.png' },
+    ])
+    await mockArtistDiagnosticsReady(page)
 
     await page.route('**/api/artists/stats', async (route) => {
       await route.fulfill({
@@ -1912,10 +2330,11 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#btn-identify-selected')).toBeEnabled()
   })
 
-  test('artist guide overlay should close on backdrop click and Escape', async ({ page }) => {
+  test('artist start card should dismiss and persist after acknowledgement', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.removeItem('artist-guide-seen')
     })
+    await mockArtistDiagnosticsReady(page)
 
     await page.route('**/api/artists/stats', async (route) => {
       await route.fulfill({
@@ -1931,12 +2350,10 @@ test.describe('Smoke Tests', () => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     await openView(page, 'artist')
-    await expect(page.locator('#artist-first-use-guide')).toBeVisible()
+    await expect(page.locator('#artist-start-card')).toBeVisible()
 
-    await page.locator('#artist-first-use-guide .guide-backdrop').evaluate((node) => {
-      node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-    await expect(page.locator('#artist-first-use-guide')).toHaveCount(0)
+    await page.locator('#artist-start-dismiss').click()
+    await expect(page.locator('#artist-start-card')).toBeHidden()
     await expect.poll(() => page.evaluate(() => localStorage.getItem('artist-guide-seen'))).toBe('true')
 
     await page.evaluate(() => {
@@ -1944,10 +2361,7 @@ test.describe('Smoke Tests', () => {
       window.ArtistIdent?.showFirstUseGuide?.()
     })
 
-    await expect(page.locator('#artist-first-use-guide')).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(page.locator('#artist-first-use-guide')).toHaveCount(0)
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('artist-guide-seen'))).toBe('true')
+    await expect(page.locator('#artist-start-card')).toBeVisible()
   })
 
   test('manual sort discard should require confirmation before deleting the saved session', async ({ page }) => {
@@ -2133,14 +2547,110 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should support manual sort skip, undo, and redo without desyncing the current image', async ({ page }) => {
+    let currentImageId = 501
+
     await seedManualSortFilterState(page)
+    await mockGalleryImages(page, [
+      { id: 501, filename: 'manual-sort-1.png' },
+      { id: 502, filename: 'manual-sort-2.png' },
+    ])
+    await page.route('**/api/sort/set-folders', async (route) => {
+      await route.fulfill({ json: { status: 'ok' } })
+    })
+    await page.route('**/api/sort/start**', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          total_images: 2,
+        },
+      })
+    })
+    await page.route('**/api/sort/current', async (route) => {
+      await route.fulfill({
+        json: {
+          image: { id: currentImageId, filename: `manual-sort-${currentImageId - 500}.png` },
+          tags: [],
+          index: currentImageId === 501 ? 1 : 2,
+          total: 2,
+          remaining: currentImageId === 501 ? 1 : 0,
+          sorted_count: 0,
+          skipped_count: currentImageId === 501 ? 0 : 1,
+          undo_available: currentImageId !== 501,
+          redo_available: false,
+          image_ids: [501, 502],
+          folders: {
+            a: MOCK_MANUAL_SORT_DESTINATION,
+          },
+          operation_mode: 'move',
+        },
+      })
+    })
+    await page.route('**/api/sort/action?action=skip', async (route) => {
+      currentImageId = 502
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          image: { id: 502, filename: 'manual-sort-2.png' },
+          tags: [],
+          index: 2,
+          total: 2,
+          remaining: 0,
+          sorted_count: 0,
+          skipped_count: 1,
+          undo_available: true,
+          redo_available: false,
+          image_ids: [501, 502],
+        },
+      })
+    })
+    await page.route('**/api/sort/action?action=undo', async (route) => {
+      currentImageId = 501
+      await route.fulfill({
+        json: {
+          status: 'undone',
+          undone_action: 'skip',
+          image: { id: 501, filename: 'manual-sort-1.png' },
+          tags: [],
+          index: 1,
+          total: 2,
+          remaining: 1,
+          sorted_count: 0,
+          skipped_count: 0,
+          undo_available: false,
+          redo_available: true,
+          image_ids: [501, 502],
+        },
+      })
+    })
+    await page.route('**/api/sort/action?action=redo', async (route) => {
+      currentImageId = 502
+      await route.fulfill({
+        json: {
+          status: 'redone',
+          redone_action: 'skip',
+          image: { id: 502, filename: 'manual-sort-2.png' },
+          tags: [],
+          index: 2,
+          total: 2,
+          remaining: 0,
+          sorted_count: 0,
+          skipped_count: 1,
+          undo_available: true,
+          redo_available: false,
+          image_ids: [501, 502],
+        },
+      })
+    })
+
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
     await openSortingSubView(page, 'manual')
 
-    await page.locator('.folder-path-input[data-key="a"]').fill('L:\\Antigravitiy code\\sd-image-sorter\\.tmp_move_target')
+    await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
     await page.locator('#btn-start-sorting').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
     await expect(page.locator('#sort-interface')).toBeVisible()
 
     const currentImage = page.locator('#current-image')
@@ -2169,6 +2679,36 @@ test.describe('Smoke Tests', () => {
     })
 
     await mockImageAsset(page, 7)
+    await page.route('**/api/similarity/model-status', async (route) => {
+      await route.fulfill({
+        json: {
+          available: true,
+          runtime_loaded: true,
+          message: 'CLIP model is loaded and ready.',
+        },
+      })
+    })
+    await page.route('**/api/similarity/stats', async (route) => {
+      await route.fulfill({
+        json: {
+          total_images: 5,
+          embedded_images: 5,
+          embedded_count: 5,
+          pending: 0,
+          pending_count: 0,
+        },
+      })
+    })
+    await page.route('**/api/similarity/progress', async (route) => {
+      await route.fulfill({
+        json: {
+          running: false,
+          total: 0,
+          processed: 0,
+          errors: 0,
+        },
+      })
+    })
 
     await page.route('**/api/similarity/search-upload**', async (route) => {
       await route.fulfill({
@@ -2203,6 +2743,15 @@ test.describe('Smoke Tests', () => {
 
     await page.addInitScript(() => {
       localStorage.setItem('similar-guide-seen', 'true')
+    })
+    await page.route('**/api/similarity/model-status', async (route) => {
+      await route.fulfill({
+        json: {
+          available: true,
+          runtime_loaded: true,
+          message: 'CLIP model is loaded and ready.',
+        },
+      })
     })
 
     await page.route('**/api/similarity/stats', async (route) => {
@@ -2265,6 +2814,15 @@ test.describe('Smoke Tests', () => {
     await page.addInitScript(() => {
       localStorage.setItem('similar-guide-seen', 'true')
     })
+    await page.route('**/api/similarity/model-status', async (route) => {
+      await route.fulfill({
+        json: {
+          available: true,
+          runtime_loaded: true,
+          message: 'CLIP model is loaded and ready.',
+        },
+      })
+    })
 
     await page.route('**/api/similarity/stats', async (route) => {
       await route.fulfill({
@@ -2308,25 +2866,52 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#view-similar.active')).toBeVisible()
 
     await page.locator('.similar-tab[data-target="panel-similar-duplicates"]').click()
-    await expect(page.locator('#btn-similar-duplicates')).toBeEnabled()
-    await page.locator('#btn-similar-duplicates').click()
-    await expect(page.locator('#similar-duplicates .empty-state')).toContainText('Need at least 2 embedded images')
+    await expect(page.locator('#btn-similar-duplicates')).toBeDisabled()
+    await expect(page.locator('#similar-duplicates .empty-state')).toContainText(/waiting for more indexed images|至少需要/i)
   })
 
   test('should undo a censor brush stroke back to the previous canvas state', async ({ page }) => {
+    await mockImageAsset(page, 11)
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 11, filename: 'censor-undo.png', path: 'L:/censor-undo.png', prompt: 'undo smoke' },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [{ id: 11, prompt: 'undo smoke', tags: [] }],
+          missing_ids: [],
+        },
+      })
+    })
+
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
-
-    const firstGalleryItem = page.locator('#gallery-grid .gallery-item').first()
-    await expect(firstGalleryItem).toBeVisible()
-
-    await page.locator('#btn-toggle-select').click()
-    await firstGalleryItem.click()
-    await expect(page.locator('#selection-actions')).toBeVisible()
-    await page.locator('#btn-send-to-censor').click()
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
     await expect(page.locator('#canvas-wrapper')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => {
+      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.activeId ?? null
+    }), { timeout: 10000 }).toBe(11)
 
     const penTool = page.locator('[data-tool="pen"]').first()
     if (await penTool.count()) {
@@ -2341,7 +2926,7 @@ test.describe('Smoke Tests', () => {
     const initialSnapshot = await getActiveCensorCanvasSnapshot(page)
     expect(initialSnapshot).not.toBeNull()
 
-    const canvasBox = await page.locator('#canvas-wrapper').boundingBox()
+    const canvasBox = await getActiveCensorCanvasBox(page)
     expect(canvasBox).not.toBeNull()
     if (!canvasBox) return
 
@@ -2355,6 +2940,9 @@ test.describe('Smoke Tests', () => {
     await page.mouse.move(endX, endY, { steps: 8 })
     await page.mouse.up()
 
+    await expect.poll(() => page.evaluate(() => {
+      return Number((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.undoStack?.length || 0)
+    }), { timeout: 10000 }).toBeGreaterThan(1)
     await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 5000 }).not.toBe(initialSnapshot)
     const editedSnapshot = await getActiveCensorCanvasSnapshot(page)
     expect(editedSnapshot).not.toBeNull()
@@ -2364,6 +2952,427 @@ test.describe('Smoke Tests', () => {
       const snapshot = await getActiveCensorCanvasSnapshot(page)
       return snapshot === initialSnapshot || snapshot !== editedSnapshot
     }, { timeout: 10000 }).toBeTruthy()
+  })
+
+  test('low-memory censor mode should load safely and block diff mode', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as Window & { __SD_SORTER_TEST_FLAGS__?: Record<string, number> }).__SD_SORTER_TEST_FLAGS__ = {
+        censorLowMemoryPixelThreshold: 1,
+        censorShowChangesPixelThreshold: 1,
+      }
+    })
+    await mockImageAsset(page, 11)
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 11, filename: 'censor-low-memory.png', path: 'L:/censor-low-memory.png', prompt: 'low memory smoke' },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [{ id: 11, prompt: 'low memory smoke', tags: [] }],
+          missing_ids: [],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#canvas-wrapper')).toBeVisible()
+
+    await expect.poll(() => page.evaluate(() => {
+      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.activeId ?? null
+    }), { timeout: 10000 }).toBe(11)
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.lowMemoryMode)
+    }), { timeout: 10000 }).toBeTruthy()
+
+    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).not.toBeNull()
+    const initialSnapshot = await getActiveCensorCanvasSnapshot(page)
+    expect(initialSnapshot).not.toBeNull()
+
+    await page.locator('#btn-show-changes').click()
+    await expect(page.locator('#toast-container')).toContainText(/disabled for large images|大图已禁用 Diff 对比/i)
+  })
+
+  test('large-image proxy mode should save censor edits through save-operations instead of save-data', async ({ page }) => {
+    let saveOperationsPayload: any = null
+    let saveDataCalls = 0
+
+    await mockImageAsset(page, 11)
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            {
+              id: 11,
+              filename: 'censor-proxy-save.png',
+              path: 'L:/censor-proxy-save.png',
+              prompt: 'proxy save smoke',
+              width: 5000,
+              height: 5000,
+            },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [{ id: 11, prompt: 'proxy save smoke', tags: [], width: 5000, height: 5000 }],
+          missing_ids: [],
+        },
+      })
+    })
+    await page.route('**/api/censor/save-operations', async (route) => {
+      saveOperationsPayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-proxy-save.png',
+          filename: 'censor-proxy-save.png',
+        },
+      })
+    })
+    await page.route('**/api/censor/save-data', async (route) => {
+      saveDataCalls += 1
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-proxy-save.png',
+          filename: 'censor-proxy-save.png',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
+
+    await expect(page.locator('#view-censor.active')).toBeVisible()
+    await expect(page.locator('#canvas-wrapper')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => {
+      return (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.activeId ?? null
+    }), { timeout: 10000 }).toBe(11)
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.proxyEditMode)
+    }), { timeout: 10000 }).toBeTruthy()
+
+    const penTool = page.locator('[data-tool="pen"]').first()
+    if (await penTool.count()) {
+      await penTool.click()
+    }
+    const brushSize = page.locator('#tool-size')
+    if (await brushSize.count()) {
+      await brushSize.fill('120')
+    }
+
+    const canvasBox = await getActiveCensorCanvasBox(page)
+    expect(canvasBox).not.toBeNull()
+    if (!canvasBox) return
+
+    const startX = canvasBox.x + canvasBox.width * 0.35
+    const startY = canvasBox.y + canvasBox.height * 0.35
+    const endX = canvasBox.x + canvasBox.width * 0.65
+    const endY = canvasBox.y + canvasBox.height * 0.65
+
+    await page.mouse.move(startX, startY)
+    await page.mouse.down()
+    await page.mouse.move(endX, endY, { steps: 8 })
+    await page.mouse.up()
+
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__
+      return Number(state?.queue?.find((item: any) => item.id === 11)?.editOperations?.length || 0)
+    }), { timeout: 10000 }).toBeGreaterThan(0)
+
+    await page.locator('#btn-save-all-processed').click()
+    await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+    await page.locator('#save-output-folder').fill('L:/mock-output')
+    await page.locator('#btn-confirm-save-options').click()
+
+    await expect.poll(() => saveOperationsPayload, { timeout: 10000 }).not.toBeNull()
+    expect(saveDataCalls).toBe(0)
+    expect(saveOperationsPayload.original_image_id).toBe(11)
+    expect(Array.isArray(saveOperationsPayload.operations)).toBeTruthy()
+    expect(saveOperationsPayload.operations.length).toBeGreaterThan(0)
+    expect(saveOperationsPayload.operations[0]?.kind).toBe('stroke')
+    expect(saveOperationsPayload.operations[0]?.tool).toBe('pen')
+    expect(Array.isArray(saveOperationsPayload.operations[0]?.points)).toBeTruthy()
+    expect(saveOperationsPayload.operations[0]?.points.length).toBeGreaterThan(0)
+  })
+
+  test('large-image SAM3 mask refs should preview and save without inline mask data', async ({ page }) => {
+    let saveOperationsPayload: any = null
+    let saveDataCalls = 0
+
+    await mockImageAsset(page, 11)
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            {
+              id: 11,
+              filename: 'censor-sam3-mask-ref.png',
+              path: 'L:/censor-sam3-mask-ref.png',
+              prompt: 'sam3 mask ref smoke',
+              width: 5000,
+              height: 5000,
+            },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [{ id: 11, prompt: 'sam3 mask ref smoke', tags: [], width: 5000, height: 5000 }],
+          missing_ids: [],
+        },
+      })
+    })
+    await page.route('**/api/censor/segment-text', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          mask: null,
+          mask_ref: 'sam3-mask-11',
+          mask_bounds: [1000, 1200, 2200, 2800],
+          image_width: 5000,
+          image_height: 5000,
+          text_prompt: 'face',
+        },
+      })
+    })
+    await page.route('**/api/censor/mask-cache/sam3-mask-11**', async (route) => {
+      await route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(MIXED_MASK_DATA_URL.split(',')[1], 'base64'),
+      })
+    })
+    await page.route('**/api/censor/save-operations', async (route) => {
+      saveOperationsPayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-sam3-mask-ref.png',
+          filename: 'censor-sam3-mask-ref.png',
+        },
+      })
+    })
+    await page.route('**/api/censor/save-data', async (route) => {
+      saveDataCalls += 1
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-sam3-mask-ref.png',
+          filename: 'censor-sam3-mask-ref.png',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
+
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__
+      return state?.activeId ?? null
+    }), { timeout: 10000 }).toBe(11)
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.lowMemoryMode)
+    }), { timeout: 10000 }).toBeTruthy()
+
+    const initialSnapshot = await getActiveCensorCanvasSnapshot(page)
+    expect(initialSnapshot).not.toBeNull()
+
+    await page.evaluate(async () => {
+      const result = await (window as Window & { App?: any }).App.API.post('/api/censor/segment-text', {
+        image_id: 11,
+        text_prompt: 'face',
+      })
+      await (window as Window & { applyRasterMaskToActiveCanvas?: any }).applyRasterMaskToActiveCanvas(result)
+    })
+
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__
+      const operation = state?.queue?.find((item: any) => item.id === 11)?.editOperations?.[0]
+      return operation?.mask_ref || null
+    }), { timeout: 10000 }).toBe('sam3-mask-11')
+    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).not.toBe(initialSnapshot)
+
+    await page.locator('#btn-save-all-processed').click()
+    await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+    await page.locator('#save-output-folder').fill('L:/mock-output')
+    await page.locator('#btn-confirm-save-options').click()
+
+    await expect.poll(() => saveOperationsPayload, { timeout: 10000 }).not.toBeNull()
+    expect(saveDataCalls).toBe(0)
+    expect(saveOperationsPayload.original_image_id).toBe(11)
+    expect(saveOperationsPayload.operations[0]?.kind).toBe('mask_effect')
+    expect(saveOperationsPayload.operations[0]?.mask_ref).toBe('sam3-mask-11')
+    expect(Array.isArray(saveOperationsPayload.operations[0]?.mask_bounds)).toBeTruthy()
+    expect(saveOperationsPayload.operations[0]?.mask_data ?? null).toBeNull()
+  })
+
+  test('small-image inline SAM3 masks should keep full-size preview and save through save-data', async ({ page }) => {
+    let saveDataPayload: any = null
+    let saveOperationsCalls = 0
+
+    await mockImageAsset(page, 11)
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            {
+              id: 11,
+              filename: 'censor-sam3-inline-small.png',
+              path: 'L:/censor-sam3-inline-small.png',
+              prompt: 'sam3 inline small smoke',
+              width: 64,
+              height: 64,
+            },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [{ id: 11, prompt: 'sam3 inline small smoke', tags: [], width: 64, height: 64 }],
+          missing_ids: [],
+        },
+      })
+    })
+    await page.route('**/api/censor/segment-text', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          mask: INLINE_MASK_BOTTOM_RIGHT_DATA_URL,
+          mask_ref: null,
+          mask_bounds: [48, 48, 60, 60],
+          image_width: 64,
+          image_height: 64,
+          text_prompt: 'corner',
+        },
+      })
+    })
+    await page.route('**/api/censor/save-data', async (route) => {
+      saveDataPayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-sam3-inline-small.png',
+          filename: 'censor-sam3-inline-small.png',
+        },
+      })
+    })
+    await page.route('**/api/censor/save-operations', async (route) => {
+      saveOperationsCalls += 1
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          output_path: 'L:/mock-output/censor-sam3-inline-small.png',
+          filename: 'censor-sam3-inline-small.png',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
+
+    await expect.poll(() => page.evaluate(() => {
+      const state = (window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__
+      return state?.activeId ?? null
+    }), { timeout: 10000 }).toBe(11)
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean((window as Window & { __CENSOR_STATE__?: any }).__CENSOR_STATE__?.lowMemoryMode)
+    }), { timeout: 10000 }).toBeFalsy()
+    await page.selectOption('#censor-style', 'black_bar')
+    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).not.toBeNull()
+    const initialSnapshot = await getActiveCensorCanvasSnapshot(page)
+    expect(initialSnapshot).not.toBeNull()
+
+    await page.evaluate(async () => {
+      const result = await (window as Window & { App?: any }).App.API.post('/api/censor/segment-text', {
+        image_id: 11,
+        text_prompt: 'corner',
+      })
+      await (window as Window & { applyRasterMaskToActiveCanvas?: any }).applyRasterMaskToActiveCanvas(result)
+    })
+
+    await expect.poll(() => getActiveCensorCanvasSnapshot(page), { timeout: 10000 }).not.toBe(initialSnapshot)
+
+    await page.locator('#btn-save-all-processed').click()
+    await expect(page.locator('#save-options-modal.visible')).toBeVisible()
+    await page.locator('#save-output-folder').fill('L:/mock-output')
+    await page.locator('#btn-confirm-save-options').click()
+
+    await expect.poll(() => saveDataPayload, { timeout: 10000 }).not.toBeNull()
+    expect(saveOperationsCalls).toBe(0)
+    expect(saveDataPayload.original_image_id).toBe(11)
+    expect(typeof saveDataPayload.image_data).toBe('string')
+    expect(saveDataPayload.image_data.startsWith('data:image/png;base64,')).toBeTruthy()
   })
 
   test('censor detect modal should explain simple and pro model capabilities', async ({ page }) => {
@@ -2503,6 +3512,10 @@ test.describe('Smoke Tests', () => {
 
   test('quick auto censor should auto-restore the privacy detector when a general legacy model is selected', async ({ page }) => {
     let detectPayload: any = null
+
+    await mockGalleryImages(page, [
+      { id: 601, filename: 'quick-auto-censor.png' },
+    ])
 
     await page.route('**/api/censor/models', async (route) => {
       await route.fulfill({
@@ -2671,6 +3684,16 @@ test.describe('Smoke Tests', () => {
 
     await page.route('**/api/image-thumbnail/*', fulfillImage)
     await page.route('**/api/image-file/*', fulfillImage)
+    await page.route('**/api/images/export-data', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 11, filename: 'censor-mixed-geometry.png', prompt: 'mixed geometry smoke', tags: [] },
+          ],
+          missing_ids: [],
+        },
+      })
+    })
 
     await page.route('**/api/censor/models', async (route) => {
       await route.fulfill({
@@ -2750,11 +3773,18 @@ test.describe('Smoke Tests', () => {
 
     await page.goto('/')
     await page.waitForLoadState('networkidle')
-
-    await page.locator('#btn-toggle-select').click()
-    await page.locator('#gallery-grid .gallery-item').first().click()
-    await expect(page.locator('#btn-send-to-censor')).toBeEnabled()
-    await page.locator('#btn-send-to-censor').click()
+    await openView(page, 'censor')
+    await page.evaluate(() => {
+      if (typeof (window as Window & { initCensorEdit?: any }).initCensorEdit === 'function') {
+        ;(window as Window & { initCensorEdit?: any }).initCensorEdit()
+      }
+    })
+    await expect.poll(() => page.evaluate(() => {
+      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+    }), { timeout: 10000 }).toBeTruthy()
+    await page.evaluate(async () => {
+      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+    })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
     await expect(page.locator('#censor-queue-list .queue-thumb-v2')).toHaveCount(1, { timeout: 15000 })

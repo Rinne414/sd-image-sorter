@@ -38,8 +38,29 @@ That package is meant to cover the common workflows:
 Models not bundled in the package will be downloaded automatically on first use.
 
 - **Default**: Downloaded from [HuggingFace](https://huggingface.co)
-- **Mainland China / GFW**: Set `HF_ENDPOINT=https://hf-mirror.com` in your environment or `backend/.env` file to use [hf-mirror](https://hf-mirror.com)
+- **Mainland China / GFW**: Set `HF_ENDPOINT=https://hf-mirror.com` in your environment or package-root `.env` file to use [hf-mirror](https://hf-mirror.com)
 - **ModelScope**: Available for Artist ID and SAM3 features via the UI model source selector
+
+## Manual App Updates
+
+The app only checks for updates when the user clicks the update button.
+
+- Default channel: GitHub Releases
+- Mainland China friendly option: set `SD_IMAGE_SORTER_UPDATE_API_URL`, `SD_IMAGE_SORTER_UPDATE_WEB_URL`, and `SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX` in the package-root `.env`
+- Default user guidance: if GitHub is unreachable, enable VPN and retry the manual update check
+- Asset selection rule: prefer `app-patch`, but automatically fall back to the platform full package when no patch asset exists
+- Safety rule: the updater only replaces release-managed app files and never touches `data/` or the updater runtime folders under `update/`
+
+## Why The Updater Never Touches `data/`
+
+This is intentional and must stay that way.
+
+- `data/` is package-local user state: database, favorites, downloaded models, cache, thumbnails, temp files, and other long-lived runtime data
+- `update/downloads`, `update/logs`, `update/state`, `update/worker`, and `update/backups` are updater runtime workspaces, not release payload content
+- The in-app updater is meant to behave like "replace the app code in place", not "reinstall the whole environment from scratch"
+- Release packaging already excludes runtime folders, but the worker also hard-blocks them so a future packaging mistake cannot silently overwrite or delete user state
+- If a new release manifest ever tries to manage protected runtime paths, the worker aborts the update before copying or deleting installed files
+- If an old installed manifest contains dirty entries for protected paths, the worker ignores those entries instead of treating user data as obsolete app files
 
 ## Optional Assets
 

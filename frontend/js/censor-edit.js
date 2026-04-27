@@ -6,6 +6,12 @@
 const CENSOR_UNDO_DEFAULT_DEPTH = 20;
 const CENSOR_UNDO_MIN_DEPTH = 5;
 const CENSOR_UNDO_MAX_DEPTH = 200;
+const CENSOR_LOW_MEMORY_PIXEL_THRESHOLD_DEFAULT = 20_000_000;
+const CENSOR_SHOW_CHANGES_PIXEL_THRESHOLD_DEFAULT = 12_000_000;
+const CENSOR_LOW_MEMORY_UNDO_CAP = 4;
+const CENSOR_PROXY_MAX_PIXELS_DEFAULT = 6_000_000;
+const CENSOR_PROXY_MAX_EDGE_DEFAULT = 4096;
+const CENSOR_ORIGINAL_STATE_TOKEN = '__CENSOR_ORIGINAL__';
 
 function getCensorUndoDepth() {
     const raw = parseInt(localStorage.getItem('censor_undo_depth'), 10);
@@ -18,6 +24,7 @@ const CensorState = {
     queue: [],
     pendingQueueIds: new Set(),
     activeId: null, // ID of currently edited image
+    pendingActiveId: null, // Latest requested image while a newer canvas load is still pending
     selectedItems: new Set(), // IDs of selected items for multi-select
     lastSelectedIndex: -1, // Last clicked index for shift-select range
 
@@ -35,7 +42,13 @@ const CensorState = {
     scale: 1,
     pan: { x: 0, y: 0 },
     originalImage: null,  // HTMLImageElement
-    originalImageData: null, // ImageData for reset/compare
+    originalImageData: null, // Legacy field kept for compatibility; large-image mode avoids populating it
+    originalLogicalWidth: 0,
+    originalLogicalHeight: 0,
+    activeImagePixels: 0,
+    lowMemoryMode: false,
+    proxyEditMode: false,
+    proxyScale: 1,
 
     // Clone tool state
     cloneSource: null,
@@ -54,6 +67,8 @@ const CensorState = {
     filterActionUndoStack: [],
     filterActionRedoStack: [],
     lastHistorySource: null,
+    operationRedoStack: [],
+    activeStrokeOperation: null,
 
     // Config
     modelPath: localStorage.getItem('censor_model_path') || '',
@@ -93,6 +108,188 @@ let boundHandlers = {
 
 let censorModelStatusPromise = null;
 
+function getCensorTestFlag(name, fallback) {
+    const value = window?.__SD_SORTER_TEST_FLAGS__?.[name];
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getCensorLowMemoryPixelThreshold() {
+    return getCensorTestFlag('censorLowMemoryPixelThreshold', CENSOR_LOW_MEMORY_PIXEL_THRESHOLD_DEFAULT);
+}
+
+function getCensorShowChangesPixelThreshold() {
+    return getCensorTestFlag('censorShowChangesPixelThreshold', CENSOR_SHOW_CHANGES_PIXEL_THRESHOLD_DEFAULT);
+}
+
+function getCensorProxyMaxPixels() {
+    return getCensorTestFlag('censorProxyMaxPixels', CENSOR_PROXY_MAX_PIXELS_DEFAULT);
+}
+
+function getCensorProxyMaxEdge() {
+    return getCensorTestFlag('censorProxyMaxEdge', CENSOR_PROXY_MAX_EDGE_DEFAULT);
+}
+
+function isOriginalCanvasState(state) {
+    return state === CENSOR_ORIGINAL_STATE_TOKEN;
+}
+
+function getEffectiveCensorUndoDepth() {
+    const configured = getCensorUndoDepth();
+    return CensorState.lowMemoryMode ? Math.min(configured, CENSOR_LOW_MEMORY_UNDO_CAP) : configured;
+}
+
+function restoreOriginalImageToCanvas(canvas = null) {
+    const targetCanvas = canvas || document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!targetCanvas || !CensorState.originalImage) return false;
+    const ctx = targetCanvas.getContext('2d');
+    ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+    ctx.drawImage(CensorState.originalImage, 0, 0, targetCanvas.width, targetCanvas.height);
+    return true;
+}
+
+function maybeNotifyLowMemoryMode(item, pixelCount) {
+    if (!item || !CensorState.lowMemoryMode || item.__lowMemoryModeNotified) return;
+    item.__lowMemoryModeNotified = true;
+    const megaPixels = (pixelCount / 1_000_000).toFixed(1);
+    window.App?.showToast?.(
+        tText(
+            `Large image (${megaPixels} MP): proxy edit mode is on. Editing stays responsive, undo history is reduced, and Show Changes is disabled.`,
+            `大图（${megaPixels} MP）：已启用代理编辑模式。编辑会保持流畅，撤销历史会缩短，“Diff”对比已禁用。`
+        ),
+        'info'
+    );
+}
+
+function getFocusedCensorImageId() {
+    return CensorState.pendingActiveId ?? CensorState.activeId;
+}
+
+function getActiveCensorItem() {
+    return CensorState.queue.find((item) => item.id === CensorState.activeId) || null;
+}
+
+function getCensorItemLogicalDimensions(item, fallbackWidth = 0, fallbackHeight = 0) {
+    const width = Number(item?.width || fallbackWidth || 0);
+    const height = Number(item?.height || fallbackHeight || 0);
+    return {
+        width: Number.isFinite(width) && width > 0 ? width : 0,
+        height: Number.isFinite(height) && height > 0 ? height : 0,
+    };
+}
+
+function getCensorItemPixelCount(item, fallbackWidth = 0, fallbackHeight = 0) {
+    const { width, height } = getCensorItemLogicalDimensions(item, fallbackWidth, fallbackHeight);
+    return width > 0 && height > 0 ? width * height : 0;
+}
+
+function shouldUseProxyEditMode(item, fallbackWidth = 0, fallbackHeight = 0) {
+    return getCensorItemPixelCount(item, fallbackWidth, fallbackHeight) >= getCensorLowMemoryPixelThreshold();
+}
+
+function buildProxyCanvasDimensions(width, height) {
+    const safeWidth = Math.max(1, Number(width || 1));
+    const safeHeight = Math.max(1, Number(height || 1));
+    const pixelScale = Math.sqrt(getCensorProxyMaxPixels() / (safeWidth * safeHeight));
+    const edgeScale = getCensorProxyMaxEdge() / Math.max(safeWidth, safeHeight);
+    const scale = Math.max(0.01, Math.min(1, pixelScale, edgeScale));
+    return {
+        width: Math.max(1, Math.round(safeWidth * scale)),
+        height: Math.max(1, Math.round(safeHeight * scale)),
+        scale,
+    };
+}
+
+function getCensorItemCanvasDimensions(item, fallbackWidth = 0, fallbackHeight = 0) {
+    const logical = getCensorItemLogicalDimensions(item, fallbackWidth, fallbackHeight);
+    if (logical.width <= 0 || logical.height <= 0) {
+        return {
+            width: Math.max(1, Number(fallbackWidth || 1)),
+            height: Math.max(1, Number(fallbackHeight || 1)),
+            scale: 1,
+        };
+    }
+    if (!shouldUseProxyEditMode(item, fallbackWidth, fallbackHeight)) {
+        return { width: logical.width, height: logical.height, scale: 1 };
+    }
+    return buildProxyCanvasDimensions(logical.width, logical.height);
+}
+
+function getCensorPreviewBaseUrl(item, dims = null) {
+    if (!item?.id) return item?.originalUrl || '';
+    const api = window.App?.API;
+    const targetDims = dims || getCensorItemCanvasDimensions(item);
+    if (typeof api?.getThumbnailUrl === 'function' && shouldUseProxyEditMode(item, targetDims.width, targetDims.height)) {
+        return api.getThumbnailUrl(item.id, Math.max(targetDims.width, targetDims.height));
+    }
+    return item.originalUrl || '';
+}
+
+function getCensorItemPreviewSrc(item) {
+    return item?.previewDataUrl || item?.currentDataUrl || item?.originalUrl || '';
+}
+
+function isProxyEditActive() {
+    return Boolean(CensorState.proxyEditMode);
+}
+
+function getCurrentLogicalToCanvasScale() {
+    return isProxyEditActive() ? Math.max(0.0001, Number(CensorState.proxyScale || 1)) : 1;
+}
+
+function toOriginalPoint(point) {
+    const scale = getCurrentLogicalToCanvasScale();
+    return {
+        x: point.x / scale,
+        y: point.y / scale,
+    };
+}
+
+function toCanvasPoint(point) {
+    const scale = getCurrentLogicalToCanvasScale();
+    return {
+        x: point.x * scale,
+        y: point.y * scale,
+    };
+}
+
+function getCanvasBrushSize(brushSize = CensorState.brushSize) {
+    return Math.max(1, brushSize * getCurrentLogicalToCanvasScale());
+}
+
+function cloneOperationPoints(points = []) {
+    return points.map((point) => ({
+        x: Number(point?.x || 0),
+        y: Number(point?.y || 0),
+    }));
+}
+
+function cloneNumberArray(values = []) {
+    return Array.isArray(values) ? values.map((value) => Number(value || 0)) : values;
+}
+
+function cloneEditOperations(operations = []) {
+    return operations.map((operation) => {
+        if (!operation || typeof operation !== 'object') return operation;
+        return {
+            ...operation,
+            points: cloneOperationPoints(operation.points),
+            clone_offset: operation.clone_offset ? { ...operation.clone_offset } : operation.clone_offset,
+            values: operation.values ? { ...operation.values } : operation.values,
+            mask_bounds: cloneNumberArray(operation.mask_bounds),
+            regions: Array.isArray(operation.regions)
+                ? operation.regions.map((region) => ({
+                    ...region,
+                    box: Array.isArray(region?.box) ? [...region.box] : region?.box,
+                    polygon: Array.isArray(region?.polygon)
+                        ? region.polygon.map((point) => Array.isArray(point) ? [...point] : point)
+                        : region?.polygon,
+                }))
+                : operation.regions,
+        };
+    });
+}
+
 function isZhCn() {
     return window.I18n?.getLang?.() === 'zh-CN';
 }
@@ -104,6 +301,15 @@ function tText(enText, zhText) {
 function tKey(key, enText, zhText = enText) {
     const translated = window.I18n?.t?.(key);
     return translated && translated !== key ? translated : tText(enText, zhText);
+}
+
+function tFormat(key, enText, zhText = enText, params = {}) {
+    const translated = window.I18n?.t?.(key, params);
+    if (translated && translated !== key) return translated;
+    return Object.entries(params).reduce(
+        (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
+        tText(enText, zhText)
+    );
 }
 
 function isEditableTarget(target) {
@@ -314,6 +520,7 @@ function bindEvents() {
             () => {
                 CensorState.queue = [];
                 CensorState.activeId = null;
+                CensorState.pendingActiveId = null;
                 CensorState.selectedItems.clear();
                 CensorState.lastSelectedIndex = -1;
                 CensorState.undoStack = [];
@@ -323,7 +530,12 @@ function bindEvents() {
                 CensorState.filterActionUndoStack = [];
                 CensorState.filterActionRedoStack = [];
                 CensorState.lastHistorySource = null;
+                CensorState.originalImage = null;
                 CensorState.originalImageData = null;
+                CensorState.activeImagePixels = 0;
+                CensorState.lowMemoryMode = false;
+                CensorState.preChangesData = null;
+                CensorState.showingChanges = false;
                 renderQueue();
                 clearCanvas();
                 window.App.showToast(tKey('censor.queueCleared', 'Queue cleared', '队列已清空'), 'success');
@@ -368,7 +580,7 @@ function bindEvents() {
         if (CensorState.activeId) {
             runDetectionForImage(CensorState.queue.find(i => i.id === CensorState.activeId));
         } else {
-            window.App.showToast('No image selected', 'error');
+            window.App.showToast(tText('No image selected', '未选择图片'), 'error');
         }
     });
 
@@ -377,7 +589,7 @@ function bindEvents() {
             $('#detect-modal')?.classList.remove('visible');
             runDetectionForImage(CensorState.queue.find(i => i.id === CensorState.activeId));
         } else {
-            window.App.showToast('No image selected', 'error');
+            window.App.showToast(tText('No image selected', '未选择图片'), 'error');
         }
     });
 
@@ -469,6 +681,12 @@ function bindEvents() {
         });
     });
 
+    $('#btn-censor-empty-open-gallery')?.addEventListener('click', () => {
+        if (typeof window.App?.switchView === 'function') {
+            window.App.switchView('gallery');
+        }
+    });
+
     $('#btn-open-queue-manager')?.addEventListener('click', openQueueManager);
     $('#btn-close-queue-manager')?.addEventListener('click', closeQueueManager);
     $('#btn-close-queue-manager-footer')?.addEventListener('click', closeQueueManager);
@@ -535,8 +753,8 @@ function bindEvents() {
     });
 
     $('#btn-clear-edits')?.addEventListener('click', () => {
-        if (!CensorState.activeId || !CensorState.originalImageData) {
-            window.App.showToast('No image to reset', 'error');
+        if (!CensorState.activeId || !CensorState.originalImage) {
+            window.App.showToast(tText('No image to reset', '没有可重置的图片'), 'error');
             return;
         }
         window.App.showConfirm(
@@ -631,32 +849,73 @@ function bindEvents() {
         }
 
         idsToFetch.forEach((id) => CensorState.pendingQueueIds.add(id));
-
-        const settled = await Promise.allSettled(idsToFetch.map((id) => API.getImage(id)));
         const nextItems = [];
         const failedIds = [];
+        try {
+            const selectionLoader = window.App?.loadSelectionData;
 
-        settled.forEach((entry, index) => {
-            const id = idsToFetch[index];
-            CensorState.pendingQueueIds.delete(id);
+            if (typeof selectionLoader === 'function') {
+                const payload = await selectionLoader(idsToFetch);
+                const detailMap = new Map((payload?.images || []).map((image) => [image.id, image]));
 
-            if (entry.status !== 'fulfilled' || !entry.value?.image) {
-                failedIds.push(id);
-                return;
+                idsToFetch.forEach((id) => {
+                    CensorState.pendingQueueIds.delete(id);
+                    const image = detailMap.get(id);
+                    if (!image?.filename) {
+                        failedIds.push(id);
+                        return;
+                    }
+
+                    nextItems.push({
+                        id,
+                        originalFilename: image.filename,
+                        outputFilename: image.filename,
+                        originalUrl: API.getImageUrl(id),
+                        currentDataUrl: null,
+                        previewDataUrl: null,
+                        width: Number(image.width || 0),
+                        height: Number(image.height || 0),
+                        editOperations: [],
+                        regions: [],
+                        isProcessed: false,
+                        isModified: false,
+                    });
+                });
+            } else {
+                const settled = await Promise.allSettled(idsToFetch.map((id) => API.getImage(id)));
+
+                settled.forEach((entry, index) => {
+                    const id = idsToFetch[index];
+                    CensorState.pendingQueueIds.delete(id);
+
+                    if (entry.status !== 'fulfilled' || !entry.value?.image) {
+                        failedIds.push(id);
+                        return;
+                    }
+
+                    const image = entry.value.image;
+                    nextItems.push({
+                        id,
+                        originalFilename: image.filename,
+                        outputFilename: image.filename,
+                        originalUrl: API.getImageUrl(id),
+                        currentDataUrl: null,
+                        previewDataUrl: null,
+                        width: Number(image.width || 0),
+                        height: Number(image.height || 0),
+                        editOperations: [],
+                        regions: [],
+                        isProcessed: false,
+                        isModified: false,
+                    });
+                });
             }
-
-            const image = entry.value.image;
-            nextItems.push({
-                id,
-                originalFilename: image.filename,
-                outputFilename: image.filename,
-                originalUrl: API.getImageUrl(id),
-                currentDataUrl: null,
-                regions: [],
-                isProcessed: false,
-                isModified: false,
+        } catch (error) {
+            idsToFetch.forEach((id) => {
+                CensorState.pendingQueueIds.delete(id);
+                failedIds.push(id);
             });
-        });
+        }
 
         if (nextItems.length) {
             CensorState.queue.push(...nextItems);
@@ -725,9 +984,13 @@ function renderQueue() {
     if (CensorState.activeId && !validIds.has(CensorState.activeId)) {
         CensorState.activeId = null;
     }
+    if (CensorState.pendingActiveId && !validIds.has(CensorState.pendingActiveId)) {
+        CensorState.pendingActiveId = null;
+    }
 
     // Handle empty state
     if (CensorState.queue.length === 0) {
+        CensorState.pendingActiveId = null;
         list.innerHTML = `
             <div class="queue-empty-state-v2">
                 <span class="empty-icon">📷</span>
@@ -835,13 +1098,13 @@ function renderQueue() {
         img.title = item.batchError ? `${baseTitle}\n⚠ ${item.batchError}` : baseTitle;
 
         // Only update src if it changed (prevents reload flash)
-        const newSrc = item.currentDataUrl || item.originalUrl;
+        const newSrc = getCensorItemPreviewSrc(item);
         if (img.src !== newSrc) {
             img.src = newSrc;
         }
 
         // Update classes
-        const isActive = item.id === CensorState.activeId;
+        const isActive = item.id === getFocusedCensorImageId();
         const isProcessed = item.isProcessed;
         const isSelected = CensorState.selectedItems.has(item.id);
         const batchFailed = item.batchStatus === 'failed';
@@ -918,6 +1181,7 @@ function formatQueueManagerSummary(visibleCount) {
 
 function getQueueManagerThumbnailSrc(item) {
     const api = window.App?.API;
+    if (item?.previewDataUrl) return item.previewDataUrl;
     if (item?.currentDataUrl) return item.currentDataUrl;
     if (item?.id && typeof api?.getThumbnailUrl === 'function') {
         return api.getThumbnailUrl(item.id, 320);
@@ -927,7 +1191,7 @@ function getQueueManagerThumbnailSrc(item) {
 
 function getQueueManagerStatusBadges(item) {
     const badges = [];
-    if (item.id === CensorState.activeId) {
+    if (item.id === getFocusedCensorImageId()) {
         badges.push(`<span class="queue-manager-badge is-active">${escapeHtml(tKey('common.current', 'Current', '当前'))}</span>`);
     }
     if (item.isProcessed) {
@@ -1009,7 +1273,7 @@ function renderQueueManager() {
 
     list.innerHTML = items.map((item) => {
         const index = CensorState.queue.findIndex((entry) => entry.id === item.id);
-        const isActive = item.id === CensorState.activeId;
+        const isActive = item.id === getFocusedCensorImageId();
         const isSelected = CensorState.selectedItems.has(item.id);
         const isProcessed = item.processed || item.saved;
         const classes = [
@@ -1389,12 +1653,575 @@ function handleDrop(e) {
 
 // State for double buffering
 CensorState.activeCanvasId = 'censor-canvas';
-CensorState.isLoadingImage = false; // Lock for preventing rapid load race conditions
+CensorState.isLoadingImage = false;
+CensorState.activeImageLoadRequest = 0;
+
+function buildFilterCssParts(values = {}) {
+    const brightness = 100 + Number(values.brightness || 0);
+    const contrast = 100 + Number(values.contrast || 0);
+    const saturation = 100 + Number(values.saturation || 0);
+    const hue = Number(values.hue || 0);
+    const blur = Number(values.blur || 0);
+    const temperature = Number(values.temperature || 0);
+    const filters = [
+        `brightness(${brightness}%)`,
+        `contrast(${contrast}%)`,
+        `saturate(${saturation}%)`,
+        `hue-rotate(${hue}deg)`,
+    ];
+    if (blur > 0) filters.push(`blur(${blur}px)`);
+    if (temperature !== 0) {
+        if (temperature > 0) {
+            filters.push(`sepia(${Math.abs(temperature)}%)`);
+        } else {
+            filters.push(`sepia(${Math.abs(temperature) * 0.3}%)`);
+            filters.push(`hue-rotate(${180 + hue}deg)`);
+        }
+    }
+    return filters;
+}
+
+function applySharpenToCanvasPixels(canvas, amount) {
+    if (!(canvas instanceof HTMLCanvasElement) || amount <= 0) return;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const width = canvas.width;
+    const height = canvas.height;
+    const copy = new Uint8ClampedArray(data);
+    const kernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
+
+    for (let y = 1; y < height - 1; y += 1) {
+        for (let x = 1; x < width - 1; x += 1) {
+            for (let channel = 0; channel < 3; channel += 1) {
+                let value = 0;
+                for (let ky = -1; ky <= 1; ky += 1) {
+                    for (let kx = -1; kx <= 1; kx += 1) {
+                        value += copy[((y + ky) * width + (x + kx)) * 4 + channel] * kernel[(ky + 1) * 3 + (kx + 1)];
+                    }
+                }
+                data[(y * width + x) * 4 + channel] = Math.max(0, Math.min(255, value));
+            }
+        }
+    }
+    ctx.putImageData(imageData, 0, 0);
+}
+
+function applyVignetteToCanvasPixels(canvas, amount) {
+    if (!(canvas instanceof HTMLCanvasElement) || amount <= 0) return;
+    const ctx = canvas.getContext('2d');
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = Math.max(cx, cy);
+    const gradient = ctx.createRadialGradient(cx, cy, radius * (1 - amount * 0.5), cx, cy, radius);
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, `rgba(0,0,0,${amount * 0.7})`);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+async function applyFilterValuesToCanvas(canvas, values = {}) {
+    if (!(canvas instanceof HTMLCanvasElement) || !canvas.width || !canvas.height) return;
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.filter = buildFilterCssParts(values).join(' ');
+    tempCtx.drawImage(canvas, 0, 0);
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(tempCanvas, 0, 0);
+
+    const sharpen = Number(values.sharpen || 0);
+    const vignette = Number(values.vignette || 0);
+    if (sharpen > 0) {
+        applySharpenToCanvasPixels(canvas, sharpen / 100);
+    }
+    if (vignette > 0) {
+        applyVignetteToCanvasPixels(canvas, vignette / 100);
+    }
+}
+
+function scaleRegionGeometry(region, scaleX, scaleY) {
+    const scaled = { ...region };
+    if (Array.isArray(region?.box) && region.box.length === 4) {
+        scaled.box = [
+            Number(region.box[0] || 0) * scaleX,
+            Number(region.box[1] || 0) * scaleY,
+            Number(region.box[2] || 0) * scaleX,
+            Number(region.box[3] || 0) * scaleY,
+        ];
+    }
+    if (Array.isArray(region?.polygon)) {
+        scaled.polygon = region.polygon
+            .filter((point) => Array.isArray(point) && point.length >= 2)
+            .map((point) => [Number(point[0] || 0) * scaleX, Number(point[1] || 0) * scaleY]);
+    }
+    return scaled;
+}
+
+function createWorkingCanvas(width, height) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(Number(width || 1)));
+    canvas.height = Math.max(1, Math.round(Number(height || 1)));
+    return canvas;
+}
+
+function getDrawableDimensions(source) {
+    return {
+        width: Number(source?.naturalWidth || source?.videoWidth || source?.width || 0),
+        height: Number(source?.naturalHeight || source?.videoHeight || source?.height || 0),
+    };
+}
+
+function clampCanvasBounds(bounds, width, height) {
+    const x1 = Math.max(0, Math.floor(Number(bounds?.x1 ?? bounds?.[0] ?? 0)));
+    const y1 = Math.max(0, Math.floor(Number(bounds?.y1 ?? bounds?.[1] ?? 0)));
+    const x2 = Math.min(width, Math.ceil(Number(bounds?.x2 ?? bounds?.[2] ?? width)));
+    const y2 = Math.min(height, Math.ceil(Number(bounds?.y2 ?? bounds?.[3] ?? height)));
+    if (!(x2 > x1) || !(y2 > y1)) {
+        return null;
+    }
+    return {
+        x1,
+        y1,
+        x2,
+        y2,
+        width: x2 - x1,
+        height: y2 - y1,
+    };
+}
+
+function scaleOperationEffectValue(value, scaleX = 1, scaleY = 1) {
+    return Math.max(1, Math.round(Number(value || 1) * Math.max(scaleX, scaleY)));
+}
+
+function cropCanvasRegion(canvas, bounds) {
+    const regionCanvas = createWorkingCanvas(bounds.width, bounds.height);
+    const regionCtx = regionCanvas.getContext('2d');
+    regionCtx.drawImage(
+        canvas,
+        bounds.x1,
+        bounds.y1,
+        bounds.width,
+        bounds.height,
+        0,
+        0,
+        bounds.width,
+        bounds.height
+    );
+    return regionCanvas;
+}
+
+function drawScaledSourceCrop(ctx, sourceImage, sourceBounds, destBounds, options = {}) {
+    if (!sourceImage || !ctx) return;
+    const sourceDims = getDrawableDimensions(sourceImage);
+    const referenceWidth = Math.max(1, Number(options.referenceWidth || ctx.canvas?.width || destBounds?.width || 1));
+    const referenceHeight = Math.max(1, Number(options.referenceHeight || ctx.canvas?.height || destBounds?.height || 1));
+    const scaleX = sourceDims.width > 0 ? (sourceDims.width / referenceWidth) : 1;
+    const scaleY = sourceDims.height > 0 ? (sourceDims.height / referenceHeight) : 1;
+    const sx = Math.max(0, Number(sourceBounds.x || 0) * scaleX);
+    const sy = Math.max(0, Number(sourceBounds.y || 0) * scaleY);
+    const sw = Math.max(1, Number(sourceBounds.width || 1) * scaleX);
+    const sh = Math.max(1, Number(sourceBounds.height || 1) * scaleY);
+    ctx.drawImage(
+        sourceImage,
+        sx,
+        sy,
+        sw,
+        sh,
+        Number(destBounds.x || 0),
+        Number(destBounds.y || 0),
+        Number(destBounds.width || 1),
+        Number(destBounds.height || 1)
+    );
+}
+
+function buildPixelatedCanvas(sourceCanvas, blockSize) {
+    const downscale = Math.max(1, Math.round(Number(blockSize || 1)));
+    const smallW = Math.max(1, Math.floor(sourceCanvas.width / downscale));
+    const smallH = Math.max(1, Math.floor(sourceCanvas.height / downscale));
+    const tinyCanvas = createWorkingCanvas(smallW, smallH);
+    const tinyCtx = tinyCanvas.getContext('2d');
+    tinyCtx.imageSmoothingEnabled = false;
+    tinyCtx.drawImage(sourceCanvas, 0, 0, smallW, smallH);
+
+    const pixelatedCanvas = createWorkingCanvas(sourceCanvas.width, sourceCanvas.height);
+    const pixelatedCtx = pixelatedCanvas.getContext('2d');
+    pixelatedCtx.imageSmoothingEnabled = false;
+    pixelatedCtx.drawImage(tinyCanvas, 0, 0, smallW, smallH, 0, 0, sourceCanvas.width, sourceCanvas.height);
+    return pixelatedCanvas;
+}
+
+function drawStrokeMaskOnCanvas(maskCtx, points, brushSize) {
+    if (!maskCtx || !Array.isArray(points) || points.length === 0) return;
+    const safeBrushSize = Math.max(1, Number(brushSize || 1));
+    const radius = safeBrushSize / 2;
+    maskCtx.fillStyle = '#fff';
+    maskCtx.strokeStyle = '#fff';
+    if (points.length === 1) {
+        const point = points[0];
+        maskCtx.beginPath();
+        maskCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        maskCtx.fill();
+        return;
+    }
+
+    maskCtx.lineWidth = safeBrushSize;
+    maskCtx.lineCap = 'round';
+    maskCtx.lineJoin = 'round';
+    maskCtx.beginPath();
+    maskCtx.moveTo(points[0].x, points[0].y);
+    for (let index = 1; index < points.length; index += 1) {
+        maskCtx.lineTo(points[index].x, points[index].y);
+    }
+    maskCtx.stroke();
+
+    [points[0], points[points.length - 1]].forEach((point) => {
+        maskCtx.beginPath();
+        maskCtx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+        maskCtx.fill();
+    });
+}
+
+function getStrokeMaskBounds(points, brushSize, width, height) {
+    if (!Array.isArray(points) || points.length === 0) return null;
+    const radius = Math.max(1, Number(brushSize || 1)) / 2;
+    const xs = points.map((point) => Number(point?.x || 0));
+    const ys = points.map((point) => Number(point?.y || 0));
+    return clampCanvasBounds({
+        x1: Math.min(...xs) - radius,
+        y1: Math.min(...ys) - radius,
+        x2: Math.max(...xs) + radius,
+        y2: Math.max(...ys) + radius,
+    }, width, height);
+}
+
+function getRegionBounds(regions = [], width, height) {
+    const xs = [];
+    const ys = [];
+    regions.forEach((region) => {
+        if (Array.isArray(region?.box) && region.box.length === 4) {
+            xs.push(Number(region.box[0] || 0), Number(region.box[2] || 0));
+            ys.push(Number(region.box[1] || 0), Number(region.box[3] || 0));
+        }
+        if (Array.isArray(region?.polygon)) {
+            region.polygon.forEach((point) => {
+                if (!Array.isArray(point) || point.length < 2) return;
+                xs.push(Number(point[0] || 0));
+                ys.push(Number(point[1] || 0));
+            });
+        }
+    });
+    if (!xs.length || !ys.length) return null;
+    return clampCanvasBounds({
+        x1: Math.min(...xs),
+        y1: Math.min(...ys),
+        x2: Math.max(...xs),
+        y2: Math.max(...ys),
+    }, width, height);
+}
+
+function getMaskCanvasBounds(maskCanvas) {
+    if (!(maskCanvas instanceof HTMLCanvasElement) || !maskCanvas.width || !maskCanvas.height) return null;
+    const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+    const pixels = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+    let minX = maskCanvas.width;
+    let minY = maskCanvas.height;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < maskCanvas.height; y += 1) {
+        for (let x = 0; x < maskCanvas.width; x += 1) {
+            const alpha = pixels[(y * maskCanvas.width + x) * 4 + 3];
+            if (alpha <= 0) continue;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+    return clampCanvasBounds({
+        x1: minX,
+        y1: minY,
+        x2: maxX + 1,
+        y2: maxY + 1,
+    }, maskCanvas.width, maskCanvas.height);
+}
+
+function renderMaskStyleToCanvas(canvas, maskCanvas, options = {}) {
+    if (!(canvas instanceof HTMLCanvasElement) || !(maskCanvas instanceof HTMLCanvasElement)) return;
+    const bounds = clampCanvasBounds(
+        options.bounds || getMaskCanvasBounds(maskCanvas),
+        canvas.width,
+        canvas.height
+    );
+    if (!bounds) return;
+
+    const style = String(options.style || 'mosaic').trim().toLowerCase();
+    const blockSize = Math.max(1, Math.round(Number(options.blockSize || 16)));
+    const blurRadius = Math.max(1, Math.round(Number(options.blurRadius || 20)));
+    const maskCrop = cropCanvasRegion(maskCanvas, bounds);
+    const sourceCrop = cropCanvasRegion(canvas, bounds);
+    const effectCanvas = createWorkingCanvas(bounds.width, bounds.height);
+    const effectCtx = effectCanvas.getContext('2d');
+
+    if (style === 'pen') {
+        effectCtx.globalAlpha = Math.max(0, Math.min(1, Number(options.penOpacity ?? 1)));
+        effectCtx.fillStyle = options.penColor || '#ff0000';
+        effectCtx.fillRect(0, 0, bounds.width, bounds.height);
+        effectCtx.globalAlpha = 1;
+    } else if (style === 'eraser') {
+        drawScaledSourceCrop(
+            effectCtx,
+            options.originalImage || canvas,
+            { x: bounds.x1, y: bounds.y1, width: bounds.width, height: bounds.height },
+            { x: 0, y: 0, width: bounds.width, height: bounds.height },
+            { referenceWidth: canvas.width, referenceHeight: canvas.height }
+        );
+    } else if (style === 'white_bar') {
+        effectCtx.fillStyle = '#fff';
+        effectCtx.fillRect(0, 0, bounds.width, bounds.height);
+    } else if (style === 'black_bar' || style === 'black' || style === 'solid') {
+        effectCtx.fillStyle = '#000';
+        effectCtx.fillRect(0, 0, bounds.width, bounds.height);
+    } else if (style === 'blur') {
+        effectCtx.filter = `blur(${blurRadius}px)`;
+        effectCtx.drawImage(sourceCrop, 0, 0);
+        effectCtx.filter = 'none';
+    } else {
+        effectCtx.drawImage(buildPixelatedCanvas(sourceCrop, blockSize), 0, 0);
+    }
+
+    effectCtx.globalCompositeOperation = 'destination-in';
+    effectCtx.drawImage(maskCrop, 0, 0);
+    effectCtx.globalCompositeOperation = 'source-over';
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(effectCanvas, bounds.x1, bounds.y1);
+}
+
+function createStrokeOperationFromCurrentState(tool) {
+    const operation = {
+        kind: 'stroke',
+        tool,
+        points: [],
+        brush_size: Number(CensorState.brushSize || 1),
+    };
+    if (tool === 'brush') {
+        operation.style = CensorState.style;
+        operation.block_size = Number(CensorState.blockSize || 16);
+        operation.blur_radius = Math.max(8, Number(CensorState.blockSize || 16));
+    } else if (tool === 'pen') {
+        operation.pen_color = CensorState.penColor;
+        operation.pen_opacity = Number(CensorState.penOpacity || 1);
+    }
+    return operation;
+}
+
+async function applyStrokeOperationToCanvas(canvas, originalImage, operation, scaleX = 1, scaleY = 1) {
+    if (!(canvas instanceof HTMLCanvasElement) || !operation) return;
+    const points = Array.isArray(operation.points) ? operation.points : [];
+    if (!points.length) return;
+
+    const tool = String(operation.tool || 'brush').trim().toLowerCase();
+    const canvasPoints = points.map((point) => ({
+        x: Number(point?.x || 0) * scaleX,
+        y: Number(point?.y || 0) * scaleY,
+    }));
+    const scaledBrushSize = Math.max(1, Number(operation.brush_size || 1) * Math.max(scaleX, scaleY));
+    const ctx = canvas.getContext('2d');
+
+    if (tool === 'clone') {
+        for (const point of canvasPoints) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, scaledBrushSize / 2, 0, Math.PI * 2);
+            performClone(ctx, point.x, point.y, scaledBrushSize, {
+                sourceImage: originalImage,
+                cloneOffset: {
+                    x: Number(operation.clone_offset?.x || 0) * scaleX,
+                    y: Number(operation.clone_offset?.y || 0) * scaleY,
+                },
+            });
+            ctx.restore();
+        }
+        return;
+    }
+
+    const maskCanvas = createWorkingCanvas(canvas.width, canvas.height);
+    const maskCtx = maskCanvas.getContext('2d');
+    drawStrokeMaskOnCanvas(maskCtx, canvasPoints, scaledBrushSize);
+    renderMaskStyleToCanvas(canvas, maskCanvas, {
+        bounds: getStrokeMaskBounds(canvasPoints, scaledBrushSize, canvas.width, canvas.height),
+        style: tool === 'brush' ? operation.style : tool,
+        blockSize: scaleOperationEffectValue(operation.block_size || 16, scaleX, scaleY),
+        blurRadius: scaleOperationEffectValue(operation.blur_radius || 20, scaleX, scaleY),
+        penColor: operation.pen_color,
+        penOpacity: operation.pen_opacity,
+        originalImage,
+    });
+}
+
+async function applyGeometryOperationToCanvas(canvas, originalImage, operation, scaleX = 1, scaleY = 1) {
+    if (!(canvas instanceof HTMLCanvasElement) || !operation) return;
+    const sourceImage = originalImage || CensorState.originalImage;
+    const regions = Array.isArray(operation.regions) ? operation.regions : [];
+    if (!regions.length) return;
+
+    const scaledRegions = regions.map((region) => scaleRegionGeometry(region, scaleX, scaleY));
+    const { maskRegions, boxRegions } = splitDetectionGeometry(scaledRegions);
+    if (maskRegions.length) {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = canvas.width;
+        maskCanvas.height = canvas.height;
+        const maskCtx = maskCanvas.getContext('2d');
+        maskCtx.fillStyle = '#fff';
+        maskRegions.forEach((region) => {
+            const polygon = Array.isArray(region?.polygon) ? region.polygon : [];
+            const validPoints = polygon.filter((point) => Array.isArray(point) && point.length >= 2);
+            if (validPoints.length < 3) return;
+            maskCtx.beginPath();
+            validPoints.forEach((point, index) => {
+                const x = Number(point[0] || 0);
+                const y = Number(point[1] || 0);
+                if (index === 0) {
+                    maskCtx.moveTo(x, y);
+                } else {
+                    maskCtx.lineTo(x, y);
+                }
+            });
+            maskCtx.closePath();
+            maskCtx.fill();
+        });
+        renderMaskStyleToCanvas(canvas, maskCanvas, {
+            style: operation.style,
+            blockSize: scaleOperationEffectValue(operation.block_size || 16, scaleX, scaleY),
+            blurRadius: scaleOperationEffectValue(operation.blur_radius || 20, scaleX, scaleY),
+            originalImage: sourceImage,
+            bounds: getRegionBounds(maskRegions, canvas.width, canvas.height),
+        });
+    }
+    if (boxRegions.length) {
+        const maskCanvas = createWorkingCanvas(canvas.width, canvas.height);
+        const maskCtx = maskCanvas.getContext('2d');
+        maskCtx.fillStyle = '#fff';
+        boxRegions.forEach((region) => {
+            if (!Array.isArray(region?.box) || region.box.length !== 4) return;
+            const [x1, y1, x2, y2] = region.box;
+            maskCtx.fillRect(x1, y1, x2 - x1, y2 - y1);
+        });
+        renderMaskStyleToCanvas(canvas, maskCanvas, {
+            style: operation.style,
+            blockSize: scaleOperationEffectValue(operation.block_size || 16, scaleX, scaleY),
+            blurRadius: scaleOperationEffectValue(operation.blur_radius || 20, scaleX, scaleY),
+            originalImage: sourceImage,
+            bounds: getRegionBounds(boxRegions, canvas.width, canvas.height),
+        });
+    }
+}
+
+async function applyMaskOperationToCanvas(canvas, originalImage, operation, scaleX = 1, scaleY = 1) {
+    if (!(canvas instanceof HTMLCanvasElement)) return;
+    const maskCanvas = createWorkingCanvas(canvas.width, canvas.height);
+    const maskCtx = maskCanvas.getContext('2d');
+    const maskBounds = operation?.mask_data
+        ? null
+        : getMaskOperationCanvasBounds(operation, scaleX, scaleY, canvas);
+    const maskImage = await loadMaskImageForOperation(operation, maskBounds);
+    if (!maskImage) return;
+
+    if (maskBounds) {
+        maskCtx.drawImage(maskImage, maskBounds.x, maskBounds.y, maskBounds.width, maskBounds.height);
+    } else {
+        maskCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+    }
+    renderMaskStyleToCanvas(canvas, maskCanvas, {
+        style: operation.style,
+        blockSize: scaleOperationEffectValue(operation.block_size || 16, scaleX, scaleY),
+        blurRadius: scaleOperationEffectValue(operation.blur_radius || 20, scaleX, scaleY),
+        originalImage,
+        bounds: maskBounds || undefined,
+    });
+}
+
+async function applyEditOperationToCanvas(canvas, item, operation, originalImage = null) {
+    if (!operation || typeof operation !== 'object') return;
+    const kind = String(operation.kind || '').trim().toLowerCase();
+    const logical = getCensorItemLogicalDimensions(item, CensorState.originalLogicalWidth, CensorState.originalLogicalHeight);
+    const scaleX = logical.width > 0 ? (canvas.width / logical.width) : 1;
+    const scaleY = logical.height > 0 ? (canvas.height / logical.height) : 1;
+
+    if (kind === 'stroke') {
+        await applyStrokeOperationToCanvas(canvas, originalImage || CensorState.originalImage, operation, scaleX, scaleY);
+    } else if (kind === 'geometry_effect') {
+        await applyGeometryOperationToCanvas(canvas, originalImage || CensorState.originalImage, operation, scaleX, scaleY);
+    } else if (kind === 'mask_effect') {
+        await applyMaskOperationToCanvas(canvas, originalImage || CensorState.originalImage, operation, scaleX, scaleY);
+    } else if (kind === 'filter') {
+        await applyFilterValuesToCanvas(canvas, operation.values || {});
+    }
+}
+
+async function replayEditOperationsOntoCanvas(canvas, item, originalImage = null) {
+    if (!(canvas instanceof HTMLCanvasElement) || !item?.editOperations?.length) return;
+    for (const operation of item.editOperations) {
+        await applyEditOperationToCanvas(canvas, item, operation, originalImage || CensorState.originalImage);
+    }
+}
+
+function syncProxyItemPreviewFromCanvas(item, canvas = null) {
+    if (!item) return;
+    const targetCanvas = canvas || document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!item.editOperations?.length) {
+        item.previewDataUrl = null;
+        item.currentDataUrl = null;
+        item.isModified = false;
+        return;
+    }
+    item.previewDataUrl = captureCanvasState(targetCanvas);
+    item.currentDataUrl = null;
+    item.isModified = true;
+}
+
+async function redrawProxyCanvasFromOperations(item, canvas = null, baseImage = null) {
+    if (!item) return null;
+    const targetCanvas = canvas || document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+    if (!(targetCanvas instanceof HTMLCanvasElement) || !targetCanvas.width || !targetCanvas.height) {
+        return null;
+    }
+    const dims = getCensorItemCanvasDimensions(item);
+    const sourceImage = baseImage || CensorState.originalImage || await loadImage(getCensorPreviewBaseUrl(item, dims));
+    const ctx = targetCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+    ctx.drawImage(sourceImage, 0, 0, targetCanvas.width, targetCanvas.height);
+    await replayEditOperationsOntoCanvas(targetCanvas, item, sourceImage);
+    syncProxyItemPreviewFromCanvas(item, targetCanvas);
+    return targetCanvas;
+}
+
+async function renderProxyPreviewDataForItem(item) {
+    if (!item) return null;
+    const dims = getCensorItemCanvasDimensions(item);
+    const previewBaseUrl = getCensorPreviewBaseUrl(item, dims);
+    const baseImage = await loadImage(previewBaseUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = dims.width;
+    canvas.height = dims.height;
+    await redrawProxyCanvasFromOperations(item, canvas, baseImage);
+    return item.previewDataUrl;
+}
 
 
 async function loadCanvasImage(id) {
     const item = CensorState.queue.find(i => i.id === id);
     if (!item) return;
+    const requestId = ++CensorState.activeImageLoadRequest;
+    const preserveOperationRedoStack = CensorState.activeId === id && CensorState.operationRedoStack.length > 0;
 
     if (typeof window.__invalidateCensorFilterPreview === 'function') {
         window.__invalidateCensorFilterPreview();
@@ -1403,16 +2230,13 @@ async function loadCanvasImage(id) {
     CensorState.selectedItems.clear();
     CensorState.selectedItems.add(id);
     CensorState.lastSelectedIndex = CensorState.queue.findIndex(queueItem => queueItem.id === id);
-
-    // Prevent race conditions from rapid clicking
-    if (CensorState.isLoadingImage) return;
+    CensorState.pendingActiveId = id;
     CensorState.isLoadingImage = true;
 
     if (CensorState.activeId && CensorState.activeId !== id) {
         saveCurrentCanvasToState();
     }
 
-    CensorState.activeId = id;
     renderQueue();
     scrollQueueItemIntoView(id);
 
@@ -1424,50 +2248,85 @@ async function loadCanvasImage(id) {
     // UI Updates
     const noImageEl = document.getElementById('censor-no-image');
     const filenameEl = document.getElementById('censor-filename');
-    showLoading(true, 'Loading image...');
+    showLoading(true, tText('Loading image...', '正在加载图片...'));
 
     try {
-        const imgUrl = item.currentDataUrl || item.originalUrl;
+        let fallbackImage = null;
+        let logicalDims = getCensorItemLogicalDimensions(item);
+        if (logicalDims.width <= 0 || logicalDims.height <= 0) {
+            fallbackImage = await loadImage(item.originalUrl);
+            logicalDims = getCensorItemLogicalDimensions(item, fallbackImage.width, fallbackImage.height);
+            item.width = logicalDims.width;
+            item.height = logicalDims.height;
+        }
 
-        // Load images
+        const proxyMode = shouldUseProxyEditMode(item, logicalDims.width, logicalDims.height);
+        const canvasDims = getCensorItemCanvasDimensions(item, logicalDims.width, logicalDims.height);
+        const displayUrl = proxyMode
+            ? getCensorPreviewBaseUrl(item, canvasDims)
+            : (item.currentDataUrl || item.originalUrl);
+        const originalPreviewUrl = proxyMode
+            ? getCensorPreviewBaseUrl(item, canvasDims)
+            : item.originalUrl;
+
         const [img, originalImg] = await Promise.all([
-            loadImage(imgUrl),
-            loadImage(item.originalUrl)
+            proxyMode && fallbackImage ? Promise.resolve(fallbackImage) : loadImage(displayUrl),
+            proxyMode && fallbackImage ? Promise.resolve(fallbackImage) : loadImage(originalPreviewUrl)
         ]);
+        if (requestId !== CensorState.activeImageLoadRequest) {
+            return;
+        }
 
         CensorState.originalImage = originalImg;
+        CensorState.originalImageData = null;
+        CensorState.originalLogicalWidth = logicalDims.width || img.width;
+        CensorState.originalLogicalHeight = logicalDims.height || img.height;
+        CensorState.preChangesData = null;
+        CensorState.showingChanges = false;
+        CensorState.activeImagePixels = getCensorItemPixelCount(item, img.width, img.height) || (img.width * img.height);
+        CensorState.lowMemoryMode = CensorState.activeImagePixels >= getCensorLowMemoryPixelThreshold();
+        CensorState.proxyEditMode = proxyMode;
+        CensorState.proxyScale = proxyMode && CensorState.originalLogicalWidth > 0
+            ? canvasDims.width / CensorState.originalLogicalWidth
+            : 1;
+        if (!preserveOperationRedoStack) {
+            CensorState.operationRedoStack = [];
+        }
+        CensorState.activeStrokeOperation = null;
 
         // Draw to NEXT canvas (hidden)
-        nextCanvas.width = img.width;
-        nextCanvas.height = img.height;
+        nextCanvas.width = proxyMode ? canvasDims.width : img.width;
+        nextCanvas.height = proxyMode ? canvasDims.height : img.height;
         const ctx = nextCanvas.getContext('2d', { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-
-        // Store true original image data for eraser/reset
-        const originalCanvas = document.createElement('canvas');
-        originalCanvas.width = originalImg.width;
-        originalCanvas.height = originalImg.height;
-        const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
-        originalCtx.drawImage(originalImg, 0, 0);
-        CensorState.originalImageData = originalCtx.getImageData(0, 0, originalImg.width, originalImg.height);
+        ctx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+        ctx.drawImage(img, 0, 0, nextCanvas.width, nextCanvas.height);
+        if (proxyMode && Array.isArray(item.editOperations) && item.editOperations.length > 0) {
+            await replayEditOperationsOntoCanvas(nextCanvas, item, originalImg);
+        }
 
         // Initialize undo stack from the image that is actually shown on screen
-        const initialState = captureCanvasState(nextCanvas);
+        const initialState = proxyMode ? CENSOR_ORIGINAL_STATE_TOKEN : (item.currentDataUrl || CENSOR_ORIGINAL_STATE_TOKEN);
         CensorState.baseCanvasState = initialState;
         CensorState.baseItemState = {
             currentDataUrl: item.currentDataUrl || null,
+            previewDataUrl: item.previewDataUrl || null,
+            editOperations: cloneEditOperations(item.editOperations || []),
             isModified: Boolean(item.isModified)
         };
-        CensorState.undoStack = initialState ? [initialState] : [];
+        CensorState.undoStack = proxyMode ? [CENSOR_ORIGINAL_STATE_TOKEN] : [initialState];
         CensorState.redoStack = [];
         updateUndoRedoButtons();
+        maybeNotifyLowMemoryMode(item, CensorState.activeImagePixels);
 
         // Fit canvases to container before showing
-        fitCanvasToContainer(nextCanvas, img.width, img.height);
-        fitCanvasToContainer(currentCanvas, img.width, img.height);
+        fitCanvasToContainer(nextCanvas, nextCanvas.width, nextCanvas.height);
+        fitCanvasToContainer(currentCanvas, nextCanvas.width, nextCanvas.height);
 
         // SWAP: Show next, Hide current (with RAF)
         requestAnimationFrame(() => {
+            if (requestId !== CensorState.activeImageLoadRequest) {
+                return;
+            }
             nextCanvas.style.opacity = '1';
             nextCanvas.style.pointerEvents = 'auto';
             nextCanvas.style.zIndex = '10';
@@ -1478,6 +2337,8 @@ async function loadCanvasImage(id) {
 
             // Update State
             CensorState.activeCanvasId = nextCanvasId;
+            CensorState.activeId = id;
+            CensorState.pendingActiveId = null;
 
             // Finalize
             noImageEl.style.display = 'none';
@@ -1488,18 +2349,39 @@ async function loadCanvasImage(id) {
             if (typeof window.__updateCensorFilterPreview === 'function') {
                 window.__updateCensorFilterPreview();
             }
-            CensorState.isLoadingImage = false; // Release lock
+            CensorState.isLoadingImage = false;
+            if (proxyMode) {
+                syncProxyItemPreviewFromCanvas(item, nextCanvas);
+            }
+            renderQueue();
         });
 
     } catch (error) {
+        if (requestId !== CensorState.activeImageLoadRequest) {
+            return;
+        }
         Logger.error('Failed to load image:', error);
         showLoading(false);
-        CensorState.isLoadingImage = false; // Release lock on error
-        window.App.showToast(formatUserError(error, "Operation failed"), "error");
+        CensorState.isLoadingImage = false;
+        CensorState.pendingActiveId = null;
+        if (CensorState.activeId) {
+            CensorState.selectedItems.clear();
+            CensorState.selectedItems.add(CensorState.activeId);
+            CensorState.lastSelectedIndex = CensorState.queue.findIndex(queueItem => queueItem.id === CensorState.activeId);
+        }
+        renderQueue();
+        window.App.showToast(
+            formatUserError(error, tKey('censor.loadImageFailed', 'Failed to load image', '加载图片失败')),
+            'error'
+        );
     }
 
-    // Safety fallback: release lock after timeout in case RAF never fires
-    setTimeout(() => { CensorState.isLoadingImage = false; }, 2000);
+    // Safety fallback: only clear the newest request lock.
+    setTimeout(() => {
+        if (requestId === CensorState.activeImageLoadRequest) {
+            CensorState.isLoadingImage = false;
+        }
+    }, 2000);
 }
 
 function fitCanvasToContainer(canvas, imgW, imgH) {
@@ -1537,9 +2419,11 @@ window.addEventListener('resize', () => {
     if (CensorState.activeId && CensorState.originalImage) {
         const c1 = document.getElementById('censor-canvas');
         const c2 = document.getElementById('censor-canvas-buffer');
-        const img = CensorState.originalImage;
-        fitCanvasToContainer(c1, img.width, img.height);
-        fitCanvasToContainer(c2, img.width, img.height);
+        const referenceCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+        const width = referenceCanvas?.width || CensorState.originalImage.width;
+        const height = referenceCanvas?.height || CensorState.originalImage.height;
+        fitCanvasToContainer(c1, width, height);
+        fitCanvasToContainer(c2, width, height);
     }
 });
 
@@ -1550,6 +2434,16 @@ function saveCurrentCanvasToState(serializedState = null) {
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
 
     if (item && canvas) {
+        if (isProxyEditActive()) {
+            const hasPendingFilterPreview = typeof window.__censorHasPendingFilterPreview === 'function'
+                ? Boolean(window.__censorHasPendingFilterPreview())
+                : false;
+            if (!hasPendingFilterPreview) {
+                syncProxyItemPreviewFromCanvas(item, canvas);
+            }
+            return;
+        }
+
         const nextState = serializedState || captureCanvasState(canvas);
         if (!nextState) return;
 
@@ -1622,18 +2516,29 @@ async function loadCensorModelStatus() {
                     : '';
 
                 banner.className = classes.join(' ');
-                banner.innerHTML = `<strong>Detection Ready:</strong> ${escapeHtml(readyNotes || 'None')} ${escapeHtml(recommended)}${extra}`;
+                banner.innerHTML = `<strong>${escapeHtml(tText('Detection Ready', '检测就绪'))}:</strong> ${escapeHtml(readyNotes || tText('None', '无'))} ${escapeHtml(recommended)}${extra}`;
             }
             if (simpleGuide) {
-                simpleGuide.textContent = legacy?.simple_user_advice || 'Keep the recommended mode and only touch custom paths if you know why.';
+                simpleGuide.textContent = legacy?.simple_user_advice || tText(
+                    'Keep the recommended mode and only touch custom paths if you know why.',
+                    '保持推荐模式即可；只有明确知道原因时才去改自定义路径。'
+                );
             }
             renderCensorCapabilityPanel();
             return result;
         } catch (e) {
-            CensorState.modelStatusError = e?.message || 'Model readiness could not be loaded right now.';
+            CensorState.modelStatusError = e?.message || tKey(
+                'censor.modelReadinessLoadFailed',
+                'Model readiness could not be loaded right now.',
+                '暂时无法读取模型就绪状态。'
+            );
             if (banner) {
                 banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
-                banner.textContent = 'Model readiness could not be loaded right now.';
+                banner.textContent = tKey(
+                    'censor.modelReadinessLoadFailed',
+                    'Model readiness could not be loaded right now.',
+                    '暂时无法读取模型就绪状态。'
+                );
             }
             if (simpleGuide) {
                 simpleGuide.textContent = '';
@@ -1688,6 +2593,7 @@ function renderCensorCapabilityPanel(options = {}) {
     const promptInput = document.getElementById('censor-text-prompt');
     const simpleGuide = document.getElementById('censor-simple-guide');
     const segmentButton = document.getElementById('btn-segment-text-current');
+    const batchRefineButton = document.getElementById('btn-sam3-batch-refine');
     const targetGroup = document.getElementById('censor-target-region-group');
     const targetChecks = Array.from(document.querySelectorAll('.target-region-check'));
 
@@ -1739,6 +2645,12 @@ function renderCensorCapabilityPanel(options = {}) {
             segmentButton.title = isLoading
                 ? tText('Loading model readiness…', '正在加载模型状态…')
                 : tText('Model readiness is unavailable right now.', '当前无法读取模型状态。');
+        }
+        if (batchRefineButton) {
+            batchRefineButton.disabled = true;
+            batchRefineButton.title = isLoading
+                ? tText('Loading SAM3 readiness…', '正在加载 SAM3 状态…')
+                : tText('SAM3 readiness is unavailable right now.', '当前无法读取 SAM3 状态。');
         }
         if (simpleGuide) {
             simpleGuide.textContent = isLoading
@@ -1870,6 +2782,12 @@ function renderCensorCapabilityPanel(options = {}) {
         segmentButton.title = sam3?.available
             ? ''
             : (sam3?.message || tText('SAM3 is not available in this environment yet.', '当前环境暂时无法使用 SAM3。'));
+    }
+    if (batchRefineButton) {
+        batchRefineButton.disabled = !sam3?.available;
+        batchRefineButton.title = sam3?.available
+            ? ''
+            : (sam3?.message || tText('SAM3 batch refine is not available in this environment yet.', '当前环境暂时无法使用 SAM3 批量精修。'));
     }
 
     if (simpleGuide) {
@@ -2227,7 +3145,7 @@ function pushUndoState(serializedState = null) {
     }
 
     CensorState.undoStack.push(state);
-    const maxDepth = getCensorUndoDepth();
+    const maxDepth = getEffectiveCensorUndoDepth();
     while (CensorState.undoStack.length > maxDepth) CensorState.undoStack.shift();
     if (typeof window.__invalidateCensorFilterPreview === 'function') {
         window.__invalidateCensorFilterPreview();
@@ -2239,12 +3157,15 @@ function pushUndoState(serializedState = null) {
 }
 
 function updateUndoRedoButtons() {
-    const canUndoCanvas = CensorState.undoStack.length > 1;
-    const canRedoCanvas = CensorState.redoStack.length > 0;
+    const activeItem = getActiveCensorItem();
+    const canUndoCanvas = !isProxyEditActive() && CensorState.undoStack.length > 1;
+    const canRedoCanvas = !isProxyEditActive() && CensorState.redoStack.length > 0;
+    const canUndoProxy = isProxyEditActive() && Boolean(activeItem?.editOperations?.length);
+    const canRedoProxy = isProxyEditActive() && CensorState.operationRedoStack.length > 0;
     const canUndoFilter = CensorState.filterActionUndoStack.length > 0;
     const canRedoFilter = CensorState.filterActionRedoStack.length > 0;
-    const canUndo = canUndoFilter || canUndoCanvas;
-    const canRedo = canRedoFilter || canRedoCanvas;
+    const canUndo = canUndoFilter || canUndoCanvas || canUndoProxy;
+    const canRedo = canRedoFilter || canRedoCanvas || canRedoProxy;
 
     const undoBtn = document.getElementById('btn-undo');
     const redoBtn = document.getElementById('btn-redo');
@@ -2275,11 +3196,16 @@ async function restoreFilterActionEntry(entry, direction = 'undo') {
     for (const snapshot of entry.snapshots) {
         const item = CensorState.queue.find((queueItem) => queueItem.id === snapshot.id);
         if (!item) continue;
+        const proxySnapshot = Boolean(snapshot.beforeOperations || snapshot.afterOperations);
         if (direction === 'undo') {
-            item.currentDataUrl = snapshot.beforeDataUrl || null;
+            item.currentDataUrl = proxySnapshot ? null : (snapshot.beforeDataUrl || null);
+            item.previewDataUrl = snapshot.beforePreviewDataUrl || null;
+            item.editOperations = cloneEditOperations(snapshot.beforeOperations || []);
             item.isModified = Boolean(snapshot.beforeModified);
         } else {
-            item.currentDataUrl = snapshot.afterDataUrl || null;
+            item.currentDataUrl = proxySnapshot ? null : (snapshot.afterDataUrl || null);
+            item.previewDataUrl = snapshot.afterPreviewDataUrl || null;
+            item.editOperations = cloneEditOperations(snapshot.afterOperations || []);
             item.isModified = Boolean(snapshot.afterModified);
         }
     }
@@ -2323,9 +3249,30 @@ function onCanvasMouseDown(e) {
         CensorState.cloneSource = { x, y };
         CensorState.cloneOffset = null;
         CensorState.cloneSourceSet = true;
-        window.App.showToast('Clone source set - now paint to clone', 'info');
+        window.App.showToast(
+            tKey('censor.cloneSourceSet', 'Clone source set. Paint to clone now.', '克隆源点已设置，现在直接涂抹即可复制。'),
+            'info'
+        );
         CensorState.isDrawing = false;
         return;
+    }
+
+    if (isProxyEditActive()) {
+        if (CensorState.currentTool === 'clone' && !CensorState.cloneSourceSet) {
+            CensorState.isDrawing = false;
+            return;
+        }
+        const originalPoint = toOriginalPoint({ x, y });
+        const operation = createStrokeOperationFromCurrentState(CensorState.currentTool);
+        operation.points.push(originalPoint);
+        if (CensorState.currentTool === 'clone' && CensorState.cloneSourceSet) {
+            const originalCloneSource = toOriginalPoint(CensorState.cloneSource);
+            operation.clone_offset = {
+                x: originalCloneSource.x - originalPoint.x,
+                y: originalCloneSource.y - originalPoint.y,
+            };
+        }
+        CensorState.activeStrokeOperation = operation;
     }
 
     drawAtPoint(x, y);
@@ -2345,21 +3292,48 @@ function onCanvasMouseMove(e) {
     const steps = Math.max(1, Math.floor(Math.hypot(x - CensorState.lastPoint.x, y - CensorState.lastPoint.y) / 2));
     for (let i = 1; i <= steps; i++) {
         const t = i / steps;
-        drawAtPoint(
-            CensorState.lastPoint.x + (x - CensorState.lastPoint.x) * t,
-            CensorState.lastPoint.y + (y - CensorState.lastPoint.y) * t
-        );
+        const point = {
+            x: CensorState.lastPoint.x + (x - CensorState.lastPoint.x) * t,
+            y: CensorState.lastPoint.y + (y - CensorState.lastPoint.y) * t,
+        };
+        if (isProxyEditActive() && CensorState.activeStrokeOperation) {
+            CensorState.activeStrokeOperation.points.push(toOriginalPoint(point));
+        }
+        drawAtPoint(point.x, point.y);
     }
     CensorState.lastPoint = { x, y };
 }
 
-function onCanvasMouseUp() {
+async function onCanvasMouseUp() {
     if (!isCensorViewActive()) return;
 
     const wasDrawing = CensorState.isDrawing;
     CensorState.isDrawing = false;
 
     if (!wasDrawing || !CensorState.activeId) return;
+
+    if (isProxyEditActive()) {
+        const item = getActiveCensorItem();
+        if (!item || !CensorState.activeStrokeOperation?.points?.length) {
+            CensorState.activeStrokeOperation = null;
+            updateUndoRedoButtons();
+            return;
+        }
+        item.editOperations = [...(item.editOperations || []), CensorState.activeStrokeOperation];
+        item.isModified = true;
+        item.currentDataUrl = null;
+        CensorState.operationRedoStack = [];
+        CensorState.lastHistorySource = 'operation';
+        CensorState.activeStrokeOperation = null;
+        try {
+            await redrawProxyCanvasFromOperations(item);
+        } catch (error) {
+            Logger.error('Failed to redraw proxy censor preview:', error);
+        }
+        updateUndoRedoButtons();
+        renderQueue();
+        return;
+    }
 
     const committedState = pushUndoState();
     saveCurrentCanvasToState(committedState);
@@ -2382,14 +3356,18 @@ function getCanvasCoordinates(e) {
 function drawAtPoint(x, y) {
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     const ctx = canvas.getContext('2d');
-    const size = CensorState.brushSize;
+    const size = getCanvasBrushSize();
 
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, size / 2, 0, Math.PI * 2);
 
     if (CensorState.currentTool === 'brush') {
-        applyCensorStyle(ctx, x, y, size);
+        const effectScale = getCurrentLogicalToCanvasScale();
+        applyCensorStyle(ctx, x, y, size, {
+            blockSize: scaleOperationEffectValue(CensorState.blockSize || 16, effectScale, effectScale),
+            blurRadius: scaleOperationEffectValue(Math.max(8, CensorState.blockSize || 16), effectScale, effectScale),
+        });
     } else if (CensorState.currentTool === 'pen') {
         // Draw with pen color and opacity
         ctx.globalAlpha = CensorState.penOpacity;
@@ -2401,17 +3379,11 @@ function drawAtPoint(x, y) {
         ctx.clip();
         if (CensorState.originalImage) {
             ctx.drawImage(CensorState.originalImage, 0, 0, canvas.width, canvas.height);
-        } else if (CensorState.originalImageData) {
-            // Fallback to stored image data
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = canvas.width;
-            tempCanvas.height = canvas.height;
-            tempCanvas.getContext('2d').putImageData(CensorState.originalImageData, 0, 0);
-            ctx.drawImage(tempCanvas, 0, 0);
         }
     } else if (CensorState.currentTool === 'clone') {
         if (!CensorState.cloneSourceSet) {
             // Clone source not set - show hint
+            ctx.restore();
             return;
         }
         performClone(ctx, x, y, size);
@@ -2420,9 +3392,9 @@ function drawAtPoint(x, y) {
     ctx.restore();
 }
 
-function applyCensorStyle(ctx, x, y, size) {
-    const style = CensorState.style;
-    const b = CensorState.blockSize;
+function applyCensorStyle(ctx, x, y, size, options = {}) {
+    const style = options.style || CensorState.style;
+    const b = Math.max(1, Number(options.blockSize || CensorState.blockSize || 16));
     const canvas = ctx.canvas;
 
     if (style === 'mosaic') {
@@ -2445,7 +3417,7 @@ function applyCensorStyle(ctx, x, y, size) {
         }
     } else if (style === 'blur') {
         // Apply actual blur effect
-        const blurRadius = Math.max(8, CensorState.blockSize);
+        const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(8, CensorState.blockSize)));
         const regionX = Math.max(0, Math.floor(x - size / 2));
         const regionY = Math.max(0, Math.floor(y - size / 2));
         const regionW = Math.min(canvas.width - regionX, Math.ceil(size));
@@ -2490,23 +3462,45 @@ function getAverageColor(imageData) {
     return c ? `rgb(${r / c | 0},${g / c | 0},${b / c | 0})` : '#000';
 }
 
-function performClone(ctx, x, y, size) {
-    if (!CensorState.cloneSource) return;
+function performClone(ctx, x, y, size, options = {}) {
+    const cloneSource = options.cloneSource || CensorState.cloneSource;
+    let cloneOffset = options.cloneOffset || CensorState.cloneOffset;
+    const sourceImage = options.sourceImage || CensorState.originalImage;
+    if (!cloneSource && !cloneOffset) return;
 
-    if (!CensorState.cloneOffset) {
-        CensorState.cloneOffset = { x: CensorState.cloneSource.x - x, y: CensorState.cloneSource.y - y };
+    if (!cloneOffset && cloneSource) {
+        cloneOffset = { x: cloneSource.x - x, y: cloneSource.y - y };
+        if (!options.cloneOffset) {
+            CensorState.cloneOffset = cloneOffset;
+        }
     }
+    if (!cloneOffset) return;
 
-    const sourceX = x + CensorState.cloneOffset.x;
-    const sourceY = y + CensorState.cloneOffset.y;
+    const sourceX = x + cloneOffset.x;
+    const sourceY = y + cloneOffset.y;
 
     ctx.clip();
     // Draw directly from current canvas state (or original? usually current)
     // Actually cloning usually samples from same layer.
     // To simplify: Clone samples from a snapshot of the canvas taken at start of stroke?
     // For now: Clone from original image for simplicity (allows "repair" using clean parts)
-    if (CensorState.originalImage) {
-        ctx.drawImage(CensorState.originalImage, sourceX - size / 2, sourceY - size / 2, size, size, x - size / 2, y - size / 2, size, size);
+    if (sourceImage) {
+        drawScaledSourceCrop(
+            ctx,
+            sourceImage,
+            {
+                x: sourceX - size / 2,
+                y: sourceY - size / 2,
+                width: size,
+                height: size,
+            },
+            {
+                x: x - size / 2,
+                y: y - size / 2,
+                width: size,
+                height: size,
+            }
+        );
     }
 }
 
@@ -2556,10 +3550,13 @@ async function runAutoCensorBatch() {
 
 async function runDetectionForImage(item, silent = false, executionPlan = null) {
     try {
+        let reloadedActiveItem = false;
         const plan = executionPlan || await resolveQuickAutoCensorExecutionPlan({ silent });
         if (!plan?.ok) {
             item.regions = [];
             item.currentDataUrl = null;
+            item.previewDataUrl = null;
+            item.editOperations = [];
             item.isProcessed = false;
             if (!silent && item.id === CensorState.activeId) {
                 loadCanvasImage(item.id);
@@ -2581,36 +3578,76 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
 
         const regions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
         item.regions = regions;
-
-        // Apply to a temporary canvas to generate DataURL
-        const img = await loadImage(item.originalUrl);
-        const cvs = document.createElement('canvas');
-        cvs.width = img.width;
-        cvs.height = img.height;
-        const ctx = cvs.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-
         const { maskRegions, boxRegions } = splitDetectionGeometry(regions);
-        const shouldUseMask = Boolean(data.combined_mask) && maskRegions.length > 0;
+        const combinedMaskSource = {
+            mask: data.combined_mask || null,
+            mask_ref: data.combined_mask_ref || null,
+            mask_bounds: Array.isArray(data.combined_mask_bounds) ? cloneNumberArray(data.combined_mask_bounds) : null,
+            image_width: data.image_width,
+            image_height: data.image_height,
+        };
+        const shouldUseMask = Boolean(combinedMaskSource.mask || combinedMaskSource.mask_ref) && maskRegions.length > 0;
         const shouldUseBoxes = boxRegions.length > 0;
 
-        if (shouldUseMask) {
-            await renderRasterMaskEffectOntoCanvas(cvs, data.combined_mask);
-        }
-        if (shouldUseBoxes) {
-            applyBoxRegionsToCanvas(cvs, img, boxRegions);
-        }
-
-        if (shouldUseMask || shouldUseBoxes) {
-            item.currentDataUrl = cvs.toDataURL('image/png');
-            item.isProcessed = true;
+        if (shouldUseProxyEditMode(item)) {
+            if (shouldUseMask || shouldUseBoxes) {
+                item.editOperations = [{
+                    kind: 'geometry_effect',
+                    style: CensorState.style,
+                    block_size: Number(CensorState.blockSize || 16),
+                    blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
+                    regions,
+                }];
+                item.currentDataUrl = null;
+                item.isProcessed = true;
+                if (item.id === CensorState.activeId) {
+                    await loadCanvasImage(item.id);
+                    reloadedActiveItem = true;
+                } else {
+                    await renderProxyPreviewDataForItem(item);
+                }
+            } else {
+                item.editOperations = [];
+                item.previewDataUrl = null;
+                item.currentDataUrl = null;
+                item.isProcessed = false;
+                item.isModified = false;
+                if (item.id === CensorState.activeId) {
+                    await loadCanvasImage(item.id);
+                    reloadedActiveItem = true;
+                }
+            }
         } else {
-            item.currentDataUrl = null;
-            item.isProcessed = false;
+            // Apply to a temporary canvas to generate DataURL
+            const img = await loadImage(item.originalUrl);
+            const cvs = document.createElement('canvas');
+            cvs.width = img.width;
+            cvs.height = img.height;
+            const ctx = cvs.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            if (shouldUseMask) {
+                const maskOperation = createMaskEffectOperation(combinedMaskSource);
+                await applyMaskOperationToCanvas(cvs, img, maskOperation, 1, 1);
+            }
+            if (shouldUseBoxes) {
+                applyBoxRegionsToCanvas(cvs, img, boxRegions);
+            }
+
+            if (shouldUseMask || shouldUseBoxes) {
+                item.currentDataUrl = cvs.toDataURL('image/png');
+                item.isProcessed = true;
+            } else {
+                item.currentDataUrl = null;
+                item.isProcessed = false;
+            }
+            item.previewDataUrl = null;
         }
 
         if (!silent && item.id === CensorState.activeId) {
-            loadCanvasImage(item.id);
+            if (!reloadedActiveItem) {
+                await loadCanvasImage(item.id);
+            }
             if (regions.length === 0) {
                 window.App.showToast(
                     tText('No matching regions were found. Try lowering confidence or changing the model.', '没有找到匹配区域。可以试着降低置信度，或换一条检测路线。'),
@@ -2631,12 +3668,20 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
 
     } catch (e) {
         Logger.error(e);
-        if (!silent) window.App.showToast(formatUserError(e, "Detection failed"), "error");
+        if (!silent) {
+            window.App.showToast(
+                formatUserError(e, tKey('censor.detectFailed', 'Detection failed', '检测失败')),
+                'error'
+            );
+        }
     }
 }
 
-function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
+function applyBoxRegionsToCanvas(canvas, baseImage, regions, options = {}) {
     const ctx = canvas.getContext('2d');
+    const style = options.style || CensorState.style;
+    const blockSize = Math.max(1, Number(options.blockSize || CensorState.blockSize || 16));
+    const blurRadius = Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(CensorState.blockSize / 2))));
     ctx.save();
     regions.forEach(r => {
         if (!Array.isArray(r?.box) || r.box.length !== 4) return;
@@ -2644,8 +3689,8 @@ function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
         const w = x2 - x1;
         const h = y2 - y1;
 
-        if (CensorState.style === 'mosaic') {
-            const b = CensorState.blockSize;
+        if (style === 'mosaic') {
+            const b = blockSize;
             for (let bx = x1; bx < x2; bx += b) {
                 for (let by = y1; by < y2; by += b) {
                     const bw = Math.min(b, x2 - bx);
@@ -2655,15 +3700,15 @@ function applyBoxRegionsToCanvas(canvas, baseImage, regions) {
                     ctx.fillRect(bx, by, bw, bh);
                 }
             }
-        } else if (CensorState.style === 'blur') {
+        } else if (style === 'blur') {
             ctx.save();
             ctx.beginPath();
             ctx.rect(x1, y1, w, h);
             ctx.clip();
-            ctx.filter = `blur(${CensorState.blockSize / 2}px)`;
+            ctx.filter = `blur(${blurRadius}px)`;
             ctx.drawImage(baseImage, 0, 0);
             ctx.restore();
-        } else if (CensorState.style === 'white_bar') {
+        } else if (style === 'white_bar') {
             ctx.fillStyle = '#fff';
             ctx.fillRect(x1, y1, w, h);
         } else {
@@ -2717,68 +3762,145 @@ function splitDetectionGeometry(regions = []) {
     return { maskRegions, boxRegions };
 }
 
-async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl) {
+async function renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl, options = {}) {
     if (!canvas || !canvas.width || !canvas.height) {
         throw new Error('No editable canvas is ready');
     }
 
-    const ctx = canvas.getContext('2d');
-    const snapshot = captureCanvasState(canvas);
-    if (!snapshot) {
-        throw new Error('Could not capture the current canvas state');
-    }
-
-    const [baseImage, maskImage] = await Promise.all([
-        loadImage(snapshot),
-        normalizeMaskDataUrl(maskDataUrl),
-    ]);
-
-    const effectCanvas = document.createElement('canvas');
-    effectCanvas.width = canvas.width;
-    effectCanvas.height = canvas.height;
-    const effectCtx = effectCanvas.getContext('2d');
-
-    if (CensorState.style === 'mosaic') {
-        const downscale = Math.max(1, Math.round(CensorState.blockSize));
-        const smallW = Math.max(1, Math.floor(canvas.width / downscale));
-        const smallH = Math.max(1, Math.floor(canvas.height / downscale));
-        const tmpCanvas = document.createElement('canvas');
-        tmpCanvas.width = smallW;
-        tmpCanvas.height = smallH;
-        const tmpCtx = tmpCanvas.getContext('2d');
-        tmpCtx.imageSmoothingEnabled = false;
-        tmpCtx.drawImage(baseImage, 0, 0, smallW, smallH);
-        effectCtx.imageSmoothingEnabled = false;
-        effectCtx.drawImage(tmpCanvas, 0, 0, smallW, smallH, 0, 0, canvas.width, canvas.height);
-    } else if (CensorState.style === 'blur') {
-        effectCtx.filter = `blur(${Math.max(1, Math.round(CensorState.blockSize / 2))}px)`;
-        effectCtx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
-        effectCtx.filter = 'none';
-    } else if (CensorState.style === 'white_bar') {
-        effectCtx.fillStyle = '#fff';
-        effectCtx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
-        effectCtx.fillStyle = '#000';
-        effectCtx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    effectCtx.globalCompositeOperation = 'destination-in';
-    effectCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
-
-    ctx.drawImage(effectCanvas, 0, 0);
+    const maskImage = await normalizeMaskDataUrl(maskDataUrl);
+    const maskCanvas = createWorkingCanvas(canvas.width, canvas.height);
+    const maskCtx = maskCanvas.getContext('2d');
+    maskCtx.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+    renderMaskStyleToCanvas(canvas, maskCanvas, {
+        style: options.style || CensorState.style,
+        blockSize: Math.max(1, Number(options.blockSize || CensorState.blockSize || 16)),
+        blurRadius: Math.max(1, Number(options.blurRadius || Math.max(1, Math.round(CensorState.blockSize / 2)))),
+        originalImage: options.originalImage || CensorState.originalImage,
+    });
 }
 
-async function applyRasterMaskToActiveCanvas(maskDataUrl) {
+function buildCensorMaskCacheUrl(maskRef, width = null, height = null) {
+    const token = String(maskRef || '').trim();
+    if (!token) return '';
+    const params = new URLSearchParams();
+    if (Number.isFinite(width) && width > 0) {
+        params.set('width', String(Math.max(1, Math.round(width))));
+    }
+    if (Number.isFinite(height) && height > 0) {
+        params.set('height', String(Math.max(1, Math.round(height))));
+    }
+    const query = params.toString();
+    return `/api/censor/mask-cache/${encodeURIComponent(token)}${query ? `?${query}` : ''}`;
+}
+
+function createMaskEffectOperation(maskSource) {
+    const operation = {
+        kind: 'mask_effect',
+        style: CensorState.style,
+        block_size: Number(CensorState.blockSize || 16),
+        blur_radius: Math.max(1, Math.round(CensorState.blockSize / 2)),
+    };
+
+    if (typeof maskSource === 'string') {
+        operation.mask_data = maskSource;
+        return operation;
+    }
+
+    if (maskSource?.mask) {
+        operation.mask_data = maskSource.mask;
+    }
+    if (maskSource?.mask_ref) {
+        operation.mask_ref = String(maskSource.mask_ref);
+        if (Array.isArray(maskSource?.mask_bounds) && maskSource.mask_bounds.length === 4) {
+            operation.mask_bounds = cloneNumberArray(maskSource.mask_bounds);
+        }
+        const imageWidth = Number(maskSource?.image_width || 0);
+        const imageHeight = Number(maskSource?.image_height || 0);
+        if (Number.isFinite(imageWidth) && imageWidth > 0) {
+            operation.mask_image_width = imageWidth;
+        }
+        if (Number.isFinite(imageHeight) && imageHeight > 0) {
+            operation.mask_image_height = imageHeight;
+        }
+    }
+    return operation;
+}
+
+function getMaskOperationCanvasBounds(operation, scaleX = 1, scaleY = 1, canvas = null) {
+    if (!Array.isArray(operation?.mask_bounds) || operation.mask_bounds.length !== 4) return null;
+    const targetCanvas = canvas instanceof HTMLCanvasElement ? canvas : null;
+    const maxWidth = targetCanvas?.width || Number.POSITIVE_INFINITY;
+    const maxHeight = targetCanvas?.height || Number.POSITIVE_INFINITY;
+    const rawX1 = Number(operation.mask_bounds[0] || 0) * scaleX;
+    const rawY1 = Number(operation.mask_bounds[1] || 0) * scaleY;
+    const rawX2 = Number(operation.mask_bounds[2] || 0) * scaleX;
+    const rawY2 = Number(operation.mask_bounds[3] || 0) * scaleY;
+    const x1 = Math.max(0, Math.floor(rawX1));
+    const y1 = Math.max(0, Math.floor(rawY1));
+    const x2 = Math.min(maxWidth, Math.ceil(rawX2));
+    const y2 = Math.min(maxHeight, Math.ceil(rawY2));
+    if (!(x2 > x1) || !(y2 > y1)) return null;
+    return {
+        x: x1,
+        y: y1,
+        width: x2 - x1,
+        height: y2 - y1,
+        x1,
+        y1,
+        x2,
+        y2,
+    };
+}
+
+async function loadMaskImageForOperation(operation, canvasBounds = null) {
+    if (operation?.mask_data) {
+        return normalizeMaskDataUrl(operation.mask_data);
+    }
+    if (!operation?.mask_ref) {
+        return null;
+    }
+    const maskUrl = buildCensorMaskCacheUrl(
+        operation.mask_ref,
+        canvasBounds?.width || null,
+        canvasBounds?.height || null
+    );
+    if (!maskUrl) {
+        return null;
+    }
+    return loadImage(maskUrl);
+}
+
+async function applyRasterMaskToActiveCanvas(maskSource) {
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     if (!canvas || !canvas.width || !canvas.height) {
         throw new Error('No editable canvas is ready');
     }
 
-    await renderRasterMaskEffectOntoCanvas(canvas, maskDataUrl);
+    const activeItem = CensorState.queue.find(i => i.id === CensorState.activeId);
+    const operation = createMaskEffectOperation(maskSource);
+    if (isProxyEditActive() && activeItem) {
+        activeItem.editOperations = [
+            ...(activeItem.editOperations || []),
+            operation,
+        ];
+        activeItem.isProcessed = true;
+        activeItem.isModified = true;
+        CensorState.operationRedoStack = [];
+        CensorState.lastHistorySource = 'operation';
+        await loadCanvasImage(activeItem.id);
+        renderQueue();
+        return;
+    }
+
+    const logical = activeItem
+        ? getCensorItemLogicalDimensions(activeItem, canvas.width, canvas.height)
+        : { width: canvas.width, height: canvas.height };
+    const scaleX = logical.width > 0 ? (canvas.width / logical.width) : 1;
+    const scaleY = logical.height > 0 ? (canvas.height / logical.height) : 1;
+    await applyMaskOperationToCanvas(canvas, CensorState.originalImage, operation, scaleX, scaleY);
     const committedState = pushUndoState();
     saveCurrentCanvasToState(committedState);
 
-    const activeItem = CensorState.queue.find(i => i.id === CensorState.activeId);
     if (activeItem) {
         activeItem.isProcessed = true;
     }
@@ -2787,32 +3909,48 @@ async function applyRasterMaskToActiveCanvas(maskDataUrl) {
 
 async function segmentCurrentImageByText() {
     if (!CensorState.activeId) {
-        window.App.showToast('No image selected', 'error');
+        window.App.showToast(tText('No image selected', '未选择图片'), 'error');
         return;
     }
 
     const textPrompt = String(document.getElementById('censor-text-prompt')?.value || '').trim();
     if (!textPrompt) {
-        window.App.showToast('Enter a text prompt first', 'warning');
+        window.App.showToast(
+            tKey('censor.textPromptRequired', 'Enter a text prompt first', '请先输入文本提示词'),
+            'warning'
+        );
         return;
     }
 
-    showLoading(true, `SAM3 text segment · ${textPrompt}`);
+    showLoading(true, tFormat('censor.loadingSegmentText', 'SAM3 text segment · {prompt}', 'SAM3 文本分割：{prompt}', {
+        prompt: textPrompt,
+    }));
     try {
         const result = await window.App.API.post('/api/censor/segment-text', {
             image_id: CensorState.activeId,
             text_prompt: textPrompt,
         });
 
-        if (!result?.mask) {
-            window.App.showToast(result?.message || 'No matching regions were found', 'info');
+        if (!result?.mask && !result?.mask_ref) {
+            window.App.showToast(
+                result?.message || tKey('censor.sam3NoMatch', 'No matching regions were found', '没有找到匹配区域'),
+                'info'
+            );
             return;
         }
 
-        await applyRasterMaskToActiveCanvas(result.mask);
-        window.App.showToast(`Applied SAM3 mask for "${textPrompt}"`, 'success');
+        await applyRasterMaskToActiveCanvas(result);
+        window.App.showToast(
+            tFormat('censor.sam3Applied', 'Applied SAM3 mask for "{prompt}"', '已对“{prompt}”应用 SAM3 mask', {
+                prompt: textPrompt,
+            }),
+            'success'
+        );
     } catch (error) {
-        window.App.showToast(formatUserError(error, 'SAM3 text segmentation failed'), 'error');
+        window.App.showToast(
+            formatUserError(error, tKey('censor.sam3SegmentFailed', 'SAM3 text segmentation failed', 'SAM3 文本分割失败')),
+            'error'
+        );
     } finally {
         showLoading(false);
     }
@@ -3055,7 +4193,7 @@ async function applyBatchRename() {
 
 function openSaveOptionsPopup() {
     if (CensorState.queue.length === 0) {
-        window.App.showToast('No images in queue to save', 'error');
+        window.App.showToast(tText('No images in queue to save', '队列里没有可保存的图片'), 'error');
         return;
     }
 
@@ -3085,7 +4223,10 @@ async function confirmAndSaveAll() {
     const formatOption = document.getElementById('save-format-option')?.value || 'png';
 
     if (!folder) {
-        window.App.showToast('Please specify an output folder', 'error');
+        window.App.showToast(
+            tKey('censor.outputFolderRequired', 'Please specify an output folder', '请先填写输出文件夹'),
+            'error'
+        );
         return;
     }
 
@@ -3104,13 +4245,16 @@ async function confirmAndSaveAll() {
 async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') {
     const folder = CensorState.outputFolder;
     if (!folder) {
-        window.App.showToast('Set output folder in Rename or Setup first', 'error');
+        window.App.showToast(
+            tKey('censor.outputFolderSetupFirst', 'Set output folder in Rename or Setup first', '请先在重命名或设置里指定输出文件夹'),
+            'error'
+        );
         return;
     }
 
     _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
-    showLoading(true, 'Save · preparing files...');
+    showLoading(true, tKey('censor.loadingSavePreparing', 'Save · preparing files...', '保存中：正在准备文件...'));
 
     let count = 0;
     for (let index = 0; index < CensorState.queue.length; index += 1) {
@@ -3121,34 +4265,46 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
                 completed: index,
                 total: CensorState.queue.length,
                 tracker,
-                defaultMessage: 'Saving processed images...',
-                primaryLabel: 'Save'
+                defaultMessage: tKey('censor.loadingSaveDefault', 'Saving processed images...', '正在保存处理后的图片...'),
+                primaryLabel: tKey('censor.loadingSavePrimary', 'Save', '保存')
             }));
-            let dataUrl;
-
-            if (item.currentDataUrl) {
-                // Already edited - canvas data has no metadata
-                dataUrl = item.currentDataUrl;
-            } else if (metadataOption === 'strip') {
-                // No edits but stripping metadata - draw through canvas to remove all metadata
-                dataUrl = await stripMetadataViaCanvas(item.originalUrl);
-            } else {
-                // Keep metadata - use original blob (metadata preserved in blob)
-                dataUrl = await urlToDataUrl(item.originalUrl);
-            }
 
             // Update filename extension to match selected format
             const baseName = item.outputFilename.replace(/\.[^/.]+$/, '');
             const finalFilename = `${baseName}.${formatOption}`;
 
-            await window.App.API.post('/api/censor/save-data', {
-                image_data: dataUrl,
-                filename: finalFilename,
-                output_folder: folder,
-                metadata_option: metadataOption,
-                output_format: formatOption,
-                original_image_id: item.id  // Pass original image ID for metadata copying
-            });
+            if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
+                await window.App.API.post('/api/censor/save-operations', {
+                    original_image_id: item.id,
+                    operations: item.editOperations || [],
+                    filename: finalFilename,
+                    output_folder: folder,
+                    metadata_option: metadataOption,
+                    output_format: formatOption,
+                });
+            } else {
+                let dataUrl;
+
+                if (item.currentDataUrl) {
+                    // Already edited - canvas data has no metadata
+                    dataUrl = item.currentDataUrl;
+                } else if (metadataOption === 'strip') {
+                    // No edits but stripping metadata - draw through canvas to remove all metadata
+                    dataUrl = await stripMetadataViaCanvas(item.originalUrl);
+                } else {
+                    // Keep metadata - use original blob (metadata preserved in blob)
+                    dataUrl = await urlToDataUrl(item.originalUrl);
+                }
+
+                await window.App.API.post('/api/censor/save-data', {
+                    image_data: dataUrl,
+                    filename: finalFilename,
+                    output_folder: folder,
+                    metadata_option: metadataOption,
+                    output_format: formatOption,
+                    original_image_id: item.id  // Pass original image ID for metadata copying
+                });
+            }
             item.batchStatus = 'saved';
             count++;
         } catch (e) {
@@ -3194,7 +4350,7 @@ async function stripMetadataViaCanvas(url) {
 
 async function promptSingleRename() {
     if (!CensorState.activeId) {
-        window.App.showToast('No image selected', 'error');
+        window.App.showToast(tText('No image selected', '未选择图片'), 'error');
         return;
     }
 
@@ -3203,8 +4359,8 @@ async function promptSingleRename() {
 
     const currentName = item.outputFilename || item.filename || 'image.png';
     const newName = await window.App.showInputModal(
-        'Rename File',
-        'Enter the new filename:',
+        tKey('censor.renameDialogTitle', 'Rename File', '重命名文件'),
+        tKey('censor.renameDialogMessage', 'Enter the new filename:', '请输入新的文件名：'),
         currentName
     );
 
@@ -3218,7 +4374,12 @@ async function promptSingleRename() {
         item.outputFilename = finalName;
         document.getElementById('censor-filename').textContent = finalName;
         renderQueue();
-        window.App.showToast(`Renamed to "${finalName}"`, 'success');
+        window.App.showToast(
+            tFormat('censor.renamedTo', 'Renamed to "{name}"', '已重命名为“{name}”', {
+                name: finalName,
+            }),
+            'success'
+        );
     }
 }
 
@@ -3261,12 +4422,12 @@ function updateCursorOverlay(e) {
 
     // Calculate visual size based on canvas scaling
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-    let visualSize = CensorState.brushSize;
+    let visualSize = getCanvasBrushSize();
 
     if (canvas && canvas.width > 0 && CensorState.activeId) {
         const canvasRect = canvas.getBoundingClientRect();
         const scale = canvasRect.width / canvas.width;
-        visualSize = CensorState.brushSize * scale;
+        visualSize = getCanvasBrushSize() * scale;
     }
 
     cursor.style.width = `${visualSize}px`;
@@ -3280,12 +4441,58 @@ function pushUndo() {
     return pushUndoState();
 }
 
+async function restoreCanvasSnapshot(canvas, serializedState) {
+    const ctx = canvas.getContext('2d');
+    if (isOriginalCanvasState(serializedState)) {
+        restoreOriginalImageToCanvas(canvas);
+        return;
+    }
+
+    try {
+        if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
+            const response = await fetch(serializedState);
+            const blob = await response.blob();
+            const bitmap = await createImageBitmap(blob);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            if (typeof bitmap.close === 'function') {
+                bitmap.close();
+            }
+            return;
+        }
+    } catch (error) {
+        Logger.warn('Falling back to Image() canvas restore:', error);
+    }
+
+    await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(null);
+        };
+        img.onerror = reject;
+        img.src = serializedState;
+    });
+}
+
 
 async function undo() {
     if (CensorState.lastHistorySource === 'filter' && CensorState.filterActionUndoStack.length > 0) {
         const entry = CensorState.filterActionUndoStack.pop();
         CensorState.filterActionRedoStack.push(entry);
         await restoreFilterActionEntry(entry, 'undo');
+        return;
+    }
+
+    if (isProxyEditActive()) {
+        const item = getActiveCensorItem();
+        if (!item?.editOperations?.length) return;
+        const operation = item.editOperations.pop();
+        CensorState.operationRedoStack.push(operation);
+        await loadCanvasImage(item.id);
+        CensorState.lastHistorySource = 'operation';
+        updateUndoRedoButtons();
         return;
     }
 
@@ -3296,36 +4503,11 @@ async function undo() {
     const prev = CensorState.undoStack[CensorState.undoStack.length - 1]; // Peek at previous
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
 
-    try {
-        if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
-            const response = await fetch(prev);
-            const blob = await response.blob();
-            const bitmap = await createImageBitmap(blob);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-            if (typeof bitmap.close === 'function') {
-                bitmap.close();
-            }
-            saveCurrentCanvasToState(prev);
-            CensorState.lastHistorySource = 'canvas';
-            updateUndoRedoButtons();
-            return;
-        }
-    } catch (error) {
-        Logger.warn('Falling back to Image() undo restore:', error);
-    }
-
-    const img = new Image();
-    img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        saveCurrentCanvasToState(prev);
-        CensorState.lastHistorySource = 'canvas';
-        updateUndoRedoButtons();
-    };
-    img.src = prev;
+    await restoreCanvasSnapshot(canvas, prev);
+    saveCurrentCanvasToState(prev);
+    CensorState.lastHistorySource = 'canvas';
+    updateUndoRedoButtons();
 }
 
 async function redo() {
@@ -3336,42 +4518,27 @@ async function redo() {
         return;
     }
 
+    if (isProxyEditActive()) {
+        const item = getActiveCensorItem();
+        if (!item || !CensorState.operationRedoStack.length) return;
+        const operation = CensorState.operationRedoStack.pop();
+        item.editOperations = [...(item.editOperations || []), operation];
+        await loadCanvasImage(item.id);
+        CensorState.lastHistorySource = 'operation';
+        updateUndoRedoButtons();
+        return;
+    }
+
     if (!CensorState.redoStack.length) return;
     const next = CensorState.redoStack.pop();
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
 
-    try {
-        if (typeof fetch === 'function' && typeof createImageBitmap === 'function') {
-            const response = await fetch(next);
-            const blob = await response.blob();
-            const bitmap = await createImageBitmap(blob);
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-            if (typeof bitmap.close === 'function') {
-                bitmap.close();
-            }
-            CensorState.undoStack.push(next);
-            saveCurrentCanvasToState(next);
-            CensorState.lastHistorySource = 'canvas';
-            updateUndoRedoButtons();
-            return;
-        }
-    } catch (error) {
-        Logger.warn('Falling back to Image() redo restore:', error);
-    }
-
-    const img = new Image();
-    img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        CensorState.undoStack.push(next);
-        saveCurrentCanvasToState(next);
-        CensorState.lastHistorySource = 'canvas';
-        updateUndoRedoButtons();
-    };
-    img.src = next;
+    await restoreCanvasSnapshot(canvas, next);
+    CensorState.undoStack.push(next);
+    saveCurrentCanvasToState(next);
+    CensorState.lastHistorySource = 'canvas';
+    updateUndoRedoButtons();
 }
 
 function handleKeydown(e) {
@@ -3479,7 +4646,7 @@ function updateBrushIndicator() {
 function navigateQueue(direction) {
     if (CensorState.queue.length === 0) return;
 
-    const currentIndex = CensorState.queue.findIndex(item => item.id === CensorState.activeId);
+    const currentIndex = CensorState.queue.findIndex(item => item.id === getFocusedCensorImageId());
     if (currentIndex === -1) {
         // No active, load first
         if (CensorState.queue.length > 0) {
@@ -3529,33 +4696,40 @@ function urlToDataUrl(url) {
 // ============== New Helper Functions ==============
 
 function clearAllEdits() {
-    if (!CensorState.activeId || !CensorState.originalImageData) return;
+    if (!CensorState.activeId || !CensorState.originalImage) return;
 
     const canvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-    const ctx = canvas.getContext('2d');
-
-    // Restore original image data
-    ctx.putImageData(CensorState.originalImageData, 0, 0);
+    restoreOriginalImageToCanvas(canvas);
 
     // Clear modified flag
     const item = CensorState.queue.find(i => i.id === CensorState.activeId);
     if (item) {
         item.isModified = false;
         item.currentDataUrl = null;
+        item.previewDataUrl = null;
+        item.editOperations = [];
     }
 
-    const restoredState = captureCanvasState(canvas);
+    const restoredState = CENSOR_ORIGINAL_STATE_TOKEN;
     CensorState.baseCanvasState = restoredState;
     CensorState.baseItemState = {
         currentDataUrl: null,
+        previewDataUrl: null,
+        editOperations: [],
         isModified: false
     };
-    CensorState.undoStack = restoredState ? [restoredState] : [];
+    CensorState.undoStack = [restoredState];
     CensorState.redoStack = [];
-    CensorState.lastHistorySource = 'canvas';
+    CensorState.operationRedoStack = [];
+    CensorState.activeStrokeOperation = null;
+    CensorState.lastHistorySource = isProxyEditActive() ? 'operation' : 'canvas';
     updateUndoRedoButtons();
+    renderQueue();
 
-    window.App.showToast('Edits cleared - image restored to original', 'success');
+    window.App.showToast(
+        tKey('censor.editsCleared', 'Edits cleared. Image restored to the original.', '已清除修改，图片已恢复为原图。'),
+        'success'
+    );
 }
 
 function toggleShowChanges() {
@@ -3563,8 +4737,19 @@ function toggleShowChanges() {
     const ctx = canvas.getContext('2d');
     const btn = document.getElementById('btn-show-changes');
 
-    if (!CensorState.activeId || !CensorState.originalImageData) {
-        window.App.showToast('No image to compare', 'error');
+    if (!CensorState.activeId || !CensorState.originalImage) {
+        window.App.showToast(tText('No image to compare', '没有可对比的图片'), 'error');
+        return;
+    }
+
+    if (CensorState.activeImagePixels > getCensorShowChangesPixelThreshold()) {
+        window.App.showToast(
+            tText(
+                'Show Changes is disabled for large images to avoid browser freezes',
+                '为避免浏览器卡死，大图已禁用 Diff 对比'
+            ),
+            'warning'
+        );
         return;
     }
 
@@ -3582,7 +4767,12 @@ function toggleShowChanges() {
 
         // Compare with original and highlight differences
         const currentData = CensorState.preChangesData.data;
-        const originalData = CensorState.originalImageData.data;
+        const originalCanvas = document.createElement('canvas');
+        originalCanvas.width = canvas.width;
+        originalCanvas.height = canvas.height;
+        const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
+        originalCtx.drawImage(CensorState.originalImage, 0, 0, canvas.width, canvas.height);
+        const originalData = originalCtx.getImageData(0, 0, canvas.width, canvas.height).data;
         const highlightData = ctx.createImageData(canvas.width, canvas.height);
 
         for (let i = 0; i < currentData.length; i += 4) {
@@ -3609,7 +4799,10 @@ function toggleShowChanges() {
         ctx.putImageData(highlightData, 0, 0);
         CensorState.showingChanges = true;
         if (btn) btn.classList.add('active');
-        window.App.showToast('Changed areas highlighted in red', 'info');
+        window.App.showToast(
+            tKey('censor.showChangesOn', 'Changed areas highlighted in red', '已用红色高亮显示修改区域'),
+            'info'
+        );
     }
 }
 
@@ -3628,7 +4821,7 @@ async function runDetectionForAll() {
 
     _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
-    showLoading(true, 'Detect All · preparing queue...');
+    showLoading(true, tKey('censor.loadingDetectPreparing', 'Detect All · preparing queue...', '批量检测：正在准备队列...'));
     let count = 0;
 
     for (let index = 0; index < CensorState.queue.length; index += 1) {
@@ -3639,8 +4832,8 @@ async function runDetectionForAll() {
                 completed: index,
                 total: CensorState.queue.length,
                 tracker,
-                defaultMessage: 'Running detection...',
-                primaryLabel: 'Detect All'
+                defaultMessage: tKey('censor.loadingDetectDefault', 'Running detection...', '正在执行检测...'),
+                primaryLabel: tKey('censor.loadingDetectPrimary', 'Detect All', '批量检测')
             }));
             await runDetectionForImage(item, true, executionPlan);
             item.batchStatus = 'detected';
@@ -3648,7 +4841,7 @@ async function runDetectionForAll() {
         } catch (e) {
             Logger.error('Detection error for', item.id, e);
             item.batchStatus = 'failed';
-            item.batchError = `${tText('Detection failed', '检测失败')}: ${e?.message || e || ''}`.trim();
+            item.batchError = `${tKey('censor.detectFailed', 'Detection failed', '检测失败')}: ${e?.message || e || ''}`.trim();
         }
     }
 
@@ -3716,7 +4909,10 @@ async function runSam3BatchRefine() {
         }
     });
 
-    showLoading(true, `SAM3 Batch Refine · 0/${batchItems.length}`);
+    showLoading(true, tFormat('censor.loadingSam3Batch', 'SAM3 Batch Refine · {current}/{total}', 'SAM3 批量精修：{current}/{total}', {
+        current: 0,
+        total: batchItems.length,
+    }));
 
     try {
         const result = await window.App.API.post('/api/censor/batch-refine-mask', {
@@ -3729,7 +4925,7 @@ async function runSam3BatchRefine() {
         const refinedIds = new Set();
         const failedErrorById = new Map();
         for (const refined of result.results || []) {
-            if (refined.status === 'ok' && refined.mask) {
+            if (refined.status === 'ok' && (refined.mask || refined.mask_ref)) {
                 refinedIds.add(refined.image_id);
             } else {
                 failedErrorById.set(
@@ -3742,20 +4938,30 @@ async function runSam3BatchRefine() {
         if (result.completed > 0) {
             // Apply refined masks back to queue items
             for (const refined of result.results) {
-                if (refined.status !== 'ok' || !refined.mask) continue;
+                if (refined.status !== 'ok' || (!refined.mask && !refined.mask_ref)) continue;
                 const item = CensorState.queue.find(i => i.id === refined.image_id);
                 if (!item) continue;
 
                 // Apply mask to this item's canvas
                 try {
-                    const img = await loadImage(item.currentDataUrl || item.originalUrl);
-                    const cvs = document.createElement('canvas');
-                    cvs.width = img.width;
-                    cvs.height = img.height;
-                    const ctx = cvs.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    await renderRasterMaskEffectOntoCanvas(cvs, refined.mask);
-                    item.currentDataUrl = cvs.toDataURL('image/png');
+                    const operation = createMaskEffectOperation(refined);
+                    if (shouldUseProxyEditMode(item)) {
+                        item.editOperations = [
+                            ...(item.editOperations || []),
+                            operation,
+                        ];
+                        item.currentDataUrl = null;
+                        await renderProxyPreviewDataForItem(item);
+                    } else {
+                        const img = await loadImage(item.currentDataUrl || item.originalUrl);
+                        const cvs = document.createElement('canvas');
+                        cvs.width = img.width;
+                        cvs.height = img.height;
+                        const ctx = cvs.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        await applyMaskOperationToCanvas(cvs, img, operation, 1, 1);
+                        item.currentDataUrl = cvs.toDataURL('image/png');
+                    }
                     item.isProcessed = true;
                     item.batchStatus = 'refined';
                 } catch (maskErr) {
@@ -3796,7 +5002,10 @@ async function runSam3BatchRefine() {
             item.batchError = `${tText('SAM3 batch aborted', 'SAM3 批量中止')}: ${e?.message || e || ''}`.trim();
         });
         renderQueue();
-        showToast(formatUserError(e, 'SAM3 Batch Refine failed'), 'error');
+        showToast(
+            formatUserError(e, tKey('censor.sam3BatchRefineFailed', 'SAM3 Batch Refine failed', 'SAM3 批量精修失败')),
+            'error'
+        );
     }
 }
 
@@ -4166,38 +5375,14 @@ window.cleanupCensorView = cleanupCensorViewFull;
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
-
-        const b = 100 + currentFilters.brightness;
-        const c = 100 + currentFilters.contrast;
-        const s = 100 + currentFilters.saturation;
-        const h = currentFilters.hue;
-        const bl = currentFilters.blur;
-
-        const filters = [
-            `brightness(${b}%)`,
-            `contrast(${c}%)`,
-            `saturate(${s}%)`,
-            `hue-rotate(${h}deg)`,
-        ];
-        if (bl > 0) filters.push(`blur(${bl}px)`);
-        if (currentFilters.temperature !== 0) {
-            const temp = currentFilters.temperature;
-            if (temp > 0) {
-                filters.push(`sepia(${Math.abs(temp)}%)`);
-            } else {
-                filters.push(`sepia(${Math.abs(temp) * 0.3}%)`);
-                filters.push(`hue-rotate(${180 + h}deg)`);
-            }
-        }
-
-        ctx.filter = filters.join(' ');
+        ctx.filter = buildFilterCssParts(currentFilters).join(' ');
         ctx.drawImage(img, 0, 0);
 
         if (currentFilters.sharpen > 0) {
-            applySharpen(canvas, currentFilters.sharpen / 100);
+            applySharpenToCanvasPixels(canvas, currentFilters.sharpen / 100);
         }
         if (currentFilters.vignette > 0) {
-            applyVignette(canvas, currentFilters.vignette / 100);
+            applyVignetteToCanvasPixels(canvas, currentFilters.vignette / 100);
         }
 
         return canvas.toDataURL('image/png');
@@ -4226,18 +5411,42 @@ window.cleanupCensorView = cleanupCensorViewFull;
             for (const targetId of targetIds) {
                 const item = CensorState.queue.find(entry => entry.id === targetId);
                 if (!item) continue;
-                const sourceUrl = item.currentDataUrl || item.originalUrl;
-                const beforeDataUrl = item.currentDataUrl || null;
                 const beforeModified = Boolean(item.isModified);
-                item.currentDataUrl = await renderFilteredDataUrlFromUrl(sourceUrl);
-                item.isModified = true;
-                historyEntry.snapshots.push({
-                    id: targetId,
-                    beforeDataUrl,
-                    beforeModified,
-                    afterDataUrl: item.currentDataUrl || null,
-                    afterModified: Boolean(item.isModified),
-                });
+                if (shouldUseProxyEditMode(item)) {
+                    const beforeOperations = cloneEditOperations(item.editOperations || []);
+                    const beforePreviewDataUrl = item.previewDataUrl || null;
+                    item.editOperations = [
+                        ...(item.editOperations || []),
+                        {
+                            kind: 'filter',
+                            values: { ...currentFilters },
+                        },
+                    ];
+                    await renderProxyPreviewDataForItem(item);
+                    historyEntry.snapshots.push({
+                        id: targetId,
+                        beforeDataUrl: null,
+                        beforePreviewDataUrl,
+                        beforeOperations,
+                        beforeModified,
+                        afterDataUrl: null,
+                        afterPreviewDataUrl: item.previewDataUrl || null,
+                        afterOperations: cloneEditOperations(item.editOperations || []),
+                        afterModified: Boolean(item.isModified),
+                    });
+                } else {
+                    const sourceUrl = item.currentDataUrl || item.originalUrl;
+                    const beforeDataUrl = item.currentDataUrl || null;
+                    item.currentDataUrl = await renderFilteredDataUrlFromUrl(sourceUrl);
+                    item.isModified = true;
+                    historyEntry.snapshots.push({
+                        id: targetId,
+                        beforeDataUrl,
+                        beforeModified,
+                        afterDataUrl: item.currentDataUrl || null,
+                        afterModified: Boolean(item.isModified),
+                    });
+                }
                 applied += 1;
             }
 
@@ -4257,7 +5466,7 @@ window.cleanupCensorView = cleanupCensorViewFull;
     async function bakeFiltersToCanvas() {
         const canvas = getActiveCanvas();
         if (!canvas || !CensorState.activeId) {
-            window.App?.showToast?.('No image loaded — select an image first', 'warning');
+            window.App?.showToast?.(tText('No image loaded — select an image first', '还没有载入图片，请先选一张'), 'warning');
             return;
         }
 
@@ -4293,11 +5502,43 @@ window.cleanupCensorView = cleanupCensorViewFull;
             snapshots: activeItem ? [{
                 id: activeItem.id,
                 beforeDataUrl: activeItem.currentDataUrl || null,
+                beforePreviewDataUrl: activeItem.previewDataUrl || null,
+                beforeOperations: cloneEditOperations(activeItem.editOperations || []),
                 beforeModified: Boolean(activeItem.isModified),
                 afterDataUrl: null,
+                afterPreviewDataUrl: null,
+                afterOperations: [],
                 afterModified: true,
             }] : [],
         };
+
+        if (isProxyEditActive() && activeItem) {
+            canvas.style.filter = 'none';
+            activeItem.editOperations = [
+                ...(activeItem.editOperations || []),
+                {
+                    kind: 'filter',
+                    values: { ...currentFilters },
+                },
+            ];
+            activeItem.currentDataUrl = null;
+            activeItem.isModified = true;
+            CensorState.operationRedoStack = [];
+            await loadCanvasImage(CensorState.activeId);
+            if (historyEntry.snapshots[0]) {
+                historyEntry.snapshots[0].afterPreviewDataUrl = activeItem.previewDataUrl || null;
+                historyEntry.snapshots[0].afterOperations = cloneEditOperations(activeItem.editOperations || []);
+                historyEntry.snapshots[0].afterModified = Boolean(activeItem.isModified);
+            }
+            invalidatePreFilterSnapshot();
+            setSliders(FILTER_DEFAULTS);
+            pushFilterActionHistory(historyEntry);
+            window.App?.showToast?.(
+                tKey('censor.canvasFiltersApplied', 'Filters applied to canvas', '已把滤镜应用到画布'),
+                'success'
+            );
+            return;
+        }
 
         const destCtx = canvas.getContext('2d');
         destCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -4305,12 +5546,12 @@ window.cleanupCensorView = cleanupCensorViewFull;
 
         // Apply sharpen if needed
         if (currentFilters.sharpen > 0) {
-            applySharpen(canvas, currentFilters.sharpen / 100);
+            applySharpenToCanvasPixels(canvas, currentFilters.sharpen / 100);
         }
 
         // Apply vignette if needed
         if (currentFilters.vignette > 0) {
-            applyVignette(canvas, currentFilters.vignette / 100);
+            applyVignetteToCanvasPixels(canvas, currentFilters.vignette / 100);
         }
 
         // Mark the active item as modified
@@ -4328,43 +5569,18 @@ window.cleanupCensorView = cleanupCensorViewFull;
         invalidatePreFilterSnapshot();
         setSliders(FILTER_DEFAULTS);
         pushFilterActionHistory(historyEntry);
-        window.App?.showToast?.('Filters applied to canvas', 'success');
+        window.App?.showToast?.(
+            tKey('censor.canvasFiltersApplied', 'Filters applied to canvas', '已把滤镜应用到画布'),
+            'success'
+        );
     }
 
     function applySharpen(canvas, amount) {
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        const w = canvas.width;
-        const copy = new Uint8ClampedArray(data);
-        const kernel = [0, -amount, 0, -amount, 1 + 4 * amount, -amount, 0, -amount, 0];
-
-        for (let y = 1; y < canvas.height - 1; y++) {
-            for (let x = 1; x < w - 1; x++) {
-                for (let c = 0; c < 3; c++) {
-                    let val = 0;
-                    for (let ky = -1; ky <= 1; ky++) {
-                        for (let kx = -1; kx <= 1; kx++) {
-                            val += copy[((y + ky) * w + (x + kx)) * 4 + c] * kernel[(ky + 1) * 3 + (kx + 1)];
-                        }
-                    }
-                    data[(y * w + x) * 4 + c] = Math.max(0, Math.min(255, val));
-                }
-            }
-        }
-        ctx.putImageData(imageData, 0, 0);
+        applySharpenToCanvasPixels(canvas, amount);
     }
 
     function applyVignette(canvas, amount) {
-        const ctx = canvas.getContext('2d');
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
-        const radius = Math.max(cx, cy);
-        const gradient = ctx.createRadialGradient(cx, cy, radius * (1 - amount * 0.5), cx, cy, radius);
-        gradient.addColorStop(0, 'rgba(0,0,0,0)');
-        gradient.addColorStop(1, `rgba(0,0,0,${amount * 0.7})`);
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        applyVignetteToCanvasPixels(canvas, amount);
     }
 
     // Bind events after DOM is ready
@@ -4422,4 +5638,5 @@ window.cleanupCensorView = cleanupCensorViewFull;
 
     window.__updateCensorFilterPreview = applyFilterPreview;
     window.__invalidateCensorFilterPreview = invalidatePreFilterSnapshot;
+    window.__censorHasPendingFilterPreview = hasFilterChanges;
 })();

@@ -5,6 +5,25 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-04-26
+
+### Added
+- Reader is no longer just for viewing. Users can now edit prompt, negative prompt, seed, sampler, steps, CFG, size, model, and LoRA fields, then save the result as a new image directly from the app.
+- Reader save now lets users choose the output format (`png` / `webp` / `jpg`) and save location more directly, including images that were uploaded through the browser.
+- Folder scan now becomes usable earlier: the library can appear first, while the remaining images and metadata continue loading in the background.
+
+### Fixed
+- Reader overwrite is now safer and less annoying. If the user saves to the same path, the app asks first instead of failing once before asking.
+- Reader confirmation text no longer gets overwritten while the dialog is open.
+- Desktop navigation no longer hides the Reader tab too aggressively on normal desktop screens.
+- WSL / Linux runs now handle old Windows drive paths (`L:\...`) properly, so affected libraries no longer lose thumbnails just because the backend is running in WSL.
+- Scan progress is clearer during large imports. Users now see that the app is still importing in the background instead of feeling like the scan froze.
+- JPG / WebP warnings now explain the metadata limitations honestly instead of implying they behave like PNG.
+
+### Validation
+- Reader save / overwrite flow passed real browser validation end-to-end.
+- Scan and metadata regression tests passed after the v3.1.0 scan-experience updates.
+
 ## [3.0.6] - 2026-04-20
 
 ### Fixed

@@ -23,6 +23,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import database as db
+from image_fingerprint import compute_image_content_fingerprint
 
 
 class TestDatabaseInit:
@@ -169,6 +170,56 @@ class TestImageCRUD:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM images WHERE path = ?", (path,))
             assert cursor.fetchone()[0] == 1
+
+    def test_add_image_reuses_equivalent_windows_and_wsl_paths(self, test_db):
+        """Equivalent Windows and /mnt/<drive> paths should upsert the same row."""
+        windows_path = r"L:\datasets\shared\equivalent.png"
+        wsl_path = "/mnt/l/datasets/shared/equivalent.png"
+
+        image_id = db.add_image(path=windows_path, filename="equivalent.png", prompt="first")
+        updated_id = db.add_image(path=wsl_path, filename="equivalent.png", prompt="second")
+
+        assert updated_id == image_id
+        image = db.get_image_by_id(image_id)
+        assert image["path"] == windows_path
+        assert image["prompt"] == "second"
+
+    def test_get_image_by_path_accepts_equivalent_windows_and_wsl_paths(self, test_db):
+        """Cross-runtime path translations should still retrieve the indexed row."""
+        windows_path = r"L:\datasets\lookup\image.png"
+        wsl_path = "/mnt/l/datasets/lookup/image.png"
+
+        image_id = db.add_image(path=windows_path, filename="image.png", prompt="lookup")
+
+        image = db.get_image_by_path(wsl_path)
+
+        assert image is not None
+        assert image["id"] == image_id
+        assert image["path"] == windows_path
+
+    def test_add_image_replaces_existing_preserves_original_created_at(self, test_db):
+        """Upserting an indexed path should not reshuffle gallery chronology."""
+        path = "/test/stable-created-at.png"
+        original_created_at = datetime(2024, 1, 2, 3, 4, 5)
+        rescanned_created_at = datetime(2025, 6, 7, 8, 9, 10)
+
+        image_id = db.add_image(
+            path=path,
+            filename="stable-created-at.png",
+            prompt="first prompt",
+            created_at=original_created_at,
+        )
+        updated_id = db.add_image(
+            path=path,
+            filename="stable-created-at.png",
+            prompt="rescanned prompt",
+            created_at=rescanned_created_at,
+        )
+
+        assert updated_id == image_id
+        image = db.get_image_by_id(image_id)
+        assert image["prompt"] == "rescanned prompt"
+        assert str(image["created_at"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
 
     def test_rescan_preserves_child_records_for_existing_path(self, test_db):
         """Rescanning an indexed path should not cascade-delete child rows."""
@@ -386,6 +437,25 @@ class TestTagOperations:
         image = db.get_image_by_id(image_id)
         assert image["tagged_at"] is not None
 
+    def test_add_tags_computes_content_fingerprint_when_missing(self, test_db, tmp_path: Path):
+        """Direct tag writes should still populate the content fingerprint fallback."""
+        image_path = tmp_path / "tagged-fingerprint.png"
+        from PIL import Image
+
+        Image.new("RGB", (16, 16), color="white").save(image_path)
+        image_id = db.add_image(path=str(image_path), filename=image_path.name)
+
+        db.add_tags(image_id, [{"tag": "test", "confidence": 0.9}])
+
+        expected = compute_image_content_fingerprint(str(image_path))
+        with db.get_db() as conn:
+            row = conn.execute(
+                "SELECT content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+
+        assert row["content_fingerprint"] == expected
+
 
 class TestImageFiltering:
     """Tests for image filtering logic."""
@@ -555,6 +625,40 @@ class TestImageFiltering:
         assert images[0]["id"] == image_id
         assert "embedding" not in images[0]
         json.dumps(images)
+
+    def test_filter_by_lora_uses_exact_normalized_names(self, test_db):
+        """LoRA filtering should not substring-match unrelated normalized names."""
+        exact_id = db.add_image(
+            path="/test/lora_exact.png",
+            filename="lora_exact.png",
+            loras=["girl.safetensors"],
+        )
+        db.add_image(
+            path="/test/lora_substring.png",
+            filename="lora_substring.png",
+            loras=["school_girl.safetensors"],
+        )
+
+        images = db.get_images(loras=["girl"])
+
+        assert [image["id"] for image in images] == [exact_id]
+
+    def test_filter_by_lora_matches_inline_prompt_exactly(self, test_db):
+        """Inline <lora:name:weight> tags should follow the same exact-name filter contract."""
+        exact_id = db.add_image(
+            path="/test/lora_prompt_exact.png",
+            filename="lora_prompt_exact.png",
+            prompt="portrait <lora:girl:0.8>",
+        )
+        db.add_image(
+            path="/test/lora_prompt_substring.png",
+            filename="lora_prompt_substring.png",
+            prompt="portrait <lora:school_girl:0.8>",
+        )
+
+        images = db.get_images(loras=["girl"])
+
+        assert [image["id"] for image in images] == [exact_id]
 
     def test_filter_by_image_ids(self, test_db_with_images):
         """Filtering by specific image IDs should work."""
@@ -901,6 +1005,16 @@ class TestUtilityFunctions:
         gen_dict = {g["generator"]: g["count"] for g in generators}
         assert gen_dict.get("comfyui") == 2
         assert gen_dict.get("webui") == 1
+
+    def test_get_images_in_folder_scope_accepts_equivalent_windows_and_wsl_roots(self, test_db):
+        """Folder-scope lookups should match Windows-style rows from a WSL root."""
+        windows_path = r"L:\datasets\scope\folder\scope-image.png"
+        db.add_image(path=windows_path, filename="scope-image.png")
+
+        rows = db.get_images_in_folder_scope("/mnt/l/datasets/scope/folder", recursive=False)
+
+        assert len(rows) == 1
+        assert rows[0]["path"] == windows_path
 
     def test_get_untagged_images(self, test_db):
         """Getting untagged images should work."""

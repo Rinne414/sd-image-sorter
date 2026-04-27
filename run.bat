@@ -7,6 +7,45 @@ echo ==========================================
 echo.
 
 cd /d "%~dp0"
+set "ROOT_DIR=%CD%"
+
+REM -- Package-local runtime paths
+set "DATA_DIR=%ROOT_DIR%\data"
+set "UPDATE_DIR=%ROOT_DIR%\update"
+set "TMP_DIR=%DATA_DIR%\tmp"
+set "CACHE_DIR=%DATA_DIR%\cache"
+set "MODELS_DIR=%DATA_DIR%\models"
+set "FAVORITES_DIR=%DATA_DIR%\favorites"
+set "CONFIG_DIR=%DATA_DIR%\config"
+set "THUMBNAIL_DIR=%DATA_DIR%\thumbnails"
+
+for %%D in ("%DATA_DIR%" "%UPDATE_DIR%" "%TMP_DIR%" "%CACHE_DIR%" "%MODELS_DIR%" "%FAVORITES_DIR%" "%CONFIG_DIR%" "%THUMBNAIL_DIR%") do (
+    if not exist "%%~D" mkdir "%%~D"
+)
+
+set "SD_IMAGE_SORTER_LAUNCHER=run.bat"
+set "SD_IMAGE_SORTER_DATA_DIR=%DATA_DIR%"
+set "SD_IMAGE_SORTER_CONFIG_DIR=%CONFIG_DIR%"
+set "SD_IMAGE_SORTER_TMP_DIR=%TMP_DIR%"
+set "SD_IMAGE_SORTER_UPDATE_DIR=%UPDATE_DIR%"
+set "SD_IMAGE_SORTER_THUMBNAIL_DIR=%THUMBNAIL_DIR%"
+set "SD_IMAGE_SORTER_DB_PATH=%DATA_DIR%\images.db"
+set "SD_IMAGE_SORTER_FAVORITES_PATH=%FAVORITES_DIR%"
+set "SD_IMAGE_SORTER_WD14_MODEL_DIR=%MODELS_DIR%\wd14-tagger"
+set "SD_IMAGE_SORTER_YOLO_MODEL_DIR=%MODELS_DIR%\yolo"
+set "SD_IMAGE_SORTER_CLIP_MODEL_DIR=%MODELS_DIR%\clip"
+set "SD_IMAGE_SORTER_ARTIST_MODEL_DIR=%MODELS_DIR%\artist"
+set "SD_IMAGE_SORTER_SAM3_MODEL_DIR=%MODELS_DIR%\sam3"
+set "SD_IMAGE_SORTER_NUDENET_MODEL_DIR=%MODELS_DIR%\nudenet"
+set "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR=%MODELS_DIR%\toriigate"
+set "SD_IMAGE_SORTER_CACHE_DIR=%CACHE_DIR%"
+set "HF_HOME=%DATA_DIR%\hf"
+set "TRANSFORMERS_CACHE=%DATA_DIR%\hf\transformers"
+set "XDG_CACHE_HOME=%CACHE_DIR%"
+set "TORCH_HOME=%DATA_DIR%\torch"
+set "PIP_CACHE_DIR=%DATA_DIR%\pip-cache"
+set "TEMP=%TMP_DIR%"
+set "TMP=%TMP_DIR%"
 
 REM -- Find Python
 set "PYTHON_CMD="

@@ -1,17 +1,40 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { defineConfig, devices } from '@playwright/test'
 
 const defaultPort = process.env.PW_WEB_SERVER_PORT || process.env.SD_IMAGE_SORTER_PORT || '19087'
 const baseURL = process.env.BASE_URL || `http://127.0.0.1:${defaultPort}`
 const basePort = Number(new URL(baseURL).port || defaultPort)
 const repoRoot = path.resolve(__dirname, '..', '..')
-const backendPython = process.env.PW_BACKEND_PYTHON || [
+const backendPythonCandidates = process.platform === 'win32' ? [
   path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
   path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
-].find((candidate) => fs.existsSync(candidate)) || path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
+] : [
+  path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+  path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+]
+const backendPython = process.env.PW_BACKEND_PYTHON || backendPythonCandidates.find((candidate) => fs.existsSync(candidate)) || backendPythonCandidates[0]
 const backendMain = path.join(repoRoot, 'backend', 'main.py')
-const webServerCommand = `"${backendPython}" "${backendMain}" --port ${basePort}`
+
+function isWindowsExecutable(candidate: string): boolean {
+  return candidate.toLowerCase().endsWith('.exe')
+}
+
+function toWindowsPathForWsl(candidate: string): string {
+  if (process.platform !== 'linux') {
+    return candidate
+  }
+
+  try {
+    return execFileSync('wslpath', ['-w', candidate], { encoding: 'utf8' }).trim()
+  } catch {
+    return candidate
+  }
+}
+
+const backendMainForPython = isWindowsExecutable(backendPython) ? toWindowsPathForWsl(backendMain) : backendMain
+const webServerCommand = `"${backendPython}" "${backendMainForPython}" --port ${basePort}`
 
 /**
  * E2E Test Configuration for SD Image Sorter

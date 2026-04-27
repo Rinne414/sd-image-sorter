@@ -16,9 +16,11 @@ from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database as db
-from image_manager import scan_folder, move_image
+from constants import VALID_ASPECT_RATIOS
+from image_manager import scan_folder, move_image, copy_image
 from metadata_parser import verify_image_readable
-from utils.path_validation import validate_folder_path
+from utils.path_validation import normalize_user_path, validate_folder_path
+from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -32,14 +34,17 @@ PATH_MAX_LENGTH = 4096
 FOLDER_KEY_MAX_LENGTH = 100
 BATCH_MOVE_FETCH_CHUNK = 500
 SEARCH_MAX_LENGTH = 1000
-VALID_ASPECT_RATIOS = ["square", "landscape", "portrait"]
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
+VALID_FILE_OPERATIONS = ["move", "copy"]
 
 
 class ScanRequest(BaseModel):
     """Request model for folder scanning."""
     folder_path: str = Field(..., max_length=PATH_MAX_LENGTH)
     recursive: bool = True
+    force_reparse: bool = False
+    cleanup_missing: bool = False
+    quick_import: bool = True
 
     @field_validator('folder_path')
     @classmethod
@@ -65,6 +70,14 @@ class MoveRequest(BaseModel):
     """Request model for image move operations."""
     image_ids: List[int] = Field(..., min_length=1, max_length=50000)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    operation: str = Field(default="move")
+
+    @field_validator('operation')
+    @classmethod
+    def validate_operation(cls, v: str) -> str:
+        if v not in VALID_FILE_OPERATIONS:
+            raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
+        return v
 
 
 class BatchMoveRequest(BaseModel):
@@ -84,6 +97,7 @@ class BatchMoveRequest(BaseModel):
     min_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     max_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    operation: str = Field(default="move")
 
     @field_validator('aspect_ratio')
     @classmethod
@@ -113,6 +127,13 @@ class BatchMoveRequest(BaseModel):
     def validate_max_aesthetic(cls, v: Optional[float], info) -> Optional[float]:
         if v is not None and info.data.get('min_aesthetic') is not None and v < info.data['min_aesthetic']:
             raise ValueError('max_aesthetic cannot be less than min_aesthetic')
+        return v
+
+    @field_validator('operation')
+    @classmethod
+    def validate_operation(cls, v: str) -> str:
+        if v not in VALID_FILE_OPERATIONS:
+            raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
 
 
@@ -147,9 +168,15 @@ class SortingService:
             "current": 0,
             "processed": 0,
             "total": 0,
+            "total_final": False,
             "errors": 0,
             "new": 0,
             "updated": 0,
+            "removed": 0,
+            "library_ready": False,
+            "quick_import": True,
+            "metadata_processed": 0,
+            "metadata_total": 0,
             "message": "",
             "current_item": None,
             "started_at": None,
@@ -165,6 +192,7 @@ class SortingService:
             "image_ids": [],
             "current_index": 0,
             "folders": {},
+            "operation_mode": "move",
             "history": [],
             "redo_stack": [],
         }
@@ -181,11 +209,28 @@ class SortingService:
             "moved": 0,
             "current_item": None,
             "recent_errors": [],
+            "operation": "move",
             "started_at": None,
             "updated_at": None,
         }
         self._batch_move_lock = threading.Lock()
         self._batch_move_run_id = 0
+
+    @staticmethod
+    def _resolve_image_path(path: str) -> Optional[str]:
+        """Resolve a library image path across native Windows and WSL mounts."""
+        return resolve_existing_indexed_image_path(path, backend_file=__file__)
+
+    @staticmethod
+    def _validate_file_operation(operation: Optional[str]) -> str:
+        """Normalize file operations to one of the supported modes."""
+        normalized = str(operation or "move").strip().lower()
+        if normalized not in VALID_FILE_OPERATIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid operation. Must be one of: {', '.join(VALID_FILE_OPERATIONS)}",
+            )
+        return normalized
 
     def _get_sort_history_counts(self, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
         """Summarize move/skip counts from the current manual-sort history."""
@@ -246,10 +291,11 @@ class SortingService:
         for key, path in config.folders.items():
             if not path:
                 continue
-            is_valid, error = validate_folder_path(path, allow_create=True)
+            normalized_path = normalize_user_path(path)
+            is_valid, error = validate_folder_path(normalized_path, allow_create=True)
             if not is_valid:
                 raise HTTPException(status_code=400, detail=error or f"Invalid folder path for key '{key}'")
-            validated_folders[key] = path
+            validated_folders[key] = normalized_path
 
         return validated_folders
 
@@ -276,9 +322,15 @@ class SortingService:
                     "current": 0,
                     "processed": 0,
                     "total": 0,
+                    "total_final": False,
                     "errors": 0,
                     "new": 0,
                     "updated": 0,
+                    "removed": 0,
+                    "library_ready": False,
+                    "quick_import": True,
+                    "metadata_processed": 0,
+                    "metadata_total": 0,
                     "message": "Reset by user",
                     "current_item": None,
                     "started_at": None,
@@ -297,6 +349,7 @@ class SortingService:
 
             current = int(self._scan_progress.get("current", 0) or 0)
             total = int(self._scan_progress.get("total", 0) or 0)
+            total_final = bool(self._scan_progress.get("total_final", False))
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
 
             if self._scan_cancel_event is not None:
@@ -305,13 +358,21 @@ class SortingService:
             if worker_alive:
                 self._scan_progress["status"] = "cancelling"
                 self._scan_progress["step"] = "cancelling"
-                self._scan_progress["message"] = f"Cancelling scan... ({current}/{total or '?'})"
+                self._scan_progress["message"] = (
+                    f"Cancelling scan... ({current}/{total})"
+                    if total_final and total > 0
+                    else f"Cancelling scan... ({current} scanned)"
+                )
                 self._scan_progress["updated_at"] = time.time()
                 return {"status": "cancelling", "message": "Scan cancellation requested"}
 
             self._scan_progress["status"] = "cancelled"
             self._scan_progress["step"] = "cancelled"
-            self._scan_progress["message"] = f"Scan cancelled at {current}/{total or current}."
+            self._scan_progress["message"] = (
+                f"Scan cancelled at {current}/{total}."
+                if total_final and total > 0
+                else f"Scan cancelled after {current} scanned."
+            )
             self._scan_progress["updated_at"] = time.time()
             self._scan_cancel_event = None
             self._scan_worker_thread = None
@@ -390,6 +451,58 @@ class SortingService:
             }
             return True
 
+    def _apply_file_operation(
+        self,
+        operation: str,
+        image_id: int,
+        destination_folder: str,
+        source_path: str,
+        source_row: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Execute either a move or a copy and return a normalized result payload."""
+        normalized_operation = self._validate_file_operation(operation)
+        if normalized_operation == "copy":
+            result = copy_image(
+                image_id=image_id,
+                destination_folder=destination_folder,
+                image_path=source_path,
+                source_row=source_row,
+            )
+            return {
+                "operation": "copy",
+                "new_path": result["new_path"],
+                "new_image_id": result["new_image_id"],
+            }
+
+        return {
+            "operation": "move",
+            "new_path": move_image(image_id, destination_folder, source_path),
+            "new_image_id": None,
+        }
+
+    def _undo_file_operation(self, history_entry: Dict[str, Any]) -> None:
+        """Undo a previous move/copy action recorded in manual sort history."""
+        operation = self._validate_file_operation(history_entry.get("operation") or history_entry.get("action"))
+        if operation == "copy":
+            copied_image_id = history_entry.get("copied_image_id")
+            copied_path = self._resolve_image_path(history_entry.get("new_path") or "")
+            if copied_path and os.path.exists(copied_path):
+                os.remove(copied_path)
+            if copied_image_id:
+                db.delete_image(int(copied_image_id))
+            return
+
+        image = db.get_image_by_id(history_entry["image_id"])
+        if not image:
+            return
+
+        source_path = self._resolve_image_path(image.get("path") or "")
+        original_folder = history_entry.get("original_folder") or os.path.dirname(
+            normalize_user_path(history_entry.get("original_path") or "")
+        )
+        if source_path and original_folder:
+            move_image(history_entry["image_id"], original_folder, source_path)
+
     def _filter_readable_image_ids(self, image_ids: List[int]) -> tuple[List[int], List[Dict[str, Any]]]:
         """Drop unreadable images from interactive sorting/move flows and mark them in DB."""
         if not image_ids:
@@ -405,13 +518,14 @@ class SortingService:
                 continue
 
             path = image.get("path") or ""
+            source_path = self._resolve_image_path(path)
             filename = image.get("filename") or f"image-{image_id}"
-            if not path or not os.path.exists(path):
+            if not source_path:
                 skipped.append({"image_id": image_id, "filename": filename, "error": "File not found"})
                 db.mark_image_unreadable(image_id, "File not found")
                 continue
 
-            readable, read_error = verify_image_readable(path)
+            readable, read_error = verify_image_readable(source_path)
             if not readable:
                 skipped.append({"image_id": image_id, "filename": filename, "error": read_error or "Unreadable image"})
                 db.mark_image_unreadable(image_id, read_error or "Unreadable image")
@@ -424,12 +538,25 @@ class SortingService:
     def set_sort_session(self, session: Dict[str, Any]) -> None:
         """Set the sort session."""
         with self._sort_session_lock:
-            self._sort_session = session
+            self._sort_session = {
+                "active": bool(session.get("active", False)),
+                "image_ids": list(session.get("image_ids", [])),
+                "current_index": int(session.get("current_index", 0) or 0),
+                "folders": dict(session.get("folders", {})),
+                "operation_mode": self._validate_file_operation(session.get("operation_mode", "move")),
+                "history": list(session.get("history", [])),
+                "redo_stack": list(session.get("redo_stack", [])),
+            }
 
     def validate_path(self, request: ValidatePathRequest) -> Dict[str, Any]:
         """Validate a folder path for inline UI feedback."""
-        is_valid, error = validate_folder_path(request.path)
-        return {"valid": is_valid, "error": error}
+        normalized_path = normalize_user_path(request.path)
+        is_valid, error = validate_folder_path(normalized_path)
+        return {
+            "valid": is_valid,
+            "error": error,
+            "normalized_path": normalized_path if is_valid else None,
+        }
 
     def start_scan(
         self,
@@ -437,7 +564,8 @@ class SortingService:
         background_tasks: BackgroundTasks
     ) -> Dict[str, str]:
         """Start scanning a folder for images."""
-        is_valid, error = validate_folder_path(request.folder_path)
+        normalized_folder_path = normalize_user_path(request.folder_path)
+        is_valid, error = validate_folder_path(normalized_folder_path)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid folder path")
 
@@ -458,10 +586,18 @@ class SortingService:
                 "current": 0,
                 "processed": 0,
                 "total": 0,
+                "total_final": False,
                 "errors": 0,
                 "new": 0,
                 "updated": 0,
-                "message": "Counting image files...",
+                "removed": 0,
+                "library_ready": False,
+                "quick_import": request.quick_import,
+                "metadata_processed": 0,
+                "metadata_total": 0,
+                "message": "Syncing folder index..." if request.cleanup_missing else (
+                    "Starting fast library import..." if request.quick_import else "Preparing full scan..."
+                ),
                 "current_item": None,
                 "started_at": started_at,
                 "updated_at": started_at,
@@ -477,14 +613,36 @@ class SortingService:
                     details = details or {}
                     last_error = details.get("last_error") if isinstance(details, dict) else None
                     phase = details.get("phase") if isinstance(details, dict) else None
+                    library_ready = bool(details.get("library_ready", self._scan_progress.get("library_ready", False))) if isinstance(details, dict) else self._scan_progress.get("library_ready", False)
+                    metadata_processed = int(details.get("metadata_processed", self._scan_progress.get("metadata_processed", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_processed", 0) or 0)
+                    metadata_total = int(details.get("metadata_total", self._scan_progress.get("metadata_total", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_total", 0) or 0)
+                    total_final = bool(details.get("total_final", self._scan_progress.get("total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("total_final", False))
                     message = f"Processing: {filename}" if filename else "Scanning files..."
                     current_item = filename or None
-                    step = "scanning"
+                    step = "importing"
                     status = "running"
-                    if phase == "counted":
-                        message = f"Found {total} image(s). Starting scan..."
+                    removed_count = details.get("removed", self._scan_progress.get("removed", 0)) if isinstance(details, dict) else self._scan_progress.get("removed", 0)
+                    if phase == "cleanup":
+                        message = (
+                            f"Folder sync complete. Removed {removed_count} missing entr"
+                            f"{'y' if removed_count == 1 else 'ies'}."
+                        )
                         current_item = None
-                        step = "counted"
+                        step = "cleanup"
+                    elif phase == "library_ready":
+                        step = "importing"
+                        current_item = None
+                        if total_final and metadata_total > 0:
+                            message = f"Library ready. Finishing metadata in background ({metadata_processed}/{metadata_total})..."
+                        else:
+                            message = f"Library is browseable. Importing continues in background ({current} scanned)..."
+                    elif phase == "metadata":
+                        step = "metadata"
+                        message = f"Reading metadata: {filename}" if filename else "Reading metadata..."
+                        current_item = filename or None
+                    elif not total_final:
+                        message = f"Fast importing library... ({current} scanned)"
+                        current_item = None
                     elif last_error:
                         message = (
                             f"Skipped unreadable image: {last_error.get('filename', filename)}"
@@ -493,33 +651,49 @@ class SortingService:
                     if cancel_event.is_set():
                         status = "cancelling"
                         step = "cancelling"
-                        message = f"Cancelling scan... ({current}/{total or '?'})"
+                        message = (
+                            f"Cancelling scan... ({current}/{total})"
+                            if total_final and total > 0
+                            else f"Cancelling scan... ({current} scanned)"
+                        )
                     self._update_scan_progress_if_current(
                         run_id,
                         status=status,
                         current=current,
                         processed=current,
                         total=total,
+                        total_final=total_final,
                         step=step,
                         errors=details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0),
+                        removed=removed_count,
+                        library_ready=library_ready,
+                        quick_import=request.quick_import,
+                        metadata_processed=metadata_processed,
+                        metadata_total=metadata_total,
                         message=message,
                         current_item=current_item,
                         updated_at=now,
                     )
 
                 result = scan_folder(
-                    request.folder_path,
+                    normalized_folder_path,
                     request.recursive,
                     progress_cb,
                     stop_requested=cancel_event.is_set,
+                    force_reparse=request.force_reparse,
+                    cleanup_missing=request.cleanup_missing,
+                    quick_import=request.quick_import,
                 )
                 now = time.time()
                 errors = result.get("errors", 0)
                 new_count = result.get("new", 0)
                 updated_count = result.get("updated", 0)
+                removed_count = result.get("removed", 0)
                 summary = f"Completed! {new_count} images indexed."
                 if updated_count:
                     summary += f" {updated_count} updated."
+                if removed_count:
+                    summary += f" {removed_count} missing entries removed."
                 if errors:
                     summary += f" {errors} failed."
                 recent_errors = result.get("recent_errors") or []
@@ -534,9 +708,15 @@ class SortingService:
                         "current": result["total"],
                         "processed": result["total"],
                         "total": result["total"],
+                        "total_final": result.get("total_final", True),
                         "errors": errors,
                         "new": new_count,
                         "updated": updated_count,
+                        "removed": removed_count,
+                        "library_ready": result.get("library_ready", request.quick_import),
+                        "quick_import": request.quick_import,
+                        "metadata_processed": result.get("metadata_processed", 0),
+                        "metadata_total": result.get("metadata_total", 0),
                         "message": summary,
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
@@ -559,10 +739,20 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "total_final": current_state.get("total_final", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
-                            "message": f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0) or current_state.get('processed', current_state.get('current', 0))}.",
+                            "removed": current_state.get("removed", 0),
+                            "library_ready": current_state.get("library_ready", False),
+                            "quick_import": current_state.get("quick_import", True),
+                            "metadata_processed": current_state.get("metadata_processed", 0),
+                            "metadata_total": current_state.get("metadata_total", 0),
+                            "message": (
+                                f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
+                                if current_state.get("total_final", False) and current_state.get("total", 0)
+                                else f"Scan cancelled after {current_state.get('processed', current_state.get('current', 0))} scanned."
+                            ),
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
                             "updated_at": now,
@@ -578,9 +768,15 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "total_final": current_state.get("total_final", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
+                            "removed": current_state.get("removed", 0),
+                            "library_ready": current_state.get("library_ready", False),
+                            "quick_import": current_state.get("quick_import", True),
+                            "metadata_processed": current_state.get("metadata_processed", 0),
+                            "metadata_total": current_state.get("metadata_total", 0),
                             "message": "Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
@@ -604,7 +800,9 @@ class SortingService:
 
     def move_images(self, request: MoveRequest) -> Dict[str, Any]:
         """Move specific images to a folder."""
-        is_valid, error = validate_folder_path(request.destination_folder, allow_create=True)
+        operation = self._validate_file_operation(request.operation)
+        destination_folder = normalize_user_path(request.destination_folder)
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
@@ -616,7 +814,7 @@ class SortingService:
             entry["image_id"]: entry
             for entry in unreadable_skips
         }
-        destination_ready = os.path.isdir(request.destination_folder)
+        destination_ready = os.path.isdir(destination_folder)
 
         results = []
         for image_id in request.image_ids:
@@ -631,18 +829,36 @@ class SortingService:
                 continue
 
             image = images_map.get(image_id)
-            if image_id in readable_id_set and image and os.path.exists(image["path"]):
+            source_path = self._resolve_image_path(image.get("path") or "") if image else None
+            if image_id in readable_id_set and image and source_path:
                 try:
                     if not destination_ready:
-                        os.makedirs(request.destination_folder, exist_ok=True)
+                        os.makedirs(destination_folder, exist_ok=True)
                         destination_ready = True
-                    new_path = move_image(image_id, request.destination_folder, image["path"])
-                    results.append({"id": image_id, "new_path": new_path, "success": True})
+                    operation_result = self._apply_file_operation(
+                        operation=operation,
+                        image_id=image_id,
+                        destination_folder=destination_folder,
+                        source_path=source_path,
+                        source_row=image,
+                    )
+                    results.append({
+                        "id": image_id,
+                        "new_path": operation_result["new_path"],
+                        "new_image_id": operation_result.get("new_image_id"),
+                        "operation": operation,
+                        "success": True,
+                    })
                 except Exception as e:
-                    logger.error("Failed to move image %d: %s", image_id, e)
-                    results.append({"id": image_id, "error": "Failed to move image", "success": False})
+                    logger.error("Failed to %s image %d: %s", operation, image_id, e)
+                    results.append({
+                        "id": image_id,
+                        "error": f"Failed to {operation} image",
+                        "operation": operation,
+                        "success": False,
+                    })
             else:
-                results.append({"id": image_id, "error": "Image not found", "success": False})
+                results.append({"id": image_id, "error": "Image not found", "operation": operation, "success": False})
 
         return {"results": results}
 
@@ -652,7 +868,9 @@ class SortingService:
         background_tasks: BackgroundTasks
     ) -> Dict[str, Any]:
         """Move all images matching filters to a folder with progress tracking."""
-        is_valid, error = validate_folder_path(request.destination_folder, allow_create=True)
+        operation = self._validate_file_operation(request.operation)
+        destination_folder = normalize_user_path(request.destination_folder)
+        is_valid, error = validate_folder_path(destination_folder, allow_create=True)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
@@ -689,7 +907,6 @@ class SortingService:
             return {"message": "No images match the filters", "count": 0}
 
         # Run actual move in background with progress tracking
-        destination_folder = request.destination_folder
         with self._batch_move_lock:
             self._batch_move_run_id += 1
             run_id = self._batch_move_run_id
@@ -698,11 +915,12 @@ class SortingService:
                 "step": "starting",
                 "current": 0,
                 "total": total_count,
-                "message": f"Starting move of {total_count} images...",
+                "message": f"Starting {operation} of {total_count} images...",
                 "errors": 0,
                 "moved": 0,
                 "current_item": None,
                 "recent_errors": [],
+                "operation": operation,
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
@@ -741,6 +959,7 @@ class SortingService:
                             "moved": 0,
                             "current_item": None,
                             "recent_errors": unreadable_skips[-3:],
+                            "operation": operation,
                             "started_at": time.time(),
                             "updated_at": time.time(),
                         }
@@ -766,9 +985,16 @@ class SortingService:
                         filename = image.get("filename", "image")
                         error_message = None
 
-                        if os.path.exists(image["path"]):
+                        source_path = self._resolve_image_path(image.get("path") or "")
+                        if source_path:
                             try:
-                                move_image(image["id"], destination_folder, image["path"])
+                                self._apply_file_operation(
+                                    operation=operation,
+                                    image_id=image["id"],
+                                    destination_folder=destination_folder,
+                                    source_path=source_path,
+                                    source_row=image,
+                                )
                                 moved += 1
                             except Exception as e:
                                 error_message = str(e)
@@ -789,6 +1015,7 @@ class SortingService:
                             message=f"Processed {filename} ({processed}/{total_count})",
                             current_item=filename,
                             recent_errors=errors[-3:],
+                            operation=operation,
                             updated_at=time.time(),
                         ):
                             return
@@ -805,6 +1032,7 @@ class SortingService:
                         "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
+                        "operation": operation,
                         "started_at": self._batch_move_progress.get("started_at"),
                         "updated_at": time.time(),
                     }
@@ -829,17 +1057,20 @@ class SortingService:
                         "message": "Batch move failed due to an internal error",
                         "current_item": None,
                         "recent_errors": self._batch_move_progress.get("recent_errors", []) if run_id == self._batch_move_run_id else [],
+                        "operation": operation,
                         "started_at": self._batch_move_progress.get("started_at") if run_id == self._batch_move_run_id else None,
                         "updated_at": time.time(),
                     }
                 )
 
         background_tasks.add_task(run_batch_move)
+        progress_verb = "Copying" if operation == "copy" else "Moving"
         return {
             "status": "started",
-            "message": f"Moving {total_count} images in background",
+            "message": f"{progress_verb} {total_count} images in background",
             "total": total_count,
             "count": total_count,
+            "operation": operation,
         }
 
     def start_sort_session(
@@ -859,8 +1090,10 @@ class SortingService:
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
         folders: Optional[str] = None,
+        operation_mode: str = "move",
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
+        operation_mode = self._validate_file_operation(operation_mode)
         # Validate aspect_ratio
         if aspect_ratio is not None and aspect_ratio not in VALID_ASPECT_RATIOS:
             raise HTTPException(
@@ -912,6 +1145,7 @@ class SortingService:
                 "image_ids": image_ids,
                 "current_index": 0,
                 "folders": folder_config,
+                "operation_mode": operation_mode,
                 "history": [],
                 "redo_stack": [],
             }
@@ -924,6 +1158,7 @@ class SortingService:
             "total_images": len(image_ids),
             "current": first_image,
             "skipped_unreadable": [],
+            "operation_mode": operation_mode,
         }
 
     def get_current_sort_image(self) -> Dict[str, Any]:
@@ -942,6 +1177,7 @@ class SortingService:
                         "remaining": 0,
                         "image_ids": [],
                         "folders": {},
+                        "operation_mode": "move",
                         **self._get_sort_session_flags([], []),
                     }
 
@@ -960,8 +1196,8 @@ class SortingService:
                     self._save_session_to_disk()
                 continue
 
-            current_path = current.get("path") or ""
-            if not current_path or not os.path.exists(current_path):
+            current_path = self._resolve_image_path(current.get("path") or "")
+            if not current_path:
                 db.mark_image_unreadable(current_id, "File not found")
                 with self._sort_session_lock:
                     self._sort_session["current_index"] += 1
@@ -986,6 +1222,7 @@ class SortingService:
                 "remaining": len(image_ids) - current_index,
                 "image_ids": list(image_ids),
                 "folders": dict(self._sort_session["folders"]),
+                "operation_mode": self._sort_session.get("operation_mode", "move"),
                 **self._get_sort_session_flags(history_snapshot, self._sort_session.get("redo_stack", [])),
             }
 
@@ -1006,6 +1243,7 @@ class SortingService:
                 raise HTTPException(status_code=400, detail="No active sort session")
 
             image_ids = self._sort_session["image_ids"]
+            operation_mode = self._sort_session.get("operation_mode", "move")
 
             if action == "undo":
                 if self._sort_session["history"]:
@@ -1017,14 +1255,15 @@ class SortingService:
                         image = db.get_image_by_id(last["image_id"])
                         if image:
                             try:
-                                move_image(last["image_id"], os.path.dirname(last["original_path"]), image["path"])
+                                self._undo_file_operation(last)
                             except Exception as e:
-                                logger.warning("Error moving image back during undo: %s", e)
+                                logger.warning("Error undoing %s during undo: %s", last.get("operation") or "move", e)
                     self._sort_session["current_index"] = max(0, self._sort_session["current_index"] - 1)
                 else:
                     return {
                         "status": "no_history",
                         "message": "Nothing to undo",
+                        "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
 
@@ -1040,6 +1279,7 @@ class SortingService:
                         "current_index": self._sort_session["current_index"],
                         "undone_action": undone_action,
                         "folder_key": undone_folder_key,
+                        "operation_mode": operation_mode,
                         **session_flags,
                     }
 
@@ -1058,6 +1298,7 @@ class SortingService:
                     "remaining": len(image_ids) - current_index,
                     "image_ids": list(image_ids),
                     "folders": dict(self._sort_session["folders"]),
+                    "operation_mode": operation_mode,
                     **session_flags,
                 }
 
@@ -1067,6 +1308,7 @@ class SortingService:
                     return {
                         "status": "no_redo",
                         "message": "Nothing to redo",
+                        "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
 
@@ -1074,6 +1316,7 @@ class SortingService:
                 redone_action = redo_entry.get("action")
                 redone_folder_key = redo_entry.get("folder_key")
                 target_id = redo_entry.get("image_id")
+                entry_operation = self._validate_file_operation(redo_entry.get("operation") or operation_mode)
 
                 if redone_action == "move":
                     folder = self._sort_session["folders"].get(redone_folder_key)
@@ -1081,24 +1324,36 @@ class SortingService:
                         redo_stack.append(redo_entry)
                         return {
                             "error": f"Folder {str(redone_folder_key).upper()} is not configured",
+                            "operation_mode": operation_mode,
                             **self._get_sort_session_flags(),
                         }
 
                     target_image = db.get_image_by_id(target_id) if target_id is not None else None
-                    if not target_image or not target_image.get("path") or not os.path.exists(target_image["path"]):
+                    target_path = self._resolve_image_path(target_image.get("path") or "") if target_image else None
+                    if not target_image or not target_path:
                         redo_stack.append(redo_entry)
                         return {
                             "error": "Image file not found on disk",
+                            "operation_mode": operation_mode,
                             **self._get_sort_session_flags(),
                         }
 
                     try:
-                        redo_entry["new_path"] = move_image(target_image["id"], folder, target_image["path"])
+                        operation_result = self._apply_file_operation(
+                            operation=entry_operation,
+                            image_id=target_image["id"],
+                            destination_folder=folder,
+                            source_path=target_path,
+                            source_row=target_image,
+                        )
+                        redo_entry["new_path"] = operation_result["new_path"]
+                        redo_entry["copied_image_id"] = operation_result.get("new_image_id")
                     except Exception as e:
-                        logger.error("Redo move failed for image %s: %s", target_id, e)
+                        logger.error("Redo %s failed for image %s: %s", entry_operation, target_id, e)
                         redo_stack.append(redo_entry)
                         return {
-                            "error": "Failed to redo move",
+                            "error": f"Failed to redo {entry_operation}",
+                            "operation_mode": operation_mode,
                             **self._get_sort_session_flags(),
                         }
 
@@ -1114,6 +1369,7 @@ class SortingService:
                         "message": "All images sorted",
                         "redone_action": redone_action,
                         "folder_key": redone_folder_key,
+                        "operation_mode": operation_mode,
                         **session_flags,
                     }
 
@@ -1135,11 +1391,12 @@ class SortingService:
                     "remaining": len(image_ids) - next_index,
                     "image_ids": list(image_ids),
                     "folders": dict(self._sort_session["folders"]),
+                    "operation_mode": operation_mode,
                     **session_flags,
                 }
 
             if self._sort_session["current_index"] >= len(image_ids):
-                return {"done": True}
+                return {"done": True, "operation_mode": operation_mode}
 
             current_id = image_ids[self._sort_session["current_index"]]
             current_index = self._sort_session["current_index"]
@@ -1147,6 +1404,7 @@ class SortingService:
             if action == "move" and not folder_key:
                 return {
                     "error": "Folder key is required for move",
+                    "operation_mode": operation_mode,
                     **self._get_sort_session_flags(),
                 }
 
@@ -1162,7 +1420,7 @@ class SortingService:
                 # Skip missing images: fetch next
                 session_flags = self._get_sort_session_flags()
                 if self._sort_session["current_index"] >= len(image_ids):
-                    return {"done": True, "message": "All images sorted", **session_flags}
+                    return {"done": True, "message": "All images sorted", "operation_mode": operation_mode, **session_flags}
                 next_id = image_ids[self._sort_session["current_index"]]
                 next_index = self._sort_session["current_index"]
                 next_image = db.get_image_by_id(next_id)
@@ -1173,6 +1431,7 @@ class SortingService:
                     "index": next_index,
                     "total": len(image_ids),
                     "remaining": len(image_ids) - next_index,
+                    "operation_mode": operation_mode,
                     **session_flags,
                 }
 
@@ -1180,28 +1439,41 @@ class SortingService:
                 if not folder:
                     return {
                         "error": f"Folder {folder_key.upper()} is not configured",
+                        "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
-                if not current.get("path") or not os.path.exists(current["path"]):
+                current_path = self._resolve_image_path(current.get("path") or "")
+                if not current_path:
                     return {
                         "error": "Image file not found on disk",
+                        "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
                 try:
-                    original_path = current["path"]
-                    new_path = move_image(current["id"], folder, current["path"])
+                    original_path = current_path
+                    operation_result = self._apply_file_operation(
+                        operation=operation_mode,
+                        image_id=current["id"],
+                        destination_folder=folder,
+                        source_path=current_path,
+                        source_row=current,
+                    )
                     self._sort_session["redo_stack"] = []
                     self._sort_session["history"].append({
                         "action": "move",
+                        "operation": operation_mode,
                         "image_id": current["id"],
                         "original_path": original_path,
-                        "new_path": new_path,
+                        "original_folder": os.path.dirname(original_path),
+                        "new_path": operation_result["new_path"],
+                        "copied_image_id": operation_result.get("new_image_id"),
                         "folder_key": folder_key
                     })
                 except Exception as e:
-                    logger.error("Sort move failed for image %d: %s", current["id"], e)
+                    logger.error("Sort %s failed for image %d: %s", operation_mode, current["id"], e)
                     return {
-                        "error": "Failed to move image",
+                        "error": f"Failed to {operation_mode} image",
+                        "operation_mode": operation_mode,
                         **self._get_sort_session_flags(),
                     }
             elif action == "skip":
@@ -1216,7 +1488,7 @@ class SortingService:
 
             if self._sort_session["current_index"] >= len(image_ids):
                 self._save_session_to_disk()
-                return {"done": True, "message": "All images sorted", **session_flags}
+                return {"done": True, "message": "All images sorted", "operation_mode": operation_mode, **session_flags}
 
             next_id = image_ids[self._sort_session["current_index"]]
             next_index = self._sort_session["current_index"]
@@ -1231,25 +1503,29 @@ class SortingService:
                 "index": next_index,
                 "total": len(image_ids),
                 "remaining": len(image_ids) - next_index,
+                "operation_mode": operation_mode,
                 **session_flags,
             }
 
     def set_sort_folders(self, config: FolderConfig) -> Dict[str, Any]:
         """Set folder destinations for sort keys."""
+        normalized_folders = dict(config.folders)
         for key, path in config.folders.items():
             if path:
-                is_valid, error = validate_folder_path(path, allow_create=True)
+                normalized_path = normalize_user_path(path)
+                is_valid, error = validate_folder_path(normalized_path, allow_create=True)
                 if not is_valid:
                     raise HTTPException(status_code=400, detail=error or f"Invalid folder path for key '{key}'")
                 try:
-                    os.makedirs(path, exist_ok=True)
+                    os.makedirs(normalized_path, exist_ok=True)
                 except OSError as exc:
                     raise HTTPException(status_code=400, detail=f"Cannot create folder for key '{key}': {exc}") from exc
+                normalized_folders[key] = normalized_path
 
         with self._sort_session_lock:
-            self._sort_session["folders"] = config.folders
+            self._sort_session["folders"] = normalized_folders
             self._save_session_to_disk()
-        return {"status": "ok", "folders": config.folders}
+        return {"status": "ok", "folders": normalized_folders}
 
     def get_sort_folders(self) -> Dict[str, Any]:
         """Get current folder configuration."""
@@ -1264,6 +1540,7 @@ class SortingService:
                 'image_ids': [],
                 'current_index': 0,
                 'folders': {},
+                'operation_mode': 'move',
                 'history': [],
                 'redo_stack': [],
             }
@@ -1330,7 +1607,8 @@ class SortingService:
 
     def export_tags_batch(self, request) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
+        output_folder = normalize_user_path(request.output_folder)
+        is_valid, error = validate_folder_path(output_folder, allow_create=True)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid output folder")
 
@@ -1339,7 +1617,7 @@ class SortingService:
 
         exported = 0
         errors = []
-        output_folder_ready = os.path.isdir(request.output_folder)
+        output_folder_ready = os.path.isdir(output_folder)
 
         for image_id in request.image_ids:
             image = db.get_image_by_id(image_id)
@@ -1352,11 +1630,11 @@ class SortingService:
             tag_string = prefix + ", ".join(filtered_tags) if filtered_tags else prefix.rstrip(", ")
 
             image_basename = os.path.splitext(image["filename"])[0]
-            output_path = os.path.join(request.output_folder, f"{image_basename}.txt")
+            output_path = os.path.join(output_folder, f"{image_basename}.txt")
 
             try:
                 if not output_folder_ready:
-                    os.makedirs(request.output_folder, exist_ok=True)
+                    os.makedirs(output_folder, exist_ok=True)
                     output_folder_ready = True
                 with open(output_path, "w", encoding="utf-8") as f:
                     f.write(tag_string)
@@ -1425,14 +1703,16 @@ class SortingService:
                 if original_positions.get(entry.get('image_id'), -1) >= original_index
             ]
             restored_index = min(len(valid_ids), restored_index)
+            operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
 
             # Validate all folder paths loaded from JSON
             validated_folders = {}
             for key, path in data.get('folders', {}).items():
                 try:
-                    is_valid, _error = validate_folder_path(path, allow_create=True)
+                    normalized_path = normalize_user_path(path)
+                    is_valid, _error = validate_folder_path(normalized_path, allow_create=True)
                     if is_valid:
-                        validated_folders[key] = path
+                        validated_folders[key] = normalized_path
                     else:
                         logger.warning("Skipping invalid folder path for key %s", key)
                 except Exception:
@@ -1444,6 +1724,7 @@ class SortingService:
                     'image_ids': valid_ids,
                     'current_index': restored_index,
                     'folders': validated_folders,
+                    'operation_mode': operation_mode,
                     'history': restored_history,
                     'redo_stack': restored_redo_stack,
                 }
@@ -1459,6 +1740,7 @@ class SortingService:
                 'active': self._sort_session['active'],
                 'current_index': self._sort_session['current_index'],
                 'folders': self._sort_session['folders'],
+                'operation_mode': self._sort_session.get('operation_mode', 'move'),
                 'history': self._sort_session['history'],
                 'redo_stack': self._sort_session.get('redo_stack', []),
                 'image_ids': self._sort_session['image_ids']
@@ -1509,14 +1791,15 @@ class SortingService:
                 path = "/"
 
         # Validate the folder path (must exist)
-        is_valid, error = validate_folder_path(path)
+        normalized_path = normalize_user_path(path)
+        is_valid, error = validate_folder_path(normalized_path)
         if not is_valid:
             raise HTTPException(
                 status_code=400,
                 detail=error or "Invalid folder path",
             )
 
-        resolved = os.path.realpath(path)
+        resolved = os.path.realpath(normalized_path)
 
         # Determine parent
         parent = os.path.dirname(resolved)

@@ -83,6 +83,8 @@ const DEFAULT_GENERATOR_COLORS = {
 const Gallery = {
     images: [],
     loading: false,
+    lastSelectedIndex: null,
+    _languageBound: false,
     lazyObserver: null,
     currentPreviewIndex: -1,
     currentPreviewRequestId: 0,
@@ -113,6 +115,51 @@ const Gallery = {
      */
     _getGenColors() {
         return window.GENERATOR_COLORS || DEFAULT_GENERATOR_COLORS;
+    },
+
+    _normalizeGenerator(generator) {
+        const normalized = String(generator || 'unknown').trim().toLowerCase();
+        return Object.prototype.hasOwnProperty.call(DEFAULT_GENERATOR_COLORS, normalized)
+            ? normalized
+            : 'unknown';
+    },
+
+    _formatGeneratorLabel(generator) {
+        return window.App?.formatGeneratorLabel?.(generator, 'Unknown')
+            || String(generator || 'unknown');
+    },
+
+    _setGeneratorText(element, generator) {
+        if (!element) return;
+        const normalized = this._normalizeGenerator(generator);
+        element.dataset.generatorValue = normalized;
+        element.textContent = this._formatGeneratorLabel(normalized);
+    },
+
+    refreshLocalizedContent() {
+        const { AppState } = getGalleryAppContext();
+        document.querySelectorAll('#gallery-grid .gallery-item').forEach((item) => {
+            const imageId = item.dataset.id;
+            const image = AppState.images.find((entry) => String(entry.id) === String(imageId));
+            const generator = image?.generator || item.querySelector('.gallery-item-generator')?.dataset.generatorValue || 'unknown';
+            const generatorLabel = this._formatGeneratorLabel(generator);
+            const generatorEl = item.querySelector('.gallery-item-generator');
+            if (generatorEl) {
+                this._setGeneratorText(generatorEl, generator);
+            }
+            item.setAttribute('aria-label', `${image?.filename || 'Image'} - ${generatorLabel}`);
+        });
+
+        const modalGenerator = document.getElementById('modal-generator');
+        if (modalGenerator?.dataset.generatorValue) {
+            modalGenerator.textContent = this._formatGeneratorLabel(modalGenerator.dataset.generatorValue);
+        }
+    },
+
+    _bindLanguageUpdates() {
+        if (this._languageBound) return;
+        document.addEventListener('languageChanged', () => this.refreshLocalizedContent());
+        this._languageBound = true;
     },
 
     _getScrollContainer() {
@@ -564,15 +611,17 @@ const Gallery = {
     _formatLargeCardAspect(image) {
         const width = Number(image?.width || 0);
         const height = Number(image?.height || 0);
-        if (!width || !height) return 'Unknown ratio';
-        if (width === height) return 'Square';
-        return width > height ? 'Landscape' : 'Portrait';
+        if (!width || !height) return this._t('gallery.largeUnknownRatio', null, 'Unknown ratio');
+        if (width === height) return this._t('filter.square', null, 'Square');
+        return width > height
+            ? this._t('filter.landscape', null, 'Landscape')
+            : this._t('filter.portrait', null, 'Portrait');
     },
 
     _truncateLargeCardPrompt(prompt, maxLength = 140) {
         const normalized = String(prompt || '').replace(/\s+/g, ' ').trim();
         if (!normalized) {
-            return 'No prompt metadata';
+            return window.I18n?.t?.('gallery.noPromptPreview') || 'No prompt info yet';
         }
 
         return normalized.length > maxLength
@@ -584,6 +633,8 @@ const Gallery = {
         const safeFilename = (image.filename || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         const isWaterfall = viewMode === 'waterfall';
         const isLarge = viewMode === 'large';
+        const generatorValue = this._normalizeGenerator(image.generator);
+        const generatorLabel = this._formatGeneratorLabel(generatorValue);
         const imgAttributes = immediateLoad
             ? `src="${initialUrl}" loading="lazy" decoding="async"`
             : `data-src="${initialUrl}" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" decoding="async"`;
@@ -595,14 +646,14 @@ const Gallery = {
                 : `<img ${imgAttributes} alt="${safeFilename}" draggable="false"${highResAttr}>`;
 
             const aestheticBadge = image.aesthetic_score != null
-                ? `<span class="gallery-item-aesthetic" title="Aesthetic: ${Number(image.aesthetic_score).toFixed(1)}">${Number(image.aesthetic_score).toFixed(1)}</span>`
+                ? `<span class="gallery-item-aesthetic" title="${this._escapeHtml(this._t('filter.aestheticTitle', null, 'Aesthetic Score'))}: ${Number(image.aesthetic_score).toFixed(1)}">${Number(image.aesthetic_score).toFixed(1)}</span>`
                 : '';
 
             return `
                 ${imageTag}
                 <div class="gallery-item-overlay" aria-hidden="true">
-                    <span class="gallery-item-generator" style="background: ${generatorColor}">
-                        ${this._escapeHtml(image.generator)}
+                    <span class="gallery-item-generator" data-generator-value="${this._escapeHtml(generatorValue)}" style="background: ${generatorColor}">
+                        ${this._escapeHtml(generatorLabel)}
                     </span>
                     ${aestheticBadge}
                 </div>
@@ -610,12 +661,14 @@ const Gallery = {
         }
 
         const rating = this._formatLargeCardRating(image);
-        const ratingLabel = rating === 'unrated' ? 'Unrated' : rating.charAt(0).toUpperCase() + rating.slice(1);
-        const checkpoint = String(image?.checkpoint || '').trim() || 'No checkpoint';
+        const ratingFallback = rating === 'unrated' ? 'Unrated' : rating.charAt(0).toUpperCase() + rating.slice(1);
+        const ratingLabel = this._t(`gallery.rating.${rating}`, null, ratingFallback);
+        const noCheckpointLabel = this._t('gallery.noCheckpoint', null, 'No checkpoint');
+        const checkpoint = String(image?.checkpoint || '').trim() || noCheckpointLabel;
         const checkpointLabel = checkpoint
             ? checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt|pt|pth|bin)$/i, '') || checkpoint
-            : 'No checkpoint';
-        const sizeLabel = image.width && image.height ? `${image.width}x${image.height}` : 'Unknown size';
+            : noCheckpointLabel;
+        const sizeLabel = image.width && image.height ? `${image.width}x${image.height}` : this._t('gallery.unknownSize', null, 'Unknown size');
         const aspectLabel = this._formatLargeCardAspect(image);
         const promptPreview = this._truncateLargeCardPrompt(image.prompt);
         const pathMeta = (() => {
@@ -637,8 +690,8 @@ const Gallery = {
             </div>
             <div class="gallery-item-large-meta">
                 <div class="gallery-item-large-top">
-                    <span class="gallery-item-generator" style="background: ${generatorColor}">
-                        ${this._escapeHtml(image.generator)}
+                    <span class="gallery-item-generator" data-generator-value="${this._escapeHtml(generatorValue)}" style="background: ${generatorColor}">
+                        ${this._escapeHtml(generatorLabel)}
                     </span>
                     <span class="gallery-item-rating rating-${rating}">
                         ${this._escapeHtml(ratingLabel)}
@@ -728,6 +781,8 @@ const Gallery = {
     createVirtualGalleryItem(index, image, viewMode) {
         const { AppState } = getGalleryAppContext();
         const genColors = this._getGenColors();
+        const generatorValue = this._normalizeGenerator(image.generator);
+        const generatorLabel = this._formatGeneratorLabel(generatorValue);
 
         const isWaterfall = viewMode === 'waterfall';
         const isLarge = viewMode === 'large';
@@ -749,7 +804,7 @@ const Gallery = {
         item.draggable = true;
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
-        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${image.generator || 'Unknown generator'}`);
+        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
         item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
 
         item.innerHTML = this._buildGalleryItemMarkup(
@@ -757,14 +812,14 @@ const Gallery = {
             viewMode,
             initialUrl,
             finalUrl,
-            genColors[image.generator] || genColors.unknown,
+            genColors[generatorValue] || genColors.unknown,
             true
         );
 
         // Add event listeners
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (event) => {
             if (AppState.selectionMode) {
-                this.toggleSelection(image.id);
+                this.handleSelectionInteraction(event, image.id, Number(item.dataset.index));
             } else {
                 this.openPreview(image.id);
             }
@@ -779,7 +834,7 @@ const Gallery = {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 if (AppState.selectionMode) {
-                    this.toggleSelection(image.id);
+                    this.handleSelectionInteraction(e, image.id, Number(item.dataset.index));
                 } else {
                     this.openPreview(image.id);
                 }
@@ -1106,6 +1161,8 @@ const Gallery = {
     createGalleryItem(image, index, viewMode = null) {
         const { AppState } = getGalleryAppContext();
         const genColors = this._getGenColors();
+        const generatorValue = this._normalizeGenerator(image.generator);
+        const generatorLabel = this._formatGeneratorLabel(generatorValue);
         const resolvedViewMode = viewMode || AppState.viewMode;
         const isWaterfall = resolvedViewMode === 'waterfall';
         const isLarge = resolvedViewMode === 'large';
@@ -1129,14 +1186,14 @@ const Gallery = {
         // Accessibility: make item focusable and add ARIA attributes
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
-        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${image.generator || 'Unknown generator'}`);
+        item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
         item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
         item.innerHTML = this._buildGalleryItemMarkup(
             image,
             resolvedViewMode,
             initialUrl,
             finalUrl,
-            genColors[image.generator] || genColors.unknown,
+            genColors[generatorValue] || genColors.unknown,
             false
         );
 
@@ -1146,9 +1203,9 @@ const Gallery = {
             img.draggable = false;
         });
 
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (event) => {
             if (AppState.selectionMode) {
-                this.toggleSelection(image.id);
+                this.handleSelectionInteraction(event, image.id, Number(item.dataset.index));
             } else {
                 this.openPreview(image.id);
             }
@@ -1164,7 +1221,7 @@ const Gallery = {
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 if (AppState.selectionMode) {
-                    this.toggleSelection(image.id);
+                    this.handleSelectionInteraction(e, image.id, Number(item.dataset.index));
                 } else {
                     this.openPreview(image.id);
                 }
@@ -1196,8 +1253,88 @@ const Gallery = {
         return item;
     },
 
+    _emitSelectionChanged(AppState) {
+        const detail = {
+            selectionMode: Boolean(AppState.selectionMode),
+            selectedCount: AppState.selectedIds.size,
+        };
+        window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
+        document.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
+    },
+
+    _finalizeSelectionChange(AppState, updateSelectionUI) {
+        this.syncSelectionState();
+        if (updateSelectionUI) updateSelectionUI();
+        this._emitSelectionChanged(AppState);
+    },
+
+    getVisibleGalleryIds() {
+        return Array.from(document.querySelectorAll('#gallery-grid .gallery-item[data-id]'))
+            .map((item) => Number(item.dataset.id))
+            .filter((id) => Number.isFinite(id));
+    },
+
+    selectRange(startIndex, endIndex, { additive = false } = {}) {
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
+        if (!Number.isInteger(startIndex) || !Number.isInteger(endIndex)) return;
+
+        const lower = Math.max(0, Math.min(startIndex, endIndex));
+        const upper = Math.min(AppState.images.length - 1, Math.max(startIndex, endIndex));
+        if (!additive) {
+            AppState.selectedIds.clear();
+        }
+        for (let index = lower; index <= upper; index += 1) {
+            const image = AppState.images[index];
+            if (image?.id != null) {
+                AppState.selectedIds.add(image.id);
+            }
+        }
+        this.lastSelectedIndex = endIndex;
+        this._finalizeSelectionChange(AppState, updateSelectionUI);
+    },
+
+    handleSelectionInteraction(event, imageId, index) {
+        const normalizedIndex = Number.isInteger(index) ? index : null;
+        const additive = Boolean(event?.ctrlKey || event?.metaKey);
+
+        if (event?.shiftKey && this.lastSelectedIndex !== null && normalizedIndex !== null) {
+            this.selectRange(this.lastSelectedIndex, normalizedIndex, { additive });
+            return;
+        }
+
+        this.toggleSelection(imageId);
+        if (normalizedIndex !== null) {
+            this.lastSelectedIndex = normalizedIndex;
+        }
+    },
+
+    selectAllVisible() {
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
+        this.getVisibleGalleryIds().forEach((imageId) => AppState.selectedIds.add(imageId));
+        this._finalizeSelectionChange(AppState, updateSelectionUI);
+    },
+
+    invertVisibleSelection() {
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
+        this.getVisibleGalleryIds().forEach((imageId) => {
+            if (AppState.selectedIds.has(imageId)) {
+                AppState.selectedIds.delete(imageId);
+            } else {
+                AppState.selectedIds.add(imageId);
+            }
+        });
+        this._finalizeSelectionChange(AppState, updateSelectionUI);
+    },
+
+    clearSelection() {
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
+        AppState.selectedIds.clear();
+        this.lastSelectedIndex = null;
+        this._finalizeSelectionChange(AppState, updateSelectionUI);
+    },
+
     toggleSelection(imageId) {
-        const { $, AppState, updateSelectionUI } = getGalleryAppContext();
+        const { AppState, updateSelectionUI } = getGalleryAppContext();
 
         const isNowSelected = !AppState.selectedIds.has(imageId);
 
@@ -1224,6 +1361,7 @@ const Gallery = {
             window.VirtualGallery.updateItemSelection(imageId, isNowSelected);
         }
 
+        this._emitSelectionChanged(AppState);
         if (updateSelectionUI) updateSelectionUI();
     },
 
@@ -1935,10 +2073,11 @@ const Gallery = {
         };
 
         if (assets.primary_model_name) {
+            const primaryModelType = assets.primary_model_type || t('generator.unknown', 'Unknown');
             blocks.push(`
                 <div class="model-asset-block">
                     <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.primaryModel', 'Primary Model'))}</span><span class="param-value">${window.escapeHtml(assets.primary_model_name)}</span></div>
-                    <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.primaryModelType', 'Primary Model Type'))}</span><span class="param-value">${window.escapeHtml(assets.primary_model_type || 'unknown')}</span></div>
+                    <div class="param-item"><span class="param-label">${window.escapeHtml(t('modal.primaryModelType', 'Primary Model Type'))}</span><span class="param-value">${window.escapeHtml(primaryModelType)}</span></div>
                 </div>
             `);
         }
@@ -2463,7 +2602,14 @@ ${String(value)}`)
             }
         };
         $('#modal-filename').textContent = summaryImage?.filename || `Image #${imageId}`;
-        $('#modal-generator').textContent = (summaryImage?.generator || '-').toUpperCase();
+        const modalGenerator = $('#modal-generator');
+        if (modalGenerator) {
+            const summaryGenerator = summaryImage?.generator || '';
+            modalGenerator.dataset.generatorValue = this._normalizeGenerator(summaryGenerator);
+            modalGenerator.textContent = summaryGenerator
+                ? this._formatGeneratorLabel(summaryGenerator)
+                : '-';
+        }
         $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
         $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
         $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');
@@ -2492,14 +2638,14 @@ ${String(value)}`)
         document.querySelector('#modal-nodes-list').innerHTML = '';
         $('#btn-reparse-metadata').onclick = async () => {
             try {
-                $('#modal-loading-state').textContent = this._t('modal.reparsing', null, 'Reparsing metadata…');
+                $('#modal-loading-state').textContent = this._t('modal.reparsing', null, 'Reading image info again…');
                 $('#modal-loading-state').style.display = '';
                 const reparsed = await API.reparseImage(imageId);
                 if (requestId !== this.currentPreviewRequestId) return;
                 this._hydratePreview(reparsed.image, reparsed.tags);
-                showToast?.(this._t('modal.metadataReparsed', null, 'Metadata reparsed'), 'success');
+                showToast?.(this._t('modal.metadataReparsed', null, 'Image info refreshed'), 'success');
             } catch (error) {
-                showToast?.(formatUserError(error, this._t('modal.failedReparse', null, 'Failed to reparse metadata')), "error");
+                showToast?.(formatUserError(error, this._t('modal.failedReparse', null, 'Could not read the image info again')), "error");
             }
         };
         $('#modal-prev-image').onclick = () => this.openAdjacentPreview(-1);
@@ -2552,9 +2698,9 @@ ${String(value)}`)
         }
         $('#btn-copy-params').onclick = () => copyToClipboard(
             this._serializeGenerationParams(this._lastModalImage, this._lastParsedData),
-            this._t('modal.paramsCopied', null, 'Params copied')
+            this._t('modal.paramsCopied', null, 'Image settings copied')
         );
-        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), this._t('modal.allCopied', null, 'All metadata copied'));
+        $('#btn-copy-all').onclick = () => copyToClipboard(this._buildCopyAllText(this._lastModalImage, this._lastParsedData, this._lastModalTags, getPromptView()), this._t('modal.allCopied', null, 'All image info copied'));
         $('#btn-open-folder').onclick = async () => {
             const image = this._lastModalImage;
             if (!image?.id) return;
@@ -2685,7 +2831,11 @@ ${String(value)}`)
             }
             pathEl.closest('.modal-path-row')?.style.setProperty('display', image.path ? '' : 'none');
         }
-        $('#modal-generator').textContent = image.generator.toUpperCase();
+        const modalGeneratorFinal = $('#modal-generator');
+        if (modalGeneratorFinal) {
+            modalGeneratorFinal.dataset.generatorValue = this._normalizeGenerator(image.generator);
+            modalGeneratorFinal.textContent = this._formatGeneratorLabel(image.generator);
+        }
         $('#modal-size').textContent = `${image.width}×${image.height} • ${formatSize(image.file_size)}`;
         $('#modal-prompt-text').textContent = image.prompt || this._t('modal.noPrompt', null, 'No prompt');
         const parsedData = this._extractParsedData(image);
@@ -3058,3 +3208,9 @@ ${String(value)}`)
 // Export configuration for external use
 window.GALLERY_VIRTUAL_CONFIG = GALLERY_VIRTUAL_CONFIG;
 window.Gallery = Gallery;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Gallery._bindLanguageUpdates());
+} else {
+    Gallery._bindLanguageUpdates();
+}

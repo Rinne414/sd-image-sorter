@@ -9,6 +9,7 @@ from services.tagging_service import TaggingService
 from services.sorting_service import SortingService
 from services.censor_service import CensorService
 from services.similarity_service import SimilarityService
+from services.update_service import UpdateService
 
 __all__ = [
     "ImageService",
@@ -16,4 +17,5 @@ __all__ = [
     "SortingService",
     "CensorService",
     "SimilarityService",
+    "UpdateService",
 ]

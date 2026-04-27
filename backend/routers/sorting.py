@@ -331,6 +331,7 @@ async def start_sort_session(
     min_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     folders: Optional[str] = Query(default=None, max_length=4096),
+    operation_mode: str = Query(default="move", max_length=16),
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start a manual sort session."""
@@ -350,6 +351,7 @@ async def start_sort_session(
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
         folders=folders,
+        operation_mode=operation_mode,
     )
 
 

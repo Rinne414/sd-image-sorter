@@ -470,7 +470,7 @@ Use this structure for future entries:
 ### ADR-AI-20260427-16: In-app updates must never manage package-local user data or updater runtime state
 - Status: active
 - Area: release / updater safety / package-local data
-- Evidence tier: Tier 1
+- Evidence tier: explicit user instruction + Tier 1
 - Decision:
   The in-app updater may replace only release-managed application files. It must never overwrite or delete `data/` or updater runtime folders such as `update/downloads`, `update/logs`, `update/state`, `update/worker`, and `update/backups`.
 - Why:
@@ -492,3 +492,56 @@ Use this structure for future entries:
   Any implicit assumption that a full-package fallback may safely overwrite the whole extracted folder tree.
 - Validation:
   `backend/tests/test_update_worker.py` protected-path regression coverage plus release-build manifest exclusion tests.
+
+### ADR-AI-20260427-17: Update checks are manual, GitHub-default, and advanced-channel override is opt-in
+- Status: active
+- Area: update UX / release channel semantics
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The app should only check for updates when the user clicks the update button. It should not auto-check on startup and should not auto-apply updates without explicit confirmation. The default update channel remains GitHub Releases, while custom channel/proxy settings are an advanced opt-in path for advanced users and fork maintainers.
+- Why:
+  The intended product behavior is "one-click when I choose" rather than background updater behavior. Ordinary users should not be forced into channel/proxy setup just because GitHub can be blocked in some regions. At the same time, advanced users still need a supported override path.
+- Do not "improve" this by:
+  Adding startup auto-checks, silent background updates, mandatory proxy/channel setup UI for everyone, or replacing honest GitHub/VPN guidance with a fake built-in default mirror story.
+- Allowed evolution:
+  Clearer update status UI, better channel diagnostics, better wording around VPN/channel override, and more advanced override options behind an explicitly advanced path.
+- Evidence:
+  Current frontend only checks when the update buttons are clicked; current README and release-pack docs tell ordinary users to use the update button and enable VPN if GitHub is unreachable; current backend keeps custom channel override available through config instead of forcing it into the normal user flow.
+- Last verified:
+  2026-04-27 against current frontend update flow, updater service behavior, README, and release-pack docs.
+- Related files:
+  `frontend/js/app.js`
+  `backend/services/update_service.py`
+  `backend/routers/updates.py`
+  `README.md`
+  `docs/RELEASE_PACKS.md`
+  `backend/tests/test_update_service.py`
+- Supersedes:
+  None
+- Validation:
+  `backend/tests/test_update_service.py`, `backend/tests/test_routers/test_updates.py`, unsafe archive-entry validation tests, and current click-triggered frontend update flow.
+
+### ADR-AI-20260427-18: LoRA library filtering uses exact normalized names, not substring search
+- Status: active
+- Area: filter semantics / metadata assets
+- Evidence tier: Tier 1
+- Decision:
+  Filtering by selected LoRAs should match the normalized LoRA name exactly after stripping path, extension, and weight syntax. It should not use substring matching such as `%girl%`.
+- Why:
+  LoRA names are identity-like asset names. Substring matching makes common short names dangerous: `girl` can match `school_girl`, and `detail` can match unrelated `add_detail` variants. The `image_loras` junction table exists to make normalized asset-name matching explicit and indexable.
+- Do not "improve" this by:
+  Replacing exact `image_loras.lora_name = ?` filtering with broad `LIKE` search for selected LoRA filters. If fuzzy LoRA discovery is needed, add a separate search/discovery mode instead of changing the filter contract.
+- Allowed evolution:
+  Add aliases, explicit fuzzy search UI, or richer LoRA asset metadata, but keep selected-filter execution exact unless the UI clearly says otherwise.
+- Evidence:
+  Current `backend/database.py` normalizes LoRA names with `normalize_lora_name()` and filters against `image_loras` by exact lowercase normalized name.
+- Last verified:
+  2026-04-27 against current database filter implementation and regression tests.
+- Related files:
+  `backend/database.py`
+  `backend/tests/test_database.py`
+  `frontend/js/gallery.js`
+- Supersedes:
+  The previous substring `LIKE` implementation in `_apply_lora_filter()`.
+- Validation:
+  `backend/tests/test_database.py` covers exact LoRA filters for both stored LoRA arrays and inline `<lora:name:weight>` prompt tags.

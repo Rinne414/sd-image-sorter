@@ -29,6 +29,7 @@
         _setText: function (selector, key, fallback) {
             var el = document.querySelector(selector);
             if (!el) return;
+            if (el.dataset && el.dataset.i18nLocked === '1') return;
             el.textContent = this._t(key, null, fallback);
         },
 
@@ -65,7 +66,9 @@
             el.innerHTML = iconHtml + '<span class="ui-label">' + label + '</span>';
             if (titleKey) {
                 var text = this._t(titleKey);
-                el.title = text;
+                if (el.dataset.dynamicTitle !== 'true') {
+                    el.title = text;
+                }
                 el.setAttribute('aria-label', text);
             }
         },
@@ -161,6 +164,7 @@
                 'summary.checkpoints',
                 'summary.loras',
                 'summary.prompts',
+                'summary.search',
                 'summary.dimensions'
             ]);
             this._setSummaryStrongs('#manual-sort-filter-summary', [
@@ -170,6 +174,7 @@
                 'summary.checkpoints',
                 'summary.loras',
                 'summary.prompts',
+                'summary.search',
                 'summary.dimensions'
             ]);
             this._setTextAll('#filter-summary .summary-label', [
@@ -179,6 +184,7 @@
                 'summary.checkpoints',
                 'summary.loras',
                 'summary.prompt',
+                'summary.search',
                 'summary.artist'
             ]);
         },
@@ -198,6 +204,7 @@
             this._setText('#view-autosep .autosep-preview-hint', 'autosep.previewHint');
             this._setButton('#btn-preview-autosep', 'autosep.previewBtn', null, 'autosep.previewBtn');
             this._setButton('#btn-execute-autosep', 'autosep.moveBtn', '📁', 'autosep.moveBtn');
+            window.updateAutoSepActionUi?.();
         },
 
         _translateManual: function () {
@@ -306,7 +313,11 @@
             this._setText('#scan-modal-title', 'modal.scanFolder');
             this._setText('#scan-folder-path-label', 'modal.folderPath');
             this._setPlaceholder('#scan-folder-path', 'modal.folderPath');
-            this._setText('#scan-modal .checkbox-text', 'modal.includeSubfolders');
+            this._setText('#scan-recursive-label', 'modal.includeSubfolders');
+            this._setText('#scan-quick-import-label', 'scan.quickImportLabel');
+            this._setText('#scan-force-reparse-label', 'scan.forceReparseLabel');
+            this._setText('#scan-cleanup-missing-label', 'scan.cleanupMissingLabel');
+            this._setText('#scan-auto-tag-label', 'scan.autoTagLabel');
             var scanCancelBtn = document.querySelector('#btn-cancel-scan');
             if (!scanCancelBtn || scanCancelBtn.dataset.liveLabel !== '1') {
                 this._setButton('#btn-cancel-scan', 'modal.cancel');
@@ -449,7 +460,7 @@
             this._setPlaceholder('#modal-checkpoint-search', 'filter.searchCheckpoints');
             this._setPlaceholder('#modal-lora-search', 'filter.searchLoras');
 
-            this._setButton('#btn-select-all', 'selection.selectAll', '✓✓', 'selection.selectAll');
+            this._setButton('#btn-select-all', 'selection.selectVisible', '✓✓', 'selection.selectVisible');
             this._setButton('#btn-export-selected', 'selection.exportPrompts', '📤', 'selection.exportPrompts');
             this._setButton('#btn-export-tags-selected', 'selection.exportTags', '🏷️', 'selection.exportTags');
             this._setButton('#btn-batch-export-tags', 'selection.exportTagsToFiles', '📝', 'selection.exportTagsToFiles');
