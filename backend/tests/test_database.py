@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import database as db
 from image_fingerprint import compute_image_content_fingerprint
+from utils.pagination_cursor import decode_image_cursor
 
 
 class TestDatabaseInit:
@@ -1025,13 +1026,16 @@ class TestImageFiltering:
 
         assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
         assert first_page["has_more"] is True
-        assert first_page["next_cursor"] == str(expected_ids[2])
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+        assert first_cursor.image_id == expected_ids[2]
 
         second_page = db.get_images_paginated(
             prompt_terms=["hero"],
             sort_by="newest",
             limit=3,
-            cursor_id=int(first_page["next_cursor"]),
+            cursor_id=first_cursor.image_id,
+            cursor_sort_value=first_cursor.sort_value,
+            cursor_is_opaque=first_cursor.is_opaque,
             skip_count=True,
         )
         assert [img["id"] for img in second_page["images"]] == expected_ids[3:]
@@ -1054,7 +1058,8 @@ class TestImageFiltering:
         expected_ids = list(reversed(ids))
         first_page = db.get_images_paginated(sort_by="newest", limit=3, skip_count=True)
         assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
-        assert first_page["next_cursor"] == str(expected_ids[2])
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+        assert first_cursor.image_id == expected_ids[2]
 
         with db.get_db() as conn:
             conn.execute("DELETE FROM images WHERE id = ?", (expected_ids[2],))
@@ -1063,6 +1068,43 @@ class TestImageFiltering:
             sort_by="newest",
             limit=3,
             cursor_id=expected_ids[2],
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in second_page["images"]] == expected_ids[3:]
+        assert second_page["has_more"] is False
+
+    def test_get_images_paginated_opaque_cursor_survives_deleted_anchor_row(self, test_db):
+        """Opaque cursors should continue from the stored sort boundary even after the anchor row is deleted."""
+        ids = []
+        for index in range(6):
+            ids.append(
+                db.add_image(
+                    path=f"/test/opaque_cursor_missing_{index}.png",
+                    filename=f"opaque_cursor_missing_{index}.png",
+                    prompt=f"opaque cursor missing {index}",
+                    created_at=datetime(2024, 1, 1, 0, 0, index),
+                )
+            )
+
+        expected_ids = list(reversed(ids))
+        first_page = db.get_images_paginated(sort_by="newest", limit=3, skip_count=True)
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+
+        assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
+        assert first_cursor.image_id == expected_ids[2]
+        assert first_cursor.sort_value is not None
+        assert first_cursor.is_opaque is True
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (first_cursor.image_id,))
+
+        second_page = db.get_images_paginated(
+            sort_by="newest",
+            limit=3,
+            cursor_id=first_cursor.image_id,
+            cursor_sort_value=first_cursor.sort_value,
+            cursor_is_opaque=True,
             skip_count=True,
         )
 
@@ -1084,7 +1126,9 @@ class TestImageFiltering:
 
         first_page = db.get_images_paginated(sort_by="oldest", limit=2, skip_count=True)
         assert [img["id"] for img in first_page["images"]] == ids[:2]
-        assert first_page["next_cursor"] == str(ids[1])
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+        assert first_cursor.image_id == ids[1]
+        assert first_cursor.sort_value is None
 
         second_page = db.get_images_paginated(
             sort_by="oldest",
@@ -1095,7 +1139,9 @@ class TestImageFiltering:
 
         assert [img["id"] for img in second_page["images"]] == ids[2:4]
         assert second_page["has_more"] is True
-        assert second_page["next_cursor"] == str(ids[3])
+        second_cursor = decode_image_cursor(second_page["next_cursor"])
+        assert second_cursor.image_id == ids[3]
+        assert second_cursor.sort_value is None
 
     def test_get_images_paginated_post_filter_cursor_missing_row_still_finds_sparse_matches(self, test_db):
         """Post-filter pagination should keep finding sparse exact matches even if the cursor row was deleted."""
@@ -1127,7 +1173,8 @@ class TestImageFiltering:
         )
 
         assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
-        assert first_page["next_cursor"] == str(expected_ids[2])
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+        assert first_cursor.image_id == expected_ids[2]
 
         with db.get_db() as conn:
             conn.execute("DELETE FROM images WHERE id = ?", (expected_ids[2],))
@@ -1136,7 +1183,9 @@ class TestImageFiltering:
             prompt_terms=["hero"],
             sort_by="newest",
             limit=3,
-            cursor_id=expected_ids[2],
+            cursor_id=first_cursor.image_id,
+            cursor_sort_value=first_cursor.sort_value,
+            cursor_is_opaque=first_cursor.is_opaque,
             skip_count=True,
         )
 
@@ -1192,7 +1241,8 @@ class TestImageFiltering:
 
         first_page = db.get_images_paginated(sort_by="oldest", limit=2, skip_count=True)
         assert [img["id"] for img in first_page["images"]] == image_ids[:2]
-        cursor_id = int(first_page["next_cursor"])
+        first_cursor = decode_image_cursor(first_page["next_cursor"])
+        cursor_id = first_cursor.image_id
 
         with db.get_db() as conn:
             conn.execute("DELETE FROM images WHERE id = ?", (cursor_id,))

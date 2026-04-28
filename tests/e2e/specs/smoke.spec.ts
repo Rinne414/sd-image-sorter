@@ -2066,6 +2066,15 @@ test.describe('Smoke Tests', () => {
       filename: `bulk-preview-${i + 1}.png`,
       path: `L:/Antigravitiy code/sd-image-sorter/test-data/bulk-preview-${i + 1}.png`,
     }))
+    const requestedCursors: Array<string | null> = []
+    const encodeCursor = (imageId: number) => `opaque:${imageId}`
+    const decodeCursor = (cursor: string | null) => {
+      if (!cursor) return 0
+      const lastSeenId = Number(cursor.replace('opaque:', ''))
+      return Number.isFinite(lastSeenId)
+        ? previewImages.findIndex((image) => image.id === lastSeenId) + 1
+        : -1
+    }
 
     await page.route('**/api/image-thumbnail/**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: MOCK_IMAGE_SVG })
@@ -2077,8 +2086,10 @@ test.describe('Smoke Tests', () => {
     await page.route('**/api/images**', async (route) => {
       const url = new URL(route.request().url())
       const limit = Number(url.searchParams.get('limit') || '0') || 0
-      const cursor = Number(url.searchParams.get('cursor') || '0') || 0
-      const startIndex = cursor > 0 ? previewImages.findIndex((image) => image.id === cursor) + 1 : 0
+      const cursor = url.searchParams.get('cursor')
+      requestedCursors.push(cursor)
+      const startIndex = decodeCursor(cursor)
+      expect(startIndex).toBeGreaterThanOrEqual(0)
       const effectiveLimit = Math.max(1, limit || 50)
       const rows = previewImages.slice(startIndex, startIndex + effectiveLimit)
       const nextRow = previewImages[startIndex + effectiveLimit] || null
@@ -2088,7 +2099,7 @@ test.describe('Smoke Tests', () => {
           images: rows,
           total: previewImages.length,
           has_more: Boolean(nextRow),
-          next_cursor: nextRow ? String(rows.at(-1)?.id || '') : null,
+          next_cursor: nextRow ? encodeCursor(rows.at(-1)?.id || 0) : null,
         },
       })
     })
@@ -2112,6 +2123,11 @@ test.describe('Smoke Tests', () => {
 
     const overflowNodeCount = await page.locator('#autosep-overflow-list .autosep-preview-item').count()
     expect(overflowNodeCount).toBeLessThanOrEqual(200)
+
+    await page.locator('#autosep-overflow-load-more').click()
+    await expect
+      .poll(() => requestedCursors.filter((value): value is string => Boolean(value)))
+      .toContain('opaque:200')
   })
 
   test('sending selected images to censor should preserve the user selection order', async ({ page }) => {

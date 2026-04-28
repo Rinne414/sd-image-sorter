@@ -47,6 +47,7 @@ from utils.model_names import (
     checkpoint_identity_key,
     normalize_checkpoint_name as _normalize_checkpoint_name,
 )
+from utils.pagination_cursor import encode_image_cursor_from_image
 
 
 
@@ -1249,6 +1250,7 @@ _IMAGE_COLUMNS_WITH_PROMPT = _format_image_column_list(_IMAGE_COLUMNS_WITH_PROMP
 _IMAGE_COLUMNS_LIGHTWEIGHT = _format_image_column_list(_IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS, alias="i")
 _IMAGE_COLUMNS_BARE = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS)
 
+_LIBRARY_ORDER_SQL_UNQUALIFIED = "COALESCE(library_order_time, created_at)"
 _LIBRARY_ORDER_SQL = "COALESCE(i.library_order_time, i.created_at)"
 
 
@@ -2120,6 +2122,8 @@ def get_images_paginated(
     sort_by: str = "newest",
     limit: int = 100,
     cursor_id: Optional[int] = None,
+    cursor_sort_value: Optional[str] = None,
+    cursor_is_opaque: bool = False,
     min_width: Optional[int] = None,
     max_width: Optional[int] = None,
     min_height: Optional[int] = None,
@@ -2135,8 +2139,8 @@ def get_images_paginated(
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
 
-    Uses image ID as the cursor, which works with the primary key index for fast lookups.
-    The cursor represents the last image ID from the previous page.
+    Newer clients should use the opaque `next_cursor` token returned by the API.
+    Legacy callers may still pass the last image ID and rely on best-effort fallback.
 
     Args:
         generators: Filter by generator type (OR logic)
@@ -2148,6 +2152,8 @@ def get_images_paginated(
         sort_by: Sorting method
         limit: Number of images to return (default 100)
         cursor_id: Last image ID from previous page (None for first page)
+        cursor_sort_value: Stored sort boundary from an opaque cursor token
+        cursor_is_opaque: True when cursor_sort_value came from a server-issued opaque token
         min_width, max_width, min_height, max_height: Dimension filters
         prompt_terms: Multi-prompt filter (AND logic)
         aspect_ratio: Filter by aspect ratio
@@ -2157,7 +2163,7 @@ def get_images_paginated(
     Returns:
         Dictionary with:
         - images: List of image objects
-        - next_cursor: ID to use as cursor for next page (None if no more)
+        - next_cursor: Opaque token to use as cursor for next page (None if no more)
         - has_more: Boolean indicating if more pages exist
         - total: Total count matching filters (-1 if skip_count=True)
     """
@@ -2219,13 +2225,15 @@ def get_images_paginated(
         if cursor_id is not None and sort_by != "random":
             if not _supports_cursor_sort(sort_by):
                 raise ValueError(f"Cursor pagination does not support sort_by={sort_by}")
-            cursor_sort_row = cursor.execute(
-                "SELECT COALESCE(library_order_time, created_at) AS sort_value FROM images WHERE id = ?",
-                (cursor_id,),
-            ).fetchone()
-            cursor_sort_value = cursor_sort_row["sort_value"] if cursor_sort_row else None
+            effective_cursor_sort_value = cursor_sort_value if cursor_is_opaque else None
+            if not cursor_is_opaque:
+                cursor_sort_row = cursor.execute(
+                    f"SELECT {_LIBRARY_ORDER_SQL_UNQUALIFIED} AS sort_value FROM images WHERE id = ?",
+                    (cursor_id,),
+                ).fetchone()
+                effective_cursor_sort_value = cursor_sort_row["sort_value"] if cursor_sort_row else None
             if sort_by == "newest":
-                if cursor_sort_value is None:
+                if effective_cursor_sort_value is None:
                     conditions.append("i.id < ?")
                     params.append(cursor_id)
                 else:
@@ -2235,9 +2243,9 @@ def get_images_paginated(
                         "OR (COALESCE(i.library_order_time, i.created_at) = ? AND i.id < ?)"
                         ")"
                     )
-                    params.extend([cursor_sort_value, cursor_sort_value, cursor_id])
+                    params.extend([effective_cursor_sort_value, effective_cursor_sort_value, cursor_id])
             else:
-                if cursor_sort_value is None:
+                if effective_cursor_sort_value is None:
                     conditions.append("i.id > ?")
                     params.append(cursor_id)
                 else:
@@ -2247,7 +2255,7 @@ def get_images_paginated(
                         "OR (COALESCE(i.library_order_time, i.created_at) = ? AND i.id > ?)"
                         ")"
                     )
-                    params.extend([cursor_sort_value, cursor_sort_value, cursor_id])
+                    params.extend([effective_cursor_sort_value, effective_cursor_sort_value, cursor_id])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -2290,11 +2298,11 @@ def get_images_paginated(
                 min_height, max_height, aspect_ratio, include_unreadable
             )
 
-        # Determine next cursor (last item's ID)
+        # Determine next cursor from the last row returned in this page
         # For random sort, cursor is None since pagination doesn't work with random
         next_cursor = None
         if has_more and results and sort_by != "random":
-            next_cursor = str(results[-1]["id"])
+            next_cursor = encode_image_cursor_from_image(results[-1])
 
         return {
             "images": results,

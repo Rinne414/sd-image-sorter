@@ -771,3 +771,36 @@ Use this structure for future entries:
   Prior duplicated manifest/runtime protection literals across builder and updater.
 - Validation:
   Release-builder and updater unit tests in current workspace.
+
+### ADR-AI-20260428-25: `/api/images` cursor pagination is an opaque API contract, not an image-ID contract
+- Status: active
+- Area: API contract / pagination invariants
+- Evidence tier: Tier 1
+- Decision:
+  `GET /api/images` must expose `next_cursor` as an opaque token that clients pass back unchanged. Backend pagination may still accept legacy integer image IDs for backward compatibility, but frontend and external callers must not parse, synthesize, or rely on cursor internals.
+- Why:
+  Treating `cursor` as a bare image ID made pagination fragile when the anchor row disappeared between requests. The stable contract is the `(sort_value, id)` boundary encoded into the cursor token; that lets newest/oldest pagination continue even after deletes while keeping clients decoupled from storage details.
+- Do not "improve" this by:
+  Switching frontend code or docs back to integer cursor assumptions, regenerating cursor strings on the client, or downgrading service-layer parsing to `int(cursor)`.
+- Allowed evolution:
+  Change cursor token schema/version later, provided the token remains opaque to clients and legacy integer acceptance is retired only with an explicit compatibility decision.
+- Evidence:
+  Shared cursor helpers now live in `backend/utils/pagination_cursor.py`; image service decodes API cursors before calling the DB layer; DB pagination uses stored sort boundaries when available; router/API docs describe the token as opaque; regressions cover malformed tokens, deleted anchor rows, and frontend passthrough behavior.
+- Last verified:
+  2026-04-28 against current workspace code plus targeted backend and Playwright regression coverage.
+- Related files:
+  `backend/utils/pagination_cursor.py`
+  `backend/services/image_service.py`
+  `backend/database.py`
+  `backend/routers/images.py`
+  `backend/db_repos/repositories/base.py`
+  `backend/db_repos/repositories/image_repo.py`
+  `docs/API.md`
+  `backend/tests/test_database.py`
+  `backend/tests/test_api_errors.py`
+  `backend/tests/test_routers/test_images.py`
+  `tests/e2e/specs/smoke.spec.ts`
+- Supersedes:
+  The older implicit contract where `cursor` / `next_cursor` were treated as raw image IDs.
+- Validation:
+  Targeted pagination regression tests in `backend/tests/test_database.py`, `backend/tests/test_api_errors.py`, `backend/tests/test_routers/test_images.py`, and `tests/e2e/specs/smoke.spec.ts`.

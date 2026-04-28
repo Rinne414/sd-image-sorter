@@ -38,6 +38,10 @@ from utils.path_validation import (
     validate_file_path,
     validate_image_output_path,
 )
+from utils.pagination_cursor import (
+    decode_image_cursor,
+    encode_image_cursor_from_image,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 
@@ -420,7 +424,7 @@ class ImageService:
             artist: Artist name filter
             sort_by: Sorting method
             limit: Number of images to return
-            cursor: Image ID cursor for pagination
+            cursor: Opaque cursor token from a previous page (legacy integer IDs still accepted)
             offset: Offset for fallback pagination when cursor sorting is unavailable
             min_width: Minimum width filter
             max_width: Maximum width filter
@@ -453,22 +457,18 @@ class ImageService:
         search = _sanitize_filter_value(search) if search else None
         artist = _sanitize_filter_value(artist) if artist else None
 
-        # Parse cursor
-        cursor_id = None
+        cursor_payload = None
         if cursor:
             try:
-                cursor_id = int(cursor)
-            except ValueError:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid cursor format. Must be an integer image ID."
-                )
+                cursor_payload = decode_image_cursor(cursor)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         supports_cursor_pagination = sort_by in {"newest", "oldest"} and offset is None
 
         if supports_cursor_pagination:
             collected: List[Dict[str, Any]] = []
-            current_cursor = cursor_id
+            current_cursor = cursor_payload
             total = -1
             total_missing = 0
             fetch_limit = min(max(limit * 2, 32), LIMIT_MAX)
@@ -485,7 +485,9 @@ class ImageService:
                     artist=artist,
                     sort_by=sort_by,
                     limit=fetch_limit,
-                    cursor_id=current_cursor,
+                    cursor_id=current_cursor.image_id if current_cursor else None,
+                    cursor_sort_value=current_cursor.sort_value if current_cursor else None,
+                    cursor_is_opaque=current_cursor.is_opaque if current_cursor else False,
                     min_width=min_width,
                     max_width=max_width,
                     min_height=min_height,
@@ -505,10 +507,7 @@ class ImageService:
                 if len(collected) >= limit + 1 or not result.get("has_more") or not result.get("images"):
                     break
 
-                next_cursor_value = result.get("next_cursor")
-                if next_cursor_value is None:
-                    break
-                current_cursor = int(next_cursor_value)
+                current_cursor = decode_image_cursor(result["next_cursor"])
 
             has_more = len(collected) > limit
             if has_more:
@@ -519,7 +518,7 @@ class ImageService:
 
             return {
                 "images": collected,
-                "next_cursor": str(collected[-1]["id"]) if has_more and collected else None,
+                "next_cursor": encode_image_cursor_from_image(collected[-1]) if has_more and collected else None,
                 "next_offset": None,
                 "has_more": has_more,
                 "total": total,

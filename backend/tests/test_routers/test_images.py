@@ -20,6 +20,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from utils.pagination_cursor import decode_image_cursor
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -260,6 +261,47 @@ class TestGetImages:
         image = next(item for item in data["images"] if item["id"] == image_id)
         assert image["filename"] == "listing-\ufffd.png"
         assert image["generator"] == "comfy\ufffdui"
+
+    def test_get_images_accepts_opaque_cursor_and_survives_deleted_anchor_row(self, test_client, tmp_path):
+        """Router pagination should accept opaque next_cursor tokens and continue after deleted anchor rows."""
+        import database as db
+
+        image_ids = []
+        for index in range(4):
+            image_path = tmp_path / f"opaque-router-{index}.png"
+            Image.new("RGB", (32, 32), color="white").save(image_path)
+            image_ids.append(
+                db.add_image(
+                    path=str(image_path),
+                    filename=image_path.name,
+                    metadata_json="{}",
+                    created_at=datetime(2024, 1, 1, 0, 0, index),
+                )
+            )
+
+        expected_ids = list(reversed(image_ids))
+        first_response = test_client.get("/api/images?sort_by=newest&limit=2")
+
+        assert first_response.status_code == 200
+        first_payload = first_response.json()
+        assert [item["id"] for item in first_payload["images"]] == expected_ids[:2]
+        assert first_payload["next_cursor"] != str(expected_ids[1])
+
+        cursor = decode_image_cursor(first_payload["next_cursor"])
+        assert cursor.image_id == expected_ids[1]
+        assert cursor.is_opaque is True
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (cursor.image_id,))
+
+        second_response = test_client.get(
+            f"/api/images?sort_by=newest&limit=2&cursor={first_payload['next_cursor']}"
+        )
+
+        assert second_response.status_code == 200
+        second_payload = second_response.json()
+        assert [item["id"] for item in second_payload["images"]] == expected_ids[2:]
+        assert second_payload["has_more"] is False
 
 
 class TestSelectionIds:

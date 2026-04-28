@@ -303,6 +303,8 @@ class ImageRepositoryBase(Repository[Dict[str, Any]], ABC):
         sort_by: str = "newest",
         limit: int = 100,
         cursor_id: Optional[int] = None,
+        cursor_sort_value: Optional[str] = None,
+        cursor_is_opaque: bool = False,
     ) -> Dict[str, Any]:
         """Get images with cursor-based pagination.
 
@@ -311,6 +313,8 @@ class ImageRepositoryBase(Repository[Dict[str, Any]], ABC):
             sort_by: Sorting method
             limit: Number of images per page
             cursor_id: Last image ID from previous page
+            cursor_sort_value: Stored sort boundary from the decoded cursor token
+            cursor_is_opaque: Whether the caller supplied an opaque API cursor token
 
         Returns:
             Dictionary with images, next_cursor, has_more, total

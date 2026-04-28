@@ -135,7 +135,8 @@ All filter parameters support comma-separated values. Tag filters use AND logic
 - `GET /api/images?min_width=1920&aspect_ratio=landscape` - High-res landscape images
 
 **Pagination:**
-Use the `cursor` parameter with the `next_cursor` value from previous response to get the next page.
+Use the `cursor` parameter with the `next_cursor` value from the previous response to get the next page.
+Treat `next_cursor` as an opaque token and pass it back unchanged.
     """,
     responses={
         200: {
@@ -161,7 +162,7 @@ Use the `cursor` parameter with the `next_cursor` value from previous response t
                                 "created_at": "2024-01-15T10:30:00Z"
                             }
                         ],
-                        "next_cursor": "1",
+                        "next_cursor": "eyJpZCI6MSwic29ydF92YWx1ZSI6IjIwMjQtMDEtMTVUMTA6MzA6MDBaIiwidiI6MX0",
                         "has_more": True,
                         "total": 500
                     }
@@ -230,8 +231,8 @@ async def get_images(
     ),
     cursor: Optional[str] = Query(
         default=None,
-        description="Cursor for pagination (image ID from previous page's next_cursor)",
-        examples=["42"],
+        description="Opaque cursor from the previous page's next_cursor value. Pass it back unchanged.",
+        examples=["eyJpZCI6NDIsInNvcnRfdmFsdWUiOiIyMDI0LTAxLTE1VDEwOjMwOjAwWiIsInYiOjF9"],
     ),
     offset: Optional[int] = Query(
         default=None,

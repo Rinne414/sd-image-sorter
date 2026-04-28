@@ -205,6 +205,16 @@ class TestEdgeCaseErrors:
         response = test_client.get("/api/images?cursor=-1")
         assert response.status_code in [200, 400]
 
+    def test_invalid_opaque_cursor_returns_validation_error(self, test_client, test_db_with_images):
+        """Malformed opaque cursor tokens should fail fast instead of being treated as image IDs."""
+        response = test_client.get("/api/images?cursor=not-a-real-cursor-token")
+
+        assert response.status_code == 400
+        data = response.json()
+        _assert_error_contract(data)
+        assert data["type"] == "HTTPException"
+        assert "Invalid cursor token" in data["error"]
+
 
 class TestScanErrors:
     """Tests for scan endpoint errors."""

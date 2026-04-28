@@ -183,6 +183,8 @@ class ImageRepository(ImageRepositoryBase):
         sort_by: str = "newest",
         limit: int = 100,
         cursor_id: Optional[int] = None,
+        cursor_sort_value: Optional[str] = None,
+        cursor_is_opaque: bool = False,
     ) -> Dict[str, Any]:
         """Get images with cursor-based pagination.
 
@@ -191,6 +193,8 @@ class ImageRepository(ImageRepositoryBase):
             sort_by: Sorting method
             limit: Number of images per page
             cursor_id: Last image ID from previous page
+            cursor_sort_value: Stored sort boundary from the decoded cursor token
+            cursor_is_opaque: Whether the caller supplied an opaque API cursor token
 
         Returns:
             Dictionary with images, next_cursor, has_more, total
@@ -208,6 +212,8 @@ class ImageRepository(ImageRepositoryBase):
             sort_by=sort_by,
             limit=limit,
             cursor_id=cursor_id,
+            cursor_sort_value=cursor_sort_value,
+            cursor_is_opaque=cursor_is_opaque,
             min_width=filters.min_width,
             max_width=filters.max_width,
             min_height=filters.min_height,
