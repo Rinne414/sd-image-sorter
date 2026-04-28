@@ -148,3 +148,59 @@ def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
 
     assert "renderManualSortResumeBanner(null, { visible: true })" not in source
     assert "previousResumeSnapshot" in source
+
+def test_gallery_load_finally_clears_only_active_sequence():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "let _activeImageLoadSequence = 0;" in source
+    assert "const isActiveLoad = _activeImageLoadSequence === loadSequence;" in source
+    assert "RequestManager.complete(IMAGE_LOAD_KEY, controller);" in source
+
+
+def test_autosep_critical_action_settings_are_visible_on_main_panel():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
+
+    assert "autosep-action-settings" in html
+    assert 'name="autosep-operation-mode-main"' in html
+    assert 'data-autosep-setting="confirmBeforeMove"' in html
+    assert 'data-autosep-setting="rememberDestination"' in html
+    assert "setAutoSepOperationMode(input.value, { persist: true })" in source
+
+
+def test_metadata_resolving_chip_is_driven_by_stats_contract():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "metadata-status-chip" in html
+    assert "stats.metadata_pending" in source
+    assert "stats.scan_status" in source
+    assert "stats.scan_library_ready" in source
+    assert "const countsResolving = metadataPending > 0 || (scanRunning && !scanLibraryReady);" in source
+    assert "gallery.metadataResolving" in source
+    assert "gallery.scanResolving" in source
+    assert "countEl.textContent = countsResolving && count === 0 ? '…' : String(count);" in source
+
+
+def test_gallery_delete_key_removes_from_gallery_not_disk():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    match = re.search(r"else if \(e\.key === 'Delete'\) \{(?P<body>.*?)\n        \}", source, re.DOTALL)
+    assert match is not None
+    body = match.group("body")
+    assert "removeSelectedGalleryImages();" in body
+    assert "deleteSelectedGalleryImages();" not in body
+
+
+def test_manual_sort_start_routes_unfinished_sessions_to_resume():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
+
+    assert "confirmResumeSavedSessionFromStart(savedSession)" in source
+    assert "resumeSavedSession(savedSession)" in source
+    assert "discard the saved session first" in source
+    assert "replaceExisting = false" in source

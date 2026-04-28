@@ -2163,6 +2163,16 @@ test.describe('Smoke Tests', () => {
     expect(deletePayloads).toHaveLength(0)
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
+    await page.keyboard.press('Delete')
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-message')).toContainText('Files stay on disk')
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => removePayloads.length).toBe(2)
+    expect(removePayloads[1]).toMatchObject({ image_ids: [301] })
+    expect(deletePayloads).toHaveLength(0)
+
+    await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
     await page.locator('#btn-delete-selected-files').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await expect(page.locator('#confirm-message')).toContainText('permanently deletes')
@@ -2173,6 +2183,86 @@ test.describe('Smoke Tests', () => {
       image_ids: [301],
       confirm_delete_files: true,
     })
+  })
+
+  test('gallery should recover from stale large-library loads when switching tabs', async ({ page }) => {
+    const largeImages = Array.from({ length: 5000 }, (_, index) =>
+      buildMockGalleryImage(index + 1, {
+        filename: `large-${index + 1}.png`,
+        generator: index % 2 === 0 ? 'webui' : 'forge',
+      })
+    )
+
+    await Promise.all(largeImages.slice(0, 24).map((image) => mockImageAsset(page, image.id)))
+
+    let imageRequests = 0
+    let releaseFirstRequest: (() => void) | null = null
+    let firstRequestStarted: (() => void) | null = null
+    const firstRequestSeen = new Promise<void>((resolve) => {
+      firstRequestStarted = resolve
+    })
+
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      imageRequests += 1
+      const payload = {
+        images: largeImages.slice(0, 24),
+        total: largeImages.length,
+        has_more: true,
+        next_cursor: 'cursor-24',
+      }
+
+      if (imageRequests === 1) {
+        firstRequestStarted?.()
+        await new Promise<void>((resolve) => {
+          releaseFirstRequest = resolve
+        })
+        await route.fulfill({ json: payload }).catch(() => undefined)
+        return
+      }
+
+      await route.fulfill({ json: payload })
+    })
+
+    await page.route('**/api/stats', async (route) => {
+      await route.fulfill({
+        json: {
+          total_images: largeImages.length,
+          generators: [
+            { generator: 'webui', count: 0 },
+            { generator: 'forge', count: 0 },
+          ],
+          top_tags: [],
+          checkpoints: [],
+          loras: [],
+          metadata_pending: 0,
+          metadata_status: { complete: 0, pending: 0 },
+          scan_status: 'running',
+          scan_step: 'indexing',
+          scan_library_ready: false,
+        },
+      })
+    })
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForNavigationChrome(page)
+    await firstRequestSeen
+
+    await openView(page, 'reader')
+    await openView(page, 'gallery')
+
+    await expect.poll(() => imageRequests, { timeout: 5000 }).toBeGreaterThanOrEqual(2)
+    releaseFirstRequest?.()
+
+    await expect.poll(() => page.evaluate(() => window.App.AppState.isLoading), { timeout: 5000 }).toBe(false)
+    await expect(page.locator('#gallery-grid .gallery-item[data-id="1"]')).toBeVisible()
+    await expect(page.locator('#metadata-status-chip')).toContainText('Scanning library')
+    await expect(page.locator('#count-webui')).toHaveText('…')
   })
 
   test('gallery selected move and copy actions should call move API with explicit operation', async ({ page }) => {
@@ -2290,12 +2380,19 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-export-selected').click()
 
     await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-format')).toHaveValue('prompt')
+    await expect(page.locator('#btn-download-export')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue('prompt one\n\nprompt two\n\nprompt three')
     await expect.poll(() => selectionDataRequests).toBe(1)
     expect(detailRequests).toHaveLength(0)
 
-    await page.locator('#btn-export-tags-alt').click()
+    await page.locator('#export-format').selectOption('tags')
     await expect(page.locator('#export-text')).toHaveValue('alpha, beta, gamma')
+    await expect.poll(() => selectionDataRequests).toBe(1)
+    expect(detailRequests).toHaveLength(0)
+
+    await page.locator('#export-format').selectOption('jsonl')
+    await expect(page.locator('#export-text')).toHaveValue(/"prompt":"prompt one"/)
     await expect.poll(() => selectionDataRequests).toBe(1)
     expect(detailRequests).toHaveLength(0)
   })
@@ -2335,9 +2432,71 @@ test.describe('Smoke Tests', () => {
       await window.App.showExportModal()
     })
     await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#btn-download-export')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2000 of 2501 selected images/)
     await expect.poll(() => requestedPayloadSizes.length).toBe(1)
     expect(requestedPayloadSizes[0]).toBe(2000)
+
+    await page.locator('#export-format').selectOption('csv')
+    await expect(page.locator('#export-text')).toHaveValue(/id,filename,generator,prompt/)
+    await expect.poll(() => requestedPayloadSizes.length).toBe(1)
+  })
+
+  test('batch sidecar export should send content mode and overwrite policy', async ({ page }) => {
+    const selectedImages = [
+      { id: 71, filename: 'sidecar-1.png', path: 'L:/sidecar-1.png', prompt: 'prompt one', tags: ['alpha'] },
+      { id: 72, filename: 'sidecar-2.png', path: 'L:/sidecar-2.png', prompt: 'prompt two', tags: ['beta'] },
+    ]
+    let exportPayload: any = null
+
+    await Promise.all(selectedImages.map((image) => mockImageAsset(page, image.id)))
+
+    await page.route('**/api/images**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: selectedImages,
+          total: selectedImages.length,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/tags/export-batch', async (route) => {
+      exportPayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          exported: 2,
+          total: 2,
+          errors: null,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="71"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="72"]').click()
+    await page.locator('#btn-batch-export-tags').click()
+
+    await expect(page.locator('#batch-export-modal.visible')).toBeVisible()
+    await expect(page.locator('#batch-export-content-mode')).toBeVisible()
+    await expect(page.locator('#batch-export-overwrite')).toBeVisible()
+
+    await page.locator('#batch-export-folder').fill('C:/exports/sidecars')
+    await page.locator('#batch-export-content-mode').selectOption('a1111')
+    await page.locator('#batch-export-overwrite').selectOption('skip')
+    await page.locator('#btn-start-batch-export').click()
+
+    await expect.poll(() => exportPayload).toMatchObject({
+      image_ids: [71, 72],
+      output_folder: 'C:/exports/sidecars',
+      content_mode: 'a1111',
+      overwrite_policy: 'skip',
+    })
   })
 
   test('should preview auto-separate matches for an active gallery filter', async ({ page }) => {
@@ -2436,6 +2595,11 @@ test.describe('Smoke Tests', () => {
 
     await openSortingSubView(page, 'autosep')
 
+    const actionPanel = page.locator('#autosep-action-mode-panel')
+    await expect(actionPanel).toBeVisible()
+    await expect(actionPanel.locator('input[data-autosep-operation-mode][value="move"]')).toBeChecked()
+    await expect(page.locator('#btn-execute-autosep')).toContainText('Move Images')
+
     await page.locator('#btn-preview-autosep').click()
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('2')
 
@@ -2448,6 +2612,61 @@ test.describe('Smoke Tests', () => {
     await expect(warningToast).toContainText('Moved 1 images')
     await expect(warningToast).toContainText('1 failed')
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('0')
+  })
+
+  test('auto-separate visible copy mode should send copy operation', async ({ page }) => {
+    await mockImageAsset(page, 1)
+    await seedAutoSepTagFilter(page, ['copy_match'])
+
+    let batchMovePayload: any = null
+
+    await page.route('**/api/images?**', async (route) => {
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 1, filename: 'copy-match.png', path: 'L:/Antigravitiy code/sd-image-sorter/test-data/copy-match.png' },
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/batch-move', async (route) => {
+      batchMovePayload = route.request().postDataJSON()
+      await route.fulfill({ json: { status: 'started', total: 1, count: 1 } })
+    })
+
+    await page.route('**/api/batch-move/progress', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'done',
+          current: 1,
+          total: 1,
+          moved: 1,
+          errors: 0,
+          operation: 'copy',
+          message: 'Completed! Copied 1 images.',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openSortingSubView(page, 'autosep')
+    await page.locator('#autosep-action-mode-panel input[data-autosep-operation-mode][value="copy"]').check({ force: true })
+    await expect(page.locator('#btn-execute-autosep')).toContainText('Copy Images')
+
+    await page.locator('#btn-preview-autosep').click()
+    await expect(page.locator('#autosep-preview .stat-number')).toHaveText('1')
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
+    await page.locator('#btn-execute-autosep').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => batchMovePayload?.operation).toBe('copy')
   })
 
   test('auto-separate should pass normalized artist filters through preview and execution', async ({ page }) => {
@@ -3292,11 +3511,12 @@ test.describe('Smoke Tests', () => {
     await expect(banner).toContainText('Setup preferences here may differ from the active saved session.')
   })
 
-  test('manual sort start should not overwrite an unfinished session unless explicitly confirmed', async ({ page }) => {
+  test('manual sort start should resume unfinished session instead of starting over', async ({ page }) => {
     await seedManualSortFilterState(page)
     await mockImageAsset(page, 701)
 
     let startRequests = 0
+    let setFolderRequests = 0
 
     await page.route('**/api/sort/current', async (route) => {
       await route.fulfill({
@@ -3319,20 +3539,13 @@ test.describe('Smoke Tests', () => {
     })
 
     await page.route('**/api/sort/set-folders', async (route) => {
+      setFolderRequests += 1
       await route.fulfill({ json: { status: 'ok' } })
     })
 
     await page.route('**/api/sort/start**', async (route) => {
       startRequests += 1
-      const url = new URL(route.request().url())
-      expect(url.searchParams.get('replace_existing')).toBe('true')
-      await route.fulfill({
-        json: {
-          status: 'started',
-          total_images: 3,
-          operation_mode: 'move',
-        },
-      })
+      await route.fulfill({ status: 500, json: { detail: 'Start should not be called while resume is available' } })
     })
 
     await page.goto('/')
@@ -3344,18 +3557,21 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-start-sorting').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await expect(page.locator('#confirm-title')).toContainText('Start new sorting session?')
+    await expect(page.locator('#confirm-title')).toContainText('Resume saved Manual Sort session?')
+    await expect(page.locator('#confirm-message')).toContainText('discard the saved session first')
     await page.locator('#btn-confirm-cancel').click()
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
     expect(startRequests).toBe(0)
+    expect(setFolderRequests).toBe(0)
 
     await page.locator('#btn-start-sorting').click()
-    await expect(page.locator('#confirm-title')).toContainText('Start new sorting session?')
-    await page.locator('#btn-confirm-ok').click()
-    await expect(page.locator('#confirm-title')).toContainText('Start Sorting')
+    await expect(page.locator('#confirm-title')).toContainText('Resume saved Manual Sort session?')
     await page.locator('#btn-confirm-ok').click()
 
-    await expect.poll(() => startRequests).toBe(1)
+    await expect(page.locator('#manual-sort-interface')).toBeVisible()
+    await expect(page.locator('#sort-progress-text')).toHaveText('1 / 3')
+    await expect.poll(() => startRequests).toBe(0)
+    expect(setFolderRequests).toBe(0)
   })
 
 

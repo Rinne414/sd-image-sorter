@@ -256,6 +256,7 @@ Rules:
 - `limit` is capped at `1..10000`.
 - Token mode is an immediate stateless filter contract; it is not a durable snapshot.
 - Response includes `images`, `missing_ids`, `count`, `total`, `offset`, `limit`, `next_offset`, `has_more`, `source`, and `exact_total`.
+- Each image row includes SD/pro export fields where available: `prompt`, `negative_prompt`, `ai_caption`, `generation_params`, `tags`, `checkpoint`, dimensions, and score metadata.
 
 #### POST /api/images/delete-selected
 Delete selected image files with per-item partial-failure reporting. This is destructive and requires `confirm_delete_files: true`.
@@ -345,9 +346,11 @@ Export tags to `.txt` sidecar files.
 |-----------|------|---------|-------------|
 | `image_ids` | int[] | required | Images to export (min 1) |
 | `output_folder` | string | required | Output directory |
-| `prefix` | string | "" | Prefix for each tag |
+| `prefix` | string | "" | Prefix/class token prepended to tag/caption sidecar lines |
+| `content_mode` | string | `tags` | `tags`, `prompt`, `negative`, `prompt_negative`, `a1111`, `caption_tags`, `caption_merged`, or `json` |
+| `overwrite_policy` | string | `unique` | `unique` creates non-colliding filenames, `skip` leaves existing sidecars untouched, `overwrite` replaces sidecars |
 
-Response includes `status` (`ok`, `partial`, or `error`), `exported`, numeric `errors`/`error_count`, `error_messages`, and `total`.
+Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
 
 #### POST /api/tags/fix-ratings
 Clean up duplicate rating tags in existing database.
@@ -408,6 +411,23 @@ Get analytics.
 
 #### GET /api/stats
 Get database stats.
+
+Response includes generator facets and metadata-resolution state:
+
+```json
+{
+  "total_images": 5000,
+  "generators": [{"generator": "unknown", "count": 120}],
+  "metadata_status": {"pending": 120, "complete": 4880},
+  "metadata_pending": 120,
+  "metadata_resolving": true,
+  "scan_status": "running",
+  "scan_step": "metadata",
+  "scan_library_ready": true
+}
+```
+
+`metadata_pending > 0`, or `scan_status` running/cancelling while `scan_library_ready` is false, means generator bucket counts are provisional. Clients must label WebUI/Forge/etc. counts as resolving instead of presenting zeroes as final.
 
 #### GET /api/system-info
 Get local hardware summary and tagger runtime recommendation.

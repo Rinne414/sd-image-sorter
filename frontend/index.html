@@ -339,7 +339,7 @@
                             <button id="btn-copy-selected" class="btn btn-secondary full-width"><span>📄</span> <span data-i18n="selection.copySelected">Copy Selected...</span></button>
                             <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Export Prompts</span></button>
                             <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Export Tags</span></button>
-                            <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Export Tags to Files</span></button>
+                            <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Export Sidecars</span></button>
                             <button id="btn-send-to-censor" class="btn btn-primary full-width"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
                             <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
                             <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Delete Files from Disk...</span></button>
@@ -376,6 +376,7 @@
                                 <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
                             </button>
                             <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
+                            <span class="header-status-chip is-info metadata-status-chip" id="metadata-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
                                 <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
@@ -898,6 +899,36 @@
                             <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
                         </div>
 
+                        <div class="autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
+                            <div class="autosep-action-settings-header">
+                                <h4 id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</h4>
+                                <span class="autosep-action-settings-badge" data-i18n="autosep.actionSettingsBadge">Visible before you run</span>
+                            </div>
+                            <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
+                                <label class="segmented-option">
+                                    <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode checked>
+                                    <span data-i18n="autosep.operationModeMove">Move originals</span>
+                                </label>
+                                <label class="segmented-option">
+                                    <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode>
+                                    <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
+                                </label>
+                            </div>
+                            <div class="autosep-inline-options">
+                                <label class="checkbox-label autosep-inline-option">
+                                    <input type="checkbox" id="autosep-confirm-move-main" data-autosep-setting="confirmBeforeMove" checked>
+                                    <span class="checkbox-custom" aria-hidden="true"></span>
+                                    <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
+                                </label>
+                                <label class="checkbox-label autosep-inline-option">
+                                    <input type="checkbox" id="autosep-remember-destination-main" data-autosep-setting="rememberDestination" checked>
+                                    <span class="checkbox-custom" aria-hidden="true"></span>
+                                    <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
+                                </label>
+                            </div>
+                            <small class="helper-text" data-i18n="autosep.actionModeHelp">Move changes the library location. Copy keeps originals untouched.</small>
+                        </div>
+
                         <button class="btn btn-primary btn-large" id="btn-execute-autosep">
                             <span>📁</span>
                             <span data-i18n="autosep.moveBtn">Move Images</span>
@@ -925,7 +956,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-remember-destination" checked>
+                            <input type="checkbox" id="autosep-remember-destination" data-autosep-setting="rememberDestination" checked>
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
                         </label>
@@ -934,7 +965,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-auto-preview">
+                            <input type="checkbox" id="autosep-auto-preview" data-autosep-setting="autoPreview">
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.autoPreview">Auto-preview after filter changes</span>
                         </label>
@@ -943,7 +974,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-confirm-move" checked>
+                            <input type="checkbox" id="autosep-confirm-move" data-autosep-setting="confirmBeforeMove" checked>
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
                         </label>
@@ -954,11 +985,11 @@
                         <label data-i18n="autosep.operationModeTitle">File Action Mode</label>
                         <div class="segmented-control" role="radiogroup" aria-label="Auto-Separate action mode">
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode" value="move" checked>
+                                <input type="radio" name="autosep-operation-mode-settings" value="move" data-autosep-operation-mode checked>
                                 <span data-i18n="autosep.operationModeMove">Move originals</span>
                             </label>
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode" value="copy">
+                                <input type="radio" name="autosep-operation-mode-settings" value="copy" data-autosep-operation-mode>
                                 <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
                             </label>
                         </div>
@@ -2691,11 +2722,27 @@
                 <button class="modal-close" id="btn-close-export">✕</button>
                 <h3 id="export-title" data-i18n="modal.exportPrompts">📤 Export Prompts</h3>
                 <p class="modal-description" id="export-count">0 images selected</p>
+                <div class="form-group export-format-group">
+                    <label for="export-format" data-i18n="export.formatLabel">Export Format</label>
+                    <select id="export-format" class="input-field">
+                        <option value="prompt" data-i18n="export.formatPrompt">Prompt only</option>
+                        <option value="negative" data-i18n="export.formatNegative">Negative prompt only</option>
+                        <option value="prompt_negative" data-i18n="export.formatPromptNegative">Prompt + negative</option>
+                        <option value="a1111" data-i18n="export.formatA1111">A1111 / Forge parameter blocks</option>
+                        <option value="tags" data-i18n="export.formatTags">Unique tags</option>
+                        <option value="caption_tags" data-i18n="export.formatCaptionTags">Caption + tags</option>
+                        <option value="caption_merged" data-i18n="export.formatCaptionMerged">Caption + prompt + tags</option>
+                        <option value="jsonl" data-i18n="export.formatJsonl">JSONL dataset</option>
+                        <option value="csv" data-i18n="export.formatCsv">CSV dataset</option>
+                    </select>
+                    <small class="helper-text" data-i18n="export.formatHelper">Use parameter blocks for regeneration, caption formats for training datasets, and JSONL/CSV for downstream tools.</small>
+                </div>
                 <div class="export-container">
                     <textarea id="export-text" class="input-field" rows="15" readonly></textarea>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-secondary" id="btn-export-tags-alt" data-i18n="modal.exportTagsAlt">Export Tags Instead</button>
+                    <button class="btn btn-secondary" id="btn-download-export" data-i18n="export.downloadFile">Download File</button>
                     <button class="btn btn-primary" id="btn-copy-export" data-i18n="modal.copyToClipboard">Copy to Clipboard</button>
                 </div>
             </div>
@@ -2735,7 +2782,7 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-batch-export">✕</button>
-                <h3 data-i18n="batchExport.title">📝 Export Tags to Files</h3>
+                <h3 data-i18n="batchExport.title">📝 Export Sidecars</h3>
                 <p class="modal-description" id="batch-export-count">0 images selected</p>
 
                 <div class="form-group">
@@ -2745,10 +2792,34 @@
                 </div>
 
                 <div class="form-group">
-                    <label data-i18n="batchExport.tagPrefix">Tag Prefix (optional)</label>
+                    <label for="batch-export-content-mode" data-i18n="batchExport.contentMode">Sidecar Content</label>
+                    <select id="batch-export-content-mode" class="input-field">
+                        <option value="tags" data-i18n="batchExport.modeTags">Tags only</option>
+                        <option value="prompt" data-i18n="batchExport.modePrompt">Prompt only</option>
+                        <option value="negative" data-i18n="batchExport.modeNegative">Negative prompt only</option>
+                        <option value="prompt_negative" data-i18n="batchExport.modePromptNegative">Prompt + negative</option>
+                        <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge parameter block</option>
+                        <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + tags</option>
+                        <option value="caption_merged" data-i18n="batchExport.modeCaptionMerged">Caption + prompt + tags</option>
+                        <option value="json" data-i18n="batchExport.modeJson">JSON per image</option>
+                    </select>
+                    <small class="helper-text" data-i18n="batchExport.contentModeHelper">Choose what each sidecar contains. Training captions and regeneration prompt blocks are first-class outputs.</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="batch-export-overwrite" data-i18n="batchExport.overwritePolicy">Existing Sidecars</label>
+                    <select id="batch-export-overwrite" class="input-field">
+                        <option value="unique" data-i18n="batchExport.overwriteUnique">Keep both by creating unique names</option>
+                        <option value="skip" data-i18n="batchExport.overwriteSkip">Skip existing files</option>
+                        <option value="overwrite" data-i18n="batchExport.overwriteReplace">Overwrite existing files</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label data-i18n="batchExport.tagPrefix">Prefix / Class Token (optional)</label>
                     <input type="text" id="batch-export-prefix" class="input-field"
-                        placeholder="e.g., masterpiece, best quality, ">
-                    <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Text to add at the beginning of each tag file</small>
+                        placeholder="e.g., masterpiece, best quality, or sks person, ">
+                    <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Prepended to tag/caption sidecars. Leave blank for exact prompt/metadata export.</small>
                 </div>
 
                 <div class="form-group">

@@ -617,11 +617,13 @@ class TagImportRequest(BaseModel):
 
 
 class BatchTagExportRequest(BaseModel):
-    """Request model for batch tag export."""
+    """Request model for batch sidecar export."""
     image_ids: List[int] = Field(..., min_length=1, max_length=BATCH_EXPORT_LIMIT)
     output_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     blacklist: Optional[List[str]] = Field(default=[], max_length=500)
     prefix: Optional[str] = Field(default="", max_length=256)
+    content_mode: str = Field(default="tags", max_length=32)
+    overwrite_policy: str = Field(default="unique", max_length=16)
 
 
 class TaggingService:
@@ -1403,13 +1405,23 @@ class TaggingService:
         result = export_tags_batch_request(request)
         error_count = int(result.get("error_count", 0) or 0)
         exported = int(result.get("exported", 0) or 0)
+        skipped = int(result.get("skipped", 0) or 0)
+        if error_count > 0:
+            status = "partial" if exported > 0 or skipped > 0 else "error"
+        elif skipped > 0:
+            status = "partial"
+        else:
+            status = "ok"
         return {
-            "status": "ok" if error_count == 0 else ("partial" if exported > 0 else "error"),
+            "status": status,
             "exported": exported,
             "errors": error_count,
             "error_count": error_count,
             "error_messages": result.get("error_messages", []),
+            "skipped": skipped,
             "total": result.get("total", len(request.image_ids)),
+            "content_mode": result.get("content_mode", request.content_mode),
+            "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
         }
 
     def fix_rating_tags(self) -> Dict[str, Any]:

@@ -26,6 +26,7 @@ from constants import VALID_ASPECT_RATIOS
 from image_manager import reparse_image_metadata
 from metadata_parser import parse_image, verify_image_readable
 from services.indexed_file_mutation_service import save_and_reconcile_checked
+from services.tag_export_service import extract_generation_params
 from thumbnail_cache import (
     get_thumbnail,
     get_thumbnail_async,
@@ -962,10 +963,13 @@ class ImageService:
                     "filename": image.get("filename") or "",
                     "generator": image.get("generator"),
                     "prompt": image.get("prompt") or "",
+                    "negative_prompt": image.get("negative_prompt") or "",
                     "checkpoint": image.get("checkpoint"),
                     "width": image.get("width"),
                     "height": image.get("height"),
                     "aesthetic_score": image.get("aesthetic_score"),
+                    "ai_caption": image.get("ai_caption") or "",
+                    "generation_params": extract_generation_params(image),
                     "tags": [tag["tag"] for tag in tags_map.get(image_id, [])],
                 }
             )

@@ -668,10 +668,47 @@ async function initManualSort() {
 
 // ============== Start Sorting ==============
 
+async function confirmResumeSavedSessionFromStart(savedSession) {
+    const body = formatManualSortI18n(
+        'manual.resumeInsteadBody',
+        'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Resume it instead of starting over. To start from the first matching image, discard the saved session first.',
+        {
+            index: Number(savedSession.index || 0) + 1,
+            total: Number(savedSession.total || 0),
+            remaining: Number(savedSession.remaining || 0),
+        }
+    );
+
+    return new Promise(resolve => {
+        window.App.showConfirm(
+            manualSortText('manual.resumeInsteadTitle', 'Resume saved Manual Sort session?', '恢复已保存的手动分类会话？'),
+            body,
+            async () => {
+                await resumeSavedSession(savedSession);
+                resolve(true);
+            },
+            () => {
+                renderManualSortResumeBanner(savedSession, { visible: true });
+                resolve(false);
+            }
+        );
+    });
+}
+
 async function startSorting() {
     const { $, $$, API, showToast } = window.App;
     const operationMode = getManualSortOperationMode();
     const operationLabel = getManualSortOperationLabel(operationMode);
+
+    try {
+        const savedSession = await API.getCurrentSortImage();
+        if (savedSession && !savedSession.done && savedSession.image) {
+            await confirmResumeSavedSessionFromStart(savedSession);
+            return;
+        }
+    } catch (error) {
+        if (window.Logger) Logger.warn('Failed to check existing sort session before start:', error);
+    }
 
     // Collect folder paths
     const folders = {};
@@ -687,36 +724,7 @@ async function startSorting() {
         return;
     }
 
-    let replaceExisting = false;
-    try {
-        const savedSession = await API.getCurrentSortImage();
-        if (savedSession && !savedSession.done && savedSession.image) {
-            const confirmedNewSession = await new Promise(resolve => {
-                const body = formatManualSortI18n(
-                    'manual.startNewSessionBody',
-                    'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Starting a new session will discard that progress and start from the first matching image.',
-                    {
-                        index: Number(savedSession.index || 0) + 1,
-                        total: Number(savedSession.total || 0),
-                        remaining: Number(savedSession.remaining || 0),
-                    }
-                );
-                window.App.showConfirm(
-                    manualSortText('manual.startNewSessionTitle', 'Start new sorting session?', '开始新的手动分类会话？'),
-                    body,
-                    () => resolve(true),
-                    () => resolve(false)
-                );
-            });
-            if (!confirmedNewSession) {
-                renderManualSortResumeBanner(savedSession, { visible: true });
-                return;
-            }
-            replaceExisting = true;
-        }
-    } catch (error) {
-        if (window.Logger) Logger.warn('Failed to check existing sort session before start:', error);
-    }
+    const replaceExisting = false;
 
     // Confirmation dialog before starting (files will be moved/copied)
     const scopeStatus = getManualSortScopeStatus();
@@ -1032,7 +1040,7 @@ function applyCurrentSortPayload(result, options = {}) {
     return true;
 }
 
-async function resumeSavedSession() {
+async function resumeSavedSession(prefetchedSession = null) {
     const { $, API, showToast } = window.App;
     const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
         ? {
@@ -1043,7 +1051,7 @@ async function resumeSavedSession() {
         : null;
 
     try {
-        const session = await API.getCurrentSortImage();
+        const session = prefetchedSession || await API.getCurrentSortImage();
 
         if (!session || session.done || !session.image) {
             renderManualSortResumeBanner(null, { visible: false });

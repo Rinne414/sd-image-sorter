@@ -1077,6 +1077,55 @@ class TestReparseImage:
         assert response.status_code == 404
 
 
+class TestExportSelectionData:
+    """Tests for selected-image prompt/tag export data."""
+
+    def test_export_data_includes_sd_negative_params_and_caption(self, test_client, tmp_path: Path):
+        """Export previews should expose enough SD data for Pro prompt/caption workflows."""
+        import database as db
+
+        image_path = tmp_path / "pro_export.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        metadata_json = json.dumps({
+            "_parsed": {
+                "generation_params": {
+                    "steps": 28,
+                    "sampler": "DPM++ 2M",
+                    "cfg_scale": 7.5,
+                    "seed": 12345,
+                    "size": "832x1216",
+                    "model": "ponyDiffusionV6XL.safetensors",
+                }
+            }
+        })
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator="webui",
+            prompt="masterpiece, 1girl",
+            negative_prompt="lowres, bad anatomy",
+            checkpoint="ponyDiffusionV6XL.safetensors",
+            width=832,
+            height=1216,
+            metadata_json=metadata_json,
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("anime girl standing", image_id))
+        db.add_tags(image_id, [{"tag": "solo", "confidence": 0.9}])
+
+        response = test_client.post("/api/images/export-data", json={"image_ids": [image_id]})
+
+        assert response.status_code == 200
+        data = response.json()
+        image = data["images"][0]
+        assert image["negative_prompt"] == "lowres, bad anatomy"
+        assert image["generation_params"]["steps"] == 28
+        assert image["generation_params"]["sampler"] == "DPM++ 2M"
+        assert image["generation_params"]["model"] == "ponyDiffusionV6XL.safetensors"
+        assert image["ai_caption"] == "anime girl standing"
+        assert image["tags"] == ["solo"]
+
+
 class TestUtilityImageEndpoints:
     """Tests for upload parsing and file explorer helpers."""
 

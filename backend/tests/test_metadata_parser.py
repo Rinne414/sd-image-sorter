@@ -1449,6 +1449,26 @@ class TestForgeMetadata:
 
         assert result["generator"] == "webui"
 
+    def test_webui_prompt_word_forge_does_not_make_generator_forge(self, tmp_path: Path):
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        image_path = tmp_path / "webui-prompt-forge-word.png"
+        params = (
+            "blacksmith forge, forged armor, glowing steel\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler, CFG scale: 7, Seed: 123, Size: 512x512, Model: vanilla-model"
+        )
+        image = Image.new("RGB", (64, 64), color="white")
+        metadata = PngInfo()
+        metadata.add_text("parameters", params)
+        metadata.add_text("Software", "AUTOMATIC1111")
+        image.save(image_path, pnginfo=metadata)
+
+        result = parse_image(str(image_path))
+
+        assert result["generator"] == "webui"
+
     def test_forge_detected_from_forge_style_version(self, tmp_path: Path):
         from PIL import Image
         from PIL.PngImagePlugin import PngInfo

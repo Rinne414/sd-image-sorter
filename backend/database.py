@@ -2704,6 +2704,25 @@ def get_all_generators() -> List[Dict[str, Any]]:
         return _rows_to_dicts(cursor.fetchall())
 
 
+def get_metadata_status_counts() -> Dict[str, int]:
+    """Get image counts grouped by metadata parsing status."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT LOWER(COALESCE(metadata_status, 'complete')) AS status, COUNT(*) AS count
+            FROM images
+            WHERE COALESCE(is_readable, 1) = 1
+            GROUP BY LOWER(COALESCE(metadata_status, 'complete'))
+            """
+        )
+        counts: Dict[str, int] = {}
+        for row in cursor.fetchall():
+            status = str(row["status"] or "complete").strip().lower() or "complete"
+            counts[status] = int(row["count"] or 0)
+        return counts
+
+
 def get_all_checkpoints() -> List[Dict[str, Any]]:
     """Get normalized checkpoint facets with counts for filtering and analytics."""
     with get_db() as conn:

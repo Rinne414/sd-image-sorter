@@ -776,23 +776,31 @@ class MetadataParser:
         gen_params: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Distinguish Forge from vanilla A1111/WebUI before returning parsed parameters."""
-        candidates = [params or ""]
-        for key in ("Software", "software", "Source", "Comment", "ImageDescription", "UserComment"):
-            value = metadata.get(key)
-            if value is not None:
-                candidates.append(str(value))
-        if gen_params:
-            candidates.extend(str(value) for value in gen_params.values() if value is not None)
+        def has_forge_signature(value: Any) -> bool:
+            text = str(value or "").strip().lower()
+            if not text:
+                return False
+            if re.search(r"\bsd[-_\s]?webui[-_\s]?forge\b", text):
+                return True
+            if re.search(r"\bstable[-_\s]?diffusion[-_\s]?(?:webui[-_\s]?)?forge\b", text):
+                return True
+            if re.search(r"\bwebui[-_\s]+forge\b|\bforge[-_\s]+webui\b", text):
+                return True
+            if re.search(r"\bf\d+(?:\.\d+)*v\d+(?:\.\d+)*(?:[-+][a-z0-9_.-]+)?\b", text, flags=re.IGNORECASE):
+                return True
+            return False
 
-        combined = "\n".join(candidates).lower()
-        if "forge" in combined or "sd-webui-forge" in combined:
-            return "forge"
+        for key in ("Software", "software", "Source", "source", "Generator", "generator"):
+            if has_forge_signature(metadata.get(key)):
+                return "forge"
 
-        version = ""
         if gen_params:
-            version = str(gen_params.get("version") or gen_params.get("Version") or "")
-        if re.search(r"\bf\d+(?:\.\d+)*v\d+(?:\.\d+)*", version, flags=re.IGNORECASE):
-            return "forge"
+            for key, value in gen_params.items():
+                key_normalized = str(key or "").strip().lower().replace(" ", "_")
+                if key_normalized in {"forge_version", "sd_webui_forge_version"}:
+                    return "forge"
+                if key_normalized in {"version", "software", "source", "generator"} and has_forge_signature(value):
+                    return "forge"
 
         return "webui"
 

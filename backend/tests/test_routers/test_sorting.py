@@ -1652,12 +1652,52 @@ class TestAnalytics:
 
     def test_get_stats(self, test_client, test_db_with_images):
         """Getting stats should return summary."""
+        test_client.test_db.add_image(
+            path="/tmp/stats_pending_metadata.png",
+            filename="stats_pending_metadata.png",
+            generator="unknown",
+            metadata_status="pending",
+        )
+
         response = test_client.get("/api/stats")
 
         assert response.status_code == 200
         data = response.json()
         assert "total_images" in data
         assert "generators" in data
+        assert data["metadata_status"]["pending"] >= 1
+        assert data["metadata_pending"] >= 1
+        assert data["metadata_resolving"] is True
+        assert "metadata_status" in data
+        assert "metadata_pending" in data
+
+    def test_get_stats_reports_pending_metadata_counts(self, test_client):
+        """Stats should tell the frontend when generator counts are still resolving."""
+        db = test_client.test_db
+        db.add_image(
+            path="/tmp/stats_pending_metadata.png",
+            filename="stats_pending_metadata.png",
+            generator="unknown",
+            metadata_json="{}",
+            metadata_status="pending",
+        )
+        db.add_image(
+            path="/tmp/stats_complete_metadata.png",
+            filename="stats_complete_metadata.png",
+            generator="forge",
+            metadata_json="{}",
+            metadata_status="complete",
+        )
+
+        response = test_client.get("/api/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["metadata_status"]["pending"] == 1
+        assert data["metadata_status"]["complete"] >= 1
+        assert data["metadata_pending"] == 1
+        assert data["metadata_resolving"] is True
+        assert data["total_images"] >= 2
 
 
 class TestExportTagsBatch:

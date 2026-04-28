@@ -1733,12 +1733,21 @@ class SortingService:
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics."""
         analytics_data = self.get_analytics()
+        metadata_status = db.get_metadata_status_counts()
+        metadata_pending = int(metadata_status.get("pending", 0) or 0)
+        scan_progress = self.get_scan_progress()
         return {
             "total_images": db.get_image_count(),
             "generators": db.get_all_generators(),
             "top_tags": analytics_data["top_tags"],
             "checkpoints": analytics_data["checkpoints"],
-            "loras": analytics_data["loras"]
+            "loras": analytics_data["loras"],
+            "metadata_status": metadata_status,
+            "metadata_pending": metadata_pending,
+            "metadata_resolving": metadata_pending > 0,
+            "scan_status": scan_progress.get("status"),
+            "scan_step": scan_progress.get("step"),
+            "scan_library_ready": bool(scan_progress.get("library_ready", False)),
         }
 
     def export_tags_batch(self, request) -> Dict[str, Any]:

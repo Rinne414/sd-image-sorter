@@ -105,10 +105,13 @@ class ExportSelectionImage(BaseModel):
     filename: str = ""
     generator: Optional[str] = None
     prompt: str = ""
+    negative_prompt: str = ""
     checkpoint: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     aesthetic_score: Optional[float] = None
+    ai_caption: str = ""
+    generation_params: dict[str, Any] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
 
 

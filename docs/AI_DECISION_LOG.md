@@ -1375,11 +1375,11 @@ Use this structure for future entries:
 - Context:
   User smoke testing found the Gallery selection panel had collapsed important meanings: the primary action looked like visible-only selection, filtered selection was ambiguous, disk deletion was exposed as the obvious selected-file action, and Gallery had no selected move/copy entry point even though the backend already supported `/api/move`.
 - Decision:
-  Gallery selection must expose separate actions for `Select All Filtered`, `Invert All Filtered`, `Select Visible`, and `Invert Visible`. The safe default cleanup action is `Remove from Gallery`, which deletes only index rows through `/api/images/remove-selected`; permanent file deletion remains available only as `Delete Files from Disk...` with explicit destructive copy and `confirm_delete_files=true`. Selected Gallery images must also expose `Move Selected...` and `Copy Selected...` using the shared `/api/move` operation contract.
+  Gallery selection must expose separate actions for `Select All Filtered`, `Invert All Filtered`, `Select Visible`, and `Invert Visible`. The safe default cleanup action is `Remove from Gallery`, which deletes only index rows through `/api/images/remove-selected`; the Delete key follows that safe removal semantic. Permanent file deletion remains available only as `Delete Files from Disk...` with explicit destructive copy and `confirm_delete_files=true`. Selected Gallery images must also expose `Move Selected...` and `Copy Selected...` using the shared `/api/move` operation contract.
 - Evidence:
   `frontend/index.html`, `frontend/js/app.js`, `frontend/js/ui-refresh.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/routers/images.py`, `backend/services/image_service.py`, `backend/tests/test_routers/test_images.py`, `tests/e2e/specs/smoke.spec.ts`.
 - Related invariants:
-  Visible selection only covers currently rendered/loaded thumbnails; filtered selection covers every image matching the active Gallery filters. Removing from Gallery never touches disk files. Disk delete must be visually and verbally dangerous.
+  Visible selection only covers currently rendered/loaded thumbnails; filtered selection covers every image matching the active Gallery filters. Removing from Gallery never touches disk files, including when invoked by the Delete key. Disk delete must be visually and verbally dangerous.
 - Validation:
   Backend route tests pass. Browser smoke coverage for the touched Gallery/Manual Sort flows passes through the project wrapper: `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "selection scope summary|filtered selection|gallery batch actions|gallery selected move|manual sort start"`.
 
@@ -1389,7 +1389,7 @@ Use this structure for future entries:
 - Context:
   User smoke testing confirmed that exiting Manual Sort mid-session and pressing Start after restart discards the saved progress and restarts from the first matching image.
 - Decision:
-  `/api/sort/start` defaults to preserving an unfinished active session and returns HTTP 409 unless the caller sends `replace_existing=true`. The frontend checks `/api/sort/current` before starting, shows the saved progress, and only sends `replace_existing=true` after the user explicitly confirms starting a new session.
+  `/api/sort/start` defaults to preserving an unfinished active session and returns HTTP 409 unless the caller sends `replace_existing=true`. The frontend must not use the primary Start action as a hidden "new session" path when a resumable session exists; it checks `/api/sort/current`, shows saved progress, and resumes by default. Starting from the first matching image is allowed only after the user explicitly discards the saved session first.
 - Evidence:
   `backend/routers/sorting.py`, `backend/services/sorting_service.py`, `frontend/js/app.js`, `frontend/js/manual-sort.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_routers/test_sorting.py`, `tests/e2e/specs/smoke.spec.ts`.
 - Related invariants:
@@ -1403,10 +1403,52 @@ Use this structure for future entries:
 - Context:
   User smoke testing reported Forge images appearing under WebUI and tag export feedback being too weak for serious SD workflows. Investigation found Forge detection only trusted limited parameter text, and `/api/tags/export-batch` returned a shape that frontend code could misread.
 - Decision:
-  WebUI-family parser logic detects Forge from metadata-level signals such as PNG `Software`, source/comment fields, and Forge-style version strings, not only the main `parameters` body. Batch tag export returns explicit `status`, `exported`, numeric `errors`/`error_count`, `error_messages`, and `total` so UI can distinguish success, partial success, and failure.
+  WebUI-family parser logic detects Forge from structured generator signals such as PNG `Software`/`Source`, explicit Forge version fields, and Forge-style version strings; it must not scan arbitrary prompt text for the word `forge`. Batch tag export returns explicit `status`, `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, and `total` so UI can distinguish success, skipped sidecars, partial success, and failure.
 - Evidence:
   `backend/metadata_parser.py`, `backend/services/tagging_service.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_tags.py`, `frontend/js/app.js`.
 - Related invariants:
-  `forge` and `webui` are distinct user-facing generator buckets. Batch export errors are counts plus messages, not a truthy/falsy ambiguous field.
+  `forge` and `webui` are distinct user-facing generator buckets, but prompt words like `forge` or `forged armor` are not generator identity. Batch export errors and skipped files are counts plus messages, not truthy/falsy ambiguous fields.
 - Validation:
   `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_returns_normalized_frontend_contract_fields`.
+
+### ADR-AI-20260429-51: Pro export, Auto-Separate execution settings, and metadata-resolving counts are explicit UX contracts
+
+- Status: accepted
+- Context:
+  User smoke testing showed three regressions that shared the same root: important SD workflow semantics were hidden or implicit. Export only exposed weak prompt/tag paths, Auto-Separate hid move/copy safety choices in settings, and quick-import generator tabs could show WebUI/Forge zeroes while metadata was still pending.
+- Decision:
+  Export payloads and sidecars must expose SD-user content modes explicitly: prompt, negative, prompt+negative, A1111/Forge parameter block, tags, caption+tags, merged caption, and JSON. Sidecar overwrite behavior is an explicit `overwrite_policy`, and `skip` must report skipped files instead of looking like a generic failure. Auto-Separate must show file action mode plus safety toggles on the main panel before the execute button, not only in the settings modal. `/api/stats` must report `metadata_status`, `metadata_pending`, `scan_status`, and `scan_library_ready` so frontend generator tabs can mark provisional counts as resolving while metadata is pending or scan import has not made the library ready.
+- Evidence:
+  `backend/services/tag_export_service.py`, `backend/services/image_service.py`, `backend/services/sorting_service.py`, `backend/database.py`, `frontend/index.html`, `frontend/js/app.js`, `frontend/js/autosep.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `docs/API.md`.
+- Related invariants:
+  Move/copy is not a preference hidden behind a gear; it changes whether source files move. Quick-import generator counts are not authoritative until metadata pending reaches zero and the scan reports the library ready. Export modes are workflow contracts, not just textarea labels.
+- Validation:
+  `node --check frontend/js/app.js frontend/js/autosep.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`; targeted stats/frontend contract tests and export router tests.
+
+### ADR-AI-20260429-52: Manual Sort primary Start resumes unfinished sessions
+
+- Status: accepted
+- Context:
+  User smoke testing showed the earlier safeguard was still not enough: a confirmation to "start new" preserved API safety but left the primary UX path biased toward restarting, which feels like progress loss when the user simply relaunches and presses Start.
+- Decision:
+  Manual Sort's primary Start action is now a resume-first action when `/api/sort/current` reports an unfinished session. The confirmation copy says to resume instead of starting over; cancelling keeps the resume banner visible. A new first-image session must be reached by discarding the saved session first, not by a normal Start click. Backend `replace_existing=true` remains as an explicit escape hatch for callers that already performed a destructive discard decision.
+- Evidence:
+  `frontend/js/manual-sort.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/services/sorting_service.py`, `backend/tests/test_frontend_contract.py`, `tests/e2e/specs/smoke.spec.ts`.
+- Related invariants:
+  Persisted `current_index` is user progress. Resume is the default product semantic; replacement is destructive session state and must be explicit, not merely confirmed in a generic start flow.
+- Validation:
+  `backend/tests/test_frontend_contract.py::test_manual_sort_start_routes_unfinished_sessions_to_resume`; browser smoke test `manual sort start should resume unfinished session instead of starting over`.
+
+### ADR-AI-20260429-53: Gallery Delete key and scan-time counts must follow safe/provisional semantics
+
+- Status: accepted
+- Context:
+  Review found two remaining contract holes after the smoke-fix pass: the visible button semantics were safe, but the Delete keyboard shortcut still invoked permanent disk deletion; `/api/stats` exposed scan readiness, but the frontend only treated `metadata_pending` as provisional.
+- Decision:
+  The Gallery Delete key removes selected rows from the gallery index only, matching `Remove from Gallery`; permanent deletion remains behind the explicit `Delete Files from Disk...` action. Generator tab counts are resolving when metadata is pending or when scan is running/cancelling before `scan_library_ready`; WebUI/Forge zeroes must not be displayed as final in that state.
+- Evidence:
+  `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_frontend_contract.py`, `tests/e2e/specs/smoke.spec.ts`, `docs/API.md`.
+- Related invariants:
+  Keyboard shortcuts cannot be more destructive than the primary visible UX. Generator buckets are final only after both import and metadata resolution make the indexed library ready.
+- Validation:
+  `backend/tests/test_frontend_contract.py::test_gallery_delete_key_removes_from_gallery_not_disk`, `backend/tests/test_frontend_contract.py::test_metadata_resolving_chip_is_driven_by_stats_contract`, browser smoke tests for Gallery remove/delete and stale large-library loads.

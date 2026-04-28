@@ -57,6 +57,51 @@ function getAutoSepOperationLabel(mode = getAutoSepOperationMode()) {
         : tKey('autosep.operationModeMove', 'Move originals', '移动原图');
 }
 
+function syncAutoSepOperationControls() {
+    const operationMode = getAutoSepOperationMode();
+    document.querySelectorAll('input[data-autosep-operation-mode]').forEach((input) => {
+        input.checked = normalizeAutoSepOperationMode(input.value) === operationMode;
+    });
+}
+
+function setAutoSepOperationMode(mode, { persist = false } = {}) {
+    AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(mode);
+    syncAutoSepOperationControls();
+    if (persist) saveAutoSepSettings();
+    updateAutoSepSettingsSummary();
+    updateAutoSepActionUi();
+}
+
+function syncAutoSepBooleanSetting(settingKey) {
+    const value = Boolean(AutoSepState.settings[settingKey]);
+    document.querySelectorAll(`input[data-autosep-setting="${settingKey}"]`).forEach((input) => {
+        input.checked = value;
+    });
+}
+
+function setAutoSepBooleanSetting(settingKey, value, { persist = false } = {}) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_AUTOSEP_SETTINGS, settingKey)) return;
+    AutoSepState.settings[settingKey] = Boolean(value);
+    syncAutoSepBooleanSetting(settingKey);
+
+    if (settingKey === 'rememberDestination') {
+        const destination = document.getElementById('autosep-destination')?.value?.trim() || '';
+        if (AutoSepState.settings.rememberDestination) {
+            persistAutoSepDestination(destination);
+        } else {
+            localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
+        }
+    }
+
+    if (persist) saveAutoSepSettings();
+    updateAutoSepSettingsSummary();
+}
+
+function getAutoSepBooleanSettingFromUi(settingKey) {
+    const input = document.querySelector(`input[data-autosep-setting="${settingKey}"]`);
+    return input ? Boolean(input.checked) : Boolean(AutoSepState.settings[settingKey]);
+}
+
 function getAutoSepCompletedLabel(mode = getAutoSepOperationMode(), count = '{count}') {
     return mode === 'copy'
         ? _formatAutoSepI18n('autosep.progressCopied', '{count} copied', { count })
@@ -419,12 +464,15 @@ function initAutoSeparate() {
     $('#autosep-overflow-modal .modal-backdrop')?.addEventListener('click', () => window.App?.hideModal?.('autosep-overflow-modal'));
     $('#btn-save-autosep-settings')?.addEventListener('click', saveAutoSepSettingsFromUi);
     $('#btn-reset-autosep-settings')?.addEventListener('click', resetAutoSepSettings);
-    document.querySelectorAll('input[name="autosep-operation-mode"]').forEach((input) => {
+    document.querySelectorAll('input[data-autosep-operation-mode]').forEach((input) => {
         input.addEventListener('change', () => {
             if (!input.checked) return;
-            AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(input.value);
-            updateAutoSepSettingsSummary();
-            updateAutoSepActionUi();
+            setAutoSepOperationMode(input.value, { persist: true });
+        });
+    });
+    document.querySelectorAll('input[data-autosep-setting]').forEach((input) => {
+        input.addEventListener('change', () => {
+            setAutoSepBooleanSetting(input.dataset.autosepSetting, input.checked, { persist: true });
         });
     });
     $('#btn-autosep-new-config')?.addEventListener('click', createAutoSepConfig);
@@ -706,16 +754,11 @@ function getSavedAutoSepDestination() {
 
 function applyAutoSepSettingsToUi() {
     const destinationInput = document.getElementById('autosep-destination');
-    const rememberDestination = document.getElementById('autosep-remember-destination');
-    const autoPreview = document.getElementById('autosep-auto-preview');
-    const confirmMove = document.getElementById('autosep-confirm-move');
 
-    if (rememberDestination) rememberDestination.checked = Boolean(AutoSepState.settings.rememberDestination);
-    if (autoPreview) autoPreview.checked = Boolean(AutoSepState.settings.autoPreview);
-    if (confirmMove) confirmMove.checked = Boolean(AutoSepState.settings.confirmBeforeMove);
-    document.querySelectorAll('input[name="autosep-operation-mode"]').forEach((input) => {
-        input.checked = input.value === getAutoSepOperationMode();
-    });
+    syncAutoSepBooleanSetting('rememberDestination');
+    syncAutoSepBooleanSetting('autoPreview');
+    syncAutoSepBooleanSetting('confirmBeforeMove');
+    syncAutoSepOperationControls();
 
     if (destinationInput && AutoSepState.settings.rememberDestination && !destinationInput.value.trim()) {
         destinationInput.value = getSavedAutoSepDestination();
@@ -743,8 +786,8 @@ function updateAutoSepSettingsSummary() {
     );
     parts.push(
         AutoSepState.settings.confirmBeforeMove
-            ? tKey('autosep.summaryConfirmOn', 'Confirm move: On', '移动确认：开启')
-            : tKey('autosep.summaryConfirmOff', 'Confirm move: Off', '移动确认：关闭')
+            ? tKey('autosep.summaryConfirmOn', 'Confirmation: On', '执行确认：开启')
+            : tKey('autosep.summaryConfirmOff', 'Confirmation: Off', '执行确认：关闭')
     );
     parts.push(
         _formatAutoSepI18n('autosep.summaryOperation', 'Action mode: {mode}', {
@@ -781,11 +824,11 @@ function closeAutoSepSettingsModal() {
 }
 
 function saveAutoSepSettingsFromUi() {
-    AutoSepState.settings.rememberDestination = Boolean(document.getElementById('autosep-remember-destination')?.checked);
-    AutoSepState.settings.autoPreview = Boolean(document.getElementById('autosep-auto-preview')?.checked);
-    AutoSepState.settings.confirmBeforeMove = Boolean(document.getElementById('autosep-confirm-move')?.checked);
+    AutoSepState.settings.rememberDestination = getAutoSepBooleanSettingFromUi('rememberDestination');
+    AutoSepState.settings.autoPreview = getAutoSepBooleanSettingFromUi('autoPreview');
+    AutoSepState.settings.confirmBeforeMove = getAutoSepBooleanSettingFromUi('confirmBeforeMove');
     AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(
-        document.querySelector('input[name="autosep-operation-mode"]:checked')?.value || 'move'
+        document.querySelector('input[data-autosep-operation-mode]:checked')?.value || getAutoSepOperationMode()
     );
     saveAutoSepSettings();
 
@@ -796,6 +839,7 @@ function saveAutoSepSettingsFromUi() {
         localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
     }
 
+    applyAutoSepSettingsToUi();
     updateAutoSepSettingsSummary();
     updateAutoSepActionUi();
     closeAutoSepSettingsModal();

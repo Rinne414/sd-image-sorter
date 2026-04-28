@@ -86,8 +86,10 @@ const RequestManager = {
         this.pendingRequests.clear();
     },
 
-    complete(key) {
-        this.pendingRequests.delete(key);
+    complete(key, controller = null) {
+        if (!controller || this.pendingRequests.get(key) === controller) {
+            this.pendingRequests.delete(key);
+        }
     },
 
     isAbortedError(error) {
@@ -1015,13 +1017,15 @@ const API = {
         return this.post('/api/sort/set-folders', { folders });
     },
 
-    // Batch Tag Export
-    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '') {
+    // Batch Sidecar Export
+    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique') {
         return this.post('/api/tags/export-batch', {
             image_ids: imageIds,
             output_folder: outputFolder,
             blacklist: blacklist,
-            prefix: prefix
+            prefix: prefix,
+            content_mode: contentMode,
+            overwrite_policy: overwritePolicy
         });
     },
 
@@ -3594,6 +3598,10 @@ function initEventListeners() {
             showToast(appT('export.copyFailed', 'Failed to copy'), 'error');
         });
     });
+    $('#export-format')?.addEventListener('change', (event) => {
+        renderExportModalText(event.target.value);
+    });
+    $('#btn-download-export')?.addEventListener('click', downloadCurrentExportText);
     // --- Export Tags from FAB ---
     $('#btn-export-tags-selected').addEventListener('click', () => {
         resetSelectionDataCache();
@@ -5089,14 +5097,45 @@ async function loadStats() {
             }
         });
 
+        const metadataPending = Number(stats.metadata_pending || stats.metadata_status?.pending || stats.metadata_status_counts?.pending || 0);
+        const scanStatus = String(stats.scan_status || '').toLowerCase();
+        const scanRunning = scanStatus === 'running' || scanStatus === 'cancelling';
+        const scanLibraryReady = stats.scan_library_ready === true;
+        const countsResolving = metadataPending > 0 || (scanRunning && !scanLibraryReady);
+        const reportedTotal = Number.isFinite(Number(stats.total_images))
+            ? Number(stats.total_images)
+            : totalCount;
+
         // Update generator tab counts
         const countAll = $('#count-all');
-        if (countAll) countAll.textContent = totalCount;
+        if (countAll) countAll.textContent = reportedTotal;
 
         ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
             const countEl = $(`#count-${gen}`);
-            if (countEl) countEl.textContent = genCounts[gen] || 0;
+            if (countEl) {
+                const count = genCounts[gen] || 0;
+                countEl.textContent = countsResolving && count === 0 ? '…' : String(count);
+                countEl.title = countsResolving
+                    ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
+                    : '';
+            }
         });
+
+        const metadataChip = $('#metadata-status-chip');
+        if (metadataChip) {
+            if (countsResolving) {
+                metadataChip.textContent = metadataPending > 0
+                    ? appT('gallery.metadataResolving', 'Reading image info: {count} pending')
+                        .replace('{count}', String(metadataPending))
+                    : appT('gallery.scanResolving', 'Scanning library: generator counts are not final yet');
+                metadataChip.title = appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.');
+                metadataChip.style.display = 'inline-flex';
+            } else {
+                metadataChip.textContent = '';
+                metadataChip.title = '';
+                metadataChip.style.display = 'none';
+            }
+        }
 
         // Store analytics for later use
         AppState.analytics = {
@@ -5104,7 +5143,12 @@ async function loadStats() {
             loras: stats.loras || [],
             top_tags: stats.top_tags || [],
             generatorCounts: genCounts,
-            totalImages: totalCount
+            totalImages: reportedTotal,
+            metadataPending,
+            metadataStatus: stats.metadata_status || stats.metadata_status_counts || {},
+            countsResolving,
+            scanStatus,
+            scanLibraryReady
         };
 
         // Update model filters summary UI
@@ -5264,12 +5308,14 @@ async function startAestheticScoring(force = false) {
 const IMAGE_LOAD_KEY = 'images-load';
 let _pendingImageReload = null;
 let _imageLoadSequence = 0;
+let _activeImageLoadSequence = 0;
 
 function cancelGalleryImageLoad() {
     const hadPendingGalleryLoad = AppState.isLoading
         || _pendingImageReload !== null
         || RequestManager.pendingRequests.has(IMAGE_LOAD_KEY);
     _imageLoadSequence += 1;
+    _activeImageLoadSequence = 0;
     _pendingImageReload = null;
     RequestManager.cancel(IMAGE_LOAD_KEY);
     AppState.isLoading = false;
@@ -5330,6 +5376,7 @@ async function loadImages(appendMode = false, options = {}) {
     }
 
     const loadSequence = ++_imageLoadSequence;
+    _activeImageLoadSequence = loadSequence;
     const galleryGrid = $('#gallery-grid');
 
     if (!appendMode && !preserveExisting) {
@@ -5349,9 +5396,10 @@ async function loadImages(appendMode = false, options = {}) {
     if (galleryLoading && !silent) galleryLoading.style.display = 'flex';
     const imageCount = $('#image-count');
     if (imageCount && !appendMode && !silent) imageCount.textContent = appT('gallery.loading', 'Loading images...');
+    let controller = null;
 
     try {
-        const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
+        controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
         const useCursorPagination = supportsCursorPagination(AppState.filters.sortBy);
         const filters = {
             ...AppState.filters,
@@ -5360,7 +5408,7 @@ async function loadImages(appendMode = false, options = {}) {
             offset: appendMode && !useCursorPagination ? AppState.pagination.offset : undefined
         };
         const result = await API.getImages(filters, { signal: controller.signal });
-        RequestManager.complete(IMAGE_LOAD_KEY);
+        RequestManager.complete(IMAGE_LOAD_KEY, controller);
 
         if (result === null) return;
         if (loadSequence !== _imageLoadSequence || AppState.currentView !== 'gallery') {
@@ -5436,12 +5484,22 @@ async function loadImages(appendMode = false, options = {}) {
         }
         showToast(formatUserError(error, appT('gallery.loadImagesFailed', 'Failed to load images')), 'error');
     } finally {
-        if (loadSequence !== _imageLoadSequence) {
-            return;
+        if (controller) {
+            RequestManager.complete(IMAGE_LOAD_KEY, controller);
         }
-        AppState.isLoading = false;
-        if (galleryLoading && !silent) {
-            galleryLoading.style.display = 'none';
+        const isLatestLoad = loadSequence === _imageLoadSequence;
+        const isActiveLoad = _activeImageLoadSequence === loadSequence;
+
+        if (isActiveLoad) {
+            _activeImageLoadSequence = 0;
+            AppState.isLoading = false;
+            if (galleryLoading && !silent) {
+                galleryLoading.style.display = 'none';
+            }
+        }
+
+        if (!isLatestLoad) {
+            return;
         }
 
         // Show/hide "Load More" button based on pagination state
@@ -6150,95 +6208,266 @@ function addTagToUI(tag) {
 }
 
 
-async function showExportModal() {
+let _currentExportModalData = null;
+let _currentExportFormat = 'prompt';
+
+function getExportFormatLabel(format) {
+    const labels = {
+        prompt: appT('export.formatPrompt', 'Prompt only'),
+        negative: appT('export.formatNegative', 'Negative prompt only'),
+        prompt_negative: appT('export.formatPromptNegative', 'Prompt + negative'),
+        a1111: appT('export.formatA1111', 'A1111 / Forge parameter blocks'),
+        tags: appT('export.formatTags', 'Unique tags'),
+        caption_tags: appT('export.formatCaptionTags', 'Caption + tags'),
+        caption_merged: appT('export.formatCaptionMerged', 'Caption + prompt + tags'),
+        jsonl: appT('export.formatJsonl', 'JSONL dataset'),
+        csv: appT('export.formatCsv', 'CSV dataset'),
+    };
+    return labels[format] || labels.prompt;
+}
+
+function normalizeExportTextPart(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function uniqueExportParts(parts) {
+    const seen = new Set();
+    const output = [];
+    parts.forEach((part) => {
+        const value = normalizeExportTextPart(part).replace(/^,+|,+$/g, '').trim();
+        if (!value) return;
+        const key = value.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        output.push(value);
+    });
+    return output;
+}
+
+function buildExportGenerationParams(image = {}) {
+    const params = image.generation_params && typeof image.generation_params === 'object'
+        ? { ...image.generation_params }
+        : {};
+    if (!params.model && image.checkpoint) params.model = image.checkpoint;
+    if (!params.size && image.width && image.height) params.size = `${image.width}x${image.height}`;
+    return params;
+}
+
+function buildA1111ExportBlock(image = {}) {
+    const prompt = String(image.prompt || '').trim();
+    const negative = String(image.negative_prompt || '').trim();
+    const params = buildExportGenerationParams(image);
+    const lines = [];
+    if (prompt) lines.push(prompt);
+    if (negative) lines.push(`Negative prompt: ${negative}`);
+
+    const order = [
+        ['steps', 'Steps'],
+        ['sampler', 'Sampler'],
+        ['schedule_type', 'Schedule type'],
+        ['cfg_scale', 'CFG scale'],
+        ['seed', 'Seed'],
+        ['size', 'Size'],
+        ['model', 'Model'],
+        ['model_hash', 'Model hash'],
+        ['clip_skip', 'Clip skip'],
+        ['denoising_strength', 'Denoising strength'],
+        ['loras', 'LoRAs'],
+    ];
+    const emitted = new Set();
+    const parts = [];
+    order.forEach(([key, label]) => {
+        const value = params[key];
+        if (value == null || value === '') return;
+        emitted.add(key);
+        parts.push(`${label}: ${value}`);
+    });
+    Object.keys(params).sort().forEach((key) => {
+        if (emitted.has(key)) return;
+        const value = params[key];
+        if (value == null || value === '') return;
+        const label = key.split('_').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
+        parts.push(`${label}: ${value}`);
+    });
+    if (parts.length) lines.push(parts.join(', '));
+    return lines.join('\n').trim();
+}
+
+function buildExportRecord(image = {}) {
+    return {
+        id: image.id,
+        filename: image.filename || '',
+        generator: image.generator || null,
+        prompt: image.prompt || '',
+        negative_prompt: image.negative_prompt || '',
+        ai_caption: image.ai_caption || '',
+        tags: Array.isArray(image.tags) ? image.tags : [],
+        checkpoint: image.checkpoint || null,
+        width: image.width || null,
+        height: image.height || null,
+        aesthetic_score: image.aesthetic_score ?? null,
+        generation_params: buildExportGenerationParams(image),
+    };
+}
+
+function escapeCsvField(value) {
+    const text = value == null ? '' : String(value);
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function buildExportText(exportData, format) {
+    const images = Array.isArray(exportData?.images) ? exportData.images : [];
+    let text = '';
+
+    if (format === 'prompt') {
+        text = images.map(image => String(image.prompt || '').trim()).filter(Boolean).join('\n\n');
+    } else if (format === 'negative') {
+        text = images.map(image => String(image.negative_prompt || '').trim()).filter(Boolean).join('\n\n');
+    } else if (format === 'prompt_negative') {
+        text = images.map((image) => {
+            const prompt = String(image.prompt || '').trim();
+            const negative = String(image.negative_prompt || '').trim();
+            return [prompt, negative ? `Negative prompt: ${negative}` : ''].filter(Boolean).join('\n');
+        }).filter(Boolean).join('\n\n');
+    } else if (format === 'a1111') {
+        text = images.map(buildA1111ExportBlock).filter(Boolean).join('\n\n');
+    } else if (format === 'tags') {
+        const allTags = new Set();
+        images.forEach((image) => (image.tags || []).forEach(tag => allTags.add(tag)));
+        text = Array.from(allTags).sort().join(', ');
+    } else if (format === 'caption_tags') {
+        text = images.map((image) => uniqueExportParts([image.ai_caption, ...(image.tags || [])]).join(', ')).filter(Boolean).join('\n');
+    } else if (format === 'caption_merged') {
+        text = images.map((image) => uniqueExportParts([image.ai_caption, image.prompt, ...(image.tags || [])]).join(', ')).filter(Boolean).join('\n');
+    } else if (format === 'jsonl') {
+        text = images.map(image => JSON.stringify(buildExportRecord(image))).join('\n');
+    } else if (format === 'csv') {
+        const header = ['id', 'filename', 'generator', 'prompt', 'negative_prompt', 'ai_caption', 'tags', 'checkpoint', 'width', 'height'];
+        const rows = images.map((image) => {
+            const record = buildExportRecord(image);
+            const values = [
+                record.id,
+                record.filename,
+                record.generator,
+                record.prompt,
+                record.negative_prompt,
+                record.ai_caption,
+                record.tags.join(', '),
+                record.checkpoint,
+                record.width,
+                record.height,
+            ];
+            return values.map(escapeCsvField).join(',');
+        });
+        text = [header.join(','), ...rows].join('\n');
+    }
+
+    if (!text) {
+        text = appT('export.noDataForFormat', 'No exportable data for this format in the selected preview.');
+    }
+
+    const totalSelected = Number(exportData?.total || images.length);
+    const previewWindowSize = Number(exportData?.preview_count ?? exportData?.count ?? images.length);
+    const previewCount = Math.min(totalSelected, previewWindowSize);
+    const previewOnly = Boolean(exportData?.has_more) || totalSelected > previewCount;
+
+    if (text.length > EXPORT_PREVIEW_MAX_CHARS) {
+        text = `${text.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
+    }
+    if (previewOnly) {
+        text = `${text}\n\n${appT(
+            'export.previewLimited',
+            'Preview only shows the first {preview} of {total} selected images. Use "Export Sidecars" for full output.',
+            { preview: previewCount, total: totalSelected }
+        )}`;
+    }
+    return text;
+}
+
+function setExportModalMode(mode) {
+    const exportAltBtn = $('#btn-export-tags-alt');
+    if (!exportAltBtn) return;
+
+    const normalizedMode = mode === 'tags' ? 'tags' : 'prompts';
+    exportAltBtn.dataset.exportView = normalizedMode;
+    exportAltBtn.innerHTML = normalizedMode === 'prompts'
+        ? `🏷️ ${appT('export.tagsInstead', 'Export Tags Instead')}`
+        : `📤 ${appT('export.promptsInstead', 'Export Prompts Instead')}`;
+}
+
+function renderExportModalText(format = null) {
+    const selectedFormat = format || $('#export-format')?.value || _currentExportFormat || 'prompt';
+    _currentExportFormat = selectedFormat;
+    const select = $('#export-format');
+    if (select && select.value !== selectedFormat) select.value = selectedFormat;
+
+    $('#export-title').textContent = `${selectedFormat === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(selectedFormat)}`;
+    setExportModalMode(selectedFormat === 'tags' ? 'tags' : 'prompts');
+
+    const textArea = $('#export-text');
+    if (!textArea || !_currentExportModalData) return;
+    textArea.value = buildExportText(_currentExportModalData, selectedFormat);
+}
+
+async function showExportModalWithFormat(format = 'prompt') {
     if (AppState.selectedIds.size === 0) return;
 
-    $('#export-title').textContent = `📤 ${appT('export.promptsTitle', 'Export Prompts')}`;
+    _currentExportModalData = null;
+    _currentExportFormat = format;
     $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
         count: AppState.selectedIds.size,
     });
-    setExportModalMode('prompts');
+    const select = $('#export-format');
+    if (select) select.value = format;
+    setExportModalMode(format === 'tags' ? 'tags' : 'prompts');
+    $('#export-title').textContent = `${format === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(format)}`;
     const textArea = $('#export-text');
-    textArea.value = appT('export.loadingPrompts', 'Loading prompts...');
+    textArea.value = format === 'tags'
+        ? appT('export.loadingTags', 'Loading tags...')
+        : appT('export.loadingPrompts', 'Loading prompts...');
 
     showModal('export-modal');
 
     try {
         const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
-        const totalSelected = Number(exportData.total || ids.length || exportData.images.length);
-        const previewWindowSize = Number(exportData.preview_count ?? exportData.count ?? exportData.images.length);
-        const previewCount = Math.min(totalSelected, previewWindowSize);
-        const previewOnly = Boolean(exportData.has_more) || totalSelected > previewCount;
-        const prompts = exportData.images
-            .map((image) => image.prompt?.trim())
-            .filter(Boolean);
-        let previewText = prompts.join('\n\n');
-        if (previewText.length > EXPORT_PREVIEW_MAX_CHARS) {
-            previewText = `${previewText.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
-        }
-        if (previewOnly) {
-            previewText = `${previewText}\n\n${appT(
-                'export.previewLimited',
-                'Preview only shows the first {preview} of {total} selected images. Use \"Export Tags to Files\" for full output.',
-                { preview: previewCount, total: totalSelected }
-            )}`;
-        }
-        textArea.value = previewText;
+        _currentExportModalData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
+        renderExportModalText(format);
     } catch (e) {
-        textArea.value = appT('export.errorLoadingPrompts', 'Error loading prompts: {message}', {
+        textArea.value = appT('export.errorLoadingData', 'Error loading export data: {message}', {
             message: e.message,
         });
     }
+}
+
+async function showExportModal() {
+    return showExportModalWithFormat('prompt');
 }
 
 async function showExportTagsModal() {
-    if (AppState.selectedIds.size === 0) return;
-
-    $('#export-title').textContent = `🏷️ ${appT('export.tagsTitle', 'Export Tags')}`;
-    $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
-        count: AppState.selectedIds.size,
-    });
-    setExportModalMode('tags');
-    const textArea = $('#export-text');
-    textArea.value = appT('export.loadingTags', 'Loading tags...');
-
-    showModal('export-modal');
-    try {
-        const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
-        const totalSelected = Number(exportData.total || ids.length || exportData.images.length);
-        const previewWindowSize = Number(exportData.preview_count ?? exportData.count ?? exportData.images.length);
-        const previewCount = Math.min(totalSelected, previewWindowSize);
-        const previewOnly = Boolean(exportData.has_more) || totalSelected > previewCount;
-        const allTags = new Set();
-
-        exportData.images.forEach((image) => {
-            (image.tags || []).forEach((tag) => {
-                allTags.add(tag);
-            });
-        });
-
-        // Sort alphabetically and join
-        const sortedTags = Array.from(allTags).sort();
-        let previewText = sortedTags.join(', ');
-        if (previewText.length > EXPORT_PREVIEW_MAX_CHARS) {
-            previewText = `${previewText.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
-        }
-        if (previewOnly) {
-            previewText = `${previewText}\n\n${appT(
-                'export.previewLimited',
-                'Preview only shows the first {preview} of {total} selected images. Use \"Export Tags to Files\" for full output.',
-                { preview: previewCount, total: totalSelected }
-            )}`;
-        }
-        textArea.value = previewText;
-    } catch (e) {
-        textArea.value = appT('export.errorLoadingTags', 'Error loading tags: {message}', {
-            message: e.message,
-        });
-    }
+    return showExportModalWithFormat('tags');
 }
+
+function getExportFileExtension(format) {
+    if (format === 'jsonl') return 'jsonl';
+    if (format === 'csv') return 'csv';
+    return 'txt';
+}
+
+function downloadCurrentExportText() {
+    const text = $('#export-text')?.value || '';
+    const format = $('#export-format')?.value || _currentExportFormat || 'prompt';
+    const extension = getExportFileExtension(format);
+    const filename = `sd-image-sorter-${format}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+    const blob = new Blob([text], { type: extension === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 
 function showBatchExportModal() {
     if (AppState.selectedIds.size === 0) {
@@ -6397,15 +6626,6 @@ async function loadSelectionPreviewData(ids, limit = EXPORT_PREVIEW_MAX_IMAGES) 
     };
 }
 
-function setExportModalMode(mode) {
-    const exportAltBtn = $('#btn-export-tags-alt');
-    if (!exportAltBtn) return;
-
-    exportAltBtn.dataset.exportView = mode;
-    exportAltBtn.innerHTML = mode === 'prompts'
-        ? `🏷️ ${appT('export.tagsInstead', 'Export Tags Instead')}`
-        : `📤 ${appT('export.promptsInstead', 'Export Prompts Instead')}`;
-}
 
 async function executeBatchExport() {
     const outputFolder = $('#batch-export-folder')?.value?.trim() || '';
@@ -6417,6 +6637,8 @@ async function executeBatchExport() {
     const prefix = $('#batch-export-prefix')?.value || '';
     const blacklistText = $('#batch-export-blacklist')?.value || '';
     const blacklist = blacklistText ? blacklistText.split(',').map(t => t.trim()).filter(t => t) : [];
+    const contentMode = $('#batch-export-content-mode')?.value || 'tags';
+    const overwritePolicy = $('#batch-export-overwrite')?.value || 'unique';
 
     const imageIds = Array.from(AppState.selectedIds);
 
@@ -6431,23 +6653,30 @@ async function executeBatchExport() {
     if (startBtn) startBtn.disabled = true;
 
     try {
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix);
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy);
 
         $('#batch-export-progress-fill').style.width = '100%';
 
         const exported = Number(result?.exported || 0);
+        const skipped = Number(result?.skipped || 0);
         const errorCount = Number(result?.error_count ?? result?.errors ?? 0);
         const errorMessages = Array.isArray(result?.error_messages) ? result.error_messages : [];
 
-        if ((result.status === 'ok' || errorCount === 0) && exported > 0) {
+        if ((result.status === 'ok' || errorCount === 0) && exported > 0 && skipped === 0) {
             showToast(appT('export.success', 'Exported {count} tag files successfully.', {
                 count: exported,
             }), 'success');
             hideModal('batch-export-modal');
-        } else if (result.status === 'partial' || (exported > 0 && errorCount > 0)) {
-            showToast(appT('batchExport.partialSuccess', 'Exported {count} tag file(s). {failed} failed.')
-                .replace('{count}', exported)
-                .replace('{failed}', errorCount), 'warning');
+        } else if (result.status === 'partial' || exported > 0 || skipped > 0) {
+            const baseMessage = exported > 0
+                ? appT('batchExport.partialSuccess', 'Exported {count} sidecar file(s). {failed} failed.')
+                    .replace('{count}', exported)
+                    .replace('{failed}', errorCount)
+                : appT('batchExport.noFilesWritten', 'No sidecar files were written.');
+            const skippedMessage = skipped > 0
+                ? ` ${appT('batchExport.skippedExisting', 'Skipped {skipped} existing sidecar(s).').replace('{skipped}', skipped)}`
+                : '';
+            showToast(`${baseMessage}${skippedMessage}`.trim(), errorCount > 0 || skipped > 0 ? 'warning' : 'success');
             hideModal('batch-export-modal');
         } else {
             showToast(appT('export.failedReason', 'Export failed: {reason}', {
@@ -7659,11 +7888,11 @@ function initGlobalKeyboardShortcuts() {
                 showToast(appT('gallery.selectionCleared', 'Selection cleared'), 'info');
             }
         }
-        // Delete - Clear gallery (with confirmation)
+        // Delete - Remove from gallery only; permanent disk delete stays behind the explicit dangerous button.
         else if (e.key === 'Delete') {
             if (AppState.selectedIds.size > 0) {
                 e.preventDefault();
-                deleteSelectedGalleryImages();
+                removeSelectedGalleryImages();
             }
         }
     });

@@ -560,15 +560,15 @@ Quality bar:
 
 - Gallery selection semantics are no longer collapsed: filtered-all, visible-only, and invert actions now have separate controls and tests.
 - Selected Gallery file operations now exist in the Gallery panel: `Move Selected...` and `Copy Selected...` call the existing `/api/move` backend contract instead of forcing users into Auto-Separate/Manual Sort.
-- Destructive selected deletion is no longer the default cleanup path: `Remove from Gallery` deletes only DB rows through `/api/images/remove-selected`; `Delete Files from Disk...` remains explicit and dangerous.
-- Manual Sort start no longer silently overwrites unfinished progress. Backend requires `replace_existing=true`; frontend asks before discarding a saved session.
-- Forge detection now uses metadata-level Forge signals and Forge-style version strings, reducing WebUI/Forge bucket drift for newly parsed or re-parsed images.
+- Destructive selected deletion is no longer the default cleanup path: `Remove from Gallery` and the Delete key delete only DB rows through `/api/images/remove-selected`; `Delete Files from Disk...` remains explicit and dangerous.
+- Manual Sort start no longer silently overwrites or nudges users to discard unfinished progress. Backend requires `replace_existing=true`; frontend Start resumes a saved session by default, and restarting from the first image requires discarding the saved session first.
+- Forge detection now uses structured Forge signals and Forge-style version fields without scanning arbitrary prompt text, reducing WebUI/Forge bucket drift and avoiding `forge` prompt-word false positives for newly parsed or re-parsed images.
 - Batch tag export response shape now has explicit `status`, `error_count`, and `error_messages`, closing the frontend/backend contract drift that made partial exports hard to report correctly.
 
 ### Remaining staged work after the user smoke fixes
 
-- Pro-grade prompt/tag export is still product debt, not fully solved. Current export is safer and better reported, but SD power users still need presets such as prompt-only, negative-only, prompt+negative+params, sidecar overwrite policy, filename templates, JSON/CSV bundles, and large-library streaming/background export.
-- Auto-Separate settings visibility is still UX debt. The move/copy mode and important execution settings should be promoted near the action buttons like Manual Sort, not hidden in low-salience controls.
-- Quick-import generator counts can still be provisional while metadata is pending. The UI should label pending/unknown counts explicitly instead of making WebUI/Forge buckets look authoritative before parsing completes.
+- Pro-grade prompt/tag export has the core mode contract now: prompt-only, negative-only, prompt+negative, A1111/Forge block, tags, caption+tags, merged caption, JSON sidecars, CSV/JSONL modal formats, and sidecar overwrite policy. Remaining debt is filename templates/presets and streamed/background full-library export.
+- Auto-Separate execution-critical settings are now visible near the run button: move/copy, confirmation, and destination memory. Remaining debt is polishing preset ergonomics, not hidden destructive semantics.
+- Quick-import generator counts now expose `metadata_pending`, `scan_status`, and `scan_library_ready` through `/api/stats`; the UI labels unresolved generator buckets as resolving while metadata is pending or scan import is not library-ready. Remaining debt is historical rows that need explicit reparse/rescan when old parser logic already saved the wrong generator.
 - Existing already-indexed Forge rows may require reparse/rescan to move buckets if they were previously saved as `webui`; the parser fix improves new or re-parsed metadata, not historical rows automatically.
 - Local Playwright still depends on either host Chromium shared libraries or the wrapper's `.tools` runtime package cache being present. The touched smoke slice passes through the wrapper, but a clean WSL workspace without system libs still needs the local `.deb` cache before browser tests can run.
