@@ -1341,11 +1341,12 @@ Use this structure for future entries:
 - Context:
   `run.bat`, `run.sh`, and the portable launcher all install from `backend/requirements.txt`. A Linux-generated lockfile can accidentally include Linux-only CUDA/NVIDIA/Triton wheels without markers, which makes Windows and macOS first-run installation fail before the app starts.
 - Decision:
-  Keep Linux CUDA/NVIDIA/Triton transitive pins guarded with `sys_platform == "linux"`, keep `uvloop` guarded away from Windows, and keep Linux ONNX Runtime on a Linux-only pin, use macOS-resolvable ONNX Runtime, OpenCV, and PyTorch pins, keep the Windows ONNX Runtime GPU and `triton-windows` pins Windows-only, and pin `triton-windows` to an actually published wheel version. Treat marker loss or an unresolvable platform pin in `backend/requirements.txt` as a release blocker.
+  Keep Linux CUDA/NVIDIA/Triton transitive pins guarded with `sys_platform == "linux"`, keep `uvloop` guarded away from Windows, and keep Linux ONNX Runtime on a Linux-only pin, use macOS-resolvable ONNX Runtime, OpenCV, and PyTorch pins, keep the Windows ONNX Runtime GPU and `triton-windows` pins Windows-only, and pin `triton-windows` to an actually published wheel version. Treat marker loss or an unresolvable platform pin in `backend/requirements.txt` or `backend/requirements-dev.txt` as a release/dev-onboarding blocker.
 - Evidence:
-  `backend/requirements.txt` now guards `cuda-*`, `nvidia-*`, and `triton`, splits ONNX Runtime, OpenCV, and PyTorch pins for Linux/Windows/macOS, and uses a published `triton-windows` post-release pin; `backend/tests/test_release_build.py` validates the shared launcher requirements markers.
+  `backend/requirements.txt` and `backend/requirements-dev.txt` now guard `cuda-*`, `nvidia-*`, and `triton`, split ONNX Runtime, OpenCV, and PyTorch pins for Linux/Windows/macOS, and use a published `triton-windows` post-release pin; `backend/tests/test_release_build.py` validates both runtime and dev lock marker policy.
 - Related files:
   `backend/requirements.txt`
+  `backend/requirements-dev.txt`
   `backend/tests/test_release_build.py`
   `run.bat`
   `run.sh`

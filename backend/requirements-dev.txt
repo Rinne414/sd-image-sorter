@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: 53d2896779dd7dfa9a9eaa1b7cbf444c5b60a490ca0e5e435af5d7fb1978d83e
+# lock-input-sha256: f469f46ee8d9c3f6d09d022730f596334841e8cac5b61e341bc6fa67141dd188
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt
@@ -47,15 +47,15 @@ contourpy==1.3.3
     #   matplotlib
 coverage[toml]==7.13.5
     # via pytest-cov
-cuda-bindings==13.2.0
+cuda-bindings==13.2.0 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-cuda-pathfinder==1.5.3
+cuda-pathfinder==1.5.3 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-bindings
-cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2
+cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.2 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
@@ -191,73 +191,78 @@ numpy==1.26.4
     #   transformers
     #   ultralytics
     #   ultralytics-thop
-nvidia-cublas==13.1.0.3
+nvidia-cublas==13.1.0.3 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
     #   nvidia-cudnn-cu13
     #   nvidia-cusolver
-nvidia-cuda-cupti==13.0.85
+nvidia-cuda-cupti==13.0.85 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cuda-nvrtc==13.0.88
+nvidia-cuda-nvrtc==13.0.88 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cuda-runtime==13.0.96
+nvidia-cuda-runtime==13.0.96 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cudnn-cu13==9.19.0.56
+nvidia-cudnn-cu13==9.19.0.56 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-nvidia-cufft==12.0.0.61
+nvidia-cufft==12.0.0.61 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cufile==1.15.1.6
+nvidia-cufile==1.15.1.6 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-curand==10.4.0.35
+nvidia-curand==10.4.0.35 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cusolver==12.0.4.66
+nvidia-cusolver==12.0.4.66 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-nvidia-cusparse==12.6.3.3
+nvidia-cusparse==12.6.3.3 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
     #   nvidia-cusolver
-nvidia-cusparselt-cu13==0.8.0
+nvidia-cusparselt-cu13==0.8.0 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-nvidia-nccl-cu13==2.28.9
+nvidia-nccl-cu13==2.28.9 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-nvidia-nvjitlink==13.0.88
+nvidia-nvjitlink==13.0.88 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
     #   nvidia-cufft
     #   nvidia-cusolver
     #   nvidia-cusparse
-nvidia-nvshmem-cu13==3.4.5
+nvidia-nvshmem-cu13==3.4.5 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-nvidia-nvtx==13.0.85
+nvidia-nvtx==13.0.85 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   cuda-toolkit
-onnxruntime==1.25.0 ; sys_platform != "win32"
+onnxruntime==1.25.0 ; sys_platform == "linux"
+    # via
+    #   -r backend/requirements.txt
+    #   fastembed
+    #   nudenet
+onnxruntime==1.19.2 ; sys_platform == "darwin"
     # via
     #   -r backend/requirements.txt
     #   fastembed
@@ -266,11 +271,15 @@ onnxruntime-gpu==1.21.0 ; sys_platform == "win32"
     # via -r backend/requirements.txt
 open-clip-torch==3.3.0
     # via -r backend/requirements.txt
-opencv-python==4.11.0.86
+opencv-python==4.11.0.86 ; sys_platform != "darwin"
+opencv-python==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"
+opencv-python==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"
     # via
     #   -r backend/requirements.txt
     #   ultralytics
-opencv-python-headless==4.11.0.86
+opencv-python-headless==4.11.0.86 ; sys_platform != "darwin"
+opencv-python-headless==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"
+opencv-python-headless==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"
     # via
     #   -r backend/requirements.txt
     #   nudenet
@@ -414,7 +423,9 @@ tokenizers==0.22.2
     #   -r backend/requirements.txt
     #   fastembed
     #   transformers
-torch==2.11.0
+torch==2.11.0 ; sys_platform != "darwin"
+torch==2.11.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+torch==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
     # via
     #   -r backend/requirements.txt
     #   open-clip-torch
@@ -422,7 +433,9 @@ torch==2.11.0
     #   torchvision
     #   ultralytics
     #   ultralytics-thop
-torchvision==0.26.0
+torchvision==0.26.0 ; sys_platform != "darwin"
+torchvision==0.26.0 ; sys_platform == "darwin" and platform_machine == "arm64"
+torchvision==0.17.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
     # via
     #   -r backend/requirements.txt
     #   open-clip-torch
@@ -437,11 +450,11 @@ tqdm==4.67.3
     #   transformers
 transformers==5.6.2
     # via -r backend/requirements.txt
-triton==3.6.0 ; sys_platform != "win32"
+triton==3.6.0 ; sys_platform == "linux"
     # via
     #   -r backend/requirements.txt
     #   torch
-triton-windows==3.6.0 ; sys_platform == "win32"
+triton-windows==3.6.0.post26 ; sys_platform == "win32"
     # via -r backend/requirements.txt
 typer==0.25.0
     # via
@@ -477,7 +490,7 @@ urllib3==2.6.3
     #   requests
 uvicorn[standard]==0.46.0
     # via -r backend/requirements.txt
-uvloop==0.22.1
+uvloop==0.22.1 ; sys_platform != "win32"
     # via
     #   -r backend/requirements.txt
     #   uvicorn

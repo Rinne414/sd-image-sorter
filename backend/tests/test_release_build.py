@@ -239,11 +239,9 @@ def test_download_file_rejects_sha256_mismatch(monkeypatch, tmp_path):
     assert not (tmp_path / "payload.bin.tmp").exists()
 
 
-def test_runtime_requirements_keep_platform_specific_wheels_guarded():
-    """The shared launcher requirements file must remain installable on Windows/macOS."""
-    requirements_text = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
+def _assert_platform_specific_wheels_guarded(requirements_path: Path):
     requirement_lines: dict[str, list[str]] = {}
-    for line in requirements_text.splitlines():
+    for line in requirements_path.read_text(encoding="utf-8").splitlines():
         if not line or line.startswith(("#", " ")) or "==" not in line:
             continue
         package_name = line.split("==", 1)[0].split("[", 1)[0]
@@ -285,3 +283,13 @@ def test_runtime_requirements_keep_platform_specific_wheels_guarded():
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
     assert any(line.startswith("triton-windows==3.6.0.post") for line in requirement_lines["triton-windows"])
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])
+
+
+def test_runtime_requirements_keep_platform_specific_wheels_guarded():
+    """The shared launcher requirements file must remain installable on Windows/macOS."""
+    _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements.txt")
+
+
+def test_dev_requirements_keep_platform_specific_wheels_guarded():
+    """The dev lock must not regress to a Linux-only runtime closure."""
+    _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements-dev.txt")

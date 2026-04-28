@@ -546,7 +546,8 @@ Quality bar:
 ## Dependency / Release Debt Reduced On 2026-04-28
 
 - Confirmed release blocker fixed: `backend/requirements.txt` had Linux CUDA/NVIDIA/Triton wheels pinned without platform markers, while Windows and portable launchers install that same file. Those pins are now Linux-only, `uvloop` is non-Windows, macOS uses resolvable ONNX Runtime/OpenCV/PyTorch pins, `triton-windows` uses a published post-release pin, and a release-build regression test guards the shared requirements marker policy.
-- Remaining debt: the repo still uses one generated cross-platform requirements lock. A staged future improvement should split runtime constraints/locks per platform or regenerate locks in CI for Windows, Linux, and macOS instead of relying on manual marker preservation.
+- Confirmed dev-onboarding blocker fixed: `backend/requirements-dev.txt` had drifted behind the runtime lock and kept stale/unmarked platform wheels. It now mirrors the runtime platform split, refreshes its embedded input hash, and has the same marker regression test coverage.
+- Remaining debt: the repo still uses generated cross-platform requirements locks that require manual marker preservation. A staged future improvement should split runtime constraints/locks per platform or regenerate locks in CI for Windows, Linux, and macOS instead of relying on manual lockfile surgery.
 
 ## Small Review Bugs Fixed On 2026-04-28
 
