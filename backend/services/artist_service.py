@@ -7,7 +7,7 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional
 
-from fastapi import HTTPException
+from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError, ValidationError
 
 import database as db
 from artist_identifier import get_artist_identifier as default_get_artist_identifier
@@ -47,7 +47,7 @@ class ArtistService:
             row = cursor.fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail="Image not found")
+            raise ImageNotFoundError(image_id=image_id)
 
         indexed_path = str(row[0] or "")
         resolved_path = resolve_existing_indexed_image_path(indexed_path, backend_file=__file__)
@@ -58,7 +58,7 @@ class ArtistService:
             db.mark_image_unreadable(image_id, "File not found")
         except Exception:
             logger.debug("Failed to mark image %s unreadable after path resolution failure", image_id)
-        raise HTTPException(status_code=404, detail="Image file not found")
+        raise ImageFileNotFoundError(image_id=image_id)
 
     def _compute_content_fingerprint(self, image_path: str) -> Optional[str]:
         try:
@@ -105,7 +105,7 @@ class ArtistService:
         )
         result = identifier.identify(image_path, top_k=top_k)
         if result.get("error"):
-            raise HTTPException(status_code=503, detail=result["error"])
+            raise ServiceError(result["error"])
 
         self._store_prediction(
             image_id=image_id,
@@ -272,7 +272,7 @@ class ArtistService:
     def get_artist_images(self, *, artist_name: str, limit: int, offset: int) -> Dict[str, Any]:
         safe_artist = str(artist_name or "").strip()
         if not safe_artist:
-            raise HTTPException(status_code=400, detail="Artist name is required")
+            raise ValidationError("Artist name is required", field="artist_name")
 
         with db.get_db() as conn:
             cursor = conn.cursor()

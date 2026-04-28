@@ -52,7 +52,7 @@
     width: 100% !important;
     flex: 1 1 auto !important;
     min-width: 0 !important;
-    height: calc(100vh - 60px) !important;
+    height: calc(100vh - var(--nav-height)) !important;
     /* Account for navbar height */
     background: radial-gradient(circle at 50% 50%, #1a0b2e 0%, #0a0a0f 100%) !important;
     position: relative;
@@ -100,8 +100,8 @@
     backdrop-filter: var(--glass-blur-xl) !important;
     border-right: 1px solid rgba(168, 85, 247, 0.15) !important;
     padding: 10px !important;
-    height: calc(100vh - 60px) !important;
-    max-height: calc(100vh - 60px) !important;
+    height: calc(100vh - var(--nav-height)) !important;
+    max-height: calc(100vh - var(--nav-height)) !important;
     z-index: 20;
     overflow-y: auto !important;
     box-shadow: 5px 0 30px rgba(0, 0, 0, 0.2);
@@ -144,7 +144,7 @@
     z-index: 10;
     /* Don't use 100vh - it ignores the navbar and pushes toolbar off screen */
     height: 100% !important;
-    max-height: calc(100vh - 60px) !important;
+    max-height: calc(100vh - var(--nav-height)) !important;
 }
 
 /* Canvas Wrapper - The Container */

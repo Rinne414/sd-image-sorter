@@ -47,9 +47,9 @@ def _read_default_version() -> str:
 DEFAULT_VERSION = _read_default_version()
 
 # Python embeddable package URL template (Windows amd64)
-PYTHON_EMBED_VERSION = "3.11.9"
+PYTHON_EMBED_VERSION = "3.12.8"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
-PYTHON_EMBED_SHA256 = "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
+PYTHON_EMBED_SHA256 = "8d3f33be9eb810f23c102f08475af2854e50484b8e4e06275e937be61ce3d2fb"
 GET_PIP_COMMIT = "1c1d362758a70f85b9c9b12417c0c6f0ca3da4aa"
 GET_PIP_URL = f"https://raw.githubusercontent.com/pypa/get-pip/{GET_PIP_COMMIT}/public/get-pip.py"
 GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"

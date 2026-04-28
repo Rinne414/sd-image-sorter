@@ -33,6 +33,7 @@ const ManualSortState = {
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
 const MANUAL_SORT_OPERATION_MODE_KEY = 'manual_sort_operation_mode_v1';
+const MAX_MINIMAP_IMAGES = 1000;
 
 // Key mappings
 const KEY_MAP = {
@@ -826,7 +827,7 @@ async function startSorting() {
         const previewImages = [];
         let previewCursor = null;
 
-        while (previewImages.length < result.total_images) {
+        while (previewImages.length < result.total_images && previewImages.length < MAX_MINIMAP_IMAGES) {
             const imagesResult = await API.getImages({
                 generators: generators,
                 tags: tags,
@@ -864,7 +865,6 @@ async function startSorting() {
         ManualSortState.index = 0;
         ManualSortState.combo = 0;
         ManualSortState.history = [];
-        RedoStack.clear();
         ManualSortState.images = previewImages;
         ManualSortState.sortedCount = 0;
         ManualSortState.skippedCount = 0;
@@ -1073,7 +1073,6 @@ async function resumeSavedSession(prefetchedSession = null) {
         ManualSortState.undoAvailable = false;
         ManualSortState.redoAvailable = false;
         setManualSortOperationMode(session.operation_mode || ManualSortState.operationMode, { persist: true, updateUi: true });
-        RedoStack.clear();
 
         if (!Object.keys(ManualSortState.folders).length) {
             const folderResult = await API.get('/api/sort/folders');
@@ -1440,7 +1439,6 @@ function finishSorting() {
     ManualSortState.history = [];
     ManualSortState.undoAvailable = false;
     ManualSortState.redoAvailable = false;
-    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
@@ -1468,8 +1466,8 @@ function finishSorting() {
     $('#sort-interface').style.display = 'none';
     $('#sort-setup').style.display = 'block';
 
-    fetch('/api/sort/session', {method: 'DELETE'}).catch(e => {
-        console.warn('Operation failed:', e);
+    window.App.API.delete('/api/sort/session').catch(e => {
+        if (window.Logger) Logger.warn('Failed to clean up sort session:', e);
     });
 
     // Refresh gallery
@@ -1484,7 +1482,6 @@ function exitSorting() {
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
     ManualSortState.redoAvailable = false;
-    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
@@ -1575,27 +1572,6 @@ window.updateManualSortFilterSummary = updateManualSortFilterSummary;
 window.maybeAdoptManualSortFiltersFromGallery = maybeAdoptManualSortFiltersFromGallery;
 
 // ============== Touch Controls for Mobile ==============
-
-// Redo stack for manual sort
-const RedoStack = {
-    stack: [],
-    
-    push(action) {
-        this.stack.push(action);
-    },
-    
-    pop() {
-        return this.stack.pop();
-    },
-    
-    clear() {
-        this.stack = [];
-    },
-    
-    isEmpty() {
-        return this.stack.length === 0;
-    }
-};
 
 // Touch control button mapping
 const TOUCH_BUTTONS = [
@@ -1736,5 +1712,4 @@ async function redoLastAction() {
 
 // Export touch control functions
 window.createTouchControls = createTouchControls;
-window.RedoStack = RedoStack;
 window.redoLastAction = redoLastAction;

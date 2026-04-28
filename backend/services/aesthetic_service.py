@@ -7,9 +7,8 @@ import gc
 import logging
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import HTTPException
-
 import database as db
+from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
 from image_fingerprint import compute_image_content_fingerprint
 from services.derived_state_service import write_image_aesthetic_score
 from utils.source_paths import resolve_existing_indexed_image_path
@@ -43,14 +42,11 @@ class AestheticService:
 
     def _scored_count(self) -> int:
         try:
-            conn = db.get_connection()
-            try:
+            with db.get_db() as conn:
                 row = conn.execute(
                     "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NOT NULL"
                 ).fetchone()
                 return int(row[0] or 0)
-            finally:
-                conn.close()
         except Exception:
             return 0
 
@@ -68,20 +64,19 @@ class AestheticService:
         image_id: int,
         predict_score: Callable[[str], Optional[float]],
     ) -> Dict[str, Any]:
-        conn = db.get_connection()
-        try:
+        with db.get_db() as conn:
             row = conn.execute("SELECT path FROM images WHERE id = ?", (image_id,)).fetchone()
             if not row:
-                raise HTTPException(status_code=404, detail="Image not found")
+                raise ImageNotFoundError(image_id=image_id)
 
             indexed_path = str(row["path"] or "")
             image_path = self._resolve_image_path(image_id=image_id, indexed_path=indexed_path)
             if not image_path:
-                raise HTTPException(status_code=404, detail="Image file not found")
+                raise ImageFileNotFoundError(image_id=image_id)
 
             score = predict_score(image_path)
             if score is None:
-                raise HTTPException(status_code=500, detail="Scoring failed")
+                raise ServiceError("Scoring failed")
 
             write_image_aesthetic_score(
                 conn,
@@ -89,14 +84,10 @@ class AestheticService:
                 aesthetic_score=score,
                 content_fingerprint=self._compute_content_fingerprint(image_path),
             )
-            conn.commit()
             return {"image_id": image_id, "aesthetic_score": score}
-        finally:
-            conn.close()
 
     def count_images_to_score(self, *, force: bool) -> int:
-        conn = db.get_connection()
-        try:
+        with db.get_db() as conn:
             if force:
                 row = conn.execute("SELECT COUNT(*) FROM images").fetchone()
             else:
@@ -104,8 +95,6 @@ class AestheticService:
                     "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL"
                 ).fetchone()
             return int(row[0] or 0)
-        finally:
-            conn.close()
 
     def score_batch(
         self,
@@ -128,8 +117,7 @@ class AestheticService:
         commit_interval = 20
         cache_clear_interval = 50
 
-        conn = db.get_connection()
-        try:
+        with db.get_db() as conn:
             if force:
                 rows = conn.execute("SELECT id, path FROM images").fetchall()
             else:
@@ -186,16 +174,15 @@ class AestheticService:
 
             if pending_commits > 0:
                 conn.commit()
-        finally:
-            conn.close()
-            emit({
-                "running": False,
-                "current": "",
-            })
-            gc.collect()
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-            except Exception:
-                pass
+
+        emit({
+            "running": False,
+            "current": "",
+        })
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass

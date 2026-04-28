@@ -17,6 +17,7 @@ from artist_identifier import (
     ARTIST_THRESHOLD_DEFAULT,
 )
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
+from exceptions import ImageNotFoundError, ServiceError, ValidationError
 from model_health import get_model_health
 from services.artist_service import ArtistService
 
@@ -237,13 +238,18 @@ async def identify_artist(
     Raises:
         HTTPException 404: Image not found or file missing on disk
     """
-    result = service.identify_image(
-        image_id=request.image_id,
-        threshold=request.threshold,
-        top_k=request.top_k,
-        model_source=request.model_source,
-        model_path=request.model_path,
-    )
+    try:
+        result = service.identify_image(
+            image_id=request.image_id,
+            threshold=request.threshold,
+            top_k=request.top_k,
+            model_source=request.model_source,
+            model_path=request.model_path,
+        )
+    except ImageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message)
+    except ServiceError as exc:
+        raise HTTPException(status_code=503, detail=exc.message)
     return IdentifyResponse(**result)
 
 
@@ -473,11 +479,14 @@ async def get_artist_images(
     service: ArtistService = Depends(get_artist_service),
 ):
     """Return images identified for a specific artist ordered by confidence."""
-    return ArtistImageListResponse(**service.get_artist_images(
-        artist_name=artist_name,
-        limit=limit,
-        offset=offset,
-    ))
+    try:
+        return ArtistImageListResponse(**service.get_artist_images(
+            artist_name=artist_name,
+            limit=limit,
+            offset=offset,
+        ))
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
 
 
 @router.get("/list")

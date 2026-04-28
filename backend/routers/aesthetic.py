@@ -7,6 +7,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
+from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError
 from services.aesthetic_service import AestheticService
 
 logger = logging.getLogger(__name__)
@@ -56,10 +57,15 @@ def score_single_image(
     except ImportError:
         raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
 
-    return service.score_single_image(
-        image_id=image_id,
-        predict_score=predict_score,
-    )
+    try:
+        return service.score_single_image(
+            image_id=image_id,
+            predict_score=predict_score,
+        )
+    except ImageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message)
+    except ServiceError as exc:
+        raise HTTPException(status_code=500, detail=exc.message)
 
 
 # Background task state

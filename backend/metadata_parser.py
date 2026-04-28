@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 PARSED_METADATA_VERSION = 5
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_PNG_CHUNK_BYTES = 64 * 1024 * 1024       # 64 MB – generous cap for any single PNG chunk
+_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MB – cap for zlib-decompressed text data
 
 
 class MetadataParser:
@@ -265,6 +267,9 @@ class MetadataParser:
                 if len(chunk_type) != 4:
                     raise ValueError("Truncated PNG chunk type")
 
+                if chunk_length > _MAX_PNG_CHUNK_BYTES:
+                    break  # abort: chunk too large, likely malformed
+
                 chunk_data = png_file.read(chunk_length)
                 if len(chunk_data) != chunk_length:
                     raise ValueError("Truncated PNG chunk data")
@@ -326,6 +331,8 @@ class MetadataParser:
         if compression_method != 0:
             return None
         text = zlib.decompress(remainder[1:])
+        if len(text) > _MAX_DECOMPRESSED_BYTES:
+            return None
         return (
             keyword.decode("latin-1", errors="replace"),
             text.decode("utf-8", errors="replace"),
@@ -354,6 +361,8 @@ class MetadataParser:
             if compression_method != 0:
                 return None
             text_bytes = zlib.decompress(text_bytes)
+            if len(text_bytes) > _MAX_DECOMPRESSED_BYTES:
+                return None
 
         return (
             keyword.decode("latin-1", errors="replace"),

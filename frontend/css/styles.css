@@ -49,7 +49,41 @@
     --border-color: rgba(255, 138, 61, 0.2);
     --border-glow: rgba(255, 138, 61, 0.35);
 
-/* Color Distribution */
+    /* Border Radius - Consolidated */
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-3xl: 20px;
+    --radius-full: 50px;
+    --radius-circle: 50%;
+
+    /* Glassmorphism Effects - Consolidated */
+    --glass-blur: blur(12px);
+    --glass-blur-lg: blur(16px);
+    --glass-blur-xl: blur(20px);
+    --glass-bg: rgba(8, 18, 27, 0.78);
+    --glass-border: rgba(184, 215, 233, 0.12);
+
+    /* Shadows - Consolidated */
+    --shadow-glow: 0 0 30px rgba(255, 138, 61, 0.18);
+    --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.26);
+    --shadow-modal: 0 18px 48px rgba(0, 0, 0, 0.34);
+    --shadow-float: 0 12px 36px rgba(0, 0, 0, 0.25);
+
+    /* Spacing */
+    --nav-height: 72px;
+    --sidebar-width: 300px;
+
+    /* Animation */
+    --transition-fast: 150ms ease;
+    --transition-normal: 250ms ease;
+    --transition-slow: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ===== Color Distribution (Image Detail Modal) ===== */
 .modal-color-distribution {
     margin: 10px 0 14px;
 }
@@ -130,40 +164,6 @@
     border-radius: 4px;
     border: 1px solid rgba(255,255,255,0.15);
     flex-shrink: 0;
-}
-
-    /* Border Radius - Consolidated */
-    --radius-xs: 4px;
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 10px;
-    --radius-xl: 12px;
-    --radius-2xl: 16px;
-    --radius-3xl: 20px;
-    --radius-full: 50px;
-    --radius-circle: 50%;
-
-    /* Glassmorphism Effects - Consolidated */
-    --glass-blur: blur(12px);
-    --glass-blur-lg: blur(16px);
-    --glass-blur-xl: blur(20px);
-    --glass-bg: rgba(8, 18, 27, 0.78);
-    --glass-border: rgba(184, 215, 233, 0.12);
-
-    /* Shadows - Consolidated */
-    --shadow-glow: 0 0 30px rgba(255, 138, 61, 0.18);
-    --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.26);
-    --shadow-modal: 0 18px 48px rgba(0, 0, 0, 0.34);
-    --shadow-float: 0 12px 36px rgba(0, 0, 0, 0.25);
-
-    /* Spacing */
-    --nav-height: 72px;
-    --sidebar-width: 300px;
-
-    /* Animation */
-    --transition-fast: 150ms ease;
-    --transition-normal: 250ms ease;
-    --transition-slow: 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ===== Utility Classes ===== */

@@ -2009,26 +2009,4 @@ window.I18nLang_zhCN = {
     'tagger.cpuRuntime': 'CPU 运行环境',
     'tagger.pytorchCudaOnlyDetail': 'PyTorch CUDA 可用，但当前 ONNX 运行时路径仍然只能走 CPU。',
 
-    // ========================
-    // Prompt Lab
-    // ========================
-    'promptlab.categories': '标签分类',
-    'promptlab.searchTags': '搜索标签...',
-    'promptlab.loadingCategories': '加载分类中...',
-    'promptlab.tagSet': '标签集:',
-    'promptlab.selectTagSet': '-- 选择标签集 --',
-    'promptlab.applyTagSet': '应用',
-    'promptlab.slots': '提示词槽位',
-    'promptlab.randomize': '随机生成',
-    'promptlab.clear': '清空',
-    'promptlab.loadingSlots': '加载槽位中...',
-    'promptlab.output': '生成的提示词',
-    'promptlab.useInGallery': '在图库中使用',
-    'promptlab.generate': '生成',
-    'promptlab.copy': '复制',
-    'promptlab.validate': '验证',
-    'promptlab.outputPlaceholder': '点击“生成”或“随机生成”以创建提示词...',
-    'promptlab.presets': '预设',
-    'promptlab.savePreset': '保存预设',
-    'promptlab.noPresets': '暂无保存的预设。'
 };
