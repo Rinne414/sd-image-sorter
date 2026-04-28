@@ -665,17 +665,17 @@ Use this structure for future entries:
 - Area: release / updater integrity
 - Evidence tier: Tier 1
 - Decision:
-  External runtime/bootstrap downloads used by release packaging must be pinned by SHA-256, and release-built update assets should expose a checksum manifest so the in-app updater can validate archives when that manifest is present.
+  External runtime/bootstrap downloads used by release packaging must be pinned by SHA-256 and must use immutable artifact URLs when the upstream default URL is mutable; release-built update assets should expose a checksum manifest so the in-app updater can validate archives when that manifest is present. Bootstrap download caches must stay under staging, not the release asset root.
 - Why:
   Size-only validation is not enough for bootstrap Python, `get-pip.py`, or shipped update archives. This repo already controls the release-builder output, so it should use that control to make drift and tampering fail loudly instead of silently succeeding.
 - Do not "improve" this by:
-  Reverting to naked `urlretrieve()` downloads, keeping updater validation at size-only when a checksum manifest exists, or treating checksum assets as optional decoration with no enforcement path.
+  Reverting to naked `urlretrieve()` downloads, pinning a mutable `get-pip.py` URL by hash, leaving bootstrap cache files next to publishable release assets, keeping updater validation at size-only when a checksum manifest exists, or treating checksum assets as optional decoration with no enforcement path.
 - Allowed evolution:
   Stronger signing, detached signatures, or richer manifest metadata are welcome later, but the baseline checksum guard should stay in place.
 - Evidence:
-  `scripts/build_release_packages.py` now pins Python embed / `get-pip.py` downloads by SHA-256 and emits a release-manifest asset; `backend/services/update_service.py` can now consume that manifest to validate downloaded archives.
+  `scripts/build_release_packages.py` now pins Python embed downloads by versioned Python URL and SHA-256, pins `get-pip.py` to a specific `pypa/get-pip` Git commit plus SHA-256, keeps bootstrap download cache under staging, and emits a release-manifest asset; `backend/services/update_service.py` can consume that manifest to validate downloaded archives.
 - Last verified:
-  2026-04-27 against current release-builder code, updater code, and regression coverage.
+  2026-04-28 against current release-builder code, updater code, release-build smoke, and regression coverage.
 - Related files:
   `scripts/build_release_packages.py`
   `backend/services/update_service.py`
@@ -684,7 +684,7 @@ Use this structure for future entries:
 - Supersedes:
   The older size-only / trust-the-URL release bootstrap behavior.
 - Validation:
-  `backend/tests/test_release_build.py` checksum tests and `backend/tests/test_update_service.py` manifest/checksum download tests.
+  `backend/tests/test_release_build.py` checksum/bootstrap source tests, `backend/tests/test_update_service.py` manifest/checksum download tests, and `scripts/build_release_packages.py` smoke build.
 
 ### ADR-AI-20260428-22: Cross-generator checkpoint filters must use `checkpoint_normalized`, while raw `checkpoint` stays display-only
 - Status: active

@@ -547,6 +547,7 @@ Quality bar:
 
 - Confirmed release blocker fixed: `backend/requirements.txt` had Linux CUDA/NVIDIA/Triton wheels pinned without platform markers, while Windows and portable launchers install that same file. Those pins are now Linux-only, `uvloop` is non-Windows, macOS uses resolvable ONNX Runtime/OpenCV/PyTorch pins, `triton-windows` uses a published post-release pin, and a release-build regression test guards the shared requirements marker policy.
 - Confirmed dev-onboarding blocker fixed: `backend/requirements-dev.txt` had drifted behind the runtime lock and kept stale/unmarked platform wheels. It now mirrors the runtime platform split, refreshes its embedded input hash, and has the same marker regression test coverage.
+- Confirmed release-build smoke blockers fixed: the release builder now prunes excluded directory trees before walking them, so `backend/venv` / `artifacts` cannot create a packaging-time performance cliff; `get-pip.py` is pinned to an immutable upstream commit instead of mutable `bootstrap.pypa.io/get-pip.py`; bootstrap download cache now stays under staging and is deleted before the publishable asset list is complete.
 - Remaining debt: the repo still uses generated cross-platform requirements locks that require manual marker preservation. A staged future improvement should split runtime constraints/locks per platform or regenerate locks in CI for Windows, Linux, and macOS instead of relying on manual lockfile surgery.
 
 ## Small Review Bugs Fixed On 2026-04-28

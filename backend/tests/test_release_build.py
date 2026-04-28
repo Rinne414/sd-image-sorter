@@ -51,6 +51,44 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path("README.md")) is False
 
 
+def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    fake_root = tmp_path / "repo"
+    stage_root = tmp_path / "stage"
+
+    files = {
+        "README.md": "readme\n",
+        "backend/main.py": "print('ok')\n",
+        "frontend/index.html": "<html></html>\n",
+        "models/yolo/README.md": "model docs\n",
+        "models/yolo/model.onnx": "model payload\n",
+        "backend/venv/Lib/site-packages/huge.py": "must not copy\n",
+        "artifacts/release/staging/recursive.txt": "must not copy\n",
+        "data/images.db": "must not copy\n",
+        "update/downloads/patch.zip": "must not copy\n",
+        ".git/config": "must not copy\n",
+    }
+    for relative_path, content in files.items():
+        target = fake_root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    monkeypatch.setattr(release_builder, "ROOT", fake_root)
+
+    release_builder.copy_project(stage_root)
+
+    assert (stage_root / "README.md").exists()
+    assert (stage_root / "backend/main.py").exists()
+    assert (stage_root / "frontend/index.html").exists()
+    assert (stage_root / "models/yolo/README.md").exists()
+    assert not (stage_root / "models/yolo/model.onnx").exists()
+    assert not (stage_root / "backend/venv/Lib/site-packages/huge.py").exists()
+    assert not (stage_root / "artifacts/release/staging/recursive.txt").exists()
+    assert not (stage_root / "data/images.db").exists()
+    assert not (stage_root / "update/downloads/patch.zip").exists()
+    assert not (stage_root / ".git/config").exists()
+
+
 def test_release_default_version_follows_app_info():
     release_builder = load_release_builder()
     match = re.search(
@@ -61,6 +99,26 @@ def test_release_default_version_follows_app_info():
 
     assert match is not None
     assert release_builder.DEFAULT_VERSION == match.group(1)
+
+
+def test_release_bootstrap_downloads_are_pinned_to_immutable_sources():
+    release_builder = load_release_builder()
+
+    assert release_builder.PYTHON_EMBED_VERSION in release_builder.PYTHON_EMBED_URL
+    assert re.fullmatch(r"[0-9a-f]{64}", release_builder.PYTHON_EMBED_SHA256)
+    assert re.fullmatch(r"[0-9a-f]{40}", release_builder.GET_PIP_COMMIT)
+    assert release_builder.GET_PIP_COMMIT in release_builder.GET_PIP_URL
+    assert "raw.githubusercontent.com/pypa/get-pip/" in release_builder.GET_PIP_URL
+    assert "/main/" not in release_builder.GET_PIP_URL
+    assert release_builder.GET_PIP_URL != "https://bootstrap.pypa.io/get-pip.py"
+    assert re.fullmatch(r"[0-9a-f]{64}", release_builder.GET_PIP_SHA256)
+
+
+def test_release_bootstrap_download_cache_stays_under_staging_root():
+    release_builder = load_release_builder()
+
+    assert release_builder.BOOTSTRAP_DOWNLOAD_ROOT.parent == release_builder.STAGING_ROOT
+    assert release_builder.BOOTSTRAP_DOWNLOAD_ROOT.name.startswith("_")
 
 
 def test_write_package_manifest_excludes_runtime_files(tmp_path):

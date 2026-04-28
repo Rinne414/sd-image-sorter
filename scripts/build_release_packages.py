@@ -19,6 +19,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
+BOOTSTRAP_DOWNLOAD_ROOT = STAGING_ROOT / "_downloads"
 DEFAULT_SPLIT_SIZE_MB = 1900
 
 BACKEND_ROOT = ROOT / "backend"
@@ -49,8 +50,9 @@ DEFAULT_VERSION = _read_default_version()
 PYTHON_EMBED_VERSION = "3.11.9"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
 PYTHON_EMBED_SHA256 = "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
-GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
-GET_PIP_SHA256 = "feba1c697df45be1b539b40d93c102c9ee9dde1d966303323b830b06f3fbca3c"
+GET_PIP_COMMIT = "1c1d362758a70f85b9c9b12417c0c6f0ca3da4aa"
+GET_PIP_URL = f"https://raw.githubusercontent.com/pypa/get-pip/{GET_PIP_COMMIT}/public/get-pip.py"
+GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 120
 DOWNLOAD_HEADERS = {
@@ -242,15 +244,35 @@ def build_model_artifact_policy(managed_paths: Iterable[str], *, include_model_p
     }
 
 
+def _matches_prefix(relative_path: Path, prefixes: Iterable[str]) -> bool:
+    rel = relative_path.as_posix()
+    return any(rel == prefix or rel.startswith(prefix + "/") for prefix in prefixes)
+
+
+def should_prune_directory(relative_path: Path) -> bool:
+    rel = relative_path.as_posix()
+    if any(part.startswith(".") for part in relative_path.parts):
+        return True
+    if _matches_prefix(relative_path, RUNTIME_EXCLUDED_PREFIXES):
+        return True
+    if _matches_prefix(relative_path, EXCLUDED_PREFIXES):
+        return True
+    if rel.startswith("backend/test_"):
+        return True
+    if any(part in EXCLUDED_NAMES for part in relative_path.parts):
+        return True
+    return False
+
+
 def should_skip_path(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
     if any(part.startswith(".") for part in relative_path.parts) and rel not in ALLOWED_HIDDEN_FILES:
         return True
     if rel in EXCLUDED_FILES:
         return True
-    if any(rel == prefix or rel.startswith(prefix + "/") for prefix in RUNTIME_EXCLUDED_PREFIXES):
+    if _matches_prefix(relative_path, RUNTIME_EXCLUDED_PREFIXES):
         return True
-    if any(rel == prefix or rel.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES):
+    if _matches_prefix(relative_path, EXCLUDED_PREFIXES):
         return True
     # Exclude loose test files in backend/
     if rel.startswith("backend/test_"):
@@ -262,6 +284,20 @@ def should_skip_path(relative_path: Path) -> bool:
     if relative_path.parts and relative_path.parts[0] == "models" and rel not in DOC_FILES:
         return True
     return False
+
+
+def iter_project_files() -> Iterable[tuple[Path, Path]]:
+    stack = [ROOT]
+    while stack:
+        current = stack.pop()
+        for item in sorted(current.iterdir(), key=lambda path: path.name):
+            relative = item.relative_to(ROOT)
+            if item.is_dir():
+                if not should_prune_directory(relative):
+                    stack.append(item)
+                continue
+            if not should_skip_path(relative):
+                yield item, relative
 
 
 def copy_file(relative_path: str | Path, destination_root: Path) -> None:
@@ -288,12 +324,7 @@ def copy_tree(source_root: Path, destination_root: Path, target_relative_root: s
 
 
 def copy_project(destination_root: Path) -> None:
-    for item in ROOT.rglob("*"):
-        if item.is_dir():
-            continue
-        relative = item.relative_to(ROOT)
-        if should_skip_path(relative):
-            continue
+    for item, relative in iter_project_files():
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(item, destination)
@@ -622,7 +653,7 @@ def prepare_embedded_python(stage_dir: Path) -> None:
     python_dir.mkdir(parents=True, exist_ok=True)
 
     # Download embeddable Python
-    embed_zip = ARTIFACT_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
+    embed_zip = BOOTSTRAP_DOWNLOAD_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
     download_file(PYTHON_EMBED_URL, embed_zip, expected_sha256=PYTHON_EMBED_SHA256)
 
     # Extract
