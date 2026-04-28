@@ -212,16 +212,19 @@ function cloneSelectionState(selectionState) {
         return window.SelectionStore.cloneState(selectionState);
     }
     const source = selectionState || createDefaultSelectionState();
+    const scope = source.scope === 'filtered' || source.scope === 'loaded' ? source.scope : 'visible';
+    const filterKey = scope === 'filtered' && typeof source.filterKey === 'string' && source.filterKey
+        ? source.filterKey
+        : null;
+    const selectionToken = scope === 'filtered' && typeof source.selectionToken === 'string' && source.selectionToken
+        ? source.selectionToken
+        : null;
     return {
         selectionMode: Boolean(source.selectionMode),
         selectedIds: new Set(Array.from(source.selectedIds || [])),
-        scope: source.scope || 'visible',
-        filterKey: typeof source.filterKey === 'string' && source.filterKey
-            ? source.filterKey
-            : null,
-        selectionToken: typeof source.selectionToken === 'string' && source.selectionToken
-            ? source.selectionToken
-            : null,
+        scope,
+        filterKey,
+        selectionToken,
     };
 }
 

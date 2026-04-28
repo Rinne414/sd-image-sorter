@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -77,3 +79,55 @@ def test_window_app_context_is_sealed_after_creation():
 
     assert "window.App = buildAppContext();" in source
     assert "Object.seal(window.App);" in source
+
+
+def test_selection_store_clears_filtered_token_for_non_filtered_scopes():
+    if shutil.which("node") is None:
+        return
+
+    repo_root = Path(__file__).resolve().parents[2]
+    script = f"""
+const fs = require('fs');
+global.window = {{}};
+const source = fs.readFileSync({str(repo_root / 'frontend' / 'js' / 'stores' / 'selection-store.js')!r}, 'utf8');
+eval(source);
+const visibleState = window.SelectionStore.cloneState({{
+  selectionMode: true,
+  selectedIds: [1, 2],
+  scope: 'visible',
+  filterKey: 'stale-filter',
+  selectionToken: 'stale-token',
+}});
+if (visibleState.filterKey !== null || visibleState.selectionToken !== null) {{
+  throw new Error('visible selection retained filtered token state');
+}}
+const loadedState = window.SelectionStore.cloneState({{
+  selectionMode: true,
+  selectedIds: [1, 2],
+  scope: 'loaded',
+  filterKey: 'stale-filter',
+  selectionToken: 'stale-token',
+}});
+if (loadedState.filterKey !== null || loadedState.selectionToken !== null) {{
+  throw new Error('loaded selection retained filtered token state');
+}}
+const filteredState = window.SelectionStore.cloneState({{
+  selectionMode: true,
+  selectedIds: [1, 2],
+  scope: 'filtered',
+  filterKey: 'active-filter',
+  selectionToken: 'active-token',
+}});
+if (filteredState.filterKey !== 'active-filter' || filteredState.selectionToken !== 'active-token') {{
+  throw new Error('filtered selection lost active token state');
+}}
+"""
+    subprocess.run(["node", "-e", script], check=True)
+
+
+def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
+
+    assert "renderManualSortResumeBanner(null, { visible: true })" not in source
+    assert "previousResumeSnapshot" in source

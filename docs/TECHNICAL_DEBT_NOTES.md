@@ -547,3 +547,9 @@ Quality bar:
 
 - Confirmed release blocker fixed: `backend/requirements.txt` had Linux CUDA/NVIDIA/Triton wheels pinned without platform markers, while Windows and portable launchers install that same file. Those pins are now Linux-only, `uvloop` is non-Windows, macOS uses resolvable ONNX Runtime/OpenCV/PyTorch pins, `triton-windows` uses a published post-release pin, and a release-build regression test guards the shared requirements marker policy.
 - Remaining debt: the repo still uses one generated cross-platform requirements lock. A staged future improvement should split runtime constraints/locks per platform or regenerate locks in CI for Windows, Linux, and macOS instead of relying on manual marker preservation.
+
+## Small Review Bugs Fixed On 2026-04-28
+
+- Selection state now enforces `selectionToken/filterKey => filtered scope` in the shared store instead of relying on every Gallery action to remember to clear stale token state.
+- Manual Sort resume banner no longer renders a null visible session and leaves stale copy on screen; resume failure restores the previous saved-session snapshot only when one exists.
+- Migration 003 no longer imports live `database` helpers; its LoRA extraction backfill is frozen inside the migration with contract tests.

@@ -446,10 +446,13 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
         return;
     }
 
-    banner.style.display = 'flex';
     if (!session) {
+        ManualSortState.resumeBannerSessionSnapshot = null;
+        banner.style.display = 'none';
         return;
     }
+
+    banner.style.display = 'flex';
     ManualSortState.resumeBannerSessionSnapshot = {
         remaining: Number(session?.remaining || 0),
         operation_mode: session?.operation_mode || 'move',
@@ -999,6 +1002,13 @@ function applyCurrentSortPayload(result, options = {}) {
 
 async function resumeSavedSession() {
     const { $, API, showToast } = window.App;
+    const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
+        ? {
+            remaining: ManualSortState.resumeBannerSessionSnapshot.remaining,
+            operation_mode: ManualSortState.resumeBannerSessionSnapshot.operation_mode,
+            folders: { ...(ManualSortState.resumeBannerSessionSnapshot.folders || {}) },
+        }
+        : null;
 
     try {
         const session = await API.getCurrentSortImage();
@@ -1037,7 +1047,7 @@ async function resumeSavedSession() {
         renderManualSortResumeBanner(null, { visible: false });
     } catch (error) {
         rollbackSortingUi();
-        renderManualSortResumeBanner(null, { visible: true });
+        renderManualSortResumeBanner(previousResumeSnapshot, { visible: Boolean(previousResumeSnapshot) });
         Logger.error('Failed to resume saved session:', error);
         showToast(formatUserError(error, manualSortText('manual.resumeFailed', 'Failed to resume saved session', '恢复已保存会话失败')), 'error');
     }

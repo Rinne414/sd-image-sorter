@@ -38,16 +38,19 @@
 
     function cloneState(state) {
         const source = state || createDefaultState();
+        const scope = normalizeScope(source.scope);
+        const filterKey = scope === 'filtered' && typeof source.filterKey === 'string' && source.filterKey
+            ? source.filterKey
+            : null;
+        const selectionToken = scope === 'filtered' && typeof source.selectionToken === 'string' && source.selectionToken
+            ? source.selectionToken
+            : null;
         return {
             selectionMode: Boolean(source.selectionMode),
             selectedIds: cloneSelectedIds(source.selectedIds),
-            scope: normalizeScope(source.scope),
-            filterKey: typeof source.filterKey === 'string' && source.filterKey
-                ? source.filterKey
-                : null,
-            selectionToken: typeof source.selectionToken === 'string' && source.selectionToken
-                ? source.selectionToken
-                : null,
+            scope,
+            filterKey,
+            selectionToken,
         };
     }
 

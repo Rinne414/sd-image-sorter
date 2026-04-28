@@ -1352,3 +1352,18 @@ Use this structure for future entries:
   `scripts/build_release_packages.py`
 - Validation:
   `backend/tests/test_release_build.py`.
+
+### ADR-AI-20260428-47: Selection tokens are valid only for filtered scope
+
+- Status: accepted
+- Context:
+  Gallery range/visible/toggle operations rewrite selection scope locally. If stale `selectionToken` or `filterKey` survives after scope narrows to `visible` or `loaded`, later export paths can accidentally see a token that no longer represents the current selection semantics.
+- Decision:
+  `SelectionStore.cloneState()` owns the invariant: only `filtered` selections may retain `filterKey` and `selectionToken`; `visible` and `loaded` selections always clear both fields. Manual Sort resume banner rendering also treats a missing session as hidden instead of preserving stale banner text.
+- Evidence:
+  `frontend/js/stores/selection-store.js`
+  `frontend/js/app.js`
+  `frontend/js/manual-sort.js`
+  `backend/tests/test_frontend_contract.py`
+- Validation:
+  `backend/tests/test_frontend_contract.py`.
