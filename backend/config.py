@@ -105,6 +105,12 @@ TEMP_DIR: Path = Path(
         str(DATA_DIR / "tmp"),
     )
 ).expanduser()
+STATE_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_STATE_DIR",
+        str(DATA_DIR / "state"),
+    )
+).expanduser()
 UPDATE_DIR: Path = Path(
     os.environ.get(
         "SD_IMAGE_SORTER_UPDATE_DIR",
@@ -118,6 +124,10 @@ THUMBNAIL_DIR: Path = Path(
     )
 ).expanduser()
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
+MANUAL_SORT_SESSION_FILE: str = os.environ.get(
+    "SD_IMAGE_SORTER_SORT_SESSION_FILE",
+    str(STATE_DIR / "sort-session.json"),
+)
 
 
 # =============================================================================
@@ -585,6 +595,12 @@ def get_temp_dir() -> str:
     """Get the package-local temp directory, creating it if necessary."""
     configure_runtime_temp_env()
     return str(TEMP_DIR)
+
+
+def get_state_dir() -> str:
+    """Get the package-local runtime state directory, creating it if necessary."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    return str(STATE_DIR)
 
 
 def get_update_dir() -> str:

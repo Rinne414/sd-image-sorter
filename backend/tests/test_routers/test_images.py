@@ -311,6 +311,37 @@ class TestSelectionIds:
         assert response.status_code == 400
         assert "Invalid sort_by value" in response.text
 
+    def test_selection_ids_post_filter_scans_sparse_matches_without_truncation(self, test_client, test_db_with_images):
+        """Selection ID resolution should not truncate when SQL prefilter returns many false positives."""
+        exact_ids = []
+        for index in range(5):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_exact_{index}.png",
+                    filename=f"router_selection_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+
+        for index in range(45):
+            test_client.test_db.add_image(
+                path=f"/test/router_selection_false_positive_{index}.png",
+                filename=f"router_selection_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        expected_ids = list(reversed(exact_ids))
+        response = test_client.post("/api/images/selection-ids", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": expected_ids,
+            "total": len(expected_ids),
+        }
+
 
 class TestGetSingleImage:
     """Tests for GET /api/images/{image_id} endpoint."""

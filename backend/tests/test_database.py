@@ -996,6 +996,83 @@ class TestImageFiltering:
         assert "embedding" not in images[0]
         json.dumps(images)
 
+    def test_get_images_paginated_post_filter_scans_beyond_false_positive_window(self, test_db):
+        """Post-filter pagination must keep scanning until it finds the true next matches."""
+        exact_ids = []
+        for index in range(4):
+            exact_ids.append(
+                db.add_image(
+                    path=f"/test/post_filter_exact_{index}.png",
+                    filename=f"post_filter_exact_{index}.png",
+                    prompt="hero, studio light",
+                )
+            )
+
+        for index in range(40):
+            db.add_image(
+                path=f"/test/post_filter_false_positive_{index}.png",
+                filename=f"post_filter_false_positive_{index}.png",
+                prompt="superhero, dramatic pose",
+            )
+
+        expected_ids = list(reversed(exact_ids))
+        first_page = db.get_images_paginated(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            limit=3,
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
+        assert first_page["has_more"] is True
+        assert first_page["next_cursor"] == str(expected_ids[2])
+
+        second_page = db.get_images_paginated(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            limit=3,
+            cursor_id=int(first_page["next_cursor"]),
+            skip_count=True,
+        )
+        assert [img["id"] for img in second_page["images"]] == expected_ids[3:]
+        assert second_page["has_more"] is False
+        assert second_page["next_cursor"] is None
+
+    def test_get_filtered_image_ids_streams_post_filter_batches_with_optional_limit(self, test_db):
+        """Filtered ID lookup should support chunked scanning and an explicit result cap."""
+        exact_ids = []
+        for index in range(12):
+            exact_ids.append(
+                db.add_image(
+                    path=f"/test/selection_exact_{index}.png",
+                    filename=f"selection_exact_{index}.png",
+                    prompt="hero, portrait",
+                )
+            )
+
+        for index in range(60):
+            db.add_image(
+                path=f"/test/selection_false_positive_{index}.png",
+                filename=f"selection_false_positive_{index}.png",
+                prompt="superhero, portrait",
+            )
+
+        expected_ids = list(reversed(exact_ids))
+        full_ids = db.get_filtered_image_ids(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            fetch_chunk_size=5,
+        )
+        assert full_ids == expected_ids
+
+        limited_ids = db.get_filtered_image_ids(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            fetch_chunk_size=5,
+            max_results=4,
+        )
+        assert limited_ids == expected_ids[:4]
+
     def test_filter_by_lora_uses_exact_normalized_names(self, test_db):
         """LoRA filtering should not substring-match unrelated normalized names."""
         exact_id = db.add_image(

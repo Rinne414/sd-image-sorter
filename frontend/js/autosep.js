@@ -470,6 +470,20 @@ function serializeAutoSepFilters(filters) {
     };
 }
 
+function buildAutoSepFilterContract(filters) {
+    const source = serializeAutoSepFilters(filters);
+    const normalizeCheckpoint = window.App?.normalizeCheckpointFilterValue;
+    const checkpoints = Array.isArray(source.checkpoints) ? source.checkpoints : [];
+    return {
+        ...source,
+        checkpoints: checkpoints
+            .map((value) => typeof normalizeCheckpoint === 'function' ? normalizeCheckpoint(value) : String(value || '').trim())
+            .filter(Boolean),
+        artist: source.artist ? String(source.artist).trim() : null,
+        search: source.search || '',
+    };
+}
+
 function loadAutoSepConfigs() {
     try {
         const raw = localStorage.getItem(AUTOSEP_CONFIGS_KEY);
@@ -853,21 +867,27 @@ function updateAutoSepSummary() {
 }
 
 function getAutoSepFilterSignature(filters) {
+    const appSignature = window.App?.getAdvancedFilterContractSignature;
+    if (typeof appSignature === 'function') {
+        return appSignature(buildAutoSepFilterContract(filters));
+    }
+    const contract = buildAutoSepFilterContract(filters);
     return JSON.stringify({
-        generators: filters.generators || [],
-        tags: filters.tags || [],
-        ratings: filters.ratings || [],
-        checkpoints: filters.checkpoints || [],
-        loras: filters.loras || [],
-        prompts: filters.prompts || [],
-        search: filters.search || '',
-        minWidth: filters.minWidth ?? null,
-        maxWidth: filters.maxWidth ?? null,
-        minHeight: filters.minHeight ?? null,
-        maxHeight: filters.maxHeight ?? null,
-        aspectRatio: filters.aspectRatio || null,
-        minAesthetic: filters.minAesthetic ?? null,
-        maxAesthetic: filters.maxAesthetic ?? null,
+        generators: contract.generators || [],
+        tags: contract.tags || [],
+        ratings: contract.ratings || [],
+        checkpoints: contract.checkpoints || [],
+        loras: contract.loras || [],
+        prompts: contract.prompts || [],
+        artist: contract.artist || null,
+        search: contract.search || '',
+        minWidth: contract.minWidth ?? null,
+        maxWidth: contract.maxWidth ?? null,
+        minHeight: contract.minHeight ?? null,
+        maxHeight: contract.maxHeight ?? null,
+        aspectRatio: contract.aspectRatio || null,
+        minAesthetic: contract.minAesthetic ?? null,
+        maxAesthetic: contract.maxAesthetic ?? null,
     });
 }
 
@@ -958,21 +978,23 @@ function _renderAutoSepOverflowModal(images) {
 }
 
 function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
+    const contract = buildAutoSepFilterContract(filters);
     return {
-        generators: filters.generators?.length > 0 ? filters.generators : null,
-        tags: filters.tags?.length > 0 ? filters.tags : null,
-        ratings: filters.ratings?.length < 4 ? filters.ratings : null,
-        checkpoints: filters.checkpoints?.length > 0 ? filters.checkpoints : null,
-        loras: filters.loras?.length > 0 ? filters.loras : null,
-        prompts: filters.prompts?.length > 0 ? filters.prompts : null,
-        search: filters.search?.trim() || null,
-        minWidth: filters.minWidth,
-        maxWidth: filters.maxWidth,
-        minHeight: filters.minHeight,
-        maxHeight: filters.maxHeight,
-        aspectRatio: filters.aspectRatio,
-        minAesthetic: filters.minAesthetic,
-        maxAesthetic: filters.maxAesthetic,
+        generators: contract.generators?.length > 0 ? contract.generators : null,
+        tags: contract.tags?.length > 0 ? contract.tags : null,
+        ratings: contract.ratings?.length < 4 ? contract.ratings : null,
+        checkpoints: contract.checkpoints?.length > 0 ? contract.checkpoints : null,
+        loras: contract.loras?.length > 0 ? contract.loras : null,
+        prompts: contract.prompts?.length > 0 ? contract.prompts : null,
+        artist: contract.artist || null,
+        search: contract.search?.trim() || null,
+        minWidth: contract.minWidth,
+        maxWidth: contract.maxWidth,
+        minHeight: contract.minHeight,
+        maxHeight: contract.maxHeight,
+        aspectRatio: contract.aspectRatio,
+        minAesthetic: contract.minAesthetic,
+        maxAesthetic: contract.maxAesthetic,
         limit,
         cursor,
     };
@@ -1095,6 +1117,7 @@ async function updateAutoSepPreview() {
         (filters.checkpoints?.length > 0) ||
         (filters.loras?.length > 0) ||
         (filters.prompts?.length > 0) ||
+        Boolean(filters.artist?.trim?.()) ||
         Boolean(filters.search?.trim()) ||
         filters.minWidth || filters.maxWidth || filters.minHeight || filters.maxHeight ||
         filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null;
@@ -1491,29 +1514,31 @@ async function executeAutoSeparateWithProgress() {
             showAutosepMoveProgress(total);
 
             try {
+                const contract = buildAutoSepFilterContract(filters);
                 const dimensions = {
-                    minWidth: filters.minWidth,
-                    maxWidth: filters.maxWidth,
-                    minHeight: filters.minHeight,
-                    maxHeight: filters.maxHeight,
-                    aspectRatio: filters.aspectRatio
+                    minWidth: contract.minWidth,
+                    maxWidth: contract.maxWidth,
+                    minHeight: contract.minHeight,
+                    maxHeight: contract.maxHeight,
+                    aspectRatio: contract.aspectRatio
                 };
 
                 const startResult = await API.batchMove(
-                    filters.generators?.length > 0 ? filters.generators : null,
-                    filters.tags?.length > 0 ? filters.tags : null,
-                    filters.ratings?.length < 4 ? filters.ratings : null,
+                    contract.generators?.length > 0 ? contract.generators : null,
+                    contract.tags?.length > 0 ? contract.tags : null,
+                    contract.ratings?.length < 4 ? contract.ratings : null,
                     destination,
-                    filters.checkpoints?.length > 0 ? filters.checkpoints : null,
-                    filters.loras?.length > 0 ? filters.loras : null,
-                    filters.prompts?.length > 0 ? filters.prompts : null,
+                    contract.checkpoints?.length > 0 ? contract.checkpoints : null,
+                    contract.loras?.length > 0 ? contract.loras : null,
+                    contract.prompts?.length > 0 ? contract.prompts : null,
                     dimensions,
-                    filters.search?.trim() || null,
+                    contract.search?.trim() || null,
                     {
-                        min: filters.minAesthetic,
-                        max: filters.maxAesthetic,
+                        min: contract.minAesthetic,
+                        max: contract.maxAesthetic,
                     },
                     operationMode,
+                    contract.artist,
                 );
 
                 if (startResult?.error) {

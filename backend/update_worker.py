@@ -24,7 +24,8 @@ INSTALLED_MANIFEST_RELATIVE_PATH = Path("update") / "installed-manifest.json"
 # The in-app updater is only allowed to touch release-managed application files.
 # User and runtime state must survive every update attempt, even if a future
 # release manifest is built incorrectly. `data/` holds the database, favorites,
-# downloaded models, caches, thumbnails, and other package-local state.
+# downloaded models, caches, thumbnails, manual-sort session persistence, and
+# other package-local state.
 # The update subfolders below are runtime workspaces used by the updater itself
 # and must never be replaced by release assets.
 PROTECTED_RUNTIME_PREFIXES = (

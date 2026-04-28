@@ -179,6 +179,20 @@ function createDefaultManualSortScopeMeta() {
     };
 }
 
+function buildManualSortFilterContract(filters) {
+    const source = serializeManualSortFilters(filters);
+    const normalizeCheckpoint = window.App?.normalizeCheckpointFilterValue;
+    const checkpoints = Array.isArray(source.checkpoints) ? source.checkpoints : [];
+    return {
+        ...source,
+        checkpoints: checkpoints
+            .map((value) => typeof normalizeCheckpoint === 'function' ? normalizeCheckpoint(value) : String(value || '').trim())
+            .filter(Boolean),
+        artist: source.artist ? String(source.artist).trim() : null,
+        search: source.search || '',
+    };
+}
+
 function loadManualSortScopeMeta() {
     try {
         const raw = localStorage.getItem(MANUAL_SORT_SCOPE_META_KEY);
@@ -251,21 +265,27 @@ function getManualSortToolLabel() {
 }
 
 function getManualSortScopeSignature(filters) {
+    const appSignature = window.App?.getAdvancedFilterContractSignature;
+    if (typeof appSignature === 'function') {
+        return appSignature(buildManualSortFilterContract(filters));
+    }
+    const contract = buildManualSortFilterContract(filters);
     return JSON.stringify({
-        generators: filters.generators || [],
-        tags: filters.tags || [],
-        ratings: filters.ratings || [],
-        checkpoints: filters.checkpoints || [],
-        loras: filters.loras || [],
-        prompts: filters.prompts || [],
-        search: filters.search || '',
-        minWidth: filters.minWidth || null,
-        maxWidth: filters.maxWidth || null,
-        minHeight: filters.minHeight || null,
-        maxHeight: filters.maxHeight || null,
-        aspectRatio: filters.aspectRatio || null,
-        minAesthetic: filters.minAesthetic ?? null,
-        maxAesthetic: filters.maxAesthetic ?? null,
+        generators: contract.generators || [],
+        tags: contract.tags || [],
+        ratings: contract.ratings || [],
+        checkpoints: contract.checkpoints || [],
+        loras: contract.loras || [],
+        prompts: contract.prompts || [],
+        artist: contract.artist || null,
+        search: contract.search || '',
+        minWidth: contract.minWidth || null,
+        maxWidth: contract.maxWidth || null,
+        minHeight: contract.minHeight || null,
+        maxHeight: contract.maxHeight || null,
+        aspectRatio: contract.aspectRatio || null,
+        minAesthetic: contract.minAesthetic ?? null,
+        maxAesthetic: contract.maxAesthetic ?? null,
     });
 }
 
@@ -661,7 +681,7 @@ async function startSorting() {
     });
 
     // Manual Sort keeps its own filter state so queue/sort work does not pollute Gallery.
-    const f = getManualSortFilters();
+    const f = buildManualSortFilterContract(getManualSortFilters());
     const generators = f.generators?.length > 0 ? f.generators : null;
     const ratings = f.ratings?.length > 0 ? f.ratings : null;
     const tags = f.tags?.length > 0 ? f.tags : null;
@@ -697,6 +717,7 @@ async function startSorting() {
                 max: f.maxAesthetic,
             },
             operationMode,
+            f.artist,
         );
 
         if (result.total_images === 0) {
@@ -719,6 +740,7 @@ async function startSorting() {
                 checkpoints: checkpoints,
                 loras: loras,
                 prompts: prompts,
+                artist: f.artist,
                 search: search,
                 minWidth: f.minWidth,
                 maxWidth: f.maxWidth,

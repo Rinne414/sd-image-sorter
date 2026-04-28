@@ -10,11 +10,13 @@ import platform
 import string
 import threading
 import time
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from config import MANUAL_SORT_SESSION_FILE
 import database as db
 from constants import VALID_ASPECT_RATIOS
 from image_manager import scan_folder, move_image, copy_image
@@ -27,7 +29,8 @@ from utils.source_paths import resolve_existing_indexed_image_path
 logger = logging.getLogger(__name__)
 
 
-SESSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'sort_session.json')
+SESSION_FILE = MANUAL_SORT_SESSION_FILE
+LEGACY_SESSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'sort_session.json')
 SORT_SESSION_SCHEMA_VERSION = 1
 
 # Validation constants
@@ -370,11 +373,28 @@ class SortingService:
     def _discard_persisted_session_file(self, reason: str) -> None:
         """Delete an unusable persisted session file so future boots do not half-restore it."""
         logger.warning("Discarding persisted sort session: %s", reason)
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except OSError as exc:
-            logger.warning("Failed to remove unsupported session file: %s", exc)
+        for path in self._get_session_file_candidates():
+            try:
+                if path.exists():
+                    path.unlink()
+            except OSError as exc:
+                logger.warning("Failed to remove unsupported session file %s: %s", path, exc)
+
+    @staticmethod
+    def _get_session_file_candidates() -> List[Path]:
+        """Return persisted-session paths in preferred load/save order."""
+        preferred = Path(SESSION_FILE).expanduser()
+        legacy = Path(LEGACY_SESSION_FILE).expanduser()
+        if preferred.resolve() == legacy.resolve():
+            return [preferred]
+        return [preferred, legacy]
+
+    def _find_existing_session_file(self) -> Optional[Path]:
+        """Find the first existing persisted sort-session file."""
+        for candidate in self._get_session_file_candidates():
+            if candidate.exists():
+                return candidate
+        return None
 
     def get_scan_progress(self) -> Dict[str, Any]:
         """Get the current scan progress."""
@@ -1653,11 +1673,12 @@ class SortingService:
         """Clear the current sort session."""
         with self._sort_session_lock:
             self._sort_session = self._build_default_sort_session_state()
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except Exception as e:
-            logger.warning("Failed to remove session file: %s", e)
+        for session_file in self._get_session_file_candidates():
+            try:
+                if session_file.exists():
+                    session_file.unlink()
+            except Exception as e:
+                logger.warning("Failed to remove session file %s: %s", session_file, e)
         return {'status': 'ok'}
 
     def clear_gallery(self) -> Dict[str, str]:
@@ -1717,9 +1738,10 @@ class SortingService:
     def load_session_from_disk(self) -> None:
         """Load persisted session from disk on startup."""
         try:
-            if not os.path.exists(SESSION_FILE):
+            session_file = self._find_existing_session_file()
+            if session_file is None:
                 return
-            with open(SESSION_FILE, 'r', encoding='utf-8') as f:
+            with session_file.open('r', encoding='utf-8') as f:
                 data = json.load(f)
 
             try:
@@ -1751,7 +1773,7 @@ class SortingService:
 
             if not valid_ids:
                 try:
-                    os.remove(SESSION_FILE)
+                    session_file.unlink()
                 except OSError:
                     pass
                 return
@@ -1807,6 +1829,12 @@ class SortingService:
                     'redo_stack': restored_redo_stack,
                 })
                 self._save_session_to_disk()
+                preferred_session_file = self._get_session_file_candidates()[0]
+                if session_file != preferred_session_file and session_file.exists():
+                    try:
+                        session_file.unlink()
+                    except OSError as exc:
+                        logger.warning("Failed to remove legacy sort session file %s: %s", session_file, exc)
             logger.info("Restored session: %d images", len(valid_ids))
         except Exception as e:
             logger.warning("Failed to restore session: %s", e)
@@ -1815,7 +1843,9 @@ class SortingService:
         """Persist session to disk."""
         try:
             data = self._build_persisted_sort_session_payload()
-            with open(SESSION_FILE, 'w', encoding='utf-8') as f:
+            session_file = self._get_session_file_candidates()[0]
+            session_file.parent.mkdir(parents=True, exist_ok=True)
+            with session_file.open('w', encoding='utf-8') as f:
                 json.dump(data, f)
         except Exception as e:
             logger.warning("Failed to save session to disk: %s", e)

@@ -223,10 +223,12 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         generators: [...(source.generators || [])],
         ratings: [...(source.ratings || [])],
         tags: [...(source.tags || [])],
-        checkpoints: [...(source.checkpoints || [])],
+        checkpoints: [...(source.checkpoints || [])]
+            .map(normalizeCheckpointFilterValue)
+            .filter(Boolean),
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
-        artist: source.artist || null,
+        artist: source.artist ? String(source.artist).trim() : null,
         search: source.search || '',
         sortBy: source.sortBy || 'newest',
         minWidth: source.minWidth ?? null,
@@ -241,6 +243,31 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
 
 function getSelectionFilterCacheKey(filters = AppState?.filters || createDefaultFilterState()) {
     return JSON.stringify(buildSelectionFilterRequest(filters));
+}
+
+function buildAdvancedFilterContract(filters = AppState?.filters || createDefaultFilterState()) {
+    const request = buildSelectionFilterRequest(filters);
+    return {
+        generators: request.generators,
+        ratings: request.ratings,
+        tags: request.tags,
+        checkpoints: request.checkpoints,
+        loras: request.loras,
+        prompts: request.prompts,
+        artist: request.artist,
+        search: request.search || '',
+        minWidth: request.minWidth ?? null,
+        maxWidth: request.maxWidth ?? null,
+        minHeight: request.minHeight ?? null,
+        maxHeight: request.maxHeight ?? null,
+        aspectRatio: request.aspectRatio || '',
+        minAesthetic: request.minAesthetic ?? null,
+        maxAesthetic: request.maxAesthetic ?? null,
+    };
+}
+
+function getAdvancedFilterContractSignature(filters = AppState?.filters || createDefaultFilterState()) {
+    return JSON.stringify(buildAdvancedFilterContract(filters));
 }
 
 function copyFilterState(target, source) {
@@ -831,7 +858,7 @@ const API = {
         return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder, operation });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move') {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -839,6 +866,7 @@ const API = {
             checkpoints,
             loras,
             prompts,
+            artist: artist ? String(artist).trim() : null,
             search,
             min_width: dimensions?.minWidth || null,
             max_width: dimensions?.maxWidth || null,
@@ -853,7 +881,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move') {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null) {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -861,6 +889,7 @@ const API = {
         if (checkpoints?.length) params.set('checkpoints', checkpoints.join(','));
         if (loras?.length) params.set('loras', loras.join(','));
         if (prompts?.length) params.set('prompts', prompts.join(','));
+        if (artist) params.set('artist', String(artist).trim());
         if (search) params.set('search', search);
         if (dimensions?.minWidth) params.set('min_width', dimensions.minWidth);
         if (dimensions?.maxWidth) params.set('max_width', dimensions.maxWidth);
@@ -5178,7 +5207,9 @@ function renderModelSelectList() {
 
 function confirmModelSelection() {
     const { type, tempSelected } = AppState.modalSelection;
-    AppState.filters[`${type}s`] = Array.from(tempSelected);
+    updateAppFilters((filters) => {
+        filters[`${type}s`] = Array.from(tempSelected);
+    });
 
     updateModelSelectionSummaries();
     hideModal('model-select-modal');
@@ -6807,11 +6838,11 @@ function loadFilterPreset(name) {
         return false;
     }
 
-    // Apply preset to filters
-    AppState.filters = {
+    // Apply preset via shared filter setter so FilterStore stays in sync.
+    setAppFilters({
         ...AppState.filters,
-        ...preset
-    };
+        ...preset,
+    });
 
     updateFilterSummary();
     syncGenTabsWithFilters();
@@ -7256,6 +7287,10 @@ function buildAppContext() {
         createDefaultFilterState,
         cloneFilterState,
         copyFilterState,
+        buildSelectionFilterRequest,
+        getSelectionFilterCacheKey,
+        buildAdvancedFilterContract,
+        getAdvancedFilterContractSignature,
         normalizeCheckpointFilterValue,
         FilterStore: AppFilterStore,
         setFilters: setAppFilters,

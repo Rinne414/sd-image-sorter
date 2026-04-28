@@ -34,3 +34,23 @@ def test_backend_non_test_python_files_do_not_reintroduce_direct_path_identity_s
         "Use database/path helper APIs instead of literal `WHERE path = ?` clauses.\n"
         + "\n".join(violations)
     )
+
+
+def test_derived_writers_keep_path_resolution_on_shared_helper():
+    backend_root = Path(__file__).resolve().parents[1]
+    required_files = (
+        "similarity.py",
+        "services/aesthetic_service.py",
+        "services/artist_service.py",
+    )
+    missing: list[str] = []
+
+    for relative_path in required_files:
+        source = (backend_root / relative_path).read_text(encoding="utf-8")
+        if "resolve_existing_indexed_image_path(" not in source:
+            missing.append(relative_path)
+
+    assert not missing, (
+        "Derived pipelines must resolve indexed paths via shared helper before disk access.\n"
+        + "\n".join(missing)
+    )

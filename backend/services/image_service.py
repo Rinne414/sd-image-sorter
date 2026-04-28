@@ -50,6 +50,7 @@ LIMIT_MAX = 1000
 OFFSET_MAX = 10000000
 SEARCH_MAX_LENGTH = 1000
 DEFAULT_PAGE_SIZE = 100
+SELECTION_IDS_FETCH_CHUNK = 2000
 
 # Valid sort options and aspect ratios
 VALID_SORT_OPTIONS = [
@@ -639,6 +640,7 @@ class ImageService:
             artist=_sanitize_filter_value(artist) if artist else None,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
         )
         return {
             "image_ids": image_ids,

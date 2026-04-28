@@ -28,6 +28,7 @@ from config import (
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
+from utils.source_paths import resolve_existing_indexed_image_path
 
 
 logger = logging.getLogger(__name__)
@@ -336,10 +337,11 @@ class SimilarityIndex:
                 # Batch update embeddings - collect all updates first
                 updates = []
                 for img_id, img_path in batch:
-                    self._progress["current_item"] = os.path.basename(img_path)
+                    resolved_path = resolve_existing_indexed_image_path(img_path, backend_file=__file__)
+                    self._progress["current_item"] = os.path.basename(resolved_path or img_path)
                     self._progress["updated_at"] = time.time()
 
-                    if not os.path.exists(img_path):
+                    if not resolved_path:
                         self._progress["processed"] += 1
                         self._progress["errors"] += 1
                         self._progress["skipped"] += 1
@@ -348,7 +350,7 @@ class SimilarityIndex:
                             self.db.mark_image_unreadable(img_id, "File not found")
                         continue
 
-                    readable, read_error = verify_image_readable(img_path)
+                    readable, read_error = verify_image_readable(resolved_path)
                     if not readable:
                         self._progress["processed"] += 1
                         self._progress["errors"] += 1
@@ -358,14 +360,14 @@ class SimilarityIndex:
                             self.db.mark_image_unreadable(img_id, read_error or "Unreadable image")
                         continue
 
-                    embedding = embed_image_file(img_path, model=model)
+                    embedding = embed_image_file(resolved_path, model=model)
                     self._progress["processed"] += 1
                     if embedding is not None:
                         content_fingerprint = None
                         try:
-                            content_fingerprint = compute_image_content_fingerprint(img_path)
+                            content_fingerprint = compute_image_content_fingerprint(resolved_path)
                         except Exception as exc:
-                            logger.warning("Could not compute content fingerprint for %s: %s", img_path, exc)
+                            logger.warning("Could not compute content fingerprint for %s: %s", resolved_path, exc)
                         updates.append((embedding_to_bytes(embedding), content_fingerprint, img_id))
                         self._progress["embedded"] += 1
                     else:

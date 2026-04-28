@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-04-27
+**Updated:** 2026-04-28
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -719,3 +719,55 @@ Use this structure for future entries:
   The old implicit behavior where raw mixed generator checkpoint strings also doubled as the filter/facet identity key.
 - Validation:
   `backend/tests/test_database.py`, `backend/tests/test_routers/test_images.py`, `backend/tests/test_routers/test_sorting.py`, and `backend/tests/test_routers/test_prompts_censor_similarity_artists.py` all pass with the new contract.
+
+### ADR-AI-20260428-23: Manual Sort session persistence belongs to package-local runtime state (`data/state`), with legacy-path migration
+- Status: active
+- Area: runtime state / sorting session persistence
+- Evidence tier: Tier 1
+- Decision:
+  Persist Manual Sort session payloads at `data/state/sort-session.json` by default (`SD_IMAGE_SORTER_SORT_SESSION_FILE` override supported). On startup, still read legacy `backend/sort_session.json` if present, then migrate to the new runtime path.
+- Why:
+  Session persistence is runtime/user state, not source-code-adjacent app code. Keeping it under `backend/` made release/update ownership blurry and depended on packaging exclusions instead of runtime-boundary contract.
+- Do not "improve" this by:
+  Moving session persistence back beside backend source files, or dropping legacy-path compatibility immediately.
+- Allowed evolution:
+  Move to richer session schema/versioning, add multi-session support, or relocate state under a new runtime directory as long as runtime ownership and migration behavior remain explicit.
+- Evidence:
+  Sorting service now writes to the config-driven runtime state path and keeps compatibility load/migration logic for legacy persisted sessions.
+- Last verified:
+  2026-04-28 against current sorting service and config behavior.
+- Related files:
+  `backend/config.py`
+  `backend/services/sorting_service.py`
+  `backend/update_worker.py`
+  `scripts/build_release_packages.py`
+- Supersedes:
+  The older implicit behavior that persisted session state under `backend/sort_session.json`.
+- Validation:
+  Targeted sorting-session restore tests and runtime-path verification in current workspace.
+
+### ADR-AI-20260428-24: Release builder and detached updater must share manifest/runtime-protection constants
+- Status: active
+- Area: release/update operability contract
+- Evidence tier: Tier 1
+- Decision:
+  Packaging and updater flows must reuse the same manifest relative paths and runtime-protected prefix definitions, instead of duplicating string literals in separate modules.
+- Why:
+  Copy-maintained constants drift silently and only explode during publish/update. The detached worker is the enforcement boundary; the builder should derive its exclusions and manifest naming from that same contract.
+- Do not "improve" this by:
+  Reintroducing hardcoded `update/package-manifest.json` / `update/installed-manifest.json` string copies in the release builder, or bypassing updater-owned runtime protection prefixes in packaging logic.
+- Allowed evolution:
+  Move this contract to a dedicated shared module later, as long as builder/updater continue to share one source of truth.
+- Evidence:
+  `scripts/build_release_packages.py` now imports manifest/runtime-protection constants from `backend/update_worker.py` and uses them for skip and manifest generation paths.
+- Last verified:
+  2026-04-28 against current release-builder and updater code.
+- Related files:
+  `scripts/build_release_packages.py`
+  `backend/update_worker.py`
+  `backend/tests/test_release_build.py`
+  `backend/tests/test_update_worker.py`
+- Supersedes:
+  Prior duplicated manifest/runtime protection literals across builder and updater.
+- Validation:
+  Release-builder and updater unit tests in current workspace.

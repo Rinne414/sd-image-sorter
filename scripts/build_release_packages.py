@@ -21,6 +21,16 @@ ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
 DEFAULT_SPLIT_SIZE_MB = 1900
 
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from update_worker import (  # noqa: E402
+    INSTALLED_MANIFEST_RELATIVE_PATH,
+    PACKAGE_MANIFEST_RELATIVE_PATH,
+    PROTECTED_RUNTIME_PREFIXES,
+)
+
 
 def _read_default_version() -> str:
     app_info_path = ROOT / "backend" / "app_info.py"
@@ -67,7 +77,6 @@ EXCLUDED_PREFIXES = (
     "backend/test_",
     "node_modules",
     "python",
-    "data",
     "update",
     "tests",
     "test-results",
@@ -82,6 +91,8 @@ EXCLUDED_PREFIXES = (
     "docs/SECURITY_ARCHITECTURE",
     "docs/architecture",
 )
+
+RUNTIME_EXCLUDED_PREFIXES = tuple(prefix.as_posix() for prefix in PROTECTED_RUNTIME_PREFIXES)
 
 EXCLUDED_NAMES = {
     "__pycache__",
@@ -197,6 +208,8 @@ def should_skip_path(relative_path: Path) -> bool:
         return True
     if rel in EXCLUDED_FILES:
         return True
+    if any(rel == prefix or rel.startswith(prefix + "/") for prefix in RUNTIME_EXCLUDED_PREFIXES):
+        return True
     if any(rel == prefix or rel.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES):
         return True
     # Exclude loose test files in backend/
@@ -248,17 +261,18 @@ def copy_project(destination_root: Path) -> None:
 
 def write_package_manifest(stage_dir: Path, version: str) -> Path:
     managed_paths: list[str] = []
+    installed_manifest_relative = INSTALLED_MANIFEST_RELATIVE_PATH.as_posix()
     for file_path in sorted(stage_dir.rglob("*")):
         if file_path.is_dir():
             continue
         relative = file_path.relative_to(stage_dir).as_posix()
         if relative.startswith("python/"):
             continue
-        if relative == "update/installed-manifest.json":
+        if relative == installed_manifest_relative:
             continue
         managed_paths.append(relative)
 
-    manifest_relative = "update/package-manifest.json"
+    manifest_relative = PACKAGE_MANIFEST_RELATIVE_PATH.as_posix()
     if manifest_relative not in managed_paths:
         managed_paths.append(manifest_relative)
 

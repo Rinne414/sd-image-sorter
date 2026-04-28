@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-04-27
+**Updated:** 2026-04-28
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -102,7 +102,7 @@ Use this structure for future confirmed-debt entries:
   The immediate bugs were fixed, but the abstraction boundary is still missing.
 
 ### Debt-04: Manual sort session persistence is pragmatic, but not a clean state model
-- Status: open
+- Status: partially mitigated
 - Type: state management debt
 - Impact: medium
 - Risk if ignored:
@@ -119,7 +119,7 @@ Use this structure for future confirmed-debt entries:
 - Revisit trigger:
   Revisit before adding richer history, persistent sessions across app restarts, multi-session support, or expanded undo/redo.
 - Deferred because:
-  Current behavior is serviceable and recent review did not uncover a direct release-blocking bug worth destabilizing the session system for.
+  Session persistence is now moved into package-local runtime state (`data/state`) with legacy-path migration support, but session lifecycle remains single-session and still spans backend persisted JSON plus frontend local storage state.
 
 ### Debt-05: Gallery selection semantics are not explicit enough
 - Status: mitigated
@@ -218,7 +218,7 @@ Use this structure for future confirmed-debt entries:
   The immediate user-visible breakage was fixed without taking on a risky full CSS consolidation during release work.
 
 ### Debt-10: Release/update path ownership rules are still duplicated across packaging and updater layers
-- Status: partially mitigated
+- Status: mitigated
 - Type: release + operability debt
 - Impact: medium
 - Risk if ignored:
@@ -238,7 +238,7 @@ Use this structure for future confirmed-debt entries:
 - Revisit trigger:
   Revisit before adding new package-local runtime directories, changing portable package layout, or expanding updater asset types/channels.
 - Deferred because:
-  The immediate user-facing risk is mitigated by worker-side hard protection and regression tests, so centralizing the contract can wait until the release/update pipeline gets a broader hardening pass.
+  The immediate string-literal duplication between builder and updater is removed by sharing updater-owned manifest/protection constants, but broader release-pipeline redesign is still intentionally deferred.
 
 
 ## Quick Debt Reductions Applied On 2026-04-27
@@ -254,6 +254,12 @@ These do not close the major structural debts from the whole-repo audit, but the
 - Test-client DB setup now uses a real temporary SQLite path instead of brittle sibling-name path swapping inside `backend/tests/conftest.py`.
 - Canonical image SELECT column lists in `backend/database.py` now derive from one shared field source instead of four independently maintained string constants.
 - `run.bat` no longer probes a machine-specific `D:\Anaconda\python.exe` path before falling back to general user-install or PATH-based Python discovery.
+
+## Quick Debt Reductions Applied On 2026-04-28
+
+- Manual Sort persisted session moved from `backend/sort_session.json` into package-local runtime state (`data/state/sort-session.json` by default), with startup compatibility migration from the legacy path.
+- Release builder now reuses updater-owned constants for manifest-relative paths and runtime-protected prefixes, reducing copy-maintained release/update contract drift.
+- Core docs (`README.md`, `AGENTS.md`, `docs/API.md`, `docs/architecture.md`) were aligned to current runtime defaults: `127.0.0.1:8487`, package-local `data/` runtime paths, and currently mounted router surface.
 
 ## Whole-Repo Audit Status Refresh (2026-04-27)
 
@@ -273,8 +279,8 @@ This refresh aligns the long audit report with the current shipped workspace aft
   The schema now separates `library_order_time` from `source_file_mtime`, default ordering uses `library_order_time`, and `created_at` is reduced to a compatibility alias. The remaining cleanup is future alias removal, not unresolved mixed live semantics.
 - TD-07 Router/service boundary leakage: open.
   New hardening work avoided adding fresh leakage, but the older mixed boundaries remain.
-- TD-08 Manual sort session persistence split-brain: open.
-  No session-schema unification was attempted in this pass.
+- TD-08 Manual sort session persistence split-brain: partially mitigated.
+  Persisted session storage now lives under package-local runtime state with legacy-path migration, but broader multi-layer session-state ownership is still not unified.
 - TD-09 Selection semantics ambiguity: partially mitigated.
   `SelectionStore` now owns explicit `visible` / `loaded` / `filtered` scope state, `POST /api/images/selection-ids` resolves true filtered-result selection in backend sort order, and same-filter reloads no longer silently prune off-page IDs against the loaded thumbnail slice.
 - TD-10 Cross-generator checkpoint semantics: partially mitigated.

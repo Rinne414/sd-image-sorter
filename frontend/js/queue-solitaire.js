@@ -97,6 +97,27 @@
         };
     }
 
+    function normalizeCheckpointValue(value) {
+        const normalize = window.App?.normalizeCheckpointFilterValue;
+        if (typeof normalize === 'function') {
+            return normalize(value);
+        }
+        let text = String(value || '').trim();
+        if (!text) return '';
+        text = text.replace(/\\/g, '/').split('/').pop().trim();
+        text = text.replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+        return text;
+    }
+
+    function getNormalizedCheckpoint(meta) {
+        return normalizeCheckpointValue(meta?.checkpoint_normalized || meta?.checkpoint || '');
+    }
+
+    function getNormalizedArtist(meta) {
+        const raw = meta?.artist ?? meta?.predicted_artist ?? meta?.artist_name ?? '';
+        return String(raw || '').trim().toLowerCase();
+    }
+
     function t(key, fallback, params) {
         return window.I18n?.t?.(key, params) || fallback;
     }
@@ -821,7 +842,7 @@
                 promptCounts.set(token, (promptCounts.get(token) || 0) + 1);
             });
 
-            const checkpoint = String(detail.checkpoint || '').trim();
+            const checkpoint = getNormalizedCheckpoint(detail);
             if (checkpoint) {
                 checkpointCounts.set(checkpoint, (checkpointCounts.get(checkpoint) || 0) + 1);
             }
@@ -850,9 +871,12 @@
         const selectedGenerators = Array.isArray(filters.generators) ? filters.generators : [];
         const selectedRatings = Array.isArray(filters.ratings) ? filters.ratings : [];
         const selectedTags = Array.isArray(filters.tags) ? filters.tags.map(tag => String(tag).toLowerCase()) : [];
-        const selectedCheckpoints = Array.isArray(filters.checkpoints) ? filters.checkpoints.map(v => String(v).toLowerCase()) : [];
+        const selectedCheckpoints = Array.isArray(filters.checkpoints)
+            ? filters.checkpoints.map(v => normalizeCheckpointValue(v).toLowerCase()).filter(Boolean)
+            : [];
         const selectedLoras = Array.isArray(filters.loras) ? filters.loras.map(v => String(v).toLowerCase()) : [];
         const selectedPrompts = Array.isArray(filters.prompts) ? filters.prompts.map(v => String(v).toLowerCase()) : [];
+        const artistQuery = String(filters.artist || '').trim().toLowerCase();
         const searchQuery = String(filters.search || '').trim().toLowerCase();
 
         const generatorValue = String(meta.generator || '').toLowerCase();
@@ -860,12 +884,14 @@
         const tags = Array.isArray(meta.tags) ? meta.tags.map(tag => String(tag).toLowerCase()) : [];
         const prompt = String(meta.prompt || '').toLowerCase();
         const filename = String(meta.filename || '').toLowerCase();
-        const checkpoint = String(meta.checkpoint || '').toLowerCase();
+        const checkpoint = getNormalizedCheckpoint(meta).toLowerCase();
+        const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
         const loras = getLoraText(meta);
         const aspect = getAspectBucket(meta);
         const width = Number(meta.width || 0);
         const height = Number(meta.height || 0);
         const aesthetic = meta.aesthetic_score == null ? null : Number(meta.aesthetic_score);
+        const artist = getNormalizedArtist(meta);
 
         if (selectedGenerators.length && selectedGenerators.length < 5 && !selectedGenerators.includes(generatorValue)) return false;
         if (selectedRatings.length && selectedRatings.length < 4 && !selectedRatings.includes(ratingValue)) return false;
@@ -873,7 +899,8 @@
         if (selectedCheckpoints.length && !selectedCheckpoints.includes(checkpoint)) return false;
         if (selectedLoras.length && !selectedLoras.every(lora => loras.includes(lora))) return false;
         if (selectedPrompts.length && !selectedPrompts.every(term => prompt.includes(term))) return false;
-        if (searchQuery && ![prompt, filename, checkpoint, loras, tags.join(' ')].join(' ').includes(searchQuery)) return false;
+        if (artistQuery && artist !== artistQuery) return false;
+        if (searchQuery && ![prompt, filename, checkpoint, rawCheckpoint, loras, tags.join(' '), artist].join(' ').includes(searchQuery)) return false;
         if (filters.minWidth && width < filters.minWidth) return false;
         if (filters.maxWidth && width > filters.maxWidth) return false;
         if (filters.minHeight && height < filters.minHeight) return false;
@@ -917,16 +944,24 @@
                 const prompt = (meta.prompt || '').toLowerCase();
                 const tags = Array.isArray(meta.tags) ? meta.tags.join(' ').toLowerCase() : '';
                 const filename = (meta.filename || '').toLowerCase();
-                const checkpoint = (meta.checkpoint || '').toLowerCase();
+                const checkpoint = getNormalizedCheckpoint(meta).toLowerCase();
+                const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
                 const loras = getLoraText(meta);
                 const generatorText = (meta.generator || '').toLowerCase();
-                const haystack = [prompt, tags, filename, checkpoint, loras, generatorText].join(' ');
+                const artist = getNormalizedArtist(meta);
+                const haystack = [prompt, tags, filename, checkpoint, rawCheckpoint, loras, generatorText, artist].join(' ');
                 if (!haystack.includes(keyword)) match = false;
             }
 
             if (generator && String(meta.generator || '').toLowerCase() !== generator) match = false;
             if (rating && getRatingFromMeta(meta) !== rating) match = false;
-            if (checkpointQuery && !String(meta.checkpoint || '').toLowerCase().includes(checkpointQuery)) match = false;
+            if (checkpointQuery) {
+                const normalizedCheckpoint = getNormalizedCheckpoint(meta).toLowerCase();
+                const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
+                if (!normalizedCheckpoint.includes(checkpointQuery) && !rawCheckpoint.includes(checkpointQuery)) {
+                    match = false;
+                }
+            }
             if (loraQuery && !getLoraText(meta).includes(loraQuery)) match = false;
             if (minW > 0 && (meta.width || 0) < minW) match = false;
             if (maxW > 0 && (meta.width || 0) > maxW) match = false;
@@ -952,10 +987,12 @@
 
     async function applyGalleryFilters() {
         const filters = window.App?.AppState?.filters || createFilterState();
-
-        state.advancedFilters = window.App?.cloneFilterState
-            ? window.App.cloneFilterState(filters)
-            : JSON.parse(JSON.stringify(filters));
+        const buildContract = window.App?.buildAdvancedFilterContract;
+        state.advancedFilters = typeof buildContract === 'function'
+            ? buildContract(filters)
+            : (window.App?.cloneFilterState
+                ? window.App.cloneFilterState(filters)
+                : JSON.parse(JSON.stringify(filters)));
         await applyFilterState(state.advancedFilters, true);
     }
 
@@ -966,14 +1003,6 @@
         state.filterMatches.clear();
         const allIds = getAllImageIds();
         await ensureImageDetails(allIds);
-
-        const selectedGenerators = Array.isArray(filters.generators) ? filters.generators : [];
-        const selectedRatings = Array.isArray(filters.ratings) ? filters.ratings : [];
-        const selectedTags = Array.isArray(filters.tags) ? filters.tags.map(tag => String(tag).toLowerCase()) : [];
-        const selectedCheckpoints = Array.isArray(filters.checkpoints) ? filters.checkpoints.map(v => String(v).toLowerCase()) : [];
-        const selectedLoras = Array.isArray(filters.loras) ? filters.loras.map(v => String(v).toLowerCase()) : [];
-        const selectedPrompts = Array.isArray(filters.prompts) ? filters.prompts.map(v => String(v).toLowerCase()) : [];
-        const searchQuery = String(filters.search || '').trim().toLowerCase();
 
         for (const id of allIds) {
             const meta = state.detailCache.get(id) || getImageMeta(id);
@@ -1172,7 +1201,7 @@
         const meta = getImageMeta(state.previewId);
         const dims = meta ? `${meta.width || '?'}×${meta.height || '?'}` : '';
         const aesthetic = meta?.aesthetic_score != null ? `★ ${meta.aesthetic_score.toFixed(1)}` : '';
-        const checkpoint = meta?.checkpoint ? meta.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') : '';
+        const checkpoint = getNormalizedCheckpoint(meta);
 
         infoEl.innerHTML = `
             <span class="qs-preview-filename">${item?.outputFilename || item?.originalFilename || state.previewId}</span>

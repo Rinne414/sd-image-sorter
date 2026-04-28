@@ -1653,17 +1653,31 @@ def _fetch_post_filtered_page(
     order_clause: str,
     prompt_terms: Optional[List[str]],
     loras: Optional[List[str]],
+    *,
+    post_offset: int = 0,
     limit: int,
+    fetch_size: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch enough rows for a post-filtered page without fixed heuristic truncation."""
+    """Fetch a post-filtered page by scanning SQL rows in deterministic chunks."""
     cursor = conn.cursor()
-    fetch_size = max(limit * 2, 50)
-    offset = 0
+    if limit < 0:
+        raise ValueError("limit must be >= 0")
+
+    normalized_offset = max(0, int(post_offset))
+    normalized_limit = max(0, int(limit))
+    target_count = None if normalized_limit == 0 else normalized_offset + normalized_limit
+
+    effective_fetch_size = int(fetch_size or 0)
+    if effective_fetch_size <= 0:
+        baseline = normalized_limit if normalized_limit > 0 else 50
+        effective_fetch_size = max(baseline * 2, 50)
+
+    raw_offset = 0
     collected: List[Dict[str, Any]] = []
 
     while True:
         query = f"{base_query} ORDER BY {order_clause} LIMIT ? OFFSET ?"
-        params = list(base_params) + [fetch_size, offset]
+        params = list(base_params) + [effective_fetch_size, raw_offset]
         cursor.execute(query, params)
         rows = cursor.fetchall()
         if not rows:
@@ -1671,14 +1685,36 @@ def _fetch_post_filtered_page(
 
         batch = _post_filter_results(_rows_to_dicts(rows), prompt_terms, loras, 0, 0)
         collected.extend(batch)
-        if limit and len(collected) > limit:
+        if target_count is not None and len(collected) >= target_count:
             break
 
-        if len(rows) < fetch_size:
+        if len(rows) < effective_fetch_size:
             break
-        offset += fetch_size
+        raw_offset += effective_fetch_size
 
-    return collected
+    if normalized_limit == 0:
+        return collected[normalized_offset:]
+    return collected[normalized_offset:normalized_offset + normalized_limit]
+
+
+def _matches_exact_post_filters(
+    prompt: Optional[str],
+    lora_text: Optional[str],
+    normalized_prompt_terms: List[str],
+    normalized_loras: List[str],
+) -> bool:
+    """Apply the exact prompt/LORA matching semantics used by post-filter paths."""
+    if normalized_prompt_terms:
+        image_tokens = extract_prompt_tokens(prompt or "")
+        if not all(term in image_tokens for term in normalized_prompt_terms):
+            return False
+
+    if normalized_loras:
+        image_loras = extract_lora_names(lora_text or "", prompt or "")
+        if not any(lora in image_loras for lora in normalized_loras):
+            return False
+
+    return True
 
 
 def _post_filter_results(results: List[Dict[str, Any]],
@@ -1696,17 +1732,13 @@ def _post_filter_results(results: List[Dict[str, Any]],
     early_stop_count = offset + limit if limit else None
 
     for img in results:
-        if normalized_prompt_terms:
-            image_tokens = extract_prompt_tokens(img.get('prompt', ''))
-            if not all(term in image_tokens for term in normalized_prompt_terms):
-                continue
-
-        if normalized_loras:
-            image_loras = extract_lora_names(img.get('loras', ''), img.get('prompt', ''))
-            if not any(lora in image_loras for lora in normalized_loras):
-                continue
-
-        filtered_results.append(img)
+        if _matches_exact_post_filters(
+            img.get("prompt"),
+            img.get("loras"),
+            normalized_prompt_terms,
+            normalized_loras,
+        ):
+            filtered_results.append(img)
 
         if early_stop_count and len(filtered_results) >= early_stop_count:
             break
@@ -1833,7 +1865,16 @@ def get_images(
         order_clause = _get_order_clause(sort_by)
 
         if needs_post_filter:
-            results = _fetch_post_filtered_page(conn, query, params, order_clause, prompt_terms, loras, limit)
+            results = _fetch_post_filtered_page(
+                conn,
+                query,
+                params,
+                order_clause,
+                prompt_terms,
+                loras,
+                post_offset=offset,
+                limit=limit,
+            )
         else:
             query += f" ORDER BY {order_clause} LIMIT ? OFFSET ?"
             params.extend([limit, offset])
@@ -1959,6 +2000,8 @@ def get_filtered_image_ids(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
+    fetch_chunk_size: int = 5000,
+    max_results: Optional[int] = None,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -1973,6 +2016,8 @@ def get_filtered_image_ids(
     """
     if image_ids is not None and len(image_ids) == 0:
         return []
+    if max_results is not None and max_results <= 0:
+        return []
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -1980,8 +2025,8 @@ def get_filtered_image_ids(
         # Determine if post-filtering is needed
         needs_post_filter = bool(prompt_terms) or bool(loras)
 
-        # Build base query selecting only IDs
-        query = _build_base_query(sort_by, "i.id")
+        select_cols = "i.id, i.prompt, i.loras" if needs_post_filter else "i.id"
+        query = _build_base_query(sort_by, select_cols)
 
         conditions: List[str] = []
         params: List[Any] = []
@@ -2035,54 +2080,32 @@ def get_filtered_image_ids(
         query += f" ORDER BY {order_clause}"
 
         cursor.execute(query, params)
-        
-        # Memory optimization: Use generator to avoid loading all rows at once
-        # For very large datasets, fetch in batches instead of all at once
-        ids = []
-        batch_fetch_size = 5000  # Fetch in chunks to limit memory usage
+
+        ids: List[int] = []
+        chunk_size = max(1, int(fetch_chunk_size))
+        normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
+        normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
+
         while True:
-            rows = cursor.fetchmany(batch_fetch_size)
+            rows = cursor.fetchmany(chunk_size)
             if not rows:
                 break
-            ids.extend(row[0] for row in rows)
-
-        # Post-filtering for exact matching if needed
-        if needs_post_filter and ids:
-            filtered_ids = []
-            batch_size = 500
-
-            for i in range(0, len(ids), batch_size):
-                batch_ids = ids[i:i + batch_size]
-                placeholders = ",".join("?" * len(batch_ids))
-                cursor.execute(
-                    f"SELECT id, prompt, loras FROM images WHERE id IN ({placeholders})",
-                    batch_ids
-                )
-                batch_data = {row[0]: {'prompt': row[1], 'loras': row[2]} for row in cursor.fetchall()}
-
-                for img_id in batch_ids:
-                    if img_id not in batch_data:
-                        continue
-
-                    img = batch_data[img_id]
-
-                    # Check prompt tokens (AND logic)
-                    if prompt_terms:
-                        normalized_prompt_terms = [normalize_prompt_token(t) for t in prompt_terms]
-                        image_tokens = extract_prompt_tokens(img.get('prompt', '') or '')
-                        if not all(term in image_tokens for term in normalized_prompt_terms):
-                            continue
-
-                    # Check LORAs (OR logic)
-                    if loras:
-                        normalized_loras = [normalize_lora_name(l) for l in loras]
-                        image_loras = extract_lora_names(img.get('loras', '') or '', img.get('prompt', '') or '')
-                        if not any(lora in image_loras for lora in normalized_loras):
-                            continue
-
-                    filtered_ids.append(img_id)
-
-            return filtered_ids
+            if needs_post_filter:
+                for row in rows:
+                    row_id = int(row["id"])
+                    if _matches_exact_post_filters(
+                        row["prompt"],
+                        row["loras"],
+                        normalized_prompt_terms,
+                        normalized_loras,
+                    ):
+                        ids.append(row_id)
+                        if max_results is not None and len(ids) >= max_results:
+                            return ids
+            else:
+                ids.extend(int(row["id"]) for row in rows)
+                if max_results is not None and len(ids) >= max_results:
+                    return ids[:max_results]
 
         return ids
 
@@ -2196,26 +2219,35 @@ def get_images_paginated(
         if cursor_id is not None and sort_by != "random":
             if not _supports_cursor_sort(sort_by):
                 raise ValueError(f"Cursor pagination does not support sort_by={sort_by}")
+            cursor_sort_row = cursor.execute(
+                "SELECT COALESCE(library_order_time, created_at) AS sort_value FROM images WHERE id = ?",
+                (cursor_id,),
+            ).fetchone()
+            cursor_sort_value = cursor_sort_row["sort_value"] if cursor_sort_row else None
             if sort_by == "newest":
-                conditions.append(
-                    "("
-                    "COALESCE(i.library_order_time, i.created_at) < "
-                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) "
-                    "OR (COALESCE(i.library_order_time, i.created_at) = "
-                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) AND i.id < ?)"
-                    ")"
-                )
-                params.extend([cursor_id, cursor_id, cursor_id])
+                if cursor_sort_value is None:
+                    conditions.append("i.id < ?")
+                    params.append(cursor_id)
+                else:
+                    conditions.append(
+                        "("
+                        "COALESCE(i.library_order_time, i.created_at) < ? "
+                        "OR (COALESCE(i.library_order_time, i.created_at) = ? AND i.id < ?)"
+                        ")"
+                    )
+                    params.extend([cursor_sort_value, cursor_sort_value, cursor_id])
             else:
-                conditions.append(
-                    "("
-                    "COALESCE(i.library_order_time, i.created_at) > "
-                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) "
-                    "OR (COALESCE(i.library_order_time, i.created_at) = "
-                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) AND i.id > ?)"
-                    ")"
-                )
-                params.extend([cursor_id, cursor_id, cursor_id])
+                if cursor_sort_value is None:
+                    conditions.append("i.id > ?")
+                    params.append(cursor_id)
+                else:
+                    conditions.append(
+                        "("
+                        "COALESCE(i.library_order_time, i.created_at) > ? "
+                        "OR (COALESCE(i.library_order_time, i.created_at) = ? AND i.id > ?)"
+                        ")"
+                    )
+                    params.extend([cursor_sort_value, cursor_sort_value, cursor_id])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
@@ -2223,23 +2255,23 @@ def get_images_paginated(
         order_clause = _get_order_clause(sort_by)
 
         if needs_post_filter:
-            # For post-filtering, fetch more items to ensure we get enough after filtering
-            # We fetch limit * 3 to account for filtering
-            fetch_limit = limit * 3 + 1
-            query += f" ORDER BY {order_clause} LIMIT ?"
-            params.append(fetch_limit)
+            results = _fetch_post_filtered_page(
+                conn,
+                query,
+                params,
+                order_clause,
+                prompt_terms,
+                loras,
+                post_offset=0,
+                limit=limit + 1,
+            )
         else:
             # Fetch one extra to check if there are more pages
             query += f" ORDER BY {order_clause} LIMIT ?"
             params.append(limit + 1)
-
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        results = _rows_to_dicts(rows)
-
-        # Apply post-filtering for exact matching if needed
-        if needs_post_filter:
-            results = _post_filter_results(results, prompt_terms, loras, 0, limit + 1)
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            results = _rows_to_dicts(rows)
 
         # Check if there are more results
         has_more = len(results) > limit

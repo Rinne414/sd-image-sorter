@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 import database as db
 from image_fingerprint import compute_image_content_fingerprint
+from utils.source_paths import resolve_existing_indexed_image_path
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,17 @@ ProgressCallback = Callable[[Dict[str, Any]], None]
 
 class AestheticService:
     """Service wrapper for aesthetic-scoring routes."""
+
+    def _resolve_image_path(self, *, image_id: int, indexed_path: str) -> Optional[str]:
+        resolved_path = resolve_existing_indexed_image_path(indexed_path, backend_file=__file__)
+        if resolved_path:
+            return resolved_path
+
+        try:
+            db.mark_image_unreadable(image_id, "File not found")
+        except Exception:
+            logger.debug("Failed to mark image %s as unreadable after path resolution failure", image_id)
+        return None
 
     def _compute_content_fingerprint(self, image_path: str) -> Optional[str]:
         try:
@@ -61,7 +73,11 @@ class AestheticService:
             if not row:
                 raise HTTPException(status_code=404, detail="Image not found")
 
-            image_path = row["path"]
+            indexed_path = str(row["path"] or "")
+            image_path = self._resolve_image_path(image_id=image_id, indexed_path=indexed_path)
+            if not image_path:
+                raise HTTPException(status_code=404, detail="Image file not found")
+
             score = predict_score(image_path)
             if score is None:
                 raise HTTPException(status_code=500, detail="Scoring failed")
@@ -123,14 +139,21 @@ class AestheticService:
             errors = 0
 
             for index, row in enumerate(rows):
-                image_path = row["path"]
-                emit({"current": image_path})
+                image_id = int(row["id"])
+                indexed_path = str(row["path"] or "")
+                image_path = self._resolve_image_path(image_id=image_id, indexed_path=indexed_path)
+                emit({"current": image_path or indexed_path})
+                if not image_path:
+                    errors += 1
+                    emit({"errors": errors})
+                    emit({"completed": index + 1})
+                    continue
                 try:
                     score = predict_score(image_path)
                     if score is not None:
                         conn.execute(
                             "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                            (score, self._compute_content_fingerprint(image_path), row["id"]),
+                            (score, self._compute_content_fingerprint(image_path), image_id),
                         )
                         pending_commits += 1
                     else:

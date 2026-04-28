@@ -12,6 +12,7 @@ from fastapi import HTTPException
 import database as db
 from artist_identifier import get_artist_identifier as default_get_artist_identifier
 from image_fingerprint import compute_image_content_fingerprint
+from utils.source_paths import resolve_existing_indexed_image_path
 
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,16 @@ class ArtistService:
         if not row:
             raise HTTPException(status_code=404, detail="Image not found")
 
-        return str(row[0] or "")
+        indexed_path = str(row[0] or "")
+        resolved_path = resolve_existing_indexed_image_path(indexed_path, backend_file=__file__)
+        if resolved_path:
+            return resolved_path
+
+        try:
+            db.mark_image_unreadable(image_id, "File not found")
+        except Exception:
+            logger.debug("Failed to mark image %s unreadable after path resolution failure", image_id)
+        raise HTTPException(status_code=404, detail="Image file not found")
 
     def _compute_content_fingerprint(self, image_path: str) -> Optional[str]:
         try:
@@ -85,8 +95,6 @@ class ArtistService:
         model_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         image_path = self._get_image_path(image_id)
-        if not os.path.exists(image_path):
-            raise HTTPException(status_code=404, detail="Image file not found")
 
         identifier = self._identifier(
             model_path=model_path,
@@ -163,14 +171,19 @@ class ArtistService:
                 if image_id not in image_map:
                     raise FileNotFoundError(f"Image {image_id} not found in database")
 
-                image_path = image_map[image_id]
-                current_item = os.path.basename(image_path)
+                indexed_path = image_map[image_id]
+                image_path = resolve_existing_indexed_image_path(indexed_path, backend_file=__file__)
+                current_item = os.path.basename(image_path or indexed_path)
                 emit({
                     "current_item": current_item,
                     "message": f"Identifying {current_item}",
                 })
 
-                if not os.path.exists(image_path):
+                if not image_path:
+                    try:
+                        db.mark_image_unreadable(image_id, "File not found")
+                    except Exception:
+                        logger.debug("Failed to mark image %s unreadable in batch identification", image_id)
                     raise FileNotFoundError(f"Image file not found for image {image_id}")
 
                 result = identifier.identify(image_path, top_k=top_k)

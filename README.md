@@ -176,6 +176,8 @@ run.bat
 ./run.sh
 ```
 
+默认会在 `http://127.0.0.1:8487` 启动（可通过 `SD_IMAGE_SORTER_PORT` 覆盖）。
+
 > [!TIP]
 > Windows 便携版自带 Python 3.11。AI 模型按需自动下载。首次启动时间长一点是正常的，不是死了。
 
@@ -375,8 +377,9 @@ Artist ID 和 SAM3 也支持 [ModelScope](https://modelscope.cn)。
 sd-image-sorter/
 ├── backend/            # FastAPI + SQLite + AI model orchestration
 ├── frontend/           # Vanilla HTML / JS / CSS UI
+├── data/               # 运行时状态（images.db、thumbnails、models、state 等）
 ├── docs/screenshots/   # README 展示图
-├── models/             # 本地模型目录
+├── models/             # 发布时附带的基础模型文件（运行时会同步到 data/models）
 ├── run-portable.bat    # Windows 便携版入口
 ├── run.bat             # Windows 源码运行入口
 └── run.sh              # Linux / macOS 运行入口

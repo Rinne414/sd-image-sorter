@@ -1812,7 +1812,7 @@ test.describe('Smoke Tests', () => {
       buildMockGalleryImage(903, { filename: 'autosep-ignore.png', generator: 'unknown' }),
     ]
     await Promise.all(previewImages.map((image) => mockImageAsset(page, image.id)))
-    await page.route('**/api/images**', async (route) => {
+    await page.route('**/api/images?**', async (route) => {
       const url = new URL(route.request().url())
       if (url.pathname !== '/api/images') {
         await route.continue()
@@ -1910,6 +1910,78 @@ test.describe('Smoke Tests', () => {
     await expect(warningToast).toContainText('Moved 1 images')
     await expect(warningToast).toContainText('1 failed')
     await expect(page.locator('#autosep-preview .stat-number')).toHaveText('0')
+  })
+
+  test('auto-separate should pass normalized artist filters through preview and execution', async ({ page }) => {
+    await mockImageAsset(page, 1)
+    await seedAutoSepFilterState(page, { artist: '  Mock Artist  ' })
+
+    let previewArtist: string | null = null
+    let batchMovePayload: any = null
+
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+      previewArtist = url.searchParams.get('artist')
+      await route.fulfill({
+        json: {
+          images: [
+            buildMockGalleryImage(1, {
+              filename: 'artist-match.png',
+              artist: 'Mock Artist',
+            }),
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/batch-move', async (route) => {
+      batchMovePayload = route.request().postDataJSON()
+      await route.fulfill({
+        json: {
+          status: 'started',
+          total: 1,
+          count: 1,
+        },
+      })
+    })
+
+    await page.route('**/api/batch-move/progress', async (route) => {
+      await route.fulfill({
+        json: {
+          status: 'done',
+          current: 1,
+          total: 1,
+          moved: 1,
+          errors: 0,
+          message: 'Completed! Moved 1 images.',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openSortingSubView(page, 'autosep')
+    await page.locator('#btn-preview-autosep').click()
+    await expect.poll(() => previewArtist).toBe('Mock Artist')
+    await expect.poll(async () => {
+      const value = await page.locator('#autosep-preview .stat-number').textContent()
+      return Number(value || '0')
+    }, { timeout: 10000 }).toBe(1)
+
+    await page.locator('#autosep-destination').fill(MOCK_AUTOSEP_DESTINATION)
+    await page.locator('#btn-execute-autosep').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => batchMovePayload?.artist).toBe('Mock Artist')
   })
 
   test('auto-separate should surface start errors instead of polling a non-existent batch job', async ({ page }) => {
@@ -3094,6 +3166,81 @@ test.describe('Smoke Tests', () => {
     await page.locator('.similar-tab[data-target="panel-similar-duplicates"]').click()
     await expect(page.locator('#btn-similar-duplicates')).toBeDisabled()
     await expect(page.locator('#similar-duplicates .empty-state')).toContainText(/waiting for more indexed images|至少需要/i)
+  })
+
+  test('manual sort should pass normalized artist filters to session start and preview loading', async ({ page }) => {
+    let startArtist: string | null = null
+    let previewArtist: string | null = null
+
+    await seedManualSortFilterState(page, { artist: '  Mock Artist  ' })
+    await mockImageAsset(page, 601)
+
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+      previewArtist = url.searchParams.get('artist')
+      await route.fulfill({
+        json: {
+          images: [
+            buildMockGalleryImage(601, {
+              filename: 'manual-artist.png',
+              artist: 'Mock Artist',
+            }),
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/sort/set-folders', async (route) => {
+      await route.fulfill({ json: { status: 'ok' } })
+    })
+    await page.route('**/api/sort/start**', async (route) => {
+      startArtist = new URL(route.request().url()).searchParams.get('artist')
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          total_images: 1,
+        },
+      })
+    })
+    await page.route('**/api/sort/current', async (route) => {
+      await route.fulfill({
+        json: {
+          image: { id: 601, filename: 'manual-artist.png' },
+          tags: [],
+          index: 1,
+          total: 1,
+          remaining: 0,
+          sorted_count: 0,
+          skipped_count: 0,
+          undo_available: false,
+          redo_available: false,
+          image_ids: [601],
+          folders: {
+            a: MOCK_MANUAL_SORT_DESTINATION,
+          },
+          operation_mode: 'move',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await openSortingSubView(page, 'manual')
+    await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
+    await page.locator('#btn-start-sorting').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect(page.locator('#sort-interface')).toBeVisible()
+    expect(startArtist).toBe('Mock Artist')
+    expect(previewArtist).toBe('Mock Artist')
   })
 
   test('should undo a censor brush stroke back to the previous canvas state', async ({ page }) => {

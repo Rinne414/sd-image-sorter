@@ -6,18 +6,46 @@
 
 function getGalleryAppContext() {
     const app = window.App || {};
+    const appState = app.AppState || {
+        images: [],
+        filters: {},
+        selectedIds: new Set(),
+        selectionMode: false,
+        selectionScope: 'visible',
+        selectionFilterKey: null,
+        viewMode: 'grid'
+    };
+    const cloneSelectionState = app.cloneSelectionState || ((selectionState) => ({
+        selectionMode: Boolean(selectionState?.selectionMode),
+        selectedIds: new Set(Array.from(selectionState?.selectedIds || [])),
+        scope: selectionState?.scope || selectionState?.selectionScope || 'visible',
+        filterKey: selectionState?.filterKey || selectionState?.selectionFilterKey || null,
+    }));
+    const setSelectionState = app.setSelectionState || ((nextSelection) => {
+        const nextState = cloneSelectionState(nextSelection);
+        appState.selectionMode = nextState.selectionMode;
+        appState.selectedIds = nextState.selectedIds;
+        appState.selectionScope = nextState.scope;
+        appState.selectionFilterKey = nextState.filterKey || null;
+        return nextState;
+    });
+    const updateSelectionState = app.updateSelectionState || ((updater) => {
+        const draft = cloneSelectionState({
+            selectionMode: appState.selectionMode,
+            selectedIds: appState.selectedIds,
+            scope: appState.selectionScope,
+            filterKey: appState.selectionFilterKey,
+        });
+        const nextState = typeof updater === 'function'
+            ? (updater(draft) ?? draft)
+            : updater;
+        return setSelectionState(nextState);
+    });
     return {
         $: app.$ || ((selector) => document.querySelector(selector)),
         API: app.API || window.API,
-        AppState: app.AppState || {
-            images: [],
-            filters: {},
-            selectedIds: new Set(),
-            selectionMode: false,
-            selectionScope: 'visible',
-            viewMode: 'grid'
-        },
-        updateSelectionState: app.updateSelectionState || null,
+        AppState: appState,
+        updateSelectionState,
         updateSelectionUI: app.updateSelectionUI || window.updateSelectionUI,
         showModal: app.showModal || window.showModal,
         formatSize: app.formatSize || window.formatSize,
@@ -1283,32 +1311,18 @@ const Gallery = {
 
         const lower = Math.max(0, Math.min(startIndex, endIndex));
         const upper = Math.min(AppState.images.length - 1, Math.max(startIndex, endIndex));
-        if (typeof updateSelectionState === 'function') {
-            updateSelectionState((selection) => {
-                const nextIds = additive ? new Set(selection.selectedIds) : new Set();
-                for (let index = lower; index <= upper; index += 1) {
-                    const image = AppState.images[index];
-                    if (image?.id != null) {
-                        nextIds.add(Number(image.id));
-                    }
-                }
-                selection.selectedIds = nextIds;
-                selection.scope = 'loaded';
-                selection.filterKey = null;
-            });
-        } else {
-            if (!additive) {
-                AppState.selectedIds.clear();
-            }
+        updateSelectionState((selection) => {
+            const nextIds = additive ? new Set(selection.selectedIds) : new Set();
             for (let index = lower; index <= upper; index += 1) {
                 const image = AppState.images[index];
                 if (image?.id != null) {
-                    AppState.selectedIds.add(image.id);
+                    nextIds.add(Number(image.id));
                 }
             }
-            AppState.selectionScope = 'loaded';
-            AppState.selectionFilterKey = null;
-        }
+            selection.selectedIds = nextIds;
+            selection.scope = 'loaded';
+            selection.filterKey = null;
+        });
         this.lastSelectedIndex = endIndex;
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
@@ -1331,66 +1345,42 @@ const Gallery = {
     selectAllVisible() {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
         const visibleIds = this.getVisibleGalleryIds();
-        if (typeof updateSelectionState === 'function') {
-            updateSelectionState((selection) => {
-                const nextIds = new Set(selection.selectedIds);
-                visibleIds.forEach((imageId) => nextIds.add(imageId));
-                selection.selectedIds = nextIds;
-                selection.scope = 'visible';
-                selection.filterKey = null;
-            });
-        } else {
-            visibleIds.forEach((imageId) => AppState.selectedIds.add(imageId));
-            AppState.selectionScope = 'visible';
-            AppState.selectionFilterKey = null;
-        }
+        updateSelectionState((selection) => {
+            const nextIds = new Set(selection.selectedIds);
+            visibleIds.forEach((imageId) => nextIds.add(imageId));
+            selection.selectedIds = nextIds;
+            selection.scope = 'visible';
+            selection.filterKey = null;
+        });
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
 
     invertVisibleSelection() {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
         const visibleIds = this.getVisibleGalleryIds();
-        if (typeof updateSelectionState === 'function') {
-            updateSelectionState((selection) => {
-                const nextIds = new Set(selection.selectedIds);
-                visibleIds.forEach((imageId) => {
-                    if (nextIds.has(imageId)) {
-                        nextIds.delete(imageId);
-                    } else {
-                        nextIds.add(imageId);
-                    }
-                });
-                selection.selectedIds = nextIds;
-                selection.scope = 'visible';
-                selection.filterKey = null;
-            });
-        } else {
+        updateSelectionState((selection) => {
+            const nextIds = new Set(selection.selectedIds);
             visibleIds.forEach((imageId) => {
-                if (AppState.selectedIds.has(imageId)) {
-                    AppState.selectedIds.delete(imageId);
+                if (nextIds.has(imageId)) {
+                    nextIds.delete(imageId);
                 } else {
-                    AppState.selectedIds.add(imageId);
+                    nextIds.add(imageId);
                 }
             });
-            AppState.selectionScope = 'visible';
-            AppState.selectionFilterKey = null;
-        }
+            selection.selectedIds = nextIds;
+            selection.scope = 'visible';
+            selection.filterKey = null;
+        });
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
 
     clearSelection() {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
-        if (typeof updateSelectionState === 'function') {
-            updateSelectionState((selection) => {
-                selection.selectedIds = new Set();
-                selection.scope = 'visible';
-                selection.filterKey = null;
-            });
-        } else {
-            AppState.selectedIds.clear();
-            AppState.selectionScope = 'visible';
-            AppState.selectionFilterKey = null;
-        }
+        updateSelectionState((selection) => {
+            selection.selectedIds = new Set();
+            selection.scope = 'visible';
+            selection.filterKey = null;
+        });
         this.lastSelectedIndex = null;
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
@@ -1401,27 +1391,17 @@ const Gallery = {
 
         const isNowSelected = !AppState.selectedIds.has(normalizedImageId);
 
-        if (typeof updateSelectionState === 'function') {
-            updateSelectionState((selection) => {
-                const nextIds = new Set(selection.selectedIds);
-                if (isNowSelected) {
-                    nextIds.add(normalizedImageId);
-                } else {
-                    nextIds.delete(normalizedImageId);
-                }
-                selection.selectedIds = nextIds;
-                selection.scope = 'visible';
-                selection.filterKey = null;
-            });
-        } else {
+        updateSelectionState((selection) => {
+            const nextIds = new Set(selection.selectedIds);
             if (isNowSelected) {
-                AppState.selectedIds.add(normalizedImageId);
+                nextIds.add(normalizedImageId);
             } else {
-                AppState.selectedIds.delete(normalizedImageId);
+                nextIds.delete(normalizedImageId);
             }
-            AppState.selectionScope = 'visible';
-            AppState.selectionFilterKey = null;
-        }
+            selection.selectedIds = nextIds;
+            selection.scope = 'visible';
+            selection.filterKey = null;
+        });
 
         // Update DOM element if it exists in the current view
         const item = document.querySelector(`.gallery-item[data-id="${normalizedImageId}"]`);

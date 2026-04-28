@@ -1215,6 +1215,43 @@ class TestSimilarityRouterValidation:
             "missing.png",
         }
 
+    def test_embed_batch_resolves_windows_indexed_path_before_embedding(self, test_db, tmp_path, monkeypatch):
+        import similarity as similarity_module
+        from PIL import Image
+
+        resolved_path = tmp_path / "resolved-similarity.png"
+        Image.new("RGB", (64, 64), color="white").save(resolved_path)
+
+        indexed_windows_path = r"L:\datasets\resolved-similarity.png"
+        image_id = test_db.add_image(
+            path=indexed_windows_path,
+            filename="resolved-similarity.png",
+            metadata_json="{}",
+        )
+
+        monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+        monkeypatch.setattr(
+            similarity_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: str(resolved_path) if primary_path == indexed_windows_path else None,
+        )
+        monkeypatch.setattr(similarity_module, "verify_image_readable", lambda _path: (True, None))
+        monkeypatch.setattr(similarity_module, "compute_image_content_fingerprint", lambda _path: "fp")
+
+        captured = {}
+
+        def fake_embed(path, model=None):
+            captured["path"] = path
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(similarity_module, "embed_image_file", fake_embed)
+
+        result = similarity_module.SimilarityIndex(test_db).embed_batch([image_id])
+
+        assert result["embedded"] == 1
+        assert result["errors"] == 0
+        assert captured["path"] == str(resolved_path)
+
     def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
         from routers import models as models_router
 
@@ -1548,6 +1585,89 @@ class TestArtistsRouterValidation:
         data = response.json()
         model_ids = {item["id"] for item in data["models"]}
         assert {"wd14", "clip", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
+
+
+class TestDerivedWriterPathResolution:
+    def test_aesthetic_service_resolves_windows_indexed_path_before_scoring(self, test_db, tmp_path, monkeypatch):
+        from services import aesthetic_service as aesthetic_service_module
+        from PIL import Image
+
+        resolved_path = tmp_path / "resolved-aesthetic.png"
+        Image.new("RGB", (64, 64), color="white").save(resolved_path)
+
+        indexed_windows_path = r"L:\datasets\resolved-aesthetic.png"
+        image_id = test_db.add_image(
+            path=indexed_windows_path,
+            filename="resolved-aesthetic.png",
+            metadata_json="{}",
+        )
+
+        monkeypatch.setattr(
+            aesthetic_service_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: str(resolved_path) if primary_path == indexed_windows_path else None,
+        )
+
+        captured = {}
+
+        def fake_predict(path: str):
+            captured["path"] = path
+            return 7.25
+
+        service = aesthetic_service_module.AestheticService()
+        result = service.score_single_image(image_id=image_id, predict_score=fake_predict)
+
+        assert result["image_id"] == image_id
+        assert result["aesthetic_score"] == 7.25
+        assert captured["path"] == str(resolved_path)
+
+    def test_artist_service_batch_resolves_windows_indexed_path_before_identify(self, test_db, tmp_path, monkeypatch):
+        from services import artist_service as artist_service_module
+        from PIL import Image
+
+        resolved_a = tmp_path / "resolved-artist-a.png"
+        resolved_b = tmp_path / "resolved-artist-b.png"
+        Image.new("RGB", (64, 64), color="blue").save(resolved_a)
+        Image.new("RGB", (64, 64), color="green").save(resolved_b)
+
+        indexed_a = r"L:\datasets\resolved-artist-a.png"
+        indexed_b = r"L:\datasets\resolved-artist-b.png"
+        image_a = test_db.add_image(path=indexed_a, filename="resolved-artist-a.png", metadata_json="{}")
+        image_b = test_db.add_image(path=indexed_b, filename="resolved-artist-b.png", metadata_json="{}")
+
+        resolved_map = {
+            indexed_a: str(resolved_a),
+            indexed_b: str(resolved_b),
+        }
+
+        monkeypatch.setattr(
+            artist_service_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: resolved_map.get(primary_path),
+        )
+
+        captured_paths = []
+
+        class FakeIdentifier:
+            def identify(self, image_path, top_k=5):
+                captured_paths.append(image_path)
+                return {
+                    "artist": "artist_x",
+                    "confidence": 0.77,
+                    "top_predictions": [{"artist": "artist_x", "confidence": 0.77}],
+                    "model_loaded": True,
+                }
+
+        service = artist_service_module.ArtistService(identifier_getter=lambda **kwargs: FakeIdentifier())
+        result = service.run_batch_identification(
+            image_ids=[image_a, image_b],
+            threshold=0.1,
+            top_k=3,
+        )
+
+        assert result["errors"] == 0
+        assert result["processed"] == 2
+        assert captured_paths == [str(resolved_a), str(resolved_b)]
 
 
 class TestPromptGenerator:
