@@ -11,6 +11,7 @@ from fastapi import HTTPException
 
 import database as db
 from image_fingerprint import compute_image_content_fingerprint
+from services.derived_state_service import write_image_aesthetic_score
 from utils.source_paths import resolve_existing_indexed_image_path
 
 
@@ -82,9 +83,11 @@ class AestheticService:
             if score is None:
                 raise HTTPException(status_code=500, detail="Scoring failed")
 
-            conn.execute(
-                "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                (score, self._compute_content_fingerprint(image_path), image_id),
+            write_image_aesthetic_score(
+                conn,
+                image_id=image_id,
+                aesthetic_score=score,
+                content_fingerprint=self._compute_content_fingerprint(image_path),
             )
             conn.commit()
             return {"image_id": image_id, "aesthetic_score": score}
@@ -151,9 +154,11 @@ class AestheticService:
                 try:
                     score = predict_score(image_path)
                     if score is not None:
-                        conn.execute(
-                            "UPDATE images SET aesthetic_score = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                            (score, self._compute_content_fingerprint(image_path), image_id),
+                        write_image_aesthetic_score(
+                            conn,
+                            image_id=image_id,
+                            aesthetic_score=score,
+                            content_fingerprint=self._compute_content_fingerprint(image_path),
                         )
                         pending_commits += 1
                     else:

@@ -83,6 +83,100 @@ def test_write_package_manifest_excludes_runtime_files(tmp_path):
     assert "update/package-manifest.json" in payload["managed_paths"]
 
 
+def test_write_package_manifest_declares_model_artifact_policy(tmp_path):
+    release_builder = load_release_builder()
+
+    staged_files = {
+        "backend/main.py": "print('ok')\n",
+        "models/README.md": "models docs\n",
+        "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx": "model\n",
+    }
+    for relative_path, content in staged_files.items():
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    manifest_path = release_builder.write_package_manifest(tmp_path, "9.9.9")
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    policy = payload["model_artifact_policy"]
+
+    assert policy["version"] == release_builder.MODEL_ARTIFACT_POLICY_VERSION
+    assert policy["default_packages_include_model_payloads"] is False
+    assert policy["runtime_model_root"] == "data/models"
+    assert "models/README.md" in payload["managed_paths"]
+    assert "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx" not in payload["managed_paths"]
+    assert "models/wd14-tagger/wd-swinv2-tagger-v3/model.onnx" in policy["auto_download_model_paths"]
+    assert policy["managed_model_payload_paths"] == []
+    assert {asset["name"] for asset in policy["optional_release_assets"]} >= {
+        "wd14-eva02-model",
+        "artist-runtime",
+        "kaloscope-checkpoint",
+        "sam3-modelscope-sam3pt",
+    }
+
+
+def test_write_package_manifest_filters_protected_runtime_paths_even_if_staged(tmp_path):
+    release_builder = load_release_builder()
+
+    staged_files = {
+        "backend/main.py": "print('ok')\n",
+        "data/images.db": "database\n",
+        "data/models/wd14/model.onnx": "model\n",
+        "update/backups/old-file.txt": "backup\n",
+        "update/downloads/patch.zip": "zip\n",
+        "update/logs/update.log": "log\n",
+        "update/state/pending-update.json": "state\n",
+        "update/worker/update_worker.py": "worker\n",
+    }
+    for relative_path, content in staged_files.items():
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    manifest_path = release_builder.write_package_manifest(tmp_path, "9.9.9")
+    managed_paths = set(json.loads(manifest_path.read_text(encoding="utf-8"))["managed_paths"])
+
+    assert "backend/main.py" in managed_paths
+    assert "update/package-manifest.json" in managed_paths
+    for protected_path in staged_files:
+        if protected_path != "backend/main.py":
+            assert protected_path not in managed_paths
+
+
+def test_copy_project_then_manifest_excludes_all_protected_runtime_prefixes(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+
+    source_root = tmp_path / "source"
+    stage_dir = tmp_path / "stage"
+    (source_root / "backend").mkdir(parents=True)
+    (source_root / "backend" / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    protected_files = {
+        "data/images.db": "database\n",
+        "data/models/wd14/model.onnx": "model\n",
+        "update/backups/old-file.txt": "backup\n",
+        "update/downloads/patch.zip": "zip\n",
+        "update/logs/update.log": "log\n",
+        "update/state/pending-update.json": "state\n",
+        "update/worker/update_worker.py": "worker\n",
+    }
+    for relative_path, content in protected_files.items():
+        target = source_root / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    monkeypatch.setattr(release_builder, "ROOT", source_root)
+
+    release_builder.copy_project(stage_dir)
+    manifest_path = release_builder.write_package_manifest(stage_dir, "9.9.9")
+    managed_paths = set(json.loads(manifest_path.read_text(encoding="utf-8"))["managed_paths"])
+
+    assert "backend/main.py" in managed_paths
+    assert "update/package-manifest.json" in managed_paths
+    for protected_path in protected_files:
+        assert protected_path not in managed_paths
+
+
 def test_download_file_verifies_sha256(monkeypatch, tmp_path):
     release_builder = load_release_builder()
     payload = b"verified-download"

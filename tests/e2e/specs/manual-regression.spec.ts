@@ -686,6 +686,116 @@ test('gallery selection actions should stay in the left sidebar instead of float
   expect(panelBox!.x + panelBox!.width).toBeLessThanOrEqual(sidebarBox!.x + sidebarBox!.width + 1)
 })
 
+test('filtered gallery selection should clear when gallery filters change', async ({ page }) => {
+  await openMainPage(page)
+
+  const state = await page.evaluate(() => {
+    const app = (window as any).App
+    const filterKey = app.getSelectionFilterCacheKey(app.AppState.filters)
+
+    app.setSelectionMode(true, { clearSelectionWhenDisabled: false })
+    app.setSelectionState({
+      selectionMode: true,
+      selectedIds: new Set([987654321]),
+      scope: 'filtered',
+      filterKey,
+    })
+    app.updateFilters((filters: any) => {
+      filters.search = `selection_scope_changed_${Date.now()}`
+    })
+
+    return {
+      selectedCount: app.AppState.selectedIds.size,
+      selectionScope: app.AppState.selectionScope,
+      selectionFilterKey: app.AppState.selectionFilterKey,
+    }
+  })
+
+  expect(state).toEqual({
+    selectedCount: 0,
+    selectionScope: 'visible',
+    selectionFilterKey: null,
+  })
+})
+
+test('filtered gallery selection should drop offscreen IDs when switching to visible selection', async ({ page }) => {
+  await openMainPage(page)
+
+  const state = await page.evaluate(() => {
+    const app = (window as any).App
+    const gallery = (window as any).Gallery
+    const grid = document.querySelector('#gallery-grid')
+    if (!grid) throw new Error('gallery grid missing')
+
+    const visibleItem = document.createElement('div')
+    visibleItem.className = 'gallery-item'
+    visibleItem.dataset.id = '123456'
+    grid.appendChild(visibleItem)
+
+    app.setSelectionMode(true, { clearSelectionWhenDisabled: false })
+    app.setSelectionState({
+      selectionMode: true,
+      selectedIds: new Set([987654321]),
+      scope: 'filtered',
+      filterKey: app.getSelectionFilterCacheKey(app.AppState.filters),
+    })
+
+    gallery.toggleSelection(123456)
+
+    return {
+      selectedIds: Array.from(app.AppState.selectedIds).sort((a: any, b: any) => Number(a) - Number(b)),
+      selectionScope: app.AppState.selectionScope,
+      selectionFilterKey: app.AppState.selectionFilterKey,
+    }
+  })
+
+  expect(state).toEqual({
+    selectedIds: [123456],
+    selectionScope: 'visible',
+    selectionFilterKey: null,
+  })
+})
+
+test('gallery filter modal should commit through FilterStore instead of mutating AppState directly', async ({ page }) => {
+  await openMainPage(page)
+
+  await page.evaluate(() => {
+    const app = (window as any).App
+    app.setFilters(app.createDefaultFilterState())
+    ;(window as any).__filterStoreEvents = 0
+    app.FilterStore.subscribe(() => {
+      ;(window as any).__filterStoreEvents += 1
+    })
+  })
+
+  await page.evaluate(async () => {
+    await (window as any).App.openFilterModal()
+  })
+  await expect(page.locator('#filter-modal.visible')).toBeVisible()
+
+  await page.locator('#modal-free-text-search').fill('filter_store_commit_probe')
+  await page.locator('#btn-apply-modal-filters').click()
+  await expect(page.locator('#filter-modal.visible')).toHaveCount(0)
+
+  const committed = await page.evaluate(() => {
+    const app = (window as any).App
+    return {
+      search: app.AppState.filters.search,
+      storeEvents: (window as any).__filterStoreEvents,
+    }
+  })
+
+  expect(committed.search).toBe('filter_store_commit_probe')
+  expect(committed.storeEvents).toBeGreaterThan(0)
+
+  await page.evaluate(async () => {
+    const app = (window as any).App
+    app.setFilters(app.createDefaultFilterState())
+    app.updateFilterSummary()
+    await app.loadImages()
+  })
+})
+
 test('censor workspace sidebars should stay readable without covering the canvas', async ({ page }) => {
   await openMainPage(page)
   await openView(page, 'censor')

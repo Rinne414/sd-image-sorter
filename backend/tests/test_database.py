@@ -160,6 +160,8 @@ class TestDatabaseInit:
 
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_loras'")
             assert cursor.fetchone() is not None
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_prompt_tokens'")
+            assert cursor.fetchone() is not None
 
             cursor.execute(
                 """
@@ -327,6 +329,13 @@ class TestDatabaseInit:
             )
             lora_rows = cursor.fetchall()
             assert [lora_row["lora_name"] for lora_row in lora_rows] == ["legacy_style"]
+
+            cursor.execute(
+                "SELECT token FROM image_prompt_tokens WHERE image_id = (SELECT id FROM images WHERE path = ?) ORDER BY token",
+                ("/legacy/versioned.png",),
+            )
+            token_rows = cursor.fetchall()
+            assert [token_row["token"] for token_row in token_rows] == []
             conn.close()
         finally:
             db.DATABASE_PATH = original_path
@@ -637,6 +646,67 @@ class TestImageCRUD:
         assert image["width"] == 768
         assert image["height"] == 768
 
+    def test_datetime_values_do_not_use_deprecated_sqlite_default_adapter(self, test_db):
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", category=DeprecationWarning)
+            image_id = db.add_image(
+                path="/test/datetime-adapter.png",
+                filename="datetime-adapter.png",
+                prompt="adapter",
+                library_order_time=datetime(2024, 1, 2, 3, 4, 5),
+                source_file_mtime=datetime(2024, 1, 2, 3, 4, 6),
+                created_at=datetime(2024, 1, 2, 3, 4, 7),
+            )
+            db.add_tags(image_id, [{"tag": "adapter", "confidence": 0.9}])
+
+        row = db.get_image_by_id(image_id)
+        assert str(row["library_order_time"]).startswith("2024-01-02 03:04:05")
+
+    def test_add_and_update_image_metadata_refreshes_prompt_token_index(self, test_db):
+        """Prompt library facets should read maintained image_prompt_tokens rows."""
+        image_id = db.add_image(
+            path="/test/prompt-token.png",
+            filename="prompt-token.png",
+            prompt="Best_Quality, MASTERPIECE, high res, <lora:ignored:0.8>",
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT token FROM image_prompt_tokens WHERE image_id = ? ORDER BY token",
+                (image_id,),
+            )
+            original_tokens = [row["token"] for row in cursor.fetchall()]
+
+        assert original_tokens == ["best quality", "high res", "masterpiece"]
+
+        db.update_image_metadata(
+            image_id=image_id,
+            generator="comfyui",
+            prompt="cinematic_lighting, standing",
+            negative_prompt=None,
+            metadata_json="{}",
+            width=512,
+            height=512,
+            file_size=1024,
+            checkpoint=None,
+            loras=[],
+        )
+
+        with db.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT token FROM image_prompt_tokens WHERE image_id = ? ORDER BY token",
+                (image_id,),
+            )
+            refreshed_tokens = [row["token"] for row in cursor.fetchall()]
+
+        assert refreshed_tokens == ["cinematic lighting", "standing"]
+        library = db.get_all_prompt_tokens(limit=10)
+        assert {item["prompt"] for item in library["prompts"]} >= {"cinematic lighting", "standing"}
+
     def test_update_image_metadata_refreshes_image_loras_index(self, test_db):
         """Reparsing metadata should refresh the normalized image_loras rows."""
         image_id = db.add_image(
@@ -685,6 +755,139 @@ class TestImageCRUD:
             refreshed_loras = [row["lora_name"] for row in cursor.fetchall()]
 
         assert refreshed_loras == ["new_prompt", "new_style"]
+
+    def test_update_image_metadata_preserve_flag_requires_matching_fingerprint(self, test_db):
+        image_id = db.add_image(
+            path="/test/preserve-gate.png",
+            filename="preserve-gate.png",
+            prompt="before",
+            source_mtime_ns=100,
+            source_size=200,
+            content_fingerprint="fingerprint-1",
+        )
+        db.add_tags(image_id, [{"tag": "stale_tag", "confidence": 0.95}], content_fingerprint="fingerprint-1")
+        with db.get_db() as conn:
+            conn.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+                WHERE id = ?
+                """,
+                ("stale caption", 5.0, b"old-embedding", "fingerprint-1", image_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (image_id, "artist_old", 0.9, '[{"artist":"artist_old","confidence":0.9}]'),
+            )
+
+        db.update_image_metadata(
+            image_id=image_id,
+            generator="comfyui",
+            prompt="pixels changed",
+            negative_prompt=None,
+            metadata_json="{}",
+            width=768,
+            height=768,
+            file_size=300,
+            checkpoint=None,
+            loras=[],
+            source_mtime_ns=101,
+            source_size=300,
+            metadata_status="complete",
+            content_fingerprint="fingerprint-2",
+            preserve_derived_state=True,
+        )
+
+        row = db.get_image_by_id(image_id)
+        assert row["ai_caption"] is None
+        assert row["aesthetic_score"] is None
+        with db.get_db() as conn:
+            content_fingerprint = conn.execute(
+                "SELECT content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()["content_fingerprint"]
+            embedding_value = conn.execute(
+                "SELECT embedding FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()["embedding"]
+        assert content_fingerprint == "fingerprint-2"
+        assert embedding_value is None
+        assert db.get_image_tags(image_id) == []
+        with db.get_db() as conn:
+            remaining_artist_rows = conn.execute(
+                "SELECT COUNT(*) FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()[0]
+        assert remaining_artist_rows == 0
+
+    def test_update_image_metadata_preserve_flag_does_not_keep_unreadable_rows(self, test_db):
+        image_id = db.add_image(
+            path="/test/preserve-unreadable.png",
+            filename="preserve-unreadable.png",
+            prompt="before",
+            source_mtime_ns=100,
+            source_size=200,
+            content_fingerprint="fingerprint-1",
+        )
+        db.add_tags(image_id, [{"tag": "stale_tag", "confidence": 0.95}], content_fingerprint="fingerprint-1")
+        with db.get_db() as conn:
+            conn.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+                WHERE id = ?
+                """,
+                ("stale caption", 5.0, b"old-embedding", "fingerprint-1", image_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions)
+                VALUES (?, ?, ?, ?)
+                """,
+                (image_id, "artist_old", 0.9, '[{"artist":"artist_old","confidence":0.9}]'),
+            )
+
+        db.update_image_metadata(
+            image_id=image_id,
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            metadata_json="{}",
+            width=None,
+            height=None,
+            file_size=200,
+            checkpoint=None,
+            loras=[],
+            is_readable=False,
+            read_error="parse failed",
+            source_mtime_ns=101,
+            source_size=201,
+            metadata_status="error",
+            content_fingerprint=None,
+            preserve_derived_state=True,
+        )
+
+        row = db.get_image_by_id(image_id)
+        assert row["is_readable"] == 0
+        assert row["metadata_status"] == "error"
+        assert row["ai_caption"] is None
+        assert row["aesthetic_score"] is None
+        with db.get_db() as conn:
+            embedding_value = conn.execute(
+                "SELECT embedding FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()["embedding"]
+        assert embedding_value is None
+        assert db.get_image_tags(image_id) == []
+        with db.get_db() as conn:
+            remaining_artist_rows = conn.execute(
+                "SELECT COUNT(*) FROM artist_predictions WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()[0]
+        assert remaining_artist_rows == 0
 
 
 class TestTagOperations:

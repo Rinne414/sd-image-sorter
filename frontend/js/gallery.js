@@ -61,6 +61,21 @@ function getRequiredGalleryAPI() {
     return API;
 }
 
+function selectionBaseForScope(selection, nextScope, { additive = true } = {}) {
+    if (!additive) return new Set();
+
+    const currentScope = selection?.scope || selection?.selectionScope || 'visible';
+    if (currentScope === nextScope) {
+        return new Set(selection?.selectedIds || []);
+    }
+
+    if (nextScope === 'visible' || currentScope === 'filtered') {
+        return new Set();
+    }
+
+    return new Set(selection?.selectedIds || []);
+}
+
 /**
  * Gallery Virtual Scrolling Configuration
  */
@@ -1312,7 +1327,7 @@ const Gallery = {
         const lower = Math.max(0, Math.min(startIndex, endIndex));
         const upper = Math.min(AppState.images.length - 1, Math.max(startIndex, endIndex));
         updateSelectionState((selection) => {
-            const nextIds = additive ? new Set(selection.selectedIds) : new Set();
+            const nextIds = selectionBaseForScope(selection, 'loaded', { additive });
             for (let index = lower; index <= upper; index += 1) {
                 const image = AppState.images[index];
                 if (image?.id != null) {
@@ -1346,7 +1361,7 @@ const Gallery = {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
         const visibleIds = this.getVisibleGalleryIds();
         updateSelectionState((selection) => {
-            const nextIds = new Set(selection.selectedIds);
+            const nextIds = selectionBaseForScope(selection, 'visible');
             visibleIds.forEach((imageId) => nextIds.add(imageId));
             selection.selectedIds = nextIds;
             selection.scope = 'visible';
@@ -1359,7 +1374,7 @@ const Gallery = {
         const { AppState, updateSelectionState, updateSelectionUI } = getGalleryAppContext();
         const visibleIds = this.getVisibleGalleryIds();
         updateSelectionState((selection) => {
-            const nextIds = new Set(selection.selectedIds);
+            const nextIds = selectionBaseForScope(selection, 'visible');
             visibleIds.forEach((imageId) => {
                 if (nextIds.has(imageId)) {
                     nextIds.delete(imageId);
@@ -1392,7 +1407,7 @@ const Gallery = {
         const isNowSelected = !AppState.selectedIds.has(normalizedImageId);
 
         updateSelectionState((selection) => {
-            const nextIds = new Set(selection.selectedIds);
+            const nextIds = selectionBaseForScope(selection, 'visible');
             if (isNowSelected) {
                 nextIds.add(normalizedImageId);
             } else {
@@ -3103,8 +3118,6 @@ ${String(value)}`)
             { label: t('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
                 if (typeof window.App?.addToCensorQueue === 'function') {
                     window.App.addToCensorQueue([image.id]);
-                } else if (typeof window.App?._addToCensorQueue === 'function') {
-                    window.App._addToCensorQueue([image.id]);
                 } else {
                     window.App?.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }

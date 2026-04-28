@@ -99,6 +99,10 @@ const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
 const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
 const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
+const FILTERED_SELECTION_CONFIRM_THRESHOLD = 10000;
+const FILTERED_SELECTION_CHUNK_SIZE = 2000;
+const EXPORT_PREVIEW_MAX_IMAGES = 2000;
+const EXPORT_PREVIEW_MAX_CHARS = 200000;
 
 function readStoredBoolean(storageKey, fallback = false) {
     try {
@@ -199,6 +203,7 @@ function createDefaultSelectionState() {
         selectedIds: new Set(),
         scope: 'visible',
         filterKey: null,
+        selectionToken: null,
     };
 }
 
@@ -213,6 +218,9 @@ function cloneSelectionState(selectionState) {
         scope: source.scope || 'visible',
         filterKey: typeof source.filterKey === 'string' && source.filterKey
             ? source.filterKey
+            : null,
+        selectionToken: typeof source.selectionToken === 'string' && source.selectionToken
+            ? source.selectionToken
             : null,
     };
 }
@@ -349,6 +357,7 @@ const AppState = {
     selectedIds: AppSelectionStore ? AppSelectionStore.getState().selectedIds : new Set(),
     selectionScope: AppSelectionStore ? AppSelectionStore.getState().scope : 'visible',
     selectionFilterKey: AppSelectionStore ? AppSelectionStore.getState().filterKey : null,
+    selectionToken: AppSelectionStore ? AppSelectionStore.getState().selectionToken : null,
     selectionDataCache: {
         key: null,
         data: null
@@ -377,6 +386,7 @@ const AppState = {
 if (AppFilterStore) {
     AppFilterStore.subscribe((nextState) => {
         AppState.filters = nextState;
+        clearFilteredSelectionIfFilterChanged(nextState);
     });
 }
 
@@ -386,6 +396,7 @@ if (AppSelectionStore) {
         AppState.selectedIds = nextState.selectedIds;
         AppState.selectionScope = nextState.scope;
         AppState.selectionFilterKey = nextState.filterKey || null;
+        AppState.selectionToken = nextState.selectionToken || null;
     });
 }
 
@@ -394,6 +405,7 @@ function setAppFilters(nextFilters) {
         return AppFilterStore.setState(nextFilters);
     }
     AppState.filters = cloneFilterState(nextFilters);
+    clearFilteredSelectionIfFilterChanged(AppState.filters);
     return AppState.filters;
 }
 
@@ -417,6 +429,7 @@ function setSelectionState(nextSelection) {
     AppState.selectedIds = nextState.selectedIds;
     AppState.selectionScope = nextState.scope;
     AppState.selectionFilterKey = nextState.filterKey || null;
+    AppState.selectionToken = nextState.selectionToken || null;
     return nextState;
 }
 
@@ -429,6 +442,7 @@ function updateSelectionState(updater) {
         selectedIds: AppState.selectedIds,
         scope: AppState.selectionScope,
         filterKey: AppState.selectionFilterKey,
+        selectionToken: AppState.selectionToken,
     });
     const nextState = typeof updater === 'function'
         ? (updater(draft) ?? draft)
@@ -445,6 +459,7 @@ function mutateSelectedIds(mutator, { scope = null } = {}) {
             selection.scope = scope;
             if (scope !== 'filtered') {
                 selection.filterKey = null;
+                selection.selectionToken = null;
             }
         }
     });
@@ -454,6 +469,55 @@ function clearSelectedIds(options = {}) {
     return mutateSelectedIds((selectedIds) => {
         selectedIds.clear();
     }, options);
+}
+
+function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
+    if (!AppState?.selectedIds || AppState.selectedIds.size === 0) return false;
+    if (AppState.selectionScope !== 'filtered') return false;
+
+    const currentFilterKey = getSelectionFilterCacheKey(filters);
+    if (!AppState.selectionFilterKey || AppState.selectionFilterKey === currentFilterKey) {
+        return false;
+    }
+
+    updateSelectionState((selection) => {
+        selection.selectedIds = new Set();
+        selection.scope = 'visible';
+        selection.filterKey = null;
+        selection.selectionToken = null;
+    });
+    resetSelectionDataCache();
+
+    if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+        Gallery.syncSelectionState();
+    }
+    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+    emitSelectionStateChanged();
+    return true;
+}
+
+function markGalleryNeedsRefresh({ resetSelectionCache = true } = {}) {
+    AppState.galleryNeedsRefresh = true;
+    if (resetSelectionCache) {
+        resetSelectionDataCache();
+    }
+}
+
+function commitFilterModalState(filterState) {
+    const nextFilters = cloneFilterState(filterState);
+    const hasExternalHandler = Boolean(FilterModalController.onApply || FilterModalController.onReset);
+
+    if (!hasExternalHandler) {
+        setAppFilters(nextFilters);
+        return cloneFilterState(AppState.filters);
+    }
+
+    if (FilterModalController.targetState) {
+        copyFilterState(FilterModalController.targetState, nextFilters);
+        return cloneFilterState(FilterModalController.targetState);
+    }
+
+    return nextFilters;
 }
 
 // Sort direction pairs: base sort value -> reversed sort value
@@ -701,8 +765,31 @@ const API = {
         return this.post('/api/images/selection-ids', buildSelectionFilterRequest(filters));
     },
 
+    async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE) {
+        return this.post('/api/images/selection-token', {
+            ...buildSelectionFilterRequest(filters),
+            chunkSize,
+        });
+    },
+
+    async getSelectionChunk(selectionToken, { offset = 0, limit = FILTERED_SELECTION_CHUNK_SIZE } = {}) {
+        const params = new URLSearchParams();
+        params.set('selection_token', selectionToken);
+        params.set('offset', String(offset));
+        params.set('limit', String(limit));
+        return this.get(`/api/images/selection-chunk?${params.toString()}`);
+    },
+
     async getSelectionData(imageIds) {
         return this.post('/api/images/export-data', { image_ids: imageIds });
+    },
+
+    async getSelectionDataByToken(selectionToken, { offset = 0, limit = EXPORT_PREVIEW_MAX_IMAGES } = {}) {
+        return this.post('/api/images/export-data', {
+            selection_token: selectionToken,
+            offset,
+            limit,
+        });
     },
 
     async getExportSelectionData(imageIds) {
@@ -738,7 +825,7 @@ const API = {
         return this.get('/api/tags');
     },
 
-    async getTagsLibrary(sortBy = 'frequency', limit = 100000) {
+    async getTagsLibrary(sortBy = 'frequency', limit = 1000) {
         return this.get(`/api/tags/library?sort_by=${sortBy}&limit=${limit}`);
     },
 
@@ -746,11 +833,11 @@ const API = {
         return this.post('/api/tags/import', { images, overwrite });
     },
 
-    async getPromptsLibrary(limit = 100000) {
+    async getPromptsLibrary(limit = 1000) {
         return this.get(`/api/prompts/library?limit=${limit}`);
     },
 
-    async getLorasLibrary(limit = 100000) {
+    async getLorasLibrary(limit = 1000) {
         return this.get(`/api/loras/library?limit=${limit}`);
     },
 
@@ -2611,6 +2698,94 @@ function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visibl
     return appT('selection.scopeVisible', 'Scope: visible thumbnails currently on screen');
 }
 
+function normalizeSelectionImageIds(rawIds) {
+    return Array.isArray(rawIds)
+        ? rawIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+}
+
+function confirmLargeFilteredSelection(total) {
+    const normalizedTotal = Number(total || 0);
+    if (normalizedTotal <= FILTERED_SELECTION_CONFIRM_THRESHOLD) {
+        return true;
+    }
+
+    const confirmMessage = appT(
+        'selection.largeFilteredConfirm',
+        'This will select {count} filtered images and may use a lot of memory. Continue?',
+        { count: normalizedTotal }
+    );
+    return window.confirm(confirmMessage);
+}
+
+function shouldFallbackToSelectionIds(error) {
+    return [404, 405, 501].includes(Number(error?.apiStatus));
+}
+
+async function resolveFilteredSelectionIdsViaChunks(filterPayload) {
+    const tokenPayload = await API.createSelectionToken(filterPayload, FILTERED_SELECTION_CHUNK_SIZE);
+    const selectionToken = tokenPayload?.selection_token;
+    if (!selectionToken) {
+        throw new Error('Selection token response was missing a token');
+    }
+
+    const totalEstimate = Number(tokenPayload?.total_estimate || 0);
+    if (!confirmLargeFilteredSelection(totalEstimate)) {
+        return { cancelled: true, imageIds: [] };
+    }
+
+    const chunkSize = Math.max(1, Math.min(
+        Number(tokenPayload?.chunk_size || FILTERED_SELECTION_CHUNK_SIZE),
+        10000
+    ));
+    const imageIds = [];
+    let offset = 0;
+
+    while (true) {
+        const chunk = await API.getSelectionChunk(selectionToken, { offset, limit: chunkSize });
+        imageIds.push(...normalizeSelectionImageIds(chunk?.image_ids));
+
+        if (!chunk?.has_more) {
+            break;
+        }
+
+        const nextOffset = Number(chunk?.next_offset);
+        if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
+            throw new Error('Selection chunk response did not advance');
+        }
+        offset = nextOffset;
+    }
+
+    return { cancelled: false, imageIds, selectionToken };
+}
+
+async function resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload) {
+    const result = await API.getSelectionIds(filterPayload);
+    const imageIds = normalizeSelectionImageIds(result?.image_ids);
+    const total = Number(result?.total || imageIds.length || 0);
+    if (!confirmLargeFilteredSelection(total)) {
+        return { cancelled: true, imageIds: [] };
+    }
+    return { cancelled: false, imageIds, selectionToken: null };
+}
+
+async function resolveFilteredSelectionIds(filterPayload) {
+    if (filterPayload?.sortBy === 'random') {
+        return resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload);
+    }
+
+    try {
+        return await resolveFilteredSelectionIdsViaChunks(filterPayload);
+    } catch (error) {
+        if (!shouldFallbackToSelectionIds(error)) {
+            throw error;
+        }
+        return resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload);
+    }
+}
+
 async function selectAllFilteredResults() {
     const selectFilteredBtn = $('#btn-select-filtered');
     if (selectFilteredBtn) {
@@ -2620,17 +2795,22 @@ async function selectAllFilteredResults() {
     try {
         const filterPayload = buildSelectionFilterRequest();
         const filterKey = JSON.stringify(filterPayload);
-        const result = await API.getSelectionIds(filterPayload);
-        const imageIds = Array.isArray(result?.image_ids)
-            ? result.image_ids
-                .map((id) => Number(id))
-                .filter((id) => Number.isFinite(id) && id > 0)
-            : [];
+        const result = await resolveFilteredSelectionIds(filterPayload);
+        if (result.cancelled) {
+            updateSelectionUI();
+            return;
+        }
+
+        if (getSelectionFilterCacheKey(AppState.filters) !== filterKey) {
+            updateSelectionUI();
+            return;
+        }
 
         updateSelectionState((selection) => {
-            selection.selectedIds = new Set(imageIds);
+            selection.selectedIds = new Set(result.imageIds);
             selection.scope = 'filtered';
             selection.filterKey = filterKey;
+            selection.selectionToken = result.selectionToken || null;
         });
 
         if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
@@ -2671,6 +2851,7 @@ function setSelectionMode(enabled, options = {}) {
             selection.selectedIds = new Set();
             selection.scope = 'visible';
             selection.filterKey = null;
+        selection.selectionToken = null;
         }
     });
 
@@ -4981,6 +5162,7 @@ async function loadImages(appendMode = false, options = {}) {
                         selection.selectedIds = new Set();
                         selection.scope = 'visible';
                         selection.filterKey = null;
+        selection.selectionToken = null;
                     });
                     if (typeof updateSelectionUI === 'function') updateSelectionUI();
                     emitSelectionStateChanged();
@@ -5736,12 +5918,26 @@ async function showExportModal() {
 
     try {
         const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionData(ids);
+        const exportData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
+        const totalSelected = Number(exportData.total || ids.length || exportData.images.length);
+        const previewWindowSize = Number(exportData.preview_count ?? exportData.count ?? exportData.images.length);
+        const previewCount = Math.min(totalSelected, previewWindowSize);
+        const previewOnly = Boolean(exportData.has_more) || totalSelected > previewCount;
         const prompts = exportData.images
             .map((image) => image.prompt?.trim())
             .filter(Boolean);
-
-        textArea.value = prompts.join('\n\n');
+        let previewText = prompts.join('\n\n');
+        if (previewText.length > EXPORT_PREVIEW_MAX_CHARS) {
+            previewText = `${previewText.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
+        }
+        if (previewOnly) {
+            previewText = `${previewText}\n\n${appT(
+                'export.previewLimited',
+                'Preview only shows the first {preview} of {total} selected images. Use \"Export Tags to Files\" for full output.',
+                { preview: previewCount, total: totalSelected }
+            )}`;
+        }
+        textArea.value = previewText;
     } catch (e) {
         textArea.value = appT('export.errorLoadingPrompts', 'Error loading prompts: {message}', {
             message: e.message,
@@ -5763,7 +5959,11 @@ async function showExportTagsModal() {
     showModal('export-modal');
     try {
         const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionData(ids);
+        const exportData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
+        const totalSelected = Number(exportData.total || ids.length || exportData.images.length);
+        const previewWindowSize = Number(exportData.preview_count ?? exportData.count ?? exportData.images.length);
+        const previewCount = Math.min(totalSelected, previewWindowSize);
+        const previewOnly = Boolean(exportData.has_more) || totalSelected > previewCount;
         const allTags = new Set();
 
         exportData.images.forEach((image) => {
@@ -5774,7 +5974,18 @@ async function showExportTagsModal() {
 
         // Sort alphabetically and join
         const sortedTags = Array.from(allTags).sort();
-        textArea.value = sortedTags.join(', ');
+        let previewText = sortedTags.join(', ');
+        if (previewText.length > EXPORT_PREVIEW_MAX_CHARS) {
+            previewText = `${previewText.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
+        }
+        if (previewOnly) {
+            previewText = `${previewText}\n\n${appT(
+                'export.previewLimited',
+                'Preview only shows the first {preview} of {total} selected images. Use \"Export Tags to Files\" for full output.',
+                { preview: previewCount, total: totalSelected }
+            )}`;
+        }
+        textArea.value = previewText;
     } catch (e) {
         textArea.value = appT('export.errorLoadingTags', 'Error loading tags: {message}', {
             message: e.message,
@@ -5798,6 +6009,20 @@ function showBatchExportModal() {
 
 function getExportDataCacheKey(imageIds) {
     return imageIds.map((id) => String(id)).join(',');
+}
+
+function getTokenExportDataCacheKey(selectionToken, offset, limit) {
+    return `token:${selectionToken}:${offset}:${limit}`;
+}
+
+function getActiveSelectionExportToken() {
+    if (AppState.selectionScope !== 'filtered' || !AppState.selectionToken) {
+        return null;
+    }
+    if (AppState.selectionFilterKey !== getSelectionFilterCacheKey(AppState.filters)) {
+        return null;
+    }
+    return AppState.selectionToken;
 }
 
 function resetSelectionDataCache() {
@@ -5868,6 +6093,61 @@ async function loadSelectionData(imageIds) {
         data
     };
     return data;
+}
+
+async function loadSelectionDataByToken(selectionToken, { offset = 0, limit = EXPORT_PREVIEW_MAX_IMAGES } = {}) {
+    const normalizedOffset = Math.max(0, Number(offset) || 0);
+    const normalizedLimit = Math.max(1, Math.min(Number(limit) || EXPORT_PREVIEW_MAX_IMAGES, 10000));
+    const cacheKey = getTokenExportDataCacheKey(selectionToken, normalizedOffset, normalizedLimit);
+    if (AppState.selectionDataCache.key === cacheKey && AppState.selectionDataCache.data) {
+        return AppState.selectionDataCache.data;
+    }
+
+    const response = await API.getSelectionDataByToken(selectionToken, {
+        offset: normalizedOffset,
+        limit: normalizedLimit,
+    });
+    const responseIds = Array.isArray(response?.images)
+        ? response.images.map((image) => Number(image?.id)).filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+    const data = {
+        ...buildSelectionDataPayload(responseIds, response),
+        count: Number(response?.count ?? responseIds.length),
+        preview_count: Number(response?.count ?? responseIds.length),
+        total: Number(response?.total ?? responseIds.length),
+        offset: Number(response?.offset ?? normalizedOffset),
+        limit: Number(response?.limit ?? normalizedLimit),
+        next_offset: response?.next_offset ?? null,
+        has_more: Boolean(response?.has_more),
+        source: response?.source || 'selection_token',
+        exact_total: response?.exact_total !== false,
+    };
+    AppState.selectionDataCache = {
+        key: cacheKey,
+        data
+    };
+    return data;
+}
+
+async function loadSelectionPreviewData(ids, limit = EXPORT_PREVIEW_MAX_IMAGES) {
+    const selectionToken = getActiveSelectionExportToken();
+    if (selectionToken) {
+        return loadSelectionDataByToken(selectionToken, { offset: 0, limit });
+    }
+
+    const previewIds = ids.slice(0, limit);
+    const data = await loadSelectionData(previewIds);
+    return {
+        ...data,
+        count: data.images.length,
+        preview_count: previewIds.length,
+        total: ids.length,
+        offset: 0,
+        limit: previewIds.length,
+        has_more: ids.length > previewIds.length,
+        source: 'image_ids',
+        exact_total: true,
+    };
 }
 
 function setExportModalMode(mode) {
@@ -6681,14 +6961,12 @@ function applyModalFilters() {
     filterState.minAesthetic = minAesthetic;
     filterState.maxAesthetic = maxAesthetic;
 
-    if (FilterModalController.targetState) {
-        copyFilterState(FilterModalController.targetState, filterState);
-    }
+    const committedFilters = commitFilterModalState(filterState);
 
     hideModal('filter-modal');
 
     if (FilterModalController.onApply) {
-        FilterModalController.onApply(cloneFilterState(FilterModalController.targetState || filterState));
+        FilterModalController.onApply(cloneFilterState(committedFilters));
         showToast(appT('filter.appliedToast', 'Filters applied'), 'success');
         resetFilterModalController();
         return;
@@ -6758,21 +7036,17 @@ function resetAllFilters() {
     const artistRow = $('#artist-filter-row');
     if (artistRow) artistRow.style.display = 'none';
 
-    // Update all filter summaries
-    updateFilterSummary();
+    const committedFilters = commitFilterModalState(filterState);
     hideModal('filter-modal');
 
-    if (FilterModalController.targetState) {
-        copyFilterState(FilterModalController.targetState, filterState);
-    }
-
     if (FilterModalController.onReset) {
-        FilterModalController.onReset(cloneFilterState(FilterModalController.targetState || filterState));
+        FilterModalController.onReset(cloneFilterState(committedFilters));
         showToast(appT('filter.clearedToast', 'Filters cleared'), 'success');
         resetFilterModalController();
         return;
     }
 
+    updateFilterSummary();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
@@ -7058,6 +7332,7 @@ function refreshLocalizedDynamicUi() {
         renderModelSelectList();
     }
     updateAestheticUi();
+    syncTaggerModelUi({ applyModelDefaults: false });
     window.Gallery?.refreshLocalizedContent?.();
 }
 
@@ -7150,7 +7425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncGallerySortLabels();
     switchView('gallery');
     loadStats();
-    refreshAestheticStatus();
+    const aestheticStatusReady = refreshAestheticStatus();
     updateFilterSummary();
     updateSelectionUI();
     resumeScanProgress();
@@ -7187,6 +7462,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateNavigationOverflowState();
     window.addEventListener('load', updateNavigationOverflowState, { once: true });
     document.fonts?.ready?.then?.(() => updateNavigationOverflowState()).catch?.(() => {});
+    Promise.resolve(aestheticStatusReady).finally(() => {
+        document.documentElement.dataset.appReady = '1';
+        window.dispatchEvent(new Event('sd-image-sorter-ready'));
+    });
 });
 
 function addToCensorQueue(imageIds = []) {
@@ -7202,7 +7481,7 @@ function addToCensorQueue(imageIds = []) {
         window.initCensorEdit();
     }
 
-    const runtimeHandler = window.App?._addToCensorQueue;
+    const runtimeHandler = window.CensorEdit?.addToQueue;
     if (typeof runtimeHandler === 'function') {
         return runtimeHandler(normalizedIds);
     }
@@ -7307,7 +7586,9 @@ function buildAppContext() {
         syncGallerySortLabels,
         formatGeneratorLabel,
         loadSelectionData,
+        loadSelectionDataByToken,
         resetSelectionDataCache,
+        markGalleryNeedsRefresh,
         openTagsLibrary,
         switchLibraryTab,
         filterLibraryContent,
@@ -7316,7 +7597,6 @@ function buildAppContext() {
         applyPromptFilter,
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
-        _addToCensorQueue: null,
         openPromptBuildFromImage,
         openReaderFromImage,
         addRecentFolder,
@@ -7329,6 +7609,7 @@ function buildAppContext() {
 
 // Export for other modules
 window.App = buildAppContext();
+Object.seal(window.App);
 window.clampTaggerChunkToAvailableOption = clampTaggerChunkToAvailableOption;
 
 
@@ -7343,4 +7624,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-

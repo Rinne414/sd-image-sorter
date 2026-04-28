@@ -27,6 +27,7 @@ const ManualSortState = {
     hasSavedFilterState: false,
     inheritedCurrentGalleryFilters: false,
     scopeMeta: null,
+    resumeBannerSessionSnapshot: null,
 };
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
@@ -425,6 +426,63 @@ function maybeAdoptManualSortFiltersFromGallery() {
     return true;
 }
 
+function summarizeManualSortFolders(folders = {}) {
+    const entries = Object.entries(folders || {}).filter(([, value]) => typeof value === 'string' && value.trim());
+    if (entries.length === 0) {
+        return manualSortText('manual.resumeFoldersEmpty', 'No destination folders saved yet', '还没有保存目标文件夹');
+    }
+    return entries
+        .map(([key, value]) => `${String(key).toUpperCase()}: ${value}`)
+        .join(' · ');
+}
+
+function renderManualSortResumeBanner(session, { visible = true } = {}) {
+    const banner = document.querySelector('#sort-resume-banner');
+    if (!banner) return;
+
+    if (!visible) {
+        ManualSortState.resumeBannerSessionSnapshot = null;
+        banner.style.display = 'none';
+        return;
+    }
+
+    banner.style.display = 'flex';
+    if (!session) {
+        return;
+    }
+    ManualSortState.resumeBannerSessionSnapshot = {
+        remaining: Number(session?.remaining || 0),
+        operation_mode: session?.operation_mode || 'move',
+        folders: { ...(session?.folders || {}) },
+    };
+
+    const countEl = banner.querySelector('.resume-count');
+    if (countEl) {
+        countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
+            count: Number(session?.remaining || 0),
+        });
+    }
+
+    const operationEl = banner.querySelector('.resume-operation');
+    if (operationEl) {
+        const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'move');
+        operationEl.textContent = formatManualSortI18n(
+            'manual.resumeOperationMode',
+            'Saved session action mode: {mode}',
+            { mode: modeLabel }
+        );
+    }
+
+    const foldersEl = banner.querySelector('.resume-folders');
+    if (foldersEl) {
+        foldersEl.textContent = formatManualSortI18n(
+            'manual.resumeFolderSummary',
+            'Saved session folders: {summary}',
+            { summary: summarizeManualSortFolders(session?.folders || {}) }
+        );
+    }
+}
+
 // ============== Initialization ==============
 
 async function initManualSort() {
@@ -550,8 +608,7 @@ async function initManualSort() {
                 async () => {
                     try {
                         await window.App.API.delete('/api/sort/session');
-                        const banner = $('#sort-resume-banner');
-                        if (banner) banner.style.display = 'none';
+                        renderManualSortResumeBanner(null, { visible: false });
                         window.App.showToast(
                             manualSortText('manual.discardSessionSuccess', 'Saved session discarded', '已丢弃已保存会话'),
                             'success'
@@ -587,6 +644,9 @@ async function initManualSort() {
     document.addEventListener('languageChanged', () => {
         updateManualSortFilterSummary();
         setManualSortOperationMode(ManualSortState.operationMode, { persist: false, updateUi: true });
+        if (ManualSortState.resumeBannerSessionSnapshot) {
+            renderManualSortResumeBanner(ManualSortState.resumeBannerSessionSnapshot, { visible: true });
+        }
     });
 
     // Check for saved session on the server
@@ -596,16 +656,7 @@ async function initManualSort() {
             return null;
         });
         if (session && !session.done && session.image) {
-            const banner = document.querySelector('#sort-resume-banner');
-            if (banner) {
-                banner.style.display = 'flex';
-                const countEl = banner.querySelector('.resume-count');
-                if (countEl) {
-                    countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
-                        count: session.remaining,
-                    });
-                }
-            }
+            renderManualSortResumeBanner(session, { visible: true });
         }
     } catch(e) {
         if (window.Logger) Logger.warn('Failed to check sort session:', e);
@@ -953,8 +1004,7 @@ async function resumeSavedSession() {
         const session = await API.getCurrentSortImage();
 
         if (!session || session.done || !session.image) {
-            const banner = $('#sort-resume-banner');
-            if (banner) banner.style.display = 'none';
+            renderManualSortResumeBanner(null, { visible: false });
             showToast(manualSortText('manual.noSavedSession', 'No saved sorting session to resume', '没有可恢复的已保存排序会话'), 'info');
             return;
         }
@@ -984,12 +1034,10 @@ async function resumeSavedSession() {
         activateSortingUi();
         applyCurrentSortPayload(session);
 
-        const banner = $('#sort-resume-banner');
-        if (banner) banner.style.display = 'none';
+        renderManualSortResumeBanner(null, { visible: false });
     } catch (error) {
         rollbackSortingUi();
-        const banner = $('#sort-resume-banner');
-        if (banner) banner.style.display = 'flex';
+        renderManualSortResumeBanner(null, { visible: true });
         Logger.error('Failed to resume saved session:', error);
         showToast(formatUserError(error, manualSortText('manual.resumeFailed', 'Failed to resume saved session', '恢复已保存会话失败')), 'error');
     }
@@ -1394,15 +1442,15 @@ function exitSorting() {
     $('#sort-setup').style.display = 'block';
 
     const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
-    const banner = $('#sort-resume-banner');
-    if (banner && remaining > 0) {
-        banner.style.display = 'flex';
-        const countEl = banner.querySelector('.resume-count');
-        if (countEl) {
-            countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
-                count: remaining,
-            });
-        }
+    if (remaining > 0) {
+        renderManualSortResumeBanner(
+            {
+                remaining,
+                operation_mode: getManualSortOperationMode(),
+                folders: ManualSortState.folders || {},
+            },
+            { visible: true }
+        );
     }
 
     showToast(manualSortText('manual.sortingPaused', 'Sorting paused. You can resume later.', '排序已暂停，稍后可以继续。'), 'info');

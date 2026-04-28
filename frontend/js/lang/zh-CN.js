@@ -327,7 +327,12 @@ window.I18nLang_zhCN = {
     'manual.resume': '恢复',
     'manual.discard': '丢弃',
     'manual.unfinishedSession': '检测到未完成的排序：',
+    'manual.resumeBannerTitle': '检测到未完成的排序：',
     'manual.imagesRemaining': '剩余 {count} 张图片',
+    'manual.resumeOperationMode': '已保存会话操作模式：{mode}',
+    'manual.resumeFolderSummary': '已保存会话文件夹：{summary}',
+    'manual.resumeFoldersEmpty': '还没有保存目标文件夹',
+    'manual.resumeBannerNote': '这里的设置偏好可能与当前已保存会话不一致。',
     'manual.folderPath': '{key} 键对应的文件夹路径',
     'manual.folderPathHint': '输入目标文件夹路径。\n示例：D:\\sorted\\folder-name',
 
@@ -1030,6 +1035,8 @@ window.I18nLang_zhCN = {
     'export.promptsInstead': '改为导出提示词',
     'export.loadingPrompts': '正在加载提示词...',
     'export.loadingTags': '正在加载标签...',
+    'export.previewLimited': '预览仅显示前 {preview}/{total} 张已选图片。完整导出请使用“导出标签到文件”。',
+    'export.previewTextTruncated': '[为保证页面流畅，预览内容已截断]',
     'export.errorLoadingPrompts': '加载提示词失败：{message}',
     'export.errorLoadingTags': '加载标签失败：{message}',
     'export.copied': '已复制到剪贴板',
@@ -1211,6 +1218,7 @@ window.I18nLang_zhCN = {
     'selection.deletePartial': '已删除 {deleted} 个文件，另有 {failed} 个失败。',
     'selection.deleteFailed': '删除已选图片文件失败',
     'selection.selectFilteredFailed': '选择全部筛选结果失败',
+    'selection.largeFilteredConfirm': '这将一次性选择 {count} 张筛选结果，可能占用较多内存。要继续吗？',
 
     // ========================
     // Batch Tag Export Modal
@@ -1265,6 +1273,8 @@ window.I18nLang_zhCN = {
     'save.formatJpg': 'JPG（文件更小，兼容性更好）',
     'save.formatWebp': 'WebP（文件较小，画质良好）',
     'save.formatHelper': '选择输出图片格式',
+    'save.allowOverwrite': '允许替换已有文件',
+    'save.allowOverwriteHelper': '默认关闭以阻止误覆盖。只有明确要替换同名输出文件时才开启。',
     'save.cancel': '取消',
     'save.saveAll': '保存所有图片',
 

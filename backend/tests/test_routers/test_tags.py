@@ -259,6 +259,27 @@ class TestLorasLibrary:
         # Weight notation should not affect the name
         assert "detail" in lora_names
 
+    def test_loras_library_uses_indexed_lora_rows_not_prompt_rescan(self, test_client, test_db):
+        """LoRA library must read the normalized image_loras index, not rescan prompt text."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/lora_indexed.png",
+            filename="lora_indexed.png",
+            loras=["indexed_style"],
+            prompt="<lora:prompt_style:0.8>",
+        )
+
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET loras = '', prompt = '' WHERE id = ?", (image_id,))
+
+        response = test_client.get("/api/loras/library")
+
+        assert response.status_code == 200
+        lora_names = [l["lora"] for l in response.json()["loras"]]
+        assert "indexed_style" in lora_names
+        assert "prompt_style" in lora_names
+
 
 class TestTagImportExport:
     """Tests for tag import/export endpoints."""

@@ -186,6 +186,27 @@ class TestObfuscationPreview:
 
 
 class TestObfuscationIndexedOverwrite:
+    def test_encode_rejects_existing_output_without_allow_overwrite(self, test_client, tmp_path):
+        source_path = tmp_path / "obfuscate-source.png"
+        output_path = tmp_path / "obfuscate-output.png"
+        _create_png_with_metadata(source_path, "source")
+        _create_png_with_metadata(output_path, "existing")
+
+        response = test_client.post(
+            "/api/obfuscate/encode",
+            json={
+                "image_path": str(source_path),
+                "output_path": str(output_path),
+                "password": "1201",
+                "preserve_metadata": False,
+            },
+        )
+
+        assert response.status_code == 409
+        body = response.json()
+        error_msg = body.get("detail") or body.get("error") or ""
+        assert "already exists" in error_msg.lower()
+
     def test_encode_overwrite_refreshes_indexed_state(self, test_client, tmp_path):
         from image_fingerprint import compute_image_content_fingerprint
 
@@ -221,10 +242,17 @@ class TestObfuscationIndexedOverwrite:
                 "output_path": str(source_path),
                 "password": "1201",
                 "preserve_metadata": False,
+                "allow_overwrite": True,
             },
         )
 
         assert response.status_code == 200
+        payload = response.json()
+        assert payload["warnings"] == []
+        assert payload["overwrote_existing"] is True
+        assert payload["overwrote_indexed_path"] is True
+        assert payload["reconciled_image_id"] == image_id
+
         refreshed_fingerprint = compute_image_content_fingerprint(str(source_path))
 
         with test_client.test_db.get_db() as conn:

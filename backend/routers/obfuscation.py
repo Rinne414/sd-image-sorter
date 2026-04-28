@@ -20,6 +20,7 @@ from obfuscation import (
     BIG_TOMATO_MODE,
     MAX_OBFUSCATE_SOURCE_BYTES,
     ImageTooLargeError,
+    ObfuscationOverwriteConflictError,
     batch_process,
     decode_image,
     decode_image_bytes,
@@ -107,6 +108,7 @@ class SingleProcessRequest(BaseModel):
     password: str = Field(default="", description="Password for scrambling")
     preserve_metadata: bool = Field(default=True, description="Preserve SD metadata")
     compat_mode: str = Field(default=BIG_TOMATO_MODE, description="Compatibility mode: big_tomato or small_tomato")
+    allow_overwrite: bool = Field(default=False, description="Allow replacing an existing output file")
 
 
 class BatchProcessRequest(BaseModel):
@@ -118,6 +120,7 @@ class BatchProcessRequest(BaseModel):
     suffix: str = Field(default="", description="Suffix for output filenames")
     legacy_pnginfo: bool = Field(default=False, description="Use legacy PNG Info text algorithm")
     compat_mode: str = Field(default=BIG_TOMATO_MODE, description="Compatibility mode: big_tomato or small_tomato")
+    allow_overwrite: bool = Field(default=False, description="Allow replacing existing output files")
 
 
 @router.post("/encode")
@@ -134,10 +137,13 @@ async def encode_single(request: SingleProcessRequest):
             request.password,
             request.preserve_metadata,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
+    except ObfuscationOverwriteConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -159,10 +165,13 @@ async def decode_single(request: SingleProcessRequest):
             request.password,
             request.preserve_metadata,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
+    except ObfuscationOverwriteConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -192,6 +201,7 @@ async def batch(request: BatchProcessRequest):
             request.suffix,
             legacy_pnginfo=request.legacy_pnginfo,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:

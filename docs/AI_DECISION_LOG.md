@@ -855,3 +855,482 @@ Use this structure for future entries:
   The older implicit behavior where Reader overwrite checks could compare against temp upload paths and gallery refresh intent could drift with post-save state mutation.
 - Validation:
   Targeted Reader save-path smoke coverage in `tests/e2e/specs/smoke.spec.ts`, including indexed overwrite confirmation and save-as-new non-refresh behavior.
+
+### ADR-AI-20260428-28: Feature-local expensive derived-state writes must use the shared derived-state writer
+- Status: active
+- Area: backend data lifecycle / derived-state invariants
+- Evidence tier: Tier 1
+- Decision:
+  Feature services that write expensive pixel-derived image state (`embedding`, `aesthetic_score`, artist prediction fingerprint advancement) must route image-row writes through `backend/services/derived_state_service.py` instead of embedding their own `UPDATE images ... content_fingerprint ...` SQL.
+- Why:
+  `content_fingerprint` is the validity boundary for expensive derived state. Letting each feature hand-write the same update silently turns fingerprint advancement into a scattered invariant and makes stale caches easy to bless as current data.
+- Do not "improve" this by:
+  Reintroducing direct feature-local `UPDATE images SET ... content_fingerprint = COALESCE(...)` SQL in similarity, aesthetic, artist, or future derived-analysis services.
+- Allowed evolution:
+  Move the helper to a lower DB-owned module later to remove the remaining `database.py` ownership split, provided feature services still call one shared writer boundary.
+- Evidence:
+  `backend/similarity.py`, `backend/services/aesthetic_service.py`, and `backend/services/artist_service.py` now use `write_image_embeddings()`, `write_image_aesthetic_score()`, `write_image_content_fingerprint(s)()`, or `write_artist_prediction()`; `backend/tests/test_derived_state_contract.py` guards the writer allowlist and preserves metadata-only vs pixel-change invalidation semantics.
+- Last verified:
+  2026-04-28 against current workspace code and targeted backend contract tests.
+- Related files:
+  `backend/services/derived_state_service.py`
+  `backend/similarity.py`
+  `backend/services/aesthetic_service.py`
+  `backend/services/artist_service.py`
+  `backend/database.py`
+  `backend/tests/test_derived_state_contract.py`
+- Supersedes:
+  The older tolerated pattern where each feature service could advance `content_fingerprint` with local SQL as long as the endpoint worked.
+- Validation:
+  Targeted derived-state contract tests plus service integration regression coverage in current workspace.
+
+### ADR-AI-20260428-29: Filtered Gallery selection is tied to an exact filter snapshot
+- Status: active
+- Area: frontend UX / selection-filter contract
+- Evidence tier: Tier 1
+- Decision:
+  A Gallery selection with scope `filtered` is only valid for the filter snapshot recorded in `selectionFilterKey`. If Gallery filters change, stale filtered selection must be cleared and downgraded to `visible` rather than silently applying to a different result set. Gallery filter modal apply/reset must commit through `FilterStore`, not direct `AppState.filters` mutation.
+- Why:
+  `filtered` means "all backend-resolved results for this exact filter", not "whatever the current sidebar happens to mean later". Keeping old IDs after filter changes makes destructive batch actions semantically wrong even when the UI counter still looks plausible.
+- Do not "improve" this by:
+  Preserving `filtered` selections across filter-key changes, mutating `AppState.filters` directly from the modal, or inferring filtered selection from currently loaded thumbnails.
+- Allowed evolution:
+  Add explicit UX prompts to preserve/convert selections later, but the default hidden state transition must not carry stale filtered selections across filter snapshots.
+- Evidence:
+  `frontend/js/app.js` now clears stale filtered selections from the `FilterStore` subscription / fallback setter and commits filter-modal apply/reset through `commitFilterModalState()`; Playwright regression coverage verifies both behaviors.
+- Last verified:
+  2026-04-28 against current workspace code and selected Playwright coverage.
+- Related files:
+  `frontend/js/app.js`
+  `frontend/js/stores/filter-store.js`
+  `frontend/js/stores/selection-store.js`
+  `tests/e2e/specs/manual-regression.spec.ts`
+- Supersedes:
+  Any older implicit behavior where a filtered selection could survive unrelated filter mutations because the selected ID set was still non-empty.
+- Validation:
+  `manual-regression.spec.ts` tests for filtered-selection clearing and FilterStore-based modal commits.
+
+### ADR-AI-20260428-30: Downloaded update archives must prove their managed-path contract before apply
+- Status: active
+- Area: release/update operability contract
+- Evidence tier: Tier 1
+- Decision:
+  A downloaded update archive is not a valid update payload unless it contains `update/package-manifest.json` and that manifest passes strict managed-path validation before the update is staged/applied.
+- Why:
+  Archive member-name checks alone only prevent traversal. They do not prove which installed files the release claims to own, and they do not prevent a future bad package from managing protected runtime state such as `data/` or updater workspaces.
+- Do not "improve" this by:
+  Accepting archives without `update/package-manifest.json`, treating manifest validation as worker-only best effort, or letting protected runtime paths appear in a newly downloaded manifest because the builder "should have" filtered them earlier.
+- Allowed evolution:
+  Add signatures or stronger manifest schema validation later; the minimum contract remains manifest-present plus managed-path validation before file replacement.
+- Evidence:
+  `UpdateService._validate_archive()` now reads the package manifest from rootless or single-payload-root zip/tar update payloads, rejects archives missing it, rejects multiple real package manifests, ignores fake `badupdate/package-manifest.json` suffix matches, and calls `validate_update_manifest_managed_paths()`; release-builder tests and updater tests cover protected runtime path filtering and rejection.
+- Last verified:
+  2026-04-28 against current workspace code and release/update contract tests.
+- Related files:
+  `backend/services/update_service.py`
+  `backend/update_worker.py`
+  `scripts/build_release_packages.py`
+  `backend/tests/test_update_worker.py`
+  `backend/tests/test_update_service.py`
+  `backend/tests/test_release_build.py`
+  `docs/RELEASE_PACKS.md`
+- Supersedes:
+  The older weaker assumption that a syntactically safe archive was enough to proceed and the worker would catch all package ownership mistakes later.
+- Validation:
+  Targeted release/update tests plus full CI in current workspace.
+
+
+
+### ADR-AI-20260428-31: Prompt and LoRA library facets must use maintained index tables
+- Status: active
+- Area: database / performance / facet semantics
+- Evidence tier: Tier 1
+- Decision:
+  Prompt and LoRA library/facet counts must be served from maintained normalized index tables (`image_prompt_tokens`, `image_loras`) instead of reparsing every `images.prompt` / `images.loras` row at request time.
+- Why:
+  Library panels are interactive UI surfaces. Full-table Python regex/JSON scans scale badly on large SD libraries and create a second implementation of prompt/LoRA normalization that can drift from filter semantics.
+- Do not "improve" this by:
+  Reintroducing `SELECT id, prompt FROM images` / `SELECT id, loras, prompt FROM images` plus request-time tokenization in `TaggingService`, or by adding a new prompt/LoRA facet endpoint that bypasses the maintained indexes.
+- Allowed evolution:
+  Replace the SQLite tables with a generated statistics table or searchable facet API later, provided scan/reparse/update paths remain the source of truth and request handlers do not reparse the whole image table.
+- Evidence:
+  Migration `006_prompt_token_index` creates/backfills `image_prompt_tokens`; `database._sync_image_prompt_tokens()` and existing `image_loras` sync refresh indexes on add/reparse; `TaggingService.get_prompts_library()` and `TaggingService.get_loras_library()` now delegate to DB indexed facet helpers.
+- Last verified:
+  2026-04-28 against current workspace code and targeted database/router tests.
+- Related files:
+  `backend/migrations/006_prompt_token_index.py`
+  `backend/migrations/_schema_common.py`
+  `backend/database.py`
+  `backend/services/tagging_service.py`
+  `backend/routers/tags.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_routers/test_tags.py`
+- Supersedes:
+  The older accepted behavior where opening prompt/LoRA libraries could trigger full-image-table parsing.
+- Validation:
+  Targeted database migration/index tests and prompt/LoRA router tests.
+
+### ADR-AI-20260428-32: Censor save overwrite requires explicit intent and returns reconcile signals
+- Status: active
+- Area: UX contract / indexed overwrite lifecycle
+- Evidence tier: Tier 1
+- Decision:
+  Censor save endpoints must default to no overwrite. Replacing an existing output file requires explicit `allow_overwrite=true`, and successful saves that touch an indexed path must return enough signal for the frontend to mark Gallery data stale.
+- Why:
+  Reader already treats overwrite as destructive intent. Censor silently overwriting files creates inconsistent UX and can leave the Gallery showing stale thumbnails/metadata unless the frontend knows an indexed output was reconciled.
+- Do not "improve" this by:
+  Defaulting Censor saves back to `allow_overwrite=True`, swallowing 409 conflicts as generic save failures without user-facing overwrite policy, or letting Censor write directly to `AppState.galleryNeedsRefresh` instead of using the app boundary.
+- Allowed evolution:
+  Add a richer 409-confirm-retry dialog later. The minimum contract remains explicit overwrite intent plus backend reconcile metadata.
+- Evidence:
+  `CensorSaveRequest`, `CensorSaveDataRequest`, and `CensorSaveOperationsRequest` now include `allow_overwrite`; `CensorService` rejects implicit existing-file overwrites with 409, uses shared save/reconcile, and returns `overwrote_existing`, `overwrote_indexed_path`, `reconciled_image_id`, and `warnings`; Censor UI exposes an overwrite checkbox and calls `window.App.markGalleryNeedsRefresh()` on indexed overwrites.
+- Last verified:
+  2026-04-28 against targeted backend tests and frontend syntax checks.
+- Related files:
+  `backend/services/censor_service.py`
+  `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`
+  `frontend/index.html`
+  `frontend/js/censor-edit.js`
+  `frontend/js/app.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+- Supersedes:
+  The older implicit Censor behavior where save-data/save-operations always overwrote target files.
+- Validation:
+  Targeted Censor save overwrite/reconcile tests and JS syntax checks.
+
+### ADR-AI-20260428-33: Gallery scope-narrowing operations must drop out-of-scope IDs
+- Status: active
+- Area: frontend selection semantics / destructive action safety
+- Evidence tier: Tier 1
+- Decision:
+  When a Gallery operation narrows selection scope to `visible`, it must not carry IDs from broader or stale scopes such as `filtered` or `loaded`. When a range operation enters `loaded`, it must not carry stale `filtered` IDs.
+- Why:
+  The scope label drives user trust before destructive actions. If UI says `visible` while `selectedIds` still contains thousands of filtered/off-screen IDs, delete/export/censor actions can operate on a larger set than the user believes.
+- Do not "improve" this by:
+  Cloning the previous `selectedIds` set unconditionally inside `Gallery.toggleSelection()`, `selectAllVisible()`, `invertVisibleSelection()`, or range-selection code.
+- Allowed evolution:
+  Add an explicit "add visible to filtered selection" UX later, but implicit scope narrowing must discard out-of-scope IDs.
+- Evidence:
+  `frontend/js/gallery.js` now uses `selectionBaseForScope()` for visible/loaded transitions, and Playwright coverage verifies that toggling a visible item after a filtered selection drops an off-screen filtered ID.
+- Last verified:
+  2026-04-28 against frontend syntax checks and selected Playwright coverage in current workspace.
+- Related files:
+  `frontend/js/gallery.js`
+  `tests/e2e/specs/manual-regression.spec.ts`
+- Supersedes:
+  The older implementation that cloned the whole selected-ID set and then relabeled the selection scope.
+- Validation:
+  `manual-regression.spec.ts` selection-scope regression plus JS syntax checks.
+
+### ADR-AI-20260428-34: Derived state may only be preserved when content identity is explicitly unchanged
+- Status: active
+- Area: backend data lifecycle / derived-state invalidation
+- Evidence tier: Tier 1
+- Decision:
+  `preserve_derived_state=True` is not a caller override for stale caches. It may preserve tags, embeddings, captions, scores, and artist predictions only when the row remains readable, metadata status is `complete`, and both old and incoming `content_fingerprint` values are present and equal.
+- Why:
+  Metadata-only rewrites should not force expensive reprocessing, but unreadable parses, missing fingerprints, or changed pixel fingerprints must invalidate derived state. Otherwise old AI results can be silently blessed as current data after overwrite/reparse failure.
+- Do not "improve" this by:
+  Treating `preserve_derived_state=True` as unconditional, preserving derived state for unreadable/error rows, or preserving when either content fingerprint is unknown.
+- Allowed evolution:
+  Move the invalidation decision into a lower repository layer later, provided the same content-identity precondition remains enforced.
+- Evidence:
+  `backend/database.py` now computes `can_preserve_derived_state` from readable/status/fingerprint equality, and tests cover matching-fingerprint preservation plus unreadable and pixel-changed invalidation.
+- Last verified:
+  2026-04-28 against targeted database and derived-state regression tests.
+- Related files:
+  `backend/database.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_derived_state_contract.py`
+- Supersedes:
+  The older implicit behavior where caller intent could preserve derived state even when content identity was unknown or invalid.
+- Validation:
+  `test_update_image_metadata_preserve_flag_requires_matching_fingerprint`, `test_update_image_metadata_preserve_flag_clears_when_content_changed`, and `test_update_image_metadata_preserve_flag_does_not_keep_unreadable_rows`.
+
+### ADR-AI-20260428-35: Interrupted scans must reconcile pending placeholders in the same runtime
+- Status: active
+- Area: scan/import/rescan lifecycle
+- Evidence tier: Tier 1
+- Decision:
+  A scan run that is cancelled or fails after quick-import placeholders are written must reconcile its own pending rows before returning: new placeholders are removed, and updated placeholders that never completed metadata backfill are quarantined as unreadable `metadata_status='error'` rows.
+- Why:
+  Startup repair is not enough. A user can cancel a scan and keep using the same running app; leaving readable `pending` rows in that session makes the library look imported while metadata and derived-state validity are still unknown.
+- Do not "improve" this by:
+  Relying only on next-startup cleanup, leaving pending rows readable, or reporting placeholder writes as completed metadata updates.
+- Allowed evolution:
+  Add scan-run IDs or a full import job table later; the current low-risk rule is that interrupted placeholder state must be reconciled before the current process continues normal use.
+- Evidence:
+  `backend/image_manager.py` tracks per-run placeholder status and metadata completion, deletes new unresolved placeholders, and quarantines unresolved updated placeholders on cancellation/error.
+- Last verified:
+  2026-04-28 against targeted scan lifecycle tests.
+- Related files:
+  `backend/image_manager.py`
+  `backend/tests/test_image_manager.py`
+- Supersedes:
+  The older assumption that startup pending-row quarantine was sufficient for all interrupted scans.
+- Validation:
+  `test_scan_folder_raises_cancelled_when_stop_requested_after_first_progress` and scan count regressions.
+
+### ADR-AI-20260428-36: Obfuscation save uses the same explicit overwrite contract as Reader and Censor
+- Status: active
+- Area: overwrite UX / indexed-file reconciliation
+- Evidence tier: Tier 1
+- Decision:
+  Obfuscation encode/decode and batch processing default to `allow_overwrite=false`; replacing an existing output requires explicit `allow_overwrite=true`. Successful saves return `warnings`, `overwrote_existing`, `overwrote_indexed_path`, and `reconciled_image_id` so clients can refresh indexed gallery state.
+- Why:
+  Reader and Censor already require destructive intent. Obfuscation silently overwriting files would keep the most destructive image transformation on a different contract and recreate hidden gallery-staleness failures.
+- Do not "improve" this by:
+  Passing `allow_overwrite=True` by default, hiding indexed overwrite signals, or treating obfuscation as a special case because it is a utility endpoint.
+- Allowed evolution:
+  Move existence/preflight details deeper into the shared indexed-file mutation helper later, but every current save-capable feature must remain explicit about overwrite intent.
+- Evidence:
+  `SingleProcessRequest` and `BatchProcessRequest` now expose `allow_overwrite`, obfuscation rejects existing targets with HTTP 409 by default, and tests cover explicit overwrite plus indexed-state refresh.
+- Last verified:
+  2026-04-28 against obfuscation router tests.
+- Related files:
+  `backend/routers/obfuscation.py`
+  `backend/obfuscation.py`
+  `backend/tests/test_routers/test_obfuscation.py`
+- Supersedes:
+  The previous obfuscation behavior where `save_and_reconcile(... allow_overwrite=True)` made overwrites implicit.
+- Validation:
+  `backend/tests/test_routers/test_obfuscation.py`.
+
+### ADR-AI-20260428-37: Manual Sort resume UI must show server-session context, not local setup preferences
+- Status: active
+- Area: frontend UX / manual-sort session semantics
+- Evidence tier: Tier 1
+- Decision:
+  When `/api/sort/current` reports an unfinished session, the resume banner must display that server session's remaining count, operation mode, and saved folder mapping, and must state that setup preferences may differ from the active saved session.
+- Why:
+  Manual Sort setup fields are local preferences until a new session starts. Resume uses backend/persisted session state. If the banner only shows a count, users cannot tell whether they are resuming move vs copy or which folders will be used.
+- Do not "improve" this by:
+  Inferring resume context from `localStorage`, hiding operation/folder state until after resume, or suggesting setup edits will change an existing server session.
+- Allowed evolution:
+  Make setup read-only while a server session exists or add a richer session-detail panel, provided resume context remains server-owned.
+- Evidence:
+  `frontend/js/manual-sort.js` renders resume details from the `/api/sort/current` payload, and Playwright smoke coverage asserts mode/folder copy appears in the banner.
+- Last verified:
+  2026-04-28 against JS syntax and targeted/static tests; Playwright target discovery passed in the current environment.
+- Related files:
+  `frontend/js/manual-sort.js`
+  `frontend/index.html`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `tests/e2e/specs/smoke.spec.ts`
+- Supersedes:
+  The older count-only resume banner that let `localStorage` setup values visually compete with server session state.
+- Validation:
+  Manual Sort resume banner smoke coverage in `tests/e2e/specs/smoke.spec.ts`.
+
+### ADR-AI-20260428-38: Large synchronous UX operations need explicit caps before staged backend protocols exist
+- Status: active
+- Area: performance / large-library UX
+- Evidence tier: Tier 1
+- Decision:
+  Until backend-side selection tokens, streamed exports, and background duplicate jobs exist, synchronous large operations must have guardrails: filtered selection above 10,000 results requires explicit confirmation, export prompt/tag preview loads at most 2,000 selected IDs and truncates huge text, and duplicate search refuses synchronous all-pairs comparison above `DUPLICATE_SYNC_MAX_EMBEDDINGS`.
+- Why:
+  These are not complete scalability architectures, but they prevent the current UI/backend from silently walking into memory and CPU cliffs on large libraries.
+- Do not "improve" this by:
+  Removing the confirmations/caps because pagination exists elsewhere, raising thresholds without performance evidence, or pretending the guards replace tokenized selection/export/background duplicate protocols.
+- Allowed evolution:
+  Replace the guards with server-side selection snapshots, streaming/paged export, searchable facets, and background/ANN duplicate workflows.
+- Evidence:
+  `frontend/js/app.js` adds filtered-selection confirmation and export preview caps; `backend/similarity.py` counts embeddings before loading them and returns a structured `too_many_embeddings` duplicate-search reason; `frontend/js/similar.js` displays that reason.
+- Last verified:
+  2026-04-28 against targeted backend and JS syntax tests.
+- Related files:
+  `frontend/js/app.js`
+  `frontend/js/similar.js`
+  `backend/similarity.py`
+  `backend/services/similarity_service.py`
+  `backend/config.py`
+  `tests/e2e/specs/smoke.spec.ts`
+  `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`
+- Supersedes:
+  The older behavior where these actions could synchronously materialize very large ID sets, text payloads, or all-pairs embedding matrices without an explicit user/performance boundary.
+- Validation:
+  Duplicate-search limit regression tests, JS syntax checks, and smoke tests for selection/export guardrails.
+
+### ADR-AI-20260428-39: New migrations must freeze their own data-transform semantics
+- Status: active
+- Area: schema migration / operability
+- Evidence tier: Tier 1
+- Decision:
+  Numbered migrations must not import mutable runtime business helpers such as `database.extract_prompt_tokens()` for data backfills. If a migration needs transformation logic, it must freeze the version used by that migration or import from a migration-safe frozen helper.
+- Why:
+  Re-running an old migration during a future fresh install must produce the same schema/data shape that existing upgraded users received. Importing live runtime helpers makes historical migrations change silently when business semantics evolve.
+- Do not "improve" this by:
+  DRYing migrations against runtime helpers whose behavior can change, or changing a historical migration's transform logic instead of adding a new migration.
+- Allowed evolution:
+  Introduce a dedicated migration utility module containing versioned frozen helpers.
+- Evidence:
+  `backend/migrations/006_prompt_token_index.py` now contains `_extract_prompt_tokens_v1()` and no longer imports `database`; `backend/tests/test_migration_contract.py` guards both import isolation and tokenizer examples.
+- Last verified:
+  2026-04-28 against migration contract tests.
+- Related files:
+  `backend/migrations/006_prompt_token_index.py`
+  `backend/tests/test_migration_contract.py`
+- Supersedes:
+  The initial v6 migration draft that imported the mutable runtime prompt-token extractor from `database.py`.
+- Validation:
+  `backend/tests/test_migration_contract.py`.
+
+### ADR-AI-20260428-40: SQLite datetime values are adapted explicitly for Python 3.12+
+- Status: active
+- Area: dependency/runtime compatibility / database serialization
+- Evidence tier: Tier 1
+- Decision:
+  `backend/database.py` registers an explicit `datetime -> string` SQLite adapter using `datetime.isoformat(sep=" ")` so inserts and updates do not rely on Python's deprecated default sqlite3 datetime adapter.
+- Why:
+  Python 3.12 emits deprecation warnings for the default adapter. Leaving this implicit turns normal scan/add-image paths into warning noise now and future runtime risk later.
+- Do not "improve" this by:
+  Removing the adapter because tests pass on one Python version, or changing stored datetime format without a migration and ordering compatibility check.
+- Allowed evolution:
+  A future schema migration may standardize on UTC or epoch storage, but that must be a staged data migration rather than an incidental adapter change.
+- Evidence:
+  `backend/database.py` registers `_adapt_datetime_for_sqlite()`, and `backend/tests/test_database.py` treats `DeprecationWarning` as an error around representative `add_image()` / `add_tags()` writes.
+- Last verified:
+  2026-04-28 against targeted database tests.
+- Related files:
+  `backend/database.py`
+  `backend/tests/test_database.py`
+- Supersedes:
+  The previous implicit reliance on sqlite3's deprecated default datetime adapter.
+- Validation:
+  `test_datetime_values_do_not_use_deprecated_sqlite_default_adapter`.
+
+### ADR-AI-20260428-41: Filtered selection uses an immediate stateless chunk protocol, not a durable snapshot
+- Status: active
+- Area: frontend UX / API contract / performance
+- Evidence tier: Tier 1
+- Decision:
+  Large filtered Gallery selection should prefer `POST /api/images/selection-token` followed by immediate `GET /api/images/selection-chunk` pages. The legacy `POST /api/images/selection-ids` endpoint remains the fallback and remains the required path for `sortBy=random`.
+- Why:
+  Returning every matching ID in one response recreates a large-library memory cliff. Stateless chunks reduce response size without pretending to be a durable background selection snapshot. Random ordering cannot be offset-paged because each chunk would re-randomize and duplicate or skip images.
+- Do not "improve" this by:
+  Using the chunk protocol for `random`, treating the token as resumable across scan/import/delete operations, or removing the legacy endpoint before all clients have a fallback.
+- Allowed evolution:
+  Replace this with a server-side snapshot/cursor protocol if selection becomes a long-running or resumable operation.
+- Evidence:
+  `backend/routers/images.py` exposes token/chunk response models, `backend/services/image_service.py` rejects random chunk tokens and validates decoded token scalar types as 400s, `backend/database.py` supports exact-match post-filter offset/limit, and `frontend/js/app.js` fetches filtered IDs in chunks with legacy fallback.
+- Last verified:
+  2026-04-28 against targeted selection router/database tests, JS syntax checks, API docs contract tests, and full `scripts/run_ci.py` validation.
+- Related files:
+  `backend/routers/images.py`
+  `backend/services/image_service.py`
+  `backend/database.py`
+  `frontend/js/app.js`
+  `tests/e2e/specs/smoke.spec.ts`
+  `backend/tests/test_routers/test_images.py`
+  `backend/tests/test_database.py`
+- Supersedes:
+  The previous mitigation where filtered selection still relied on one large `/api/images/selection-ids` response after the large-selection confirmation.
+- Validation:
+  `backend/tests/test_routers/test_images.py::TestSelectionIds`, `backend/tests/test_database.py::TestImageFiltering::test_get_filtered_image_ids_streams_post_filter_batches_with_optional_limit`, and `node --check frontend/js/app.js`.
+
+### ADR-AI-20260428-42: Export preview data can page by selection token
+- Status: active
+- Area: API contract / frontend performance
+- Evidence tier: Tier 1
+- Decision:
+  `POST /api/images/export-data` accepts either legacy `image_ids` or a `selection_token` with `offset` / `limit`. Filtered Gallery export previews use the token path when the current `filtered` selection still matches its recorded filter key. The export modal's limited-preview copy reports the preview window size, not the number of non-empty prompt/tag rows rendered into the textarea.
+- Why:
+  Capping the modal preview avoided UI lockups but still required clients to send large explicit ID payloads. Token-page export keeps the preview path aligned with backend filter semantics and avoids another hidden large-payload cliff.
+- Do not "improve" this by:
+  Sending both `image_ids` and `selection_token`, treating selection tokens as durable snapshots, or using token mode for `sortBy=random`.
+- Allowed evolution:
+  A future full export/download flow may stream pages server-side, but it should build on an explicit snapshot/job contract rather than pretending this immediate token is resumable.
+- Evidence:
+  `backend/routers/images.py` validates the mutually exclusive request shapes, `backend/services/image_service.py` resolves token export pages through the same post-filter offset code as selection chunks, and `frontend/js/app.js` chooses token export for current filtered selections while carrying an internal `preview_count` so UX copy cannot confuse returned prompt rows with the selected preview window.
+- Last verified:
+  2026-04-28 against targeted export router tests, export Playwright regressions, JS syntax checks, and full `scripts/run_ci.py` validation.
+- Related files:
+  `backend/routers/images.py`
+  `backend/services/image_service.py`
+  `backend/tests/test_routers/test_images.py`
+  `frontend/js/app.js`
+  `tests/e2e/specs/smoke.spec.ts`
+- Supersedes:
+  The previous export modal mitigation where large previews were capped but still always used explicit selected ID payloads.
+- Validation:
+  `backend/tests/test_routers/test_images.py::TestExportSelectionData`, `tests/e2e/specs/smoke.spec.ts` filtered/export preview regressions, `node --check frontend/js/app.js`, and `python3 scripts/run_ci.py`.
+
+### ADR-AI-20260428-43: Indexed file save preflight is owned by the shared mutation helper
+- Status: active
+- Area: overwrite semantics / backend data lifecycle
+- Evidence tier: Tier 1
+- Decision:
+  Save-capable features must use `save_and_reconcile_checked()` / `preflight_output_write()` for same-source, existing-file, directory, symlink, overwrite-intent, and indexed-row reconciliation semantics. Reader, Censor, and Obfuscation no longer keep feature-local overwrite preflight helpers.
+- Why:
+  The old shape duplicated the same destructive-write policy in feature services, making future save features likely to drift and making indexed overwrite refresh depend on caller discipline.
+- Do not "improve" this by:
+  Reintroducing `_ensure_overwrite_allowed()` in feature modules, checking `output.exists and not allow_overwrite` at the feature layer, or writing bytes before the shared preflight has run.
+- Allowed evolution:
+  The helper can grow richer return metadata or transactional temp-file writes, but destructive write policy must stay centralized.
+- Evidence:
+  `backend/services/indexed_file_mutation_service.py` now owns checked preflight and result metadata; Censor and Obfuscation call it directly; contract tests reject feature-local overwrite helpers.
+- Last verified:
+  2026-04-28 against indexed mutation contract tests and Reader/Censor/Obfuscation router slices.
+- Related files:
+  `backend/services/indexed_file_mutation_service.py`
+  `backend/services/image_service.py`
+  `backend/services/censor_service.py`
+  `backend/obfuscation.py`
+  `backend/tests/test_indexed_file_mutation_contract.py`
+- Supersedes:
+  The prior partially-centralized state where `save_and_reconcile()` refreshed indexed rows but callers still owned overwrite preflight.
+- Validation:
+  `backend/tests/test_indexed_file_mutation_contract.py`, `backend/tests/test_routers/test_obfuscation.py`, `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`.
+
+### ADR-AI-20260428-44: `window.App` is sealed; feature modules use named bridges
+- Status: active
+- Area: frontend state / architecture
+- Evidence tier: Tier 1
+- Decision:
+  `window.App` is created once by `frontend/js/app.js` and sealed immediately. Feature modules must not add or mutate `window.App.*`; Censor exposes its queue bridge via `window.CensorEdit.addToQueue`, while app-level callers use the stable `window.App.addToCensorQueue()` wrapper.
+- Why:
+  A giant mutable global service locator lets feature modules silently expand API surface and makes load order/state ownership regressions hard to detect.
+- Do not "improve" this by:
+  Adding feature-local fields back onto `window.App`, or bypassing the wrapper from Gallery/Similar/Artist features.
+- Allowed evolution:
+  Split `window.App` into narrower module APIs, but keep static tests that prevent feature modules from mutating shared globals.
+- Evidence:
+  `frontend/js/app.js` calls `Object.seal(window.App)`, `frontend/js/censor-edit.js` registers `window.CensorEdit.addToQueue`, and `backend/tests/test_frontend_contract.py` blocks feature-module `window.App.*` assignments.
+- Last verified:
+  2026-04-28 against frontend contract tests and JS syntax checks.
+- Related files:
+  `frontend/js/app.js`
+  `frontend/js/censor-edit.js`
+  `frontend/js/gallery.js`
+  `backend/tests/test_frontend_contract.py`
+- Supersedes:
+  The previous Censor bridge that mutated `window.App._addToCensorQueue` at runtime.
+- Validation:
+  `backend/tests/test_frontend_contract.py`, `node --check frontend/js/app.js frontend/js/censor-edit.js frontend/js/gallery.js`.
+
+### ADR-AI-20260428-45: Release manifests declare model artifact policy
+- Status: active
+- Area: release / update / model assets
+- Evidence tier: Tier 1
+- Decision:
+  Release package manifests include `model_artifact_policy`, explicitly declaring that default app packages do not manage model payload files, that runtime models live under `data/models`, and which model paths are auto-download or optional release assets.
+- Why:
+  A model-free package can otherwise look complete to update tooling, and an accidental staged model binary could become updater-managed app content.
+- Do not "improve" this by:
+  Putting model binaries into default app/update manifests without explicit `include_model_payloads=True`, or relying on release notes alone to explain model delivery.
+- Allowed evolution:
+  Optional model packs may opt into model payload management with separate manifest semantics and artifact smoke tests.
+- Evidence:
+  `scripts/build_release_packages.py` writes `model_artifact_policy` and excludes non-doc `models/` payloads from default manifests; `backend/tests/test_release_build.py` validates the policy.
+- Last verified:
+  2026-04-28 against release build tests.
+- Related files:
+  `scripts/build_release_packages.py`
+  `backend/tests/test_release_build.py`
+  `docs/RELEASE_PACKS.md`
+- Supersedes:
+  The previous release manifest shape that tracked app managed paths but did not state model delivery assumptions.
+- Validation:
+  `backend/tests/test_release_build.py`.

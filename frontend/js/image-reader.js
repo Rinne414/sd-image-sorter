@@ -351,9 +351,8 @@
                 return;
             }
 
-            app.AppState.galleryNeedsRefresh = true;
-            if (typeof app.resetSelectionDataCache === 'function') {
-                app.resetSelectionDataCache();
+            if (typeof app.markGalleryNeedsRefresh === 'function') {
+                app.markGalleryNeedsRefresh();
             }
         },
 

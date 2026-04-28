@@ -506,6 +506,10 @@ DUPLICATE_CHUNK_SIZE: int = int(os.environ.get(
     "SD_IMAGE_SORTER_DUPLICATE_CHUNK_SIZE",
     "500"
 ))
+DUPLICATE_SYNC_MAX_EMBEDDINGS: int = int(os.environ.get(
+    "SD_IMAGE_SORTER_DUPLICATE_SYNC_MAX_EMBEDDINGS",
+    "5000"
+))
 
 
 # =============================================================================

@@ -12,6 +12,7 @@ Priority: HIGH
 import os
 import sys
 import json
+import base64
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -384,6 +385,135 @@ class TestSelectionIds:
             "total": len(expected_ids),
         }
 
+    def test_selection_query_token_returns_stateless_chunk_contract(self, test_client, test_db_with_images):
+        """Selection token should let clients page IDs without one giant response."""
+        response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["selection_token"]
+        assert payload["chunk_size"] == 2
+        assert payload["total_estimate"] == len(test_db_with_images["image_ids"])
+        assert payload["exact_total"] is True
+
+        first = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 0, "limit": 2},
+        )
+        second = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 2, "limit": 2},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+        assert first.json()["image_ids"] == expected_ids[:2]
+        assert first.json()["next_offset"] == 2
+        assert first.json()["has_more"] is True
+        assert second.json()["image_ids"] == expected_ids[2:4]
+
+    def test_selection_query_token_marks_prompt_total_as_estimate(self, test_client, test_db_with_images):
+        """Prompt terms can still require post-filtering, so token totals must be honest."""
+        response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["selection_token"]
+        assert payload["exact_total"] is False
+        assert isinstance(payload["total_estimate"], int)
+
+    def test_selection_chunk_post_filter_offset_skips_exact_matches_only(self, test_client, test_db_with_images):
+        """Chunked selection must not treat SQL false positives as offset positions."""
+        exact_ids = []
+        for index in range(5):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_chunk_exact_{index}.png",
+                    filename=f"router_selection_chunk_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+
+        for index in range(45):
+            test_client.test_db.add_image(
+                path=f"/test/router_selection_chunk_false_positive_{index}.png",
+                filename=f"router_selection_chunk_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+        token = token_response.json()["selection_token"]
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token, "offset": 2, "limit": 2},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == list(reversed(exact_ids))[2:4]
+
+    def test_selection_token_rejects_random_sort(self, test_client):
+        """Random ordering cannot be split into stateless offset chunks without duplicates/gaps."""
+        response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "random",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 400
+        assert "random sort cannot use the chunked selection token protocol" in response.text
+
+    def test_selection_chunk_rejects_tampered_filter_types(self, test_client):
+        """Decoded token payloads should fail as 400 instead of leaking TypeError as 500."""
+        token_payload = {
+            "v": 1,
+            "filters": {
+                "sortBy": "newest",
+                "minWidth": "not-an-int",
+                "maxWidth": 100,
+            },
+        }
+        raw = json.dumps(token_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        selection_token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+        response = test_client.get("/api/images/selection-chunk", params={
+            "selection_token": selection_token,
+            "offset": 0,
+            "limit": 100,
+        })
+
+        assert response.status_code == 400
+        assert "Invalid selection token" in response.text
+
+    def test_selection_chunk_rejects_invalid_token(self, test_client):
+        """Chunk endpoint should not silently reinterpret malformed selection tokens."""
+        response = test_client.get("/api/images/selection-chunk", params={
+            "selection_token": "not-a-token",
+            "offset": 0,
+            "limit": 100,
+        })
+
+        assert response.status_code == 400
+        assert "Invalid selection token" in response.text
+
 
 class TestGetSingleImage:
     """Tests for GET /api/images/{image_id} endpoint."""
@@ -523,6 +653,101 @@ class TestExportSelectionData:
     def test_export_selection_data_rejects_empty_ids(self, test_client):
         """Validation should reject empty export selections."""
         response = test_client.post("/api/images/export-data", json={"image_ids": []})
+
+        assert response.status_code == 400
+
+    def test_export_selection_data_accepts_selection_token_page(self, test_client, test_db_with_images):
+        """Large export previews should page by selection token instead of requiring giant ID payloads."""
+        token_response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 0,
+            "limit": 2,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+        assert [item["id"] for item in data["images"]] == expected_ids[:2]
+        assert data["missing_ids"] == []
+        assert data["count"] == 2
+        assert data["total"] == len(test_db_with_images["image_ids"])
+        assert data["offset"] == 0
+        assert data["limit"] == 2
+        assert data["next_offset"] == 2
+        assert data["has_more"] is True
+        assert data["source"] == "selection_token"
+        assert data["exact_total"] is True
+
+    def test_export_selection_data_token_page_skips_prompt_false_positives(self, test_client, test_db):
+        """Token export paging must share selection post-filter offset semantics."""
+        exact_ids = []
+        for index in range(4):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/export_token_exact_{index}.png",
+                    filename=f"export_token_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+        for index in range(20):
+            test_client.test_db.add_image(
+                path=f"/test/export_token_false_positive_{index}.png",
+                filename=f"export_token_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 2,
+            "limit": 2,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == list(reversed(exact_ids))[2:4]
+        assert data["source"] == "selection_token"
+        assert data["exact_total"] is False
+
+    def test_export_selection_data_rejects_tampered_selection_token(self, test_client):
+        """Export-data token mode should fail closed like selection chunks."""
+        raw = json.dumps({"v": 1, "filters": {"tags": "not-a-list"}}).encode("utf-8")
+        selection_token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": selection_token,
+            "offset": 0,
+            "limit": 2,
+        })
+
+        assert response.status_code == 400
+
+    def test_export_selection_data_rejects_oversized_token_limit(self, test_client):
+        """Export-data token pages must keep the same cap as selection chunks."""
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": "not-a-token",
+            "offset": 0,
+            "limit": 10001,
+        })
 
         assert response.status_code == 400
 

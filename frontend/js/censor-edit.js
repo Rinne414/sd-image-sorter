@@ -402,6 +402,7 @@ function bindEvents() {
             renderCensorCapabilityPanel({ loading: true });
             await loadCensorModelStatus();
         }
+        populateCensorModelSelect(getLegacyBackendStatus());
         updateDetectionModelInputs();
         renderCensorCapabilityPanel();
     });
@@ -813,8 +814,9 @@ function bindEvents() {
     boundHandlers.keydown = handleKeydown;
     document.addEventListener('keydown', boundHandlers.keydown);
 
-    // Add to Queue (Hook for Gallery)
-    window.App._addToCensorQueue = async (imageIds) => {
+    // Add to Queue bridge for Gallery/App without mutating window.App.
+    window.CensorEdit = window.CensorEdit || {};
+    window.CensorEdit.addToQueue = async (imageIds) => {
         const { API } = window.App;
         // Switch view to censor tab - use nav tab click for reliable switching
         const censorTab = document.querySelector('.nav-tab[data-view="censor"]');
@@ -4160,6 +4162,11 @@ function openSaveOptionsPopup() {
         formatOption.value = CensorState.outputFormat || 'png';
     }
 
+    const allowOverwrite = document.getElementById('save-allow-overwrite');
+    if (allowOverwrite) {
+        allowOverwrite.checked = false;
+    }
+
     document.getElementById('save-options-modal')?.classList.add('visible');
 }
 
@@ -4168,6 +4175,7 @@ async function confirmAndSaveAll() {
     const folder = document.getElementById('save-output-folder')?.value;
     const metadataOption = document.getElementById('save-metadata-option')?.value || 'strip';
     const formatOption = document.getElementById('save-format-option')?.value || 'png';
+    const allowOverwrite = Boolean(document.getElementById('save-allow-overwrite')?.checked);
 
     if (!folder) {
         window.App.showToast(
@@ -4186,10 +4194,18 @@ async function confirmAndSaveAll() {
     // Close popup and start saving
     document.getElementById('save-options-modal')?.classList.remove('visible');
 
-    await saveAllProcessed(formatOption, metadataOption);
+    await saveAllProcessed(formatOption, metadataOption, allowOverwrite);
 }
 
-async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') {
+function markGalleryRefreshAfterCensorSave(result) {
+    if (!result?.overwrote_indexed_path && !result?.reconciled_image_id) return;
+
+    if (window.App?.markGalleryNeedsRefresh) {
+        window.App.markGalleryNeedsRefresh();
+    }
+}
+
+async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip', allowOverwrite = false) {
     const folder = CensorState.outputFolder;
     if (!folder) {
         window.App.showToast(
@@ -4221,14 +4237,16 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
             const finalFilename = `${baseName}.${formatOption}`;
 
             if (shouldUseProxyEditMode(item) || (Array.isArray(item.editOperations) && item.editOperations.length > 0)) {
-                await window.App.API.post('/api/censor/save-operations', {
+                const result = await window.App.API.post('/api/censor/save-operations', {
                     original_image_id: item.id,
                     operations: item.editOperations || [],
                     filename: finalFilename,
                     output_folder: folder,
                     metadata_option: metadataOption,
                     output_format: formatOption,
+                    allow_overwrite: allowOverwrite,
                 });
+                markGalleryRefreshAfterCensorSave(result);
             } else {
                 let dataUrl;
 
@@ -4243,14 +4261,16 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
                     dataUrl = await urlToDataUrl(item.originalUrl);
                 }
 
-                await window.App.API.post('/api/censor/save-data', {
+                const result = await window.App.API.post('/api/censor/save-data', {
                     image_data: dataUrl,
                     filename: finalFilename,
                     output_folder: folder,
                     metadata_option: metadataOption,
                     output_format: formatOption,
-                    original_image_id: item.id  // Pass original image ID for metadata copying
+                    original_image_id: item.id,
+                    allow_overwrite: allowOverwrite,
                 });
+                markGalleryRefreshAfterCensorSave(result);
             }
             item.batchStatus = 'saved';
             count++;

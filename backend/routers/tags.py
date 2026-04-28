@@ -146,7 +146,7 @@ async def get_generators(
 )
 async def get_tags_library(
     sort_by: str = Query(default="frequency", description="Sort order: 'frequency' or 'alphabetical'"),
-    limit: int = Query(default=1000, ge=1, le=100000, description="Maximum tags to return"),
+    limit: int = Query(default=1000, ge=1, le=5000, description="Maximum tags to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get tags library with frequency and sorting options."""
@@ -155,7 +155,7 @@ async def get_tags_library(
 
 @router.get("/prompts/library")
 async def get_prompts_library(
-    limit: int = Query(default=500, ge=1, le=100000, description="Maximum prompt tokens to return"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Maximum prompt tokens to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique prompt tokens from images with frequency counts."""
@@ -166,13 +166,9 @@ async def get_prompts_library(
     "/loras/library",
     summary="Get LoRAs library",
     description="""
-Get unique LoRAs from images with frequency counts.
+Get unique LoRAs from the normalized `image_loras` index with frequency counts.
 
-LoRA names are extracted from both:
-- The `loras` JSON array in the database
-- `<lora:name:weight>` patterns in prompts
-
-Names are normalized by stripping weight notation and file extensions.
+The index is maintained from both the `loras` JSON array and `<lora:name:weight>` prompt patterns during scan/reparse. Names are normalized by stripping weight notation and file extensions.
     """,
     responses={
         200: {
@@ -192,7 +188,7 @@ Names are normalized by stripping weight notation and file extensions.
     }
 )
 async def get_loras_library(
-    limit: int = Query(default=500, ge=1, le=100000, description="Maximum LoRAs to return"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Maximum LoRAs to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique LoRAs from images with frequency counts."""

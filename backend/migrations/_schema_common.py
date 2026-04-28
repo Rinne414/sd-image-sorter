@@ -165,6 +165,15 @@ FULL_SCHEMA_STATEMENTS: tuple[str, ...] = (
         UNIQUE(image_id, lora_name)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS image_prompt_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_id INTEGER NOT NULL,
+        token TEXT NOT NULL,
+        FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+        UNIQUE(image_id, token)
+    )
+    """,
 )
 
 
@@ -193,6 +202,8 @@ INDEX_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_images_metadata_status ON images(metadata_status)",
     "CREATE INDEX IF NOT EXISTS idx_image_loras_lora_name ON image_loras(lora_name)",
     "CREATE INDEX IF NOT EXISTS idx_image_loras_image_id ON image_loras(image_id)",
+    "CREATE INDEX IF NOT EXISTS idx_image_prompt_tokens_token ON image_prompt_tokens(token)",
+    "CREATE INDEX IF NOT EXISTS idx_image_prompt_tokens_image_id ON image_prompt_tokens(image_id)",
 )
 
 

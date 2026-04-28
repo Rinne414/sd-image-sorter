@@ -298,6 +298,7 @@ class TestCensorRouterValidation:
                 "metadata_option": "strip",
                 "output_format": "png",
                 "original_image_id": image_id,
+                "allow_overwrite": True,
             },
         )
 
@@ -321,6 +322,37 @@ class TestCensorRouterValidation:
         assert row["embedding"] is None
         assert row["content_fingerprint"] == refreshed_fingerprint
         assert refreshed_fingerprint != original_fingerprint
+        response_payload = response.json()
+        assert response_payload["overwrote_existing"] is True
+        assert response_payload["overwrote_indexed_path"] is True
+        assert response_payload["reconciled_image_id"] == image_id
+
+    def test_save_data_requires_explicit_overwrite_for_existing_output(self, test_client, tmp_path):
+        source_path = tmp_path / "save-data-conflict.png"
+        Image.new("RGB", (32, 32), color="white").save(source_path)
+        image_id = test_client.test_db.add_image(
+            path=str(source_path),
+            filename=source_path.name,
+            metadata_json="{}",
+        )
+        payload_image = base64.b64encode(source_path.read_bytes()).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": source_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+                "original_image_id": image_id,
+            },
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "Confirm overwrite" in detail
 
     def test_save_data_rejects_oversized_decoded_payload(self, test_client, monkeypatch):
         from services import censor_service as censor_service_module
@@ -336,6 +368,7 @@ class TestCensorRouterValidation:
                 "output_folder": tempfile.gettempdir(),
                 "metadata_option": "strip",
                 "output_format": "png",
+                "allow_overwrite": True,
             },
         )
 
@@ -591,6 +624,7 @@ class TestCensorRouterValidation:
                 "output_folder": str(tmp_path),
                 "metadata_option": "strip",
                 "output_format": "png",
+                "allow_overwrite": True,
             },
         )
 
@@ -614,6 +648,36 @@ class TestCensorRouterValidation:
         assert row["embedding"] is None
         assert row["content_fingerprint"] == refreshed_fingerprint
         assert refreshed_fingerprint != original_fingerprint
+        response_payload = response.json()
+        assert response_payload["overwrote_existing"] is True
+        assert response_payload["overwrote_indexed_path"] is True
+        assert response_payload["reconciled_image_id"] == image_id
+
+    def test_save_operations_requires_explicit_overwrite_for_existing_output(self, test_client, tmp_path):
+        image_path = tmp_path / "save-operations-conflict.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [],
+                "filename": image_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "Confirm overwrite" in detail
 
     def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
         from PIL import Image
@@ -1158,6 +1222,36 @@ class TestSimilarityRouterValidation:
         assert data["reason"] == "insufficient_embeddings"
         assert data["embedded_count"] == 0
         assert data["minimum_required"] == 2
+
+    def test_duplicates_refuse_sync_search_above_embedding_limit(self, test_client, monkeypatch):
+        import similarity as similarity_module
+
+        monkeypatch.setattr(similarity_module, "DUPLICATE_SYNC_MAX_EMBEDDINGS", 2)
+        monkeypatch.setattr(
+            similarity_module,
+            "_index",
+            similarity_module.SimilarityIndex(test_client.test_db),
+        )
+        embedding = similarity_module.embedding_to_bytes(np.array([1, 0, 0, 0], dtype=np.float32))
+
+        for index in range(3):
+            image_id = test_client.test_db.add_image(
+                path=f"/tmp/duplicate-limit-{index}.png",
+                filename=f"duplicate-limit-{index}.png",
+                metadata_json="{}",
+            )
+            with test_client.test_db.get_db() as conn:
+                conn.execute("UPDATE images SET embedding = ? WHERE id = ?", (embedding, image_id))
+
+        response = test_client.get("/api/similarity/duplicates?threshold=0.95")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["duplicates"] == []
+        assert data["count"] == 0
+        assert data["reason"] == "too_many_embeddings"
+        assert data["embedded_count"] == 3
+        assert data["max_embeddings"] == 2
 
     def test_model_status_reports_clip_readiness_payload(self, test_client):
         response = test_client.get("/api/similarity/model-status")

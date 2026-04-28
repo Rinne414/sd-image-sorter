@@ -514,8 +514,9 @@ async function waitForNavigationChrome(page) {
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
       }
 
-      return isVisible(document.querySelector('.nav-tabs [data-view="reader"]'))
+      const chromeVisible = isVisible(document.querySelector('.nav-tabs [data-view="reader"]'))
         || isVisible(document.getElementById('mobile-menu-toggle'))
+      return chromeVisible && document.documentElement.dataset.appReady === '1'
     })
   }).toBe(true)
 }
@@ -1894,7 +1895,10 @@ test.describe('Smoke Tests', () => {
       buildMockGalleryImage(11, { filename: 'filtered-1.png', prompt: 'filtered one' }),
       buildMockGalleryImage(22, { filename: 'filtered-2.png', prompt: 'filtered two' }),
     ]
-    let selectionIdsRequests = 0
+    let selectionTokenRequests = 0
+    const selectionChunkOffsets: number[] = []
+    const exportDataPayloads: any[] = []
+    let legacySelectionIdsRequests = 0
 
     await Promise.all(loadedImages.map((image) => mockImageAsset(page, image.id)))
 
@@ -1915,16 +1919,71 @@ test.describe('Smoke Tests', () => {
       })
     })
 
-    await page.route('**/api/images/selection-ids', async (route) => {
-      selectionIdsRequests += 1
+    await page.route('**/api/images/selection-token', async (route) => {
+      selectionTokenRequests += 1
       expect(route.request().method()).toBe('POST')
       expect(route.request().postDataJSON()).toMatchObject({
         sortBy: 'newest',
+        chunkSize: 2000,
       })
+      await route.fulfill({
+        json: {
+          selection_token: 'filtered-selection-token',
+          total_estimate: 4,
+          exact_total: true,
+          chunk_size: 2,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-chunk**', async (route) => {
+      expect(route.request().method()).toBe('GET')
+      const url = new URL(route.request().url())
+      expect(url.searchParams.get('selection_token')).toBe('filtered-selection-token')
+      const offset = Number(url.searchParams.get('offset') || '0')
+      const limit = Number(url.searchParams.get('limit') || '0')
+      selectionChunkOffsets.push(offset)
+      const allIds = [11, 22, 33, 44]
+      const imageIds = allIds.slice(offset, offset + limit)
+      await route.fulfill({
+        json: {
+          image_ids: imageIds,
+          offset,
+          limit,
+          next_offset: offset + imageIds.length < allIds.length ? offset + imageIds.length : null,
+          has_more: offset + imageIds.length < allIds.length,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-ids', async (route) => {
+      legacySelectionIdsRequests += 1
       await route.fulfill({
         json: {
           image_ids: [11, 22, 33, 44],
           total: 4,
+        },
+      })
+    })
+
+    await page.route('**/api/images/export-data', async (route) => {
+      const payload = route.request().postDataJSON()
+      exportDataPayloads.push(payload)
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 11, prompt: 'filtered one', tags: ['filtered'] },
+            { id: 22, prompt: 'filtered two', tags: ['filtered'] },
+          ],
+          missing_ids: [],
+          count: 2,
+          total: 4,
+          offset: 0,
+          limit: 2000,
+          next_offset: 2,
+          has_more: true,
+          source: 'selection_token',
+          exact_total: true,
         },
       })
     })
@@ -1935,7 +1994,9 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-toggle-select').click()
     await page.locator('#btn-select-filtered').click()
 
-    await expect.poll(() => selectionIdsRequests).toBe(1)
+    await expect.poll(() => selectionTokenRequests).toBe(1)
+    await expect.poll(() => selectionChunkOffsets).toEqual([0, 2])
+    expect(legacySelectionIdsRequests).toBe(0)
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
     await expect(page.locator('#selection-count')).toContainText('4 items selected')
     await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
@@ -1943,6 +2004,19 @@ test.describe('Smoke Tests', () => {
     await page.evaluate(() => window.App.loadImages())
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
     await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
+
+    await page.locator('#btn-export-selected').click()
+    await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-text')).toHaveValue(/filtered one/)
+    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2 of 4 selected images/)
+    await expect.poll(() => exportDataPayloads.length).toBe(1)
+    expect(exportDataPayloads[0]).toMatchObject({
+      selection_token: 'filtered-selection-token',
+      offset: 0,
+      limit: 2000,
+    })
+    expect(exportDataPayloads[0].image_ids).toBeUndefined()
+    await page.locator('#btn-close-export').click()
 
     await page.evaluate(() => {
       window.App.updateFilters((filters) => {
@@ -1952,6 +2026,93 @@ test.describe('Smoke Tests', () => {
     })
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-scope-summary')).toContainText('visible thumbnails')
+  })
+
+  test('filtered selection should require confirmation for very large result sets', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'large-filtered-1.png' }),
+      buildMockGalleryImage(22, { filename: 'large-filtered-2.png' }),
+    ]
+    await Promise.all(loadedImages.map((image) => mockImageAsset(page, image.id)))
+
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+      await route.fulfill({
+        json: {
+          images: loadedImages,
+          total: 12000,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    let selectionChunkRequests = 0
+
+    await page.route('**/api/images/selection-token', async (route) => {
+      await route.fulfill({
+        json: {
+          selection_token: 'large-filtered-selection-token',
+          total_estimate: 12000,
+          exact_total: true,
+          chunk_size: 2000,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-chunk**', async (route) => {
+      selectionChunkRequests += 1
+      await route.fulfill({
+        json: {
+          image_ids: [11, 22, 33, 44],
+          offset: 0,
+          limit: 2000,
+          next_offset: null,
+          has_more: false,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-ids', async (route) => {
+      await route.fulfill({
+        json: {
+          image_ids: [11, 22, 33, 44],
+          total: 12000,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.evaluate(() => {
+      ;(window as Window & { __confirmCalls?: string[] }).__confirmCalls = []
+      const originalConfirm = window.confirm
+      window.confirm = (message?: string) => {
+        ;(window as Window & { __confirmCalls?: string[] }).__confirmCalls?.push(String(message || ''))
+        return false
+      }
+      ;(window as Window & { __restoreConfirm?: () => void }).__restoreConfirm = () => {
+        window.confirm = originalConfirm
+      }
+    })
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-filtered').click()
+
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
+    expect(selectionChunkRequests).toBe(0)
+    await expect.poll(async () => {
+      return await page.evaluate(() => (window as Window & { __confirmCalls?: string[] }).__confirmCalls || [])
+    }).toContainEqual(expect.stringContaining('12000'))
+
+    await page.evaluate(() => {
+      ;(window as Window & { __restoreConfirm?: () => void }).__restoreConfirm?.()
+    })
   })
 
   test('export modal should fetch selected prompt/tag data once and reuse it when toggling views', async ({ page }) => {
@@ -2019,6 +2180,46 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#export-text')).toHaveValue('alpha, beta, gamma')
     await expect.poll(() => selectionDataRequests).toBe(1)
     expect(detailRequests).toHaveLength(0)
+  })
+
+  test('export modal should cap large previews and request preview subset only', async ({ page }) => {
+    const requestedPayloadSizes: number[] = []
+
+    await page.route('**/api/images/export-data', async (route) => {
+      const payload = route.request().postDataJSON() as { image_ids?: number[] }
+      requestedPayloadSizes.push(Array.isArray(payload?.image_ids) ? payload.image_ids.length : 0)
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 1, prompt: 'prompt one', tags: ['alpha'] },
+            { id: 2, prompt: 'prompt two', tags: ['beta'] },
+            { id: 3, prompt: 'prompt three', tags: ['gamma'] },
+          ],
+          missing_ids: [],
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.evaluate(() => {
+      const ids = Array.from({ length: 2501 }, (_, index) => index + 1)
+      window.App.setSelectionState({
+        selectionMode: true,
+        selectedIds: new Set(ids),
+        scope: 'filtered',
+        filterKey: 'preview-cap-test',
+      })
+    })
+
+    await page.evaluate(async () => {
+      await window.App.showExportModal()
+    })
+    await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2000 of 2501 selected images/)
+    await expect.poll(() => requestedPayloadSizes.length).toBe(1)
+    expect(requestedPayloadSizes[0]).toBe(2000)
   })
 
   test('should preview auto-separate matches for an active gallery filter', async ({ page }) => {
@@ -2942,6 +3143,37 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#sort-resume-banner')).toBeHidden()
   })
 
+  test('manual sort resume banner should show saved session mode and folders context', async ({ page }) => {
+    await mockImageAsset(page, 1)
+
+    await page.route('**/api/sort/current', async (route) => {
+      await route.fulfill({
+        json: {
+          image: { id: 1, filename: 'resume.png' },
+          remaining: 12,
+          done: false,
+          operation_mode: 'copy',
+          folders: {
+            a: 'C:/sorted/keep',
+            d: 'C:/sorted/best',
+          },
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openSortingSubView(page, 'manual')
+
+    const banner = page.locator('#sort-resume-banner')
+    await expect(banner).toBeVisible()
+    await expect(banner).toContainText('12 images remaining')
+    await expect(banner).toContainText('Saved session action mode: Copy and keep originals')
+    await expect(banner).toContainText('A: C:/sorted/keep')
+    await expect(banner).toContainText('D: C:/sorted/best')
+    await expect(banner).toContainText('Setup preferences here may differ from the active saved session.')
+  })
+
   test('manual sort resume should restore counts and support redo after undoing a saved action', async ({ page }) => {
     let currentCall = 0
 
@@ -3509,10 +3741,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
@@ -3599,10 +3831,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
@@ -3684,10 +3916,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()
@@ -3823,10 +4055,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect.poll(() => page.evaluate(() => {
@@ -3943,10 +4175,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect.poll(() => page.evaluate(() => {
@@ -4388,10 +4620,10 @@ test.describe('Smoke Tests', () => {
       }
     })
     await expect.poll(() => page.evaluate(() => {
-      return typeof (window as Window & { App?: any }).App?._addToCensorQueue === 'function'
+      return typeof (window as Window & { App?: any }).App?.addToCensorQueue === 'function'
     }), { timeout: 10000 }).toBeTruthy()
     await page.evaluate(async () => {
-      await (window as Window & { App?: any }).App._addToCensorQueue([11])
+      await (window as Window & { App?: any }).App.addToCensorQueue([11])
     })
 
     await expect(page.locator('#view-censor.active')).toBeVisible()

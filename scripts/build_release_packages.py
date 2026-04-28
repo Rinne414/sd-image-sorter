@@ -29,6 +29,7 @@ from update_worker import (  # noqa: E402
     INSTALLED_MANIFEST_RELATIVE_PATH,
     PACKAGE_MANIFEST_RELATIVE_PATH,
     PROTECTED_RUNTIME_PREFIXES,
+    is_protected_runtime_path,
 )
 
 
@@ -61,6 +62,7 @@ DOC_FILES = {
     "models/yolo/README.md",
     "models/artist/README.md",
 }
+MODEL_ARTIFACT_POLICY_VERSION = 1
 
 EXCLUDED_PREFIXES = (
     ".git",
@@ -202,6 +204,44 @@ def find_seven_zip() -> Path | None:
     return Path(found) if found else None
 
 
+def is_model_payload_path(relative_path: str | Path) -> bool:
+    """Return True for model binaries/config payloads that default app packages must not manage."""
+    rel = relative_path.as_posix() if isinstance(relative_path, Path) else str(relative_path).replace("\\", "/")
+    return rel.startswith("models/") and rel not in DOC_FILES
+
+
+def build_model_artifact_policy(managed_paths: Iterable[str], *, include_model_payloads: bool = False) -> dict:
+    """Describe release model delivery so packages do not pretend bundled models exist."""
+    managed_model_paths = sorted(path for path in managed_paths if is_model_payload_path(path))
+    return {
+        "version": MODEL_ARTIFACT_POLICY_VERSION,
+        "default_packages_include_model_payloads": bool(include_model_payloads),
+        "runtime_model_root": "data/models",
+        "managed_model_payload_paths": managed_model_paths,
+        "auto_download_model_paths": sorted(path for path in CORE_MODEL_FILES if is_model_payload_path(path)),
+        "optional_release_assets": [
+            {
+                "name": "wd14-eva02-model",
+                "paths": sorted(path for path in EVA_MODEL_FILES if is_model_payload_path(path)),
+            },
+            {
+                "name": "artist-runtime",
+                "paths": sorted(path for path in ARTIST_RUNTIME_FILES if is_model_payload_path(path)),
+            },
+            {
+                "name": "kaloscope-checkpoint",
+                "paths": [LARGE_MODEL_FILES["kaloscope"]],
+                "split": True,
+            },
+            {
+                "name": "sam3-modelscope-sam3pt",
+                "paths": [LARGE_MODEL_FILES["sam3"]],
+                "split": True,
+            },
+        ],
+    }
+
+
 def should_skip_path(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
     if any(part.startswith(".") for part in relative_path.parts) and rel not in ALLOWED_HIDDEN_FILES:
@@ -259,7 +299,7 @@ def copy_project(destination_root: Path) -> None:
         shutil.copy2(item, destination)
 
 
-def write_package_manifest(stage_dir: Path, version: str) -> Path:
+def write_package_manifest(stage_dir: Path, version: str, *, include_model_payloads: bool = False) -> Path:
     managed_paths: list[str] = []
     installed_manifest_relative = INSTALLED_MANIFEST_RELATIVE_PATH.as_posix()
     for file_path in sorted(stage_dir.rglob("*")):
@@ -269,6 +309,10 @@ def write_package_manifest(stage_dir: Path, version: str) -> Path:
         if relative.startswith("python/"):
             continue
         if relative == installed_manifest_relative:
+            continue
+        if is_protected_runtime_path(relative):
+            continue
+        if is_model_payload_path(relative) and not include_model_payloads:
             continue
         managed_paths.append(relative)
 
@@ -283,6 +327,10 @@ def write_package_manifest(stage_dir: Path, version: str) -> Path:
             {
                 "version": version,
                 "managed_paths": managed_paths,
+                "model_artifact_policy": build_model_artifact_policy(
+                    managed_paths,
+                    include_model_payloads=include_model_payloads,
+                ),
             },
             indent=2,
         ),

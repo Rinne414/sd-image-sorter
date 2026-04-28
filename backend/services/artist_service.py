@@ -12,6 +12,10 @@ from fastapi import HTTPException
 import database as db
 from artist_identifier import get_artist_identifier as default_get_artist_identifier
 from image_fingerprint import compute_image_content_fingerprint
+from services.derived_state_service import (
+    write_artist_prediction,
+    write_artist_predictions,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 
 
@@ -74,15 +78,13 @@ class ArtistService:
     ) -> None:
         with db.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                (content_fingerprint, image_id),
-            )
-            cursor.execute(
-                """INSERT OR REPLACE INTO artist_predictions
-                   (image_id, artist, confidence, top_predictions)
-                   VALUES (?, ?, ?, ?)""",
-                (image_id, artist, confidence, str(top_predictions)),
+            write_artist_prediction(
+                cursor,
+                image_id=image_id,
+                artist=artist,
+                confidence=confidence,
+                top_predictions=top_predictions,
+                content_fingerprint=content_fingerprint,
             )
 
     def identify_image(
@@ -217,24 +219,7 @@ class ArtistService:
         if predictions_to_insert:
             with db.get_db() as conn:
                 cursor = conn.cursor()
-                cursor.executemany(
-                    "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                    [(item["content_fingerprint"], item["image_id"]) for item in predictions_to_insert],
-                )
-                cursor.executemany(
-                    """INSERT OR REPLACE INTO artist_predictions
-                       (image_id, artist, confidence, top_predictions)
-                       VALUES (?, ?, ?, ?)""",
-                    [
-                        (
-                            item["image_id"],
-                            item["artist"],
-                            item["confidence"],
-                            item["top_predictions"],
-                        )
-                        for item in predictions_to_insert
-                    ],
-                )
+                write_artist_predictions(cursor, predictions_to_insert)
 
         return {
             "total": len(image_ids),

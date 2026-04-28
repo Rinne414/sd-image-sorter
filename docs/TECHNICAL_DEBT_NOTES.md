@@ -70,25 +70,26 @@ Use this structure for future confirmed-debt entries:
   `backend/similarity.py`
   `backend/services/aesthetic_service.py`
   `backend/services/artist_service.py`
+  `backend/services/derived_state_service.py`
 - Observed problem:
   The app stores derived data such as tags, embeddings, AI captions, aesthetic scores, and artist predictions. Whether these should be cleared depends on whether pixel content really changed.
-  Recent fixes confirmed that non-scan entry points can still bypass shared derived-state helpers: `TaggingService.import_tags()` had drifted into hand-written tag SQL before being pulled back onto `db.add_tags_batch()`, while similarity / aesthetic / artist flows still update `content_fingerprint` directly in feature-local SQL.
+  Recent fixes confirmed that non-scan entry points can still bypass shared derived-state helpers: `TaggingService.import_tags()` had drifted into hand-written tag SQL before being pulled back onto `db.add_tags_batch()`. A 2026-04-28 hardening pass moved similarity / aesthetic / artist feature-local fingerprint writes behind `backend/services/derived_state_service.py`, but DB-owned scan/tag/copy/metadata writes still remain in `database.py`.
 - Why this is debt:
   This is a system invariant, but historically it was enforced by scattered entry-point behavior. The same bug family can come back through a different route.
-  As long as feature-local writers can independently advance `content_fingerprint`, stale derived fields can be accidentally "blessed" as current state instead of being reconciled through one owner.
+  The highest-risk feature-local writers are now behind a shared helper, but the remaining DB-owned writes still make the content-change policy too broad and easy to alter accidentally.
 - Better long-term shape:
-  Define one canonical "content changed" policy, route all mutation flows through it, and document it in architecture/invariants docs.
+  Define one canonical "content changed" policy, route all mutation flows through it, and move the remaining DB-owned writer/invalidation split behind a lower-level shared module that does not create service/database circular imports.
 - Revisit trigger:
   Revisit before adding any new save/export/edit path, scan lifecycle change, or external-file reconciliation path.
 - Deferred because:
-  The mitigation (`content_fingerprint`) exists, but the rule still spans multiple layers and entry points instead of living behind one narrow abstraction.
+  The mitigation (`content_fingerprint`) exists, feature-local derived writes are now guarded, but full consolidation still needs a lower-level DB-safe owner for scan/tag/copy/metadata invalidation.
 
 ### Debt-03: Indexed-path overwrite refresh is still entry-point dependent
-- Status: open
+- Status: partially mitigated
 - Type: lifecycle debt
 - Impact: high
 - Risk if ignored:
-  A future feature can overwrite an indexed file successfully on disk but leave stale DB metadata and stale UI state because the author forgot the library-reconcile step.
+  A future feature can overwrite an indexed file successfully on disk but leave stale DB metadata and stale UI state because the author forgot the library-reconcile step or forgets to expose explicit overwrite intent.
 - Related files:
   `backend/services/image_service.py`
   `backend/services/censor_service.py`
@@ -97,7 +98,7 @@ Use this structure for future confirmed-debt entries:
   `frontend/js/image-reader.js`
   `frontend/js/censor-edit.js`
 - Observed problem:
-  If a feature saves over a file path that is already indexed in the library, the library row must be refreshed immediately. This had to be repaired separately in Reader and Censor Edit flows.
+  If a feature saves over a file path that is already indexed in the library, the library row must be refreshed immediately. Reader and Censor now share explicit overwrite/reconcile behavior for the main save paths, but this had to be repaired separately in Reader and Censor Edit flows.
 - Why this is debt:
   Every feature author currently has to remember a hidden rule instead of using one enforced shared path.
 - Better long-term shape:
@@ -147,7 +148,7 @@ Use this structure for future confirmed-debt entries:
 - Revisit trigger:
   Revisit before changing pagination/virtualization, adding "select all matching" style features, or broadening batch actions.
 - Deferred because:
-  The current pass now includes `SelectionStore`, explicit `visible` / `loaded` / `filtered` scope copy, and a backend `POST /api/images/selection-ids` path for true filtered-result selection. Future scope expansion such as whole-library or cross-session selection can wait until there is a concrete product need.
+  The current pass now includes `SelectionStore`, explicit `visible` / `loaded` / `filtered` scope copy, a compatibility `POST /api/images/selection-ids` path, the preferred immediate `selection-token` / `selection-chunk` path for large filtered-result selection, and token-page export previews for filtered selections. The remaining debt is durable snapshot semantics if filtered selection/export becomes resumable or backgrounded.
 
 ### Debt-06: Path normalization is critical and still discipline-based
 - Status: partially mitigated
@@ -288,7 +289,7 @@ This refresh aligns the long audit report with the current shipped workspace aft
 - TD-08 Manual sort session persistence split-brain: partially mitigated.
   Persisted session storage now lives under package-local runtime state with legacy-path migration, but broader multi-layer session-state ownership is still not unified.
 - TD-09 Selection semantics ambiguity: partially mitigated.
-  `SelectionStore` now owns explicit `visible` / `loaded` / `filtered` scope state, `POST /api/images/selection-ids` resolves true filtered-result selection in backend sort order, and same-filter reloads no longer silently prune off-page IDs against the loaded thumbnail slice.
+  `SelectionStore` now owns explicit `visible` / `loaded` / `filtered` scope state, `selection-token` / `selection-chunk` resolves true filtered-result selection in backend sort order without one giant response, `POST /api/images/selection-ids` remains as compatibility and `random` fallback, same-filter reloads no longer silently prune off-page IDs against the loaded thumbnail slice, changing Gallery filters now clears stale `filtered` selections, filter modal apply/reset commits through `FilterStore`, and scope-narrowing Gallery operations now drop out-of-scope IDs instead of relabeling them.
 - TD-10 Cross-generator checkpoint semantics: partially mitigated.
   LoRA exact matching is fixed, image rows now persist `checkpoint_normalized`, gallery/search/filter analytics now group and match by that normalized key, and raw `checkpoint` stays available for per-image display. The remaining gap is making NAI/no-LoRA semantics more explicit in UI copy instead of leaving them implicit.
 
@@ -303,6 +304,15 @@ This refresh aligns the long audit report with the current shipped workspace aft
 - `frontend/js/censor-edit.js` no longer keeps its own `tText()` / `tKey()` / `tFormat()` bilingual helper stack; the editor now routes its main strings through the shared language packs via one thin `censorT()` wrapper.
 - GitHub Actions now covers Linux full CI and Windows path/migration/update risk areas, the backend suite now emits coverage output, and CI fails when compiled lock metadata drifts from the checked-in source inputs.
 - Release bootstrap downloads now use pinned SHA-256 validation, the release builder emits a checksum manifest asset, and the updater can validate downloaded archives against that manifest when present.
+- API docs now have an OpenAPI/export contract guard: `docs/API.md` endpoint headings must match FastAPI `/api/*` routes, app version must match `backend/app_info.py`, and update contract fields are pinned in tests.
+- Feature-local similarity, aesthetic, and artist derived-state image writes now use `backend/services/derived_state_service.py`; a writer allowlist prevents silent reintroduction of scattered `content_fingerprint` SQL.
+- Gallery filtered selection now invalidates on filter-key changes, and the filter modal commits through `FilterStore`, reducing the chance of destructive actions applying to stale result semantics.
+- Release/update packaging now rejects downloaded update archives without `update/package-manifest.json` and validates managed paths before apply; the release builder also filters protected runtime paths even if staging is polluted.
+- Prompt and LoRA library counts now read from maintained normalized indexes (`image_prompt_tokens`, `image_loras`) instead of scanning every image row and reparsing prompt/LoRA text in Python.
+
+- Censor save/save-data/save-operations now default to no overwrite, require explicit `allow_overwrite=true` to replace an existing output file, and return indexed-overwrite reconcile signals so the frontend can mark Gallery state stale.
+- Gallery scope-narrowing selection operations now discard stale/out-of-scope IDs, so the visible/loaded/filtered selection label no longer silently lies before destructive actions.
+- Downloaded update archive manifest discovery now matches only rootless or single-payload-root `update/package-manifest.json`, rejecting multiple real manifests and ignoring fake suffix matches such as `badupdate/package-manifest.json`.
 
 ## Suggested Follow-Up Work
 
@@ -509,3 +519,26 @@ Quality bar:
 - do not confuse bugs with structural debt
 - do not mark something as confirmed debt unless you can point to real evidence
 ```
+
+## Phase 6 Structural Debt Reductions Applied On 2026-04-28
+
+- Scan/import/rescan pending-row lifecycle now has same-runtime interruption cleanup: cancelled or failed scans remove new unresolved placeholders and quarantine unresolved updated placeholders instead of waiting for a restart.
+- `preserve_derived_state=True` no longer overrides content identity. It only preserves derived state for readable, complete rows with explicit matching `content_fingerprint`; unreadable/error rows and pixel changes clear tags, captions, embeddings, scores, and artist predictions.
+- Artist prediction writes now use `derived_state_service.write_artist_prediction(s)()` in both single and batch paths; feature-local direct `artist_predictions` SQL is guarded by contract tests.
+- Migration 006 freezes its prompt-token tokenizer and no longer imports mutable runtime `database` helpers; migration contract tests now block that class of drift.
+- Obfuscation encode/decode/batch save now matches Reader/Censor overwrite semantics: no implicit overwrite, HTTP 409 by default, explicit `allow_overwrite=true`, and indexed reconcile signals on success.
+- Manual Sort resume now displays server-owned session context (remaining count, move/copy mode, saved folders) and warns that setup preferences may differ from the active saved session.
+- `window.App.AppState` writes from feature modules are blocked by a static contract; `window.App` is sealed after creation, Censor uses a named `window.CensorEdit.addToQueue` bridge, and Reader/Censor use narrow refresh APIs instead of feature-local global mutation.
+- Large synchronous operations have guardrails or chunk paths: filtered-result selection above 10,000 requires confirmation and now fetches preferred non-random selections via immediate token/chunk pages, filtered export previews can page by `selection_token` instead of sending giant explicit ID payloads, preview text still caps at 2,000 images / 200,000 chars, and duplicate search refuses synchronous O(N²) work above `DUPLICATE_SYNC_MAX_EMBEDDINGS`.
+- `save_and_reconcile_checked()` now owns overwrite preflight and indexed-row reconciliation result metadata for Reader, Censor, and Obfuscation, with contract tests blocking feature-local overwrite helpers.
+- Release package manifests now declare `model_artifact_policy`, exclude accidental non-doc model payloads from default app manifests, and document auto-download / optional model asset assumptions.
+- SQLite datetime writes now register an explicit adapter, removing Python 3.12 default-adapter deprecation risk without changing the stored string shape.
+
+### Remaining staged work after this slice
+
+- Durable server-side selection/export snapshots are still needed if filtered selection or export becomes resumable, cancelable, or backgrounded across scan/import/delete/update mutations.
+- Full export still needs a streamed/downloadable backend job for truly large libraries; the current fix makes preview paging sane, not full archival export.
+- Duplicate search still needs a background/ANN/LSH workflow for very large embedding sets; the current limit prevents synchronous CPU/RAM cliffs.
+- Filter/facet option rendering still needs a searchable/paged facet API for huge tag/checkpoint/LoRA libraries.
+- Censor's auxiliary non-proxy canvas/filter/metadata-strip paths still need full migration into the backend operation pipeline for very large images.
+- Optional model pack artifact smoke still needs real release-asset extraction/install coverage; the manifest now states policy, but it does not prove every external model archive is valid.

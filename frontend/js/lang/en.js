@@ -325,7 +325,12 @@ window.I18nLang_en = {
     'manual.resume': 'Resume',
     'manual.discard': 'Discard',
     'manual.unfinishedSession': 'Unfinished session detected:',
+    'manual.resumeBannerTitle': 'Unfinished session detected:',
     'manual.imagesRemaining': '{count} images remaining',
+    'manual.resumeOperationMode': 'Saved session action mode: {mode}',
+    'manual.resumeFolderSummary': 'Saved session folders: {summary}',
+    'manual.resumeFoldersEmpty': 'No destination folders saved yet',
+    'manual.resumeBannerNote': 'Setup preferences here may differ from the active saved session.',
     'manual.folderPath': 'Folder Path for {key}',
     'manual.folderPathHint': 'Enter the destination folder path.\nExample: D:\\sorted\\folder-name',
 
@@ -864,6 +869,8 @@ window.I18nLang_en = {
     'export.promptsInstead': 'Export Prompts Instead',
     'export.loadingPrompts': 'Loading prompts...',
     'export.loadingTags': 'Loading tags...',
+    'export.previewLimited': 'Preview only shows the first {preview} of {total} selected images. Use "Export Tags to Files" for full output.',
+    'export.previewTextTruncated': '[Preview truncated to keep the app responsive]',
     'export.errorLoadingPrompts': 'Error loading prompts: {message}',
     'export.errorLoadingTags': 'Error loading tags: {message}',
     'export.copied': 'Copied to clipboard!',
@@ -1045,6 +1052,7 @@ window.I18nLang_en = {
     'selection.deletePartial': 'Deleted {deleted} file(s). {failed} failed.',
     'selection.deleteFailed': 'Failed to delete selected image files',
     'selection.selectFilteredFailed': 'Failed to select all filtered results',
+    'selection.largeFilteredConfirm': 'This will select {count} filtered images and may use a lot of memory. Continue?',
 
     // ========================
     // Batch Tag Export Modal
@@ -1099,6 +1107,8 @@ window.I18nLang_en = {
     'save.formatJpg': 'JPG (Smaller file, widely compatible)',
     'save.formatWebp': 'WebP (Smaller file, good quality)',
     'save.formatHelper': 'Choose the output image format',
+    'save.allowOverwrite': 'Allow replacing existing files',
+    'save.allowOverwriteHelper': 'Leave off to block accidental overwrites. Turn on only when you intentionally want to replace matching output files.',
     'save.cancel': 'Cancel',
     'save.saveAll': 'Save All Images',
 

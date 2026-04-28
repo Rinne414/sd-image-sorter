@@ -23,7 +23,7 @@ from PIL import Image, ImageDraw, PngImagePlugin, ImageEnhance, ImageFilter, Ima
 import database as db
 from config import get_temp_dir
 from model_health import get_default_legacy_model_path, get_model_health
-from services.indexed_file_mutation_service import save_and_reconcile
+from services.indexed_file_mutation_service import save_and_reconcile_checked
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,7 @@ class CensorSaveRequest(BaseModel):
     sticker_path: Optional[str] = None
     output_folder: str = Field(..., min_length=1)
     filename_suffix: str = "_censored"
+    allow_overwrite: bool = False
 
     @field_validator("regions")
     @classmethod
@@ -114,6 +115,7 @@ class CensorSaveDataRequest(BaseModel):
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
     original_image_id: Optional[int] = Field(None, ge=1)
+    allow_overwrite: bool = False
 
 
 class CensorSaveOperationsRequest(BaseModel):
@@ -124,6 +126,7 @@ class CensorSaveOperationsRequest(BaseModel):
     output_folder: str = Field(..., min_length=1)
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
+    allow_overwrite: bool = False
 
 
 class CensorService:
@@ -555,6 +558,27 @@ class CensorService:
             raise HTTPException(status_code=400, detail='Invalid output path')
         return str(output_path)
 
+    @staticmethod
+    def _output_validation_error(message: str) -> HTTPException:
+        return HTTPException(status_code=400, detail=message)
+
+    @staticmethod
+    def _output_conflict_error(message: str) -> HTTPException:
+        return HTTPException(status_code=409, detail=message)
+
+    @staticmethod
+    def _save_response(output_path: str, filename: str, *, warnings: Optional[List[str]] = None, target_existed: bool = False) -> Dict[str, Any]:
+        indexed_output = db.get_image_by_path(output_path)
+        return {
+            "status": "ok",
+            "output_path": output_path,
+            "filename": filename,
+            "warnings": warnings or [],
+            "overwrote_existing": bool(target_existed),
+            "overwrote_indexed_path": bool(indexed_output),
+            "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
+        }
+
     def detect(self, request: CensorDetectRequest) -> Dict[str, Any]:
         """
         Run detection on an image to find regions to censor.
@@ -735,7 +759,7 @@ class CensorService:
         except Exception:
             raise HTTPException(status_code=500, detail="Preview failed")
 
-    def save(self, request: CensorSaveRequest) -> Dict[str, str]:
+    def save(self, request: CensorSaveRequest) -> Dict[str, Any]:
         """Apply censoring and save to output folder."""
         from censor import Censor
         from utils.path_validation import validate_folder_path, validate_file_path
@@ -789,22 +813,27 @@ class CensorService:
                 else:
                     censored.save(final_output_path, format='PNG')
 
-            save_and_reconcile(
+            write_result = save_and_reconcile_checked(
                 output_path,
                 _write_censored_image,
-                allow_overwrite=True,
+                allow_overwrite=request.allow_overwrite,
                 backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
             )
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename
-            }
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
+        except HTTPException:
+            raise
         except Exception:
             raise HTTPException(status_code=500, detail="Save failed")
 
-    def save_data(self, request: CensorSaveDataRequest) -> Dict[str, str]:
+    def save_data(self, request: CensorSaveDataRequest) -> Dict[str, Any]:
         """Save base64 image data directly to disk."""
         from utils.path_validation import validate_folder_path, sanitize_filename
 
@@ -849,24 +878,27 @@ class CensorService:
             def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> None:
                 self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
 
-            save_and_reconcile(
+            write_result = save_and_reconcile_checked(
                 output_path,
                 _write_canvas_save,
-                allow_overwrite=True,
+                allow_overwrite=request.allow_overwrite,
                 backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
             )
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename
-            }
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(status_code=500, detail="Save data failed")
 
-    def save_operations(self, request: CensorSaveOperationsRequest) -> Dict[str, str]:
+    def save_operations(self, request: CensorSaveOperationsRequest) -> Dict[str, Any]:
         """Save original image with non-destructive censor operations applied server-side."""
         from utils.path_validation import validate_folder_path, sanitize_filename
 
@@ -918,18 +950,21 @@ class CensorService:
             def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> None:
                 self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
 
-            save_and_reconcile(
+            write_result = save_and_reconcile_checked(
                 output_path,
                 _write_operations_save,
-                allow_overwrite=True,
+                allow_overwrite=request.allow_overwrite,
                 backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
             )
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename,
-            }
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
         except HTTPException:
             raise
         except Exception:
@@ -1668,7 +1703,8 @@ class CensorService:
     def _strip_all_metadata(image: Image.Image) -> Image.Image:
         """Strip all metadata by creating a clean copy."""
         clean_image = Image.new(image.mode, image.size)
-        clean_image.putdata(list(image.getdata()))
+        pixel_data_getter = getattr(image, "get_flattened_data", image.getdata)
+        clean_image.putdata(list(pixel_data_getter()))
         return clean_image
 
     @staticmethod

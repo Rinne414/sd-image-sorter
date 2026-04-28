@@ -13,7 +13,7 @@ from typing import Optional, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from config import get_temp_dir
 from services.image_service import ImageService
@@ -39,7 +39,18 @@ class DeleteSelectedImagesRequest(BaseModel):
 
 
 class ExportSelectionRequest(BaseModel):
-    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=50000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=2000, ge=1, le=10000)
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self):
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
 
 
 class SelectionIdsRequest(BaseModel):
@@ -61,9 +72,28 @@ class SelectionIdsRequest(BaseModel):
     maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
 
 
+class SelectionTokenRequest(SelectionIdsRequest):
+    chunkSize: int = Field(default=2000, ge=1, le=10000)
+
+
 class SelectionIdsResponse(BaseModel):
     image_ids: List[int] = Field(default_factory=list)
     total: int = 0
+
+
+class SelectionTokenResponse(BaseModel):
+    selection_token: str
+    total_estimate: int = 0
+    exact_total: bool = True
+    chunk_size: int = 2000
+
+
+class SelectionChunkResponse(BaseModel):
+    image_ids: List[int] = Field(default_factory=list)
+    offset: int = 0
+    limit: int = 2000
+    next_offset: Optional[int] = None
+    has_more: bool = False
 
 
 class ExportSelectionImage(BaseModel):
@@ -81,6 +111,14 @@ class ExportSelectionImage(BaseModel):
 class ExportSelectionResponse(BaseModel):
     images: List[ExportSelectionImage] = Field(default_factory=list)
     missing_ids: List[int] = Field(default_factory=list)
+    count: int = 0
+    total: int = 0
+    offset: int = 0
+    limit: int = 0
+    next_offset: Optional[int] = None
+    has_more: bool = False
+    source: str = "image_ids"
+    exact_total: bool = True
 
 
 class DeleteSelectedImagesResponse(BaseModel):
@@ -316,6 +354,61 @@ async def get_images(
     )
 
 
+@router.post(
+    "/images/selection-token",
+    response_model=SelectionTokenResponse,
+    summary="Create a filtered selection token",
+    description="""
+Create a stateless token for the current gallery filter payload.
+
+Newer clients use this before fetching `/api/images/selection-chunk` pages so
+large filtered selections do not require one giant ID response. `total_estimate`
+is exact for indexed filters and marked as an estimate when prompt post-filtering
+may still remove SQL false positives.
+    """,
+)
+async def create_selection_token(
+    request: SelectionTokenRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Create a chunkable filtered-selection token."""
+    return service.create_selection_token(
+        generators=request.generators,
+        tags=request.tags,
+        ratings=request.ratings,
+        checkpoints=request.checkpoints,
+        loras=request.loras,
+        prompts=request.prompts,
+        artist=request.artist,
+        search=request.search,
+        sort_by=request.sortBy,
+        min_width=request.minWidth,
+        max_width=request.maxWidth,
+        min_height=request.minHeight,
+        max_height=request.maxHeight,
+        aspect_ratio=request.aspectRatio,
+        min_aesthetic=request.minAesthetic,
+        max_aesthetic=request.maxAesthetic,
+        chunk_size=request.chunkSize,
+    )
+
+
+@router.get(
+    "/images/selection-chunk",
+    response_model=SelectionChunkResponse,
+    summary="Fetch one filtered selection ID chunk",
+    description="Fetch one ordered image-ID chunk from a token created by `/api/images/selection-token`.",
+)
+async def get_selection_chunk(
+    selection_token: str = Query(..., min_length=1),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(2000, ge=1, le=10000),
+    service: ImageService = Depends(get_image_service),
+):
+    """Return one chunk of filtered-result image IDs."""
+    return service.get_selection_chunk(selection_token, offset=offset, limit=limit)
+
+
 @router.get(
     "/images/{image_id}",
     summary="Get a single image",
@@ -363,18 +456,26 @@ async def get_image(
     response_model=ExportSelectionResponse,
     summary="Get prompt and tag export data for selected images",
     description="""
-Return prompt text and tags for a selected image batch in one request.
+Return prompt text and tags for a selected image batch.
 
-Used by the export modal so the frontend does not spam one request per image.
-Missing image IDs are reported in `missing_ids` instead of failing the whole export.
+Legacy clients may pass explicit `image_ids`. Newer large-selection clients may
+pass `selection_token`, `offset`, and `limit` to page export preview data without
+sending a giant ID payload. Missing explicit IDs are reported in `missing_ids`
+instead of failing the whole export.
     """,
 )
 async def export_selection_data(
     request: ExportSelectionRequest,
     service: ImageService = Depends(get_image_service),
 ):
-    """Get export-ready prompt and tag data for multiple selected images."""
-    return service.get_export_selection_data(request.image_ids)
+    """Get export-ready prompt and tag data for selected images or a token chunk."""
+    if request.selection_token:
+        return service.get_export_selection_data_for_token(
+            request.selection_token,
+            offset=request.offset,
+            limit=request.limit,
+        )
+    return service.get_export_selection_data(request.image_ids or [])
 
 
 @router.post(

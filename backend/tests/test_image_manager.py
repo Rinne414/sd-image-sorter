@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import database as db
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
@@ -69,6 +70,17 @@ def test_scan_folder_raises_cancelled_when_stop_requested_after_first_progress(t
     else:
         raise AssertionError("Expected scan_folder() to raise ScanCancelledError")
 
+    with db.get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT metadata_status
+            FROM images
+            WHERE filename LIKE 'cancel-%'
+            """,
+        ).fetchall()
+
+    assert rows == []
+
 
 def test_scan_folder_reports_updated_count_for_rescanned_images(test_db, tmp_path: Path):
     image_path = tmp_path / "rescanned.png"
@@ -84,6 +96,8 @@ def test_scan_folder_reports_updated_count_for_rescanned_images(test_db, tmp_pat
     assert second["total"] == 1
     assert second["new"] == 0
     assert second["updated"] == 1
+    assert second["unchanged"] == 1
+    assert second["metadata_updated"] == 0
 
 
 def test_scan_folder_preserves_created_at_when_file_mtime_changes(test_db, tmp_path: Path):
@@ -246,6 +260,8 @@ def test_scan_folder_skips_reparsing_unchanged_images(test_db, tmp_path: Path, m
     second = scan_folder(str(tmp_path), recursive=False)
 
     assert second["updated"] == 1
+    assert second["unchanged"] == 1
+    assert second["metadata_updated"] == 0
     assert parse_calls["count"] == 0
 
 
@@ -268,6 +284,8 @@ def test_scan_folder_force_reparses_unchanged_images(test_db, tmp_path: Path, mo
     second = scan_folder(str(tmp_path), recursive=False, force_reparse=True)
 
     assert second["updated"] == 1
+    assert second["unchanged"] == 0
+    assert second["metadata_updated"] == 1
     assert parse_calls["count"] == 1
 
 

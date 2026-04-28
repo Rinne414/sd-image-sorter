@@ -5,10 +5,8 @@ Handles business logic for AI tagging, tag management, and import/export.
 """
 import logging
 import os
-import re
 import gc
 import time
-import json
 import threading
 import queue as queue_module
 import multiprocessing
@@ -811,97 +809,12 @@ class TaggingService:
         }
 
     def get_prompts_library(self, limit: int = 500) -> Dict[str, Any]:
-        """Get unique prompt tokens from images with frequency counts."""
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, prompt
-                FROM images
-                WHERE prompt IS NOT NULL AND prompt != ''
-            """)
-
-            token_counts: dict[str, int] = {}
-
-            for row in cursor.fetchall():
-                prompt = row["prompt"]
-
-                clean_prompt = re.sub(r'<[^>]+>[^<]*</[^>]+>', '', prompt)
-                clean_prompt = re.sub(r'<lora:[^>]+>', '', clean_prompt)
-                clean_prompt = re.sub(r'<[^>]+>', '', clean_prompt)
-
-                image_tokens = set()
-
-                tokens = [t.strip() for t in clean_prompt.split(',') if t.strip()]
-                for token in tokens:
-                    clean_token = re.sub(r'^\(+|\)+$', '', token)
-                    clean_token = re.sub(r':\d+\.?\d*\)?$', '', clean_token)
-                    clean_token = clean_token.strip()
-
-                    if clean_token and len(clean_token) > 1:
-                        normalized = self._normalize_prompt_token(clean_token)
-                        if normalized and len(normalized) > 1:
-                            image_tokens.add(normalized)
-
-                for normalized in image_tokens:
-                    token_counts[normalized] = token_counts.get(normalized, 0) + 1
-
-            sorted_tokens = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)
-            prompts = [{"prompt": normalized, "count": count} for normalized, count in sorted_tokens]
-
-        return {
-            "prompts": prompts[:limit],
-            "total": len(prompts)
-        }
+        """Get unique prompt tokens from the normalized prompt-token index."""
+        return db.get_all_prompt_tokens(limit=limit)
 
     def get_loras_library(self, limit: int = 500) -> Dict[str, Any]:
-        """Get unique LoRAs from images with frequency counts."""
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT id, loras, prompt
-                FROM images
-                WHERE (loras IS NOT NULL AND loras != '[]' AND loras != '')
-                   OR (prompt IS NOT NULL AND prompt LIKE '%<lora:%')
-            """)
-
-            lora_counts: dict[str, int] = {}
-
-            for row in cursor.fetchall():
-                loras_str = row["loras"] or ""
-                prompt_str = row["prompt"] or ""
-
-                image_loras = set()
-
-                if loras_str:
-                    try:
-                        loras_list = json.loads(loras_str)
-                        for lora_name in loras_list:
-                            if lora_name and len(lora_name) > 2:
-                                normalized = self._normalize_lora_name(lora_name)
-                                if normalized and len(normalized) > 2:
-                                    image_loras.add(normalized)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-
-                if prompt_str:
-                    lora_matches = re.findall(r'<lora:([^:>]+)(?:[^>]*)?>', prompt_str, re.IGNORECASE)
-                    for lora_name in lora_matches:
-                        if lora_name and len(lora_name) > 2:
-                            normalized = self._normalize_lora_name(lora_name)
-                            if normalized and len(normalized) > 2:
-                                image_loras.add(normalized)
-
-                for normalized in image_loras:
-                    lora_counts[normalized] = lora_counts.get(normalized, 0) + 1
-
-            sorted_loras = sorted(lora_counts.items(), key=lambda x: x[1], reverse=True)
-            loras = [{"lora": normalized, "count": count} for normalized, count in sorted_loras[:limit]]
-
-        return {
-            "loras": loras,
-            "total": len(lora_counts)
-        }
+        """Get unique LoRAs from the normalized indexed LoRA table."""
+        return db.get_all_loras(limit=limit)
 
     def export_tags(self) -> Dict[str, Any]:
         """Export all image tags as JSON for backup/transfer."""

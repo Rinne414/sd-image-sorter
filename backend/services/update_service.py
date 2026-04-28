@@ -36,6 +36,7 @@ from config import (
     UPDATE_WEB_URL,
     ensure_directories,
 )
+from update_worker import PACKAGE_MANIFEST_RELATIVE_PATH, validate_update_manifest_managed_paths
 
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,30 @@ def _validate_archive_member_name(name: str) -> None:
         or ".." in relative.parts
     ):
         raise RuntimeError(f"Downloaded update contains unsafe archive entry: {name}")
+
+
+def _package_manifest_member_name(name: str) -> str | None:
+    """Return a validated package-manifest archive member name, if this is one."""
+    normalized = str(name or "").replace("\\", "/").strip()
+    parts = PurePosixPath(normalized).parts
+    manifest_parts = PACKAGE_MANIFEST_RELATIVE_PATH.parts
+
+    if parts == manifest_parts:
+        return normalized
+    if len(parts) == len(manifest_parts) + 1 and parts[1:] == manifest_parts:
+        return normalized
+    return None
+
+
+def _load_single_package_manifest(
+    *,
+    current_manifest: dict[str, Any] | None,
+    member_name: str,
+    payload: bytes,
+) -> dict[str, Any]:
+    if current_manifest is not None:
+        raise RuntimeError(f"Downloaded update contains multiple package manifests; duplicate near: {member_name}")
+    return json.loads(payload.decode("utf-8"))
 
 
 def _sha256sum(file_path: Path) -> str:
@@ -473,22 +498,46 @@ class UpdateService:
         if archive_path.suffix.lower() == ".zip":
             if not zipfile.is_zipfile(archive_path):
                 raise RuntimeError(f"Downloaded patch is not a valid zip archive: {archive_path.name}")
+            package_manifest: dict[str, Any] | None = None
             with zipfile.ZipFile(archive_path, "r") as archive:
                 for member in archive.infolist():
                     _validate_archive_member_name(member.filename)
+                    manifest_member_name = _package_manifest_member_name(member.filename)
+                    if manifest_member_name is not None:
+                        package_manifest = _load_single_package_manifest(
+                            current_manifest=package_manifest,
+                            member_name=manifest_member_name,
+                            payload=archive.read(member),
+                        )
                 bad_member = archive.testzip()
             if bad_member is not None:
                 raise RuntimeError(f"Downloaded patch is corrupted near: {bad_member}")
+            if package_manifest is None:
+                raise RuntimeError("Downloaded update is missing update/package-manifest.json")
+            validate_update_manifest_managed_paths(package_manifest)
             return
 
         if archive_path.name.lower().endswith((".tar.gz", ".tgz")):
             if not tarfile.is_tarfile(archive_path):
                 raise RuntimeError(f"Downloaded patch is not a valid tar archive: {archive_path.name}")
+            package_manifest = None
             with tarfile.open(archive_path, "r:gz") as archive:
                 for member in archive.getmembers():
                     _validate_archive_member_name(member.name)
                     if not (member.isfile() or member.isdir()):
                         raise RuntimeError(f"Downloaded update contains unsupported archive entry: {member.name}")
+                    manifest_member_name = _package_manifest_member_name(member.name)
+                    if member.isfile() and manifest_member_name is not None:
+                        manifest_file = archive.extractfile(member)
+                        if manifest_file is not None:
+                            package_manifest = _load_single_package_manifest(
+                                current_manifest=package_manifest,
+                                member_name=manifest_member_name,
+                                payload=manifest_file.read(),
+                            )
+            if package_manifest is None:
+                raise RuntimeError("Downloaded update is missing update/package-manifest.json")
+            validate_update_manifest_managed_paths(package_manifest)
             return
 
         raise RuntimeError(f"Unsupported update archive type: {archive_path.name}")

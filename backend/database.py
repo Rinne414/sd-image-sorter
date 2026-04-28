@@ -50,6 +50,13 @@ from utils.model_names import (
 from utils.pagination_cursor import encode_image_cursor_from_image
 
 
+def _adapt_datetime_for_sqlite(value: datetime) -> str:
+    """Serialize datetimes explicitly; Python 3.12 deprecates sqlite3's default adapter."""
+    return value.isoformat(sep=" ")
+
+
+sqlite3.register_adapter(datetime, _adapt_datetime_for_sqlite)
+
 
 # ============== Tags Cache ==============
 _tags_cache_lock = threading.Lock()
@@ -508,6 +515,21 @@ def _sync_image_loras(
             (image_id, lora_name)
         )
 
+
+def _sync_image_prompt_tokens(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    prompt: Optional[str],
+) -> None:
+    """Refresh the normalized image_prompt_tokens rows for an image."""
+    cursor.execute("DELETE FROM image_prompt_tokens WHERE image_id = ?", (image_id,))
+
+    for token in extract_prompt_tokens(prompt or ''):
+        cursor.execute(
+            "INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)",
+            (image_id, token),
+        )
+
 _pragmas_initialized: set = set()
 _pragmas_lock = threading.Lock()
 SCHEMA_VERSION_ROW_ID = 1
@@ -933,6 +955,7 @@ def _upsert_image_record(
         image_id = cursor.lastrowid
 
     _sync_image_loras(cursor, image_id, record.get("loras"), record.get("prompt"))
+    _sync_image_prompt_tokens(cursor, image_id, record.get("prompt"))
     return image_id, write_status
 
 
@@ -2004,6 +2027,8 @@ def get_filtered_image_ids(
     include_unreadable: bool = False,
     fetch_chunk_size: int = 5000,
     max_results: Optional[int] = None,
+    offset: int = 0,
+    limit: Optional[int] = None,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -2018,8 +2043,13 @@ def get_filtered_image_ids(
     """
     if image_ids is not None and len(image_ids) == 0:
         return []
+    normalized_offset = max(0, int(offset or 0))
     if max_results is not None and max_results <= 0:
         return []
+    if limit is not None and limit <= 0:
+        return []
+
+    result_limit = limit if limit is not None else max_results
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -2081,12 +2111,21 @@ def get_filtered_image_ids(
         order_clause = _get_order_clause(sort_by)
         query += f" ORDER BY {order_clause}"
 
+        if not needs_post_filter:
+            if result_limit is not None:
+                query += " LIMIT ? OFFSET ?"
+                params.extend([result_limit, normalized_offset])
+            elif normalized_offset > 0:
+                query += " LIMIT -1 OFFSET ?"
+                params.append(normalized_offset)
+
         cursor.execute(query, params)
 
         ids: List[int] = []
         chunk_size = max(1, int(fetch_chunk_size))
         normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
         normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
+        matched_count = 0
 
         while True:
             rows = cursor.fetchmany(chunk_size)
@@ -2101,13 +2140,15 @@ def get_filtered_image_ids(
                         normalized_prompt_terms,
                         normalized_loras,
                     ):
-                        ids.append(row_id)
-                        if max_results is not None and len(ids) >= max_results:
-                            return ids
+                        if matched_count >= normalized_offset:
+                            ids.append(row_id)
+                            if result_limit is not None and len(ids) >= result_limit:
+                                return ids
+                        matched_count += 1
             else:
                 ids.extend(int(row["id"]) for row in rows)
-                if max_results is not None and len(ids) >= max_results:
-                    return ids[:max_results]
+                if result_limit is not None and len(ids) >= result_limit:
+                    return ids[:result_limit]
 
         return ids
 
@@ -2598,6 +2639,57 @@ def get_all_tags() -> List[Dict[str, Any]]:
     return result
 
 
+def _query_indexed_facet(
+    *,
+    table: str,
+    value_column: str,
+    output_key: str,
+    limit: Optional[int] = None,
+) -> Dict[str, Any]:
+    normalized_limit = max(0, int(limit or 0))
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        total_row = cursor.execute(f"SELECT COUNT(DISTINCT {value_column}) FROM {table}").fetchone()
+        total = int(total_row[0] or 0) if total_row else 0
+
+        query = f"""
+            SELECT {value_column} AS {output_key}, COUNT(*) AS count
+            FROM {table}
+            GROUP BY {value_column}
+            ORDER BY count DESC, {value_column} ASC
+        """
+        params: list[Any] = []
+        if normalized_limit > 0:
+            query += " LIMIT ?"
+            params.append(normalized_limit)
+
+        cursor.execute(query, params)
+        rows = _rows_to_dicts(cursor.fetchall())
+
+    return {output_key + "s": rows, "total": total}
+
+
+def get_all_prompt_tokens(*, limit: Optional[int] = None) -> Dict[str, Any]:
+    """Get unique normalized prompt tokens from the indexed prompt-token table."""
+    return _query_indexed_facet(
+        table="image_prompt_tokens",
+        value_column="token",
+        output_key="prompt",
+        limit=limit,
+    )
+
+
+def get_all_loras(*, limit: Optional[int] = None) -> Dict[str, Any]:
+    """Get unique normalized LoRAs from the indexed image_loras table."""
+    return _query_indexed_facet(
+        table="image_loras",
+        value_column="lora_name",
+        output_key="lora",
+        limit=limit,
+    )
+
+
 def get_all_generators() -> List[Dict[str, Any]]:
     """Get all generators with their counts."""
     with get_db() as conn:
@@ -2772,6 +2864,7 @@ def update_image_metadata(
         cursor = conn.cursor()
         serialized_loras = _serialize_loras(loras)
         checkpoint_normalized = normalize_checkpoint_name(checkpoint)
+        metadata_status_normalized = str(metadata_status or "").strip().lower()
         existing_row = cursor.execute(
             """
             SELECT id, source_mtime_ns, source_size, content_fingerprint,
@@ -2790,9 +2883,19 @@ def update_image_metadata(
                 "source_size": source_size,
             },
         )
+        mark_unreadable = (is_readable is False)
+        existing_fingerprint = _normalize_content_fingerprint(_row_value(existing_row, "content_fingerprint"))
+        incoming_fingerprint = _normalize_content_fingerprint(content_fingerprint)
+        can_preserve_derived_state = bool(
+            preserve_derived_state
+            and not mark_unreadable
+            and metadata_status_normalized == "complete"
+            and existing_fingerprint is not None
+            and incoming_fingerprint is not None
+            and existing_fingerprint == incoming_fingerprint
+        )
         if (
-            not preserve_derived_state
-            and _should_clear_derived_state(
+            _should_clear_derived_state(
                 existing_row,
                 {
                     "source_mtime_ns": source_mtime_ns,
@@ -2801,8 +2904,9 @@ def update_image_metadata(
                     "content_fingerprint": content_fingerprint,
                 },
                 source_changed=source_changed,
-                mark_unreadable=(is_readable is False),
+                mark_unreadable=mark_unreadable,
             )
+            and not can_preserve_derived_state
         ):
             _clear_image_derived_state(cursor, image_id)
         cursor.execute(
@@ -2850,6 +2954,7 @@ def update_image_metadata(
             )
         )
         _sync_image_loras(cursor, image_id, loras, prompt)
+        _sync_image_prompt_tokens(cursor, image_id, prompt)
     _invalidate_tags_cache()
 
 

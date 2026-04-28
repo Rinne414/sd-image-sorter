@@ -32,6 +32,7 @@
             selectedIds: new Set(),
             scope: 'visible',
             filterKey: null,
+            selectionToken: null,
         };
     }
 
@@ -43,6 +44,9 @@
             scope: normalizeScope(source.scope),
             filterKey: typeof source.filterKey === 'string' && source.filterKey
                 ? source.filterKey
+                : null,
+            selectionToken: typeof source.selectionToken === 'string' && source.selectionToken
+                ? source.selectionToken
                 : null,
         };
     }

@@ -4,8 +4,9 @@ Shared helpers for file writes that may overwrite already-indexed library paths.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Tuple, TypeVar
+from typing import Callable, List, Optional, Tuple, TypeVar
 
 import database as db
 from image_manager import reparse_image_metadata
@@ -20,6 +21,57 @@ RECONCILE_WARNING = (
     "Saved file, but the library entry did not refresh. "
     "Use Reparse if metadata looks stale."
 )
+
+
+@dataclass(frozen=True)
+class SaveAndReconcileResult:
+    """Result for a checked save plus indexed-row reconciliation."""
+
+    writer_result: T
+    warnings: List[str]
+    target_existed: bool
+    reconciled_image_id: Optional[int] = None
+
+
+def _raise_from_factory(factory: Callable[[str], BaseException], message: str) -> None:
+    raise factory(message)
+
+
+def _default_validation_error(message: str) -> ValueError:
+    return ValueError(message)
+
+
+def _default_conflict_error(message: str) -> FileExistsError:
+    return FileExistsError(message)
+
+
+def preflight_output_write(
+    output_path: str,
+    *,
+    allow_overwrite: bool = False,
+    source_path: str | None = None,
+    validation_error_factory: Callable[[str], BaseException] = _default_validation_error,
+    conflict_error_factory: Callable[[str], BaseException] = _default_conflict_error,
+) -> bool:
+    """Validate overwrite intent for all save workflows before writing bytes."""
+    target = Path(output_path).resolve(strict=False)
+    if source_path:
+        source = Path(source_path).resolve(strict=False)
+        if source == target and not allow_overwrite:
+            _raise_from_factory(
+                conflict_error_factory,
+                "Output path is the same as the source image. Confirm overwrite before saving.",
+            )
+
+    if not target.exists():
+        return False
+    if target.is_dir():
+        _raise_from_factory(validation_error_factory, "Output path points to a directory, not a file")
+    if target.is_symlink():
+        _raise_from_factory(validation_error_factory, "Output file cannot be a symlink")
+    if not allow_overwrite:
+        _raise_from_factory(conflict_error_factory, "Output file already exists. Confirm overwrite before saving.")
+    return True
 
 
 def reconcile_indexed_output(
@@ -54,6 +106,41 @@ def reconcile_indexed_output(
     return []
 
 
+def save_and_reconcile_checked(
+    output_path: str,
+    writer_fn: Callable[[str, bool], T],
+    *,
+    allow_overwrite: bool = False,
+    preserve_derived_state: bool = False,
+    backend_file: str,
+    source_path: str | None = None,
+    validation_error_factory: Callable[[str], BaseException] = _default_validation_error,
+    conflict_error_factory: Callable[[str], BaseException] = _default_conflict_error,
+) -> SaveAndReconcileResult:
+    """Execute a checked write, then refresh the indexed library row if needed."""
+    final_output_path = str(Path(output_path).resolve(strict=False))
+    target_existed = preflight_output_write(
+        final_output_path,
+        allow_overwrite=allow_overwrite,
+        source_path=source_path,
+        validation_error_factory=validation_error_factory,
+        conflict_error_factory=conflict_error_factory,
+    )
+    writer_result = writer_fn(final_output_path, allow_overwrite)
+    warnings = reconcile_indexed_output(
+        final_output_path,
+        backend_file=backend_file,
+        preserve_derived_state=preserve_derived_state,
+    )
+    indexed_output = db.get_image_by_path(final_output_path)
+    return SaveAndReconcileResult(
+        writer_result=writer_result,
+        warnings=warnings,
+        target_existed=target_existed,
+        reconciled_image_id=int(indexed_output["id"]) if indexed_output else None,
+    )
+
+
 def save_and_reconcile(
     output_path: str,
     writer_fn: Callable[[str, bool], T],
@@ -68,11 +155,11 @@ def save_and_reconcile(
     The writer callback receives the resolved output path and the caller's
     overwrite intent so save workflows can standardize around one entry point.
     """
-    final_output_path = str(Path(output_path).resolve(strict=False))
-    writer_result = writer_fn(final_output_path, allow_overwrite)
-    warnings = reconcile_indexed_output(
-        final_output_path,
-        backend_file=backend_file,
+    result = save_and_reconcile_checked(
+        output_path,
+        writer_fn,
+        allow_overwrite=allow_overwrite,
         preserve_derived_state=preserve_derived_state,
+        backend_file=backend_file,
     )
-    return writer_result, warnings
+    return result.writer_result, result.warnings

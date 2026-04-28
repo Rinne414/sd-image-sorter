@@ -142,6 +142,12 @@ def _is_protected_runtime_path(relative: Path) -> bool:
     return any(_is_relative_to(relative, prefix) for prefix in PROTECTED_RUNTIME_PREFIXES)
 
 
+def is_protected_runtime_path(relative_path: str | Path) -> bool:
+    """Return whether a package-relative path is protected runtime state."""
+    relative_text = relative_path.as_posix() if isinstance(relative_path, Path) else str(relative_path)
+    return _is_protected_runtime_path(_safe_relative_path(relative_text))
+
+
 def _extract_managed_paths(
     manifest: dict,
     *,
@@ -188,6 +194,17 @@ def _extract_managed_paths(
         _log(f"Ignored {len(protected_entries)} protected runtime path(s) from {manifest_label}", log_path=log_path)
 
     return normalized_paths
+
+
+def validate_update_manifest_managed_paths(manifest: dict, *, manifest_label: str = "update manifest") -> set[str]:
+    """Strictly validate managed paths from a newly downloaded update manifest."""
+    return _extract_managed_paths(
+        manifest,
+        manifest_label=manifest_label,
+        reject_protected=True,
+        reject_invalid=True,
+        log_path=None,
+    )
 
 
 def _resolve_payload_root(extracted_root: Path) -> Path:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
+import tarfile
 import zipfile
 from pathlib import Path
 
 import pytest
 import update_worker
+from services.update_service import UpdateService
 
 
 def test_safe_relative_path_rejects_archive_escape_entries():
@@ -170,6 +173,200 @@ def test_apply_update_rejects_manifest_that_targets_protected_runtime_paths(monk
     assert not (update_root / "installed-manifest.json").exists()
 
 
+@pytest.mark.parametrize(
+    "protected_path",
+    [
+        "data/images.db",
+        "data/models/wd14/model.onnx",
+        "update/backups/old-file.txt",
+        "update/downloads/patch.zip",
+        "update/logs/update.log",
+        "update/state/pending-update.json",
+        "update/worker/update_worker.py",
+    ],
+)
+def test_apply_update_rejects_each_protected_runtime_prefix(
+    monkeypatch,
+    tmp_path: Path,
+    protected_path: str,
+):
+    pending_manifest_path, package_root, update_root, data_root, _ = _prepare_pending_update(
+        tmp_path,
+        current_manifest_paths=[
+            "frontend/version.txt",
+            "update/package-manifest.json",
+        ],
+        new_manifest_paths=[
+            "frontend/version.txt",
+            protected_path,
+            "update/package-manifest.json",
+        ],
+        installed_files={
+            "frontend/version.txt": "old-ui\n",
+        },
+        payload_files={
+            "frontend/version.txt": "new-ui\n",
+            protected_path: "HACKED\n",
+        },
+        nested_payload_root="sd-image-sorter",
+    )
+
+    monkeypatch.setattr(update_worker, "_wait_for_pid_exit", lambda pid, timeout_seconds, log_path: None)
+
+    with pytest.raises(ValueError, match="protected runtime path"):
+        update_worker.apply_update(pending_manifest_path)
+
+    assert (package_root / "frontend" / "version.txt").read_text(encoding="utf-8") == "old-ui\n"
+    assert (data_root / "images.db").read_text(encoding="utf-8") == "USERDATA\n"
+    assert not (update_root / "installed-manifest.json").exists()
+
+
+def test_validate_update_manifest_managed_paths_rejects_invalid_entries():
+    with pytest.raises(ValueError, match="invalid managed path"):
+        update_worker.validate_update_manifest_managed_paths(
+            {"managed_paths": ["frontend/index.html", "../escape.txt"]}
+        )
+
+
+def test_validate_update_manifest_managed_paths_rejects_protected_entries():
+    with pytest.raises(ValueError, match="protected runtime path"):
+        update_worker.validate_update_manifest_managed_paths(
+            {"managed_paths": ["frontend/index.html", "data/images.db"]}
+        )
+
+
+def test_validate_update_manifest_managed_paths_allows_manifest_files():
+    managed_paths = update_worker.validate_update_manifest_managed_paths(
+        {
+            "managed_paths": [
+                "frontend/index.html",
+                "update/package-manifest.json",
+                "update/installed-manifest.json",
+            ]
+        }
+    )
+
+    assert managed_paths == {
+        "frontend/index.html",
+        "update/package-manifest.json",
+        "update/installed-manifest.json",
+    }
+
+
+def test_protected_runtime_prefixes_stay_in_sync_with_release_docs():
+    docs_text = (Path(__file__).resolve().parents[2] / "docs" / "RELEASE_PACKS.md").read_text(encoding="utf-8")
+
+    for prefix in update_worker.PROTECTED_RUNTIME_PREFIXES:
+        assert f"`{prefix.as_posix()}`" in docs_text
+
+
+def test_update_service_validate_zip_rejects_protected_manifest_entry(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("frontend/index.html", "<html></html>\n")
+        archive.writestr(
+            "update/package-manifest.json",
+            json.dumps({"managed_paths": ["frontend/index.html", "data/images.db"]}),
+        )
+
+    with pytest.raises(ValueError, match="protected runtime path"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_zip_requires_package_manifest(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("frontend/index.html", "<html></html>\n")
+
+    with pytest.raises(RuntimeError, match="missing update/package-manifest.json"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_zip_accepts_single_payload_root_manifest(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("sd-image-sorter/frontend/index.html", "<html></html>\n")
+        archive.writestr(
+            "sd-image-sorter/update/package-manifest.json",
+            json.dumps({"managed_paths": ["frontend/index.html", "update/package-manifest.json"]}),
+        )
+
+    service._validate_archive(archive_path)
+
+
+def test_update_service_validate_zip_ignores_manifest_name_inside_badupdate_prefix(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "badupdate/package-manifest.json",
+            json.dumps({"managed_paths": ["data/images.db"]}),
+        )
+        archive.writestr(
+            "update/package-manifest.json",
+            json.dumps({"managed_paths": ["frontend/index.html", "update/package-manifest.json"]}),
+        )
+
+    service._validate_archive(archive_path)
+
+
+def test_update_service_validate_zip_rejects_multiple_real_package_manifests(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    manifest = json.dumps({"managed_paths": ["frontend/index.html", "update/package-manifest.json"]})
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("update/package-manifest.json", manifest)
+        archive.writestr("sd-image-sorter/update/package-manifest.json", manifest)
+
+    with pytest.raises(RuntimeError, match="multiple package manifests"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_tar_rejects_protected_manifest_entry(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.tar.gz"
+    manifest_bytes = json.dumps({"managed_paths": ["frontend/index.html", "update/downloads/patch.zip"]}).encode("utf-8")
+
+    with tarfile.open(archive_path, "w:gz") as archive:
+        member = tarfile.TarInfo("update/package-manifest.json")
+        member.size = len(manifest_bytes)
+        archive.addfile(member, io.BytesIO(manifest_bytes))
+
+    with pytest.raises(ValueError, match="protected runtime path"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_tar_requires_package_manifest(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.tar.gz"
+    payload = b"<html></html>\n"
+
+    with tarfile.open(archive_path, "w:gz") as archive:
+        member = tarfile.TarInfo("frontend/index.html")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
+
+    with pytest.raises(RuntimeError, match="missing update/package-manifest.json"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_tar_ignores_manifest_name_inside_badupdate_prefix(tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.tar.gz"
+    fake_manifest = json.dumps({"managed_paths": ["data/images.db"]}).encode("utf-8")
+
+    with tarfile.open(archive_path, "w:gz") as archive:
+        member = tarfile.TarInfo("badupdate/package-manifest.json")
+        member.size = len(fake_manifest)
+        archive.addfile(member, io.BytesIO(fake_manifest))
+
+    with pytest.raises(RuntimeError, match="missing update/package-manifest.json"):
+        service._validate_archive(archive_path)
+
+
 def test_apply_update_ignores_protected_paths_from_current_manifest(monkeypatch, tmp_path: Path):
     pending_manifest_path, package_root, update_root, data_root, log_path = _prepare_pending_update(
         tmp_path,
@@ -208,3 +405,53 @@ def test_apply_update_ignores_protected_paths_from_current_manifest(monkeypatch,
 
     installed_manifest = json.loads((update_root / "installed-manifest.json").read_text(encoding="utf-8"))
     assert "data/images.db" not in installed_manifest["managed_paths"]
+
+
+def test_apply_update_ignores_all_protected_paths_from_current_manifest(monkeypatch, tmp_path: Path):
+    protected_paths = [
+        "data/images.db",
+        "data/models/wd14/model.onnx",
+        "update/backups/old-file.txt",
+        "update/downloads/patch.zip",
+        "update/logs/update.log",
+        "update/state/pending-update.json",
+        "update/worker/update_worker.py",
+    ]
+    pending_manifest_path, package_root, update_root, data_root, log_path = _prepare_pending_update(
+        tmp_path,
+        current_manifest_paths=[
+            "frontend/version.txt",
+            "obsolete.txt",
+            *protected_paths,
+            "update/package-manifest.json",
+        ],
+        new_manifest_paths=[
+            "frontend/version.txt",
+            "newfile.txt",
+            "update/package-manifest.json",
+        ],
+        installed_files={
+            "frontend/version.txt": "old-ui\n",
+            "obsolete.txt": "remove me\n",
+        },
+        payload_files={
+            "frontend/version.txt": "new-ui\n",
+            "newfile.txt": "brand new\n",
+        },
+        nested_payload_root="sd-image-sorter",
+    )
+
+    monkeypatch.setattr(update_worker, "_wait_for_pid_exit", lambda pid, timeout_seconds, log_path: None)
+
+    result = update_worker.apply_update(pending_manifest_path)
+
+    assert result == 0
+    assert (package_root / "frontend" / "version.txt").read_text(encoding="utf-8") == "new-ui\n"
+    assert (package_root / "newfile.txt").read_text(encoding="utf-8") == "brand new\n"
+    assert not (package_root / "obsolete.txt").exists()
+    assert (data_root / "images.db").read_text(encoding="utf-8") == "USERDATA\n"
+    assert f"Ignored {len(protected_paths)} protected runtime path(s) from current manifest" in log_path.read_text(encoding="utf-8")
+
+    installed_manifest = json.loads((update_root / "installed-manifest.json").read_text(encoding="utf-8"))
+    for protected_path in protected_paths:
+        assert protected_path not in installed_manifest["managed_paths"]

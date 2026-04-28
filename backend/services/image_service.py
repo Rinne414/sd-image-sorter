@@ -4,7 +4,10 @@ Image service for SD Image Sorter.
 Handles business logic for image retrieval, filtering, and file operations.
 """
 import logging
+import base64
+import binascii
 import io
+import json
 import os
 import subprocess
 import uuid
@@ -22,7 +25,7 @@ import database as db
 from constants import VALID_ASPECT_RATIOS
 from image_manager import reparse_image_metadata
 from metadata_parser import parse_image, verify_image_readable
-from services.indexed_file_mutation_service import save_and_reconcile
+from services.indexed_file_mutation_service import save_and_reconcile_checked
 from thumbnail_cache import (
     get_thumbnail,
     get_thumbnail_async,
@@ -55,6 +58,47 @@ OFFSET_MAX = 10000000
 SEARCH_MAX_LENGTH = 1000
 DEFAULT_PAGE_SIZE = 100
 SELECTION_IDS_FETCH_CHUNK = 2000
+SELECTION_TOKEN_DEFAULT_CHUNK = 2000
+SELECTION_TOKEN_MAX_CHUNK = 10000
+SELECTION_TOKEN_VERSION = 1
+SELECTION_TOKEN_RANDOM_SORT_ERROR = (
+    "random sort cannot use the chunked selection token protocol; use selection-ids or a snapshot protocol"
+)
+
+
+def _invalid_selection_token() -> HTTPException:
+    return HTTPException(status_code=400, detail="Invalid selection token")
+
+
+def _coerce_optional_int_filter(value: Any, field_name: str) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise _invalid_selection_token()
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise _invalid_selection_token()
+
+
+def _coerce_optional_float_filter(value: Any, field_name: str) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise _invalid_selection_token()
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise _invalid_selection_token()
+
+
+def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, (dict, list, tuple, set)):
+        raise _invalid_selection_token()
+    return str(value)
+
 
 # Valid sort options and aspect ratios
 VALID_SORT_OPTIONS = [
@@ -592,6 +636,204 @@ class ImageService:
             "total": total,
         }
 
+    def _build_selection_filter_contract(
+        self,
+        *,
+        generators: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        ratings: Optional[List[str]] = None,
+        checkpoints: Optional[List[str]] = None,
+        loras: Optional[List[str]] = None,
+        prompts: Optional[List[str]] = None,
+        artist: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "newest",
+        min_width: Optional[int] = None,
+        max_width: Optional[int] = None,
+        min_height: Optional[int] = None,
+        max_height: Optional[int] = None,
+        aspect_ratio: Optional[str] = None,
+        min_aesthetic: Optional[float] = None,
+        max_aesthetic: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Build the canonical filter contract encoded into selection tokens."""
+        sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
+        artist = _coerce_optional_string_filter(artist, "artist")
+        search = _coerce_optional_string_filter(search, "search")
+        aspect_ratio = _coerce_optional_string_filter(aspect_ratio, "aspectRatio")
+        min_width = _coerce_optional_int_filter(min_width, "minWidth")
+        max_width = _coerce_optional_int_filter(max_width, "maxWidth")
+        min_height = _coerce_optional_int_filter(min_height, "minHeight")
+        max_height = _coerce_optional_int_filter(max_height, "maxHeight")
+        min_aesthetic = _coerce_optional_float_filter(min_aesthetic, "minAesthetic")
+        max_aesthetic = _coerce_optional_float_filter(max_aesthetic, "maxAesthetic")
+
+        self._validate_common_gallery_filters(
+            sort_by=sort_by,
+            aspect_ratio=aspect_ratio,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+        )
+        return {
+            "generators": _sanitize_filter_values(generators) or [],
+            "tags": _sanitize_filter_values(tags) or [],
+            "ratings": _sanitize_filter_values(ratings) or [],
+            "checkpoints": _sanitize_filter_values(checkpoints) or [],
+            "loras": _sanitize_filter_values(loras) or [],
+            "prompts": _sanitize_filter_values(prompts) or [],
+            "artist": _sanitize_filter_value(artist) if artist else None,
+            "search": _sanitize_filter_value(search) if search else "",
+            "sortBy": sort_by or "newest",
+            "minWidth": min_width,
+            "maxWidth": max_width,
+            "minHeight": min_height,
+            "maxHeight": max_height,
+            "aspectRatio": aspect_ratio,
+            "minAesthetic": min_aesthetic,
+            "maxAesthetic": max_aesthetic,
+        }
+
+    def _selection_ids_from_contract(
+        self,
+        contract: Dict[str, Any],
+        *,
+        offset: int = 0,
+        limit: Optional[int] = None,
+    ) -> List[int]:
+        return db.get_filtered_image_ids(
+            generators=contract["generators"],
+            tags=contract["tags"],
+            ratings=contract["ratings"],
+            checkpoints=contract["checkpoints"],
+            loras=contract["loras"],
+            search_query=contract["search"] or None,
+            sort_by=contract["sortBy"],
+            min_width=contract["minWidth"],
+            max_width=contract["maxWidth"],
+            min_height=contract["minHeight"],
+            max_height=contract["maxHeight"],
+            prompt_terms=contract["prompts"],
+            aspect_ratio=contract["aspectRatio"],
+            artist=contract["artist"],
+            min_aesthetic=contract["minAesthetic"],
+            max_aesthetic=contract["maxAesthetic"],
+            fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
+            offset=offset,
+            limit=limit,
+        )
+
+    def _selection_total_estimate(self, contract: Dict[str, Any]) -> int:
+        return db.get_filtered_image_count(
+            generators=contract["generators"],
+            tags=contract["tags"],
+            ratings=contract["ratings"],
+            checkpoints=contract["checkpoints"],
+            loras=contract["loras"],
+            search_query=contract["search"] or None,
+            min_width=contract["minWidth"],
+            max_width=contract["maxWidth"],
+            min_height=contract["minHeight"],
+            max_height=contract["maxHeight"],
+            prompt_terms=contract["prompts"],
+            aspect_ratio=contract["aspectRatio"],
+            artist=contract["artist"],
+            min_aesthetic=contract["minAesthetic"],
+            max_aesthetic=contract["maxAesthetic"],
+        )
+
+    def _encode_selection_token(self, contract: Dict[str, Any]) -> str:
+        payload = {
+            "v": SELECTION_TOKEN_VERSION,
+            "issued_at": datetime.now(timezone.utc).isoformat(),
+            "filters": contract,
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    def _decode_selection_token(self, selection_token: str) -> Dict[str, Any]:
+        try:
+            padded = selection_token + "=" * (-len(selection_token) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+        except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid selection token")
+
+        if not isinstance(payload, dict) or payload.get("v") != SELECTION_TOKEN_VERSION:
+            raise HTTPException(status_code=400, detail="Invalid selection token")
+        filters = payload.get("filters")
+        if not isinstance(filters, dict):
+            raise HTTPException(status_code=400, detail="Invalid selection token")
+        for list_field in ("generators", "tags", "ratings", "checkpoints", "loras", "prompts"):
+            value = filters.get(list_field)
+            if value is not None and not isinstance(value, list):
+                raise _invalid_selection_token()
+
+        try:
+            return self._build_selection_filter_contract(
+                generators=filters.get("generators"),
+                tags=filters.get("tags"),
+                ratings=filters.get("ratings"),
+                checkpoints=filters.get("checkpoints"),
+                loras=filters.get("loras"),
+                prompts=filters.get("prompts"),
+                artist=filters.get("artist"),
+                search=filters.get("search"),
+                sort_by=filters.get("sortBy") or "newest",
+                min_width=filters.get("minWidth"),
+                max_width=filters.get("maxWidth"),
+                min_height=filters.get("minHeight"),
+                max_height=filters.get("maxHeight"),
+                aspect_ratio=filters.get("aspectRatio"),
+                min_aesthetic=filters.get("minAesthetic"),
+                max_aesthetic=filters.get("maxAesthetic"),
+            )
+        except HTTPException:
+            raise
+        except (TypeError, ValueError):
+            raise _invalid_selection_token()
+
+    def create_selection_token(
+        self,
+        *,
+        chunk_size: int = SELECTION_TOKEN_DEFAULT_CHUNK,
+        **filters: Any,
+    ) -> Dict[str, Any]:
+        """Create a stateless filtered-selection token for chunked ID retrieval."""
+        contract = self._build_selection_filter_contract(**filters)
+        if contract["sortBy"] == "random":
+            raise HTTPException(status_code=400, detail=SELECTION_TOKEN_RANDOM_SORT_ERROR)
+        normalized_chunk = max(1, min(int(chunk_size or SELECTION_TOKEN_DEFAULT_CHUNK), SELECTION_TOKEN_MAX_CHUNK))
+        exact_total = not bool(contract["prompts"])
+        return {
+            "selection_token": self._encode_selection_token(contract),
+            "total_estimate": self._selection_total_estimate(contract),
+            "exact_total": exact_total,
+            "chunk_size": normalized_chunk,
+        }
+
+    def get_selection_chunk(self, selection_token: str, *, offset: int = 0, limit: int = SELECTION_TOKEN_DEFAULT_CHUNK) -> Dict[str, Any]:
+        """Resolve one ordered chunk of image IDs from a selection token."""
+        contract = self._decode_selection_token(selection_token)
+        if contract["sortBy"] == "random":
+            raise HTTPException(status_code=400, detail=SELECTION_TOKEN_RANDOM_SORT_ERROR)
+        normalized_offset = max(0, int(offset or 0))
+        normalized_limit = max(1, min(int(limit or SELECTION_TOKEN_DEFAULT_CHUNK), SELECTION_TOKEN_MAX_CHUNK))
+        ids = self._selection_ids_from_contract(
+            contract,
+            offset=normalized_offset,
+            limit=normalized_limit + 1,
+        )
+        image_ids = ids[:normalized_limit]
+        has_more = len(ids) > normalized_limit
+        return {
+            "image_ids": image_ids,
+            "offset": normalized_offset,
+            "limit": normalized_limit,
+            "next_offset": normalized_offset + len(image_ids) if has_more else None,
+            "has_more": has_more,
+        }
+
     def get_filtered_selection_ids(
         self,
         *,
@@ -613,34 +855,25 @@ class ImageService:
         max_aesthetic: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
-        self._validate_common_gallery_filters(
-            sort_by=sort_by,
-            aspect_ratio=aspect_ratio,
-            min_width=min_width,
-            max_width=max_width,
-            min_height=min_height,
-            max_height=max_height,
-        )
-
-        image_ids = db.get_filtered_image_ids(
-            generators=_sanitize_filter_values(generators),
-            tags=_sanitize_filter_values(tags),
-            ratings=_sanitize_filter_values(ratings),
-            checkpoints=_sanitize_filter_values(checkpoints),
-            loras=_sanitize_filter_values(loras),
-            search_query=_sanitize_filter_value(search) if search else None,
+        contract = self._build_selection_filter_contract(
+            generators=generators,
+            tags=tags,
+            ratings=ratings,
+            checkpoints=checkpoints,
+            loras=loras,
+            prompts=prompts,
+            artist=artist,
+            search=search,
             sort_by=sort_by,
             min_width=min_width,
             max_width=max_width,
             min_height=min_height,
             max_height=max_height,
-            prompt_terms=_sanitize_filter_values(prompts),
             aspect_ratio=aspect_ratio,
-            artist=_sanitize_filter_value(artist) if artist else None,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
-            fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
         )
+        image_ids = self._selection_ids_from_contract(contract)
         return {
             "image_ids": image_ids,
             "total": len(image_ids),
@@ -666,7 +899,18 @@ class ImageService:
         tags = db.get_image_tags(image_id)
         return {"image": image, "tags": tags}
 
-    def get_export_selection_data(self, image_ids: List[int]) -> Dict[str, Any]:
+    def get_export_selection_data(
+        self,
+        image_ids: List[int],
+        *,
+        source: str = "image_ids",
+        total: Optional[int] = None,
+        offset: int = 0,
+        limit: Optional[int] = None,
+        has_more: bool = False,
+        next_offset: Optional[int] = None,
+        exact_total: bool = True,
+    ) -> Dict[str, Any]:
         """Return prompt and tag export data for multiple images in one request."""
         images_map = db.get_images_by_ids(image_ids)
         tags_map = db.get_image_tags_map(image_ids)
@@ -694,10 +938,51 @@ class ImageService:
                 }
             )
 
+        normalized_limit = int(limit if limit is not None else len(image_ids))
         return {
             "images": export_images,
             "missing_ids": missing_ids,
+            "count": len(export_images),
+            "total": int(total if total is not None else len(image_ids)),
+            "offset": max(0, int(offset or 0)),
+            "limit": max(0, normalized_limit),
+            "next_offset": next_offset,
+            "has_more": bool(has_more),
+            "source": source,
+            "exact_total": bool(exact_total),
         }
+
+    def get_export_selection_data_for_token(
+        self,
+        selection_token: str,
+        *,
+        offset: int = 0,
+        limit: int = SELECTION_TOKEN_DEFAULT_CHUNK,
+    ) -> Dict[str, Any]:
+        """Return one export-data page from a filtered selection token."""
+        contract = self._decode_selection_token(selection_token)
+        if contract["sortBy"] == "random":
+            raise HTTPException(status_code=400, detail=SELECTION_TOKEN_RANDOM_SORT_ERROR)
+
+        normalized_offset = max(0, int(offset or 0))
+        normalized_limit = max(1, min(int(limit or SELECTION_TOKEN_DEFAULT_CHUNK), SELECTION_TOKEN_MAX_CHUNK))
+        ids = self._selection_ids_from_contract(
+            contract,
+            offset=normalized_offset,
+            limit=normalized_limit + 1,
+        )
+        image_ids = ids[:normalized_limit]
+        has_more = len(ids) > normalized_limit
+        return self.get_export_selection_data(
+            image_ids,
+            source="selection_token",
+            total=self._selection_total_estimate(contract),
+            offset=normalized_offset,
+            limit=normalized_limit,
+            has_more=has_more,
+            next_offset=normalized_offset + len(image_ids) if has_more else None,
+            exact_total=not bool(contract["prompts"]),
+        )
 
     def resolve_image_source_path(self, image_id: int, primary_path: str) -> str:
         """
@@ -775,12 +1060,6 @@ class ImageService:
         if requested_format != normalized_output_format:
             raise ValueError("Output path extension does not match the selected format")
 
-        if source == output.path and not allow_overwrite:
-            raise FileExistsError("Output path is the same as the source image. Confirm overwrite before saving.")
-
-        if output.exists and not allow_overwrite:
-            raise FileExistsError("Output file already exists. Confirm overwrite before saving.")
-
         if quality is not None and (quality < 1 or quality > 100):
             raise ValueError("Quality must be between 1 and 100")
 
@@ -817,14 +1096,15 @@ class ImageService:
                 finally:
                     save_image.close()
 
-        _write_result, reconcile_warnings = save_and_reconcile(
+        write_result = save_and_reconcile_checked(
             str(output.path),
             _write_edited_image,
             allow_overwrite=allow_overwrite,
+            source_path=str(source),
             preserve_derived_state=(source == output.path),
             backend_file=__file__,
         )
-        warnings.extend(reconcile_warnings)
+        warnings.extend(write_result.warnings)
 
         return {
             "output_path": str(output.path),

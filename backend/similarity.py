@@ -24,10 +24,12 @@ from config import (
     DUPLICATE_THRESHOLD,
     EMBEDDING_BATCH_SIZE,
     DUPLICATE_CHUNK_SIZE,
+    DUPLICATE_SYNC_MAX_EMBEDDINGS,
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
+from services.derived_state_service import write_image_embeddings
 from utils.source_paths import resolve_existing_indexed_image_path
 
 
@@ -70,6 +72,17 @@ class SimilarityInsufficientEmbeddingsError(SimilarityError):
         )
         self.embedded_count = embedded_count
         self.minimum_required = minimum_required
+
+
+class SimilarityDuplicateSearchTooLargeError(SimilarityError):
+    """Raised when synchronous duplicate search would compare too many embeddings."""
+
+    def __init__(self, embedded_count: int, max_embeddings: int):
+        super().__init__(
+            f"Duplicate search is limited to {max_embeddings} embedded images for synchronous checks."
+        )
+        self.embedded_count = embedded_count
+        self.max_embeddings = max_embeddings
 
 
 # Lazy-loaded FastEmbed model
@@ -379,10 +392,7 @@ class SimilarityIndex:
                 if updates:
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
-                        cursor.executemany(
-                            "UPDATE images SET embedding = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                            updates
-                        )
+                        write_image_embeddings(cursor, updates)
 
             self._progress["message"] = (
                 f"Completed embeddings: {self._progress['embedded']} embedded"
@@ -508,6 +518,25 @@ class SimilarityIndex:
             cursor = conn.cursor()
             cursor.execute(
                 """
+                SELECT COUNT(*)
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                """
+            )
+            embedded_count = int(cursor.fetchone()[0] or 0)
+
+            if embedded_count < 2:
+                raise SimilarityInsufficientEmbeddingsError(embedded_count)
+
+            if embedded_count > DUPLICATE_SYNC_MAX_EMBEDDINGS:
+                raise SimilarityDuplicateSearchTooLargeError(
+                    embedded_count,
+                    DUPLICATE_SYNC_MAX_EMBEDDINGS,
+                )
+
+            cursor.execute(
+                """
                 SELECT id, path, filename, embedding
                 FROM images
                 WHERE embedding IS NOT NULL
@@ -515,9 +544,6 @@ class SimilarityIndex:
                 """
             )
             rows = cursor.fetchall()
-
-        if len(rows) < 2:
-            raise SimilarityInsufficientEmbeddingsError(len(rows))
 
         # Build embedding matrix
         ids = [r[0] for r in rows]
