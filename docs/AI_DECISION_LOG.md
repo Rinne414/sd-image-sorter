@@ -1334,3 +1334,21 @@ Use this structure for future entries:
   The previous release manifest shape that tracked app managed paths but did not state model delivery assumptions.
 - Validation:
   `backend/tests/test_release_build.py`.
+
+### ADR-AI-20260428-46: Shared requirements must keep platform-specific wheels guarded
+
+- Status: accepted
+- Context:
+  `run.bat`, `run.sh`, and the portable launcher all install from `backend/requirements.txt`. A Linux-generated lockfile can accidentally include Linux-only CUDA/NVIDIA/Triton wheels without markers, which makes Windows and macOS first-run installation fail before the app starts.
+- Decision:
+  Keep Linux CUDA/NVIDIA/Triton transitive pins guarded with `sys_platform == "linux"`, keep `uvloop` guarded away from Windows, and keep Linux ONNX Runtime on a Linux-only pin, use macOS-resolvable ONNX Runtime, OpenCV, and PyTorch pins, keep the Windows ONNX Runtime GPU and `triton-windows` pins Windows-only, and pin `triton-windows` to an actually published wheel version. Treat marker loss or an unresolvable platform pin in `backend/requirements.txt` as a release blocker.
+- Evidence:
+  `backend/requirements.txt` now guards `cuda-*`, `nvidia-*`, and `triton`, splits ONNX Runtime, OpenCV, and PyTorch pins for Linux/Windows/macOS, and uses a published `triton-windows` post-release pin; `backend/tests/test_release_build.py` validates the shared launcher requirements markers.
+- Related files:
+  `backend/requirements.txt`
+  `backend/tests/test_release_build.py`
+  `run.bat`
+  `run.sh`
+  `scripts/build_release_packages.py`
+- Validation:
+  `backend/tests/test_release_build.py`.

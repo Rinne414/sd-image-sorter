@@ -237,3 +237,51 @@ def test_download_file_rejects_sha256_mismatch(monkeypatch, tmp_path):
 
     assert not dest.exists()
     assert not (tmp_path / "payload.bin.tmp").exists()
+
+
+def test_runtime_requirements_keep_platform_specific_wheels_guarded():
+    """The shared launcher requirements file must remain installable on Windows/macOS."""
+    requirements_text = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
+    requirement_lines: dict[str, list[str]] = {}
+    for line in requirements_text.splitlines():
+        if not line or line.startswith(("#", " ")) or "==" not in line:
+            continue
+        package_name = line.split("==", 1)[0].split("[", 1)[0]
+        requirement_lines.setdefault(package_name, []).append(line)
+
+    linux_only_packages = {
+        "cuda-bindings",
+        "cuda-pathfinder",
+        "cuda-toolkit",
+        "nvidia-cublas",
+        "nvidia-cuda-cupti",
+        "nvidia-cuda-nvrtc",
+        "nvidia-cuda-runtime",
+        "nvidia-cudnn-cu13",
+        "nvidia-cufft",
+        "nvidia-cufile",
+        "nvidia-curand",
+        "nvidia-cusolver",
+        "nvidia-cusparse",
+        "nvidia-cusparselt-cu13",
+        "nvidia-nccl-cu13",
+        "nvidia-nvjitlink",
+        "nvidia-nvshmem-cu13",
+        "nvidia-nvtx",
+        "triton",
+    }
+    for package_name in linux_only_packages:
+        assert any('; sys_platform == "linux"' in line for line in requirement_lines[package_name])
+
+    assert any('; sys_platform != "win32"' in line for line in requirement_lines["uvloop"])
+    assert any('onnxruntime==1.25.0 ; sys_platform == "linux"' in line for line in requirement_lines["onnxruntime"])
+    assert any('onnxruntime==1.19.2 ; sys_platform == "darwin"' in line for line in requirement_lines["onnxruntime"])
+    assert any('opencv-python==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"' in line for line in requirement_lines["opencv-python"])
+    assert any('opencv-python==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["opencv-python"])
+    assert any('opencv-python-headless==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"' in line for line in requirement_lines["opencv-python-headless"])
+    assert any('opencv-python-headless==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["opencv-python-headless"])
+    assert any('torch==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["torch"])
+    assert any('torchvision==0.17.2 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["torchvision"])
+    assert any('; sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
+    assert any(line.startswith("triton-windows==3.6.0.post") for line in requirement_lines["triton-windows"])
+    assert any('; sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])

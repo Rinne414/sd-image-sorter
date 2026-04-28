@@ -542,3 +542,8 @@ Quality bar:
 - Filter/facet option rendering still needs a searchable/paged facet API for huge tag/checkpoint/LoRA libraries.
 - Censor's auxiliary non-proxy canvas/filter/metadata-strip paths still need full migration into the backend operation pipeline for very large images.
 - Optional model pack artifact smoke still needs real release-asset extraction/install coverage; the manifest now states policy, but it does not prove every external model archive is valid.
+
+## Dependency / Release Debt Reduced On 2026-04-28
+
+- Confirmed release blocker fixed: `backend/requirements.txt` had Linux CUDA/NVIDIA/Triton wheels pinned without platform markers, while Windows and portable launchers install that same file. Those pins are now Linux-only, `uvloop` is non-Windows, macOS uses resolvable ONNX Runtime/OpenCV/PyTorch pins, `triton-windows` uses a published post-release pin, and a release-build regression test guards the shared requirements marker policy.
+- Remaining debt: the repo still uses one generated cross-platform requirements lock. A staged future improvement should split runtime constraints/locks per platform or regenerate locks in CI for Windows, Linux, and macOS instead of relying on manual marker preservation.
