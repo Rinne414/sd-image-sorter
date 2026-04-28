@@ -769,6 +769,225 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#reader-tool-panel-reader')).toBeVisible()
   })
 
+  test('reader library overwrite should confirm before save request and flag gallery refresh intent', async ({ page }) => {
+    const imageId = 501
+    const libraryPath = 'L:/datasets/library-reader-source.png'
+    const tempSourcePath = '/tmp/sd_image_sorter_reader_uploads/library-reader-source.png'
+    const saveAllowOverwriteFlags: boolean[] = []
+    let saveConflictCount = 0
+
+    await mockImageAsset(page, imageId)
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname === `/api/images/${imageId}`) {
+        await route.fulfill({
+          json: {
+            image: {
+              id: imageId,
+              filename: 'library-reader-source.png',
+              path: libraryPath,
+              generator: 'comfyui',
+              prompt: 'library source prompt',
+              negative_prompt: '',
+              width: 1024,
+              height: 1024,
+              file_size: 12345,
+              checkpoint: 'mock_model.safetensors',
+            },
+            tags: [],
+          },
+        })
+        return
+      }
+
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: [
+            buildMockGalleryImage(imageId, {
+              filename: 'library-reader-source.png',
+              path: libraryPath,
+              generator: 'comfyui',
+              prompt: 'library source prompt',
+            }),
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/parse-image', async (route) => {
+      await route.fulfill({
+        json: {
+          generator: 'comfyui',
+          prompt: 'parsed prompt',
+          negative_prompt: 'parsed negative',
+          checkpoint: 'mock_model.safetensors',
+          width: 1024,
+          height: 1024,
+          file_size: 12345,
+          metadata: { _parsed: { generation_params: {} } },
+          source_temp_path: tempSourcePath,
+        },
+      })
+    })
+    await page.route('**/api/image-metadata/save-edited', async (route) => {
+      const payload = route.request().postDataJSON() as { allow_overwrite?: boolean }
+      const allowOverwrite = Boolean(payload?.allow_overwrite)
+      saveAllowOverwriteFlags.push(allowOverwrite)
+      if (!allowOverwrite) {
+        saveConflictCount += 1
+        await route.fulfill({
+          status: 409,
+          json: { detail: 'Output file already exists. Confirm overwrite before saving.' },
+        })
+        return
+      }
+
+      await route.fulfill({
+        status: 200,
+        json: {
+          output_path: libraryPath,
+          format: 'png',
+          warnings: [],
+        },
+      })
+    })
+
+    await openMainPage(page)
+    await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(1)
+
+    await page.evaluate(async (targetId) => {
+      await window.App.openReaderFromImage(targetId, 'library-reader-source.png')
+    }, imageId)
+
+    await expect(page.locator('#view-reader.active')).toBeVisible()
+    await expect(page.locator('#reader-metadata-editor')).toBeVisible()
+    if (!(await page.locator('#reader-editor-body').isVisible().catch(() => false))) {
+      await page.locator('#reader-metadata-editor .reader-section-toggle').click()
+    }
+    await expect(page.locator('#reader-editor-body')).toBeVisible()
+
+    await page.locator('#reader-edit-output-path').fill(libraryPath)
+    await page.locator('#reader-save-metadata-as').click()
+
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    expect(saveAllowOverwriteFlags).toEqual([])
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => saveAllowOverwriteFlags.length).toBe(1)
+    expect(saveAllowOverwriteFlags).toEqual([true])
+    expect(saveConflictCount).toBe(0)
+    await expect.poll(() => page.evaluate(() => Boolean(window.App?.AppState?.galleryNeedsRefresh))).toBe(true)
+  })
+
+  test('reader save-as-new path should not flag gallery refresh intent', async ({ page }) => {
+    const imageId = 502
+    const libraryPath = 'L:/datasets/library-reader-source-2.png'
+    const tempSourcePath = '/tmp/sd_image_sorter_reader_uploads/library-reader-source-2.png'
+    const newOutputPath = 'L:/exports/library-reader-copy.png'
+    const saveAllowOverwriteFlags: boolean[] = []
+
+    await mockImageAsset(page, imageId)
+    await page.route('**/api/images**', async (route) => {
+      const url = new URL(route.request().url())
+      if (url.pathname === `/api/images/${imageId}`) {
+        await route.fulfill({
+          json: {
+            image: {
+              id: imageId,
+              filename: 'library-reader-source-2.png',
+              path: libraryPath,
+              generator: 'comfyui',
+              prompt: 'library source prompt',
+              negative_prompt: '',
+              width: 1024,
+              height: 1024,
+              file_size: 12345,
+              checkpoint: 'mock_model.safetensors',
+            },
+            tags: [],
+          },
+        })
+        return
+      }
+
+      if (url.pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: [
+            buildMockGalleryImage(imageId, {
+              filename: 'library-reader-source-2.png',
+              path: libraryPath,
+              generator: 'comfyui',
+              prompt: 'library source prompt',
+            }),
+          ],
+          total: 1,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+    await page.route('**/api/parse-image', async (route) => {
+      await route.fulfill({
+        json: {
+          generator: 'comfyui',
+          prompt: 'parsed prompt',
+          negative_prompt: 'parsed negative',
+          checkpoint: 'mock_model.safetensors',
+          width: 1024,
+          height: 1024,
+          file_size: 12345,
+          metadata: { _parsed: { generation_params: {} } },
+          source_temp_path: tempSourcePath,
+        },
+      })
+    })
+    await page.route('**/api/image-metadata/save-edited', async (route) => {
+      const payload = route.request().postDataJSON() as { allow_overwrite?: boolean }
+      saveAllowOverwriteFlags.push(Boolean(payload?.allow_overwrite))
+      await route.fulfill({
+        status: 200,
+        json: {
+          output_path: newOutputPath,
+          format: 'png',
+          warnings: [],
+        },
+      })
+    })
+
+    await openMainPage(page)
+    await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(1)
+
+    await page.evaluate(async (targetId) => {
+      await window.App.openReaderFromImage(targetId, 'library-reader-source-2.png')
+    }, imageId)
+
+    await expect(page.locator('#view-reader.active')).toBeVisible()
+    await expect(page.locator('#reader-metadata-editor')).toBeVisible()
+    if (!(await page.locator('#reader-editor-body').isVisible().catch(() => false))) {
+      await page.locator('#reader-metadata-editor .reader-section-toggle').click()
+    }
+    await expect(page.locator('#reader-editor-body')).toBeVisible()
+
+    await page.locator('#reader-edit-output-path').fill(newOutputPath)
+    await page.locator('#reader-save-metadata-as').click()
+
+    await expect.poll(() => saveAllowOverwriteFlags.length).toBe(1)
+    expect(saveAllowOverwriteFlags).toEqual([false])
+    await expect.poll(() => page.evaluate(() => Boolean(window.App?.AppState?.galleryNeedsRefresh))).toBe(false)
+  })
+
   test('obfuscation workspace should round-trip and expose copy flow', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as any).__clipboardWrites = 0

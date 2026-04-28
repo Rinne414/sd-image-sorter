@@ -66,10 +66,16 @@ Use this structure for future confirmed-debt entries:
   `backend/image_fingerprint.py`
   `backend/services/image_service.py`
   `backend/services/censor_service.py`
+  `backend/services/tagging_service.py`
+  `backend/similarity.py`
+  `backend/services/aesthetic_service.py`
+  `backend/services/artist_service.py`
 - Observed problem:
   The app stores derived data such as tags, embeddings, AI captions, aesthetic scores, and artist predictions. Whether these should be cleared depends on whether pixel content really changed.
+  Recent fixes confirmed that non-scan entry points can still bypass shared derived-state helpers: `TaggingService.import_tags()` had drifted into hand-written tag SQL before being pulled back onto `db.add_tags_batch()`, while similarity / aesthetic / artist flows still update `content_fingerprint` directly in feature-local SQL.
 - Why this is debt:
   This is a system invariant, but historically it was enforced by scattered entry-point behavior. The same bug family can come back through a different route.
+  As long as feature-local writers can independently advance `content_fingerprint`, stale derived fields can be accidentally "blessed" as current state instead of being reconciled through one owner.
 - Better long-term shape:
   Define one canonical "content changed" policy, route all mutation flows through it, and document it in architecture/invariants docs.
 - Revisit trigger:

@@ -252,6 +252,13 @@
             return '';
         },
 
+        _getCanonicalSourcePathForOverwrite() {
+            if (this._currentOriginalSourcePath) {
+                return this._currentOriginalSourcePath;
+            }
+            return this._currentSourcePath || '';
+        },
+
         _getDefaultEditorFormat() {
             const sourcePath = this._getBaseSourcePathForSuggestions() || this._currentImage?.name || this._currentSourcePath || '';
             const ext = String(sourcePath).split('.').pop()?.toLowerCase() || '';
@@ -328,6 +335,25 @@
                 window.App.showConfirm(title, message, () => this._saveEditedMetadata(true));
             } else if (window.confirm(message)) {
                 this._saveEditedMetadata(true);
+            }
+        },
+
+        _markGalleryRefreshForIndexedOverwrite(savedOutputPath, originalSourcePath = this._currentOriginalSourcePath) {
+            const app = window.App;
+            if (!app?.AppState) return;
+
+            const matchesOriginalSource = this._pathsReferToSameFile(savedOutputPath, originalSourcePath);
+            const matchesLoadedImagePath = Array.isArray(app.AppState.images) && app.AppState.images.some((image) =>
+                this._pathsReferToSameFile(savedOutputPath, image?.path || '')
+            );
+
+            if (!matchesOriginalSource && !matchesLoadedImagePath) {
+                return;
+            }
+
+            app.AppState.galleryNeedsRefresh = true;
+            if (typeof app.resetSelectionDataCache === 'function') {
+                app.resetSelectionDataCache();
             }
         },
 
@@ -496,7 +522,8 @@
 
             // Same-path overwrite is predictable on the client, so confirm first
             // instead of spamming a guaranteed 409 into the browser console.
-            if (!allowOverwrite && this._pathsReferToSameFile(outputPath, this._currentSourcePath)) {
+            const overwriteComparisonSourcePath = this._getCanonicalSourcePathForOverwrite();
+            if (!allowOverwrite && this._pathsReferToSameFile(outputPath, overwriteComparisonSourcePath)) {
                 this._confirmMetadataOverwrite(outputPath);
                 return;
             }
@@ -526,6 +553,7 @@
                 }
 
                 const savedOutputPath = payload.output_path || outputPath;
+                const previousOriginalSourcePath = this._currentOriginalSourcePath;
                 this._currentSourcePath = savedOutputPath;
                 this._currentOriginalSourcePath = savedOutputPath;
                 this._rememberMetadataEditorDirectory(savedOutputPath);
@@ -534,6 +562,7 @@
                     outputInput.value = savedOutputPath;
                 }
                 this._updateMetadataEditorOutputHint();
+                this._markGalleryRefreshForIndexedOverwrite(savedOutputPath, previousOriginalSourcePath);
 
                 window.App?.showToast?.(this._t('reader.editSaveSuccess', 'Saved edited image copy'), 'success');
                 if (Array.isArray(payload.warnings) && payload.warnings.length) {

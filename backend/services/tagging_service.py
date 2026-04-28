@@ -948,6 +948,8 @@ class TaggingService:
         """Import tags from exported JSON data."""
         imported = 0
         skipped = 0
+        batched_updates: List[Dict[str, Any]] = []
+        scheduled_image_ids: set[int] = set()
 
         with db.get_db() as conn:
             cursor = conn.cursor()
@@ -955,8 +957,7 @@ class TaggingService:
             for img_data in request.images:
                 path = img_data.get("path", "")
                 filename = img_data.get("filename", "")
-                tags = img_data.get("tags", [])
-
+                tags = self._normalize_import_tags(img_data.get("tags", []))
                 if not tags:
                     continue
 
@@ -986,27 +987,51 @@ class TaggingService:
                     skipped += 1
                     continue
 
-                if request.overwrite:
-                    cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+                # Keep import semantics stable for overwrite=False:
+                # duplicate rows targeting the same previously-untagged image
+                # should only import once in a single request.
+                if not request.overwrite and image_id in scheduled_image_ids:
+                    skipped += 1
+                    continue
 
-                for tag_info in tags:
-                    tag = tag_info.get("tag", "")
-                    conf = tag_info.get("confidence", 0.5)
-                    if tag:
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                            (image_id, tag, conf)
-                        )
-
-                cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (image_id,)
-                )
+                batched_updates.append({
+                    "image_id": image_id,
+                    "tags": tags,
+                })
+                scheduled_image_ids.add(image_id)
                 imported += 1
 
-            conn.commit()
+        if batched_updates:
+            db.add_tags_batch(batched_updates)
 
         return {"imported": imported, "skipped": skipped}
+
+    @staticmethod
+    def _normalize_import_tags(raw_tags: Any) -> List[Dict[str, Any]]:
+        """
+        Normalize imported tag payloads into a deduplicated list.
+
+        We keep last-write-wins confidence semantics for duplicate tags to
+        match prior INSERT OR REPLACE behavior.
+        """
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for tag_info in raw_tags or []:
+            if not isinstance(tag_info, dict):
+                continue
+
+            tag = str(tag_info.get("tag", "")).strip()
+            if not tag:
+                continue
+
+            confidence_raw = tag_info.get("confidence", 0.5)
+            try:
+                confidence = float(confidence_raw)
+            except (TypeError, ValueError):
+                confidence = 0.5
+
+            deduped[tag] = {"tag": tag, "confidence": confidence}
+
+        return list(deduped.values())
 
     def _resolve_model_name(self, request: TagRequest) -> str:
         """Resolve the effective built-in model name for a request."""

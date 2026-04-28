@@ -804,3 +804,54 @@ Use this structure for future entries:
   The older implicit contract where `cursor` / `next_cursor` were treated as raw image IDs.
 - Validation:
   Targeted pagination regression tests in `backend/tests/test_database.py`, `backend/tests/test_api_errors.py`, `backend/tests/test_routers/test_images.py`, and `tests/e2e/specs/smoke.spec.ts`.
+
+### ADR-AI-20260428-26: Tag import writes must reuse the shared tag writer contract
+- Status: active
+- Area: derived-state invariants / tag import semantics
+- Evidence tier: Tier 1
+- Decision:
+  Any feature that writes final tags into the library, including JSON tag import flows, must route through the shared DB tag-writer contract (`db.add_tags()` / `db.add_tags_batch()`) instead of hand-writing tag SQL in the caller.
+- Why:
+  The shared tag writer owns more than `tags` rows. It also owns `tagged_at`, tag-cache invalidation, and `content_fingerprint` backfill needed to keep derived-state invalidation rules consistent with scan/tag/save flows. When import logic writes tags directly, the system stops having one owner for those invariants.
+- Do not "improve" this by:
+  Reintroducing per-feature `DELETE FROM tags` / `INSERT` / `UPDATE images SET tagged_at ...` SQL in import/export/service code, or by treating tag import as a harmless special case because it is "just data restore."
+- Allowed evolution:
+  Move the shared writer behind a repository/service abstraction later, provided tag import still reuses one canonical write path and payload normalization stays outside the DB helper.
+- Evidence:
+  `TaggingService.import_tags()` now normalizes duplicate tag payloads and delegates the final write to `db.add_tags_batch()` instead of maintaining its own tag/`tagged_at` SQL path.
+- Last verified:
+  2026-04-28 against current workspace code and targeted backend regression coverage.
+- Related files:
+  `backend/services/tagging_service.py`
+  `backend/database.py`
+  `backend/tests/test_tagging_service.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_routers/test_tags.py`
+- Supersedes:
+  The older implicit behavior where import-tag writes were allowed to bypass the shared tag writer as long as the endpoint appeared to work.
+- Validation:
+  Targeted import-tag regressions in `backend/tests/test_tagging_service.py`, `backend/tests/test_database.py`, and `backend/tests/test_routers/test_tags.py`.
+
+### ADR-AI-20260428-27: Reader overwrite confirmation and gallery refresh must use canonical pre-save library identity
+- Status: active
+- Area: reader save semantics / indexed-path UX contract
+- Evidence tier: Tier 1
+- Decision:
+  Reader metadata-save overwrite checks must compare the requested output path against the canonical original source path when one exists, not against the upload temp path. After save succeeds, gallery refresh intent must be decided against the pre-save indexed source identity (plus currently loaded gallery image paths), not against the post-save path after Reader retargets itself to the new output file.
+- Why:
+  Reader uploads can have both a browser temp path and an original indexed library path. The temp path is not the library identity users care about for overwrite confirmation. Separately, once save succeeds Reader intentionally retargets its current source to the saved file; if refresh logic compares against that new path, every save starts looking like an indexed overwrite and causes unnecessary gallery reloads.
+- Do not "improve" this by:
+  Falling back to temp-upload-path overwrite checks when a canonical original path is known, or by moving the refresh comparison after Reader has already overwritten its source identity with the saved output path.
+- Allowed evolution:
+  Move this decision into a more explicit Reader save-state model later, as long as overwrite confirmation remains based on canonical original identity and gallery refresh stays limited to real indexed-path overwrites.
+- Evidence:
+  Reader now uses `_getCanonicalSourcePathForOverwrite()` for client-side overwrite confirmation and `_markGalleryRefreshForIndexedOverwrite(savedOutputPath, previousOriginalSourcePath)` to preserve the pre-save comparison identity while still retargeting Reader to the saved file afterward.
+- Last verified:
+  2026-04-28 against current workspace code plus targeted Playwright smoke coverage.
+- Related files:
+  `frontend/js/image-reader.js`
+  `tests/e2e/specs/smoke.spec.ts`
+- Supersedes:
+  The older implicit behavior where Reader overwrite checks could compare against temp upload paths and gallery refresh intent could drift with post-save state mutation.
+- Validation:
+  Targeted Reader save-path smoke coverage in `tests/e2e/specs/smoke.spec.ts`, including indexed overwrite confirmation and save-as-new non-refresh behavior.
