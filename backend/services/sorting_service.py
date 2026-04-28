@@ -94,6 +94,7 @@ class BatchMoveRequest(BaseModel):
     checkpoints: Optional[List[str]] = None
     loras: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
+    artist: Optional[str] = Field(default=None, max_length=500)
     search: Optional[str] = Field(default=None, max_length=SEARCH_MAX_LENGTH)
     min_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     max_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
@@ -1021,6 +1022,7 @@ class SortingService:
         checkpoints = request.checkpoints if request.checkpoints else None
         loras = request.loras if request.loras else None
         prompts = request.prompts if request.prompts else None
+        artist = request.artist.strip() if request.artist else None
         search_query = request.search.strip() if request.search else None
 
         total_count = db.get_filtered_image_count(
@@ -1031,6 +1033,7 @@ class SortingService:
             loras=loras,
             search_query=search_query,
             prompt_terms=prompts,
+            artist=artist,
             min_width=request.min_width,
             max_width=request.max_width,
             min_height=request.min_height,
@@ -1072,6 +1075,7 @@ class SortingService:
                     loras=loras,
                     search_query=search_query,
                     prompt_terms=prompts,
+                    artist=artist,
                     min_width=request.min_width,
                     max_width=request.max_width,
                     min_height=request.min_height,
@@ -1218,6 +1222,7 @@ class SortingService:
         checkpoints: Optional[str] = None,
         loras: Optional[str] = None,
         prompts: Optional[str] = None,
+        artist: Optional[str] = None,
         search: Optional[str] = None,
         min_width: Optional[int] = None,
         max_width: Optional[int] = None,
@@ -1252,6 +1257,7 @@ class SortingService:
         cp_list = checkpoints.split(",") if checkpoints else None
         lr_list = loras.split(",") if loras else None
         prompt_list = prompts.split(",") if prompts else None
+        artist_name = artist.strip() if artist else None
         search_query = search.strip() if search else None
 
         image_ids = db.get_filtered_image_ids(
@@ -1262,6 +1268,7 @@ class SortingService:
             loras=lr_list,
             search_query=search_query,
             prompt_terms=prompt_list,
+            artist=artist_name,
             min_width=min_width,
             max_width=max_width,
             min_height=min_height,
