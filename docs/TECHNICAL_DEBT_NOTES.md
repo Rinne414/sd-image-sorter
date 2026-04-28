@@ -555,3 +555,20 @@ Quality bar:
 - Selection state now enforces `selectionToken/filterKey => filtered scope` in the shared store instead of relying on every Gallery action to remember to clear stale token state.
 - Manual Sort resume banner no longer renders a null visible session and leaves stale copy on screen; resume failure restores the previous saved-session snapshot only when one exists.
 - Migration 003 no longer imports live `database` helpers; its LoRA extraction backfill is frozen inside the migration with contract tests.
+
+## P0 User Smoke Fixes Applied On 2026-04-28
+
+- Gallery selection semantics are no longer collapsed: filtered-all, visible-only, and invert actions now have separate controls and tests.
+- Selected Gallery file operations now exist in the Gallery panel: `Move Selected...` and `Copy Selected...` call the existing `/api/move` backend contract instead of forcing users into Auto-Separate/Manual Sort.
+- Destructive selected deletion is no longer the default cleanup path: `Remove from Gallery` deletes only DB rows through `/api/images/remove-selected`; `Delete Files from Disk...` remains explicit and dangerous.
+- Manual Sort start no longer silently overwrites unfinished progress. Backend requires `replace_existing=true`; frontend asks before discarding a saved session.
+- Forge detection now uses metadata-level Forge signals and Forge-style version strings, reducing WebUI/Forge bucket drift for newly parsed or re-parsed images.
+- Batch tag export response shape now has explicit `status`, `error_count`, and `error_messages`, closing the frontend/backend contract drift that made partial exports hard to report correctly.
+
+### Remaining staged work after the user smoke fixes
+
+- Pro-grade prompt/tag export is still product debt, not fully solved. Current export is safer and better reported, but SD power users still need presets such as prompt-only, negative-only, prompt+negative+params, sidecar overwrite policy, filename templates, JSON/CSV bundles, and large-library streaming/background export.
+- Auto-Separate settings visibility is still UX debt. The move/copy mode and important execution settings should be promoted near the action buttons like Manual Sort, not hidden in low-salience controls.
+- Quick-import generator counts can still be provisional while metadata is pending. The UI should label pending/unknown counts explicitly instead of making WebUI/Forge buckets look authoritative before parsing completes.
+- Existing already-indexed Forge rows may require reparse/rescan to move buckets if they were previously saved as `webui`; the parser fix improves new or re-parsed metadata, not historical rows automatically.
+- Local Playwright still depends on either host Chromium shared libraries or the wrapper's `.tools` runtime package cache being present. The touched smoke slice passes through the wrapper, but a clean WSL workspace without system libs still needs the local `.deb` cache before browser tests can run.

@@ -229,7 +229,7 @@ async def move_images(
     request: MoveRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Move specific images to a folder."""
+    """Move or copy specific images to a folder."""
     return service.move_images(request)
 
 
@@ -278,6 +278,7 @@ async def start_sort_session(
     max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     folders: Optional[str] = Query(default=None, max_length=4096),
     operation_mode: str = Query(default="move", max_length=16),
+    replace_existing: bool = Query(default=False),
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start a manual sort session."""
@@ -299,6 +300,7 @@ async def start_sort_session(
         max_aesthetic=max_aesthetic,
         folders=folders,
         operation_mode=operation_mode,
+        replace_existing=replace_existing,
     )
 
 

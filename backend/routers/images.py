@@ -38,6 +38,10 @@ class DeleteSelectedImagesRequest(BaseModel):
     confirm_delete_files: bool = False
 
 
+class RemoveSelectedImagesRequest(BaseModel):
+    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+
+
 class ExportSelectionRequest(BaseModel):
     image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=50000)
     selection_token: Optional[str] = Field(default=None, min_length=1)
@@ -125,6 +129,12 @@ class DeleteSelectedImagesResponse(BaseModel):
     deleted: int
     failed: List[dict[str, Any]]
     permanent_delete: bool = True
+
+
+class RemoveSelectedImagesResponse(BaseModel):
+    removed: int
+    missing_ids: List[int] = Field(default_factory=list)
+    permanent_delete: bool = False
 
 
 class SaveEditedMetadataRequest(BaseModel):
@@ -538,6 +548,23 @@ async def delete_selected_images(
         )
 
     return service.delete_selected_image_files(request.image_ids)
+
+
+@router.post(
+    "/images/remove-selected",
+    response_model=RemoveSelectedImagesResponse,
+    summary="Remove selected images from the gallery index",
+    description="""
+Remove selected database rows from the local gallery without deleting the backing
+image files from disk. Re-scanning the source folder can add them back later.
+    """,
+)
+async def remove_selected_images(
+    request: RemoveSelectedImagesRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Remove selected images from the gallery index without touching files."""
+    return service.remove_selected_images_from_gallery(request.image_ids)
 
 
 @router.post(

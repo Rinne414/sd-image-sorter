@@ -838,6 +838,34 @@ class TestSortSession:
         assert data["status"] == "started"
         assert "total_images" in data
 
+
+    def test_start_sort_session_requires_explicit_replace_when_unfinished(self, test_client, test_db, tmp_path: Path):
+        """Starting Manual Sort should not silently discard a resumable session."""
+        db = test_client.test_db
+        first_path = _create_sort_image(tmp_path, "replace_guard_1.png")
+        second_path = _create_sort_image(tmp_path, "replace_guard_2.png")
+        db.add_image(path=str(first_path), filename=first_path.name, generator="unknown", metadata_json="{}")
+        db.add_image(path=str(second_path), filename=second_path.name, generator="unknown", metadata_json="{}")
+
+        test_client.delete("/api/sort/session")
+        start_response = test_client.post("/api/sort/start?generators=unknown")
+        assert start_response.status_code == 200
+
+        skip_response = test_client.post("/api/sort/action?action=skip")
+        assert skip_response.status_code == 200
+        assert test_client.get("/api/sort/current").json()["index"] == 1
+
+        blocked_response = test_client.post("/api/sort/start?generators=unknown")
+        assert blocked_response.status_code == 409
+        blocked_payload = blocked_response.json()
+        blocked_error = blocked_payload.get("detail") or blocked_payload.get("error") or ""
+        assert "unfinished manual sort session" in blocked_error.lower()
+        assert test_client.get("/api/sort/current").json()["index"] == 1
+
+        replace_response = test_client.post("/api/sort/start?generators=unknown&replace_existing=true")
+        assert replace_response.status_code == 200
+        assert test_client.get("/api/sort/current").json()["index"] == 0
+
     def test_start_sort_empty_results(self, test_client, test_db):
         """Starting sort session with no matches should work."""
         response = test_client.post(

@@ -258,7 +258,20 @@ Rules:
 - Response includes `images`, `missing_ids`, `count`, `total`, `offset`, `limit`, `next_offset`, `has_more`, `source`, and `exact_total`.
 
 #### POST /api/images/delete-selected
-Delete selected image files with per-item partial-failure reporting.
+Delete selected image files with per-item partial-failure reporting. This is destructive and requires `confirm_delete_files: true`.
+
+#### POST /api/images/remove-selected
+Remove selected image rows from the gallery index without deleting the backing files from disk.
+
+Request body:
+
+```json
+{
+  "image_ids": [1, 2, 3]
+}
+```
+
+Response includes `removed`, `missing_ids`, and `permanent_delete: false`. Re-scanning the source folder can add the files back.
 
 #### POST /api/image-metadata/save-edited
 Save an image copy with edited metadata fields.
@@ -334,6 +347,8 @@ Export tags to `.txt` sidecar files.
 | `output_folder` | string | required | Output directory |
 | `prefix` | string | "" | Prefix for each tag |
 
+Response includes `status` (`ok`, `partial`, or `error`), `exported`, numeric `errors`/`error_count`, `error_messages`, and `total`.
+
 #### POST /api/tags/fix-ratings
 Clean up duplicate rating tags in existing database.
 
@@ -356,7 +371,7 @@ Cancel the active scan task.
 Reset stuck scan progress.
 
 #### POST /api/move
-Move selected images.
+Move or copy selected images. Request body includes `image_ids`, `destination_folder`, and optional `operation` (`move` or `copy`, default `move`).
 
 #### POST /api/batch-move
 Move all images matching filters.
@@ -368,7 +383,7 @@ Get batch move progress.
 Reset stuck batch move progress.
 
 #### POST /api/sort/start
-Start manual sort session.
+Start manual sort session. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
 
 #### GET /api/sort/current
 Get current sort image.

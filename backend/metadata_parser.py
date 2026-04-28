@@ -769,6 +769,33 @@ class MetadataParser:
 
         return None
 
+    def _detect_webui_family_generator(
+        self,
+        params: str,
+        metadata: dict,
+        gen_params: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Distinguish Forge from vanilla A1111/WebUI before returning parsed parameters."""
+        candidates = [params or ""]
+        for key in ("Software", "software", "Source", "Comment", "ImageDescription", "UserComment"):
+            value = metadata.get(key)
+            if value is not None:
+                candidates.append(str(value))
+        if gen_params:
+            candidates.extend(str(value) for value in gen_params.values() if value is not None)
+
+        combined = "\n".join(candidates).lower()
+        if "forge" in combined or "sd-webui-forge" in combined:
+            return "forge"
+
+        version = ""
+        if gen_params:
+            version = str(gen_params.get("version") or gen_params.get("Version") or "")
+        if re.search(r"\bf\d+(?:\.\d+)*v\d+(?:\.\d+)*", version, flags=re.IGNORECASE):
+            return "forge"
+
+        return "webui"
+
     def _detect_and_parse(self, metadata: dict) -> Dict[str, Any]:
         """
         Detect generator type and extract prompts, checkpoint, loras, and extended info.
@@ -794,9 +821,7 @@ class MetadataParser:
             params = metadata["parameters"]
             if isinstance(params, str) and ("Steps:" in params and "Sampler:" in params):
                 prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
-                generator = "webui"
-                if "forge" in params.lower() or "Forge" in params:
-                    generator = "forge"
+                generator = self._detect_webui_family_generator(params, metadata, gen_params)
                 base.update({
                     "generator": generator, "prompt": prompt, "negative_prompt": neg,
                     "checkpoint": cp, "loras": lr, "generation_params": gen_params,
@@ -996,7 +1021,7 @@ class MetadataParser:
 
                 if "Steps:" in params and "Sampler:" in params:
                     prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
-                    generator = "forge" if "forge" in params.lower() else "webui"
+                    generator = self._detect_webui_family_generator(params, metadata, gen_params)
                     base.update({
                         "generator": generator, "prompt": prompt, "negative_prompt": neg,
                         "checkpoint": cp, "loras": lr, "generation_params": gen_params,

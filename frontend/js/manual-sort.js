@@ -687,6 +687,37 @@ async function startSorting() {
         return;
     }
 
+    let replaceExisting = false;
+    try {
+        const savedSession = await API.getCurrentSortImage();
+        if (savedSession && !savedSession.done && savedSession.image) {
+            const confirmedNewSession = await new Promise(resolve => {
+                const body = formatManualSortI18n(
+                    'manual.startNewSessionBody',
+                    'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Starting a new session will discard that progress and start from the first matching image.',
+                    {
+                        index: Number(savedSession.index || 0) + 1,
+                        total: Number(savedSession.total || 0),
+                        remaining: Number(savedSession.remaining || 0),
+                    }
+                );
+                window.App.showConfirm(
+                    manualSortText('manual.startNewSessionTitle', 'Start new sorting session?', '开始新的手动分类会话？'),
+                    body,
+                    () => resolve(true),
+                    () => resolve(false)
+                );
+            });
+            if (!confirmedNewSession) {
+                renderManualSortResumeBanner(savedSession, { visible: true });
+                return;
+            }
+            replaceExisting = true;
+        }
+    } catch (error) {
+        if (window.Logger) Logger.warn('Failed to check existing sort session before start:', error);
+    }
+
     // Confirmation dialog before starting (files will be moved/copied)
     const scopeStatus = getManualSortScopeStatus();
     const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
@@ -772,6 +803,7 @@ async function startSorting() {
             },
             operationMode,
             f.artist,
+            replaceExisting,
         );
 
         if (result.total_images === 0) {

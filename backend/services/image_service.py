@@ -433,6 +433,38 @@ class ImageService:
             "permanent_delete": True,
         }
 
+    def remove_selected_images_from_gallery(self, image_ids: List[int]) -> Dict[str, Any]:
+        """Remove images from the local gallery index without deleting files."""
+        normalized_ids: List[int] = []
+        seen_ids = set()
+        for raw_image_id in image_ids or []:
+            image_id = int(raw_image_id)
+            if image_id <= 0 or image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+            normalized_ids.append(image_id)
+
+        if not normalized_ids:
+            return {
+                "removed": 0,
+                "missing_ids": [],
+                "permanent_delete": False,
+            }
+
+        existing_ids = {
+            int(image_id)
+            for image_id, image in db.get_images_by_ids(normalized_ids).items()
+            if image
+        }
+        removed = db.delete_images_by_ids(normalized_ids)
+        missing_ids = [image_id for image_id in normalized_ids if image_id not in existing_ids]
+
+        return {
+            "removed": removed,
+            "missing_ids": missing_ids,
+            "permanent_delete": False,
+        }
+
     def get_images(
         self,
         generators: Optional[str] = None,

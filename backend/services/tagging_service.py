@@ -1401,9 +1401,15 @@ class TaggingService:
     def export_tags_batch(self, request: BatchTagExportRequest) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
         result = export_tags_batch_request(request)
+        error_count = int(result.get("error_count", 0) or 0)
+        exported = int(result.get("exported", 0) or 0)
         return {
-            "exported": result["exported"],
-            "errors": result["error_count"],
+            "status": "ok" if error_count == 0 else ("partial" if exported > 0 else "error"),
+            "exported": exported,
+            "errors": error_count,
+            "error_count": error_count,
+            "error_messages": result.get("error_messages", []),
+            "total": result.get("total", len(request.image_ids)),
         }
 
     def fix_rating_tags(self) -> Dict[str, Any]:

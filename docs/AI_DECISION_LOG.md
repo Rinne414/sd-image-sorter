@@ -212,7 +212,7 @@ Use this structure for future entries:
 - Allowed evolution:
   Recompute filtered selection automatically when filters change, add a future whole-library scope, or optimize the backend ID-resolution path, as long as filtered selection remains an explicit backend-resolved contract.
 - Evidence:
-  Current code now exposes `POST /api/images/selection-ids`, `SelectionStore` carries a filtered-selection `filterKey`, the sidebar exposes a dedicated "Select Filtered" action, and same-filter reloads no longer silently drop off-page IDs.
+  Current code now exposes `POST /api/images/selection-ids`, `SelectionStore` carries a filtered-selection `filterKey`, the sidebar exposes dedicated "Select All Filtered" and visible-scope actions, and same-filter reloads no longer silently drop off-page IDs.
 - Last verified:
   2026-04-28 against current workspace code, targeted backend router tests, and local Playwright browser runs; WSL fallback now prefers a local POSIX Python before a Windows `python.exe`, and missing Chromium shared libraries can be bootstrapped from repo-local runtime packages.
 - Related files:
@@ -1368,3 +1368,45 @@ Use this structure for future entries:
   `backend/tests/test_frontend_contract.py`
 - Validation:
   `backend/tests/test_frontend_contract.py`.
+
+### ADR-AI-20260428-48: Gallery batch actions separate filtered scope, index removal, and destructive disk delete
+
+- Status: accepted
+- Context:
+  User smoke testing found the Gallery selection panel had collapsed important meanings: the primary action looked like visible-only selection, filtered selection was ambiguous, disk deletion was exposed as the obvious selected-file action, and Gallery had no selected move/copy entry point even though the backend already supported `/api/move`.
+- Decision:
+  Gallery selection must expose separate actions for `Select All Filtered`, `Invert All Filtered`, `Select Visible`, and `Invert Visible`. The safe default cleanup action is `Remove from Gallery`, which deletes only index rows through `/api/images/remove-selected`; permanent file deletion remains available only as `Delete Files from Disk...` with explicit destructive copy and `confirm_delete_files=true`. Selected Gallery images must also expose `Move Selected...` and `Copy Selected...` using the shared `/api/move` operation contract.
+- Evidence:
+  `frontend/index.html`, `frontend/js/app.js`, `frontend/js/ui-refresh.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/routers/images.py`, `backend/services/image_service.py`, `backend/tests/test_routers/test_images.py`, `tests/e2e/specs/smoke.spec.ts`.
+- Related invariants:
+  Visible selection only covers currently rendered/loaded thumbnails; filtered selection covers every image matching the active Gallery filters. Removing from Gallery never touches disk files. Disk delete must be visually and verbally dangerous.
+- Validation:
+  Backend route tests pass. Browser smoke coverage for the touched Gallery/Manual Sort flows passes through the project wrapper: `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "selection scope summary|filtered selection|gallery batch actions|gallery selected move|manual sort start"`.
+
+### ADR-AI-20260428-49: Manual Sort start cannot silently replace a resumable session
+
+- Status: accepted
+- Context:
+  User smoke testing confirmed that exiting Manual Sort mid-session and pressing Start after restart discards the saved progress and restarts from the first matching image.
+- Decision:
+  `/api/sort/start` defaults to preserving an unfinished active session and returns HTTP 409 unless the caller sends `replace_existing=true`. The frontend checks `/api/sort/current` before starting, shows the saved progress, and only sends `replace_existing=true` after the user explicitly confirms starting a new session.
+- Evidence:
+  `backend/routers/sorting.py`, `backend/services/sorting_service.py`, `frontend/js/app.js`, `frontend/js/manual-sort.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_routers/test_sorting.py`, `tests/e2e/specs/smoke.spec.ts`.
+- Related invariants:
+  Resume is the safe default; replacing saved Manual Sort progress is destructive session behavior and must be opt-in at both API and UI layers.
+- Validation:
+  `backend/tests/test_routers/test_sorting.py::TestSortSession::test_start_sort_session_requires_explicit_replace_when_unfinished`.
+
+### ADR-AI-20260428-50: Generator family and batch export contracts must expose explicit status
+
+- Status: accepted
+- Context:
+  User smoke testing reported Forge images appearing under WebUI and tag export feedback being too weak for serious SD workflows. Investigation found Forge detection only trusted limited parameter text, and `/api/tags/export-batch` returned a shape that frontend code could misread.
+- Decision:
+  WebUI-family parser logic detects Forge from metadata-level signals such as PNG `Software`, source/comment fields, and Forge-style version strings, not only the main `parameters` body. Batch tag export returns explicit `status`, `exported`, numeric `errors`/`error_count`, `error_messages`, and `total` so UI can distinguish success, partial success, and failure.
+- Evidence:
+  `backend/metadata_parser.py`, `backend/services/tagging_service.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_tags.py`, `frontend/js/app.js`.
+- Related invariants:
+  `forge` and `webui` are distinct user-facing generator buckets. Batch export errors are counts plus messages, not a truthy/falsy ambiguous field.
+- Validation:
+  `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_returns_normalized_frontend_contract_fields`.

@@ -814,6 +814,12 @@ const API = {
         });
     },
 
+    async removeSelectedImages(imageIds) {
+        return this.post('/api/images/remove-selected', {
+            image_ids: imageIds,
+        });
+    },
+
     getImageUrl(id) {
         return `${API_BASE}/api/image-file/${id}`;
     },
@@ -971,7 +977,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null, replaceExisting = false) {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -990,6 +996,7 @@ const API = {
         if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
         if (folders) params.set('folders', JSON.stringify(folders));
         if (operationMode) params.set('operation_mode', operationMode);
+        if (replaceExisting) params.set('replace_existing', 'true');
         return this.post(`/api/sort/start?${params}`);
     },
 
@@ -2696,7 +2703,9 @@ function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visibl
         return appT('selection.scopeLoaded', 'Scope: loaded items in the current result list');
     }
     if (scope === 'filtered') {
-        return appT('selection.scopeFiltered', 'Scope: all filtered results');
+        return AppState.selectionToken
+            ? appT('selection.scopeFiltered', 'Scope: all filtered results')
+            : appT('selection.scopeFilteredExplicit', 'Scope: selected from all filtered results');
     }
     return appT('selection.scopeVisible', 'Scope: visible thumbnails currently on screen');
 }
@@ -2790,7 +2799,7 @@ async function resolveFilteredSelectionIds(filterPayload) {
 }
 
 async function selectAllFilteredResults() {
-    const selectFilteredBtn = $('#btn-select-filtered');
+    const selectFilteredBtn = $('#btn-select-all');
     if (selectFilteredBtn) {
         selectFilteredBtn.disabled = true;
     }
@@ -2824,6 +2833,53 @@ async function selectAllFilteredResults() {
     } catch (error) {
         showToast(
             formatUserError(error, appT('selection.selectFilteredFailed', 'Failed to select all filtered results')),
+            'error'
+        );
+        updateSelectionUI();
+    }
+}
+
+async function invertAllFilteredResults() {
+    const invertFilteredBtn = $('#btn-invert-selection-filtered');
+    if (invertFilteredBtn) {
+        invertFilteredBtn.disabled = true;
+    }
+
+    try {
+        const filterPayload = buildSelectionFilterRequest();
+        const filterKey = JSON.stringify(filterPayload);
+        const result = await resolveFilteredSelectionIds(filterPayload);
+        if (result.cancelled) {
+            updateSelectionUI();
+            return;
+        }
+
+        if (getSelectionFilterCacheKey(AppState.filters) !== filterKey) {
+            updateSelectionUI();
+            return;
+        }
+
+        const currentSelected = new Set(AppState.selectedIds || []);
+        const nextSelected = new Set(
+            result.imageIds.filter((imageId) => !currentSelected.has(imageId))
+        );
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = nextSelected;
+            selection.scope = 'filtered';
+            selection.filterKey = filterKey;
+            selection.selectionToken = null;
+        });
+
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
+        resetSelectionDataCache();
+        updateSelectionUI();
+        emitSelectionStateChanged();
+    } catch (error) {
+        showToast(
+            formatUserError(error, appT('selection.invertFilteredFailed', 'Failed to invert all filtered results')),
             'error'
         );
         updateSelectionUI();
@@ -2912,6 +2968,7 @@ function switchView(viewName) {
             window.VirtualGallery.destroy();
         }
         detachGalleryPaginationListener();
+        cancelGalleryImageLoad();
     }
 
     // Cleanup censor view listeners when leaving
@@ -2955,7 +3012,7 @@ function switchView(viewName) {
         setGalleryViewMode(AppState.viewMode);
         // Re-render existing images immediately, only reload from API if needed
         if (AppState.galleryNeedsRefresh) {
-            loadImages({
+            loadImages(false, {
                 silent: AppState.images.length > 0,
                 preserveExisting: AppState.images.length > 0,
                 coalesce: true,
@@ -3056,6 +3113,154 @@ function deleteSelectedGalleryImages() {
         } catch (error) {
             showToast(
                 formatUserError(error, appT('selection.deleteFailed', 'Failed to delete selected image files')),
+                'error'
+            );
+        }
+    });
+}
+
+function getSelectedGalleryIds() {
+    return Array.from(AppState.selectedIds)
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+function removeSelectedGalleryImages() {
+    const ids = getSelectedGalleryIds();
+
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select All Filtered.'), 'info');
+        return;
+    }
+
+    const examples = getSelectedGalleryExamples(ids);
+    const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
+    const message = appT(
+        'selection.removeConfirmBody',
+        'This removes {count} image record(s) from this gallery only. Files stay on disk and can be re-imported by scanning again. Examples: {examples}'
+    )
+        .replace('{count}', ids.length)
+        .replace('{examples}', examples || ids.slice(0, 5).join(', '));
+
+    showConfirm(title, message, async () => {
+        try {
+            const result = await API.removeSelectedImages(ids);
+            mutateSelectedIds((selectedIds) => {
+                ids.forEach((id) => selectedIds.delete(id));
+            });
+            resetSelectionDataCache();
+            updateSelectionUI();
+            emitSelectionStateChanged();
+            if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
+                window.Gallery.syncSelectionState();
+            }
+
+            await loadImages();
+            await loadStats();
+
+            const missingCount = Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0;
+            if (missingCount > 0) {
+                showToast(
+                    appT('selection.removePartial', 'Removed {removed} image record(s). {missing} were already missing from the gallery.')
+                        .replace('{removed}', result?.removed || 0)
+                        .replace('{missing}', missingCount),
+                    'warning'
+                );
+                return;
+            }
+
+            showToast(
+                appT('selection.removeSuccess', 'Removed {count} image record(s) from the gallery. Files were not deleted.')
+                    .replace('{count}', result?.removed || 0),
+                'success'
+            );
+        } catch (error) {
+            showToast(
+                formatUserError(error, appT('selection.removeFailed', 'Failed to remove selected images from gallery')),
+                'error'
+            );
+        }
+    });
+}
+
+async function moveOrCopySelectedGalleryImages(operation = 'move') {
+    const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
+    const ids = getSelectedGalleryIds();
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select All Filtered.'), 'info');
+        return;
+    }
+
+    const operationLabel = normalizedOperation === 'copy'
+        ? appT('selection.copyVerb', 'Copy')
+        : appT('selection.moveVerb', 'Move');
+    const destination = await showInputModal(
+        appT('selection.destinationPromptTitle', '{operation} selected images')
+            .replace('{operation}', operationLabel),
+        appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected image(s).')
+            .replace('{count}', ids.length),
+        getRecentFolders()[0] || ''
+    );
+    if (!destination || !destination.trim()) return;
+
+    const trimmedDestination = destination.trim();
+    const confirmTitle = normalizedOperation === 'copy'
+        ? appT('selection.copyConfirmTitle', 'Copy selected image files?')
+        : appT('selection.moveConfirmTitle', 'Move selected image files?');
+    const confirmBody = (normalizedOperation === 'copy'
+        ? appT('selection.copyConfirmBody', 'This copies {count} file(s) to: {destination}. Originals stay in place.')
+        : appT('selection.moveConfirmBody', 'This moves {count} original file(s) to: {destination}'))
+        .replace('{count}', ids.length)
+        .replace('{destination}', trimmedDestination);
+
+    showConfirm(confirmTitle, confirmBody, async () => {
+        try {
+            const result = await API.moveImages(ids, trimmedDestination, normalizedOperation);
+            const results = Array.isArray(result?.results) ? result.results : [];
+            const successes = results.filter((item) => item?.success);
+            const failed = results.length > 0
+                ? results.filter((item) => !item?.success)
+                : ids.length > 0 ? ids.map((id) => ({ id, error: 'No result returned' })) : [];
+
+            if (successes.length > 0 && normalizedOperation === 'move') {
+                const movedIds = new Set(successes.map((item) => Number(item.id)).filter((id) => Number.isFinite(id)));
+                mutateSelectedIds((selectedIds) => {
+                    movedIds.forEach((id) => selectedIds.delete(id));
+                });
+            }
+
+            addRecentFolder(trimmedDestination);
+            resetSelectionDataCache();
+            updateSelectionUI();
+            emitSelectionStateChanged();
+            if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
+                window.Gallery.syncSelectionState();
+            }
+
+            await loadImages();
+            await loadStats();
+
+            if (failed.length > 0) {
+                showToast(
+                    appT('selection.moveCopyPartial', '{operation} completed for {success} image(s). {failed} failed.')
+                        .replace('{operation}', operationLabel)
+                        .replace('{success}', successes.length)
+                        .replace('{failed}', failed.length),
+                    successes.length > 0 ? 'warning' : 'error'
+                );
+                return;
+            }
+
+            showToast(
+                appT('selection.moveCopySuccess', '{operation} completed for {count} image(s).')
+                    .replace('{operation}', operationLabel)
+                    .replace('{count}', successes.length),
+                'success'
+            );
+        } catch (error) {
+            showToast(
+                formatUserError(error, appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
+                    .replace('{operation}', operationLabel.toLowerCase())),
                 'error'
             );
         }
@@ -3341,15 +3546,19 @@ function initEventListeners() {
         }
     });
 
-    // Select visible gallery items
-    $('#btn-select-all').addEventListener('click', () => {
+    // Selection scope actions
+    $('#btn-select-all')?.addEventListener('click', () => {
+        selectAllFilteredResults();
+    });
+
+    $('#btn-invert-selection-filtered')?.addEventListener('click', () => {
+        invertAllFilteredResults();
+    });
+
+    $('#btn-select-visible')?.addEventListener('click', () => {
         if (window.Gallery && typeof Gallery.selectAllVisible === 'function') {
             Gallery.selectAllVisible();
         }
-    });
-
-    $('#btn-select-filtered')?.addEventListener('click', () => {
-        selectAllFilteredResults();
     });
 
     $('#btn-invert-selection-visible')?.addEventListener('click', () => {
@@ -3358,6 +3567,9 @@ function initEventListeners() {
         }
     });
 
+    $('#btn-move-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('move'));
+    $('#btn-copy-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('copy'));
+    $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
 
 
@@ -4115,7 +4327,7 @@ function _refreshScanDrivenViews(force = false, options = {}) {
     promptsLibraryCache = null;
     if (refreshGallery) {
         if (AppState.currentView === 'gallery') {
-            loadImages({
+            loadImages(false, {
                 silent: true,
                 preserveExisting: true,
                 coalesce: true,
@@ -5051,6 +5263,22 @@ async function startAestheticScoring(force = false) {
 
 const IMAGE_LOAD_KEY = 'images-load';
 let _pendingImageReload = null;
+let _imageLoadSequence = 0;
+
+function cancelGalleryImageLoad() {
+    const hadPendingGalleryLoad = AppState.isLoading
+        || _pendingImageReload !== null
+        || RequestManager.pendingRequests.has(IMAGE_LOAD_KEY);
+    _imageLoadSequence += 1;
+    _pendingImageReload = null;
+    RequestManager.cancel(IMAGE_LOAD_KEY);
+    AppState.isLoading = false;
+    if (hadPendingGalleryLoad) {
+        AppState.galleryNeedsRefresh = true;
+    }
+    const galleryLoading = $('#gallery-loading');
+    if (galleryLoading) galleryLoading.style.display = 'none';
+}
 
 // Generate skeleton items for loading state
 function generateSkeletonItems(count = 20) {
@@ -5101,6 +5329,7 @@ async function loadImages(appendMode = false, options = {}) {
         RequestManager.cancel(IMAGE_LOAD_KEY);
     }
 
+    const loadSequence = ++_imageLoadSequence;
     const galleryGrid = $('#gallery-grid');
 
     if (!appendMode && !preserveExisting) {
@@ -5134,6 +5363,10 @@ async function loadImages(appendMode = false, options = {}) {
         RequestManager.complete(IMAGE_LOAD_KEY);
 
         if (result === null) return;
+        if (loadSequence !== _imageLoadSequence || AppState.currentView !== 'gallery') {
+            AppState.galleryNeedsRefresh = true;
+            return;
+        }
 
         // Update pagination
         AppState.pagination.cursor = result.next_cursor;
@@ -5203,6 +5436,9 @@ async function loadImages(appendMode = false, options = {}) {
         }
         showToast(formatUserError(error, appT('gallery.loadImagesFailed', 'Failed to load images')), 'error');
     } finally {
+        if (loadSequence !== _imageLoadSequence) {
+            return;
+        }
         AppState.isLoading = false;
         if (galleryLoading && !silent) {
             galleryLoading.style.display = 'none';
@@ -5720,10 +5956,13 @@ function updateSelectionUI() {
     const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
     const canRunBatchActions = selectionPanelVisible && hasSelection;
     const buttonIds = [
+        'btn-move-selected',
+        'btn-copy-selected',
         'btn-export-selected',
         'btn-export-tags-selected',
         'btn-batch-export-tags',
         'btn-send-to-censor',
+        'btn-remove-selected-gallery',
         'btn-delete-selected-files'
     ];
 
@@ -5735,12 +5974,17 @@ function updateSelectionUI() {
 
     const selectAllBtn = $('#btn-select-all');
     if (selectAllBtn) {
-        selectAllBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+        selectAllBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
     }
 
-    const selectFilteredBtn = $('#btn-select-filtered');
-    if (selectFilteredBtn) {
-        selectFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
+    const invertFilteredBtn = $('#btn-invert-selection-filtered');
+    if (invertFilteredBtn) {
+        invertFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
+    }
+
+    const selectVisibleBtn = $('#btn-select-visible');
+    if (selectVisibleBtn) {
+        selectVisibleBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
     }
 
     const invertVisibleBtn = $('#btn-invert-selection-visible');
@@ -6191,14 +6435,23 @@ async function executeBatchExport() {
 
         $('#batch-export-progress-fill').style.width = '100%';
 
-        if (result.status === 'ok') {
+        const exported = Number(result?.exported || 0);
+        const errorCount = Number(result?.error_count ?? result?.errors ?? 0);
+        const errorMessages = Array.isArray(result?.error_messages) ? result.error_messages : [];
+
+        if ((result.status === 'ok' || errorCount === 0) && exported > 0) {
             showToast(appT('export.success', 'Exported {count} tag files successfully.', {
-                count: result.exported,
+                count: exported,
             }), 'success');
+            hideModal('batch-export-modal');
+        } else if (result.status === 'partial' || (exported > 0 && errorCount > 0)) {
+            showToast(appT('batchExport.partialSuccess', 'Exported {count} tag file(s). {failed} failed.')
+                .replace('{count}', exported)
+                .replace('{failed}', errorCount), 'warning');
             hideModal('batch-export-modal');
         } else {
             showToast(appT('export.failedReason', 'Export failed: {reason}', {
-                reason: result.errors?.join(', ') || appT('common.unknownError', 'Unknown error'),
+                reason: errorMessages.join(', ') || appT('common.unknownError', 'Unknown error'),
             }), 'error');
         }
     } catch (e) {

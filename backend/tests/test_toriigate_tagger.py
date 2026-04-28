@@ -129,6 +129,9 @@ def test_apply_cuda_memory_guard_caps_toriigate_gpu_fraction(monkeypatch):
         "torch",
         SimpleNamespace(cuda=fake_cuda),
     )
+    monkeypatch.setattr(toriigate_module, "hf_hub", SimpleNamespace())
+    monkeypatch.setattr(toriigate_module, "AutoProcessor", object())
+    monkeypatch.setattr(toriigate_module, "Qwen3_5ForConditionalGeneration", object())
 
     tagger = ToriiGateTagger(use_gpu=True)
     tagger._apply_cuda_memory_guard()

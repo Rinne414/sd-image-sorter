@@ -27,7 +27,15 @@ def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
         batch_size=32,
     )
 
-    runtime_plan = service._build_runtime_plan(request)
+    with patch("hardware_monitor.get_system_info", return_value={}), patch(
+        "hardware_monitor.recommend_tagger_config",
+        return_value={
+            "recommended_batch_size": 32,
+            "recommended_cpu_chunk_size": 12,
+            "recommended_session_refresh_interval": 180,
+        },
+    ):
+        runtime_plan = service._build_runtime_plan(request)
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
@@ -44,7 +52,15 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
         batch_size=32,
     )
 
-    runtime_plan = service._build_runtime_plan(request)
+    with patch("hardware_monitor.get_system_info", return_value={}), patch(
+        "hardware_monitor.recommend_tagger_config",
+        return_value={
+            "recommended_batch_size": 12,
+            "recommended_cpu_chunk_size": 12,
+            "recommended_session_refresh_interval": 180,
+        },
+    ):
+        runtime_plan = service._build_runtime_plan(request)
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False

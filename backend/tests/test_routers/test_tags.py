@@ -809,6 +809,41 @@ class TestExportTagsBatch:
         content = txt_file.read_text()
         assert content == f"{prefix}test_tag, second_tag"
 
+
+    def test_export_batch_returns_normalized_frontend_contract_fields(self, test_client, test_db, tmp_path: Path):
+        """Batch tag export should return status/error_count/error_messages, not an ambiguous errors list."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "contract_test.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+
+        image_id = db.add_image(path=str(img_path), filename="contract_test.png")
+        db.add_tags(image_id, [
+            {"tag": "contract_tag", "confidence": 0.9},
+        ])
+
+        output_dir = tmp_path / "contract_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id, 999999],
+                "output_folder": str(output_dir),
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "partial"
+        assert data["exported"] == 1
+        assert data["errors"] == 1
+        assert data["error_count"] == 1
+        assert data["total"] == 2
+        assert data["error_messages"] == ["Image 999999 not found"]
+        assert (output_dir / "contract_test.txt").read_text() == "contract_tag"
+
     def test_export_batch_keeps_same_basename_files_distinct(self, test_client, test_db, tmp_path: Path):
         """Files that only differ by extension should not overwrite each other on export."""
         import database as db

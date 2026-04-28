@@ -1233,6 +1233,7 @@ class SortingService:
         max_aesthetic: Optional[float] = None,
         folders: Optional[str] = None,
         operation_mode: str = "move",
+        replace_existing: bool = False,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -1241,6 +1242,14 @@ class SortingService:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid aspect_ratio. Must be one of: {', '.join(VALID_ASPECT_RATIOS)}"
+            )
+
+        with self._sort_session_lock:
+            has_active_session = bool(self._sort_session.get("active")) and int(self._sort_session.get("current_index", 0) or 0) < len(self._sort_session.get("image_ids", []) or [])
+        if has_active_session and not replace_existing:
+            raise HTTPException(
+                status_code=409,
+                detail="An unfinished manual sort session already exists. Resume it or explicitly start a new session.",
             )
 
         # Validate dimension ranges

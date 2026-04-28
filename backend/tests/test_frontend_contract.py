@@ -81,6 +81,23 @@ def test_window_app_context_is_sealed_after_creation():
     assert "Object.seal(window.App);" in source
 
 
+def test_load_images_options_are_passed_as_second_argument():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "loadImages({" not in source
+    assert "loadImages(false, {" in source
+
+
+def test_cancelled_gallery_load_marks_refresh_intent():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "function cancelGalleryImageLoad()" in source
+    assert "hadPendingGalleryLoad" in source
+    assert "AppState.galleryNeedsRefresh = true;" in source
+
+
 def test_selection_store_clears_filtered_token_for_non_filtered_scopes():
     if shutil.which("node") is None:
         return

@@ -1409,6 +1409,65 @@ class TestForgeMetadata:
         assert forge_result["generator"] == "forge"
         assert webui_result["generator"] == "webui"
 
+    def test_forge_detected_from_png_software_when_parameters_look_like_webui(self, tmp_path: Path):
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        image_path = tmp_path / "forge-software.png"
+        params = (
+            "girl, city\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler, CFG scale: 7, Seed: 123, Size: 512x512, Model: model"
+        )
+        image = Image.new("RGB", (64, 64), color="white")
+        metadata = PngInfo()
+        metadata.add_text("parameters", params)
+        metadata.add_text("Software", "Stable Diffusion webui Forge")
+        image.save(image_path, pnginfo=metadata)
+
+        result = parse_image(str(image_path))
+
+        assert result["generator"] == "forge"
+
+    def test_webui_without_forge_signal_stays_webui(self, tmp_path: Path):
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        image_path = tmp_path / "vanilla-webui.png"
+        params = (
+            "girl, city\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler, CFG scale: 7, Seed: 123, Size: 512x512, Model: model"
+        )
+        image = Image.new("RGB", (64, 64), color="white")
+        metadata = PngInfo()
+        metadata.add_text("parameters", params)
+        metadata.add_text("Software", "AUTOMATIC1111")
+        image.save(image_path, pnginfo=metadata)
+
+        result = parse_image(str(image_path))
+
+        assert result["generator"] == "webui"
+
+    def test_forge_detected_from_forge_style_version(self, tmp_path: Path):
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        image_path = tmp_path / "forge-version.png"
+        params = (
+            "girl, city\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler, CFG scale: 7, Seed: 123, Size: 512x512, Model: model, Version: f2.0.1v1.10.1-previous-1234"
+        )
+        image = Image.new("RGB", (64, 64), color="white")
+        metadata = PngInfo()
+        metadata.add_text("parameters", params)
+        image.save(image_path, pnginfo=metadata)
+
+        result = parse_image(str(image_path))
+
+        assert result["generator"] == "forge"
+
 
 class TestCheckpointIdentifierFallbacks:
     """Tests for non-filename model identifiers that should still surface as checkpoint info."""

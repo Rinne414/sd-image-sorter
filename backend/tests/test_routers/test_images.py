@@ -932,6 +932,39 @@ class TestAestheticEndpoints:
         assert response.headers.get("X-Thumbnail-Placeholder") == "UNREADABLE"
 
 
+class TestRemoveSelectedImages:
+    """Tests for POST /api/images/remove-selected endpoint."""
+
+    def test_remove_selected_images_removes_database_rows_but_keeps_files(self, test_client, test_db, tmp_path):
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "remove-from-gallery.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [
+            {"tag": "kept_file", "confidence": 0.95},
+        ])
+
+        response = test_client.post(
+            "/api/images/remove-selected",
+            json={"image_ids": [image_id, 999999]},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["removed"] == 1
+        assert payload["missing_ids"] == [999999]
+        assert payload["permanent_delete"] is False
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is None
+        assert db.get_image_tags(image_id) == []
+
+
 class TestDeleteSelectedImages:
     """Tests for POST /api/images/delete-selected endpoint."""
 

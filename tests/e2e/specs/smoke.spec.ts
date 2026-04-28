@@ -1886,7 +1886,7 @@ test.describe('Smoke Tests', () => {
     await page.keyboard.up('Shift')
     await expect(scopeSummary).toContainText('loaded items')
 
-    await page.locator('#btn-select-all').click()
+    await page.locator('#btn-select-visible').click()
     await expect(scopeSummary).toContainText('visible thumbnails')
   })
 
@@ -1992,7 +1992,7 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-toggle-select').click()
-    await page.locator('#btn-select-filtered').click()
+    await page.locator('#btn-select-all').click()
 
     await expect.poll(() => selectionTokenRequests).toBe(1)
     await expect.poll(() => selectionChunkOffsets).toEqual([0, 2])
@@ -2102,7 +2102,7 @@ test.describe('Smoke Tests', () => {
     })
 
     await page.locator('#btn-toggle-select').click()
-    await page.locator('#btn-select-filtered').click()
+    await page.locator('#btn-select-all').click()
 
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     expect(selectionChunkRequests).toBe(0)
@@ -2114,6 +2114,124 @@ test.describe('Smoke Tests', () => {
       ;(window as Window & { __restoreConfirm?: () => void }).__restoreConfirm?.()
     })
   })
+
+  test('gallery batch actions should separate remove-from-gallery from permanent delete', async ({ page }) => {
+    await mockGalleryImages(page, [
+      { id: 301, filename: 'remove-vs-delete.png' },
+    ])
+
+    const removePayloads: any[] = []
+    const deletePayloads: any[] = []
+
+    await page.route('**/api/images/remove-selected', async (route) => {
+      removePayloads.push(route.request().postDataJSON())
+      await route.fulfill({
+        json: {
+          removed: 1,
+          missing_ids: [],
+          permanent_delete: false,
+        },
+      })
+    })
+
+    await page.route('**/api/images/delete-selected', async (route) => {
+      deletePayloads.push(route.request().postDataJSON())
+      await route.fulfill({
+        json: {
+          deleted: 1,
+          failed: [],
+          permanent_delete: true,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await expect(page.locator('#btn-remove-selected-gallery')).toBeVisible()
+    await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
+
+    await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
+    await page.locator('#btn-remove-selected-gallery').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-message')).toContainText('Files stay on disk')
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => removePayloads.length).toBe(1)
+    expect(removePayloads[0]).toMatchObject({ image_ids: [301] })
+    expect(deletePayloads).toHaveLength(0)
+
+    await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
+    await page.locator('#btn-delete-selected-files').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-message')).toContainText('permanently deletes')
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => deletePayloads.length).toBe(1)
+    expect(deletePayloads[0]).toMatchObject({
+      image_ids: [301],
+      confirm_delete_files: true,
+    })
+  })
+
+  test('gallery selected move and copy actions should call move API with explicit operation', async ({ page }) => {
+    await mockGalleryImages(page, [
+      { id: 401, filename: 'move-selected-1.png' },
+      { id: 402, filename: 'move-selected-2.png' },
+    ])
+
+    const movePayloads: any[] = []
+    await page.route('**/api/move', async (route) => {
+      const payload = route.request().postDataJSON()
+      movePayloads.push(payload)
+      await route.fulfill({
+        json: {
+          results: payload.image_ids.map((id: number) => ({
+            id,
+            new_path: `${payload.destination_folder}/${id}.png`,
+            operation: payload.operation || 'move',
+            success: true,
+          })),
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-visible').click()
+    await page.locator('#btn-move-selected').click()
+    await expect(page.locator('#input-modal.visible')).toBeVisible()
+    await page.locator('#input-modal-field').fill('C:/sorted/move')
+    await page.locator('#btn-input-ok').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => movePayloads.length).toBe(1)
+    expect(movePayloads[0]).toMatchObject({
+      image_ids: [401, 402],
+      destination_folder: 'C:/sorted/move',
+      operation: 'move',
+    })
+
+    await page.locator('#btn-select-visible').click()
+    await page.locator('#btn-copy-selected').click()
+    await expect(page.locator('#input-modal.visible')).toBeVisible()
+    await page.locator('#input-modal-field').fill('C:/sorted/copy')
+    await page.locator('#btn-input-ok').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => movePayloads.length).toBe(2)
+    expect(movePayloads[1]).toMatchObject({
+      image_ids: [401, 402],
+      destination_folder: 'C:/sorted/copy',
+      operation: 'copy',
+    })
+  })
+
 
   test('export modal should fetch selected prompt/tag data once and reuse it when toggling views', async ({ page }) => {
     const selectedImages = [
@@ -3174,6 +3292,73 @@ test.describe('Smoke Tests', () => {
     await expect(banner).toContainText('Setup preferences here may differ from the active saved session.')
   })
 
+  test('manual sort start should not overwrite an unfinished session unless explicitly confirmed', async ({ page }) => {
+    await seedManualSortFilterState(page)
+    await mockImageAsset(page, 701)
+
+    let startRequests = 0
+
+    await page.route('**/api/sort/current', async (route) => {
+      await route.fulfill({
+        json: {
+          image: { id: 701, filename: 'unfinished-session.png' },
+          tags: [],
+          done: false,
+          index: 1,
+          total: 3,
+          remaining: 2,
+          sorted_count: 1,
+          skipped_count: 0,
+          undo_available: true,
+          redo_available: false,
+          image_ids: [700, 701, 702],
+          folders: { a: 'C:/sorted/keep' },
+          operation_mode: 'move',
+        },
+      })
+    })
+
+    await page.route('**/api/sort/set-folders', async (route) => {
+      await route.fulfill({ json: { status: 'ok' } })
+    })
+
+    await page.route('**/api/sort/start**', async (route) => {
+      startRequests += 1
+      const url = new URL(route.request().url())
+      expect(url.searchParams.get('replace_existing')).toBe('true')
+      await route.fulfill({
+        json: {
+          status: 'started',
+          total_images: 3,
+          operation_mode: 'move',
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openSortingSubView(page, 'manual')
+
+    await expect(page.locator('#sort-resume-banner')).toBeVisible()
+    await page.locator('.folder-path-input[data-key="a"]').fill(MOCK_MANUAL_SORT_DESTINATION)
+
+    await page.locator('#btn-start-sorting').click()
+    await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+    await expect(page.locator('#confirm-title')).toContainText('Start new sorting session?')
+    await page.locator('#btn-confirm-cancel').click()
+    await expect(page.locator('#sort-resume-banner')).toBeVisible()
+    expect(startRequests).toBe(0)
+
+    await page.locator('#btn-start-sorting').click()
+    await expect(page.locator('#confirm-title')).toContainText('Start new sorting session?')
+    await page.locator('#btn-confirm-ok').click()
+    await expect(page.locator('#confirm-title')).toContainText('Start Sorting')
+    await page.locator('#btn-confirm-ok').click()
+
+    await expect.poll(() => startRequests).toBe(1)
+  })
+
+
   test('manual sort resume should restore counts and support redo after undoing a saved action', async ({ page }) => {
     let currentCall = 0
 
@@ -3313,6 +3498,7 @@ test.describe('Smoke Tests', () => {
 
   test('should support manual sort skip, undo, and redo without desyncing the current image', async ({ page }) => {
     let currentImageId = 501
+    let currentSessionCalls = 0
 
     await seedManualSortFilterState(page)
     await mockGalleryImages(page, [
@@ -3331,6 +3517,12 @@ test.describe('Smoke Tests', () => {
       })
     })
     await page.route('**/api/sort/current', async (route) => {
+      currentSessionCalls += 1
+      if (currentSessionCalls <= 2) {
+        await route.fulfill({ json: { done: true, image: null } })
+        return
+      }
+
       await route.fulfill({
         json: {
           image: { id: currentImageId, filename: `manual-sort-${currentImageId - 500}.png` },
@@ -3638,6 +3830,7 @@ test.describe('Smoke Tests', () => {
   test('manual sort should pass normalized artist filters to session start and preview loading', async ({ page }) => {
     let startArtist: string | null = null
     let previewArtist: string | null = null
+    let currentSessionCalls = 0
 
     await seedManualSortFilterState(page, { artist: '  Mock Artist  ' })
     await mockImageAsset(page, 601)
@@ -3676,6 +3869,12 @@ test.describe('Smoke Tests', () => {
       })
     })
     await page.route('**/api/sort/current', async (route) => {
+      currentSessionCalls += 1
+      if (currentSessionCalls <= 2) {
+        await route.fulfill({ json: { done: true, image: null } })
+        return
+      }
+
       await route.fulfill({
         json: {
           image: { id: 601, filename: 'manual-artist.png' },
