@@ -5,6 +5,7 @@ Update service for package-local self-updates.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import re
@@ -44,6 +45,7 @@ _HTTP_HEADERS = {
     "Accept": "application/vnd.github+json",
     "User-Agent": f"sd-image-sorter/{APP_VERSION}",
 }
+_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def _normalize_version(text: Optional[str]) -> str:
@@ -77,6 +79,14 @@ def _validate_archive_member_name(name: str) -> None:
         or ".." in relative.parts
     ):
         raise RuntimeError(f"Downloaded update contains unsafe archive entry: {name}")
+
+
+def _sha256sum(file_path: Path) -> str:
+    digest = hashlib.sha256()
+    with file_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_DOWNLOAD_CHUNK_SIZE), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class UpdateService:
@@ -185,6 +195,42 @@ class UpdateService:
             raise RuntimeError("Update API returned an unexpected payload")
         return payload
 
+    def _read_release_manifest(self, manifest_url: str) -> dict[str, Any]:
+        req = urllib.request.Request(manifest_url, headers=_HTTP_HEADERS)
+        with urllib.request.urlopen(req, timeout=20) as response:
+            raw = response.read()
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("Release checksum manifest returned an unexpected payload")
+        return payload
+
+    def _resolve_asset_sha256(self, asset: dict[str, Any]) -> str:
+        direct_sha256 = str(asset.get("sha256") or "").strip().lower()
+        if direct_sha256:
+            return direct_sha256
+
+        manifest_url = str(asset.get("manifest_download_url") or "").strip()
+        if not manifest_url:
+            return ""
+
+        manifest_payload = self._read_release_manifest(manifest_url)
+        manifest_assets = manifest_payload.get("assets") or []
+        if not isinstance(manifest_assets, list):
+            raise RuntimeError("Release checksum manifest assets payload is invalid")
+
+        target_name = str(asset.get("name") or "").strip()
+        for entry in manifest_assets:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("name") or "").strip() != target_name:
+                continue
+            sha256_value = str(entry.get("sha256") or "").strip().lower()
+            if sha256_value:
+                return sha256_value
+            break
+
+        raise RuntimeError(f"Release checksum manifest is missing sha256 for asset: {target_name}")
+
     def _select_update_asset(self, release: dict[str, Any], latest_version: str) -> Optional[dict[str, Any]]:
         channel = self._channel_state()
         assets = release.get("assets") or []
@@ -199,6 +245,18 @@ class UpdateService:
             preferred_names.append(("full", WINDOWS_FULL_ASSET_TEMPLATE.format(version=latest_version)))
         else:
             preferred_names.append(("full", LINUX_MAC_FULL_ASSET_TEMPLATE.format(version=latest_version)))
+        manifest_name = f"sd-image-sorter-v{latest_version}-release-manifest.json"
+        manifest_download_url = ""
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            if str(asset.get("name") or "") != manifest_name:
+                continue
+            manifest_download_url = self._rewrite_download_url(
+                asset.get("browser_download_url") or "",
+                channel["download_url_prefix"],
+            )
+            break
 
         for asset_kind, preferred_name in preferred_names:
             for asset in assets:
@@ -215,6 +273,7 @@ class UpdateService:
                         asset.get("browser_download_url") or "",
                         channel["download_url_prefix"],
                     ),
+                    "manifest_download_url": manifest_download_url,
                     "content_type": asset.get("content_type") or "",
                     "updated_at": asset.get("updated_at"),
                 }
@@ -365,6 +424,7 @@ class UpdateService:
         name = str(asset.get("name") or "").strip()
         url = str(asset.get("download_url") or "").strip()
         size_bytes = int(asset.get("size_bytes") or 0)
+        expected_sha256 = self._resolve_asset_sha256(asset)
         if not name or not url:
             raise RuntimeError("Release does not include a downloadable update asset")
 
@@ -373,16 +433,34 @@ class UpdateService:
         archive_path = target_dir / name
 
         if archive_path.exists() and archive_path.stat().st_size > 0:
-            if size_bytes <= 0 or archive_path.stat().st_size == size_bytes:
+            size_matches = size_bytes <= 0 or archive_path.stat().st_size == size_bytes
+            hash_matches = not expected_sha256 or _sha256sum(archive_path) == expected_sha256
+            if size_matches and hash_matches:
+                self._validate_archive(archive_path)
                 return archive_path
 
+        temp_path = archive_path.with_name(archive_path.name + ".tmp")
+        if temp_path.exists():
+            temp_path.unlink()
         req = urllib.request.Request(url, headers=_HTTP_HEADERS)
-        with urllib.request.urlopen(req, timeout=60) as response, archive_path.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        digest = hashlib.sha256()
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response, temp_path.open("wb") as handle:
+                while True:
+                    chunk = response.read(_DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    digest.update(chunk)
+            actual_sha256 = digest.hexdigest()
+            if expected_sha256 and actual_sha256 != expected_sha256:
+                raise RuntimeError(
+                    f"Downloaded update checksum mismatch: expected {expected_sha256}, got {actual_sha256}"
+                )
+            temp_path.replace(archive_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
         if size_bytes > 0 and archive_path.stat().st_size != size_bytes:
             raise RuntimeError(

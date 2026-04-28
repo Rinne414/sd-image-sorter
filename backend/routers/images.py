@@ -8,19 +8,14 @@ import logging
 import os
 import subprocess
 import sys
-import time
-import uuid
 from pathlib import Path
 from typing import Optional, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
 
-import database as db
 from config import get_temp_dir
-from metadata_parser import parse_image, verify_image_readable
 from services.image_service import ImageService
 from utils.path_validation import PathValidationError
 
@@ -45,6 +40,30 @@ class DeleteSelectedImagesRequest(BaseModel):
 
 class ExportSelectionRequest(BaseModel):
     image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+
+
+class SelectionIdsRequest(BaseModel):
+    generators: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    ratings: List[str] = Field(default_factory=list)
+    checkpoints: List[str] = Field(default_factory=list)
+    loras: List[str] = Field(default_factory=list)
+    prompts: List[str] = Field(default_factory=list)
+    artist: Optional[str] = None
+    search: str = ""
+    sortBy: str = "newest"
+    minWidth: Optional[int] = Field(default=None, ge=1, le=100000)
+    maxWidth: Optional[int] = Field(default=None, ge=1, le=100000)
+    minHeight: Optional[int] = Field(default=None, ge=1, le=100000)
+    maxHeight: Optional[int] = Field(default=None, ge=1, le=100000)
+    aspectRatio: Optional[str] = None
+    minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+
+
+class SelectionIdsResponse(BaseModel):
+    image_ids: List[int] = Field(default_factory=list)
+    total: int = 0
 
 
 class ExportSelectionImage(BaseModel):
@@ -99,29 +118,6 @@ def set_image_service(service: ImageService) -> None:
     _image_service = service
 
 
-def _cleanup_stale_reader_uploads() -> None:
-    """Best-effort cleanup for temporary Reader uploads kept for follow-up save actions."""
-    try:
-        READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        cutoff = time.time() - READER_UPLOAD_TTL_SECONDS
-        for candidate in READER_UPLOAD_TEMP_DIR.iterdir():
-            try:
-                if candidate.is_file() and candidate.stat().st_mtime < cutoff:
-                    candidate.unlink()
-            except OSError:
-                continue
-    except OSError:
-        logger.debug("Failed to prepare Reader temp directory", exc_info=True)
-
-
-def _allocate_reader_upload_path(filename: str) -> Path:
-    suffix = Path(filename or "").suffix.lower() or ".png"
-    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}:
-        suffix = ".png"
-    READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    return READER_UPLOAD_TEMP_DIR / f"{uuid.uuid4().hex}{suffix}"
-
-
 @router.get(
     "/images",
     summary="Get images with optional filters",
@@ -156,9 +152,12 @@ Use the `cursor` parameter with the `next_cursor` value from previous response t
                                 "prompt": "1girl, solo, masterpiece",
                                 "negative_prompt": "lowres, bad anatomy",
                                 "checkpoint": "sd_xl_base_1.0.safetensors",
+                                "checkpoint_normalized": "sd_xl_base_1.0",
                                 "width": 1024,
                                 "height": 1536,
                                 "rating": "general",
+                                "library_order_time": "2024-01-15T10:30:00Z",
+                                "source_file_mtime": "2024-02-01T08:45:12Z",
                                 "created_at": "2024-01-15T10:30:00Z"
                             }
                         ],
@@ -334,6 +333,7 @@ async def get_images(
                             "prompt": "1girl, solo, masterpiece",
                             "negative_prompt": "lowres, bad anatomy",
                             "checkpoint": "sd_xl_base_1.0.safetensors",
+                            "checkpoint_normalized": "sd_xl_base_1.0",
                             "width": 1024,
                             "height": 1536,
                             "rating": "general"
@@ -374,6 +374,43 @@ async def export_selection_data(
 ):
     """Get export-ready prompt and tag data for multiple selected images."""
     return service.get_export_selection_data(request.image_ids)
+
+
+@router.post(
+    "/images/selection-ids",
+    response_model=SelectionIdsResponse,
+    summary="Resolve all image IDs for the current filtered result set",
+    description="""
+Return the full ordered ID set for the current gallery filter payload.
+
+This is used for truthful filtered-result selection. Unlike visible or loaded
+selection, this endpoint resolves the full matching result set in backend sort
+order, not just the thumbnails currently mounted in the DOM.
+    """,
+)
+async def get_selection_ids(
+    request: SelectionIdsRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Return the full filtered-result ID set for selection flows."""
+    return service.get_filtered_selection_ids(
+        generators=request.generators,
+        tags=request.tags,
+        ratings=request.ratings,
+        checkpoints=request.checkpoints,
+        loras=request.loras,
+        prompts=request.prompts,
+        artist=request.artist,
+        search=request.search,
+        sort_by=request.sortBy,
+        min_width=request.minWidth,
+        max_width=request.maxWidth,
+        min_height=request.minHeight,
+        max_height=request.maxHeight,
+        aspect_ratio=request.aspectRatio,
+        min_aesthetic=request.minAesthetic,
+        max_aesthetic=request.maxAesthetic,
+    )
 
 
 @router.post(
@@ -583,32 +620,11 @@ async def open_folder(
     if image_id is None:
         raise HTTPException(status_code=400, detail="image_id is required")
 
-    image = db.get_image_by_id(image_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    try:
-        file_path = service.resolve_image_source_path(image_id, image.get("path", ""))
-        normalized_path = os.path.normpath(file_path)
-
-        if sys.platform == "win32":
-            subprocess.Popen(["explorer", "/select,", normalized_path])
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", normalized_path])
-        else:
-            # Linux: open the parent directory
-            parent_dir = os.path.dirname(normalized_path)
-            subprocess.Popen(["xdg-open", parent_dir])
-
-        return {"success": True, "path": normalized_path}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to open folder for image %s: %s", image_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to open folder: {e}"
-        )
+    return service.open_image_folder(
+        image_id,
+        platform=sys.platform,
+        popen=subprocess.Popen,
+    )
 
 
 @router.post(
@@ -650,66 +666,15 @@ parameters, image dimensions, and file size.
         }
     }
 )
-async def parse_uploaded_image(file: UploadFile = File(...)):
+async def parse_uploaded_image(
+    file: UploadFile = File(...),
+    service: ImageService = Depends(get_image_service),
+):
     """Parse metadata from an uploaded image file without saving to database."""
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    # Determine suffix from uploaded filename
-    _, ext = os.path.splitext(file.filename)
-    if not ext:
-        ext = ".png"
-
-    tmp_path = None
-    cleanup_tmp = True
-    try:
-        _cleanup_stale_reader_uploads()
-        tmp_path = _allocate_reader_upload_path(file.filename)
-        with open(tmp_path, "wb") as tmp:
-            total_bytes = 0
-            while True:
-                chunk = await file.read(PARSE_IMAGE_UPLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
-                if total_bytes > PARSE_IMAGE_UPLOAD_MAX_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Uploaded image is too large to parse (max 64MB)",
-                    )
-                tmp.write(chunk)
-
-        readable, read_error = await run_in_threadpool(verify_image_readable, str(tmp_path))
-        if not readable:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid or unreadable image file: {read_error or 'image decode failed'}",
-            )
-
-        # Parse metadata using the existing parser
-        result = await run_in_threadpool(parse_image, str(tmp_path))
-        if result.get("parse_error") or result.get("width", 0) <= 0 or result.get("height", 0) <= 0:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Failed to parse image metadata: {result.get('parse_error') or 'image metadata could not be read'}",
-            )
-
-        result["source_temp_path"] = str(tmp_path.resolve())
-        cleanup_tmp = False
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to parse uploaded image %s: %s", file.filename, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse image metadata: {e}"
-        )
-    finally:
-        await file.close()
-        # Clean up temp file
-        if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+    return await service.parse_uploaded_image(
+        file,
+        temp_dir=READER_UPLOAD_TEMP_DIR,
+        temp_ttl_seconds=READER_UPLOAD_TTL_SECONDS,
+        max_bytes=PARSE_IMAGE_UPLOAD_MAX_BYTES,
+        chunk_size=PARSE_IMAGE_UPLOAD_CHUNK_SIZE,
+    )

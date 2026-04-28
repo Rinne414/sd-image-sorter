@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+import hashlib
 from pathlib import Path
 
 
@@ -80,3 +81,65 @@ def test_write_package_manifest_excludes_runtime_files(tmp_path):
     assert "frontend/index.html" in payload["managed_paths"]
     assert "python/python.exe" not in payload["managed_paths"]
     assert "update/package-manifest.json" in payload["managed_paths"]
+
+
+def test_download_file_verifies_sha256(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+    payload = b"verified-download"
+    expected_sha256 = hashlib.sha256(payload).hexdigest()
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, size=-1):
+            nonlocal payload
+            if not payload:
+                return b""
+            if size < 0:
+                chunk, payload = payload, b""
+                return chunk
+            chunk, payload = payload[:size], payload[size:]
+            return chunk
+
+    monkeypatch.setattr(release_builder.urllib.request, "urlopen", lambda request, timeout=0: FakeResponse())
+
+    dest = tmp_path / "payload.bin"
+    release_builder.download_file("https://example.com/payload.bin", dest, expected_sha256=expected_sha256)
+
+    assert dest.read_bytes() == b"verified-download"
+
+
+def test_download_file_rejects_sha256_mismatch(monkeypatch, tmp_path):
+    release_builder = load_release_builder()
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, size=-1):
+            if hasattr(self, "_done"):
+                return b""
+            self._done = True
+            return b"wrong-download"
+
+    monkeypatch.setattr(release_builder.urllib.request, "urlopen", lambda request, timeout=0: FakeResponse())
+
+    dest = tmp_path / "payload.bin"
+    expected_sha256 = hashlib.sha256(b"expected").hexdigest()
+
+    try:
+        release_builder.download_file("https://example.com/payload.bin", dest, expected_sha256=expected_sha256)
+    except RuntimeError as exc:
+        assert "checksum mismatch" in str(exc)
+    else:
+        raise AssertionError("Expected checksum mismatch")
+
+    assert not dest.exists()
+    assert not (tmp_path / "payload.bin.tmp").exists()

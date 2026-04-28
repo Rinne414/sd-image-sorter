@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from PIL import Image
+from services.indexed_file_mutation_service import save_and_reconcile
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -536,7 +537,15 @@ def encode_image(
         legacy_pnginfo=legacy_pnginfo,
         compat_mode=normalized_mode,
     )
-    Path(output_path).write_bytes(output_bytes)
+    def _write_encoded_image(final_output_path: str, _overwrite_requested: bool) -> None:
+        Path(final_output_path).write_bytes(output_bytes)
+
+    save_and_reconcile(
+        output_path,
+        _write_encoded_image,
+        allow_overwrite=True,
+        backend_file=__file__,
+    )
 
     with Image.open(io.BytesIO(output_bytes)) as image:
         width, height = image.size
@@ -572,7 +581,15 @@ def decode_image(
         legacy_pnginfo=legacy_pnginfo,
         compat_mode=normalized_mode,
     )
-    Path(output_path).write_bytes(output_bytes)
+    def _write_decoded_image(final_output_path: str, _overwrite_requested: bool) -> None:
+        Path(final_output_path).write_bytes(output_bytes)
+
+    save_and_reconcile(
+        output_path,
+        _write_decoded_image,
+        allow_overwrite=True,
+        backend_file=__file__,
+    )
 
     with Image.open(io.BytesIO(output_bytes)) as image:
         width, height = image.size

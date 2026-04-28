@@ -64,20 +64,13 @@ class ImageRepository(ImageRepositoryBase):
     def find_by_path(self, path: str) -> Optional[Dict[str, Any]]:
         """Find an image by its file path.
 
-        Note: This method requires direct database access as the original
-        module doesn't have a dedicated path lookup function.
-
         Args:
             path: The file path of the image
 
         Returns:
             The image record if found, None otherwise
         """
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM images WHERE path = ?", (path,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
+        return db_module.get_image_by_path(path)
 
     def find_all(
         self,
@@ -238,9 +231,12 @@ class ImageRepository(ImageRepositoryBase):
                    - width: Image width
                    - height: Image height
                    - file_size: File size in bytes
-                   - checkpoint: Checkpoint/model name
+                   - checkpoint: Raw checkpoint/model name for display
+                   - checkpoint_normalized: Derived filter/search key (computed on write)
                    - loras: List of LoRA names
-                   - created_at: Creation timestamp
+                   - library_order_time: Stable library ordering timestamp
+                   - source_file_mtime: Current source file modification timestamp
+                   - created_at: Deprecated compatibility alias for library_order_time
 
         Returns:
             The ID of the created image
@@ -257,6 +253,8 @@ class ImageRepository(ImageRepositoryBase):
             file_size=entity.get("file_size"),
             checkpoint=entity.get("checkpoint"),
             loras=entity.get("loras"),
+            library_order_time=entity.get("library_order_time"),
+            source_file_mtime=entity.get("source_file_mtime"),
             created_at=entity.get("created_at"),
         )
 

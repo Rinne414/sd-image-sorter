@@ -28,7 +28,7 @@ from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
-from utils.source_paths import resolve_existing_indexed_image_path
+from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,12 @@ def _build_placeholder_record(
     preserve_existing_metadata = bool(existing) and bool(existing.get("is_readable", 1))
     if preserve_existing_metadata and _has_source_fingerprint(existing):
         preserve_existing_metadata = _source_fingerprint_matches(existing, stat_result)
-    created_at = datetime.fromtimestamp(stat_result.st_mtime)
+    current_file_time = datetime.fromtimestamp(stat_result.st_mtime)
+    library_order_time = (
+        existing.get("library_order_time")
+        or existing.get("created_at")
+        or current_file_time
+    ) if existing else current_file_time
 
     if preserve_existing_metadata:
         return {
@@ -152,7 +157,9 @@ def _build_placeholder_record(
             "file_size": int(stat_result.st_size),
             "checkpoint": existing.get("checkpoint"),
             "loras": _deserialize_loras(existing.get("loras")),
-            "created_at": created_at,
+            "library_order_time": library_order_time,
+            "source_file_mtime": current_file_time,
+            "created_at": library_order_time,
             "model_hash": existing.get("model_hash"),
             "is_readable": bool(existing.get("is_readable", 1)),
             "read_error": existing.get("read_error"),
@@ -174,7 +181,9 @@ def _build_placeholder_record(
         "file_size": int(stat_result.st_size),
         "checkpoint": None,
         "loras": [],
-        "created_at": created_at,
+        "library_order_time": library_order_time,
+        "source_file_mtime": current_file_time,
+        "created_at": library_order_time,
         "model_hash": None,
         "is_readable": True,
         "read_error": None,
@@ -215,6 +224,8 @@ def _build_metadata_success_record(
         "file_size": int(stat_result.st_size),
         "checkpoint": metadata["checkpoint"],
         "loras": metadata["loras"],
+        "library_order_time": datetime.fromtimestamp(stat_result.st_mtime),
+        "source_file_mtime": datetime.fromtimestamp(stat_result.st_mtime),
         "created_at": datetime.fromtimestamp(stat_result.st_mtime),
         "model_hash": model_hash,
         "is_readable": True,
@@ -233,7 +244,7 @@ def _build_metadata_error_record(
     error_message: str,
 ) -> Dict[str, Any]:
     """Build a DB record for files that failed metadata parsing."""
-    created_at = datetime.fromtimestamp(stat_result.st_mtime) if stat_result else None
+    current_file_time = datetime.fromtimestamp(stat_result.st_mtime) if stat_result else None
     source_mtime_ns = int(stat_result.st_mtime_ns) if stat_result else None
     source_size = int(stat_result.st_size) if stat_result else None
 
@@ -249,7 +260,9 @@ def _build_metadata_error_record(
         "file_size": source_size,
         "checkpoint": None,
         "loras": [],
-        "created_at": created_at,
+        "library_order_time": current_file_time,
+        "source_file_mtime": current_file_time,
+        "created_at": current_file_time,
         "model_hash": None,
         "is_readable": False,
         "read_error": error_message,
@@ -556,7 +569,9 @@ def scan_folder(
             result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
 
         if job_result.get("error"):
-            job_status = placeholder_status_by_path.get(os.path.abspath(job_result["record"]["path"]))
+            job_status = placeholder_status_by_path.get(
+                normalize_indexed_image_path(job_result["record"]["path"])
+            )
             if job_status == "new":
                 result["new"] = max(0, result["new"] - 1)
                 pending_metadata_records.pop()
@@ -619,7 +634,7 @@ def scan_folder(
                 progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
                 try:
                     stat = cached_stat if cached_stat is not None else os.stat(image_path)
-                    existing = existing_rows.get(os.path.abspath(image_path))
+                    existing = existing_rows.get(normalize_indexed_image_path(image_path))
                     if not force_reparse and _is_unchanged_scan_hit(existing, stat):
                         result["updated"] += 1
                         generator = existing.get("generator") or "unknown"
@@ -744,7 +759,17 @@ def _build_copied_image_record(
         "loras": _deserialize_loras(source_row.get("loras")) or [],
         # Preserve the original gallery sort date so copy workflows do not
         # scramble chronology when users need a reversible export.
-        "created_at": source_row.get("created_at") or datetime.fromtimestamp(stat_result.st_mtime),
+        "library_order_time": (
+            source_row.get("library_order_time")
+            or source_row.get("created_at")
+            or datetime.fromtimestamp(stat_result.st_mtime)
+        ),
+        "source_file_mtime": datetime.fromtimestamp(stat_result.st_mtime),
+        "created_at": (
+            source_row.get("library_order_time")
+            or source_row.get("created_at")
+            or datetime.fromtimestamp(stat_result.st_mtime)
+        ),
         "model_hash": source_row.get("model_hash"),
         "is_readable": bool(source_row.get("is_readable", 1)),
         "read_error": source_row.get("read_error"),

@@ -22,6 +22,8 @@ import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
+from services.state_compat import MutableStateProxy
+from services.tag_export_service import export_tags_batch_request
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,113 @@ TRUE_BATCH_MODEL_MAX = 32
 CPU_CHUNK_MAX = 64
 TORIIGATE_GPU_CHUNK_MAX = 1
 TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
+
+TAGGER_MODEL_HINTS = {
+    "wd-eva02-large-tagger-v3": {
+        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of a fixed conservative lock.",
+        "speed": "Slow",
+        "memory": "High",
+        "best_for": "Max Quality / final library cleanup",
+        "safe_mode_note": "Adaptive runtime keeps GPU throughput high first, while automatic hardware clamps still cap the true batch size for long runs.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive max-throughput runtime. Highest quality without a fixed CPU lock.",
+        "quality_score": 5,
+        "speed_score": 3,
+        "stability_score": 3,
+    },
+    "wd-swinv2-tagger-v3": {
+        "summary": "Balanced quality and speed. Good default if you are not sure.",
+        "speed": "Medium",
+        "memory": "Medium",
+        "best_for": "Recommended general use",
+        "recommended": True,
+        "safe_mode_note": "Usually fine on average PCs. Safe Mode is optional.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-convnext-tagger-v3": {
+        "summary": "Faster than the larger models while keeping decent tagging quality.",
+        "speed": "Medium-fast",
+        "memory": "Medium",
+        "best_for": "Daily tagging on average PCs",
+        "safe_mode_note": "A good fallback when EVA02 feels too heavy.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 3,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-vit-tagger-v3": {
+        "summary": "Lightweight and quick, but less accurate than the larger models.",
+        "speed": "Fast",
+        "memory": "Low",
+        "best_for": "Weak machines / fastest pass",
+        "safe_mode_note": "Best pick for weak machines. CPU Safe Mode works well here.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 2,
+        "speed_score": 5,
+        "stability_score": 5,
+    },
+    "wd-vit-large-tagger-v3": {
+        "summary": "A middle ground between ViT speed and EVA02 accuracy.",
+        "speed": "Medium",
+        "memory": "Medium-high",
+        "best_for": "Better accuracy without going full EVA02",
+        "safe_mode_note": "Use Safe Mode if you notice freezes during model load.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 3,
+        "stability_score": 3,
+    },
+    "camie-tagger-v2": {
+        "summary": "Much newer danbooru-era tag space. Strong artist / character / copyright coverage, but it can emit many more tags if the threshold is set too low.",
+        "speed": "Medium-slow",
+        "memory": "High",
+        "best_for": "Modern tag coverage / deeper library enrichment",
+        "safe_mode_note": "Camie uses ImageNet normalization and a much larger tag space. Keep the higher default threshold unless you intentionally want denser tags.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive runtime with denser modern tags. Better coverage than older WD models, but heavier and noisier if you lower the threshold too much.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 3,
+    },
+    "pixai-tagger-v0.9": {
+        "summary": "PixAI v0.9 ONNX export with a newer tag space than classic WD models. Strong for modern danbooru-style tagging, and the app now fills rating from a local fallback so library workflows stay complete.",
+        "speed": "Medium-slow",
+        "memory": "High",
+        "best_for": "Modern general + character tags with lower default threshold",
+        "safe_mode_note": "Uses direct 448 resize and [-1, 1] normalization. This ONNX export has no native rating head, so the app derives a practical rating fallback from the returned tags.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive runtime with newer PixAI tags. Heavier than the small WD models and should still be watched on long GPU runs.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 3,
+    },
+    "toriigate-0.5": {
+        "summary": "Large anime-art multimodal caption tagger with strong NSFW, character, and copyright knowledge.",
+        "speed": "Slow",
+        "memory": "Very high",
+        "best_for": "Rich VLM tagging / difficult anime image understanding",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Runs through the dedicated Transformers VLM backend instead of the WD14 ONNX runtime. GPU is strongly recommended, and the app still clamps chunk size to the safe range.",
+        "quality_score": 5,
+        "speed_score": 1,
+        "stability_score": 2,
+    },
+}
 
 
 def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
@@ -524,11 +633,33 @@ class TaggingService:
         """Initialize the tagging service."""
         self._progress: Dict[str, Any] = _build_tag_progress_state("idle")
         self._lock = threading.Lock()
+        self._progress_proxy = MutableStateProxy(self.get_progress, self.set_progress)
         self._get_tagger: Optional[Callable] = None
         self._cancel_requested = False
         self._worker_process: Optional[Any] = None
         self._worker_cancel_event: Optional[Any] = None
         self._active_run_id = 0
+
+    @staticmethod
+    def _coerce_progress_state(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected progress state onto the canonical shape."""
+        state = state or {}
+        coerced = _build_tag_progress_state(
+            str(state.get("status", "idle")),
+            current=int(state.get("current", 0) or 0),
+            total=int(state.get("total", 0) or 0),
+            tagged=int(state.get("tagged", 0) or 0),
+            errors=int(state.get("errors", 0) or 0),
+            message=str(state.get("message", "") or ""),
+            runtime_backend_target=str(state.get("runtime_backend_target", "") or ""),
+            runtime_backend_actual=str(state.get("runtime_backend_actual", "") or ""),
+            runtime_backend_reason=str(state.get("runtime_backend_reason", "") or ""),
+            memory_pressure_warning=str(state.get("memory_pressure_warning", "") or ""),
+            run_id=int(state.get("run_id", 0) or 0),
+        )
+        if "processed" in state:
+            coerced["processed"] = int(state.get("processed", coerced["current"]) or 0)
+        return coerced
 
     def set_tagger_getter(self, tagger_getter: Callable) -> None:
         """Set the tagger getter function from main module."""
@@ -539,10 +670,14 @@ class TaggingService:
         with self._lock:
             return self._progress.copy()
 
+    def get_progress_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style progress handle without moving ownership out of the service."""
+        return self._progress_proxy
+
     def set_progress(self, state: Dict[str, Any]) -> None:
         """Set the tag progress state."""
         with self._lock:
-            self._progress = state
+            self._progress = self._coerce_progress_state(state)
 
     def reset_progress(self) -> Dict[str, Any]:
         """Reset a stuck tagging task back to idle."""
@@ -620,6 +755,44 @@ class TaggingService:
         """Get all generators with image counts."""
         generators = db.get_all_generators()
         return {"generators": generators}
+
+    def get_tagger_models(self) -> Dict[str, Any]:
+        """Return tagger model catalog with UI/runtime guidance."""
+        models = [
+            {
+                "name": name,
+                "path": config["repo_id"],
+                "description": TAGGER_MODEL_HINTS.get(name, {}).get("summary", f"{name} model"),
+                "disabled": bool(config.get("disabled") or TAGGER_MODEL_HINTS.get(name, {}).get("disabled", False)),
+                "disabled_reason": config.get("disabled_reason", ""),
+                "default_threshold": config.get("default_threshold"),
+                "default_character_threshold": config.get("default_character_threshold"),
+                "speed": TAGGER_MODEL_HINTS.get(name, {}).get("speed", "Unknown"),
+                "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
+                "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
+                "recommended": TAGGER_MODEL_HINTS.get(name, {}).get("recommended", False),
+                "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Use Safe Mode if your PC becomes unstable."),
+                "gpu_default": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_default", True),
+                "gpu_confirmation_required": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_confirmation_required", False),
+                "gpu_locked": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_locked", False),
+                "runtime_note": TAGGER_MODEL_HINTS.get(name, {}).get("runtime_note", ""),
+                "quality_score": TAGGER_MODEL_HINTS.get(name, {}).get("quality_score", 3),
+                "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
+                "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
+                "runtime_safety_tier": config.get("runtime_safety_tier", "balanced"),
+                "minimum_total_ram_gb": config.get("minimum_total_ram_gb"),
+                "minimum_available_ram_gb": config.get("minimum_available_ram_gb"),
+                "minimum_gpu_vram_mb": config.get("minimum_gpu_vram_mb"),
+                "minimum_gpu_available_vram_mb": config.get("minimum_gpu_available_vram_mb"),
+                "minimum_cpu_total_ram_gb": config.get("minimum_cpu_total_ram_gb"),
+                "minimum_cpu_available_ram_gb": config.get("minimum_cpu_available_ram_gb"),
+            }
+            for name, config in TAGGER_MODELS.items()
+        ]
+        return {
+            "models": models,
+            "default": DEFAULT_TAGGER_MODEL,
+        }
 
     def get_tags_library(self, sort_by: str = "frequency", limit: int = 1000) -> Dict[str, Any]:
         """Get tags library with frequency and sorting options."""
@@ -787,11 +960,20 @@ class TaggingService:
                 if not tags:
                     continue
 
-                cursor.execute(
-                    "SELECT id, tagged_at FROM images WHERE path = ? OR filename = ?",
-                    (path, filename)
-                )
-                row = cursor.fetchone()
+                image_row = db.get_image_by_path(path) if path else None
+                row = None
+                if image_row:
+                    cursor.execute(
+                        "SELECT id, tagged_at FROM images WHERE id = ?",
+                        (image_row["id"],),
+                    )
+                    row = cursor.fetchone()
+                elif filename:
+                    cursor.execute(
+                        "SELECT id, tagged_at FROM images WHERE filename = ?",
+                        (filename,),
+                    )
+                    row = cursor.fetchone()
 
                 if not row:
                     skipped += 1
@@ -1280,73 +1462,11 @@ class TaggingService:
 
     def export_tags_batch(self, request: BatchTagExportRequest) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        from utils.path_validation import validate_folder_path
-
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-
-        exported = 0
-        errors = 0
-        used_output_paths = set()
-        output_folder_ready = os.path.isdir(request.output_folder)
-
-        for image_id in request.image_ids:
-            try:
-                image = db.get_image_by_id(image_id)
-                if not image:
-                    errors += 1
-                    continue
-
-                tags = db.get_image_tags(image_id)
-                if not tags:
-                    continue
-
-                blacklist = request.blacklist or []
-                filtered_tags = [t["tag"] for t in tags if t["tag"] not in blacklist]
-                file_content = ", ".join(filtered_tags)
-                if request.prefix:
-                    file_content = f"{request.prefix}{file_content}" if file_content else request.prefix
-
-                basename = os.path.splitext(image["filename"])[0]
-                candidate_names = [f"{basename}.txt", f"{image['filename']}.txt"]
-                txt_path = None
-
-                for candidate_name in candidate_names:
-                    candidate_path = os.path.join(request.output_folder, candidate_name)
-                    if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-                        txt_path = candidate_path
-                        break
-
-                if txt_path is None:
-                    stem = image["filename"]
-                    counter = 1
-                    while True:
-                        candidate_path = os.path.join(request.output_folder, f"{stem}_{counter}.txt")
-                        if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-                            txt_path = candidate_path
-                            break
-                        counter += 1
-
-                if not output_folder_ready:
-                    try:
-                        os.makedirs(request.output_folder, exist_ok=True)
-                    except OSError as exc:
-                        raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
-                    output_folder_ready = True
-
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(file_content)
-
-                used_output_paths.add(txt_path)
-                exported += 1
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.error("Error exporting tags for image %d: %s", image_id, e)
-                errors += 1
-
-        return {"exported": exported, "errors": errors}
+        result = export_tags_batch_request(request)
+        return {
+            "exported": result["exported"],
+            "errors": result["error_count"],
+        }
 
     def fix_rating_tags(self) -> Dict[str, Any]:
         """Clean up duplicate rating tags in existing database."""

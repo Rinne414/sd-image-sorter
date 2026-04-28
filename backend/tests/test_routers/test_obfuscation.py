@@ -6,6 +6,7 @@ Focuses on the publish-critical preview endpoint used by the new UI.
 import io
 import sys
 import tempfile
+import base64
 from pathlib import Path
 
 from PIL import Image
@@ -182,3 +183,63 @@ class TestObfuscationPreview:
         body = response.json()
         error_msg = body.get("detail") or body.get("error") or ""
         assert "too large" in error_msg.lower()
+
+
+class TestObfuscationIndexedOverwrite:
+    def test_encode_overwrite_refreshes_indexed_state(self, test_client, tmp_path):
+        from image_fingerprint import compute_image_content_fingerprint
+
+        source_path = tmp_path / "obfuscate-indexed-source.png"
+        _create_png_with_metadata(source_path, "indexed prompt")
+
+        image_id = test_client.test_db.add_image(
+            path=str(source_path),
+            filename=source_path.name,
+            metadata_json="{}",
+        )
+
+        original_fingerprint = compute_image_content_fingerprint(str(source_path))
+        test_client.test_db.add_tags(
+            image_id,
+            [{"tag": "stale_tag", "confidence": 0.95}],
+            content_fingerprint=original_fingerprint,
+        )
+        with test_client.test_db.get_db() as conn:
+            conn.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, content_fingerprint = ?
+                WHERE id = ?
+                """,
+                ("stale caption", 0.99, base64.b64decode("qrvM"), original_fingerprint, image_id),
+            )
+
+        response = test_client.post(
+            "/api/obfuscate/encode",
+            json={
+                "image_path": str(source_path),
+                "output_path": str(source_path),
+                "password": "1201",
+                "preserve_metadata": False,
+            },
+        )
+
+        assert response.status_code == 200
+        refreshed_fingerprint = compute_image_content_fingerprint(str(source_path))
+
+        with test_client.test_db.get_db() as conn:
+            row = conn.execute(
+                "SELECT ai_caption, aesthetic_score, embedding, content_fingerprint FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()
+            tag_count = conn.execute(
+                "SELECT COUNT(*) FROM tags WHERE image_id = ?",
+                (image_id,),
+            ).fetchone()[0]
+
+        assert tag_count == 0
+        assert row["ai_caption"] is None
+        assert row["aesthetic_score"] is None
+        assert row["embedding"] is None
+        assert row["content_fingerprint"] == refreshed_fingerprint
+        assert refreshed_fingerprint != original_fingerprint

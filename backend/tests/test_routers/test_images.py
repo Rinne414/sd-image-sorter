@@ -28,8 +28,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 class TestGetImages:
     """Tests for GET /api/images endpoint."""
 
-    def test_get_images_returns_list(self, test_client, test_db_with_images):
+    def test_get_images_returns_list(self, test_client, tmp_path):
         """Getting images should return a list."""
+        from PIL import Image
+
+        image_path = tmp_path / "router_list.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            checkpoint="sd_xl_base_1.0.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+
         response = test_client.get("/api/images")
 
         assert response.status_code == 200
@@ -37,6 +48,7 @@ class TestGetImages:
         assert "images" in data
         assert "total" in data
         assert isinstance(data["images"], list)
+        assert "checkpoint_normalized" in data["images"][0]
 
     def test_get_images_with_limit(self, test_client, test_db_with_images):
         """Limit parameter should limit results."""
@@ -104,6 +116,25 @@ class TestGetImages:
         for img in data["images"]:
             if img.get("prompt"):
                 assert "landscape" in img["prompt"].lower()
+
+    def test_filter_by_checkpoint_normalized_search_query(self, test_client, tmp_path):
+        from PIL import Image
+
+        image_path = tmp_path / "router_checkpoint_search.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            checkpoint="RealisticVisionV51.safetensors [abc12345]",
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/images?search=realisticvisionv51")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["images"]) == 1
+        assert data["images"][0]["checkpoint_normalized"] == "RealisticVisionV51"
 
     def test_filter_by_dimensions(self, test_client, test_db_with_images):
         """Filtering by dimensions should work."""
@@ -231,6 +262,56 @@ class TestGetImages:
         assert image["generator"] == "comfy\ufffdui"
 
 
+class TestSelectionIds:
+    """Tests for POST /api/images/selection-ids endpoint."""
+
+    def test_selection_ids_returns_all_filtered_ids_in_sort_order(self, test_client, test_db_with_images):
+        """Filtered selection should return the full matching ID set in current sort order."""
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "sortBy": "name_asc",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": expected_ids,
+            "total": len(expected_ids),
+        }
+
+    def test_selection_ids_uses_exact_filter_contract(self, test_client, test_db_with_images):
+        """Filtered selection should reuse the real DB filter contract, including exact LoRA matching."""
+        comfyui_id = test_db_with_images["image_ids"][0]
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "generators": ["comfyui", "nai"],
+            "loras": ["add_detail"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": [comfyui_id],
+            "total": 1,
+        }
+
+    def test_selection_ids_rejects_invalid_sort(self, test_client, test_db_with_images):
+        """Filtered selection should reject invalid sort values instead of silently guessing."""
+        response = test_client.post("/api/images/selection-ids", json={
+            "sortBy": "not-a-real-sort",
+        })
+
+        assert response.status_code == 400
+        assert "Invalid sort_by value" in response.text
+
+
 class TestGetSingleImage:
     """Tests for GET /api/images/{image_id} endpoint."""
 
@@ -245,6 +326,7 @@ class TestGetSingleImage:
         assert "image" in data
         assert "tags" in data
         assert data["image"]["id"] == image_id
+        assert "checkpoint_normalized" in data["image"]
 
     def test_get_nonexistent_image(self, test_client):
         """Getting nonexistent image should return 404."""
@@ -865,6 +947,8 @@ class TestImageMetadataEditor:
         assert image["prompt"] == "cat"
         assert image["negative_prompt"] == "bad anatomy"
         assert image["checkpoint"] == "fooModel.safetensors"
+        assert image["checkpoint_normalized"] == "fooModel"
+        assert str(image["library_order_time"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
         assert str(image["created_at"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
         assert {tag["tag"] for tag in db.get_image_tags(image_id)} == {"kept_tag"}
 

@@ -173,6 +173,95 @@ Use this structure for future entries:
 - Validation:
   Manual verification plus code inspection of visible-scope selection logic.
 
+### ADR-AI-20260427-19: Gallery selection scope must stay explicit when visible-scope and loaded-scope actions differ
+- Status: active
+- Area: gallery UX semantics / frontend state
+- Evidence tier: Tier 1
+- Decision:
+  Keep gallery selection scope explicit in the sidebar: visible-scope buttons stay labeled as visible actions, and shift-range selection is treated as loaded-result scope rather than silently pretending it means the whole filtered result set.
+- Why:
+  The gallery already mixes two real scopes today: DOM-visible bulk actions and loaded-result range selection. If the UI hides that distinction, future pagination or virtualization work will quietly reintroduce wrong-scope bugs.
+- Do not "improve" this by:
+  Collapsing everything back into generic "selected" wording, renaming visible-scope actions to global-scope wording, or pretending shift-range covers the full filtered result list when it only covers loaded rows.
+- Allowed evolution:
+  Add a true filtered/all-matching selection mode later, but only if the UI and state contract continue to say exactly which scope each action uses.
+- Evidence:
+  Current code now routes gallery selection changes through `SelectionStore`, the sidebar shows explicit scope copy, and range selection still operates on `AppState.images` while the visible-action buttons operate on rendered gallery items.
+- Last verified:
+  2026-04-27 against current workspace selection logic, sidebar copy, and E2E coverage.
+- Related files:
+  `frontend/js/stores/selection-store.js`
+  `frontend/js/gallery.js`
+  `frontend/js/app.js`
+  `frontend/index.html`
+- Supersedes:
+  None
+- Validation:
+  Gallery selection E2E coverage plus manual code inspection of visible vs loaded scope paths.
+
+### ADR-AI-20260427-20: True filtered selection must resolve from the backend result set, not the loaded thumbnail subset
+- Status: active
+- Area: gallery UX semantics / frontend-backend contract
+- Evidence tier: Tier 1
+- Decision:
+  When Gallery selection scope is `filtered`, the frontend must resolve the ID set through `POST /api/images/selection-ids` and treat it as a distinct contract from `visible` DOM selection or `loaded` shift-range selection.
+- Why:
+  The loaded gallery page is only a slice of the filtered result set. If filtered selection is inferred from `AppState.images` or pruned against the currently loaded page on every refresh, batch actions silently target the wrong files.
+- Do not "improve" this by:
+  Pretending filtered selection can be reconstructed from loaded thumbnails, pruning filtered selections against the current page after every reload, or renaming visible-scope actions to broad "select all" wording.
+- Allowed evolution:
+  Recompute filtered selection automatically when filters change, add a future whole-library scope, or optimize the backend ID-resolution path, as long as filtered selection remains an explicit backend-resolved contract.
+- Evidence:
+  Current code now exposes `POST /api/images/selection-ids`, `SelectionStore` carries a filtered-selection `filterKey`, the sidebar exposes a dedicated "Select Filtered" action, and same-filter reloads no longer silently drop off-page IDs.
+- Last verified:
+  2026-04-28 against current workspace code, targeted backend router tests, and local Playwright browser runs; WSL fallback now prefers a local POSIX Python before a Windows `python.exe`, and missing Chromium shared libraries can be bootstrapped from repo-local runtime packages.
+- Related files:
+  `backend/routers/images.py`
+  `backend/services/image_service.py`
+  `backend/tests/test_routers/test_images.py`
+  `frontend/js/stores/selection-store.js`
+  `frontend/js/app.js`
+  `frontend/js/gallery.js`
+  `frontend/index.html`
+  `tests/e2e/playwright.config.ts`
+  `tests/e2e/scripts/run-playwright.mjs`
+  `tests/e2e/specs/smoke.spec.ts`
+- Supersedes:
+  None
+- Validation:
+  Backend router tests for `/api/images/selection-ids` pass; local Playwright browser runs now pass for `should load the main page` and `filtered selection should resolve all matching ids and survive same-filter reloads`.
+
+### ADR-AI-20260428-21: Image time semantics are split, but `created_at` remains a compatibility alias
+- Status: active
+- Area: data model / sorting semantics
+- Evidence tier: Tier 1
+- Decision:
+  `images.library_order_time` is now the stable gallery ordering key, `images.source_file_mtime` tracks the current file modification time, and `created_at` remains only as a deprecated compatibility alias that mirrors `library_order_time`.
+- Why:
+  The old single-field model mixed stable library chronology with mutable file time. That made rescans, copies, and future timeline/sort work too easy to misread. The split preserves existing gallery chronology while finally giving file-time semantics their own field.
+- Do not "improve" this by:
+  Reusing `source_file_mtime` as the default gallery sort key, treating `created_at` like real file creation time again, or dropping the compatibility alias before all callers are migrated.
+- Allowed evolution:
+  Move more code and docs off `created_at`, eventually remove the alias in a later compatibility-breaking pass, and add explicit UI wording for file-time-based views if the product needs them.
+- Evidence:
+  The schema now includes `library_order_time` and `source_file_mtime`; default image ordering and cursor pagination now use `library_order_time`; scan/rescan/copy writes preserve `library_order_time` while updating `source_file_mtime`; router/database/image-manager regressions cover the split.
+- Last verified:
+  2026-04-28 against current workspace code and targeted backend regression coverage.
+- Related files:
+  `backend/migrations/004_image_time_semantics.py`
+  `backend/migrations/_schema_common.py`
+  `backend/database.py`
+  `backend/image_manager.py`
+  `backend/routers/images.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_image_manager.py`
+  `backend/tests/test_routers/test_images.py`
+  `backend/tests/test_routers/test_sorting.py`
+- Supersedes:
+  The older implicit assumption recorded in debt notes that `created_at` still carried mixed live semantics.
+- Validation:
+  `backend/tests/test_database.py`, `backend/tests/test_image_manager.py`, `backend/tests/test_routers/test_images.py`, and `backend/tests/test_routers/test_sorting.py` pass with the new split semantics.
+
 ### ADR-AI-20260427-05: Truthful UI and runtime reporting is a product rule
 - Status: active
 - Area: UX semantics / runtime reporting
@@ -545,3 +634,88 @@ Use this structure for future entries:
   The previous substring `LIKE` implementation in `_apply_lora_filter()`.
 - Validation:
   `backend/tests/test_database.py` covers exact LoRA filters for both stored LoRA arrays and inline `<lora:name:weight>` prompt tags.
+
+### ADR-AI-20260427-20: Stale scan placeholder rows are quarantined on startup instead of silently staying pending
+- Status: active
+- Area: scan lifecycle / data recovery
+- Evidence tier: Tier 1
+- Decision:
+  Any `images.metadata_status = "pending"` row that survives into a fresh app startup is treated as a stale interrupted-scan placeholder. Startup repair must convert it into a recoverable `error` / unreadable row instead of leaving it in a forever-pending readable state.
+- Why:
+  Once the process is gone, there is no in-flight metadata worker left that can finish that placeholder. Leaving it pending creates a blind spot for derived-state invalidation and misreports library health. Quarantining it is more truthful, while keeping its recoverable fingerprint/derived data lets a later rescan restore the row safely if the source file did not actually change.
+- Do not "improve" this by:
+  Auto-marking stale pending rows as `complete`, silently leaving them readable forever, or pretending a later background worker still exists when the scan already died.
+- Allowed evolution:
+  Add richer repair UI, startup diagnostics, or explicit rescan helpers, but keep the rule that stale pending placeholders are no longer considered healthy rows after restart.
+- Evidence:
+  Current `database.init_db()` now repairs stale pending rows on startup, and scan logic already reparses non-`complete` rows on the next truthful rescan.
+- Last verified:
+  2026-04-27 against current startup repair code and regression coverage.
+- Related files:
+  `backend/database.py`
+  `backend/image_manager.py`
+  `backend/tests/test_database.py`
+- Supersedes:
+  The accidental old behavior where interrupted placeholder rows could remain `pending` indefinitely.
+- Validation:
+  `backend/tests/test_database.py::test_init_quarantines_stale_pending_rows_without_erasing_recoverable_derived_state`
+
+### ADR-AI-20260427-21: Release bootstrap and update downloads should use checksum validation when the repo controls the artifact channel
+- Status: active
+- Area: release / updater integrity
+- Evidence tier: Tier 1
+- Decision:
+  External runtime/bootstrap downloads used by release packaging must be pinned by SHA-256, and release-built update assets should expose a checksum manifest so the in-app updater can validate archives when that manifest is present.
+- Why:
+  Size-only validation is not enough for bootstrap Python, `get-pip.py`, or shipped update archives. This repo already controls the release-builder output, so it should use that control to make drift and tampering fail loudly instead of silently succeeding.
+- Do not "improve" this by:
+  Reverting to naked `urlretrieve()` downloads, keeping updater validation at size-only when a checksum manifest exists, or treating checksum assets as optional decoration with no enforcement path.
+- Allowed evolution:
+  Stronger signing, detached signatures, or richer manifest metadata are welcome later, but the baseline checksum guard should stay in place.
+- Evidence:
+  `scripts/build_release_packages.py` now pins Python embed / `get-pip.py` downloads by SHA-256 and emits a release-manifest asset; `backend/services/update_service.py` can now consume that manifest to validate downloaded archives.
+- Last verified:
+  2026-04-27 against current release-builder code, updater code, and regression coverage.
+- Related files:
+  `scripts/build_release_packages.py`
+  `backend/services/update_service.py`
+  `backend/tests/test_release_build.py`
+  `backend/tests/test_update_service.py`
+- Supersedes:
+  The older size-only / trust-the-URL release bootstrap behavior.
+- Validation:
+  `backend/tests/test_release_build.py` checksum tests and `backend/tests/test_update_service.py` manifest/checksum download tests.
+
+### ADR-AI-20260428-22: Cross-generator checkpoint filters must use `checkpoint_normalized`, while raw `checkpoint` stays display-only
+- Status: active
+- Area: metadata asset semantics / gallery filters / prompt stats
+- Evidence tier: Tier 1
+- Decision:
+  Image rows now persist both raw `checkpoint` and derived `checkpoint_normalized`. Raw `checkpoint` remains the per-image display value, while gallery filters, analytics facets, free-text checkpoint search, and prompt-stat checkpoint grouping must compare on `checkpoint_normalized`.
+- Why:
+  Different generators report the same model in incompatible forms: path prefixes, file extensions, and WebUI-style hash suffixes such as `model.safetensors [abc12345]`. Using raw `checkpoint` as both display text and identity key fragments one logical model into multiple silent filter buckets. Splitting display from identity fixes the contract without hiding the original metadata string.
+- Do not "improve" this by:
+  Going back to raw `checkpoint` equality for filters/facets, dropping the raw field from image payloads, or broadening checkpoint matching into fuzzy substring behavior that makes one model accidentally match another.
+- Allowed evolution:
+  Add richer checkpoint display labels, alias tables, or generator-specific normalization rules later, but keep the rule that cross-generator filter/search/facet semantics use the normalized key.
+- Evidence:
+  The schema now includes `images.checkpoint_normalized`; DB writes backfill and maintain it; gallery/image payloads expose both raw and normalized checkpoint fields; analytics and prompt stats group by `checkpoint_normalized`; checkpoint search and filter queries now compare on the normalized field.
+- Last verified:
+  2026-04-28 against current workspace code plus targeted backend regression coverage.
+- Related files:
+  `backend/utils/model_names.py`
+  `backend/migrations/005_checkpoint_normalization.py`
+  `backend/database.py`
+  `backend/services/sorting_service.py`
+  `backend/routers/prompts.py`
+  `backend/routers/images.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_routers/test_images.py`
+  `backend/tests/test_routers/test_sorting.py`
+  `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`
+  `frontend/js/app.js`
+  `frontend/js/gallery.js`
+- Supersedes:
+  The old implicit behavior where raw mixed generator checkpoint strings also doubled as the filter/facet identity key.
+- Validation:
+  `backend/tests/test_database.py`, `backend/tests/test_routers/test_images.py`, `backend/tests/test_routers/test_sorting.py`, and `backend/tests/test_routers/test_prompts_censor_similarity_artists.py` all pass with the new contract.

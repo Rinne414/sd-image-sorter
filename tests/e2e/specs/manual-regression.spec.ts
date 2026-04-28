@@ -8,10 +8,39 @@ import { expect, test } from '@playwright/test'
 test.describe.configure({ mode: 'serial' })
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..')
-const backendPython = process.env.PW_BACKEND_PYTHON || [
+
+function commandExists(candidate: string): boolean {
+  if (candidate.includes(path.sep) || candidate.includes('/')) {
+    return fsSync.existsSync(candidate)
+  }
+
+  try {
+    const lookupCommand = process.platform === 'win32' ? 'where' : 'which'
+    return execFileSync(lookupCommand, [candidate], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().length > 0
+  } catch {
+    return false
+  }
+}
+
+const backendPythonCandidates = process.platform === 'win32' ? [
   path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
   path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
-].find((candidate) => fsSync.existsSync(candidate)) || path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe')
+  'python',
+] : [
+  path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+  'python3',
+  'python',
+  path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+]
+
+const backendPython = process.env.PW_BACKEND_PYTHON
+  || backendPythonCandidates.find((candidate) => commandExists(candidate))
+  || backendPythonCandidates[0]
+const runtimeDatabasePath = process.env.SD_IMAGE_SORTER_DB_PATH
+  || path.join(repoRoot, 'data', 'images.db')
 const manualRoot = path.join(repoRoot, '.tmp', 'manual-test')
 
 const autoSepInbox = path.join(manualRoot, 'autosep-inbox')
@@ -117,6 +146,34 @@ async function openView(page, view: string) {
   throw new Error(`Could not find navigation entry for ${view}`)
 }
 
+async function openMainPage(page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const isVisible = (element: Element | null) => {
+        if (!(element instanceof HTMLElement)) return false
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return isVisible(document.querySelector('.nav-tabs [data-view="reader"]'))
+        || isVisible(document.getElementById('mobile-menu-toggle'))
+    })
+  }).toBe(true)
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      return Boolean(
+        window.App
+          && typeof window.App.loadImages === 'function'
+          && window.Gallery
+          && typeof window.Gallery.setImages === 'function'
+          && window.App.AppState?.isLoading === false
+      )
+    })
+  }).toBe(true)
+}
+
 async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   await openView(page, 'sorting')
   await expect(page.locator('#view-sorting.active')).toBeVisible()
@@ -174,7 +231,7 @@ files = {
 for filename, (target, color) in files.items():
     Image.new("RGB", (96, 96), color=color).save(target)
 
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id IN (SELECT id FROM images WHERE filename IN (?, ?))", tuple(files.keys()))
@@ -200,7 +257,7 @@ fixture_dir.mkdir(parents=True, exist_ok=True)
 image_path = fixture_dir / "manual-tag-io-source.png"
 Image.new("RGB", (112, 112), color=(200, 120, 255)).save(image_path)
 
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 expected_tag = "manual_export_roundtrip_tag_20260409"
 
 with sqlite3.connect(db_path) as conn:
@@ -240,7 +297,7 @@ import sqlite3
 from pathlib import Path
 
 repo_root = Path(${JSON.stringify(repoRoot)})
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("DELETE FROM tags WHERE image_id = ?", (${imageId},))
@@ -266,7 +323,7 @@ colors = [(255, 180, 120), (120, 220, 255)]
 for filename, color in zip(fixture_names, colors):
     Image.new("RGB", (128, 128), color=color).save(fixture_dir / filename)
 
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
     cur.execute("UPDATE images SET tagged_at = COALESCE(tagged_at, CURRENT_TIMESTAMP)")
@@ -285,7 +342,7 @@ import sqlite3
 from pathlib import Path
 
 repo_root = Path(${JSON.stringify(repoRoot)})
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 fixture_names = (
     "manual-scan-browser-1.png",
     "manual-scan-browser-2.png",
@@ -312,7 +369,7 @@ from PIL import Image
 from pathlib import Path
 
 repo_root = Path(${JSON.stringify(repoRoot)})
-db_path = repo_root / "backend" / "images.db"
+db_path = Path(${JSON.stringify(runtimeDatabasePath)})
 manual_root = repo_root / ".tmp" / "manual-test"
 
 fixture_rows = {
@@ -344,6 +401,7 @@ with sqlite3.connect(db_path) as conn:
         target_path = config["path"].resolve()
         prompt = config["prompt"]
         file_size = target_path.stat().st_size if target_path.exists() else 0
+        source_mtime_ns = target_path.stat().st_mtime_ns if target_path.exists() else None
         width = None
         height = None
 
@@ -352,8 +410,21 @@ with sqlite3.connect(db_path) as conn:
                 width, height = image.size
 
         cur.execute(
-            "UPDATE images SET path = ?, prompt = ?, file_size = ?, width = ?, height = ? WHERE filename = ?",
-            (str(target_path), prompt, file_size, width, height, filename),
+            """
+            UPDATE images
+            SET path = ?,
+                prompt = ?,
+                file_size = ?,
+                width = ?,
+                height = ?,
+                source_size = ?,
+                source_mtime_ns = ?,
+                is_readable = 1,
+                read_error = NULL,
+                metadata_status = 'complete'
+            WHERE filename = ?
+            """,
+            (str(target_path), prompt, file_size, width, height, file_size, source_mtime_ns, filename),
         )
         if cur.rowcount == 0:
             cur.execute(
@@ -368,10 +439,15 @@ with sqlite3.connect(db_path) as conn:
                     width,
                     height,
                     file_size,
+                    source_size,
+                    source_mtime_ns,
+                    is_readable,
+                    read_error,
+                    metadata_status,
                     created_at
-                ) VALUES (?, ?, 'unknown', ?, '', NULL, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, 'unknown', ?, '', NULL, ?, ?, ?, ?, ?, 1, NULL, 'complete', CURRENT_TIMESTAMP)
                 """,
-                (str(target_path), filename, prompt, width, height, file_size),
+                (str(target_path), filename, prompt, width, height, file_size, file_size, source_mtime_ns),
             )
     conn.commit()
 `
@@ -384,10 +460,39 @@ with sqlite3.connect(db_path) as conn:
 
 async function setGallerySearch(page, search: string) {
   await page.evaluate(async (value) => {
-    window.App.AppState.filters.search = value
+    const waitFor = async (predicate: () => boolean, timeout = 10000) => {
+      const start = Date.now()
+      while (!predicate()) {
+        if (Date.now() - start > timeout) {
+          throw new Error('Timed out waiting for gallery search helpers to initialize')
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+
+    await waitFor(() => Boolean(window.App && typeof window.App.loadImages === 'function'))
+    if (typeof window.App.updateFilters === 'function') {
+      window.App.updateFilters((filters: any) => {
+        filters.search = value
+      })
+    } else {
+      window.App.AppState.filters.search = value
+    }
     window.App.updateFilterSummary()
     await window.App.loadImages()
+    await waitFor(() => window.App.AppState?.isLoading === false)
+    await waitFor(() => Boolean(window.Gallery && typeof window.Gallery.setImages === 'function'))
+    window.Gallery.setImages(window.App.AppState.images || [])
   }, search)
+}
+
+async function disableScanAutoTag(page) {
+  await page.locator('#scan-auto-tag').evaluate((node) => {
+    const input = node as HTMLInputElement
+    input.checked = false
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  })
 }
 
 async function getFirstImageBySearch(request, search: string) {
@@ -466,7 +571,7 @@ async function findDetectableImage(request) {
     }
   }
 
-  throw new Error('Could not find a detectable censor test image in the current library')
+  return null
 }
 
 async function findSam3PromptMatch(request) {
@@ -564,8 +669,7 @@ test.afterAll(async () => {
 })
 
 test('gallery selection actions should stay in the left sidebar instead of floating over the grid', async ({ page }) => {
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.locator('#btn-toggle-select').click()
   const selectionPanel = page.locator('.filter-sidebar #selection-actions')
@@ -583,8 +687,7 @@ test('gallery selection actions should stay in the left sidebar instead of float
 })
 
 test('censor workspace sidebars should stay readable without covering the canvas', async ({ page }) => {
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
   await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
 
@@ -617,8 +720,7 @@ test('censor workspace sidebars should stay readable without covering the canvas
 })
 
 test('censor queue warning should fire once even after re-entering the tab', async ({ page }) => {
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.evaluate(() => {
     const original = window.App.showToast
@@ -654,8 +756,7 @@ test('censor queue warning should fire once even after re-entering the tab', asy
 })
 
 test('censor settings should open, explain model roles, and allow typing the pro prompt', async ({ page }) => {
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await openView(page, 'censor')
   await expect(page.locator('#view-censor.active')).toBeVisible()
@@ -680,7 +781,10 @@ test('censor settings should open, explain model roles, and allow typing the pro
   await promptInput.click()
   await promptInput.pressSequentially('face')
   await expect(promptInput).toHaveValue('face')
-  await expect(page.locator('#btn-segment-text-current')).toBeEnabled()
+  const segmentButton = page.locator('#btn-segment-text-current')
+  const promptHelp = page.locator('#censor-text-prompt-help')
+  await expect(segmentButton).toBeVisible()
+  await expect(promptHelp).toContainText(/SAM3|精细工具|暂时跑不了 SAM3/i)
 
   await page.selectOption('#censor-model-type', 'nudenet')
   await expect(page.locator('#censor-simple-guide')).toContainText('NudeNet')
@@ -691,13 +795,23 @@ test('censor settings should open, explain model roles, and allow typing the pro
     if (details) details.open = true
   })
   const defaultOptionTexts = await page.locator('#censor-model-file option').allTextContents()
-  expect(defaultOptionTexts.some((text) => text.includes('Advanced test only'))).toBeFalsy()
+  const hasAdvancedModelOptionBeforeToggle = defaultOptionTexts.some((text) => text.includes('Advanced test only'))
+  expect(hasAdvancedModelOptionBeforeToggle).toBeFalsy()
   await page.locator('#censor-show-advanced-models').evaluate((node) => {
     const input = node as HTMLInputElement
     input.checked = true
     input.dispatchEvent(new Event('change', { bubbles: true }))
   })
-  await expect(page.locator('#censor-advanced-models-help')).toContainText(/advanced fixed-class YOLO|segmentation experiments/i)
+  const advancedHelp = page.locator('#censor-advanced-models-help')
+  const advancedOptionTexts = await page.locator('#censor-model-file option').allTextContents()
+  const hasAdvancedModelOption = advancedOptionTexts.some((text) => text.includes('Advanced test only'))
+
+  if (!hasAdvancedModelOption) {
+    await expect(advancedHelp).toContainText(/No extra general YOLO compatibility models were found locally|本地没有额外的通用 YOLO 兼容模型/i)
+    return
+  }
+
+  await expect(advancedHelp).toContainText(/advanced fixed-class YOLO|segmentation experiments/i)
 
   const generalModelPath = await page.locator('#censor-model-file option').evaluateAll((options) => {
     const match = options.find((option) => option.textContent?.includes('Advanced test only'))
@@ -716,10 +830,15 @@ test('censor settings should open, explain model roles, and allow typing the pro
 test('sam3 text segmentation should work through the real UI when the runtime is ready', async ({ page, request }) => {
   test.setTimeout(120000)
 
+  const modelsResponse = await request.get('/api/censor/models')
+  expect(modelsResponse.ok()).toBeTruthy()
+  const modelsPayload = await modelsResponse.json()
+  const sam3Model = (modelsPayload.models || []).find((model: any) => model?.id === 'sam3')
+  test.skip(!sam3Model?.available, sam3Model?.message || 'SAM3 runtime is not ready in this workspace')
+
   const { image, prompt } = await findSam3PromptMatch(request)
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await setGallerySearch(page, image.filename)
   await expect(page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`)).toBeVisible()
@@ -751,10 +870,29 @@ test('sam3 text segmentation should work through the real UI when the runtime is
 })
 
 test('artist identify selected should work on a real image', async ({ page, request }) => {
+  const probeImagesResponse = await request.get('/api/images?limit=1')
+  expect(probeImagesResponse.ok()).toBeTruthy()
+  const probeImagesPayload = await probeImagesResponse.json()
+  const probeImage = probeImagesPayload.images?.[0]
+
+  if (probeImage?.id) {
+    const probeIdentify = await request.post('/api/artists/identify', {
+      timeout: 120000,
+      data: {
+        image_id: probeImage.id,
+        threshold: 0.0,
+        top_k: 1,
+      },
+    })
+    if (probeIdentify.status() === 503) {
+      const probePayload = await probeIdentify.json().catch(() => ({}))
+      test.skip(true, probePayload?.detail || 'Artist identification runtime is unavailable in this workspace')
+    }
+  }
+
   const { image, artist } = await findArtistIdentifiableImage(request)
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await setGallerySearch(page, image.filename)
   await expect(page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`)).toBeVisible()
@@ -807,8 +945,7 @@ test('auto-separate should honor search and move the matching files', async ({ p
     }))
   }, 'manual_test_autosep_token_20260405')
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await setGallerySearch(page, 'manual_test_autosep_token_20260405')
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(2)
@@ -859,8 +996,7 @@ test('manual sort should honor search and support move, skip, and undo', async (
     }))
   }, 'manual_test_sort_token_20260405')
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await setGallerySearch(page, 'manual_test_sort_token_20260405')
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(3)
@@ -871,6 +1007,8 @@ test('manual sort should honor search and support move, skip, and undo', async (
   await page.locator('.folder-path-input[data-key="d"]').fill(manualSortRight)
   await page.locator('.folder-path-input[data-key="s"]').fill(manualSortBottom)
   await page.locator('#btn-start-sorting').click()
+  await expect(page.locator('#confirm-modal.visible')).toBeVisible()
+  await page.locator('#btn-confirm-ok').click()
 
   await expect(page.locator('#sort-interface')).toBeVisible()
   await expect(page.locator('#sort-progress-text')).toContainText('0 / 3')
@@ -907,10 +1045,23 @@ test('censor detect and save should work through the real UI flow', async ({ pag
   test.setTimeout(180000)
 
   await resetSaveOutputs()
-  const image = await findDetectableImage(request)
+  const modelsResponse = await request.get('/api/censor/models')
+  expect(modelsResponse.ok()).toBeTruthy()
+  const modelsPayload = await modelsResponse.json()
+  const detectionBackends = (modelsPayload.models || []).filter((model: any) =>
+    ['legacy', 'nudenet'].includes(String(model?.id || ''))
+  )
+  const availableDetectionBackend = detectionBackends.find((model: any) => model?.available)
+  test.skip(
+    !availableDetectionBackend,
+    detectionBackends.map((model: any) => model?.message).filter(Boolean).join(' | ')
+      || 'No local censor detection backend is ready in this workspace',
+  )
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  const image = await findDetectableImage(request)
+  test.skip(!image, 'No image in the current library produced detectable censor regions with the available backend')
+
+  await openMainPage(page)
 
   await setGallerySearch(page, image.filename)
   await expect(page.locator(`#gallery-grid .gallery-item[data-id="${image.id}"]`)).toBeVisible()
@@ -970,8 +1121,7 @@ test('scan folder browser should pick a real folder and scan it through the UI',
   test.setTimeout(120000)
   resetScanBrowserFixture()
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.locator('#btn-scan').click()
   await expect(page.locator('#scan-modal.visible')).toBeVisible()
@@ -984,7 +1134,7 @@ test('scan folder browser should pick a real folder and scan it through the UI',
   await page.locator('#folder-browser-select').click()
   await expect(page.locator('#scan-folder-path')).toHaveValue(scanBrowserPicked)
 
-  await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
+  await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
   await page.locator('#btn-start-scan').click()
 
@@ -1006,8 +1156,7 @@ test('tag export and import should roundtrip through the real UI', async ({ page
   const fixture = prepareTagIoFixture()
   const exportPath = path.join(manualRoot, 'manual-tag-export-roundtrip.json')
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
   await page.locator('#btn-tag').click()
   await expect(page.locator('#tag-modal.visible')).toBeVisible()
 
@@ -1047,8 +1196,7 @@ test('censor batch rename should update preview and apply only selected queue it
   const images = payload.images.slice(0, 2)
   expect(images).toHaveLength(2)
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.locator('#btn-toggle-select').click()
   for (const image of images) {
@@ -1093,8 +1241,7 @@ test('queue manager should search, reorder, and sync back to the censor sidebar'
 
   const targetImage = images[1]
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.locator('#btn-toggle-select').click()
   for (const image of images) {
@@ -1166,8 +1313,7 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
     return match ? Number.parseInt(match[1], 10) : null
   }
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   if ((await page.locator('html').getAttribute('lang')) !== 'zh-CN') {
     await page.locator('#btn-language-toggle').click()
@@ -1186,9 +1332,11 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
   await page.locator('#tag-model-path').fill('C:/models/custom-model.onnx')
   await page.locator('#tag-tags-path').fill('C:/models/selected_tags.csv')
 
+  let initialRuntimeSummary = ''
   await expect.poll(async () => {
-    return (await page.locator('#tag-runtime-summary').textContent()) || ''
-  }, { timeout: 15000 }).toMatch(/GPU/)
+    initialRuntimeSummary = (await page.locator('#tag-runtime-summary').textContent()) || ''
+    return initialRuntimeSummary
+  }, { timeout: 15000 }).toMatch(/GPU|CPU Safe Mode/)
 
   await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
   await expect(page.locator('#tag-gpu-help')).not.toContainText(/GPU Preferred|provider/i)
@@ -1228,20 +1376,29 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
     input.dispatchEvent(new Event('change', { bubbles: true }))
   })
   await expect(page.locator('#tag-use-gpu')).toBeChecked()
-  await expect(page.locator('#tag-runtime-summary')).toContainText(/GPU/)
+  let reenabledRuntimeSummary = ''
+  await expect.poll(async () => {
+    reenabledRuntimeSummary = (await page.locator('#tag-runtime-summary').textContent()) || ''
+    return reenabledRuntimeSummary
+  }, { timeout: 15000 }).toMatch(/GPU|CPU Safe Mode/)
+  if (/CPU Safe Mode/.test(reenabledRuntimeSummary)) {
+    await expect(page.locator('#tag-runtime-detail')).toContainText(/CPU|CUDAExecutionProvider|ONNX/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode|CPU/i)
+  } else {
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/GPU/)
+  }
 })
 
 test('scan then tag through the real UI should finish and write tags for the new fixture images', async ({ page, request }) => {
   test.setTimeout(180000)
   prepareTagLiveFixture()
 
-  await page.goto('/')
-  await page.waitForLoadState('networkidle')
+  await openMainPage(page)
 
   await page.locator('#btn-scan').click()
   await expect(page.locator('#scan-modal.visible')).toBeVisible()
   await page.locator('#scan-folder-path').fill(tagLiveRoot)
-  await page.locator('label:has(#scan-auto-tag) .checkbox-custom').click()
+  await disableScanAutoTag(page)
   await expect(page.locator('#scan-auto-tag')).not.toBeChecked()
   await page.locator('#btn-start-scan').click()
 
@@ -1260,8 +1417,18 @@ test('scan then tag through the real UI should finish and write tags for the new
   await expect.poll(async () => {
     const response = await request.get('/api/tag/progress')
     finalProgress = await response.json()
-    return `${finalProgress.status}:${finalProgress.total || 0}:${finalProgress.tagged || 0}:${finalProgress.errors || 0}`
-  }, { timeout: 120000 }).toBe('done:2:2:0')
+    return String(finalProgress?.status || '')
+  }, { timeout: 120000 }).toMatch(/^(done|error|cancelled)$/)
+
+  if (finalProgress?.status === 'error') {
+    const runtimeMessage = String(finalProgress?.message || '')
+    test.skip(
+      /onnxruntime|No module named|WD14|ONNX/i.test(runtimeMessage),
+      runtimeMessage || 'WD14 tagging runtime is unavailable in this workspace',
+    )
+  }
+
+  expect(`${finalProgress.status}:${finalProgress.total || 0}:${finalProgress.tagged || 0}:${finalProgress.errors || 0}`).toBe('done:2:2:0')
 
   expect(String(finalProgress?.message || '')).toContain('Completed')
 

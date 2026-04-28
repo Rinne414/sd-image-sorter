@@ -153,10 +153,9 @@ function maybeNotifyLowMemoryMode(item, pixelCount) {
     item.__lowMemoryModeNotified = true;
     const megaPixels = (pixelCount / 1_000_000).toFixed(1);
     window.App?.showToast?.(
-        tText(
-            `Large image (${megaPixels} MP): proxy edit mode is on. Editing stays responsive, undo history is reduced, and Show Changes is disabled.`,
-            `大图（${megaPixels} MP）：已启用代理编辑模式。编辑会保持流畅，撤销历史会缩短，“Diff”对比已禁用。`
-        ),
+        censorT('censor.lowMemoryModeEnabled', {
+            megaPixels,
+        }, 'Large image ({megaPixels} MP): proxy edit mode is on. Editing stays responsive, undo history is reduced, and Show Changes is disabled.'),
         'info'
     );
 }
@@ -290,26 +289,18 @@ function cloneEditOperations(operations = []) {
     });
 }
 
-function isZhCn() {
-    return window.I18n?.getLang?.() === 'zh-CN';
-}
-
-function tText(enText, zhText) {
-    return isZhCn() ? zhText : enText;
-}
-
-function tKey(key, enText, zhText = enText) {
-    const translated = window.I18n?.t?.(key);
-    return translated && translated !== key ? translated : tText(enText, zhText);
-}
-
-function tFormat(key, enText, zhText = enText, params = {}) {
-    const translated = window.I18n?.t?.(key, params);
-    if (translated && translated !== key) return translated;
+function formatCensorFallback(text, params = null) {
+    if (!params || typeof params !== 'object') return text;
     return Object.entries(params).reduce(
         (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
-        tText(enText, zhText)
+        text
     );
+}
+
+function censorT(key, params = null, fallback = '') {
+    const translated = window.I18n?.t?.(key, params || undefined);
+    if (translated && translated !== key) return translated;
+    return formatCensorFallback(fallback || key, params);
 }
 
 function isEditableTarget(target) {
@@ -515,8 +506,8 @@ function bindEvents() {
     const clearQueueHandler = () => {
         if (CensorState.queue.length === 0) return;
         window.App.showConfirm(
-            tKey('modal.confirm', 'Are you sure?', '确定吗？'),
-            tKey('modal.confirmAction', 'This action cannot be undone.', '此操作无法撤销。'),
+            censorT('modal.confirm', null, 'Are you sure?'),
+            censorT('modal.confirmAction', null, 'This action cannot be undone.'),
             () => {
                 CensorState.queue = [];
                 CensorState.activeId = null;
@@ -538,7 +529,7 @@ function bindEvents() {
                 CensorState.showingChanges = false;
                 renderQueue();
                 clearCanvas();
-                window.App.showToast(tKey('censor.queueCleared', 'Queue cleared', '队列已清空'), 'success');
+                window.App.showToast(censorT('censor.queueCleared', null, 'Queue cleared'), 'success');
             }
         );
     };
@@ -580,7 +571,7 @@ function bindEvents() {
         if (CensorState.activeId) {
             runDetectionForImage(CensorState.queue.find(i => i.id === CensorState.activeId));
         } else {
-            window.App.showToast(tText('No image selected', '未选择图片'), 'error');
+            window.App.showToast(censorT('censor.noImageSelected', null, 'No image selected'), 'error');
         }
     });
 
@@ -589,7 +580,7 @@ function bindEvents() {
             $('#detect-modal')?.classList.remove('visible');
             runDetectionForImage(CensorState.queue.find(i => i.id === CensorState.activeId));
         } else {
-            window.App.showToast(tText('No image selected', '未选择图片'), 'error');
+            window.App.showToast(censorT('censor.noImageSelected', null, 'No image selected'), 'error');
         }
     });
 
@@ -651,7 +642,7 @@ function bindEvents() {
         CensorState.selectedItems = new Set(CensorState.queue.map(item => item.id));
         CensorState.lastSelectedIndex = CensorState.queue.length - 1;
         updateQueueSelection();
-        window.App.showToast(tText('Selected the whole queue', '已选中整个队列'), 'info');
+        window.App.showToast(censorT('censor.queueSelectedAll', null, 'Selected the whole queue'), 'info');
     });
 
     $('#btn-queue-deselect-all')?.addEventListener('click', () => {
@@ -736,7 +727,7 @@ function bindEvents() {
     $('#btn-queue-manager-remove-selected')?.addEventListener('click', () => {
         const selectedIds = getOrderedSelectedQueueIds();
         if (!selectedIds.length) {
-            window.App?.showToast?.(tText('Select items first', '请先选中项目'), 'warning');
+            window.App?.showToast?.(censorT('censor.selectItemsFirst', null, 'Select items first'), 'warning');
             return;
         }
         const selectedSet = new Set(selectedIds);
@@ -744,7 +735,10 @@ function bindEvents() {
         CensorState.selectedItems.clear();
         renderQueue();
         renderQueueManager();
-        window.App?.showToast?.(tText(`Removed ${selectedIds.length} items`, `已移除 ${selectedIds.length} 项`), 'success');
+        window.App?.showToast?.(
+            censorT('censor.removedItems', { count: selectedIds.length }, 'Removed {count} items'),
+            'success'
+        );
     });
 
     $('#btn-segment-text-current')?.addEventListener('click', async () => {
@@ -754,7 +748,7 @@ function bindEvents() {
 
     $('#btn-clear-edits')?.addEventListener('click', () => {
         if (!CensorState.activeId || !CensorState.originalImage) {
-            window.App.showToast(tText('No image to reset', '没有可重置的图片'), 'error');
+            window.App.showToast(censorT('censor.noImageToReset', null, 'No image to reset'), 'error');
             return;
         }
         window.App.showConfirm(
@@ -927,10 +921,9 @@ function bindEvents() {
 
         if (failedIds.length) {
             window.App?.showToast?.(
-                tText(
-                    `Failed to queue ${failedIds.length} image(s) for Censor.`,
-                    `有 ${failedIds.length} 张图片加入 Censor 队列失败。`
-                ),
+                censorT('censor.queueAddFailed', {
+                    count: failedIds.length,
+                }, 'Failed to queue {count} image(s) for Censor.'),
                 'error'
             );
         }
@@ -994,8 +987,8 @@ function renderQueue() {
         list.innerHTML = `
             <div class="queue-empty-state-v2">
                 <span class="empty-icon">📷</span>
-                <p>${escapeHtml(tText('No images selected', '未选择图片'))}</p>
-                <small>${escapeHtml(tText('Select from Gallery', '从图库中选择'))}</small>
+                <p>${escapeHtml(censorT('censor.noImages', null, 'No images selected'))}</p>
+                <small>${escapeHtml(censorT('censor.selectFromGallery', null, 'Select from Gallery'))}</small>
             </div>
         `;
         updateQueueSelection();
@@ -1169,14 +1162,15 @@ function closeQueueManager() {
 }
 
 function formatQueueManagerSummary(visibleCount) {
-    return tKey(
+    return censorT(
         'censor.queueManagerSummary',
-        '{selected} selected • {visible}/{total} visible • drag rows or use the move bar below',
-        '已选 {selected} 项 • 当前显示 {visible}/{total} • 可拖拽行或使用下方移动栏'
-    )
-        .replace('{selected}', CensorState.selectedItems.size)
-        .replace('{visible}', visibleCount)
-        .replace('{total}', CensorState.queue.length);
+        {
+            selected: CensorState.selectedItems.size,
+            visible: visibleCount,
+            total: CensorState.queue.length,
+        },
+        '{selected} selected • {visible}/{total} visible • drag rows or use the move bar below'
+    );
 }
 
 function getQueueManagerThumbnailSrc(item) {
@@ -1192,10 +1186,10 @@ function getQueueManagerThumbnailSrc(item) {
 function getQueueManagerStatusBadges(item) {
     const badges = [];
     if (item.id === getFocusedCensorImageId()) {
-        badges.push(`<span class="queue-manager-badge is-active">${escapeHtml(tKey('common.current', 'Current', '当前'))}</span>`);
+        badges.push(`<span class="queue-manager-badge is-active">${escapeHtml(censorT('common.current', null, 'Current'))}</span>`);
     }
     if (item.isProcessed) {
-        badges.push(`<span class="queue-manager-badge is-processed">${escapeHtml(tKey('common.processed', 'Processed', '已处理'))}</span>`);
+        badges.push(`<span class="queue-manager-badge is-processed">${escapeHtml(censorT('common.processed', null, 'Processed'))}</span>`);
     }
     return badges.join('');
 }
@@ -1207,8 +1201,8 @@ function renderQueueManagerSelectionStrip(items = []) {
 
     if (countEl) {
         countEl.textContent = selectedItems.length > 0
-            ? tText(`${selectedItems.length} selected`, `已选 ${selectedItems.length} 项`)
-            : tText('No selection', '未选择');
+            ? censorT('censor.queueSelectionSummary', { count: selectedItems.length }, '{count} selected')
+            : censorT('censor.queueNoSelection', null, 'No selection');
         countEl.classList.toggle('is-empty', selectedItems.length === 0);
     }
 
@@ -1217,7 +1211,7 @@ function renderQueueManagerSelectionStrip(items = []) {
     if (!selectedItems.length) {
         strip.innerHTML = `
             <div class="queue-manager-selection-empty">
-                ${escapeHtml(tText('Pick one or more thumbnails to enable batch moves.', '选择一个或多个缩略图后即可批量移动。'))}
+                ${escapeHtml(censorT('censor.queueSelectionHelp', null, 'Pick one or more thumbnails to enable batch moves.'))}
             </div>
         `;
         return;
@@ -1255,8 +1249,8 @@ function renderQueueManager() {
     if (countEl) {
         const count = CensorState.selectedItems.size;
         countEl.textContent = count > 0
-            ? tText(`${count} selected`, `已选 ${count} 项`)
-            : tText('0 selected', '0 已选');
+            ? censorT('censor.queueSelectionSummary', { count }, '{count} selected')
+            : censorT('censor.queueSelectionZero', null, '0 selected');
     }
 
     if (positionInput && CensorState.selectedItems.size > 0) {
@@ -1267,7 +1261,7 @@ function renderQueueManager() {
     }
 
     if (!items.length) {
-        list.innerHTML = `<div class="queue-manager-empty">${escapeHtml(tKey('censor.queueManagerEmpty', 'No queue items match the current filter.', '当前筛选下没有匹配的队列项。'))}</div>`;
+        list.innerHTML = `<div class="queue-manager-empty">${escapeHtml(censorT('censor.queueManagerEmpty', null, 'No queue items match the current filter.'))}</div>`;
         return;
     }
 
@@ -1360,7 +1354,11 @@ function renderQueueManager() {
             await loadCanvasImage(clickedId);
             closeQueueManager();
             window.App.showToast(
-                tKey('censor.queueManagerLoaded', 'Loaded {filename} into the editor.', '已把 {filename} 载入编辑器。').replace('{filename}', queueItem?.outputFilename || queueItem?.originalFilename || String(clickedId)),
+                censorT(
+                    'censor.queueManagerLoaded',
+                    { filename: queueItem?.outputFilename || queueItem?.originalFilename || String(clickedId) },
+                    'Loaded {filename} into the editor.'
+                ),
                 'success'
             );
         });
@@ -1380,7 +1378,7 @@ function moveQueueSelectionToPosition(targetPosition) {
     const selectedIds = getOrderedSelectedQueueIds();
     if (!selectedIds.length) {
         window.App.showToast(
-            tText('Select at least one queue item first', '请先选中至少一个队列项目'),
+            censorT('censor.queueMoveSelectionRequired', null, 'Select at least one queue item first'),
             'warning'
         );
         return;
@@ -1480,7 +1478,7 @@ function updateQueueSelection() {
     if (countEl) {
         const count = CensorState.selectedItems.size;
         countEl.textContent = count > 0
-            ? tText(`${count} selected`, `已选 ${count} 项`)
+            ? censorT('censor.queueSelectionSummary', { count }, '{count} selected')
             : '';
         countEl.style.display = count > 0 ? 'inline-flex' : 'none';
     }
@@ -1529,7 +1527,7 @@ function moveQueueSelection(direction) {
     const selectedIds = getOrderedSelectedQueueIds();
     if (!selectedIds.length) {
         window.App.showToast(
-            tText('Select at least one queue item first', '请先选中至少一个队列项目'),
+            censorT('censor.queueMoveSelectionRequired', null, 'Select at least one queue item first'),
             'warning'
         );
         return;
@@ -2248,7 +2246,7 @@ async function loadCanvasImage(id) {
     // UI Updates
     const noImageEl = document.getElementById('censor-no-image');
     const filenameEl = document.getElementById('censor-filename');
-    showLoading(true, tText('Loading image...', '正在加载图片...'));
+    showLoading(true, censorT('censor.loadingImage', null, 'Loading image...'));
 
     try {
         let fallbackImage = null;
@@ -2371,7 +2369,7 @@ async function loadCanvasImage(id) {
         }
         renderQueue();
         window.App.showToast(
-            formatUserError(error, tKey('censor.loadImageFailed', 'Failed to load image', '加载图片失败')),
+            formatUserError(error, censorT('censor.loadImageFailed', null, 'Failed to load image')),
             'error'
         );
     }
@@ -2499,46 +2497,50 @@ async function loadCensorModelStatus() {
                     .map(model => model.name)
                     .join(' / ');
                 const recommended = result.recommended_backend
-                    ? `Recommended mode: ${result.recommended_backend}.`
-                    : 'No detection backend is fully ready yet.';
+                    ? censorT('censor.recommendedMode', { backend: result.recommended_backend }, 'Recommended mode: {backend}.')
+                    : censorT('censor.noDetectionBackendReady', null, 'No detection backend is fully ready yet.');
                 const defaultLegacy = legacy?.files?.find(file => file.path === legacy?.default_model_path);
                 const extraNotes = [];
                 if (defaultLegacy) {
-                    extraNotes.push(`Legacy default: ${defaultLegacy.name} (${defaultLegacy.profile_label})`);
+                    extraNotes.push(censorT(
+                        'censor.legacyDefaultNamed',
+                        {
+                            name: defaultLegacy.name,
+                            profile: defaultLegacy.profile_label,
+                        },
+                        'Legacy default: {name} ({profile})'
+                    ));
                 } else if (legacy?.default_model_path) {
-                    extraNotes.push(`Legacy default: ${legacy.default_model_path}`);
+                    extraNotes.push(censorT('censor.legacyDefaultPath', { path: legacy.default_model_path }, 'Legacy default: {path}'));
                 }
                 if ((legacy?.general_model_count || 0) > 0) {
-                    extraNotes.push(`${legacy.general_model_count} general YOLO model(s) installed for compatibility tests`);
+                    extraNotes.push(censorT(
+                        'censor.generalModelCount',
+                        { count: legacy.general_model_count },
+                        '{count} general YOLO model(s) installed for compatibility tests'
+                    ));
                 }
                 const extra = extraNotes.length
                     ? `<br><small>${escapeHtml(extraNotes.join(' · '))}</small>`
                     : '';
 
                 banner.className = classes.join(' ');
-                banner.innerHTML = `<strong>${escapeHtml(tText('Detection Ready', '检测就绪'))}:</strong> ${escapeHtml(readyNotes || tText('None', '无'))} ${escapeHtml(recommended)}${extra}`;
+                banner.innerHTML = `<strong>${escapeHtml(censorT('censor.modelReadyLabel', null, 'Detection Ready'))}:</strong> ${escapeHtml(readyNotes || censorT('common.none', null, 'None'))} ${escapeHtml(recommended)}${extra}`;
             }
             if (simpleGuide) {
-                simpleGuide.textContent = legacy?.simple_user_advice || tText(
-                    'Keep the recommended mode and only touch custom paths if you know why.',
-                    '保持推荐模式即可；只有明确知道原因时才去改自定义路径。'
+                simpleGuide.textContent = legacy?.simple_user_advice || censorT(
+                    'censor.keepRecommendedModeHelp',
+                    null,
+                    'Keep the recommended mode and only touch custom paths if you know why.'
                 );
             }
             renderCensorCapabilityPanel();
             return result;
         } catch (e) {
-            CensorState.modelStatusError = e?.message || tKey(
-                'censor.modelReadinessLoadFailed',
-                'Model readiness could not be loaded right now.',
-                '暂时无法读取模型就绪状态。'
-            );
+            CensorState.modelStatusError = e?.message || censorT('censor.modelReadinessLoadFailed', null, 'Model readiness could not be loaded right now.');
             if (banner) {
                 banner.className = 'model-health-banner model-health-banner-compact is-visible model-health-banner-warning';
-                banner.textContent = tKey(
-                    'censor.modelReadinessLoadFailed',
-                    'Model readiness could not be loaded right now.',
-                    '暂时无法读取模型就绪状态。'
-                );
+                banner.textContent = censorT('censor.modelReadinessLoadFailed', null, 'Model readiness could not be loaded right now.');
             }
             if (simpleGuide) {
                 simpleGuide.textContent = '';
@@ -2565,6 +2567,16 @@ function getSelectedLegacyModelRecord() {
     const selectedPath = manualPath || String(document.getElementById('censor-model-file')?.value || '').trim();
     const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
     return getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacy?.default_model_path);
+}
+
+function formatCensorCapabilityLine(labelKey, value, fallbackLabel) {
+    return `${censorT(labelKey, null, fallbackLabel)}: ${value}`;
+}
+
+function formatCensorYesNo(value) {
+    return value
+        ? censorT('censor.yes', null, 'Yes')
+        : censorT('censor.no', null, 'No');
 }
 
 function buildCapabilityCardHtml(title, badge, lines = [], note = '', { recommended = false } = {}) {
@@ -2604,16 +2616,16 @@ function renderCensorCapabilityPanel(options = {}) {
 
     if (!CensorState.backendModelStatus) {
         panel.innerHTML = buildCapabilityCardHtml(
-            tText('Model readiness', '模型就绪状态'),
-            isLoading ? tText('Loading', '加载中') : tText('Unavailable', '暂不可用'),
+            censorT('censor.modelReadinessTitle', null, 'Model readiness'),
+            isLoading ? censorT('common.loading', null, 'Loading...') : censorT('censor.unavailable', null, 'Unavailable'),
             isLoading
                 ? [
-                    tText('Checking local YOLO, NudeNet, and SAM3 availability...', '正在检查本地 YOLO、NudeNet 和 SAM3 的可用性...'),
-                    tText('The panel will fill in as soon as the backend responds.', '后端返回后，这里会马上补上详细能力说明。'),
+                    censorT('censor.modelReadinessChecking', null, 'Checking local YOLO, NudeNet, and SAM3 availability...'),
+                    censorT('censor.modelReadinessPendingHint', null, 'The panel will fill in as soon as the backend responds.'),
                 ]
                 : [
-                    loadError || tText('Model readiness could not be loaded right now.', '暂时无法读取模型就绪状态。'),
-                    tText('You can reopen this dialog after the backend finishes loading.', '等后端加载完成后，重新打开这个窗口即可。'),
+                    loadError || censorT('censor.modelReadinessLoadFailed', null, 'Model readiness could not be loaded right now.'),
+                    censorT('censor.modelReadinessReloadHint', null, 'You can reopen this dialog after the backend finishes loading.'),
                 ],
             ''
         );
@@ -2627,13 +2639,13 @@ function renderCensorCapabilityPanel(options = {}) {
         }
         if (targetHelp) {
             targetHelp.textContent = isLoading
-                ? tText('Quick privacy targets are loading.', '隐私快捷目标正在加载中。')
-                : tText('Quick privacy targets are temporarily unavailable.', '隐私快捷目标暂时不可用。');
+                ? censorT('censor.quickTargetsLoading', null, 'Quick privacy targets are loading.')
+                : censorT('censor.quickTargetsUnavailable', null, 'Quick privacy targets are temporarily unavailable.');
         }
         if (promptHelp) {
             promptHelp.textContent = isLoading
-                ? tText('Loading SAM3 readiness for the pro prompt tool.', '正在读取 SAM3 的可用状态。')
-                : tText('SAM3 readiness is temporarily unavailable.', 'SAM3 状态暂时无法读取。');
+                ? censorT('censor.sam3ReadinessLoading', null, 'Loading SAM3 readiness for the pro prompt tool.')
+                : censorT('censor.sam3ReadinessUnavailable', null, 'SAM3 readiness is temporarily unavailable.');
         }
         if (promptInput) {
             promptInput.readOnly = false;
@@ -2643,19 +2655,19 @@ function renderCensorCapabilityPanel(options = {}) {
         if (segmentButton) {
             segmentButton.disabled = true;
             segmentButton.title = isLoading
-                ? tText('Loading model readiness…', '正在加载模型状态…')
-                : tText('Model readiness is unavailable right now.', '当前无法读取模型状态。');
+                ? censorT('censor.modelReadinessButtonLoading', null, 'Loading model readiness…')
+                : censorT('censor.modelReadinessButtonUnavailable', null, 'Model readiness is unavailable right now.');
         }
         if (batchRefineButton) {
             batchRefineButton.disabled = true;
             batchRefineButton.title = isLoading
-                ? tText('Loading SAM3 readiness…', '正在加载 SAM3 状态…')
-                : tText('SAM3 readiness is unavailable right now.', '当前无法读取 SAM3 状态。');
+                ? censorT('censor.sam3ReadinessButtonLoading', null, 'Loading SAM3 readiness…')
+                : censorT('censor.sam3ReadinessButtonUnavailable', null, 'SAM3 readiness is unavailable right now.');
         }
         if (simpleGuide) {
             simpleGuide.textContent = isLoading
-                ? tText('Loading the recommended detection route…', '正在加载推荐检测路线…')
-                : tText('Model readiness is temporarily unavailable.', '模型状态暂时不可用。');
+                ? censorT('censor.recommendedRouteLoading', null, 'Loading the recommended detection route…')
+                : censorT('censor.modelReadinessTemporaryUnavailable', null, 'Model readiness is temporarily unavailable.');
         }
         return;
     }
@@ -2675,10 +2687,10 @@ function renderCensorCapabilityPanel(options = {}) {
             selectedLegacy.name,
             selectedLegacy.profile_label,
             [
-                `Input: ${caps.input_mode_label || 'Fixed model labels'}`,
-                `Output: ${caps.output_mode_label || 'Legacy detection'}`,
-                `Scope: ${caps.class_scope_label || 'Unknown'}`,
-                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+                formatCensorCapabilityLine('censor.capabilityInput', caps.input_mode_label || censorT('censor.capabilityFixedModelLabels', null, 'Fixed model labels'), 'Input'),
+                formatCensorCapabilityLine('censor.capabilityOutput', caps.output_mode_label || censorT('censor.capabilityLegacyDetection', null, 'Legacy detection'), 'Output'),
+                formatCensorCapabilityLine('censor.capabilityScope', caps.class_scope_label || censorT('censor.capabilityUnknown', null, 'Unknown'), 'Scope'),
+                formatCensorCapabilityLine('censor.capabilityTextPrompt', formatCensorYesNo(caps.supports_text_prompt), 'Text prompt'),
             ],
             caps.plain_english || selectedLegacy.message || '',
             { recommended: Boolean(selectedLegacy.recommended_for_censor) }
@@ -2689,12 +2701,12 @@ function renderCensorCapabilityPanel(options = {}) {
         const caps = nudenet.capabilities || {};
         cards.push(buildCapabilityCardHtml(
             nudenet.name,
-            nudenet.available ? 'Ready' : 'Optional',
+            nudenet.available ? censorT('common.ready', null, 'Ready') : censorT('censor.optional', null, 'Optional'),
             [
-                `Input: ${caps.input_mode_label || 'Built-in NSFW labels'}`,
-                `Output: ${caps.output_mode_label || 'Detection boxes'}`,
-                `Scope: ${caps.class_scope_label || 'Built-in NSFW labels'}`,
-                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+                formatCensorCapabilityLine('censor.capabilityInput', caps.input_mode_label || censorT('censor.capabilityBuiltInNsfwLabels', null, 'Built-in NSFW labels'), 'Input'),
+                formatCensorCapabilityLine('censor.capabilityOutput', caps.output_mode_label || censorT('censor.capabilityDetectionBoxes', null, 'Detection boxes'), 'Output'),
+                formatCensorCapabilityLine('censor.capabilityScope', caps.class_scope_label || censorT('censor.capabilityBuiltInNsfwLabels', null, 'Built-in NSFW labels'), 'Scope'),
+                formatCensorCapabilityLine('censor.capabilityTextPrompt', formatCensorYesNo(caps.supports_text_prompt), 'Text prompt'),
             ],
             caps.plain_english || nudenet.message || '',
             { recommended: Boolean(nudenet.recommended) }
@@ -2705,12 +2717,12 @@ function renderCensorCapabilityPanel(options = {}) {
         const caps = sam3.capabilities || {};
         cards.push(buildCapabilityCardHtml(
             sam3.name,
-            sam3.available ? 'Precision' : 'GPU-only optional',
+            sam3.available ? censorT('censor.precision', null, 'Precision') : censorT('censor.gpuOnlyOptional', null, 'GPU-only optional'),
             [
-                `Input: ${caps.input_mode_label || 'Text prompt or box prompt'}`,
-                `Output: ${caps.output_mode_label || 'Pixel masks'}`,
-                `Scope: ${caps.class_scope_label || 'Prompt-guided segmentation'}`,
-                `Text prompt: ${caps.supports_text_prompt ? 'Yes' : 'No'}`,
+                formatCensorCapabilityLine('censor.capabilityInput', caps.input_mode_label || censorT('censor.capabilityTextOrBoxPrompt', null, 'Text prompt or box prompt'), 'Input'),
+                formatCensorCapabilityLine('censor.capabilityOutput', caps.output_mode_label || censorT('censor.capabilityPixelMasks', null, 'Pixel masks'), 'Output'),
+                formatCensorCapabilityLine('censor.capabilityScope', caps.class_scope_label || censorT('censor.capabilityPromptGuidedSegmentation', null, 'Prompt-guided segmentation'), 'Scope'),
+                formatCensorCapabilityLine('censor.capabilityTextPrompt', formatCensorYesNo(caps.supports_text_prompt), 'Text prompt'),
             ],
             caps.plain_english || sam3.message || '',
             { recommended: Boolean(sam3.available) }
@@ -2731,45 +2743,28 @@ function renderCensorCapabilityPanel(options = {}) {
 
     if (targetHelp) {
         if (modelType === 'both') {
-            targetHelp.textContent = tText(
-                'These quick privacy targets work across Wenaka and NudeNet family labels. They do not control generic COCO classes.',
-                '这些快捷隐私目标会同时作用在 Wenaka 和 NudeNet 的隐私类别上，但不会控制通用 COCO 类别。'
-            );
+            targetHelp.textContent = censorT('censor.quickTargetsBothHelp', null, 'These quick privacy targets work across Wenaka and NudeNet family labels. They do not control generic COCO classes.');
         } else if (modelType === 'nudenet') {
-            targetHelp.textContent = tText(
-                'NudeNet uses its own label system, but these quick privacy targets now map to the matching NudeNet families.',
-                'NudeNet 有自己的一套标签，但这些快捷隐私目标现在会映射到对应的 NudeNet 类别。'
-            );
+            targetHelp.textContent = censorT('censor.quickTargetsNudenetHelp', null, 'NudeNet uses its own label system, but these quick privacy targets now map to the matching NudeNet families.');
         } else if (quickFilterEnabled) {
             if (modelType === 'legacy' && selectedLegacy?.profile !== 'privacy-censor' && quickAutoFallback.canAutoRestore) {
-                targetHelp.textContent = tText(
-                    'These quick privacy targets stay active. When you run Quick Auto Censor, the app will switch back to the recommended privacy detector instead of using this general YOLO test model.',
-                    '这些快捷隐私目标会继续生效。等你真正运行快捷自动打码时，应用会自动切回推荐的隐私检测路线，而不会继续使用当前这个通用 YOLO 测试模型。'
-                );
+                targetHelp.textContent = censorT('censor.quickTargetsFallbackHelp', null, 'These quick privacy targets stay active. When you run Quick Auto Censor, the app will switch back to the recommended privacy detector instead of using this general YOLO test model.');
             } else {
-                targetHelp.textContent = tText(
-                    'These quick privacy targets map to the fixed privacy classes inside the current local model.',
-                    '这些快捷隐私目标会映射到当前本地模型里的固定隐私类别。'
-                );
+                targetHelp.textContent = censorT('censor.quickTargetsLegacyHelp', null, 'These quick privacy targets map to the fixed privacy classes inside the current local model.');
             }
         } else {
-            targetHelp.textContent = tText(
-                'These quick privacy targets stay visible so you can see the normal workflow, but the current general segmentation model cannot map them. Switch back to the recommended privacy model or Both if you want clickable privacy presets.',
-                '这些快捷隐私目标会继续显示，方便你看见正常工作流；但当前这个通用分割模型无法映射它们。想要可点击的隐私预设，请切回推荐隐私模型或“两者一起”。'
-            );
+            targetHelp.textContent = censorT('censor.quickTargetsGeneralModelHelp', null, 'These quick privacy targets stay visible so you can see the normal workflow, but the current general segmentation model cannot map them. Switch back to the recommended privacy model or Both if you want clickable privacy presets.');
         }
     }
 
     if (promptHelp) {
         promptHelp.textContent = sam3?.available
-            ? tText(
-                'Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.',
-                '这里会对当前图片执行 SAM3 文本提示分割，这是给专业用户用的精细工具。'
-            )
-            : tText(
-                `You can still type a prompt here, but this machine cannot run SAM3 yet. ${sam3?.message || ''}`.trim(),
-                `你现在仍然可以先输入提示词，但这台机器暂时跑不了 SAM3。${sam3?.message || ''}`.trim()
-            );
+            ? censorT('censor.promptHelpSam3Ready', null, 'Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.')
+            : censorT(
+                'censor.promptHelpSam3Unavailable',
+                { message: sam3?.message || '' },
+                'You can still type a prompt here, but this machine cannot run SAM3 yet. {message}'
+            ).trim();
     }
 
     if (promptInput) {
@@ -2781,46 +2776,28 @@ function renderCensorCapabilityPanel(options = {}) {
         segmentButton.disabled = !sam3?.available;
         segmentButton.title = sam3?.available
             ? ''
-            : (sam3?.message || tText('SAM3 is not available in this environment yet.', '当前环境暂时无法使用 SAM3。'));
+            : (sam3?.message || censorT('censor.sam3UnavailableMessage', null, 'SAM3 is not available in this environment yet.'));
     }
     if (batchRefineButton) {
         batchRefineButton.disabled = !sam3?.available;
         batchRefineButton.title = sam3?.available
             ? ''
-            : (sam3?.message || tText('SAM3 batch refine is not available in this environment yet.', '当前环境暂时无法使用 SAM3 批量精修。'));
+            : (sam3?.message || censorT('censor.sam3BatchUnavailableMessage', null, 'SAM3 batch refine is not available in this environment yet.'));
     }
 
     if (simpleGuide) {
         if (modelType === 'nudenet') {
-            simpleGuide.textContent = tText(
-                'NudeNet is the simple path: no text prompt, no custom labels. Use it when you want quick NSFW/body-region boxes.',
-                'NudeNet 是最省事的路线：不用填文本，也不用自定义类别。适合快速拿到 NSFW / 身体区域框。'
-            );
+            simpleGuide.textContent = censorT('censor.simpleGuideNudenet', null, 'NudeNet is the simple path: no text prompt, no custom labels. Use it when you want quick NSFW/body-region boxes.');
         } else if (modelType === 'both') {
-            simpleGuide.textContent = tText(
-                'Recommended for most people: run NudeNet together with the auto-picked privacy model. If the local model has segmentation masks, the auto-censor path will use them.',
-                '大多数人建议用这个：让 NudeNet 和自动挑选的隐私模型一起跑。如果本地模型带 segmentation mask，自动打码会优先用 mask。'
-            );
+            simpleGuide.textContent = censorT('censor.simpleGuideBoth', null, 'Recommended for most people: run NudeNet together with the auto-picked privacy model. If the local model has segmentation masks, the auto-censor path will use them.');
         } else if (selectedLegacy?.profile === 'privacy-censor') {
-            simpleGuide.textContent = tText(
-                'This local model is the privacy-part route. It only understands its fixed privacy labels, but if it exposes segmentation masks the auto-censor path will use them instead of raw rectangles.',
-                '当前这个本地模型就是隐私部位路线。它只认固定隐私标签；如果它本身提供 segmentation mask，自动打码会优先用 mask，而不是只用矩形框。'
-            );
+            simpleGuide.textContent = censorT('censor.simpleGuidePrivacyLegacy', null, 'This local model is the privacy-part route. It only understands its fixed privacy labels, but if it exposes segmentation masks the auto-censor path will use them instead of raw rectangles.');
         } else if (selectedLegacy) {
             simpleGuide.textContent = quickAutoFallback.canAutoRestore
-                ? tText(
-                    `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. Quick Auto Censor will automatically switch back to the recommended privacy route before it runs.`,
-                    `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。真正运行快捷自动打码前，应用会自动切回推荐的隐私检测路线。`
-                )
-                : tText(
-                    `${selectedLegacy.name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.`,
-                    `${selectedLegacy.name} 是保留下来的通用固定类分割模型，只给高级测试用。它可以分割自己内置的物体类别，但不是开放文本隐私检测器。`
-                );
+                ? censorT('censor.simpleGuideAdvancedLegacyAutoRestore', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. Quick Auto Censor will automatically switch back to the recommended privacy route before it runs.')
+                : censorT('censor.simpleGuideAdvancedLegacy', { name: selectedLegacy.name }, '{name} is a general fixed-class segmentation model kept for advanced tests. It can segment its own built-in object classes, but it is not an open-text privacy detector.');
         } else {
-            simpleGuide.textContent = tText(
-                'Keep the recommended mode and leave custom paths blank unless you are doing advanced model experiments.',
-                '除非你在做高级模型实验，否则保持推荐模式、把自定义路径留空就好。'
-            );
+            simpleGuide.textContent = censorT('censor.simpleGuideDefault', null, 'Keep the recommended mode and leave custom paths blank unless you are doing advanced model experiments.');
         }
     }
 }
@@ -2828,8 +2805,8 @@ function renderCensorCapabilityPanel(options = {}) {
 function formatLegacyModelOptionLabel(file) {
     const profile = file?.profile_label ? ` - ${file.profile_label}` : '';
     const purpose = file?.recommended_for_censor
-        ? tText('Recommended privacy route', '推荐隐私路线')
-        : tText('Advanced test only', '仅高级测试');
+        ? censorT('censor.recommendedPrivacyRoute', null, 'Recommended privacy route')
+        : censorT('censor.advancedTestOnly', null, 'Advanced test only');
     return `${file.name} (${file.size_mb} MB)${profile} · ${purpose}`;
 }
 
@@ -2852,22 +2829,13 @@ function syncAdvancedLegacyModelUi(legacyModel) {
 
     const generalCount = Number(legacyModel?.general_model_count || 0);
     if (generalCount <= 0) {
-        help.textContent = tText(
-            'No extra general YOLO compatibility models were found locally.',
-            '本地没有额外的通用 YOLO 兼容模型。'
-        );
+        help.textContent = censorT('censor.noAdvancedModelsFound', null, 'No extra general YOLO compatibility models were found locally.');
         return;
     }
 
     help.textContent = CensorState.showAdvancedLegacyModels
-        ? tText(
-            `${generalCount} advanced fixed-class YOLO model(s) are visible below. They are for compatibility tests, not normal privacy censoring.`,
-            `下方已显示 ${generalCount} 个高级固定类 YOLO 模型。它们是给兼容/分割测试用的，不是普通隐私打码主流程。`
-        )
-        : tText(
-            `${generalCount} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler. Leave this off unless you intentionally want advanced fixed-class YOLO compatibility tests.`,
-            `为了让普通流程更简单，已隐藏 ${generalCount} 个高级固定类 YOLO 模型。除非你是故意要做高级固定类 YOLO 兼容测试，否则不要打开。`
-        );
+        ? censorT('censor.advancedModelsVisible', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are visible below. They are for compatibility tests, not normal privacy censoring.')
+        : censorT('censor.advancedModelsHidden', { count: generalCount }, '{count} advanced fixed-class YOLO model(s) are hidden to keep the normal workflow simpler. Leave this off unless you intentionally want advanced fixed-class YOLO compatibility tests.');
 }
 
 function updateSelectedLegacyModelHelp(legacyModel) {
@@ -2876,24 +2844,18 @@ function updateSelectedLegacyModelHelp(legacyModel) {
 
     const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
     if (manualPath) {
-        help.textContent = tText(
-            'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.',
-            '当前正在使用自定义路径。如果你想让应用自动挑选推荐的本地隐私模型，就把这里留空。'
-        );
+        help.textContent = censorT('censor.customPathActiveHelp', null, 'Custom path is active. Leave it blank if you want the app to auto-pick the recommended local privacy model.');
         return;
     }
 
     const selectedPath = String(document.getElementById('censor-model-file')?.value || '').trim();
     const selectedFile = getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacyModel?.default_model_path);
     if (!selectedFile) {
-        help.textContent = tText(
-            'No local YOLO model was found. NudeNet can still work if it is installed.',
-            '本地没有找到 YOLO 模型。如果已经装好 NudeNet，它仍然可以继续工作。'
-        );
+        help.textContent = censorT('censor.noLocalYoloFound', null, 'No local YOLO model was found. NudeNet can still work if it is installed.');
         return;
     }
 
-    const parts = [tText(`Selected: ${selectedFile.name}`, `当前选择：${selectedFile.name}`)];
+    const parts = [censorT('censor.selectedModel', { name: selectedFile.name }, 'Selected: {name}')];
     if (selectedFile.profile_label) {
         parts.push(selectedFile.profile_label);
     }
@@ -2911,7 +2873,7 @@ function populateCensorModelSelect(legacyModel) {
     const files = Array.isArray(legacyModel?.files) ? legacyModel.files : [];
     const visibleFiles = getVisibleLegacyModels(files, currentValue);
     const seen = new Set();
-    const options = [`<option value="">${escapeHtml(tText('Auto-pick the recommended local model', '自动选择推荐的本地模型'))}</option>`];
+    const options = [`<option value="">${escapeHtml(censorT('censor.autoPickRecommendedLocalModel', null, 'Auto-pick the recommended local model'))}</option>`];
 
     visibleFiles.forEach(file => {
         if (!file?.path || seen.has(file.path)) return;
@@ -3065,9 +3027,10 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
         if (!canAutoRestore) {
             return {
                 ok: false,
-                message: tText(
-                    'Quick Auto Censor needs a real privacy detector, but this machine does not have one ready yet.',
-                    '快捷自动打码需要真正的隐私检测模型，但这台机器当前还没有可用的隐私检测路线。'
+                message: censorT(
+                    'censor.quickAutoNeedsPrivacyDetector',
+                    null,
+                    'Quick Auto Censor needs a real privacy detector, but this machine does not have one ready yet.'
                 ),
             };
         }
@@ -3087,14 +3050,15 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
         selectedLegacy = getSelectedLegacyModelRecord();
 
         const routeLabel = modelType === 'both'
-            ? tText('Both mode', '两者一起')
+            ? censorT('censor.bothMode', null, 'Both mode')
             : (modelType === 'nudenet'
                 ? 'NudeNet'
-                : tText('the privacy-part detector', '隐私部位检测模型'));
+                : censorT('censor.privacyPartDetector', null, 'the privacy-part detector'));
 
-        switchMessage = tText(
-            `Quick Auto Censor switched back to ${routeLabel} so the general YOLO test model will not blur unrelated parts of the image.`,
-            `快捷自动打码已自动切回 ${routeLabel}，避免继续用通用 YOLO 测试模型去误糊图片里的无关区域。`
+        switchMessage = censorT(
+            'censor.quickAutoSwitchedRoute',
+            { routeLabel },
+            'Quick Auto Censor switched back to {routeLabel} so the general YOLO test model will not blur unrelated parts of the image.'
         );
 
         if (!silent && switchMessage) {
@@ -3106,10 +3070,7 @@ async function resolveQuickAutoCensorExecutionPlan(options = {}) {
     if (Array.isArray(targetClasses) && targetClasses.length === 0) {
         return {
             ok: false,
-            message: tText(
-                'Select at least one quick privacy target first.',
-                '请先勾选至少一个快捷隐私目标。'
-            ),
+            message: censorT('censor.quickTargetRequired', null, 'Select at least one quick privacy target first.'),
         };
     }
 
@@ -3250,7 +3211,7 @@ function onCanvasMouseDown(e) {
         CensorState.cloneOffset = null;
         CensorState.cloneSourceSet = true;
         window.App.showToast(
-            tKey('censor.cloneSourceSet', 'Clone source set. Paint to clone now.', '克隆源点已设置，现在直接涂抹即可复制。'),
+            censorT('censor.cloneSourceSet', null, 'Clone source set. Paint to clone now.'),
             'info'
         );
         CensorState.isDrawing = false;
@@ -3509,19 +3470,19 @@ function performClone(ctx, x, y, size, options = {}) {
 async function runAutoCensorBatch() {
     const { showToast } = window.App;
     if (CensorState.queue.length === 0) {
-        showToast(tText('Queue is empty', '队列为空'), 'error');
+        showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
         return;
     }
 
     const executionPlan = await resolveQuickAutoCensorExecutionPlan();
     if (!executionPlan?.ok) {
-        showToast(executionPlan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'), 'warning');
+        showToast(executionPlan?.message || censorT('censor.quickAutoStartFailed', null, 'Quick Auto Censor could not start.'), 'warning');
         return;
     }
 
     const tracker = window.App.createProgressTracker();
 
-    showLoading(true, 'Auto Censor · preparing queue...');
+    showLoading(true, censorT('censor.autoCensorPreparing', null, 'Auto Censor · preparing queue...'));
 
     for (let index = 0; index < CensorState.queue.length; index += 1) {
         const item = CensorState.queue[index];
@@ -3530,8 +3491,8 @@ async function runAutoCensorBatch() {
             completed: index,
             total: CensorState.queue.length,
             tracker,
-            defaultMessage: 'Running auto-censor...',
-            primaryLabel: 'Auto Censor'
+            defaultMessage: censorT('censor.autoCensorRunning', null, 'Running auto-censor...'),
+            primaryLabel: censorT('censor.autoCensorPrimary', null, 'Auto Censor')
         }));
         await runDetectionForImage(item, true, executionPlan); // true = silent/no-refresh
     }
@@ -3542,8 +3503,8 @@ async function runAutoCensorBatch() {
     if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
     showToast(
         executionPlan.switchMessage
-            ? tText('Batch processing complete. The app auto-restored the privacy detector before running.', '批量处理完成。开始前应用已自动恢复为隐私检测路线。')
-            : tText('Batch processing complete', '批量处理完成'),
+            ? censorT('censor.batchProcessingCompleteAutoRestored', null, 'Batch processing complete. The app auto-restored the privacy detector before running.')
+            : censorT('censor.batchProcessingComplete', null, 'Batch processing complete'),
         'success'
     );
 }
@@ -3561,7 +3522,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             if (!silent && item.id === CensorState.activeId) {
                 loadCanvasImage(item.id);
                 window.App.showToast(
-                    plan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'),
+                    plan?.message || censorT('censor.quickAutoStartFailed', null, 'Quick Auto Censor could not start.'),
                     'warning'
                 );
             }
@@ -3650,17 +3611,17 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             }
             if (regions.length === 0) {
                 window.App.showToast(
-                    tText('No matching regions were found. Try lowering confidence or changing the model.', '没有找到匹配区域。可以试着降低置信度，或换一条检测路线。'),
+                    censorT('censor.noMatchingRegionsHint', null, 'No matching regions were found. Try lowering confidence or changing the model.'),
                     'info'
                 );
             } else {
                 const usedMask = shouldUseMask;
                 window.App.showToast(
                     usedMask && shouldUseBoxes
-                        ? tText(`Applied mixed auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用混合自动打码`)
+                        ? censorT('censor.autoCensorAppliedMixed', { count: regions.length }, 'Applied mixed auto-censor to {count} region(s)')
                         : (usedMask
-                            ? tText(`Applied auto-censor mask to ${regions.length} matched region(s)`, `已对 ${regions.length} 个匹配区域应用自动打码 mask`)
-                            : tText(`Applied box-based auto-censor to ${regions.length} region(s)`, `已对 ${regions.length} 个区域应用基于框的自动打码`)),
+                            ? censorT('censor.autoCensorAppliedMask', { count: regions.length }, 'Applied auto-censor mask to {count} matched region(s)')
+                            : censorT('censor.autoCensorAppliedBoxes', { count: regions.length }, 'Applied box-based auto-censor to {count} region(s)')),
                     'success'
                 );
             }
@@ -3670,7 +3631,7 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
         Logger.error(e);
         if (!silent) {
             window.App.showToast(
-                formatUserError(e, tKey('censor.detectFailed', 'Detection failed', '检测失败')),
+                formatUserError(e, censorT('censor.detectFailed', null, 'Detection failed')),
                 'error'
             );
         }
@@ -3909,22 +3870,22 @@ async function applyRasterMaskToActiveCanvas(maskSource) {
 
 async function segmentCurrentImageByText() {
     if (!CensorState.activeId) {
-        window.App.showToast(tText('No image selected', '未选择图片'), 'error');
+        window.App.showToast(censorT('censor.noImageSelected', null, 'No image selected'), 'error');
         return;
     }
 
     const textPrompt = String(document.getElementById('censor-text-prompt')?.value || '').trim();
     if (!textPrompt) {
         window.App.showToast(
-            tKey('censor.textPromptRequired', 'Enter a text prompt first', '请先输入文本提示词'),
+            censorT('censor.textPromptRequired', null, 'Enter a text prompt first'),
             'warning'
         );
         return;
     }
 
-    showLoading(true, tFormat('censor.loadingSegmentText', 'SAM3 text segment · {prompt}', 'SAM3 文本分割：{prompt}', {
+    showLoading(true, censorT('censor.loadingSegmentText', {
         prompt: textPrompt,
-    }));
+    }, 'SAM3 text segment · {prompt}'));
     try {
         const result = await window.App.API.post('/api/censor/segment-text', {
             image_id: CensorState.activeId,
@@ -3933,7 +3894,7 @@ async function segmentCurrentImageByText() {
 
         if (!result?.mask && !result?.mask_ref) {
             window.App.showToast(
-                result?.message || tKey('censor.sam3NoMatch', 'No matching regions were found', '没有找到匹配区域'),
+                result?.message || censorT('censor.sam3NoMatch', null, 'No matching regions were found'),
                 'info'
             );
             return;
@@ -3941,14 +3902,14 @@ async function segmentCurrentImageByText() {
 
         await applyRasterMaskToActiveCanvas(result);
         window.App.showToast(
-            tFormat('censor.sam3Applied', 'Applied SAM3 mask for "{prompt}"', '已对“{prompt}”应用 SAM3 mask', {
+            censorT('censor.sam3Applied', {
                 prompt: textPrompt,
-            }),
+            }, 'Applied SAM3 mask for "{prompt}"'),
             'success'
         );
     } catch (error) {
         window.App.showToast(
-            formatUserError(error, tKey('censor.sam3SegmentFailed', 'SAM3 text segmentation failed', 'SAM3 文本分割失败')),
+            formatUserError(error, censorT('censor.sam3SegmentFailed', null, 'SAM3 text segmentation failed')),
             'error'
         );
     } finally {
@@ -4022,22 +3983,13 @@ function refreshRenameSelectionUi() {
     checkbox.disabled = selectedCount === 0;
     if (selectedCount === 0) {
         checkbox.checked = false;
-        help.textContent = tText(
-            'Nothing is selected right now, so the whole queue will be renamed.',
-            '当前没有选中队列项目，所以会对整个队列重命名。'
-        );
+        help.textContent = censorT('censor.renameWholeQueueHelp', null, 'Nothing is selected right now, so the whole queue will be renamed.');
         return;
     }
 
     help.textContent = checkbox.checked
-        ? tText(
-            `Only the ${selectedCount} selected queue item(s) will be renamed. The rest stay untouched.`,
-            `只会重命名当前选中的 ${selectedCount} 个队列项目，其余项目保持不变。`
-        )
-        : tText(
-            `You have ${selectedCount} selected item(s), but this preview is still targeting the whole queue.`,
-            `你当前选中了 ${selectedCount} 个队列项目，但现在这个预览仍然会作用于整个队列。`
-        );
+        ? censorT('censor.renameSelectedOnlyHelp', { count: selectedCount }, 'Only the {count} selected queue item(s) will be renamed. The rest stay untouched.')
+        : censorT('censor.renameWholeQueueSelectedHelp', { count: selectedCount }, 'You have {count} selected item(s), but this preview is still targeting the whole queue.');
 }
 
 function updateRenamePreview() {
@@ -4096,32 +4048,30 @@ function updateRenamePreview() {
 
     previewList.innerHTML = `
         <div class="rename-preview-row rename-preview-row-head">
-            <span>${escape(tText('Current', '当前文件名'))}</span>
-            <span>${escape(tText('New name', '新文件名'))}</span>
+            <span>${escape(censorT('censor.renameCurrentColumn', null, 'Current'))}</span>
+            <span>${escape(censorT('censor.renameNewColumn', null, 'New name'))}</span>
         </div>
         ${rowHtml || `
             <div class="rename-preview-row">
-                <span>${escape(tText('No queue items yet', '当前还没有队列项目'))}</span>
-                <span>${escape(tText('Preview will appear here', '预览会显示在这里'))}</span>
+                <span>${escape(censorT('censor.renameNoQueueItems', null, 'No queue items yet'))}</span>
+                <span>${escape(censorT('censor.renamePreviewPlaceholder', null, 'Preview will appear here'))}</span>
             </div>
         `}
     `;
 
     const selectedCount = getOrderedSelectedQueueIds().length;
     const previewScope = document.getElementById('rename-only-selected')?.checked && selectedCount > 0
-        ? tText(`Previewing ${targets.length} selected item(s).`, `当前预览 ${targets.length} 个已选项目。`)
-        : tText(`Previewing ${targets.length} queue item(s).`, `当前预览 ${targets.length} 个队列项目。`);
-    const extensionNote = tText(
-        ' Final export extension still follows Save Options.',
-        ' 最终导出的扩展名仍然以保存设置为准。'
-    );
+        ? censorT('censor.renamePreviewSelected', { count: targets.length }, 'Previewing {count} selected item(s).')
+        : censorT('censor.renamePreviewQueue', { count: targets.length }, 'Previewing {count} queue item(s).');
+    const extensionNote = censorT('censor.renameExtensionNote', null, ' Final export extension still follows Save Options.');
     previewSummary.textContent = `${previewScope}${extensionNote}`;
 
     if (duplicateCount > 0) {
         previewAlert.className = 'rename-preview-alert is-warning';
-        previewAlert.textContent = tText(
-            `Duplicate output names detected in this preview (${duplicateCount} conflict group${duplicateCount > 1 ? 's' : ''}). Fix the pattern before applying.`,
-            `当前预览里检测到重复输出文件名（${duplicateCount} 组冲突）。请先修改命名规则，再执行重命名。`
+        previewAlert.textContent = censorT(
+            'censor.renameDuplicateNamesPreview',
+            { count: duplicateCount },
+            'Duplicate output names detected in this preview ({count} conflict group(s)). Fix the pattern before applying.'
         );
     } else {
         previewAlert.className = 'rename-preview-alert';
@@ -4138,7 +4088,7 @@ async function applyBatchRename() {
     const targets = getRenameTargetItems();
 
     if (!targets.length) {
-        window.App.showToast(tText('No queue items to rename', '当前没有可重命名的队列项目'), 'error');
+        window.App.showToast(censorT('censor.renameNoTargets', null, 'No queue items to rename'), 'error');
         return;
     }
 
@@ -4163,7 +4113,7 @@ async function applyBatchRename() {
     });
     if (duplicateNames.length > 0) {
         window.App.showToast(
-            tText('Rename blocked because the preview still contains duplicate output names.', '当前重命名已被拦截，因为预览里还有重复输出文件名。'),
+            censorT('censor.renameDuplicateNamesBlocked', null, 'Rename blocked because the preview still contains duplicate output names.'),
             'error'
         );
         return;
@@ -4183,17 +4133,14 @@ async function applyBatchRename() {
     }
 
     window.App.showToast(
-        tText(
-            `Renamed ${targets.length} image(s)`,
-            `已重命名 ${targets.length} 张图片`
-        ),
+        censorT('censor.renamedCount', { count: targets.length }, 'Renamed {count} image(s)'),
         'success'
     );
 }
 
 function openSaveOptionsPopup() {
     if (CensorState.queue.length === 0) {
-        window.App.showToast(tText('No images in queue to save', '队列里没有可保存的图片'), 'error');
+        window.App.showToast(censorT('censor.noImagesToSave', null, 'No images in queue to save'), 'error');
         return;
     }
 
@@ -4224,7 +4171,7 @@ async function confirmAndSaveAll() {
 
     if (!folder) {
         window.App.showToast(
-            tKey('censor.outputFolderRequired', 'Please specify an output folder', '请先填写输出文件夹'),
+            censorT('censor.outputFolderRequired', null, 'Please specify an output folder'),
             'error'
         );
         return;
@@ -4246,7 +4193,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
     const folder = CensorState.outputFolder;
     if (!folder) {
         window.App.showToast(
-            tKey('censor.outputFolderSetupFirst', 'Set output folder in Rename or Setup first', '请先在重命名或设置里指定输出文件夹'),
+            censorT('censor.outputFolderSetupFirst', null, 'Set output folder in Rename or Setup first'),
             'error'
         );
         return;
@@ -4254,7 +4201,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
 
     _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
-    showLoading(true, tKey('censor.loadingSavePreparing', 'Save · preparing files...', '保存中：正在准备文件...'));
+    showLoading(true, censorT('censor.loadingSavePreparing', null, 'Save · preparing files...'));
 
     let count = 0;
     for (let index = 0; index < CensorState.queue.length; index += 1) {
@@ -4265,8 +4212,8 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
                 completed: index,
                 total: CensorState.queue.length,
                 tracker,
-                defaultMessage: tKey('censor.loadingSaveDefault', 'Saving processed images...', '正在保存处理后的图片...'),
-                primaryLabel: tKey('censor.loadingSavePrimary', 'Save', '保存')
+                defaultMessage: censorT('censor.loadingSaveDefault', null, 'Saving processed images...'),
+                primaryLabel: censorT('censor.loadingSavePrimary', null, 'Save')
             }));
 
             // Update filename extension to match selected format
@@ -4310,7 +4257,7 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
         } catch (e) {
             Logger.error(e);
             item.batchStatus = 'failed';
-            item.batchError = `${tText('Save failed', '保存失败')}: ${e?.message || e || ''}`.trim();
+            item.batchError = `${censorT('censor.saveFailed', null, 'Save failed')}: ${e?.message || e || ''}`.trim();
         }
     }
 
@@ -4319,15 +4266,15 @@ async function saveAllProcessed(formatOption = 'png', metadataOption = 'strip') 
     const { failedCount } = _summarizeBatchFailures();
     if (failedCount > 0) {
         window.App.showToast(
-            tText(
-                `Saved ${count} images · ${failedCount} failed (red-outlined thumbnails)`,
-                `已保存 ${count} 张图片 · ${failedCount} 张失败（红框缩略图）`
-            ),
+            censorT('censor.savePartial', {
+                count,
+                failedCount,
+            }, 'Saved {count} images · {failedCount} failed (red-outlined thumbnails)'),
             'warning'
         );
     } else {
         window.App.showToast(
-            tText(`Saved ${count} images to ${folder}`, `已保存 ${count} 张图片到 ${folder}`),
+            censorT('censor.saveSuccess', { count, folder }, 'Saved {count} images to {folder}'),
             'success'
         );
     }
@@ -4350,7 +4297,7 @@ async function stripMetadataViaCanvas(url) {
 
 async function promptSingleRename() {
     if (!CensorState.activeId) {
-        window.App.showToast(tText('No image selected', '未选择图片'), 'error');
+        window.App.showToast(censorT('censor.noImageSelected', null, 'No image selected'), 'error');
         return;
     }
 
@@ -4359,8 +4306,8 @@ async function promptSingleRename() {
 
     const currentName = item.outputFilename || item.filename || 'image.png';
     const newName = await window.App.showInputModal(
-        tKey('censor.renameDialogTitle', 'Rename File', '重命名文件'),
-        tKey('censor.renameDialogMessage', 'Enter the new filename:', '请输入新的文件名：'),
+        censorT('censor.renameDialogTitle', null, 'Rename File'),
+        censorT('censor.renameDialogMessage', null, 'Enter the new filename:'),
         currentName
     );
 
@@ -4375,9 +4322,9 @@ async function promptSingleRename() {
         document.getElementById('censor-filename').textContent = finalName;
         renderQueue();
         window.App.showToast(
-            tFormat('censor.renamedTo', 'Renamed to "{name}"', '已重命名为“{name}”', {
+            censorT('censor.renamedTo', {
                 name: finalName,
-            }),
+            }, 'Renamed to "{name}"'),
             'success'
         );
     }
@@ -4573,7 +4520,7 @@ function handleKeydown(e) {
         CensorState.selectedItems = new Set(CensorState.queue.map(item => item.id));
         CensorState.lastSelectedIndex = CensorState.queue.length - 1;
         updateQueueSelection();
-        window.App.showToast(tText('Selected the whole queue', '已选中整个队列'), 'info');
+        window.App.showToast(censorT('censor.queueSelectedAll', null, 'Selected the whole queue'), 'info');
         e.preventDefault();
     }
     // Brush size [ ]
@@ -4727,7 +4674,7 @@ function clearAllEdits() {
     renderQueue();
 
     window.App.showToast(
-        tKey('censor.editsCleared', 'Edits cleared. Image restored to the original.', '已清除修改，图片已恢复为原图。'),
+        censorT('censor.editsCleared', null, 'Edits cleared. Image restored to the original.'),
         'success'
     );
 }
@@ -4738,16 +4685,13 @@ function toggleShowChanges() {
     const btn = document.getElementById('btn-show-changes');
 
     if (!CensorState.activeId || !CensorState.originalImage) {
-        window.App.showToast(tText('No image to compare', '没有可对比的图片'), 'error');
+        window.App.showToast(censorT('censor.noImageToCompare', null, 'No image to compare'), 'error');
         return;
     }
 
     if (CensorState.activeImagePixels > getCensorShowChangesPixelThreshold()) {
         window.App.showToast(
-            tText(
-                'Show Changes is disabled for large images to avoid browser freezes',
-                '为避免浏览器卡死，大图已禁用 Diff 对比'
-            ),
+            censorT('censor.showChangesDisabledLargeImage', null, 'Show Changes is disabled for large images to avoid browser freezes'),
             'warning'
         );
         return;
@@ -4800,7 +4744,7 @@ function toggleShowChanges() {
         CensorState.showingChanges = true;
         if (btn) btn.classList.add('active');
         window.App.showToast(
-            tKey('censor.showChangesOn', 'Changed areas highlighted in red', '已用红色高亮显示修改区域'),
+            censorT('censor.showChangesOn', null, 'Changed areas highlighted in red'),
             'info'
         );
     }
@@ -4809,19 +4753,19 @@ function toggleShowChanges() {
 async function runDetectionForAll() {
     const { showToast } = window.App;
     if (CensorState.queue.length === 0) {
-        showToast(tText('Queue is empty', '队列为空'), 'error');
+        showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
         return;
     }
 
     const executionPlan = await resolveQuickAutoCensorExecutionPlan();
     if (!executionPlan?.ok) {
-        showToast(executionPlan?.message || tText('Quick Auto Censor could not start.', '快捷自动打码无法开始。'), 'warning');
+        showToast(executionPlan?.message || censorT('censor.quickAutoStartFailed', null, 'Quick Auto Censor could not start.'), 'warning');
         return;
     }
 
     _resetBatchStatus();
     const tracker = window.App.createProgressTracker();
-    showLoading(true, tKey('censor.loadingDetectPreparing', 'Detect All · preparing queue...', '批量检测：正在准备队列...'));
+    showLoading(true, censorT('censor.loadingDetectPreparing', null, 'Detect All · preparing queue...'));
     let count = 0;
 
     for (let index = 0; index < CensorState.queue.length; index += 1) {
@@ -4832,8 +4776,8 @@ async function runDetectionForAll() {
                 completed: index,
                 total: CensorState.queue.length,
                 tracker,
-                defaultMessage: tKey('censor.loadingDetectDefault', 'Running detection...', '正在执行检测...'),
-                primaryLabel: tKey('censor.loadingDetectPrimary', 'Detect All', '批量检测')
+                defaultMessage: censorT('censor.loadingDetectDefault', null, 'Running detection...'),
+                primaryLabel: censorT('censor.loadingDetectPrimary', null, 'Detect All')
             }));
             await runDetectionForImage(item, true, executionPlan);
             item.batchStatus = 'detected';
@@ -4841,7 +4785,7 @@ async function runDetectionForAll() {
         } catch (e) {
             Logger.error('Detection error for', item.id, e);
             item.batchStatus = 'failed';
-            item.batchError = `${tKey('censor.detectFailed', 'Detection failed', '检测失败')}: ${e?.message || e || ''}`.trim();
+            item.batchError = `${censorT('censor.detectFailed', null, 'Detection failed')}: ${e?.message || e || ''}`.trim();
         }
     }
 
@@ -4852,17 +4796,18 @@ async function runDetectionForAll() {
     const total = CensorState.queue.length;
     if (failedCount > 0) {
         showToast(
-            tText(
-                `Detection: ${count}/${total} processed · ${failedCount} failed (red-outlined thumbnails)`,
-                `检测完成：${count}/${total} 张已处理 · ${failedCount} 张失败（红框缩略图）`
-            ),
+            censorT('censor.detectPartial', {
+                count,
+                total,
+                failedCount,
+            }, 'Detection: {count}/{total} processed · {failedCount} failed (red-outlined thumbnails)'),
             'warning'
         );
     } else {
         showToast(
             executionPlan.switchMessage
-                ? tText(`Detection complete: ${count}/${total} images processed. The app auto-restored the privacy detector first.`, `检测完成：${count}/${total} 张图片已处理。开始前应用已自动恢复为隐私检测路线。`)
-                : tText(`Detection complete: ${count}/${total} images processed`, `检测完成：已处理 ${count}/${total} 张图片`),
+                ? censorT('censor.detectCompleteAutoRestored', { count, total }, 'Detection complete: {count}/{total} images processed. The app auto-restored the privacy detector first.')
+                : censorT('censor.detectComplete', { count, total }, 'Detection complete: {count}/{total} images processed'),
             'success'
         );
     }
@@ -4872,7 +4817,7 @@ async function runDetectionForAll() {
 async function runSam3BatchRefine() {
     const { showToast } = window.App;
     if (CensorState.queue.length === 0) {
-        showToast(tText('Queue is empty', '队列为空'), 'error');
+        showToast(censorT('censor.queueEmpty', null, 'Queue is empty'), 'error');
         return;
     }
 
@@ -4893,7 +4838,7 @@ async function runSam3BatchRefine() {
 
     if (batchItems.length === 0) {
         showToast(
-            tText('No detection boxes found. Run detection first, then use SAM3 to refine the masks.', '没有找到检测框。请先运行检测，然后用 SAM3 精化 mask。'),
+            censorT('censor.noDetectionBoxesFound', null, 'No detection boxes found. Run detection first, then use SAM3 to refine the masks.'),
             'warning'
         );
         return;
@@ -4909,10 +4854,10 @@ async function runSam3BatchRefine() {
         }
     });
 
-    showLoading(true, tFormat('censor.loadingSam3Batch', 'SAM3 Batch Refine · {current}/{total}', 'SAM3 批量精修：{current}/{total}', {
+    showLoading(true, censorT('censor.loadingSam3Batch', {
         current: 0,
         total: batchItems.length,
-    }));
+    }, 'SAM3 Batch Refine · {current}/{total}'));
 
     try {
         const result = await window.App.API.post('/api/censor/batch-refine-mask', {
@@ -4930,7 +4875,7 @@ async function runSam3BatchRefine() {
             } else {
                 failedErrorById.set(
                     refined.image_id,
-                    refined.error || tText('Mask refine returned no result', 'Mask 精化没有返回结果')
+                    refined.error || censorT('censor.maskRefineNoResult', null, 'Mask refine returned no result')
                 );
             }
         }
@@ -4969,7 +4914,7 @@ async function runSam3BatchRefine() {
                     refinedIds.delete(refined.image_id);
                     failedErrorById.set(
                         refined.image_id,
-                        `${tText('Mask apply failed', 'Mask 应用失败')}: ${maskErr?.message || ''}`.trim()
+                        `${censorT('censor.maskApplyFailed', null, 'Mask apply failed')}: ${maskErr?.message || ''}`.trim()
                     );
                 }
             }
@@ -4979,7 +4924,7 @@ async function runSam3BatchRefine() {
             if (!includedIds.has(item.id)) return;
             if (failedErrorById.has(item.id)) {
                 item.batchStatus = 'failed';
-                item.batchError = `${tText('SAM3 refine failed', 'SAM3 精化失败')}: ${failedErrorById.get(item.id)}`;
+                item.batchError = `${censorT('censor.sam3RefineFailed', null, 'SAM3 refine failed')}: ${failedErrorById.get(item.id)}`;
             }
         });
 
@@ -4987,10 +4932,11 @@ async function runSam3BatchRefine() {
         if (CensorState.activeId) loadCanvasImage(CensorState.activeId);
 
         showToast(
-            tText(
-                `SAM3 Batch Refine complete: ${result.completed} refined, ${result.failed} failed out of ${result.total} boxes`,
-                `SAM3 批量精化完成：${result.completed} 成功，${result.failed} 失败，共 ${result.total} 个框`
-            ),
+            censorT('censor.sam3BatchComplete', {
+                completed: result.completed,
+                failed: result.failed,
+                total: result.total,
+            }, 'SAM3 Batch Refine complete: {completed} refined, {failed} failed out of {total} boxes'),
             result.failed > 0 ? 'warning' : 'success'
         );
     } catch (e) {
@@ -4999,11 +4945,11 @@ async function runSam3BatchRefine() {
         CensorState.queue.forEach((item) => {
             if (!includedIds.has(item.id)) return;
             item.batchStatus = 'failed';
-            item.batchError = `${tText('SAM3 batch aborted', 'SAM3 批量中止')}: ${e?.message || e || ''}`.trim();
+            item.batchError = `${censorT('censor.sam3BatchAborted', null, 'SAM3 batch aborted')}: ${e?.message || e || ''}`.trim();
         });
         renderQueue();
         showToast(
-            formatUserError(e, tKey('censor.sam3BatchRefineFailed', 'SAM3 Batch Refine failed', 'SAM3 批量精修失败')),
+            formatUserError(e, censorT('censor.sam3BatchRefineFailed', null, 'SAM3 Batch Refine failed')),
             'error'
         );
     }
@@ -5390,16 +5336,16 @@ window.cleanupCensorView = cleanupCensorViewFull;
 
     async function bakeFiltersToTargets(targetIds) {
         if (!Array.isArray(targetIds) || targetIds.length === 0) {
-            window.App?.showToast?.('No target images selected', 'warning');
+            window.App?.showToast?.(censorT('censor.noTargetImagesSelected', null, 'No target images selected'), 'warning');
             return;
         }
 
         if (!hasFilterChanges()) {
-            window.App?.showToast?.('No filter changes to apply', 'info');
+            window.App?.showToast?.(censorT('censor.noFilterChanges', null, 'No filter changes to apply'), 'info');
             return;
         }
 
-        showLoading(true, `Filter · applying to ${targetIds.length} image(s)...`);
+        showLoading(true, censorT('censor.filterApplyBatchLoading', { count: targetIds.length }, 'Filter · applying to {count} image(s)...'));
         let applied = 0;
         const historyEntry = {
             type: 'filter-batch',
@@ -5457,7 +5403,7 @@ window.cleanupCensorView = cleanupCensorViewFull;
 
             setSliders(FILTER_DEFAULTS);
             pushFilterActionHistory(historyEntry);
-            window.App?.showToast?.(`Applied filters to ${applied} image(s)`, 'success');
+            window.App?.showToast?.(censorT('censor.filtersAppliedCount', { count: applied }, 'Applied filters to {count} image(s)'), 'success');
         } finally {
             showLoading(false);
         }
@@ -5466,18 +5412,18 @@ window.cleanupCensorView = cleanupCensorViewFull;
     async function bakeFiltersToCanvas() {
         const canvas = getActiveCanvas();
         if (!canvas || !CensorState.activeId) {
-            window.App?.showToast?.(tText('No image loaded — select an image first', '还没有载入图片，请先选一张'), 'warning');
+            window.App?.showToast?.(censorT('censor.noImageLoaded', null, 'No image loaded — select an image first'), 'warning');
             return;
         }
 
         if (!hasFilterChanges()) {
-            window.App?.showToast?.('No filter changes to apply', 'info');
+            window.App?.showToast?.(censorT('censor.noFilterChanges', null, 'No filter changes to apply'), 'info');
             return;
         }
 
         // Check canvas has actual content
         if (canvas.width === 0 || canvas.height === 0) {
-            window.App?.showToast?.('Canvas is empty — load an image first', 'warning');
+            window.App?.showToast?.(censorT('censor.canvasEmpty', null, 'Canvas is empty — load an image first'), 'warning');
             return;
         }
 
@@ -5534,7 +5480,7 @@ window.cleanupCensorView = cleanupCensorViewFull;
             setSliders(FILTER_DEFAULTS);
             pushFilterActionHistory(historyEntry);
             window.App?.showToast?.(
-                tKey('censor.canvasFiltersApplied', 'Filters applied to canvas', '已把滤镜应用到画布'),
+                censorT('censor.canvasFiltersApplied', null, 'Filters applied to canvas'),
                 'success'
             );
             return;
@@ -5570,7 +5516,7 @@ window.cleanupCensorView = cleanupCensorViewFull;
         setSliders(FILTER_DEFAULTS);
         pushFilterActionHistory(historyEntry);
         window.App?.showToast?.(
-            tKey('censor.canvasFiltersApplied', 'Filters applied to canvas', '已把滤镜应用到画布'),
+            censorT('censor.canvasFiltersApplied', null, 'Filters applied to canvas'),
             'success'
         );
     }

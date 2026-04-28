@@ -24,27 +24,27 @@ const FIXTURES: ReaderFixture[] = [
   {
     file: 'comfy_good.png',
     label: 'ComfyUI workflow JSON',
-    expectGenerator: 'COMFYUI',
+    expectGenerator: 'ComfyUI',
     expectPromptContains: 'masterpiece',
     expectCheckpointContains: 'v304_comfy',
   },
   {
     file: 'nai_good.png',
     label: 'NovelAI Comment JSON',
-    expectGenerator: 'NAI',
+    expectGenerator: 'NovelAI',
     expectPromptContains: 'fantasy castle',
   },
   {
     file: 'webui_good.png',
     label: 'A1111 / WebUI parameters',
-    expectGenerator: 'WEBUI',
+    expectGenerator: 'WebUI',
     expectPromptContains: 'portrait',
     expectCheckpointContains: 'v304_webui',
   },
   {
     file: 'forge_good.png',
     label: 'Forge parameters',
-    expectGenerator: /FORGE|WEBUI/,
+    expectGenerator: /Forge|WebUI/,
     expectPromptContains: 'landscape',
     expectCheckpointContains: 'v304_forge',
   },
@@ -107,7 +107,7 @@ test.describe('Image Reader live parse', () => {
 
     await page.setInputFiles('#reader-file-input', SAMPLE_IMAGE)
 
-    await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
+    await expect(page.locator('#reader-generator')).toHaveText('ComfyUI', { timeout: 10000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('stelle', { timeout: 10000 })
     await expect(page.locator('#reader-checkpoint')).toContainText('z_image_turbo_bf16', { timeout: 10000 })
 
@@ -127,12 +127,15 @@ test.describe('Image Reader live parse', () => {
       document.dispatchEvent(evt)
     }, imageBase64)
 
-    await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
+    await expect(page.locator('#reader-generator')).toHaveText('ComfyUI', { timeout: 10000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('stelle', { timeout: 10000 })
     await expect(page.locator('#reader-checkpoint')).toContainText('z_image_turbo_bf16', { timeout: 10000 })
-    await expect(page.locator('#reader-status')).toContainText(/Clipboard images may lose|剪贴板图片可能丢失/, {
-      timeout: 10000,
-    })
+    await expect(page.locator('#reader-status')).toContainText(
+      /prompt or model details may be incomplete|提示词或模型信息可能不完整/,
+      {
+        timeout: 10000,
+      },
+    )
   })
 
   test('drag-drop parses the same real ComfyUI metadata path as file upload', async ({ page }) => {
@@ -157,7 +160,7 @@ test.describe('Image Reader live parse', () => {
       dropZone?.dispatchEvent(evt)
     }, imageBase64)
 
-    await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
+    await expect(page.locator('#reader-generator')).toHaveText('ComfyUI', { timeout: 10000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('stelle', { timeout: 10000 })
     await expect(page.locator('#reader-checkpoint')).toContainText('z_image_turbo_bf16', { timeout: 10000 })
   })
@@ -197,7 +200,7 @@ test.describe('Image Reader live parse', () => {
     await openReaderView(page)
     await page.setInputFiles('#reader-file-input', SAMPLE_IMAGE)
 
-    await expect(page.locator('#reader-generator')).toHaveText('COMFYUI', { timeout: 10000 })
+    await expect(page.locator('#reader-generator')).toHaveText('ComfyUI', { timeout: 10000 })
     await expect(page.locator('#reader-metadata-editor')).toBeVisible({ timeout: 10000 })
     if (!(await page.locator('#reader-editor-body').isVisible().catch(() => false))) {
       await page.locator('#reader-metadata-editor .reader-section-toggle').click()
@@ -229,7 +232,7 @@ test.describe('Image Reader live parse', () => {
 
     const confirmModal = page.locator('#confirm-modal')
     await expect(confirmModal).toHaveClass(/visible/, { timeout: 10000 })
-    await expect(page.locator('#confirm-title')).toContainText(/Overwrite existing file\?|覆盖/i)
+    await expect(page.locator('#confirm-title')).toContainText(/Replace this file\?|替换|覆盖/i)
     await expect(page.locator('#confirm-message')).toContainText(outputPath)
 
     await page.waitForTimeout(800)

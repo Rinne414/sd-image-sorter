@@ -14,22 +14,24 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def _first_existing(*candidates: Path) -> Path:
+def _first_existing(*candidates: Path) -> Path | None:
     for candidate in candidates:
         if candidate.exists():
             return candidate
-    return candidates[0]
+    return None
 
 
-BACKEND_PYTHON = _first_existing(
+_BACKEND_PYTHON = _first_existing(
     ROOT / "backend" / "venv" / "Scripts" / "python.exe",
     ROOT / "backend" / "venv" / "bin" / "python",
 )
+BACKEND_PYTHON = _BACKEND_PYTHON or Path(sys.executable)
 E2E_PLAYWRIGHT = _first_existing(
     ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright.cmd",
     ROOT / "tests" / "e2e" / "node_modules" / ".bin" / "playwright",
 )
 PLAYWRIGHT_CLI = ROOT / "tests" / "e2e" / "node_modules" / "playwright" / "cli.js"
+PLAYWRIGHT_WRAPPER = ROOT / "tests" / "e2e" / "scripts" / "run-playwright.mjs"
 
 
 def _first_executable(*candidates: str | Path) -> str:
@@ -112,13 +114,26 @@ def _find_available_port(*preferred_ports: int) -> str:
 def main() -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
+            "compiled lock freshness",
+            [
+                str(BACKEND_PYTHON),
+                "scripts/check_lockfiles.py",
+            ],
+            ROOT,
+        ),
+        (
             "backend full suite",
             [
                 str(BACKEND_PYTHON),
                 "-m",
                 "pytest",
+                "-p",
+                "pytest_cov",
                 "backend/tests",
                 "-q",
+                "--cov=backend",
+                "--cov-report=term-missing",
+                "--cov-report=xml:backend/coverage.xml",
             ],
             ROOT,
         ),
@@ -126,7 +141,11 @@ def main() -> int:
             "playwright e2e",
             [
                 str(NODE_EXECUTABLE),
-                "./node_modules/playwright/cli.js" if PLAYWRIGHT_CLI.exists() else str(E2E_PLAYWRIGHT),
+                (
+                    "./scripts/run-playwright.mjs"
+                    if PLAYWRIGHT_WRAPPER.exists()
+                    else ("./node_modules/playwright/cli.js" if PLAYWRIGHT_CLI.exists() else str(E2E_PLAYWRIGHT))
+                ),
                 "test",
             ],
             ROOT / "tests" / "e2e",
@@ -144,6 +163,7 @@ def main() -> int:
             }
             env.update(env_values)
             if str(command[0]).lower().endswith(".exe") and os.name != "nt":
+                script_path = command[1]
                 cli_args = command[2:]
                 env_assignments = "; ".join(
                     f"process.env[{json.dumps(key)}]={json.dumps(value)}"
@@ -155,9 +175,13 @@ def main() -> int:
                     "-e",
                     (
                         f"{env_assignments}; "
-                        "const cli = require.resolve('./node_modules/playwright/cli.js'); "
-                        f"process.argv = [process.execPath, cli, {argv}]; "
-                        "require(cli);"
+                        "const path = require('path'); "
+                        "const { pathToFileURL } = require('url'); "
+                        f"const script = {json.dumps(script_path)}; "
+                        f"process.argv = [process.execPath, script, {argv}]; "
+                        "(async () => { "
+                        "await import(pathToFileURL(path.resolve(script)).href); "
+                        "})().catch((error) => { console.error(error); process.exit(1); });"
                     ),
                 ]
         result = subprocess.run(command, cwd=cwd, env=env)

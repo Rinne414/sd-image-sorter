@@ -19,6 +19,8 @@ import database as db
 from constants import VALID_ASPECT_RATIOS
 from image_manager import scan_folder, move_image, copy_image
 from metadata_parser import verify_image_readable
+from services.state_compat import MutableStateProxy
+from services.tag_export_service import export_tags_batch_request
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 SESSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'sort_session.json')
+SORT_SESSION_SCHEMA_VERSION = 1
 
 # Validation constants
 DIMENSION_MIN = 1
@@ -160,9 +163,10 @@ class BrowseFolderRequest(BaseModel):
 class SortingService:
     """Service for scanning, moving, and manual sorting operations."""
 
-    def __init__(self):
-        """Initialize the sorting service."""
-        self._scan_progress: Dict[str, Any] = {
+    @staticmethod
+    def _build_default_scan_progress_state() -> Dict[str, Any]:
+        """Return the canonical idle scan-progress payload."""
+        return {
             "status": "idle",
             "step": "idle",
             "current": 0,
@@ -182,12 +186,11 @@ class SortingService:
             "started_at": None,
             "updated_at": None,
         }
-        self._scan_lock = threading.Lock()
-        self._scan_cancel_event: Optional[threading.Event] = None
-        self._scan_worker_thread: Optional[threading.Thread] = None
-        self._scan_run_id = 0
 
-        self._sort_session: Dict[str, Any] = {
+    @staticmethod
+    def _build_default_sort_session_state() -> Dict[str, Any]:
+        """Return the canonical inactive manual-sort session payload."""
+        return {
             "active": False,
             "image_ids": [],
             "current_index": 0,
@@ -196,7 +199,19 @@ class SortingService:
             "history": [],
             "redo_stack": [],
         }
+
+    def __init__(self):
+        """Initialize the sorting service."""
+        self._scan_progress: Dict[str, Any] = self._build_default_scan_progress_state()
+        self._scan_lock = threading.Lock()
+        self._scan_cancel_event: Optional[threading.Event] = None
+        self._scan_worker_thread: Optional[threading.Thread] = None
+        self._scan_run_id = 0
+
+        self._sort_session: Dict[str, Any] = self._build_default_sort_session_state()
         self._sort_session_lock = threading.Lock()
+        self._scan_progress_proxy = MutableStateProxy(self.get_scan_progress, self.set_scan_progress)
+        self._sort_session_proxy = MutableStateProxy(self.get_sort_session, self.set_sort_session)
         
         # Batch move progress
         self._batch_move_progress: Dict[str, Any] = {
@@ -299,15 +314,121 @@ class SortingService:
 
         return validated_folders
 
+    def _coerce_scan_progress_state(self, state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected scan-progress state onto the canonical shape."""
+        coerced = self._build_default_scan_progress_state()
+        if state:
+            coerced.update(state)
+        return coerced
+
+    def _coerce_sort_session_state(self, session: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected sort-session state onto the canonical shape."""
+        coerced = self._build_default_sort_session_state()
+        session = session or {}
+        coerced["active"] = bool(session.get("active", False))
+        coerced["image_ids"] = list(session.get("image_ids", []))
+        coerced["folders"] = dict(session.get("folders", {}))
+        coerced["history"] = list(session.get("history", []))
+        coerced["redo_stack"] = list(session.get("redo_stack", []))
+        coerced["operation_mode"] = self._validate_file_operation(session.get("operation_mode", "move"))
+
+        try:
+            current_index = int(session.get("current_index", 0) or 0)
+        except (TypeError, ValueError):
+            current_index = 0
+        coerced["current_index"] = max(0, min(current_index, len(coerced["image_ids"])))
+        return coerced
+
+    def _build_persisted_sort_session_payload(self) -> Dict[str, Any]:
+        """Return the on-disk manual-sort session payload."""
+        session = self._coerce_sort_session_state(self._sort_session)
+        return {
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": session["active"],
+            "current_index": session["current_index"],
+            "folders": session["folders"],
+            "operation_mode": session["operation_mode"],
+            "history": session["history"],
+            "redo_stack": session["redo_stack"],
+            "image_ids": session["image_ids"],
+        }
+
+    @staticmethod
+    def _parse_persisted_session_version(data: Dict[str, Any]) -> int:
+        """Read the persisted schema version, treating missing versions as legacy v0."""
+        raw_version = data.get("session_schema_version")
+        if raw_version is None:
+            return 0
+        try:
+            version = int(raw_version)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid session_schema_version") from exc
+        if version < 0:
+            raise ValueError("Invalid session_schema_version")
+        return version
+
+    def _discard_persisted_session_file(self, reason: str) -> None:
+        """Delete an unusable persisted session file so future boots do not half-restore it."""
+        logger.warning("Discarding persisted sort session: %s", reason)
+        try:
+            if os.path.exists(SESSION_FILE):
+                os.remove(SESSION_FILE)
+        except OSError as exc:
+            logger.warning("Failed to remove unsupported session file: %s", exc)
+
     def get_scan_progress(self) -> Dict[str, Any]:
         """Get the current scan progress."""
         with self._scan_lock:
             return self._scan_progress.copy()
 
+    def get_scan_progress_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style scan-progress handle from the service."""
+        return self._scan_progress_proxy
+
+    def get_system_info_payload(self) -> Dict[str, Any]:
+        """Return hardware info and tagger runtime recommendations for the UI."""
+        try:
+            from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+            from hardware_monitor import get_system_info, recommend_tagger_config
+
+            system_info = get_system_info()
+            recommendation = recommend_tagger_config(
+                system_info,
+                model_name=DEFAULT_TAGGER_MODEL,
+                use_gpu=True,
+            )
+            recommendations_by_model = {}
+            for model_name in TAGGER_MODELS.keys():
+                recommendations_by_model[model_name] = {
+                    "gpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=True),
+                    "cpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=False),
+                }
+            recommendations_by_model["custom"] = {
+                "gpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=True),
+                "cpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=False),
+            }
+            return {
+                "system_info": system_info,
+                "recommendation": recommendation,
+                "recommendations_by_model": recommendations_by_model,
+            }
+        except Exception as exc:
+            return {
+                "system_info": {"error": str(exc)},
+                "recommendation": {
+                    "recommended_batch_size": 2,
+                    "recommended_use_gpu": False,
+                    "recommended_session_refresh_interval": 0,
+                    "risk_level": "medium",
+                    "message": f"Hardware detection failed: {exc}",
+                },
+                "recommendations_by_model": {},
+            }
+
     def set_scan_progress(self, state: Dict[str, Any]) -> None:
         """Set the scan progress state."""
         with self._scan_lock:
-            self._scan_progress = state
+            self._scan_progress = self._coerce_scan_progress_state(state)
 
     def reset_scan_progress(self) -> Dict[str, Any]:
         """Reset a stuck scan task back to idle."""
@@ -418,6 +539,10 @@ class SortingService:
         """Get the current sort session."""
         with self._sort_session_lock:
             return self._sort_session.copy()
+
+    def get_sort_session_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style sort-session handle from the service."""
+        return self._sort_session_proxy
 
 
     def get_batch_move_progress(self) -> Dict[str, Any]:
@@ -538,15 +663,7 @@ class SortingService:
     def set_sort_session(self, session: Dict[str, Any]) -> None:
         """Set the sort session."""
         with self._sort_session_lock:
-            self._sort_session = {
-                "active": bool(session.get("active", False)),
-                "image_ids": list(session.get("image_ids", [])),
-                "current_index": int(session.get("current_index", 0) or 0),
-                "folders": dict(session.get("folders", {})),
-                "operation_mode": self._validate_file_operation(session.get("operation_mode", "move")),
-                "history": list(session.get("history", [])),
-                "redo_stack": list(session.get("redo_stack", [])),
-            }
+            self._sort_session = self._coerce_sort_session_state(session)
 
     def validate_path(self, request: ValidatePathRequest) -> Dict[str, Any]:
         """Validate a folder path for inline UI feedback."""
@@ -1140,7 +1257,7 @@ class SortingService:
         folder_config = self._parse_sort_folders(folders)
 
         with self._sort_session_lock:
-            self._sort_session = {
+            self._sort_session = self._coerce_sort_session_state({
                 "active": True,
                 "image_ids": image_ids,
                 "current_index": 0,
@@ -1148,7 +1265,7 @@ class SortingService:
                 "operation_mode": operation_mode,
                 "history": [],
                 "redo_stack": [],
-            }
+            })
             self._save_session_to_disk()
 
         first_image = db.get_image_by_id(image_ids[0]) if image_ids else None
@@ -1535,15 +1652,7 @@ class SortingService:
     def clear_sort_session(self) -> Dict[str, str]:
         """Clear the current sort session."""
         with self._sort_session_lock:
-            self._sort_session = {
-                'active': False,
-                'image_ids': [],
-                'current_index': 0,
-                'folders': {},
-                'operation_mode': 'move',
-                'history': [],
-                'redo_stack': [],
-            }
+            self._sort_session = self._build_default_sort_session_state()
         try:
             if os.path.exists(SESSION_FILE):
                 os.remove(SESSION_FILE)
@@ -1566,16 +1675,6 @@ class SortingService:
         with db.get_db() as conn:
             cursor = conn.cursor()
 
-            # No artificial limit — return ALL checkpoints
-            cursor.execute("""
-                SELECT checkpoint, COUNT(*) as count
-                FROM images
-                WHERE checkpoint IS NOT NULL AND checkpoint != ''
-                GROUP BY checkpoint
-                ORDER BY count DESC
-            """)
-            checkpoints = [dict(row) for row in cursor.fetchall()]
-
             # Use the normalized image_loras table instead of full-table JSON scan
             cursor.execute("""
                 SELECT lora_name AS lora, COUNT(*) as count
@@ -1589,7 +1688,7 @@ class SortingService:
             tags = db.get_all_tags()
 
         return {
-            "checkpoints": checkpoints,
+            "checkpoints": db.get_all_checkpoints(),
             "loras": loras,
             "top_tags": tags
         }
@@ -1607,46 +1706,12 @@ class SortingService:
 
     def export_tags_batch(self, request) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        output_folder = normalize_user_path(request.output_folder)
-        is_valid, error = validate_folder_path(output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
-
-        blacklist = set(tag.strip().lower() for tag in (request.blacklist or []))
-        prefix = request.prefix or ""
-
-        exported = 0
-        errors = []
-        output_folder_ready = os.path.isdir(output_folder)
-
-        for image_id in request.image_ids:
-            image = db.get_image_by_id(image_id)
-            if not image:
-                errors.append(f"Image {image_id} not found")
-                continue
-
-            tags = db.get_image_tags(image_id)
-            filtered_tags = [t["tag"] for t in tags if t["tag"].lower() not in blacklist]
-            tag_string = prefix + ", ".join(filtered_tags) if filtered_tags else prefix.rstrip(", ")
-
-            image_basename = os.path.splitext(image["filename"])[0]
-            output_path = os.path.join(output_folder, f"{image_basename}.txt")
-
-            try:
-                if not output_folder_ready:
-                    os.makedirs(output_folder, exist_ok=True)
-                    output_folder_ready = True
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(tag_string)
-                exported += 1
-            except Exception as e:
-                errors.append(f"Error writing {output_path}: {e}")
-
+        result = export_tags_batch_request(request)
         return {
             "status": "ok",
-            "exported": exported,
-            "total": len(request.image_ids),
-            "errors": errors if errors else None
+            "exported": result["exported"],
+            "total": result["total"],
+            "errors": result["error_messages"] if result["error_messages"] else None,
         }
 
     def load_session_from_disk(self) -> None:
@@ -1656,6 +1721,19 @@ class SortingService:
                 return
             with open(SESSION_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+
+            try:
+                session_version = self._parse_persisted_session_version(data)
+            except ValueError as exc:
+                self._discard_persisted_session_file(str(exc))
+                return
+
+            if session_version not in {0, SORT_SESSION_SCHEMA_VERSION}:
+                self._discard_persisted_session_file(
+                    f"unsupported session_schema_version={session_version} (current={SORT_SESSION_SCHEMA_VERSION})"
+                )
+                return
+
             if not data.get('active'):
                 return
 
@@ -1719,7 +1797,7 @@ class SortingService:
                     logger.warning("Skipping invalid folder path for key %s", key)
 
             with self._sort_session_lock:
-                self._sort_session = {
+                self._sort_session = self._coerce_sort_session_state({
                     'active': True,
                     'image_ids': valid_ids,
                     'current_index': restored_index,
@@ -1727,7 +1805,7 @@ class SortingService:
                     'operation_mode': operation_mode,
                     'history': restored_history,
                     'redo_stack': restored_redo_stack,
-                }
+                })
                 self._save_session_to_disk()
             logger.info("Restored session: %d images", len(valid_ids))
         except Exception as e:
@@ -1736,15 +1814,7 @@ class SortingService:
     def _save_session_to_disk(self) -> None:
         """Persist session to disk."""
         try:
-            data = {
-                'active': self._sort_session['active'],
-                'current_index': self._sort_session['current_index'],
-                'folders': self._sort_session['folders'],
-                'operation_mode': self._sort_session.get('operation_mode', 'move'),
-                'history': self._sort_session['history'],
-                'redo_stack': self._sort_session.get('redo_stack', []),
-                'image_ids': self._sort_session['image_ids']
-            }
+            data = self._build_persisted_sort_session_payload()
             with open(SESSION_FILE, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
         except Exception as e:

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+
+jobs:
+  linux-full:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+
+      - name: Install Playwright dependencies
+        working-directory: tests/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run full CI script
+        run: python scripts/run_ci.py
+
+      - name: Upload backend coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-xml
+          path: backend/coverage.xml
+
+  windows-risk-areas:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+
+      - name: Path identity and migration tests
+        working-directory: backend
+        run: |
+          python -m pytest tests/test_source_paths.py tests/test_database.py -k "schema_version or legacy_database_without_schema_version or windows or drive or wsl" -q
+
+      - name: Indexed overwrite reconciliation tests
+        working-directory: backend
+        run: |
+          python -m pytest tests/test_routers/test_images.py tests/test_routers/test_prompts_censor_similarity_artists.py tests/test_routers/test_obfuscation.py -k "overwrite_refreshes_indexed_state or same_path_overwrite" -q
+
+      - name: Release and updater tests
+        working-directory: backend
+        run: |
+          python -m pytest tests/test_release_build.py tests/test_update_service.py tests/test_update_worker.py -q

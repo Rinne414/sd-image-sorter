@@ -152,6 +152,33 @@ class TestPromptsRouter:
         assert data["top_checkpoints_total"] == 3
         assert data["top_checkpoints_has_more"] is True
 
+    def test_prompt_stats_group_checkpoint_variants_by_normalized_name(self, test_client, test_db):
+        for index in range(3):
+            image_id = test_db.add_image(
+                path=f"/tmp/rv51_variant_{index}.png",
+                filename=f"rv51_variant_{index}.png",
+                metadata_json="{}",
+                checkpoint="RealisticVisionV51.safetensors [abc12345]" if index % 2 == 0 else "RealisticVisionV51.safetensors",
+                prompt="cinematic portrait, studio lighting",
+            )
+            with test_db.get_db() as conn:
+                conn.execute(
+                    "UPDATE images SET aesthetic_score = ? WHERE id = ?",
+                    (7.5 + index * 0.1, image_id),
+                )
+                conn.execute(
+                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                    (image_id, "studio_lighting", 0.9),
+                )
+
+        response = test_client.get("/api/prompts/stats?checkpoint_limit=10&leader_limit=10&recipe_limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert any(item["name"] == "RealisticVisionV51" and item["count"] == 3 for item in data["top_checkpoints"])
+        assert any(item["name"] == "RealisticVisionV51" and item["count"] == 3 for item in data["checkpoint_score_leaders"])
+        assert any(recipe["name"] == "RealisticVisionV51" and "studio_lighting" in recipe["tags"] for recipe in data["checkpoint_recipes"])
+
 
 class TestCensorRouterValidation:
     @pytest.mark.parametrize(

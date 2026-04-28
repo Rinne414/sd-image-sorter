@@ -10,11 +10,28 @@ const repoRoot = path.resolve(__dirname, '..', '..')
 const backendPythonCandidates = process.platform === 'win32' ? [
   path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
   path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+  'python',
 ] : [
   path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+  'python3',
+  'python',
   path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
 ]
-const backendPython = process.env.PW_BACKEND_PYTHON || backendPythonCandidates.find((candidate) => fs.existsSync(candidate)) || backendPythonCandidates[0]
+
+function commandExists(candidate: string): boolean {
+  if (candidate.includes(path.sep) || candidate.includes('/')) {
+    return fs.existsSync(candidate)
+  }
+
+  try {
+    const lookupCommand = process.platform === 'win32' ? 'where' : 'which'
+    return execFileSync(lookupCommand, [candidate], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().length > 0
+  } catch {
+    return false
+  }
+}
+
+const backendPython = process.env.PW_BACKEND_PYTHON || backendPythonCandidates.find((candidate) => commandExists(candidate)) || backendPythonCandidates[0]
 const backendMain = path.join(repoRoot, 'backend', 'main.py')
 
 function isWindowsExecutable(candidate: string): boolean {

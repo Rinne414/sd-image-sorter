@@ -23,6 +23,15 @@ router = APIRouter(prefix="/api", tags=["sorting"])
 
 # Service instance - will be set via dependency injection
 _sorting_service: Optional[SortingService] = None
+scan_progress: Any = None
+sort_session: Any = None
+
+
+def _bind_sorting_compat_state(service: SortingService) -> None:
+    """Keep legacy router-level state handles pointed at the service-owned state."""
+    global scan_progress, sort_session
+    scan_progress = service.get_scan_progress_proxy()
+    sort_session = service.get_sort_session_proxy()
 
 
 def get_sorting_service() -> SortingService:
@@ -30,6 +39,7 @@ def get_sorting_service() -> SortingService:
     global _sorting_service
     if _sorting_service is None:
         _sorting_service = SortingService()
+        _bind_sorting_compat_state(_sorting_service)
     return _sorting_service
 
 
@@ -37,6 +47,7 @@ def set_sorting_service(service: SortingService) -> None:
     """Set the sorting service instance."""
     global _sorting_service
     _sorting_service = service
+    _bind_sorting_compat_state(service)
 
 
 def load_session_from_disk() -> None:
@@ -64,43 +75,8 @@ def set_sort_session(session: Dict[str, Any]) -> None:
     get_sorting_service().set_sort_session(session)
 
 
-# Property for backward compatibility with tests
-class _ScanProgressProxy:
-    """Proxy object that provides attribute-style access to scan progress."""
-
-    def __getitem__(self, key):
-        return get_sorting_service().get_scan_progress()[key]
-
-    def __setitem__(self, key, value):
-        progress = get_sorting_service().get_scan_progress()
-        progress[key] = value
-        get_sorting_service().set_scan_progress(progress)
-
-    def copy(self):
-        return get_sorting_service().get_scan_progress().copy()
-
-
-class _SortSessionProxy:
-    """Proxy object that provides attribute-style access to sort session."""
-
-    def __getitem__(self, key):
-        return get_sorting_service().get_sort_session()[key]
-
-    def __setitem__(self, key, value):
-        session = get_sorting_service().get_sort_session()
-        session[key] = value
-        get_sorting_service().set_sort_session(session)
-
-    def copy(self):
-        return get_sorting_service().get_sort_session().copy()
-
-
-scan_progress = _ScanProgressProxy()
-sort_session = _SortSessionProxy()
-
-
-# Import BatchTagExportRequest for export endpoint
-from services.tagging_service import BatchTagExportRequest
+if scan_progress is None or sort_session is None:
+    _bind_sorting_compat_state(get_sorting_service())
 
 
 @router.post(
@@ -154,39 +130,8 @@ async def validate_path(
 )
 async def get_system_info_endpoint():
     """Get system hardware info and recommended tagger configuration."""
-    try:
-        from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
-        from hardware_monitor import get_system_info, recommend_tagger_config
-
-        system_info = get_system_info()
-        recommendation = recommend_tagger_config(system_info, model_name=DEFAULT_TAGGER_MODEL, use_gpu=True)
-        recommendations_by_model = {}
-        for model_name in TAGGER_MODELS.keys():
-            recommendations_by_model[model_name] = {
-                "gpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=True),
-                "cpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=False),
-            }
-        recommendations_by_model["custom"] = {
-            "gpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=True),
-            "cpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=False),
-        }
-        return {
-            "system_info": system_info,
-            "recommendation": recommendation,
-            "recommendations_by_model": recommendations_by_model,
-        }
-    except Exception as e:
-        return {
-            "system_info": {"error": str(e)},
-            "recommendation": {
-                "recommended_batch_size": 2,
-                "recommended_use_gpu": False,
-                "recommended_session_refresh_interval": 0,
-                "risk_level": "medium",
-                "message": f"Hardware detection failed: {e}",
-            },
-            "recommendations_by_model": {},
-        }
+    service = get_sorting_service()
+    return service.get_system_info_payload()
 
 
 @router.post(

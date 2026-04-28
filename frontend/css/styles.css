@@ -3057,6 +3057,7 @@ body::before {
         display: flex;
         flex-direction: column;
         gap: 12px;
+        pointer-events: none;
     }
 
     .toast {
@@ -3069,6 +3070,7 @@ body::before {
         display: flex;
         align-items: center;
         gap: 12px;
+        pointer-events: none;
     }
 
     @keyframes toastSlideIn {
@@ -3315,6 +3317,12 @@ body::before {
         font-size: 13px;
         line-height: 1.45;
         color: var(--text-primary);
+    }
+
+    .selection-panel-scope {
+        font-size: 12px;
+        line-height: 1.4;
+        color: rgba(255, 255, 255, 0.64);
     }
 
     .selection-panel-clear {
@@ -6508,14 +6516,17 @@ input[type="radio"],
 /* Toast container accessibility */
 .toast-container {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
+    top: 80px;
+    right: 24px;
+    bottom: auto;
     z-index: 10001;
+    pointer-events: none;
 }
 
 .toast {
     min-height: 44px;
     padding: 12px 20px;
+    pointer-events: none;
 }
 
 /* Selection mode indicator */

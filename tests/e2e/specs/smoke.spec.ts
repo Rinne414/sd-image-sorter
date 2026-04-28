@@ -520,6 +520,59 @@ async function waitForNavigationChrome(page) {
   }).toBe(true)
 }
 
+async function hasMainPageShell(page) {
+  return await page.evaluate(() => {
+    const isVisible = (element: Element | null) => {
+      if (!(element instanceof HTMLElement)) return false
+      const style = window.getComputedStyle(element)
+      const rect = element.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+    }
+
+    return document.readyState !== 'loading' && (
+      isVisible(document.querySelector('.nav-tabs [data-view="gallery"]'))
+      || isVisible(document.getElementById('mobile-menu-toggle'))
+      || isVisible(document.getElementById('view-gallery'))
+    )
+  }).catch(() => false)
+}
+
+async function waitForMainPageShell(page, timeout = 10000) {
+  try {
+    await expect.poll(async () => {
+      return await hasMainPageShell(page)
+    }, { timeout }).toBe(true)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function openMainPage(page) {
+  let navigationError = null
+  try {
+    await page.goto('/', { waitUntil: 'commit', timeout: 5000 })
+  } catch (error) {
+    navigationError = error
+  }
+
+  if (navigationError && !(await waitForMainPageShell(page))) {
+    throw navigationError
+  }
+
+  await waitForNavigationChrome(page)
+}
+
+async function getLiveSortBy(page) {
+  return await page.evaluate(() => {
+    const app = (window as any).App
+    if (app?.FilterStore && typeof app.FilterStore.getState === 'function') {
+      return app.FilterStore.getState()?.sortBy ?? null
+    }
+    return app?.AppState?.filters?.sortBy ?? null
+  })
+}
+
 async function openSortingSubView(page, subView: 'autosep' | 'manual') {
   await openView(page, 'sorting')
   await expect(page.locator('#view-sorting.active')).toBeVisible()
@@ -546,9 +599,29 @@ async function openTagAdvancedOptions(page) {
 
 async function setGallerySearch(page, search: string) {
   await page.evaluate(async (value) => {
-    window.App.AppState.filters.search = value
+    const waitFor = async (predicate: () => boolean, timeout = 10000) => {
+      const start = Date.now()
+      while (!predicate()) {
+        if (Date.now() - start > timeout) {
+          throw new Error('Timed out waiting for gallery search helpers to initialize')
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+
+    await waitFor(() => Boolean(window.App && typeof window.App.loadImages === 'function'))
+    if (typeof window.App.updateFilters === 'function') {
+      window.App.updateFilters((filters: any) => {
+        filters.search = value
+      })
+    } else {
+      window.App.AppState.filters.search = value
+    }
     window.App.updateFilterSummary()
     await window.App.loadImages()
+    await waitFor(() => window.App.AppState?.isLoading === false)
+    await waitFor(() => Boolean(window.Gallery && typeof window.Gallery.setImages === 'function'))
+    window.Gallery.setImages(window.App.AppState.images || [])
   }, search)
 }
 
@@ -561,8 +634,7 @@ async function setGallerySearch(page, search: string) {
 
 test.describe('Smoke Tests', () => {
   test('should load the main page', async ({ page }) => {
-    await page.goto('/')
-    await waitForNavigationChrome(page)
+    await openMainPage(page)
 
     // Verify the page title
     await expect(page).toHaveTitle(/SD Image Sorter/i)
@@ -578,7 +650,7 @@ test.describe('Smoke Tests', () => {
   })
 
   test('should have all navigation tabs', async ({ page }) => {
-    await page.goto('/')
+    await openMainPage(page)
 
     const tabs = [
       'gallery',
@@ -763,20 +835,65 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#obfuscate-password')).toBeHidden()
   })
 
-  test('gallery sort reverse should support aesthetic score', async ({ page }) => {
+  test('obfuscation success toast should not block follow-up clicks', async ({ page }) => {
+    const samplePngBuffer = Buffer.from(MIXED_MASK_DATA_URL.split(',')[1], 'base64')
+
     await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await waitForNavigationChrome(page)
+
+    await openView(page, 'reader')
+    await page.locator('#reader-tool-tab-obfuscation').click()
+    await expect(page.locator('#reader-tool-panel-obfuscation')).toBeVisible()
+
+    await page.locator('#obfuscate-file-input').setInputFiles({
+      name: 'obfuscate-toast-check.png',
+      mimeType: 'image/png',
+      buffer: samplePngBuffer,
+    })
+
+    const queueItem = page.locator('.obfuscate-item').first()
+    await expect(queueItem).toBeVisible()
+
+    await page.locator('#obfuscate-btn-encode').click()
+    await expect(queueItem).toHaveClass(/done/)
+
+    const toast = page.locator('#toast-container .toast').last()
+    await expect(toast).toBeVisible()
+    await expect(toast).toContainText(/Protected 1\/1 images|已处理|已保护/i)
+
+    await page.locator('#obfuscate-settings-toggle').click()
+    await expect(page.locator('#obfuscate-advanced-settings')).toBeVisible()
+
+    await page.locator('#obfuscate-btn-clear').click()
+    await expect(page.locator('.obfuscate-item')).toHaveCount(0)
+    await expect(page.locator('#toast-container .toast').last()).toBeVisible()
+  })
+
+  test('gallery sort reverse should support aesthetic score', async ({ page }) => {
+    await page.route('**/api/aesthetic/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          available: true,
+          message: '',
+          scored_count: 6,
+        }),
+      })
+    })
+
+    await openMainPage(page)
 
     await page.locator('#gallery-sort').selectOption('aesthetic')
     await expect(page.locator('#gallery-sort')).toHaveValue('aesthetic')
 
     await expect.poll(async () => {
-      return await page.evaluate(() => (window as any).App?.AppState?.filters?.sortBy ?? null)
+      return await getLiveSortBy(page)
     }).toBe('aesthetic')
 
     await page.locator('#sort-reverse-btn').click()
     await expect.poll(async () => {
-      return await page.evaluate(() => (window as any).App?.AppState?.filters?.sortBy ?? null)
+      return await getLiveSortBy(page)
     }).toBe('aesthetic_asc')
     await expect(page.locator('#sort-reverse-btn')).toHaveClass(/active/)
   })
@@ -1494,6 +1611,7 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeVisible()
+    await expect(page.locator('#selection-scope-summary')).toContainText('visible thumbnails')
     await expect(page.locator('#btn-export-selected')).toBeDisabled()
     await expect(page.locator('#btn-send-to-censor')).toBeDisabled()
 
@@ -1507,6 +1625,114 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeHidden()
+  })
+
+  test('selection scope summary should distinguish visible actions from loaded range selection', async ({ page }) => {
+    await Promise.all([101, 102, 103].map((id) => mockImageAsset(page, id)))
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: [
+            { id: 101, filename: 'scope-1.png', path: 'L:/scope-1.png', prompt: 'scope one' },
+            { id: 102, filename: 'scope-2.png', path: 'L:/scope-2.png', prompt: 'scope two' },
+            { id: 103, filename: 'scope-3.png', path: 'L:/scope-3.png', prompt: 'scope three' },
+          ],
+          total: 3,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const galleryItems = page.locator('#gallery-grid .gallery-item')
+    const scopeSummary = page.locator('#selection-scope-summary')
+
+    await page.locator('#btn-toggle-select').click()
+    await expect(galleryItems).toHaveCount(3)
+    await expect(scopeSummary).toContainText('visible thumbnails')
+
+    await galleryItems.nth(0).click()
+    await page.keyboard.down('Shift')
+    await galleryItems.nth(2).click()
+    await page.keyboard.up('Shift')
+    await expect(scopeSummary).toContainText('loaded items')
+
+    await page.locator('#btn-select-all').click()
+    await expect(scopeSummary).toContainText('visible thumbnails')
+  })
+
+  test('filtered selection should resolve all matching ids and survive same-filter reloads', async ({ page }) => {
+    const loadedImages = [
+      buildMockGalleryImage(11, { filename: 'filtered-1.png', prompt: 'filtered one' }),
+      buildMockGalleryImage(22, { filename: 'filtered-2.png', prompt: 'filtered two' }),
+    ]
+    let selectionIdsRequests = 0
+
+    await Promise.all(loadedImages.map((image) => mockImageAsset(page, image.id)))
+
+    await page.route('**/api/images**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (pathname !== '/api/images') {
+        await route.continue()
+        return
+      }
+
+      await route.fulfill({
+        json: {
+          images: loadedImages,
+          total: 4,
+          has_more: false,
+          next_cursor: null,
+        },
+      })
+    })
+
+    await page.route('**/api/images/selection-ids', async (route) => {
+      selectionIdsRequests += 1
+      expect(route.request().method()).toBe('POST')
+      expect(route.request().postDataJSON()).toMatchObject({
+        sortBy: 'newest',
+      })
+      await route.fulfill({
+        json: {
+          image_ids: [11, 22, 33, 44],
+          total: 4,
+        },
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    await page.locator('#btn-toggle-select').click()
+    await page.locator('#btn-select-filtered').click()
+
+    await expect.poll(() => selectionIdsRequests).toBe(1)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
+    await expect(page.locator('#selection-count')).toContainText('4 items selected')
+    await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
+
+    await page.evaluate(() => window.App.loadImages())
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
+    await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
+
+    await page.evaluate(() => {
+      window.App.updateFilters((filters) => {
+        filters.search = 'changed-filter'
+      })
+      return window.App.loadImages()
+    })
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
+    await expect(page.locator('#selection-scope-summary')).toContainText('visible thumbnails')
   })
 
   test('export modal should fetch selected prompt/tag data once and reuse it when toggling views', async ({ page }) => {

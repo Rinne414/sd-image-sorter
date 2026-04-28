@@ -37,7 +37,14 @@ DEFAULT_VERSION = _read_default_version()
 # Python embeddable package URL template (Windows amd64)
 PYTHON_EMBED_VERSION = "3.11.9"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
+PYTHON_EMBED_SHA256 = "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"
 GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+GET_PIP_SHA256 = "feba1c697df45be1b539b40d93c102c9ee9dde1d966303323b830b06f3fbca3c"
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+DOWNLOAD_TIMEOUT_SECONDS = 120
+DOWNLOAD_HEADERS = {
+    "User-Agent": f"sd-image-sorter-release-builder/{DEFAULT_VERSION}",
+}
 
 DOC_FILES = {
     "models/README.md",
@@ -319,16 +326,52 @@ def create_split_zip(source_file: Path, archive_path: Path, split_size_mb: int, 
 def sha256sum(file_path: Path) -> str:
     digest = hashlib.sha256()
     with file_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        for chunk in iter(lambda: handle.read(DOWNLOAD_CHUNK_SIZE), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def download_file(url: str, dest: Path) -> None:
-    """Download a file from a URL to a local path."""
+def download_file(url: str, dest: Path, *, expected_sha256: str | None = None) -> None:
+    """Download a file from a URL to a local path with optional hash verification."""
     print(f"[release] Downloading {url} ...")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, dest)
+    normalized_expected = str(expected_sha256 or "").strip().lower()
+
+    if dest.exists():
+        if normalized_expected:
+            existing_hash = sha256sum(dest)
+            if existing_hash == normalized_expected:
+                print(f"[release] Reusing verified download at {dest}")
+                return
+            print(f"[release] Existing file hash mismatch for {dest.name}; re-downloading.")
+        else:
+            print(f"[release] Reusing existing download at {dest}")
+            return
+
+    tmp_dest = dest.with_name(dest.name + ".tmp")
+    if tmp_dest.exists():
+        tmp_dest.unlink()
+
+    digest = hashlib.sha256()
+    request = urllib.request.Request(url, headers=DOWNLOAD_HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, tmp_dest.open("wb") as handle:
+            while True:
+                chunk = response.read(DOWNLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                digest.update(chunk)
+        actual_hash = digest.hexdigest()
+        if normalized_expected and actual_hash != normalized_expected:
+            raise RuntimeError(
+                f"Downloaded file checksum mismatch for {dest.name}: "
+                f"expected {normalized_expected}, got {actual_hash}"
+            )
+        tmp_dest.replace(dest)
+    finally:
+        if tmp_dest.exists():
+            tmp_dest.unlink()
     print(f"[release] Downloaded to {dest} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
@@ -518,8 +561,7 @@ def prepare_embedded_python(stage_dir: Path) -> None:
 
     # Download embeddable Python
     embed_zip = ARTIFACT_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
-    if not embed_zip.exists():
-        download_file(PYTHON_EMBED_URL, embed_zip)
+    download_file(PYTHON_EMBED_URL, embed_zip, expected_sha256=PYTHON_EMBED_SHA256)
 
     # Extract
     import zipfile
@@ -540,8 +582,7 @@ def prepare_embedded_python(stage_dir: Path) -> None:
 
     # Download get-pip.py
     get_pip = python_dir / "get-pip.py"
-    if not get_pip.exists():
-        download_file(GET_PIP_URL, get_pip)
+    download_file(GET_PIP_URL, get_pip, expected_sha256=GET_PIP_SHA256)
 
     # Keep exact CRLF endings for cmd.exe; newline translation can corrupt batch files.
     write_portable_launcher(stage_dir)
@@ -613,11 +654,9 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
             }
         )
 
-    # Manifest is a local-only record of SHA-256 + sizes for CI / verification.
-    # Do not append to `assets` so it is not uploaded as a public release asset —
-    # the same SHAs are already printed in the release notes.
     manifest_path = ARTIFACT_ROOT / f"sd-image-sorter-v{version}-release-manifest.json"
     manifest_path.write_text(json.dumps({"version": version, "assets": manifest_entries}, indent=2), encoding="utf-8")
+    assets.append(manifest_path)
     shutil.rmtree(STAGING_ROOT, ignore_errors=True)
     return assets
 

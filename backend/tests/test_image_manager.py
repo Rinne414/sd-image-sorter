@@ -102,6 +102,8 @@ def test_scan_folder_preserves_created_at_when_file_mtime_changes(test_db, tmp_p
     second = scan_folder(str(tmp_path), recursive=False)
     assert second["updated"] == 1
     rescanned_row = test_db.get_images(limit=10, include_unreadable=True)[0]
+    assert rescanned_row["library_order_time"] == original_row["library_order_time"]
+    assert rescanned_row["source_file_mtime"] != original_row["source_file_mtime"]
     assert rescanned_row["created_at"] == original_row["created_at"]
 
 

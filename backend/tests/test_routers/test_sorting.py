@@ -47,6 +47,49 @@ def isolated_sorting_service():
     set_sorting_service(SortingService())
 
 
+class TestRouterCompatibilityState:
+    """Tests for legacy router compatibility shims delegating to service-owned state."""
+
+    def test_scan_progress_compat_helpers_delegate_to_service(self, isolated_sorting_service):
+        from routers import sorting as sorting_router
+
+        sorting_router.set_scan_progress_state({
+            "status": "running",
+            "current": 3,
+            "total": 9,
+            "message": "Scanning...",
+        })
+
+        assert isolated_sorting_service.get_scan_progress()["status"] == "running"
+        assert sorting_router.scan_progress.copy()["current"] == 3
+
+        sorting_router.scan_progress["message"] = "Compat update"
+
+        assert isolated_sorting_service.get_scan_progress()["message"] == "Compat update"
+        assert sorting_router.get_scan_progress_state()["message"] == "Compat update"
+
+    def test_sort_session_compat_helpers_delegate_to_service(self, isolated_sorting_service):
+        from routers import sorting as sorting_router
+
+        sorting_router.set_sort_session({
+            "active": True,
+            "image_ids": [11, 22],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        })
+
+        assert isolated_sorting_service.get_sort_session()["image_ids"] == [11, 22]
+        assert sorting_router.sort_session.copy()["current_index"] == 0
+
+        sorting_router.sort_session["current_index"] = 1
+
+        assert isolated_sorting_service.get_sort_session()["current_index"] == 1
+        assert sorting_router.get_sort_session()["current_index"] == 1
+
+
 class TestValidatePath:
     """Tests for POST /api/validate-path endpoint."""
 
@@ -95,6 +138,39 @@ class TestValidatePath:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
+
+
+class TestSystemInfo:
+    """Tests for GET /api/system-info endpoint."""
+
+    def test_get_system_info_returns_recommendations_by_model(self, test_client):
+        with patch("hardware_monitor.get_system_info", return_value={
+            "total_ram_gb": 32,
+            "available_ram_gb": 24,
+            "gpu_name": "Test GPU",
+            "gpu_vram_total_mb": 16384,
+            "gpu_vram_available_mb": 12000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        }), patch("hardware_monitor.recommend_tagger_config", side_effect=lambda system_info, model_name, use_gpu: {
+            "model_name": model_name,
+            "use_gpu": use_gpu,
+            "recommended_batch_size": 4 if use_gpu else 2,
+            "recommended_use_gpu": use_gpu,
+            "recommended_session_refresh_interval": 180 if use_gpu else 0,
+            "risk_level": "low" if use_gpu else "medium",
+        }):
+            response = test_client.get("/api/system-info")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["system_info"]["gpu_name"] == "Test GPU"
+        assert "recommendation" in data
+        assert "recommendations_by_model" in data
+        assert "wd-swinv2-tagger-v3" in data["recommendations_by_model"]
+        assert "custom" in data["recommendations_by_model"]
+        assert data["recommendations_by_model"]["custom"]["gpu"]["use_gpu"] is True
+        assert data["recommendations_by_model"]["custom"]["cpu"]["use_gpu"] is False
 
 
 class TestScan:
@@ -1131,7 +1207,7 @@ class TestSortSession:
     def test_load_session_from_disk_rebases_current_index_and_keeps_valid_redo(self, test_client, tmp_path: Path, monkeypatch):
         """Restore should drop missing image ids but keep current_index/history/redo aligned with the surviving order."""
         from services import sorting_service as sorting_module
-        from services.sorting_service import SortingService
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
 
         db = test_client.test_db
         first_id = db.add_image(
@@ -1180,6 +1256,7 @@ class TestSortSession:
 
         session_path = tmp_path / "sort_session.json"
         session_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
             "active": True,
             "image_ids": [first_id, second_id, third_id],
             "current_index": 2,
@@ -1205,13 +1282,14 @@ class TestSortSession:
         assert [entry["image_id"] for entry in restored["redo_stack"]] == [third_id]
 
         persisted = json.loads(session_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
         assert persisted["current_index"] == 1
         assert persisted["image_ids"] == [second_id, third_id]
 
     def test_load_session_from_disk_discards_history_past_restored_cursor(self, test_client, tmp_path: Path, monkeypatch):
         """Corrupt persisted history should not be allowed to push the restored cursor past the saved current index."""
         from services import sorting_service as sorting_module
-        from services.sorting_service import SortingService
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
 
         db = test_client.test_db
         first_id = db.add_image(
@@ -1259,9 +1337,52 @@ class TestSortSession:
 
         service.load_session_from_disk()
         restored = service.get_sort_session()
+        persisted = json.loads(session_path.read_text(encoding="utf-8"))
 
         assert restored["current_index"] == 1
         assert [entry["image_id"] for entry in restored["history"]] == [first_id]
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+
+    def test_load_session_from_disk_discards_unknown_newer_schema_version(self, test_client, tmp_path: Path, monkeypatch):
+        """A persisted session from a newer schema version should be discarded instead of half-restored."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_future_version.png",
+            filename="restore_future_version.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        session_path = tmp_path / "sort_session_future.json"
+        session_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION + 1,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(session_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is False
+        assert restored["image_ids"] == []
+        assert session_path.exists() is False
 
     def test_set_sort_folders(self, test_client, tmp_path: Path):
         """Setting sort folders should work."""
@@ -1330,6 +1451,28 @@ class TestAnalytics:
         assert "checkpoints" in data
         assert "loras" in data
         assert "top_tags" in data
+
+    def test_get_analytics_groups_checkpoint_variants_by_normalized_name(self, test_client):
+        test_client.test_db.add_image(
+            path="/tmp/analytics_cp_a.png",
+            filename="analytics_cp_a.png",
+            checkpoint="ponyXLV6.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+        test_client.test_db.add_image(
+            path="/tmp/analytics_cp_b.png",
+            filename="analytics_cp_b.png",
+            checkpoint="ponyXLV6.safetensors",
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/analytics")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["checkpoints"][0]["checkpoint"] == "ponyXLV6"
+        assert data["checkpoints"][0]["checkpoint_normalized"] == "ponyXLV6"
+        assert data["checkpoints"][0]["count"] == 2
 
     def test_get_stats(self, test_client, test_db_with_images):
         """Getting stats should return summary."""

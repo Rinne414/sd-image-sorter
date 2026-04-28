@@ -31,12 +31,12 @@ test.describe('Image Reader — Paste from Clipboard', () => {
 
     const pasteBtn = page.locator('#reader-paste-btn')
     await expect(pasteBtn).toBeVisible()
-    await expect(pasteBtn).toContainText(/Paste via Ctrl\+V|通过 Ctrl\+V 粘贴/)
+    await expect(pasteBtn).toContainText(/Paste from Clipboard|从剪贴板粘贴/)
 
     const hints = page.locator('.reader-paste-hint')
     await expect(hints.first()).toBeVisible()
     await expect(hints.first()).toContainText(/Ctrl\+V/i)
-    await expect(hints.nth(1)).toContainText(/metadata|元数据/i)
+    await expect(hints.nth(1)).toContainText(/prompt details|full image info|完整提示词|完整信息/i)
   })
 
   test('Ctrl+V paste event containing an image triggers the reader pipeline', async ({ page }) => {
@@ -86,9 +86,12 @@ test.describe('Image Reader — Paste from Clipboard', () => {
 
     // The reader should show the preview, result panel, and clipboard warning.
     await expect(page.locator('#reader-image-preview')).toBeVisible({ timeout: 5000 })
-    await expect(page.locator('#reader-generator')).toHaveText('WEBUI', { timeout: 5000 })
+    await expect(page.locator('#reader-generator')).toHaveText('WebUI', { timeout: 5000 })
     await expect(page.locator('#reader-prompt-text')).toContainText('test paste prompt')
-    await expect(page.locator('#reader-status')).toContainText(/Clipboard images may lose|剪贴板图片可能丢失/, { timeout: 5000 })
+    await expect(page.locator('#reader-status')).toContainText(
+      /prompt or model details may be incomplete|提示词或模型信息可能不完整/,
+      { timeout: 5000 },
+    )
   })
 
   test('paste button arms clipboard capture and the next paste event uses the same pipeline', async ({ page }) => {
@@ -194,15 +197,24 @@ test.describe('Image Reader — Paste from Clipboard', () => {
       document.dispatchEvent(evt)
     }, TINY_PNG_BASE64)
 
-    await expect(page.locator('#reader-generator')).toHaveText('UNKNOWN', { timeout: 5000 })
-    await expect(page.locator('#reader-status')).toContainText(/did not include original SD metadata|没有带上原始 SD 元数据/, {
-      timeout: 5000,
-    })
-    await expect(page.locator('#reader-prompt-text')).toContainText(/lost SD metadata|已经丢失 SD 元数据/, {
-      timeout: 5000,
-    })
-    await expect(page.locator('#reader-params')).toContainText(/lost SD generation parameters|已经丢失 SD 生成参数/, {
-      timeout: 5000,
-    })
+    await expect(page.locator('#reader-generator')).toHaveText('Unknown', { timeout: 5000 })
+    await expect(page.locator('#reader-status')).toContainText(
+      /did not include the original image info|没有带上原始图片信息/,
+      {
+        timeout: 5000,
+      },
+    )
+    await expect(page.locator('#reader-prompt-text')).toContainText(
+      /does not contain the full prompt|没有完整提示词/,
+      {
+        timeout: 5000,
+      },
+    )
+    await expect(page.locator('#reader-params')).toContainText(
+      /does not contain the full generation parameters|没有完整出图参数/,
+      {
+        timeout: 5000,
+      },
+    )
   })
 })

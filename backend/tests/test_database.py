@@ -74,6 +74,309 @@ class TestDatabaseInit:
         assert collection is not None
         assert collection["slug"] == "favorites"
 
+    def test_init_creates_schema_version(self, test_db):
+        """Database initialization should track an explicit schema version."""
+        import sqlite3
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+        assert cursor.fetchone() is not None
+
+        cursor.execute("SELECT version FROM schema_version")
+        row = cursor.fetchone()
+        assert row is not None
+        assert int(row[0]) >= 1
+        conn.close()
+
+    def test_init_upgrades_legacy_database_without_schema_version(self, tmp_path):
+        """Legacy databases should be upgraded through the migration runner."""
+        import sqlite3
+
+        legacy_db_path = tmp_path / "legacy_images.db"
+        original_path = db.DATABASE_PATH
+        db.DATABASE_PATH = str(legacy_db_path)
+        db._pragmas_initialized = set()
+
+        try:
+            conn = sqlite3.connect(legacy_db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                CREATE TABLE images (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path TEXT UNIQUE NOT NULL,
+                    filename TEXT NOT NULL,
+                    generator TEXT DEFAULT 'unknown',
+                    prompt TEXT,
+                    negative_prompt TEXT,
+                    metadata_json TEXT,
+                    width INTEGER,
+                    height INTEGER,
+                    file_size INTEGER,
+                    created_at DATETIME,
+                    indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    tagged_at DATETIME
+                )
+                """
+            )
+            cursor.execute(
+                """
+                INSERT INTO images (path, filename, generator, prompt, metadata_json, width, height, file_size, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("/legacy/example.png", "example.png", "webui", "legacy prompt", "{}", 512, 512, 12345, "2024-01-02 03:04:05"),
+            )
+            conn.commit()
+            conn.close()
+
+            db.init_db()
+
+            conn = sqlite3.connect(legacy_db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT version FROM schema_version")
+            schema_version = cursor.fetchone()
+            assert schema_version is not None
+            assert int(schema_version[0]) >= 1
+
+            cursor.execute("PRAGMA table_info(images)")
+            columns = {row[1] for row in cursor.fetchall()}
+            assert "checkpoint" in columns
+            assert "checkpoint_normalized" in columns
+            assert "loras" in columns
+            assert "embedding" in columns
+            assert "ai_caption" in columns
+            assert "model_hash" in columns
+            assert "aesthetic_score" in columns
+            assert "is_readable" in columns
+            assert "read_error" in columns
+            assert "source_mtime_ns" in columns
+            assert "source_size" in columns
+            assert "metadata_status" in columns
+            assert "content_fingerprint" in columns
+            assert "library_order_time" in columns
+            assert "source_file_mtime" in columns
+
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_loras'")
+            assert cursor.fetchone() is not None
+
+            cursor.execute(
+                """
+                SELECT prompt, library_order_time, source_file_mtime, created_at
+                FROM images
+                WHERE path = ?
+                """,
+                ("/legacy/example.png",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert row[0] == "legacy prompt"
+            assert row[1] == "2024-01-02 03:04:05"
+            assert row[2] == "2024-01-02 03:04:05"
+            assert row[3] == "2024-01-02 03:04:05"
+
+            conn.close()
+        finally:
+            db.DATABASE_PATH = original_path
+            db._pragmas_initialized = set()
+
+    def test_init_is_idempotent_for_schema_versioned_database(self, test_db):
+        """Repeated init_db calls should not duplicate schema-version rows."""
+        import sqlite3
+
+        db.init_db()
+        db.init_db()
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM schema_version")
+        assert cursor.fetchone()[0] == 1
+        conn.close()
+
+    def test_init_quarantines_stale_pending_rows_without_erasing_recoverable_derived_state(self, test_db):
+        import sqlite3
+
+        image_id = db.add_image(
+            path="/stale/pending.png",
+            filename="pending.png",
+            generator="webui",
+            prompt="pending scan",
+            metadata_json="{}",
+            width=512,
+            height=512,
+            file_size=123,
+            is_readable=True,
+            metadata_status="pending",
+            content_fingerprint="fingerprint-1",
+        )
+
+        db.add_tags(image_id, [{"tag": "kept_until_rescan", "confidence": 0.9}], content_fingerprint="fingerprint-1")
+        with db.get_db() as conn:
+            conn.execute(
+                """
+                UPDATE images
+                SET ai_caption = ?, aesthetic_score = ?, embedding = ?, read_error = NULL
+                WHERE id = ?
+                """,
+                ("stale-but-recoverable", 7.1, b"\x01\x02", image_id),
+            )
+
+        db.init_db()
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            """
+            SELECT is_readable, metadata_status, read_error, content_fingerprint,
+                   ai_caption, aesthetic_score, embedding
+            FROM images
+            WHERE id = ?
+            """,
+            (image_id,),
+        ).fetchone()
+        tag_row = conn.execute(
+            "SELECT tag FROM tags WHERE image_id = ?",
+            (image_id,),
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        assert int(row["is_readable"]) == 0
+        assert row["metadata_status"] == "error"
+        assert "Re-scan" in row["read_error"]
+        assert row["content_fingerprint"] == "fingerprint-1"
+        assert row["ai_caption"] == "stale-but-recoverable"
+        assert row["aesthetic_score"] == 7.1
+        assert row["embedding"] == b"\x01\x02"
+        assert tag_row["tag"] == "kept_until_rescan"
+
+    def test_init_upgrades_versioned_database_with_pending_backfill_migration(self, tmp_path):
+        """Versioned databases should apply remaining migrations and land on the latest version."""
+        import sqlite3
+        import migrations
+
+        versioned_db_path = tmp_path / "versioned_images.db"
+        original_path = db.DATABASE_PATH
+        db.DATABASE_PATH = str(versioned_db_path)
+        db._pragmas_initialized = set()
+
+        try:
+            migration_list = migrations.get_migrations()
+            latest_version = migration_list[-1].version
+
+            conn = sqlite3.connect(versioned_db_path)
+            conn.row_factory = sqlite3.Row
+            migration_list[1].apply(conn)
+            conn.execute(
+                """
+                CREATE TABLE schema_version (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    version INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute("INSERT INTO schema_version (id, version) VALUES (1, 2)")
+            conn.execute(
+                """
+                INSERT INTO images (
+                    path,
+                    filename,
+                    generator,
+                    prompt,
+                    loras,
+                    is_readable,
+                    metadata_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "/legacy/versioned.png",
+                    "versioned.png",
+                    "webui",
+                    "<lora:legacy_style:0.8>",
+                    '["legacy_style"]',
+                    None,
+                    None,
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            db.init_db()
+
+            conn = sqlite3.connect(versioned_db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT version FROM schema_version WHERE id = 1")
+            schema_version = cursor.fetchone()
+            assert schema_version is not None
+            assert int(schema_version["version"]) == latest_version
+
+            cursor.execute(
+                "SELECT is_readable, metadata_status FROM images WHERE path = ?",
+                ("/legacy/versioned.png",),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert int(row["is_readable"]) == 1
+            assert row["metadata_status"] == "complete"
+
+            cursor.execute(
+                "SELECT lora_name FROM image_loras WHERE image_id = (SELECT id FROM images WHERE path = ?)",
+                ("/legacy/versioned.png",),
+            )
+            lora_rows = cursor.fetchall()
+            assert [lora_row["lora_name"] for lora_row in lora_rows] == ["legacy_style"]
+            conn.close()
+        finally:
+            db.DATABASE_PATH = original_path
+            db._pragmas_initialized = set()
+
+    def test_init_rolls_back_failed_migration_without_advancing_version(self, tmp_path, monkeypatch):
+        """A failing migration should not leave behind partial schema writes."""
+        import sqlite3
+        import migrations
+
+        failing_db_path = tmp_path / "failing_images.db"
+        original_path = db.DATABASE_PATH
+        db.DATABASE_PATH = str(failing_db_path)
+        db._pragmas_initialized = set()
+
+        base_migrations = migrations.get_migrations()
+        latest_version = base_migrations[-1].version
+
+        def failing_apply(conn):
+            conn.execute("CREATE TABLE should_not_persist (id INTEGER PRIMARY KEY)")
+            raise RuntimeError("boom")
+
+        failing_migration = migrations.Migration(
+            version=latest_version + 1,
+            name="test_failure",
+            apply=failing_apply,
+        )
+
+        try:
+            db.init_db()
+            monkeypatch.setattr(migrations, "get_migrations", lambda: [*base_migrations, failing_migration])
+
+            with pytest.raises(RuntimeError, match="boom"):
+                db.init_db()
+
+            conn = sqlite3.connect(failing_db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT version FROM schema_version")
+            row = cursor.fetchone()
+            assert row is not None
+            assert int(row[0]) == latest_version
+
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='should_not_persist'"
+            )
+            assert cursor.fetchone() is None
+            conn.close()
+        finally:
+            db.DATABASE_PATH = original_path
+            db._pragmas_initialized = set()
+
 
 class TestImageCRUD:
     """Tests for image CRUD operations."""
@@ -127,6 +430,33 @@ class TestImageCRUD:
 
         image = db.get_image_by_id(image_id)
         assert "new_path.png" in image["path"]
+
+    def test_add_image_reuses_existing_row_for_windows_path_variants(self, test_db):
+        """Same Windows file should not duplicate rows across slash/case variants."""
+        import sqlite3
+
+        first_id, first_status = db.add_image(
+            path=r"L:\Tencent Files\foo\bar.png",
+            filename="bar.png",
+            prompt="first",
+            return_status=True,
+        )
+        second_id, second_status = db.add_image(
+            path=r"l:/Tencent Files/foo/bar.png",
+            filename="bar.png",
+            prompt="second",
+            return_status=True,
+        )
+
+        assert first_status == "new"
+        assert second_status == "updated"
+        assert second_id == first_id
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM images")
+        assert cursor.fetchone()[0] == 1
+        conn.close()
 
     def test_delete_image(self, test_db):
         """Deleting an image should remove it from database."""
@@ -219,6 +549,8 @@ class TestImageCRUD:
         assert updated_id == image_id
         image = db.get_image_by_id(image_id)
         assert image["prompt"] == "rescanned prompt"
+        assert str(image["library_order_time"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
+        assert str(image["source_file_mtime"]) == rescanned_created_at.strftime("%Y-%m-%d %H:%M:%S")
         assert str(image["created_at"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
 
     def test_rescan_preserves_child_records_for_existing_path(self, test_db):
@@ -528,6 +860,31 @@ class TestImageFiltering:
 
         assert len(images) == 1
         assert images[0]["checkpoint"] == "sd_xl_base_1.0.safetensors"
+        assert images[0]["checkpoint_normalized"] == "sd_xl_base_1.0"
+
+    def test_filter_by_normalized_checkpoint_across_raw_variants(self, test_db):
+        """Checkpoint filters should collapse raw generator-specific variants onto one normalized key."""
+        image_a = db.add_image(
+            path="/test/checkpoints/webui_variant.png",
+            filename="webui_variant.png",
+            generator="webui",
+            checkpoint="ponyXLV6.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+        image_b = db.add_image(
+            path="/test/checkpoints/comfy_variant.png",
+            filename="comfy_variant.png",
+            generator="comfyui",
+            checkpoint="ponyXLV6.safetensors",
+            metadata_json="{}",
+        )
+
+        by_normalized = db.get_images(checkpoints=["ponyXLV6"])
+        by_raw_variant = db.get_images(checkpoints=["ponyXLV6.safetensors [abcd1234]"])
+
+        assert {image["id"] for image in by_normalized} == {image_a, image_b}
+        assert {image["id"] for image in by_raw_variant} == {image_a, image_b}
+        assert {image["checkpoint_normalized"] for image in by_normalized} == {"ponyXLV6"}
 
     def test_filter_by_dimensions(self, test_db_with_images):
         """Dimension filters should work correctly."""
@@ -588,6 +945,19 @@ class TestImageFiltering:
                 found = True
                 break
         assert found, "No image found with 'landscape' in prompt"
+
+    def test_search_query_matches_normalized_checkpoint_name(self, test_db):
+        """Free-text search should match normalized checkpoint names as well as prompt text."""
+        image_id = db.add_image(
+            path="/test/search/checkpoint_variant.png",
+            filename="checkpoint_variant.png",
+            checkpoint="RealisticVisionV51.safetensors [abc12345]",
+            metadata_json="{}",
+        )
+
+        images = db.get_images(search_query="realisticvisionv51")
+
+        assert [image["id"] for image in images] == [image_id]
 
     def test_filter_combined(self, test_db_with_images):
         """Combined filters should work together."""
@@ -897,6 +1267,12 @@ class TestLoraExtraction:
         assert db.normalize_lora_name("my_lora.safetensors") == "my_lora"
         assert db.normalize_lora_name("style.ckpt") == "style"
 
+    def test_normalize_checkpoint_name_strips_path_extension_and_hash(self):
+        """Checkpoint normalization should remove path prefixes, file extensions, and WebUI hash suffixes."""
+        assert db.normalize_checkpoint_name(r"models\\ponyXLV6.safetensors [abcd1234]") == "ponyXLV6"
+        assert db.normalize_checkpoint_name("juggernautXL.safetensors") == "juggernautXL"
+        assert db.normalize_checkpoint_name("nai-diffusion-3") == "nai-diffusion-3"
+
 
 class TestCollectionOperations:
     """Tests for collection operations (Favorites)."""
@@ -1006,6 +1382,27 @@ class TestUtilityFunctions:
         assert gen_dict.get("comfyui") == 2
         assert gen_dict.get("webui") == 1
 
+    def test_get_all_checkpoints_groups_raw_variants_by_normalized_name(self, test_db):
+        """Checkpoint analytics should group generator-specific raw variants under one normalized name."""
+        db.add_image(
+            path="/test/cp_stats/variant_a.png",
+            filename="variant_a.png",
+            checkpoint="ponyXLV6.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+        db.add_image(
+            path="/test/cp_stats/variant_b.png",
+            filename="variant_b.png",
+            checkpoint="ponyXLV6.safetensors",
+            metadata_json="{}",
+        )
+
+        checkpoints = db.get_all_checkpoints()
+
+        assert checkpoints[0]["checkpoint"] == "ponyXLV6"
+        assert checkpoints[0]["checkpoint_normalized"] == "ponyXLV6"
+        assert checkpoints[0]["count"] == 2
+
     def test_get_images_in_folder_scope_accepts_equivalent_windows_and_wsl_roots(self, test_db):
         """Folder-scope lookups should match Windows-style rows from a WSL root."""
         windows_path = r"L:\datasets\scope\folder\scope-image.png"
@@ -1015,6 +1412,17 @@ class TestUtilityFunctions:
 
         assert len(rows) == 1
         assert rows[0]["path"] == windows_path
+
+    def test_get_images_in_folder_scope_non_recursive_excludes_nested_children_across_runtime_forms(self, test_db):
+        """Non-recursive folder scopes should keep only direct children across Windows/WSL variants."""
+        direct_child = r"L:\datasets\scope\folder\direct.png"
+        nested_child = r"L:\datasets\scope\folder\nested\deep.png"
+        db.add_image(path=direct_child, filename="direct.png")
+        db.add_image(path=nested_child, filename="deep.png")
+
+        rows = db.get_images_in_folder_scope("/mnt/l/datasets/scope/folder", recursive=False)
+
+        assert [row["path"] for row in rows] == [direct_child]
 
     def test_get_untagged_images(self, test_db):
         """Getting untagged images should work."""

@@ -6,18 +6,23 @@ Handles business logic for image retrieval, filtering, and file operations.
 import logging
 import io
 import os
+import subprocess
+import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 from email.utils import format_datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from PIL import Image, PngImagePlugin, UnidentifiedImageError
+from starlette.concurrency import run_in_threadpool
 
 import database as db
 from constants import VALID_ASPECT_RATIOS
 from image_manager import reparse_image_metadata
+from metadata_parser import parse_image, verify_image_readable
+from services.indexed_file_mutation_service import save_and_reconcile
 from thumbnail_cache import (
     get_thumbnail,
     get_thumbnail_async,
@@ -85,6 +90,29 @@ PARAMETER_EXPORT_ORDER = [
 ]
 
 
+def _cleanup_stale_reader_uploads(temp_dir: Path, ttl_seconds: int) -> None:
+    """Best-effort cleanup for temporary Reader uploads kept for follow-up save actions."""
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        cutoff = datetime.now(timezone.utc).timestamp() - ttl_seconds
+        for candidate in temp_dir.iterdir():
+            try:
+                if candidate.is_file() and candidate.stat().st_mtime < cutoff:
+                    candidate.unlink()
+            except OSError:
+                continue
+    except OSError:
+        logger.debug("Failed to prepare Reader temp directory", exc_info=True)
+
+
+def _allocate_reader_upload_path(temp_dir: Path, filename: str) -> Path:
+    suffix = Path(filename or "").suffix.lower() or ".png"
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}:
+        suffix = ".png"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir / f"{uuid.uuid4().hex}{suffix}"
+
+
 
 def _sanitize_filter_value(value: str) -> str:
     """
@@ -118,6 +146,26 @@ def _sanitize_filter_list(items: Optional[str]) -> Optional[List[str]]:
     # Filter out empty strings
     result = [p for p in sanitized if p]
     return result if result else None
+
+
+def _sanitize_filter_values(items: Any) -> Optional[List[str]]:
+    """Normalize string or iterable filter inputs into one sanitized string list."""
+    if items is None:
+        return None
+
+    if isinstance(items, str):
+        return _sanitize_filter_list(items)
+
+    if isinstance(items, (list, tuple, set)):
+        result: List[str] = []
+        for item in items:
+            sanitized = _sanitize_filter_value(str(item or ""))
+            if sanitized:
+                result.append(sanitized)
+        return result or None
+
+    sanitized = _sanitize_filter_value(str(items))
+    return [sanitized] if sanitized else None
 
 
 def _normalize_edited_metadata(metadata: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -231,6 +279,40 @@ def _prepare_image_for_save(image: Image.Image, pil_format: str, warnings: List[
 
 class ImageService:
     """Service for image retrieval, filtering, and file operations."""
+
+    def _validate_common_gallery_filters(
+        self,
+        *,
+        sort_by: str,
+        aspect_ratio: Optional[str],
+        min_width: Optional[int],
+        max_width: Optional[int],
+        min_height: Optional[int],
+        max_height: Optional[int],
+    ) -> None:
+        """Validate shared gallery filter constraints used by list and selection flows."""
+        if sort_by not in VALID_SORT_OPTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid sort_by value. Must be one of: {', '.join(VALID_SORT_OPTIONS)}"
+            )
+
+        if aspect_ratio is not None and aspect_ratio not in VALID_ASPECT_RATIOS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid aspect_ratio value. Must be one of: {', '.join(VALID_ASPECT_RATIOS)}"
+            )
+
+        if min_width is not None and max_width is not None and min_width > max_width:
+            raise HTTPException(
+                status_code=400,
+                detail="min_width cannot be greater than max_width"
+            )
+        if min_height is not None and max_height is not None and min_height > max_height:
+            raise HTTPException(
+                status_code=400,
+                detail="min_height cannot be greater than max_height"
+            )
 
     def _filter_and_mark_missing_images(self, images: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
         """Drop rows whose backing files no longer exist and persist that state in SQLite."""
@@ -352,39 +434,23 @@ class ImageService:
         Raises:
             HTTPException 400: Invalid parameters
         """
-        # Validate sort_by
-        if sort_by not in VALID_SORT_OPTIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid sort_by value. Must be one of: {', '.join(VALID_SORT_OPTIONS)}"
-            )
+        self._validate_common_gallery_filters(
+            sort_by=sort_by,
+            aspect_ratio=aspect_ratio,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+        )
 
-        # Validate aspect_ratio
-        if aspect_ratio is not None and aspect_ratio not in VALID_ASPECT_RATIOS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid aspect_ratio value. Must be one of: {', '.join(VALID_ASPECT_RATIOS)}"
-            )
-
-        # Validate dimension ranges
-        if min_width is not None and max_width is not None and min_width > max_width:
-            raise HTTPException(
-                status_code=400,
-                detail="min_width cannot be greater than max_width"
-            )
-        if min_height is not None and max_height is not None and min_height > max_height:
-            raise HTTPException(
-                status_code=400,
-                detail="min_height cannot be greater than max_height"
-            )
-
-        # Parse comma-separated values
-        gen_list = generators.split(",") if generators else None
-        tag_list = tags.split(",") if tags else None
-        rating_list = ratings.split(",") if ratings else None
-        cp_list = checkpoints.split(",") if checkpoints else None
-        lr_list = loras.split(",") if loras else None
-        prompt_list = prompts.split(",") if prompts else None
+        gen_list = _sanitize_filter_values(generators)
+        tag_list = _sanitize_filter_values(tags)
+        rating_list = _sanitize_filter_values(ratings)
+        cp_list = _sanitize_filter_values(checkpoints)
+        lr_list = _sanitize_filter_values(loras)
+        prompt_list = _sanitize_filter_values(prompts)
+        search = _sanitize_filter_value(search) if search else None
+        artist = _sanitize_filter_value(artist) if artist else None
 
         # Parse cursor
         cursor_id = None
@@ -524,6 +590,59 @@ class ImageService:
             "next_offset": page_offset + len(images) if has_more else None,
             "has_more": has_more,
             "total": total,
+        }
+
+    def get_filtered_selection_ids(
+        self,
+        *,
+        generators: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        ratings: Optional[List[str]] = None,
+        checkpoints: Optional[List[str]] = None,
+        loras: Optional[List[str]] = None,
+        prompts: Optional[List[str]] = None,
+        artist: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "newest",
+        min_width: Optional[int] = None,
+        max_width: Optional[int] = None,
+        min_height: Optional[int] = None,
+        max_height: Optional[int] = None,
+        aspect_ratio: Optional[str] = None,
+        min_aesthetic: Optional[float] = None,
+        max_aesthetic: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Resolve the full filtered-result ID set in current gallery sort order."""
+        self._validate_common_gallery_filters(
+            sort_by=sort_by,
+            aspect_ratio=aspect_ratio,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+        )
+
+        image_ids = db.get_filtered_image_ids(
+            generators=_sanitize_filter_values(generators),
+            tags=_sanitize_filter_values(tags),
+            ratings=_sanitize_filter_values(ratings),
+            checkpoints=_sanitize_filter_values(checkpoints),
+            loras=_sanitize_filter_values(loras),
+            search_query=_sanitize_filter_value(search) if search else None,
+            sort_by=sort_by,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+            prompt_terms=_sanitize_filter_values(prompts),
+            aspect_ratio=aspect_ratio,
+            artist=_sanitize_filter_value(artist) if artist else None,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
+        )
+        return {
+            "image_ids": image_ids,
+            "total": len(image_ids),
         }
 
     def get_image_by_id(self, image_id: int) -> Dict[str, Any]:
@@ -676,43 +795,141 @@ class ImageService:
             pil_format = "JPEG"
             warnings.append(JPEG_LIMITATION_WARNING)
 
-        with Image.open(source) as image:
-            save_image = _prepare_image_for_save(image, pil_format, warnings)
-            save_kwargs: Dict[str, Any] = {}
-            icc_profile = image.info.get("icc_profile")
-            if icc_profile:
-                save_kwargs["icc_profile"] = icc_profile
+        def _write_edited_image(final_output_path: str, _overwrite_requested: bool) -> None:
+            with Image.open(source) as image:
+                save_image = _prepare_image_for_save(image, pil_format, warnings)
+                save_kwargs: Dict[str, Any] = {}
+                icc_profile = image.info.get("icc_profile")
+                if icc_profile:
+                    save_kwargs["icc_profile"] = icc_profile
 
-            if pil_format == "PNG":
-                save_kwargs["pnginfo"] = _build_pnginfo(normalized_metadata, parameters_text)
-            else:
-                exif_bytes = _build_exif_bytes(image, parameters_text)
-                if exif_bytes:
-                    save_kwargs["exif"] = exif_bytes
-                save_kwargs["quality"] = int(quality if quality is not None else (92 if pil_format == "JPEG" else 95))
+                if pil_format == "PNG":
+                    save_kwargs["pnginfo"] = _build_pnginfo(normalized_metadata, parameters_text)
+                else:
+                    exif_bytes = _build_exif_bytes(image, parameters_text)
+                    if exif_bytes:
+                        save_kwargs["exif"] = exif_bytes
+                    save_kwargs["quality"] = int(quality if quality is not None else (92 if pil_format == "JPEG" else 95))
 
-            try:
-                save_image.save(output.path, format=pil_format, **save_kwargs)
-            finally:
-                save_image.close()
+                try:
+                    save_image.save(final_output_path, format=pil_format, **save_kwargs)
+                finally:
+                    save_image.close()
 
-        indexed_output_row = db.get_image_by_path(str(output.path))
-        if indexed_output_row:
-            try:
-                reparse_image_metadata(
-                    int(indexed_output_row["id"]),
-                    str(output.path),
-                    preserve_derived_state=(source == output.path),
-                )
-            except Exception:
-                logger.warning("Failed to refresh indexed metadata after saving %s", output.path, exc_info=True)
-                warnings.append("Saved file, but the library entry did not refresh. Use Reparse if metadata looks stale.")
+        _write_result, reconcile_warnings = save_and_reconcile(
+            str(output.path),
+            _write_edited_image,
+            allow_overwrite=allow_overwrite,
+            preserve_derived_state=(source == output.path),
+            backend_file=__file__,
+        )
+        warnings.extend(reconcile_warnings)
 
         return {
             "output_path": str(output.path),
             "format": requested_format,
             "warnings": warnings,
         }
+
+    def open_image_folder(
+        self,
+        image_id: int,
+        *,
+        platform: str,
+        popen: Callable[[List[str]], Any] = subprocess.Popen,
+    ) -> Dict[str, Any]:
+        """Open the containing folder of an indexed image in the OS file explorer."""
+        image = db.get_image_by_id(image_id)
+        if not image:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        try:
+            file_path = self.resolve_image_source_path(image_id, image.get("path", ""))
+            normalized_path = os.path.normpath(file_path)
+
+            if platform == "win32":
+                popen(["explorer", "/select,", normalized_path])
+            elif platform == "darwin":
+                popen(["open", "-R", normalized_path])
+            else:
+                popen(["xdg-open", os.path.dirname(normalized_path)])
+
+            return {"success": True, "path": normalized_path}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("Failed to open folder for image %s: %s", image_id, exc)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to open folder: {exc}",
+            ) from exc
+
+    async def parse_uploaded_image(
+        self,
+        file: UploadFile,
+        *,
+        temp_dir: Path,
+        temp_ttl_seconds: int,
+        max_bytes: int,
+        chunk_size: int,
+    ) -> Dict[str, Any]:
+        """Parse uploaded image metadata without persisting the image in the library DB."""
+        if not file or not file.filename:
+            raise HTTPException(status_code=400, detail="No file uploaded")
+
+        tmp_path: Optional[Path] = None
+        cleanup_tmp = True
+
+        try:
+            _cleanup_stale_reader_uploads(temp_dir, temp_ttl_seconds)
+            tmp_path = _allocate_reader_upload_path(temp_dir, file.filename)
+
+            with open(tmp_path, "wb") as tmp_handle:
+                total_bytes = 0
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > max_bytes:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Uploaded image is too large to parse (max 64MB)",
+                        )
+                    tmp_handle.write(chunk)
+
+            readable, read_error = await run_in_threadpool(verify_image_readable, str(tmp_path))
+            if not readable:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid or unreadable image file: {read_error or 'image decode failed'}",
+                )
+
+            result = await run_in_threadpool(parse_image, str(tmp_path))
+            if result.get("parse_error") or result.get("width", 0) <= 0 or result.get("height", 0) <= 0:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Failed to parse image metadata: {result.get('parse_error') or 'image metadata could not be read'}",
+                )
+
+            result["source_temp_path"] = str(tmp_path.resolve())
+            cleanup_tmp = False
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.error("Failed to parse uploaded image %s: %s", getattr(file, "filename", None), exc)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to parse image metadata: {exc}",
+            ) from exc
+        finally:
+            await file.close()
+            if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def get_image_file(self, image_id: int) -> FileResponse:
         """

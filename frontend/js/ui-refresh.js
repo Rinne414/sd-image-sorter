@@ -461,6 +461,7 @@
             this._setPlaceholder('#modal-lora-search', 'filter.searchLoras');
 
             this._setButton('#btn-select-all', 'selection.selectVisible', '✓✓', 'selection.selectVisible');
+            this._setButton('#btn-select-filtered', 'selection.selectFiltered', '▦', 'selection.selectFiltered');
             this._setButton('#btn-export-selected', 'selection.exportPrompts', '📤', 'selection.exportPrompts');
             this._setButton('#btn-export-tags-selected', 'selection.exportTags', '🏷️', 'selection.exportTags');
             this._setButton('#btn-batch-export-tags', 'selection.exportTagsToFiles', '📝', 'selection.exportTagsToFiles');

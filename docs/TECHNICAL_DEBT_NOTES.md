@@ -33,26 +33,26 @@ Use this structure for future confirmed-debt entries:
 ## Confirmed Debt From Recent Fixes
 
 ### Debt-01: `created_at` field has mixed semantics
-- Status: open
+- Status: mitigated
 - Type: data model debt
 - Impact: high
 - Risk if ignored:
-  Future work on sorting, import, duplicate handling, and timeline-like features can silently reintroduce date/order regressions because the field name encourages the wrong assumptions.
+  Future work can still regress if contributors keep treating the deprecated `created_at` alias like a true file-time field instead of migrating to the explicit split fields.
 - Related files:
   `backend/database.py`
   `backend/image_manager.py`
   `backend/services/sorting_service.py`
   `backend/routers/images.py`
 - Observed problem:
-  The field name reads like "image creation time", but parts of the product also rely on it as a stable library ordering key.
+  The field name originally read like "image creation time", but the product relied on it as a stable library ordering key.
 - Why this is debt:
-  Developers will make different assumptions from the field name. Bug fixes become local patches instead of one clear policy.
+  The primary semantic ambiguity is now fixed in schema and ordering logic, but the deprecated alias can still mislead future callers if they skip the new fields.
 - Better long-term shape:
-  Split semantics explicitly: keep one field for stable library insertion/order behavior and another for source-file or parsed-image time.
+  Keep using `library_order_time` for stable chronology and `source_file_mtime` for current file time, then remove `created_at` once compatibility callers are gone.
 - Revisit trigger:
-  Revisit before changing default sort semantics, library timelines, duplicate handling, or broader rescan/import policy.
+  Revisit before removing the compatibility alias or introducing user-facing file-time/timeline features.
 - Deferred because:
-  This needs a schema migration and a deliberate sort-policy decision. Changing it casually is higher risk than the bug fixes we were doing.
+  The split is shipped, but the compatibility alias remains intentionally until all callers and docs stop depending on `created_at`.
 
 ### Debt-02: Derived-state invalidation rules are cross-cutting and easy to miss
 - Status: partially mitigated
@@ -122,7 +122,7 @@ Use this structure for future confirmed-debt entries:
   Current behavior is serviceable and recent review did not uncover a direct release-blocking bug worth destabilizing the session system for.
 
 ### Debt-05: Gallery selection semantics are not explicit enough
-- Status: open
+- Status: mitigated
 - Type: UX contract + state-model debt
 - Impact: medium
 - Risk if ignored:
@@ -135,13 +135,13 @@ Use this structure for future confirmed-debt entries:
 - Observed problem:
   The UI exposes concepts like selection mode, visible selection, invert visible, and batch actions. A recent bug showed that even the button label could drift from actual behavior.
 - Why this is debt:
-  The current model still depends heavily on rendered DOM visibility instead of one explicit selection-scope contract.
+  Selection bugs reappear whenever the UI stops saying which scope is authoritative, or when frontend code starts inferring full filtered selection from only the currently loaded page.
 - Better long-term shape:
   Define selection scope explicitly, document whether actions operate on visible items, loaded items, filtered results, or all matched rows, and align UI copy with that contract.
 - Revisit trigger:
   Revisit before changing pagination/virtualization, adding "select all matching" style features, or broadening batch actions.
 - Deferred because:
-  The current user-facing bug was corrected, but the deeper selection contract has not been formalized yet.
+  The current pass now includes `SelectionStore`, explicit `visible` / `loaded` / `filtered` scope copy, and a backend `POST /api/images/selection-ids` path for true filtered-result selection. Future scope expansion such as whole-library or cross-session selection can wait until there is a concrete product need.
 
 ### Debt-06: Path normalization is critical and still discipline-based
 - Status: partially mitigated
@@ -193,7 +193,7 @@ Use this structure for future confirmed-debt entries:
 - Revisit trigger:
   Revisit before larger UI refresh work, before adding new frontend tools/views, or before release-polish passes that touch multiple tabs.
 - Deferred because:
-  The most user-visible leaks were fixed now, but fully centralizing this would cut across many frontend modules and translation bindings.
+  The Censor editor now routes its main strings through the shared language packs, but the broader frontend still has multiple ad hoc string paths and has not been collapsed behind one global toast/error policy.
 
 ### Debt-09: Censor layout ownership is split across multiple CSS layers
 - Status: partially mitigated
@@ -245,12 +245,52 @@ Use this structure for future confirmed-debt entries:
 
 These do not close the major structural debts from the whole-repo audit, but they reduce small confirmed drift without risky rewrites.
 
-- LoRA selected filters now use exact normalized `image_loras.lora_name = ?` matching instead of substring `LIKE`; checkpoint cross-generator normalization remains open.
+- LoRA selected filters now use exact normalized `image_loras.lora_name = ?` matching instead of substring `LIKE`, and cross-generator checkpoint filtering/faceting now uses a dedicated normalized key instead of raw mixed generator strings.
 - Aspect-ratio validation now imports one shared backend constant instead of copy-maintaining the same list in image and sorting services.
 - Update archives are validated for unsafe member names before staging, and the detached worker uses platform-independent archive-entry path checks.
 - Release package default version now follows `backend/app_info.py` instead of a hardcoded script-local value.
-- Production and test dependencies are split into `backend/requirements.txt` and `backend/requirements-dev.txt`; full dependency locking is still open.
+- Production and test dependencies are split into `backend/requirements.txt` and `backend/requirements-dev.txt`, and this hardening pass now also adds `requirements.in` / `requirements-dev.in` plus compiled lock outputs; cross-platform lock maintenance still remains open.
 - Gallery large-card labels moved into the main i18n packs for the visible card metadata touched in this cleanup.
+- Test-client DB setup now uses a real temporary SQLite path instead of brittle sibling-name path swapping inside `backend/tests/conftest.py`.
+- Canonical image SELECT column lists in `backend/database.py` now derive from one shared field source instead of four independently maintained string constants.
+- `run.bat` no longer probes a machine-specific `D:\Anaconda\python.exe` path before falling back to general user-install or PATH-based Python discovery.
+
+## Whole-Repo Audit Status Refresh (2026-04-27)
+
+This refresh aligns the long audit report with the current shipped workspace after the structural hardening pass completed in this session.
+
+- TD-01 Path normalization: partially mitigated.
+  Indexed DB-key lookups in the scan/reconcile path now use normalized indexed paths instead of raw `abspath()` keys, and folder-scope matching, tag-import path lookup, plus repository-layer `find_by_path()` now also reuse the shared equivalent-path helpers. There is still no single `PathIdentity` boundary for every DB-facing path touchpoint.
+- TD-02 Derived-state invalidation: partially mitigated.
+  The core invalidation rule still lives in `database.py`, overwrite/save entry points now share `backend/services/indexed_file_mutation_service.py`, and stale interrupted `metadata_status='pending'` rows are now quarantined on startup so they do not remain permanent blind spots. The broader content-fingerprint semantics still are not fully centralized.
+- TD-03 Schema migration/versioning: partially mitigated.
+  A real `schema_version` table and numbered migrations now exist, failed future migrations are guarded by explicit savepoint-based rollback coverage, and representative upgrade tests now cover fresh DBs, unversioned legacy DBs, and a versioned DB with a still-pending backfill migration. Historical downgrade policy and larger future schema redesigns still need explicit rollout discipline.
+- TD-04 Frontend mega-state: partially mitigated.
+  `FilterStore` now owns the main filter write boundary, `SelectionStore` makes scope more explicit, and `censor-edit.js` now uses the shared i18n packs instead of its own bilingual helper stack. `app.js` and `censor-edit.js` still remain large multi-responsibility modules.
+- TD-05 Dependency reproducibility: partially mitigated.
+  `requirements.in` / `requirements-dev.in`, compiled lock outputs, GitHub Actions CI, coverage reporting, and a lock-freshness guard now exist. Cross-platform lock maintenance still needs ongoing care.
+- TD-06 `created_at` mixed semantics: mitigated.
+  The schema now separates `library_order_time` from `source_file_mtime`, default ordering uses `library_order_time`, and `created_at` is reduced to a compatibility alias. The remaining cleanup is future alias removal, not unresolved mixed live semantics.
+- TD-07 Router/service boundary leakage: open.
+  New hardening work avoided adding fresh leakage, but the older mixed boundaries remain.
+- TD-08 Manual sort session persistence split-brain: open.
+  No session-schema unification was attempted in this pass.
+- TD-09 Selection semantics ambiguity: partially mitigated.
+  `SelectionStore` now owns explicit `visible` / `loaded` / `filtered` scope state, `POST /api/images/selection-ids` resolves true filtered-result selection in backend sort order, and same-filter reloads no longer silently prune off-page IDs against the loaded thumbnail slice.
+- TD-10 Cross-generator checkpoint semantics: partially mitigated.
+  LoRA exact matching is fixed, image rows now persist `checkpoint_normalized`, gallery/search/filter analytics now group and match by that normalized key, and raw `checkpoint` stays available for per-image display. The remaining gap is making NAI/no-LoRA semantics more explicit in UI copy instead of leaving them implicit.
+
+## Larger Structural Reductions Applied On 2026-04-27
+
+- SQLite schema initialization now runs through a numbered migration runner backed by `schema_version` and `backend/migrations/` instead of inline `PRAGMA table_info` startup patching inside `database.init_db()`.
+- Migration policy is now documented next to the code in `backend/migrations/README.md`, including unique increasing versions, per-migration savepoint rollback, and the current forward-only/no-automatic-downgrade stance.
+- Reader metadata save, Censor save/save-data/save-operations, and Obfuscate encode/decode writes now converge through `backend/services/indexed_file_mutation_service.py` for indexed overwrite reconciliation.
+- Folder-scope lookup and tag-import path matching now reuse the shared indexed-path equivalence helpers instead of each caller hand-rolling Windows/WSL slash and drive-letter rules.
+- Startup repair now quarantines stale interrupted `pending` scan rows so they do not survive restarts as readable invalidation blind spots.
+- Frontend filter writes now have an explicit boundary via `frontend/js/stores/filter-store.js`, and the main touched modules no longer directly assign into `AppState.filters.*`.
+- `frontend/js/censor-edit.js` no longer keeps its own `tText()` / `tKey()` / `tFormat()` bilingual helper stack; the editor now routes its main strings through the shared language packs via one thin `censorT()` wrapper.
+- GitHub Actions now covers Linux full CI and Windows path/migration/update risk areas, the backend suite now emits coverage output, and CI fails when compiled lock metadata drifts from the checked-in source inputs.
+- Release bootstrap downloads now use pinned SHA-256 validation, the release builder emits a checksum manifest asset, and the updater can validate downloaded archives against that manifest when present.
 
 ## Suggested Follow-Up Work
 
@@ -259,14 +299,14 @@ These are not "drop everything now" items.
 They are the next reasonable debt-reduction steps if the goal shifts from bug fixing to structural hardening.
 
 1. Separate library-order time from source/content time in the schema.
-2. Extract one canonical "content changed vs metadata changed" policy into a single reusable service/helper boundary.
-3. Centralize indexed-file overwrite reconciliation instead of repairing it per feature.
+2. Keep shrinking the derived-state invalidation surface so future write paths cannot bypass the shared reconcile helper.
+3. Extend indexed overwrite reconciliation coverage to any future save/export feature instead of letting new entry points drift back into one-off refresh logic.
 4. Define one manual-sort session contract covering backend memory, persisted JSON, and frontend storage.
 5. Define and document gallery selection scopes explicitly.
-6. Tighten path identity behind fewer public helpers and fewer direct path writes.
+6. Tighten path identity behind fewer public helpers and fewer direct path writes until every DB-facing lookup/write has one obvious path boundary.
 7. Centralize the release/update ownership contract for package-local runtime paths instead of copy-maintaining it across scripts, updater code, tests, and docs.
-8. Introduce a real schema migration ledger before the next schema semantics change.
-9. Generate a reproducible dependency lock for release builds, with dev/test tooling kept out of production installs.
+8. Expand migration coverage with representative legacy-database upgrade matrices and document downgrade policy before the next schema semantics change.
+9. Keep the compiled dependency locks reproducible across release environments, especially the Windows-heavy optional stacks.
 10. Split the largest frontend state modules only behind explicit selection/filter/scope contracts and regression coverage.
 
 ## Audit Targets Suggested But Not Yet Confirmed As Debt

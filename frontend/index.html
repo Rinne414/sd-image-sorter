@@ -326,11 +326,13 @@
                             <div class="selection-panel-copy">
                                 <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch Actions</span>
                                 <span id="selection-count" class="selection-panel-count">0 items selected</span>
+                                <span id="selection-scope-summary" class="selection-panel-scope"></span>
                             </div>
                             <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Deselect All</button>
                         </div>
                         <div class="selection-panel-actions">
                             <button id="btn-select-all" class="btn btn-secondary full-width"><span>✓✓</span> <span data-i18n="selection.selectVisible">Select Visible</span></button>
+                            <button id="btn-select-filtered" class="btn btn-secondary full-width"><span>▦</span> <span data-i18n="selection.selectFiltered">Select Filtered</span></button>
                             <button id="btn-invert-selection-visible" class="btn btn-secondary full-width"><span>⇄</span> <span data-i18n="selection.invertVisible">Invert Visible</span></button>
                             <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Export Prompts</span></button>
                             <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Export Tags</span></button>
@@ -1756,6 +1758,7 @@
                                 <label data-i18n="censor.advancedPrecision">Text Prompt Segmentation</label>
                                 <input type="text" id="censor-text-prompt" class="input-field"
                                     placeholder="e.g. exposed breasts, face, tattoo, hand" data-i18n-placeholder="censor.textPromptPlaceholder">
+                                <small class="helper-text" id="censor-text-prompt-help" data-i18n="censor.promptHelpSam3Ready">Uses SAM3 text-prompt segmentation on the current image. This is the precise pro tool.</small>
                             </div>
 
                             <div class="modal-actions censor-detect-actions">
@@ -3231,6 +3234,8 @@
     <script src="/static/js/guide-translations.js"></script>
     <script src="/static/js/i18n.js"></script>
     <script src="/static/js/guide.js"></script>
+    <script src="/static/js/stores/filter-store.js"></script>
+    <script src="/static/js/stores/selection-store.js"></script>
     <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>

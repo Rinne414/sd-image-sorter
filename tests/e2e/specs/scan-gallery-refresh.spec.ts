@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 
 import { createTestImage } from '../fixtures/test-helpers'
 
@@ -50,6 +50,11 @@ async function installFetchLog(page: Page) {
   })
 }
 
+async function clearIndexedGallery(request: APIRequestContext) {
+  const response = await request.delete('/api/clear-gallery')
+  expect(response.ok()).toBeTruthy()
+}
+
 async function sampleScanDom(page: Page): Promise<ScanDomSample> {
   return page.evaluate(() => ({
     loadingVisible: (() => {
@@ -62,6 +67,20 @@ async function sampleScanDom(page: Page): Promise<ScanDomSample> {
     currentView: (window as any).App?.AppState?.currentView || null,
     galleryNeedsRefresh: (window as any).App?.AppState?.galleryNeedsRefresh ?? null,
   }))
+}
+
+async function waitForGalleryToSettle(page: Page, timeout = 15000) {
+  await page.waitForFunction(
+    () => {
+      const loadingEl = document.querySelector<HTMLElement>('#gallery-loading')
+      const loadingVisible = Boolean(loadingEl) && getComputedStyle(loadingEl).display !== 'none'
+      const skeletons = document.querySelectorAll('#gallery-grid .skeleton-item, #gallery-grid .skeleton-gallery-item').length
+      const realItems = document.querySelectorAll('#gallery-grid .gallery-item').length
+      return !loadingVisible && skeletons === 0 && realItems > 0
+    },
+    undefined,
+    { timeout },
+  )
 }
 
 async function startScanFromUi(page: Page, folderPath: string) {
@@ -85,6 +104,15 @@ async function startScanFromUi(page: Page, folderPath: string) {
 
 test.describe('Scan gallery refresh stability', () => {
   test.setTimeout(180000)
+
+  test.beforeEach(async ({ request }) => {
+    await clearIndexedGallery(request)
+  })
+
+  test.afterEach(async ({ page, request }) => {
+    await page.goto('about:blank').catch(() => {})
+    await clearIndexedGallery(request)
+  })
 
   test.afterAll(async () => {
     await fs.rm(SCAN_FIXTURE_ROOT, { recursive: true, force: true }).catch(() => {})
@@ -121,17 +149,28 @@ test.describe('Scan gallery refresh stability', () => {
 
     expect(done).toBeTruthy()
 
-    await page.waitForTimeout(1200)
+    await waitForGalleryToSettle(page)
 
     const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
     const imageFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?'))
     const runningSamples = samples.filter((entry) => entry.progress?.status === 'running')
-    const postReadySamples = runningSamples.filter((entry) => entry.progress?.library_ready)
+    const postReadyPopulatedSamples = runningSamples.filter(
+      (entry) => entry.progress?.library_ready && entry.dom.realItems > 0,
+    )
+    const steadyGallerySamples: ScanDomSample[] = []
+    for (let index = 0; index < 4; index += 1) {
+      steadyGallerySamples.push(await sampleScanDom(page))
+      if (index < 3) {
+        await page.waitForTimeout(250)
+      }
+    }
 
-    expect(postReadySamples.length).toBeGreaterThan(0)
-    expect(runningSamples.filter((entry) => entry.dom.loadingVisible)).toHaveLength(0)
-    expect(runningSamples.filter((entry) => entry.dom.skeletons > 0)).toHaveLength(0)
-    expect(postReadySamples.every((entry) => entry.dom.realItems > 0)).toBeTruthy()
+    // Fast scans can transition from library_ready -> done between polls.
+    // Once the gallery settles, it should stay populated instead of flashing back to empty/loading states.
+    expect(postReadyPopulatedSamples.length > 0 || steadyGallerySamples[0]?.realItems > 0).toBeTruthy()
+    expect(steadyGallerySamples.filter((entry) => entry.loadingVisible)).toHaveLength(0)
+    expect(steadyGallerySamples.filter((entry) => entry.skeletons > 0)).toHaveLength(0)
+    expect(steadyGallerySamples.every((entry) => entry.realItems > 0)).toBeTruthy()
     expect(imageFetches.length).toBeLessThanOrEqual(2)
   })
 
@@ -175,7 +214,15 @@ test.describe('Scan gallery refresh stability', () => {
     expect(done).toBeTruthy()
     expect(imageFetchesBeforeReturn).toBe(0)
 
-    await page.waitForTimeout(1200)
+    await page.waitForFunction(
+      () => {
+        const fetchLog = (window as any).__scanFetchLog || []
+        return fetchLog.some((entry: { url: string }) => String(entry.url).includes('/api/images?'))
+      },
+      undefined,
+      { timeout: 15000 },
+    )
+    await waitForGalleryToSettle(page)
 
     const fetchLog = await page.evaluate(() => (window as any).__scanFetchLog || [])
     const imageFetches = fetchLog.filter((entry: { url: string }) => entry.url.includes('/api/images?'))

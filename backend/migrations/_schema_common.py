@@ -1,0 +1,262 @@
+"""
+Shared schema helpers for SQLite migrations.
+"""
+from __future__ import annotations
+
+import sqlite3
+from typing import Iterable
+
+from config import (
+    FAVORITES_COLLECTION_NAME,
+    FAVORITES_COLLECTION_SLUG,
+    FAVORITES_FOLDER_PATH,
+)
+
+
+FULL_SCHEMA_STATEMENTS: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS images (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        filename TEXT NOT NULL,
+        generator TEXT DEFAULT 'unknown',
+        prompt TEXT,
+        negative_prompt TEXT,
+        metadata_json TEXT,
+        width INTEGER,
+        height INTEGER,
+        file_size INTEGER,
+        checkpoint TEXT,
+        checkpoint_normalized TEXT,
+        loras TEXT,
+        embedding BLOB,
+        ai_caption TEXT,
+        model_hash TEXT,
+        aesthetic_score REAL,
+        is_readable INTEGER DEFAULT 1,
+        read_error TEXT,
+        source_mtime_ns INTEGER,
+        source_size INTEGER,
+        metadata_status TEXT DEFAULT 'complete',
+        content_fingerprint TEXT,
+        library_order_time DATETIME,
+        source_file_mtime DATETIME,
+        created_at DATETIME,
+        indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        tagged_at DATETIME
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        folder_path TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS collection_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER NOT NULL,
+        source_image_id INTEGER NOT NULL,
+        copied_path TEXT NOT NULL,
+        prompt TEXT,
+        negative_prompt TEXT,
+        checkpoint TEXT,
+        loras TEXT,
+        metadata_json TEXT,
+        created_at DATETIME,
+        width INTEGER,
+        height INTEGER,
+        file_size INTEGER,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(collection_id, source_image_id),
+        FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_image_id) REFERENCES images(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_id INTEGER NOT NULL,
+        tag TEXT NOT NULL,
+        confidence REAL DEFAULT 1.0,
+        FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tag TEXT NOT NULL UNIQUE,
+        category TEXT NOT NULL,
+        subcategory TEXT,
+        is_user_defined INTEGER DEFAULT 0
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_sets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        category TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_set_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        set_id INTEGER NOT NULL,
+        tag TEXT NOT NULL,
+        weight REAL DEFAULT 1.0,
+        is_required INTEGER DEFAULT 1,
+        FOREIGN KEY (set_id) REFERENCES tag_sets(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_exclusions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_name TEXT NOT NULL,
+        description TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_exclusion_conditions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exclusion_id INTEGER NOT NULL,
+        condition_tag TEXT NOT NULL,
+        condition_type TEXT DEFAULT 'present',
+        FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tag_exclusion_targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exclusion_id INTEGER NOT NULL,
+        excluded_tag TEXT,
+        excluded_category TEXT,
+        FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS prompt_presets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        config_json TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS artist_predictions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_id INTEGER NOT NULL UNIQUE,
+        artist TEXT NOT NULL,
+        confidence REAL NOT NULL,
+        top_predictions TEXT,
+        identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS image_loras (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_id INTEGER NOT NULL,
+        lora_name TEXT NOT NULL,
+        FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
+        UNIQUE(image_id, lora_name)
+    )
+    """,
+)
+
+
+INDEX_STATEMENTS: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS idx_images_generator ON images(generator)",
+    "CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)",
+    "CREATE INDEX IF NOT EXISTS idx_tag_categories_tag ON tag_categories(tag)",
+    "CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)",
+    "CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)",
+    "CREATE INDEX IF NOT EXISTS idx_images_embedding ON images(embedding IS NOT NULL) WHERE embedding IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_images_library_order_time ON images(library_order_time DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_artist_predictions_artist ON artist_predictions(artist)",
+    "CREATE INDEX IF NOT EXISTS idx_artist_predictions_image_id ON artist_predictions(image_id)",
+    "CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id)",
+    "CREATE INDEX IF NOT EXISTS idx_collection_items_source_image_id ON collection_items(source_image_id)",
+    "CREATE INDEX IF NOT EXISTS idx_images_checkpoint ON images(checkpoint) WHERE checkpoint IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_images_checkpoint_normalized ON images(checkpoint_normalized COLLATE NOCASE) WHERE checkpoint_normalized IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_images_tagged_at ON images(tagged_at) WHERE tagged_at IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_tags_tag_image ON tags(tag, image_id)",
+    "CREATE INDEX IF NOT EXISTS idx_tags_image_id_tag ON tags(image_id, tag)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_unique_image_tag ON tags(image_id, tag)",
+    "CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename)",
+    "CREATE INDEX IF NOT EXISTS idx_images_model_hash ON images(model_hash) WHERE model_hash IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_images_readable ON images(is_readable)",
+    "CREATE INDEX IF NOT EXISTS idx_images_metadata_status ON images(metadata_status)",
+    "CREATE INDEX IF NOT EXISTS idx_image_loras_lora_name ON image_loras(lora_name)",
+    "CREATE INDEX IF NOT EXISTS idx_image_loras_image_id ON image_loras(image_id)",
+)
+
+
+DROP_REDUNDANT_INDEXES: tuple[str, ...] = (
+    "DROP INDEX IF EXISTS idx_tags_tag",
+    "DROP INDEX IF EXISTS idx_tags_image_id",
+)
+
+
+LEGACY_IMAGE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("checkpoint", "TEXT"),
+    ("checkpoint_normalized", "TEXT"),
+    ("loras", "TEXT"),
+    ("embedding", "BLOB"),
+    ("ai_caption", "TEXT"),
+    ("model_hash", "TEXT"),
+    ("aesthetic_score", "REAL"),
+    ("is_readable", "INTEGER DEFAULT 1"),
+    ("read_error", "TEXT"),
+    ("source_mtime_ns", "INTEGER"),
+    ("source_size", "INTEGER"),
+    ("metadata_status", "TEXT DEFAULT 'complete'"),
+    ("content_fingerprint", "TEXT"),
+    ("library_order_time", "DATETIME"),
+    ("source_file_mtime", "DATETIME"),
+)
+
+
+def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone()
+    return row is not None
+
+
+def apply_statements(conn: sqlite3.Connection, statements: Iterable[str]) -> None:
+    cursor = conn.cursor()
+    for statement in statements:
+        cursor.execute(statement)
+
+
+def create_full_schema(conn: sqlite3.Connection) -> None:
+    apply_statements(conn, FULL_SCHEMA_STATEMENTS)
+    apply_statements(conn, INDEX_STATEMENTS)
+    apply_statements(conn, DROP_REDUNDANT_INDEXES)
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO collections (slug, name, folder_path)
+        VALUES (?, ?, ?)
+        """,
+        (FAVORITES_COLLECTION_SLUG, FAVORITES_COLLECTION_NAME, FAVORITES_FOLDER_PATH),
+    )
+
+
+def add_missing_legacy_image_columns(conn: sqlite3.Connection) -> None:
+    if not table_exists(conn, "images"):
+        return
+
+    existing_columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(images)").fetchall()
+    }
+    for column_name, column_sql in LEGACY_IMAGE_COLUMNS:
+        if column_name in existing_columns:
+            continue
+        conn.execute(f"ALTER TABLE images ADD COLUMN {column_name} {column_sql}")

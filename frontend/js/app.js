@@ -140,6 +140,9 @@ function getDefaultGalleryPageSize(mode = null) {
 }
 
 function createDefaultFilterState() {
+    if (window.FilterStore?.createDefaultFilterState) {
+        return window.FilterStore.createDefaultFilterState();
+    }
     return {
         generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
@@ -162,6 +165,9 @@ function createDefaultFilterState() {
 }
 
 function cloneFilterState(filters) {
+    if (window.FilterStore?.cloneState) {
+        return window.FilterStore.cloneState(filters);
+    }
     const source = filters || createDefaultFilterState();
     return {
         generators: [...(source.generators || [])],
@@ -182,6 +188,59 @@ function cloneFilterState(filters) {
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null
     };
+}
+
+function createDefaultSelectionState() {
+    if (window.SelectionStore?.createDefaultState) {
+        return window.SelectionStore.createDefaultState();
+    }
+    return {
+        selectionMode: false,
+        selectedIds: new Set(),
+        scope: 'visible',
+        filterKey: null,
+    };
+}
+
+function cloneSelectionState(selectionState) {
+    if (window.SelectionStore?.cloneState) {
+        return window.SelectionStore.cloneState(selectionState);
+    }
+    const source = selectionState || createDefaultSelectionState();
+    return {
+        selectionMode: Boolean(source.selectionMode),
+        selectedIds: new Set(Array.from(source.selectedIds || [])),
+        scope: source.scope || 'visible',
+        filterKey: typeof source.filterKey === 'string' && source.filterKey
+            ? source.filterKey
+            : null,
+    };
+}
+
+function buildSelectionFilterRequest(filters = AppState?.filters || createDefaultFilterState()) {
+    const source = cloneFilterState(filters);
+    return {
+        generators: [...(source.generators || [])],
+        ratings: [...(source.ratings || [])],
+        tags: [...(source.tags || [])],
+        checkpoints: [...(source.checkpoints || [])],
+        loras: [...(source.loras || [])],
+        prompts: [...(source.prompts || [])],
+        artist: source.artist || null,
+        search: source.search || '',
+        sortBy: source.sortBy || 'newest',
+        minWidth: source.minWidth ?? null,
+        maxWidth: source.maxWidth ?? null,
+        minHeight: source.minHeight ?? null,
+        maxHeight: source.maxHeight ?? null,
+        aspectRatio: source.aspectRatio || '',
+        minAesthetic: source.minAesthetic ?? null,
+        maxAesthetic: source.maxAesthetic ?? null,
+    };
+}
+
+function getSelectionFilterCacheKey(filters = AppState?.filters || createDefaultFilterState()) {
+    return JSON.stringify(buildSelectionFilterRequest(filters));
 }
 
 function copyFilterState(target, source) {
@@ -236,13 +295,15 @@ function loadSavedFilterState() {
 }
 
 const savedFilters = loadSavedFilterState();
+const AppFilterStore = window.FilterStore?.create(savedFilters || createDefaultFilterState()) || null;
+const AppSelectionStore = window.SelectionStore?.create(createDefaultSelectionState()) || null;
 
 // App State
 const AppState = {
     currentView: 'gallery',
     viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
-    filters: savedFilters || createDefaultFilterState(),
+    filters: AppFilterStore ? AppFilterStore.getState() : (savedFilters || createDefaultFilterState()),
     selectedImage: null,
     isLoading: false,
     galleryNeedsRefresh: false,
@@ -257,8 +318,10 @@ const AppState = {
     },
 
     // Multi-select state
-    selectionMode: false,
-    selectedIds: new Set(),
+    selectionMode: AppSelectionStore ? AppSelectionStore.getState().selectionMode : false,
+    selectedIds: AppSelectionStore ? AppSelectionStore.getState().selectedIds : new Set(),
+    selectionScope: AppSelectionStore ? AppSelectionStore.getState().scope : 'visible',
+    selectionFilterKey: AppSelectionStore ? AppSelectionStore.getState().filterKey : null,
     selectionDataCache: {
         key: null,
         data: null
@@ -283,6 +346,88 @@ const AppState = {
         search: ''
     }
 };
+
+if (AppFilterStore) {
+    AppFilterStore.subscribe((nextState) => {
+        AppState.filters = nextState;
+    });
+}
+
+if (AppSelectionStore) {
+    AppSelectionStore.subscribe((nextState) => {
+        AppState.selectionMode = nextState.selectionMode;
+        AppState.selectedIds = nextState.selectedIds;
+        AppState.selectionScope = nextState.scope;
+        AppState.selectionFilterKey = nextState.filterKey || null;
+    });
+}
+
+function setAppFilters(nextFilters) {
+    if (AppFilterStore) {
+        return AppFilterStore.setState(nextFilters);
+    }
+    AppState.filters = cloneFilterState(nextFilters);
+    return AppState.filters;
+}
+
+function updateAppFilters(updater) {
+    if (AppFilterStore) {
+        return AppFilterStore.update(updater);
+    }
+    const draft = cloneFilterState(AppState.filters);
+    const nextState = typeof updater === 'function'
+        ? (updater(draft) ?? draft)
+        : updater;
+    return setAppFilters(nextState);
+}
+
+function setSelectionState(nextSelection) {
+    if (AppSelectionStore) {
+        return AppSelectionStore.setState(nextSelection);
+    }
+    const nextState = cloneSelectionState(nextSelection);
+    AppState.selectionMode = nextState.selectionMode;
+    AppState.selectedIds = nextState.selectedIds;
+    AppState.selectionScope = nextState.scope;
+    AppState.selectionFilterKey = nextState.filterKey || null;
+    return nextState;
+}
+
+function updateSelectionState(updater) {
+    if (AppSelectionStore) {
+        return AppSelectionStore.update(updater);
+    }
+    const draft = cloneSelectionState({
+        selectionMode: AppState.selectionMode,
+        selectedIds: AppState.selectedIds,
+        scope: AppState.selectionScope,
+        filterKey: AppState.selectionFilterKey,
+    });
+    const nextState = typeof updater === 'function'
+        ? (updater(draft) ?? draft)
+        : updater;
+    return setSelectionState(nextState);
+}
+
+function mutateSelectedIds(mutator, { scope = null } = {}) {
+    return updateSelectionState((selection) => {
+        const nextIds = new Set(selection.selectedIds);
+        const result = typeof mutator === 'function' ? mutator(nextIds) : mutator;
+        selection.selectedIds = result instanceof Set ? result : nextIds;
+        if (scope) {
+            selection.scope = scope;
+            if (scope !== 'filtered') {
+                selection.filterKey = null;
+            }
+        }
+    });
+}
+
+function clearSelectedIds(options = {}) {
+    return mutateSelectedIds((selectedIds) => {
+        selectedIds.clear();
+    }, options);
+}
 
 // Sort direction pairs: base sort value -> reversed sort value
 const SORT_PAIRS = {
@@ -523,6 +668,10 @@ const API = {
 
     async getImage(id) {
         return this.get(`/api/images/${id}`);
+    },
+
+    async getSelectionIds(filters = {}) {
+        return this.post('/api/images/selection-ids', buildSelectionFilterRequest(filters));
     },
 
     async getSelectionData(imageIds) {
@@ -2417,9 +2566,56 @@ function emitSelectionStateChanged() {
     const detail = {
         selectionMode: Boolean(AppState.selectionMode),
         selectedCount: AppState.selectedIds.size,
+        selectionScope: AppState.selectionScope || 'visible',
     };
     window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
     document.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
+}
+
+function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visible') {
+    if (scope === 'loaded') {
+        return appT('selection.scopeLoaded', 'Scope: loaded items in the current result list');
+    }
+    if (scope === 'filtered') {
+        return appT('selection.scopeFiltered', 'Scope: all filtered results');
+    }
+    return appT('selection.scopeVisible', 'Scope: visible thumbnails currently on screen');
+}
+
+async function selectAllFilteredResults() {
+    const selectFilteredBtn = $('#btn-select-filtered');
+    if (selectFilteredBtn) {
+        selectFilteredBtn.disabled = true;
+    }
+
+    try {
+        const filterPayload = buildSelectionFilterRequest();
+        const filterKey = JSON.stringify(filterPayload);
+        const result = await API.getSelectionIds(filterPayload);
+        const imageIds = Array.isArray(result?.image_ids)
+            ? result.image_ids
+                .map((id) => Number(id))
+                .filter((id) => Number.isFinite(id) && id > 0)
+            : [];
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = new Set(imageIds);
+            selection.scope = 'filtered';
+            selection.filterKey = filterKey;
+        });
+
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
+        updateSelectionUI();
+        emitSelectionStateChanged();
+    } catch (error) {
+        showToast(
+            formatUserError(error, appT('selection.selectFilteredFailed', 'Failed to select all filtered results')),
+            'error'
+        );
+        updateSelectionUI();
+    }
 }
 
 function ensureSelectionPanelVisible(panel) {
@@ -2439,13 +2635,18 @@ function ensureSelectionPanelVisible(panel) {
 
 function setSelectionMode(enabled, options = {}) {
     const { clearSelectionWhenDisabled = true } = options;
-    AppState.selectionMode = Boolean(enabled);
-
-    if (!AppState.selectionMode && clearSelectionWhenDisabled) {
-        AppState.selectedIds.clear();
-        if (window.Gallery) {
-            window.Gallery.lastSelectedIndex = null;
+    const nextMode = Boolean(enabled);
+    updateSelectionState((selection) => {
+        selection.selectionMode = nextMode;
+        if (!nextMode && clearSelectionWhenDisabled) {
+            selection.selectedIds = new Set();
+            selection.scope = 'visible';
+            selection.filterKey = null;
         }
+    });
+
+    if (!nextMode && clearSelectionWhenDisabled && window.Gallery) {
+        window.Gallery.lastSelectedIndex = null;
     }
 
     updateSelectionUI();
@@ -2469,7 +2670,9 @@ function applyPromptFilter(prompt) {
     const value = String(prompt ?? '').trim();
     if (!value) return false;
 
-    AppState.filters.prompts = [value];
+    updateAppFilters((filters) => {
+        filters.prompts = [value];
+    });
 
     if (typeof renderModalActivePrompts === 'function') {
         renderModalActivePrompts();
@@ -2528,10 +2731,10 @@ function switchView(viewName) {
     if (viewName !== 'gallery') {
         const selActions = $('#selection-actions');
         if (selActions) selActions.style.display = 'none';
-    } else if (AppState.selectedIds && AppState.selectedIds.size > 0) {
+    } else if (AppState.selectionMode && AppState.selectedIds && AppState.selectedIds.size > 0) {
         // Show FAB if we have selections and are returning to gallery
         const selActions = $('#selection-actions');
-        if (selActions) selActions.style.display = 'flex';
+        if (selActions) selActions.style.display = 'grid';
     }
 
     // View-specific initialization
@@ -2570,6 +2773,8 @@ function switchView(viewName) {
             window._switchSortingSub(activeSortingSub);
         }
     }
+
+    updateSelectionUI();
 }
 
 function getSelectedGalleryExamples(ids, limit = 5) {
@@ -2604,9 +2809,12 @@ function deleteSelectedGalleryImages() {
             const failed = Array.isArray(result.failed) ? result.failed : [];
             const failedIds = new Set(failed.map((item) => Number(item.image_id)));
 
-            ids
-                .filter((id) => !failedIds.has(id))
-                .forEach((id) => AppState.selectedIds.delete(id));
+            const deletedIds = ids.filter((id) => !failedIds.has(id));
+            if (deletedIds.length > 0) {
+                mutateSelectedIds((selectedIds) => {
+                    deletedIds.forEach((id) => selectedIds.delete(id));
+                });
+            }
 
             updateSelectionUI();
             emitSelectionStateChanged();
@@ -2818,10 +3026,14 @@ function initEventListeners() {
             const gen = tab.dataset.gen;
             if (gen === 'all') {
                 // Reset to show all generators
-                AppState.filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+                updateAppFilters((filters) => {
+                    filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+                });
             } else {
                 // Filter by single generator
-                AppState.filters.generators = [gen];
+                updateAppFilters((filters) => {
+                    filters.generators = [gen];
+                });
             }
 
             // Update filter modal checkboxes to stay in sync
@@ -2836,12 +3048,16 @@ function initEventListeners() {
 
     // Gallery sort dropdown
     $('#gallery-sort').addEventListener('change', (e) => {
-        AppState.filters.sortBy = e.target.value;
+        updateAppFilters((filters) => {
+            filters.sortBy = e.target.value;
+        });
         if (AppState.filters.sortBy === 'aesthetic') {
             if (!_aestheticStatus.available) {
                 showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable — required dependencies not installed'), 'warning');
                 e.target.value = 'newest';
-                AppState.filters.sortBy = 'newest';
+                updateAppFilters((filters) => {
+                    filters.sortBy = 'newest';
+                });
             } else if (_aestheticStatus.scored_count === 0) {
                 showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Click the ⭐ button in the toolbar to score your images first.'), 'info');
             }
@@ -2858,7 +3074,9 @@ function initEventListeners() {
         const current = AppState.filters.sortBy;
         const reversed = SORT_REVERSE_MAP[current];
         if (reversed && reversed !== current) {
-            AppState.filters.sortBy = reversed;
+            updateAppFilters((filters) => {
+                filters.sortBy = reversed;
+            });
             updateSortReverseButton();
             loadImages();
         }
@@ -2904,7 +3122,7 @@ function initEventListeners() {
         if (window.Gallery && typeof Gallery.clearSelection === 'function') {
             Gallery.clearSelection();
         } else {
-            AppState.selectedIds.clear();
+            clearSelectedIds({ scope: 'visible' });
             updateSelectionUI();
             emitSelectionStateChanged();
         }
@@ -2915,6 +3133,10 @@ function initEventListeners() {
         if (window.Gallery && typeof Gallery.selectAllVisible === 'function') {
             Gallery.selectAllVisible();
         }
+    });
+
+    $('#btn-select-filtered')?.addEventListener('click', () => {
+        selectAllFilteredResults();
     });
 
     $('#btn-invert-selection-visible')?.addEventListener('click', () => {
@@ -3251,11 +3473,7 @@ function initMobileNavigation() {
             if (mobileNavOverlay?.classList.contains('visible')) {
                 closeMobileMenu();
             }
-            // Also close mobile filter sidebar
-            const filterSidebar = $('.filter-sidebar');
-            if (filterSidebar?.classList.contains('mobile-visible')) {
-                filterSidebar.classList.remove('mobile-visible');
-            }
+            closeMobileFilterSidebar();
         }
     });
 
@@ -3266,10 +3484,8 @@ function initMobileNavigation() {
         resizeTimeout = setTimeout(() => {
             const collapsed = updateNavigationOverflowState();
             if (!collapsed) {
-                const filterSidebar = $('.filter-sidebar');
-                if (filterSidebar) {
-                    filterSidebar.classList.remove('mobile-visible');
-                }
+                closeMobileMenu();
+                closeMobileFilterSidebar();
             }
         }, 150);
     });
@@ -3290,6 +3506,38 @@ function toggleMobileMenu() {
     }
 }
 
+function syncBodyScrollLocks() {
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+    const filterSidebar = $('.filter-sidebar');
+    const shouldLock = mobileNavOverlay?.classList.contains('visible')
+        || filterSidebar?.classList.contains('mobile-visible');
+    document.body.style.overflow = shouldLock ? 'hidden' : '';
+}
+
+function setMobileFilterSidebarExpanded(expanded) {
+    ['#mobile-filter-toggle', '#mobile-filter-header-btn'].forEach((selector) => {
+        const button = $(selector);
+        if (button) {
+            button.setAttribute('aria-expanded', String(expanded));
+        }
+    });
+}
+
+function closeMobileFilterSidebar() {
+    const filterSidebar = $('.filter-sidebar');
+    if (filterSidebar) {
+        filterSidebar.classList.remove('mobile-visible');
+    }
+
+    const overlay = $('.filter-sidebar-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+
+    setMobileFilterSidebarExpanded(false);
+    syncBodyScrollLocks();
+}
+
 function openMobileMenu() {
     const mobileMenuToggle = $('#mobile-menu-toggle');
     const mobileNavOverlay = $('#mobile-nav-overlay');
@@ -3298,8 +3546,7 @@ function openMobileMenu() {
     mobileMenuToggle?.setAttribute('aria-expanded', 'true');
     mobileNavOverlay?.classList.add('visible');
 
-    // Prevent body scroll when menu is open
-    document.body.style.overflow = 'hidden';
+    syncBodyScrollLocks();
 
     // Sync active state with current view
     const currentView = AppState.currentView;
@@ -3316,20 +3563,21 @@ function closeMobileMenu() {
     mobileMenuToggle?.setAttribute('aria-expanded', 'false');
     mobileNavOverlay?.classList.remove('visible');
 
-    // Restore body scroll
-    document.body.style.overflow = '';
+    syncBodyScrollLocks();
 }
 
 function toggleMobileFilterSidebar() {
     const filterSidebar = $('.filter-sidebar');
 
     if (filterSidebar) {
-        filterSidebar.classList.toggle('mobile-visible');
-
-        const mobileFilterToggle = $('#mobile-filter-toggle');
-        if (mobileFilterToggle) {
-            mobileFilterToggle.setAttribute('aria-expanded', String(filterSidebar.classList.contains('mobile-visible')));
+        const willOpen = !filterSidebar.classList.contains('mobile-visible');
+        if (!willOpen) {
+            closeMobileFilterSidebar();
+            return;
         }
+
+        filterSidebar.classList.add('mobile-visible');
+        setMobileFilterSidebarExpanded(true);
 
         // If showing, add a close button dynamically
         if (filterSidebar.classList.contains('mobile-visible')) {
@@ -3346,22 +3594,11 @@ function toggleMobileFilterSidebar() {
                     background: rgba(0, 0, 0, 0.7);
                     z-index: 999;
                 `;
-                overlay.addEventListener('click', () => {
-                    filterSidebar.classList.remove('mobile-visible');
-                    overlay.remove();
-                });
+                overlay.addEventListener('click', () => closeMobileFilterSidebar());
                 document.body.appendChild(overlay);
             }
 
-            // Prevent body scroll
-            document.body.style.overflow = 'hidden';
-        } else {
-            // Remove overlay if exists
-            const overlay = $('.filter-sidebar-overlay');
-            if (overlay) overlay.remove();
-
-            // Restore body scroll
-            document.body.style.overflow = '';
+            syncBodyScrollLocks();
         }
     }
 }
@@ -4706,13 +4943,29 @@ async function loadImages(appendMode = false, options = {}) {
                 .replace('{count}', String(AppState.pagination.total || AppState.images.length));
         }
 
-        // Clean stale selections on fresh load
+        // Clean stale selections on fresh load, but do not corrupt true filtered-result selection.
         if (AppState.selectedIds && AppState.selectedIds.size > 0 && !appendMode) {
-            const validIds = new Set(AppState.images.map(img => img.id));
-            const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
-            if (staleIds.length > 0) {
-                staleIds.forEach(id => AppState.selectedIds.delete(id));
-                if (typeof updateSelectionUI === 'function') updateSelectionUI();
+            if (AppState.selectionScope === 'filtered') {
+                const currentFilterKey = getSelectionFilterCacheKey(AppState.filters);
+                if (AppState.selectionFilterKey && AppState.selectionFilterKey !== currentFilterKey) {
+                    updateSelectionState((selection) => {
+                        selection.selectedIds = new Set();
+                        selection.scope = 'visible';
+                        selection.filterKey = null;
+                    });
+                    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+                    emitSelectionStateChanged();
+                }
+            } else {
+                const validIds = new Set(AppState.images.map(img => img.id));
+                const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
+                if (staleIds.length > 0) {
+                    mutateSelectedIds((selectedIds) => {
+                        staleIds.forEach((id) => selectedIds.delete(id));
+                    });
+                    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+                    emitSelectionStateChanged();
+                }
             }
         }
 
@@ -4843,10 +5096,28 @@ function _onGalleryScroll() {
 
 // ============== UI Components ==============
 
+function normalizeCheckpointFilterValue(value) {
+    let text = String(value || '').trim();
+    if (!text) return '';
+    text = text.replace(/\\/g, '/').split('/').pop().trim();
+    text = text.replace(/\s+\[[0-9a-fA-F]{4,}\]\s*$/, '').trim();
+    text = text.replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+    return text;
+}
+
+function getCheckpointOptionValue(item) {
+    return normalizeCheckpointFilterValue(item?.checkpoint_normalized || item?.checkpoint || item);
+}
+
 function openModelSelect(type) {
     AppState.modalSelection.type = type;
     AppState.modalSelection.search = '';
-    AppState.modalSelection.tempSelected = new Set(AppState.filters[`${type}s`]);
+    const currentSelection = AppState.filters[`${type}s`] || [];
+    AppState.modalSelection.tempSelected = new Set(
+        type === 'checkpoint'
+            ? currentSelection.map(normalizeCheckpointFilterValue).filter(Boolean)
+            : currentSelection
+    );
 
     $('#model-select-title').textContent = type === 'checkpoint'
         ? appT('modelSelect.checkpointsTitle', 'Select Models')
@@ -4868,21 +5139,24 @@ function renderModelSelectList() {
     }
 
     const filtered = items.filter(item => {
-        const val = type === 'checkpoint' ? item.checkpoint : item.lora;
-        return val.toLowerCase().includes(search);
+        const value = type === 'checkpoint' ? getCheckpointOptionValue(item) : item.lora;
+        const label = type === 'checkpoint' ? (item.checkpoint || value) : item.lora;
+        return String(label || value || '').toLowerCase().includes(search);
     });
 
     list.innerHTML = filtered.map(item => {
-        const value = type === 'checkpoint' ? item.checkpoint : item.lora;
+        const value = type === 'checkpoint' ? getCheckpointOptionValue(item) : item.lora;
+        const label = type === 'checkpoint' ? (item.checkpoint || value) : item.lora;
         const isSelected = tempSelected.has(value);
         const safeValue = escapeHtml(value);
+        const safeLabel = escapeHtml(label);
 
         return `
             <div class="model-select-item ${isSelected ? 'selected' : ''}" data-value="${safeValue}">
                 <div class="checkbox-custom" style="background: ${isSelected ? 'var(--accent-primary)' : 'transparent'}; border-color: ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}">
                     ${isSelected ? '✓' : ''}
                 </div>
-                <div class="item-text" title="${safeValue}">${safeValue}</div>
+                <div class="item-text" title="${safeLabel}">${safeLabel}</div>
                 <div class="item-count">${item.count}</div>
             </div>
         `;
@@ -5224,6 +5498,7 @@ function filterLibraryContent() {
 function updateSelectionUI() {
     const panel = $('#selection-actions');
     const countEl = $('#selection-count');
+    const scopeEl = $('#selection-scope-summary');
     const grid = $('#gallery-grid');
     const hasSelection = AppState.selectedIds.size > 0;
     const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
@@ -5245,6 +5520,11 @@ function updateSelectionUI() {
     const selectAllBtn = $('#btn-select-all');
     if (selectAllBtn) {
         selectAllBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+    }
+
+    const selectFilteredBtn = $('#btn-select-filtered');
+    if (selectFilteredBtn) {
+        selectFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
     }
 
     const invertVisibleBtn = $('#btn-invert-selection-visible');
@@ -5269,7 +5549,10 @@ function updateSelectionUI() {
         if (countEl) {
             countEl.textContent = hasSelection
                 ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
-                : (window.I18n?.t?.('selection.emptyHint') || 'Selection mode is on. Pick images or use Select All.');
+                : (window.I18n?.t?.('selection.emptyHint') || 'Selection mode is on. Pick images or use Select Visible.');
+        }
+        if (scopeEl) {
+            scopeEl.textContent = getSelectionScopeSummaryText();
         }
         requestAnimationFrame(() => ensureSelectionPanelVisible(panel));
     } else if (panel) {
@@ -5331,8 +5614,8 @@ async function showAnalytics() {
 
         $('#analytics-checkpoints').innerHTML = data.checkpoints.length ?
             data.checkpoints.map(c => `
-                <div class="analytics-item clickable" data-type="checkpoint" data-value="${escapeHtml(c.checkpoint)}">
-                    <span class="item-name">${escapeHtml(c.checkpoint)}</span>
+                <div class="analytics-item clickable" data-type="checkpoint" data-value="${escapeHtml(getCheckpointOptionValue(c))}">
+                    <span class="item-name">${escapeHtml(c.checkpoint || getCheckpointOptionValue(c))}</span>
                     <span class="item-count">${c.count}</span>
                 </div>
             `).join('') : `<p>${escapeHtml(appT('analytics.noCheckpoints', 'No checkpoints found'))}</p>`;
@@ -5370,14 +5653,20 @@ async function showAnalytics() {
 
 function applyAnalyticsFilter(type, value) {
     if (type === 'checkpoint') {
-        AppState.filters.checkpoints = [value];
+        updateAppFilters((filters) => {
+            filters.checkpoints = [value];
+        });
         updateModelSelectionSummaries();
     } else if (type === 'lora') {
-        AppState.filters.loras = [value];
+        updateAppFilters((filters) => {
+            filters.loras = [value];
+        });
         updateModelSelectionSummaries();
     } else if (type === 'tag') {
         if (!AppState.filters.tags.includes(value)) {
-            AppState.filters.tags = [...AppState.filters.tags, value];
+            updateAppFilters((filters) => {
+                filters.tags = [...filters.tags, value];
+            });
             addTagToUI(value);
         }
     }
@@ -5614,14 +5903,18 @@ function updateFiltersFromUI() {
     $$('#modal-generator-filters input[type="checkbox"]:checked').forEach(cb => {
         generators.push(cb.value);
     });
-    AppState.filters.generators = generators;
+    updateAppFilters((filters) => {
+        filters.generators = generators;
+    });
 
     // Get ratings
     const ratings = [];
     $$('#modal-rating-filters input[type="checkbox"]:checked').forEach(cb => {
         ratings.push(cb.value);
     });
-    AppState.filters.ratings = ratings;
+    updateAppFilters((filters) => {
+        filters.ratings = ratings;
+    });
 }
 
 function applyFilters() {
@@ -5636,10 +5929,12 @@ function clearFilters() {
     $$('#modal-rating-filters input[type="checkbox"]').forEach(cb => {
         cb.checked = true;
     });
-    AppState.filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
-    AppState.filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
-    AppState.filters.tags = [];
-    AppState.filters.search = '';
+    updateAppFilters((filters) => {
+        filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+        filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
+        filters.tags = [];
+        filters.search = '';
+    });
     const freeTextSearch = $('#modal-free-text-search');
     if (freeTextSearch) freeTextSearch.value = '';
     const activeTags = $('#active-tags');
@@ -5649,13 +5944,17 @@ function clearFilters() {
 
 function addTagFilter(tag) {
     if (!AppState.filters.tags.includes(tag)) {
-        AppState.filters.tags = [...AppState.filters.tags, tag];
+        updateAppFilters((filters) => {
+            filters.tags = [...filters.tags, tag];
+        });
         renderActiveTagFilters();
     }
 }
 
 function removeTagFilter(tag) {
-    AppState.filters.tags = AppState.filters.tags.filter(t => t !== tag);
+    updateAppFilters((filters) => {
+        filters.tags = filters.tags.filter(t => t !== tag);
+    });
     renderActiveTagFilters();
 }
 
@@ -6009,14 +6308,17 @@ async function loadModalFilterLists() {
 
     try {
         const data = optionData || AppState.analytics || await API.getStats();
+        const selectedCheckpointValues = new Set(
+            (filterState.checkpoints || []).map(normalizeCheckpointFilterValue).filter(Boolean)
+        );
 
         // Render checkpoints
         if (cpList) {
             cpList.innerHTML = (data.checkpoints || []).length > 0 ? (data.checkpoints || []).map(cp => `
                 <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${filterState.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
+                    <input type="checkbox" value="${escapeHtml(getCheckpointOptionValue(cp))}" ${selectedCheckpointValues.has(getCheckpointOptionValue(cp)) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
-                    <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
+                    <span class="checkbox-text">${escapeHtml(cp.checkpoint || getCheckpointOptionValue(cp))}</span>
                     <span class="checkbox-count">${cp.count}</span>
                 </label>
             `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noCheckpoints', null, 'No checkpoints found yet.'))}</div>`;
@@ -6601,7 +6903,9 @@ function initMissingFilterMarkup() {
 
 // Clear only the artist filter
 function clearArtistFilter() {
-    AppState.filters.artist = null;
+    updateAppFilters((filters) => {
+        filters.artist = null;
+    });
     const artistRow = $('#artist-filter-row');
     if (artistRow) artistRow.style.display = 'none';
     updateFilterSummary();
@@ -6710,6 +7014,7 @@ function refreshLocalizedImageCount() {
 function refreshLocalizedDynamicUi() {
     refreshLocalizedImageCount();
     updateFilterSummary();
+    updateSelectionUI();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
     if (AppState.modalSelection.type) {
@@ -6783,7 +7088,7 @@ function initGlobalKeyboardShortcuts() {
         else if (e.key === 'Escape') {
             if (AppState.selectedIds.size > 0) {
                 e.preventDefault();
-                AppState.selectedIds.clear();
+                clearSelectedIds({ scope: 'visible' });
                 updateSelectionUI();
                 emitSelectionStateChanged();
                 if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
@@ -6951,6 +7256,18 @@ function buildAppContext() {
         createDefaultFilterState,
         cloneFilterState,
         copyFilterState,
+        normalizeCheckpointFilterValue,
+        FilterStore: AppFilterStore,
+        setFilters: setAppFilters,
+        updateFilters: updateAppFilters,
+        createDefaultSelectionState,
+        cloneSelectionState,
+        SelectionStore: AppSelectionStore,
+        setSelectionState,
+        updateSelectionState,
+        mutateSelectedIds,
+        clearSelectedIds,
+        setSelectionMode,
         updateSortReverseButton,
         syncGallerySortLabels,
         formatGeneratorLabel,

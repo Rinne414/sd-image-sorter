@@ -36,10 +36,16 @@ from config import (
     FAVORITES_FOLDER_PATH,
 )
 from utils.source_paths import (
+    build_indexed_folder_scope_query_patterns,
     build_indexed_image_lookup_candidates,
     indexed_image_path_match_key,
+    is_indexed_image_path_in_folder_scope,
     is_case_insensitive_indexed_path,
     normalize_indexed_image_path,
+)
+from utils.model_names import (
+    checkpoint_identity_key,
+    normalize_checkpoint_name as _normalize_checkpoint_name,
 )
 
 
@@ -94,6 +100,64 @@ def _path_query_match_clause(paths: List[str]) -> Tuple[str, List[str]]:
         placeholders = ",".join("?" * len(casefold_candidates))
         clauses.append(f"LOWER(path) IN ({placeholders})")
         params.extend(casefold_candidates)
+
+    if not clauses:
+        return "", []
+
+    return " OR ".join(clauses), params
+
+
+def _folder_scope_query_match_clause(folder_path: str) -> Tuple[str, List[str]]:
+    """Build a SQL clause plus patterns for equivalent indexed folder scopes."""
+    patterns = build_indexed_folder_scope_query_patterns(folder_path)
+    if not patterns:
+        return "", []
+
+    exact_candidates: List[str] = []
+    exact_casefold_candidates: List[str] = []
+    prefix_candidates: List[str] = []
+    prefix_casefold_candidates: List[str] = []
+    seen_exact: set[str] = set()
+    seen_prefix: set[str] = set()
+    seen_exact_casefold: set[str] = set()
+    seen_prefix_casefold: set[str] = set()
+
+    for exact, prefix in patterns:
+        exact_match_key = indexed_image_path_match_key(exact)
+        prefix_match_key = indexed_image_path_match_key(prefix)
+
+        if exact_match_key not in seen_exact:
+            seen_exact.add(exact_match_key)
+            exact_candidates.append(exact)
+        if prefix_match_key not in seen_prefix:
+            seen_prefix.add(prefix_match_key)
+            prefix_candidates.append(f"{prefix}%")
+
+        if is_case_insensitive_indexed_path(exact) and exact_match_key not in seen_exact_casefold:
+            seen_exact_casefold.add(exact_match_key)
+            exact_casefold_candidates.append(exact_match_key)
+        if is_case_insensitive_indexed_path(prefix) and prefix_match_key not in seen_prefix_casefold:
+            seen_prefix_casefold.add(prefix_match_key)
+            prefix_casefold_candidates.append(f"{prefix_match_key}%")
+
+    clauses: List[str] = []
+    params: List[str] = []
+    if exact_candidates:
+        placeholders = ",".join("?" * len(exact_candidates))
+        clauses.append(f"path IN ({placeholders})")
+        params.extend(exact_candidates)
+    if prefix_candidates:
+        like_clause = " OR ".join("path LIKE ?" for _ in prefix_candidates)
+        clauses.append(f"({like_clause})")
+        params.extend(prefix_candidates)
+    if exact_casefold_candidates:
+        placeholders = ",".join("?" * len(exact_casefold_candidates))
+        clauses.append(f"LOWER(path) IN ({placeholders})")
+        params.extend(exact_casefold_candidates)
+    if prefix_casefold_candidates:
+        like_clause = " OR ".join("LOWER(path) LIKE ?" for _ in prefix_casefold_candidates)
+        clauses.append(f"({like_clause})")
+        params.extend(prefix_casefold_candidates)
 
     if not clauses:
         return "", []
@@ -187,6 +251,11 @@ def normalize_lora_name(lora_name: str) -> str:
             break
     
     return lora_name.lower().strip()
+
+
+def normalize_checkpoint_name(checkpoint_name: Optional[str]) -> Optional[str]:
+    """Normalize checkpoint names for cross-generator filter semantics."""
+    return _normalize_checkpoint_name(checkpoint_name)
 
 
 def extract_prompt_tokens(prompt: str) -> set:
@@ -440,6 +509,10 @@ def _sync_image_loras(
 
 _pragmas_initialized: set = set()
 _pragmas_lock = threading.Lock()
+SCHEMA_VERSION_ROW_ID = 1
+STALE_PENDING_METADATA_READ_ERROR = (
+    "Scan interrupted before metadata refresh completed. Re-scan the source folder to recover this row."
+)
 
 
 def get_connection() -> sqlite3.Connection:
@@ -474,280 +547,108 @@ def get_db():
         conn.close()
 
 
-def init_db() -> None:
-    """Initialize the database schema."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-
-        # Images table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT UNIQUE NOT NULL,
-                filename TEXT NOT NULL,
-                generator TEXT DEFAULT 'unknown',
-                prompt TEXT,
-                negative_prompt TEXT,
-                metadata_json TEXT,
-                width INTEGER,
-                height INTEGER,
-                file_size INTEGER,
-                checkpoint TEXT,
-                loras TEXT, -- JSON array of lora names
-                is_readable INTEGER DEFAULT 1,
-                read_error TEXT,
-                source_mtime_ns INTEGER,
-                source_size INTEGER,
-                metadata_status TEXT DEFAULT 'complete',
-                content_fingerprint TEXT,
-                created_at DATETIME,
-                indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                tagged_at DATETIME
-            )
-        """)
-
-        # Schema Migration: Add columns if they don't exist
-        cursor.execute("PRAGMA table_info(images)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'checkpoint' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN checkpoint TEXT")
-        if 'loras' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN loras TEXT")
-        if 'embedding' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN embedding BLOB")
-        if 'ai_caption' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN ai_caption TEXT")
-        if 'model_hash' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN model_hash TEXT")
-        if 'aesthetic_score' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN aesthetic_score REAL")
-        if 'is_readable' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN is_readable INTEGER DEFAULT 1")
-        if 'read_error' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN read_error TEXT")
-        if 'source_mtime_ns' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN source_mtime_ns INTEGER")
-        if 'source_size' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN source_size INTEGER")
-        if 'metadata_status' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN metadata_status TEXT DEFAULT 'complete'")
-        if 'content_fingerprint' not in columns:
-            cursor.execute("ALTER TABLE images ADD COLUMN content_fingerprint TEXT")
-        cursor.execute("UPDATE images SET is_readable = 1 WHERE is_readable IS NULL")
-        cursor.execute("UPDATE images SET metadata_status = 'complete' WHERE metadata_status IS NULL")
-
-        # Collections table (Favorites MVP uses a built-in collection)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS collections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                slug TEXT NOT NULL UNIQUE,
-                name TEXT NOT NULL,
-                folder_path TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Snapshot entries for collection items
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS collection_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collection_id INTEGER NOT NULL,
-                source_image_id INTEGER NOT NULL,
-                copied_path TEXT NOT NULL,
-                prompt TEXT,
-                negative_prompt TEXT,
-                checkpoint TEXT,
-                loras TEXT,
-                metadata_json TEXT,
-                created_at DATETIME,
-                width INTEGER,
-                height INTEGER,
-                file_size INTEGER,
-                added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(collection_id, source_image_id),
-                FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
-                FOREIGN KEY (source_image_id) REFERENCES images(id) ON DELETE CASCADE
-            )
-        """)
-
-        # Tags table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tags (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_id INTEGER NOT NULL,
-                tag TEXT NOT NULL,
-                confidence REAL DEFAULT 1.0,
-                FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-            )
-        """)
-
-        # === Tag categorization tables ===
-
-        # Tag category mapping (built-in + user-customizable)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tag TEXT NOT NULL UNIQUE,
-                category TEXT NOT NULL,
-                subcategory TEXT,
-                is_user_defined INTEGER DEFAULT 0
-            )
-        """)
-
-        # Tag sets (tags that should appear together, e.g. "school uniform" set)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_sets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT,
-                category TEXT NOT NULL
-            )
-        """)
-
-        # Members of tag sets
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_set_members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                set_id INTEGER NOT NULL,
-                tag TEXT NOT NULL,
-                weight REAL DEFAULT 1.0,
-                is_required INTEGER DEFAULT 1,
-                FOREIGN KEY (set_id) REFERENCES tag_sets(id) ON DELETE CASCADE
-            )
-        """)
-
-        # Tag exclusion rules
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_exclusions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rule_name TEXT NOT NULL,
-                description TEXT
-            )
-        """)
-
-        # Conditions that trigger an exclusion rule
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_exclusion_conditions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                exclusion_id INTEGER NOT NULL,
-                condition_tag TEXT NOT NULL,
-                condition_type TEXT DEFAULT 'present',
-                FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
-            )
-        """)
-
-        # Tags or categories excluded when rule is triggered
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tag_exclusion_targets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                exclusion_id INTEGER NOT NULL,
-                excluded_tag TEXT,
-                excluded_category TEXT,
-                FOREIGN KEY (exclusion_id) REFERENCES tag_exclusions(id) ON DELETE CASCADE
-            )
-        """)
-
-        # Prompt generation presets (saved configurations)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS prompt_presets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                config_json TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-        # Artist predictions (LSNet-style artist identification)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS artist_predictions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_id INTEGER NOT NULL UNIQUE,
-                artist TEXT NOT NULL,
-                confidence REAL NOT NULL,
-                top_predictions TEXT,
-                identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-            )
-        """)
-
-        # Create indexes for fast searching
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_generator ON images(generator)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_tag ON tag_categories(tag)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_embedding ON images(embedding IS NOT NULL) WHERE embedding IS NOT NULL")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_created_at ON images(created_at DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_artist ON artist_predictions(artist)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_artist_predictions_image_id ON artist_predictions(image_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collections_slug ON collections(slug)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_collection_id ON collection_items(collection_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_collection_items_source_image_id ON collection_items(source_image_id)")
-
-        # Performance-critical indexes for common queries
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_checkpoint ON images(checkpoint) WHERE checkpoint IS NOT NULL")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_tagged_at ON images(tagged_at) WHERE tagged_at IS NULL")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_tag_image ON tags(tag, image_id)")
-        # Optimized index for rating and tag_count queries (covers common correlated subqueries)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tags_image_id_tag ON tags(image_id, tag)")
-
-        # UNIQUE constraint on tags to prevent duplicates
-        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_unique_image_tag ON tags(image_id, tag)")
-
-        # Filename index for name sorting performance
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_filename ON images(filename)")
-
-        # Model hash index for checkpoint dedup
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_model_hash ON images(model_hash) WHERE model_hash IS NOT NULL")
-
-        # Readability index: normal library queries filter on COALESCE(is_readable, 1) = 1
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_readable ON images(is_readable)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_images_metadata_status ON images(metadata_status)")
-
-        # Remove redundant simple indexes superseded by composite ones
-        # idx_tags_tag is redundant with idx_tags_tag_image(tag, image_id)
-        # idx_tags_image_id is redundant with idx_tags_image_id_tag(image_id, tag)
-        cursor.execute("DROP INDEX IF EXISTS idx_tags_tag")
-        cursor.execute("DROP INDEX IF EXISTS idx_tags_image_id")
-
-        # Junction table for normalized lora names (for efficient lora filtering)
-        # This avoids LIKE queries on the loras column which requires full table scans
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS image_loras (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                image_id INTEGER NOT NULL,
-                lora_name TEXT NOT NULL,
-                FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
-                UNIQUE(image_id, lora_name)
-            )
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_image_loras_lora_name ON image_loras(lora_name)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_image_loras_image_id ON image_loras(image_id)")
-
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO collections (slug, name, folder_path)
-            VALUES (?, ?, ?)
-            """,
-            (FAVORITES_COLLECTION_SLUG, FAVORITES_COLLECTION_NAME, FAVORITES_FOLDER_PATH)
+def _ensure_schema_version_table(conn: sqlite3.Connection) -> None:
+    """Create the schema-version ledger when it does not exist yet."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_version (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            version INTEGER NOT NULL
         )
+        """
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_version (id, version) VALUES (?, 0)",
+        (SCHEMA_VERSION_ROW_ID,),
+    )
 
-        # Migrate existing loras to junction table (if not already done)
-        cursor.execute("SELECT COUNT(*) FROM image_loras")
-        if cursor.fetchone()[0] == 0:
-            cursor.execute("SELECT id, loras, prompt FROM images WHERE loras IS NOT NULL OR prompt LIKE '%<lora:%'")
-            for row in cursor.fetchall():
-                image_id = row[0]
-                loras_json = row[1] or ''
-                prompt = row[2] or ''
-                lora_names = extract_lora_names(loras_json, prompt)
-                for lora_name in lora_names:
-                    cursor.execute(
-                        "INSERT OR IGNORE INTO image_loras (image_id, lora_name) VALUES (?, ?)",
-                        (image_id, lora_name)
-                    )
+
+def _get_schema_version(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        "SELECT version FROM schema_version WHERE id = ?",
+        (SCHEMA_VERSION_ROW_ID,),
+    ).fetchone()
+    if not row:
+        return 0
+    return int(row[0] or 0)
+
+
+def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
+    conn.execute(
+        "UPDATE schema_version SET version = ? WHERE id = ?",
+        (int(version), SCHEMA_VERSION_ROW_ID),
+    )
+
+
+def _recover_stale_pending_metadata_rows(conn: sqlite3.Connection) -> int:
+    """
+    Quarantine placeholder scan rows that survived a previous process crash.
+
+    Pending rows are safe while a scan is running, but once the app starts again
+    there is no in-flight worker left that can finish them. Mark them as
+    recoverable `error` rows so they stop bypassing invalidation logic and can
+    be repaired truthfully by the next re-scan.
+    """
+    row = conn.execute(
+        """
+        SELECT COUNT(*)
+        FROM images
+        WHERE LOWER(COALESCE(metadata_status, '')) = 'pending'
+        """
+    ).fetchone()
+    pending_count = int(row[0] or 0) if row else 0
+    if pending_count <= 0:
+        return 0
+
+    conn.execute(
+        """
+        UPDATE images
+        SET is_readable = 0,
+            read_error = CASE
+                WHEN TRIM(COALESCE(read_error, '')) = '' THEN ?
+                ELSE read_error
+            END,
+            metadata_status = 'error',
+            indexed_at = CURRENT_TIMESTAMP
+        WHERE LOWER(COALESCE(metadata_status, '')) = 'pending'
+        """,
+        (STALE_PENDING_METADATA_READ_ERROR,),
+    )
+    return pending_count
+
+
+def init_db() -> None:
+    """Initialize or migrate the database schema to the latest known version."""
+    from migrations import get_migrations
+
+    conn = get_connection()
+    try:
+        _ensure_schema_version_table(conn)
+        current_version = _get_schema_version(conn)
+
+        for migration in get_migrations():
+            if migration.version <= current_version:
+                continue
+            savepoint_name = f"migration_{migration.version}"
+            conn.execute(f"SAVEPOINT {savepoint_name}")
+            try:
+                migration.apply(conn)
+                _set_schema_version(conn, migration.version)
+                conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+            except Exception:
+                conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name}")
+                conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
+                raise
+            current_version = migration.version
+
+        _recover_stale_pending_metadata_rows(conn)
 
         conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def add_image(
@@ -763,6 +664,8 @@ def add_image(
     checkpoint: Optional[str] = None,
     loras: Optional[List[str]] = None,
     created_at: Optional[datetime] = None,
+    library_order_time: Optional[datetime] = None,
+    source_file_mtime: Optional[datetime] = None,
     model_hash: Optional[str] = None,
     is_readable: bool = True,
     read_error: Optional[str] = None,
@@ -778,6 +681,8 @@ def add_image(
     ``(image_id, "new" | "updated")`` so callers can report truthful scan
     summaries without duplicating the upsert logic.
     """
+    resolved_library_order_time = library_order_time or created_at
+    resolved_source_file_mtime = source_file_mtime or created_at
     record = {
         "path": path,
         "filename": filename,
@@ -789,8 +694,11 @@ def add_image(
         "height": height,
         "file_size": file_size,
         "checkpoint": checkpoint,
+        "checkpoint_normalized": normalize_checkpoint_name(checkpoint),
         "loras": loras,
-        "created_at": created_at,
+        "library_order_time": resolved_library_order_time,
+        "source_file_mtime": resolved_source_file_mtime,
+        "created_at": resolved_library_order_time,
         "model_hash": model_hash,
         "is_readable": is_readable,
         "read_error": read_error,
@@ -832,9 +740,10 @@ def _get_existing_images_by_paths(
             continue
         cursor.execute(
             f"""
-            SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
-                   width, height, file_size, checkpoint, loras, model_hash,
-                   created_at, is_readable, read_error, source_mtime_ns, source_size, metadata_status,
+                    SELECT id, path, filename, generator, prompt, negative_prompt, metadata_json,
+                   width, height, file_size, checkpoint, checkpoint_normalized, loras, model_hash,
+                   library_order_time, source_file_mtime, created_at,
+                   is_readable, read_error, source_mtime_ns, source_size, metadata_status,
                    content_fingerprint, tagged_at, ai_caption, aesthetic_score,
                    CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
                    EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
@@ -872,6 +781,16 @@ def _upsert_image_record(
     path = _normalize_indexed_image_path(record["path"])
     serialized_loras = _serialize_loras(record.get("loras"))
     metadata_status = record.get("metadata_status") or "complete"
+    record["checkpoint_normalized"] = normalize_checkpoint_name(record.get("checkpoint"))
+    incoming_library_order_time = record.get("library_order_time")
+    if incoming_library_order_time is None:
+        incoming_library_order_time = record.get("created_at")
+    incoming_source_file_mtime = record.get("source_file_mtime")
+    if incoming_source_file_mtime is None:
+        incoming_source_file_mtime = record.get("created_at")
+    record["library_order_time"] = incoming_library_order_time
+    record["source_file_mtime"] = incoming_source_file_mtime
+    record["created_at"] = incoming_library_order_time
     source_changed = False
     mark_unreadable = not record.get("is_readable", True)
 
@@ -882,6 +801,7 @@ def _upsert_image_record(
             existing_rows = cursor.execute(
                 f"""
                 SELECT id, path, source_mtime_ns, source_size, content_fingerprint,
+                       library_order_time, source_file_mtime, created_at,
                        tagged_at, ai_caption, aesthetic_score,
                        CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END AS has_embedding,
                        EXISTS(SELECT 1 FROM artist_predictions ap WHERE ap.image_id = images.id) AS has_artist_predictions
@@ -933,6 +853,7 @@ def _upsert_image_record(
                 height = ?,
                 file_size = ?,
                 checkpoint = ?,
+                checkpoint_normalized = ?,
                 loras = ?,
                 model_hash = COALESCE(?, model_hash),
                 is_readable = ?,
@@ -941,7 +862,9 @@ def _upsert_image_record(
                 source_size = COALESCE(?, source_size),
                 metadata_status = ?,
                 content_fingerprint = COALESCE(?, content_fingerprint),
-                created_at = COALESCE(created_at, ?),
+                library_order_time = COALESCE(library_order_time, created_at, ?),
+                source_file_mtime = COALESCE(?, source_file_mtime),
+                created_at = COALESCE(library_order_time, created_at, ?),
                 indexed_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -955,6 +878,7 @@ def _upsert_image_record(
                 record.get("height"),
                 record.get("file_size"),
                 record.get("checkpoint"),
+                record.get("checkpoint_normalized"),
                 serialized_loras,
                 record.get("model_hash"),
                 1 if record.get("is_readable", True) else 0,
@@ -963,6 +887,8 @@ def _upsert_image_record(
                 incoming_source_size,
                 metadata_status,
                 record.get("content_fingerprint"),
+                record.get("library_order_time"),
+                record.get("source_file_mtime"),
                 record.get("created_at"),
                 image_id,
             ),
@@ -973,9 +899,10 @@ def _upsert_image_record(
             """
             INSERT INTO images
             (path, filename, generator, prompt, negative_prompt, metadata_json,
-             width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error,
-             source_mtime_ns, source_size, metadata_status, content_fingerprint, created_at, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             width, height, file_size, checkpoint, checkpoint_normalized, loras, model_hash, is_readable, read_error,
+             source_mtime_ns, source_size, metadata_status, content_fingerprint,
+             library_order_time, source_file_mtime, created_at, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
             (
                 path,
@@ -988,6 +915,7 @@ def _upsert_image_record(
                 record.get("height"),
                 record.get("file_size"),
                 record.get("checkpoint"),
+                record.get("checkpoint_normalized"),
                 serialized_loras,
                 record.get("model_hash"),
                 1 if record.get("is_readable", True) else 0,
@@ -996,6 +924,8 @@ def _upsert_image_record(
                 record.get("source_size"),
                 metadata_status,
                 record.get("content_fingerprint"),
+                record.get("library_order_time"),
+                record.get("source_file_mtime"),
                 record.get("created_at"),
             ),
         )
@@ -1062,27 +992,17 @@ def get_image_scan_state_by_paths(paths: List[str]) -> Dict[str, Dict[str, Any]]
 
 def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List[Dict[str, Any]]:
     """Return lightweight image rows that fall under a scan root."""
-    normalized_folder = _normalize_indexed_image_path(folder_path)
-    folder_candidates = build_indexed_image_lookup_candidates(normalized_folder)
-    if not folder_candidates:
+    clause, params = _folder_scope_query_match_clause(folder_path)
+    if not clause:
         return []
 
     with get_db() as conn:
         cursor = conn.cursor()
-        conditions: List[str] = []
-        params: List[str] = []
-        for candidate in folder_candidates:
-            windows_style = "\\" in candidate and not candidate.startswith("/")
-            separator = "\\" if windows_style else "/"
-            prefix = candidate.rstrip("\\/") + separator
-            conditions.append("(path = ? OR path LIKE ?)")
-            params.extend([candidate, f"{prefix}%"])
-
         cursor.execute(
             f"""
             SELECT id, path, filename
             FROM images
-            WHERE {" OR ".join(conditions)}
+            WHERE {clause}
             """,
             params,
         )
@@ -1091,26 +1011,10 @@ def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List
     if recursive:
         return rows
 
-    scoped_rows: List[Dict[str, Any]] = []
-    for row in rows:
-        for candidate in folder_candidates:
-            candidate_path = row["path"]
-            if candidate_path == candidate:
-                scoped_rows.append(row)
-                break
-
-            windows_style = "\\" in candidate and not candidate.startswith("/")
-            separator = "\\" if windows_style else "/"
-            prefix = candidate.rstrip("\\/") + separator
-            if not candidate_path.startswith(prefix):
-                continue
-
-            remainder = candidate_path[len(prefix):]
-            if remainder and separator not in remainder and (separator == "/" or "/" not in remainder):
-                scoped_rows.append(row)
-                break
-
-    return scoped_rows
+    return [
+        row for row in rows
+        if is_indexed_image_path_in_folder_scope(row["path"], folder_path, recursive=False)
+    ]
 
 
 def delete_images_by_ids(image_ids: List[int]) -> int:
@@ -1256,31 +1160,96 @@ VALID_SORT_OPTIONS = {
 # Canonical column lists for image queries.
 # All functions selecting image rows should reference these constants
 # so column additions only need to change one place.
-_IMAGE_COLUMNS_FULL = (
-    "i.id, i.path, i.filename, i.generator, i.prompt, i.negative_prompt, i.metadata_json, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
-    "i.source_mtime_ns, i.source_size, i.metadata_status, "
-    "i.created_at, i.indexed_at, i.tagged_at, i.ai_caption, i.aesthetic_score"
+_IMAGE_COLUMNS_BASE_FIELDS = (
+    "id",
+    "path",
+    "filename",
+    "generator",
+    "prompt",
+    "negative_prompt",
+    "metadata_json",
+    "width",
+    "height",
+    "file_size",
+    "checkpoint",
+    "checkpoint_normalized",
+    "loras",
+    "model_hash",
+    "is_readable",
+    "read_error",
+    "source_mtime_ns",
+    "source_size",
+    "metadata_status",
+    "library_order_time",
+    "source_file_mtime",
+    "created_at",
+    "indexed_at",
+    "tagged_at",
+    "ai_caption",
+    "aesthetic_score",
 )
-_IMAGE_COLUMNS_WITH_PROMPT = (
-    "i.id, i.filename, i.path, i.generator, i.prompt, i.negative_prompt, "
-    "i.width, i.height, i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
-    "i.source_mtime_ns, i.source_size, i.metadata_status, "
-    "i.created_at, i.tagged_at, i.aesthetic_score"
+_IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
+    "id",
+    "filename",
+    "path",
+    "generator",
+    "prompt",
+    "negative_prompt",
+    "width",
+    "height",
+    "file_size",
+    "checkpoint",
+    "checkpoint_normalized",
+    "loras",
+    "model_hash",
+    "is_readable",
+    "read_error",
+    "source_mtime_ns",
+    "source_size",
+    "metadata_status",
+    "library_order_time",
+    "source_file_mtime",
+    "created_at",
+    "tagged_at",
+    "aesthetic_score",
 )
-_IMAGE_COLUMNS_LIGHTWEIGHT = (
-    "i.id, i.filename, i.path, i.generator, i.width, i.height, "
-    "i.file_size, i.checkpoint, i.loras, i.model_hash, i.is_readable, i.read_error, "
-    "i.source_mtime_ns, i.source_size, i.metadata_status, "
-    "i.created_at, i.tagged_at, i.aesthetic_score"
+_IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
+    "id",
+    "filename",
+    "path",
+    "generator",
+    "width",
+    "height",
+    "file_size",
+    "checkpoint",
+    "checkpoint_normalized",
+    "loras",
+    "model_hash",
+    "is_readable",
+    "read_error",
+    "source_mtime_ns",
+    "source_size",
+    "metadata_status",
+    "library_order_time",
+    "source_file_mtime",
+    "created_at",
+    "tagged_at",
+    "aesthetic_score",
 )
-# Bare-table version (no alias prefix) for single-table queries
-_IMAGE_COLUMNS_BARE = (
-    "id, path, filename, generator, prompt, negative_prompt, metadata_json, "
-    "width, height, file_size, checkpoint, loras, model_hash, is_readable, read_error, "
-    "source_mtime_ns, source_size, metadata_status, "
-    "created_at, indexed_at, tagged_at, ai_caption, aesthetic_score"
-)
+
+
+def _format_image_column_list(columns: Tuple[str, ...], *, alias: Optional[str] = None) -> str:
+    """Return a comma-joined image column list, optionally qualified by an alias."""
+    prefix = f"{alias}." if alias else ""
+    return ", ".join(f"{prefix}{column}" for column in columns)
+
+
+_IMAGE_COLUMNS_FULL = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS, alias="i")
+_IMAGE_COLUMNS_WITH_PROMPT = _format_image_column_list(_IMAGE_COLUMNS_WITH_PROMPT_FIELDS, alias="i")
+_IMAGE_COLUMNS_LIGHTWEIGHT = _format_image_column_list(_IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS, alias="i")
+_IMAGE_COLUMNS_BARE = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS)
+
+_LIBRARY_ORDER_SQL = "COALESCE(i.library_order_time, i.created_at)"
 
 
 def _build_base_query(sort_by: str, select_cols: str) -> str:
@@ -1415,9 +1384,22 @@ def _apply_checkpoint_filter(conditions: List[str], params: List[Any],
     if not checkpoints:
         return conditions, params
 
-    placeholders = ",".join("?" * len(checkpoints))
-    conditions.append(f"i.checkpoint IN ({placeholders})")
-    params.extend(checkpoints)
+    normalized_checkpoints: List[str] = []
+    seen: set[str] = set()
+    for checkpoint in checkpoints:
+        normalized = normalize_checkpoint_name(checkpoint)
+        identity = checkpoint_identity_key(normalized)
+        if not normalized or identity in seen:
+            continue
+        seen.add(identity)
+        normalized_checkpoints.append(normalized)
+
+    if not normalized_checkpoints:
+        return conditions, params
+
+    placeholders = ",".join("?" * len(normalized_checkpoints))
+    conditions.append(f"i.checkpoint_normalized COLLATE NOCASE IN ({placeholders})")
+    params.extend(normalized_checkpoints)
 
     return conditions, params
 
@@ -1471,8 +1453,21 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
         return conditions, params
 
     normalized_search = normalize_prompt_token(search_query)
-    conditions.append("(REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\' OR LOWER(i.filename) LIKE ? ESCAPE '\\')")
-    params.extend([f"%{escape_like_pattern(normalized_search)}%", f"%{escape_like_pattern(search_query.lower())}%"])
+    checkpoint_search = checkpoint_identity_key(search_query) or search_query.lower()
+    conditions.append(
+        "("
+        "REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\' "
+        "OR LOWER(i.filename) LIKE ? ESCAPE '\\' "
+        "OR LOWER(COALESCE(i.checkpoint_normalized, '')) LIKE ? ESCAPE '\\'"
+        ")"
+    )
+    params.extend(
+        [
+            f"%{escape_like_pattern(normalized_search)}%",
+            f"%{escape_like_pattern(search_query.lower())}%",
+            f"%{escape_like_pattern(checkpoint_search)}%",
+        ]
+    )
 
     return conditions, params
 
@@ -1623,12 +1618,12 @@ def _get_order_clause(sort_by: str) -> str:
         SQL ORDER BY clause string
     """
     sort_options = {
-        "newest": "i.created_at DESC, i.id DESC",
-        "oldest": "i.created_at ASC, i.id ASC",
+        "newest": f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC",
+        "oldest": f"{_LIBRARY_ORDER_SQL} ASC, i.id ASC",
         "name_asc": "i.filename ASC, i.id ASC",
         "name_desc": "i.filename DESC, i.id DESC",
-        "generator": "i.generator ASC, i.created_at DESC, i.id DESC",
-        "generator_desc": "i.generator DESC, i.created_at DESC, i.id DESC",
+        "generator": f"i.generator ASC, {_LIBRARY_ORDER_SQL} DESC, i.id DESC",
+        "generator_desc": f"i.generator DESC, {_LIBRARY_ORDER_SQL} DESC, i.id DESC",
         "prompt_length": "LENGTH(COALESCE(i.prompt, '')) DESC, i.id DESC",
         "prompt_length_asc": "LENGTH(COALESCE(i.prompt, '')) ASC, i.id ASC",
         "tag_count": "tag_count DESC, i.id DESC",
@@ -1643,7 +1638,7 @@ def _get_order_clause(sort_by: str) -> str:
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",
         "aesthetic_asc": "COALESCE(i.aesthetic_score, 0) ASC, i.id ASC",
     }
-    return sort_options.get(sort_by, "i.created_at DESC, i.id DESC")
+    return sort_options.get(sort_by, f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC")
 
 
 def _supports_cursor_sort(sort_by: str) -> bool:
@@ -2202,10 +2197,24 @@ def get_images_paginated(
             if not _supports_cursor_sort(sort_by):
                 raise ValueError(f"Cursor pagination does not support sort_by={sort_by}")
             if sort_by == "newest":
-                conditions.append("(i.created_at < (SELECT created_at FROM images WHERE id = ?) OR (i.created_at = (SELECT created_at FROM images WHERE id = ?) AND i.id < ?))")
+                conditions.append(
+                    "("
+                    "COALESCE(i.library_order_time, i.created_at) < "
+                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) "
+                    "OR (COALESCE(i.library_order_time, i.created_at) = "
+                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) AND i.id < ?)"
+                    ")"
+                )
                 params.extend([cursor_id, cursor_id, cursor_id])
             else:
-                conditions.append("(i.created_at > (SELECT created_at FROM images WHERE id = ?) OR (i.created_at = (SELECT created_at FROM images WHERE id = ?) AND i.id > ?))")
+                conditions.append(
+                    "("
+                    "COALESCE(i.library_order_time, i.created_at) > "
+                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) "
+                    "OR (COALESCE(i.library_order_time, i.created_at) = "
+                    "(SELECT COALESCE(library_order_time, created_at) FROM images WHERE id = ?) AND i.id > ?)"
+                    ")"
+                )
                 params.extend([cursor_id, cursor_id, cursor_id])
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -2563,6 +2572,29 @@ def get_all_generators() -> List[Dict[str, Any]]:
         return _rows_to_dicts(cursor.fetchall())
 
 
+def get_all_checkpoints() -> List[Dict[str, Any]]:
+    """Get normalized checkpoint facets with counts for filtering and analytics."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT checkpoint_normalized, COUNT(*) as count
+            FROM images
+            WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != ''
+            GROUP BY checkpoint_normalized
+            ORDER BY count DESC, checkpoint_normalized COLLATE NOCASE ASC
+            """
+        )
+        return [
+            {
+                "checkpoint": row["checkpoint_normalized"],
+                "checkpoint_normalized": row["checkpoint_normalized"],
+                "count": row["count"],
+            }
+            for row in cursor.fetchall()
+        ]
+
+
 def get_untagged_images(limit: int = 100) -> List[Dict[str, Any]]:
     """Get images that haven't been tagged yet."""
     with get_db() as conn:
@@ -2699,6 +2731,7 @@ def update_image_metadata(
     with get_db() as conn:
         cursor = conn.cursor()
         serialized_loras = _serialize_loras(loras)
+        checkpoint_normalized = normalize_checkpoint_name(checkpoint)
         existing_row = cursor.execute(
             """
             SELECT id, source_mtime_ns, source_size, content_fingerprint,
@@ -2743,6 +2776,7 @@ def update_image_metadata(
                 height = ?,
                 file_size = ?,
                 checkpoint = ?,
+                checkpoint_normalized = ?,
                 loras = ?,
                 model_hash = COALESCE(?, model_hash),
                 is_readable = COALESCE(?, is_readable),
@@ -2763,6 +2797,7 @@ def update_image_metadata(
                 height,
                 file_size,
                 checkpoint,
+                checkpoint_normalized,
                 serialized_loras,
                 model_hash,
                 None if is_readable is None else (1 if is_readable else 0),

@@ -50,10 +50,10 @@ set "TMP=%TMP_DIR%"
 REM -- Find Python
 set "PYTHON_CMD="
 
-REM Try common Anaconda locations first
+REM Try common user-managed Python locations first
 for %%P in (
-    "D:\Anaconda\python.exe"
-    "C:\Users\%USERNAME%\Anaconda3\python.exe"
+    "%USERPROFILE%\Anaconda3\python.exe"
+    "%USERPROFILE%\miniconda3\python.exe"
     "C:\ProgramData\Anaconda3\python.exe"
     "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
     "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"

@@ -27,6 +27,18 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
+@pytest.fixture
+def isolated_tagging_service():
+    """Use a fresh tagging service instance so router compatibility shims hit service-owned state."""
+    from routers.tags import set_tagging_service
+    from services.tagging_service import TaggingService
+
+    service = TaggingService()
+    set_tagging_service(service)
+    yield service
+    set_tagging_service(TaggingService())
+
+
 class TestGetTags:
     """Tests for GET /api/tags endpoint."""
 
@@ -335,6 +347,35 @@ class TestTagImportExport:
         tags = db.get_image_tags(image_id)
         assert any(t["tag"] == "imported_tag" for t in tags)
 
+    def test_import_tags_matches_existing_image_by_equivalent_windows_wsl_path(self, test_client, test_db):
+        """Tag import should reuse the same DB row across equivalent Windows/WSL path forms."""
+        import database as db
+
+        windows_path = r"L:\datasets\imports\path-variant.png"
+        image_id = db.add_image(path=windows_path, filename="path-variant.png")
+
+        response = test_client.post(
+            "/api/tags/import",
+            json={
+                "images": [
+                    {
+                        "path": "/mnt/l/datasets/imports/path-variant.png",
+                        "filename": "path-variant.png",
+                        "tags": [{"tag": "variant_tag", "confidence": 0.91}],
+                    }
+                ],
+                "overwrite": False,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported"] == 1
+        assert data["skipped"] == 0
+
+        tags = db.get_image_tags(image_id)
+        assert any(tag["tag"] == "variant_tag" for tag in tags)
+
     def test_import_tags_overwrite(self, test_client, test_db, tmp_path: Path):
         """Importing tags with overwrite should replace existing."""
         import database as db
@@ -374,6 +415,25 @@ class TestTagImportExport:
 
 class TestTaggingPipeline:
     """Tests for tagging pipeline endpoints."""
+
+    def test_router_tag_progress_compat_helpers_delegate_to_service(self, isolated_tagging_service):
+        """Legacy router shims should only forward to service-owned progress state."""
+        from routers import tags as tags_router
+
+        tags_router.set_tag_progress_state({
+            "status": "running",
+            "current": 2,
+            "total": 10,
+            "message": "Tagging...",
+        })
+
+        assert isolated_tagging_service.get_progress()["status"] == "running"
+        assert tags_router.tag_progress.copy()["current"] == 2
+
+        tags_router.tag_progress["message"] = "Compat update"
+
+        assert isolated_tagging_service.get_progress()["message"] == "Compat update"
+        assert tags_router.get_tag_progress_state()["message"] == "Compat update"
 
     def test_start_tagging_already_running(self, test_client):
         """Starting tagging when already running should fail."""

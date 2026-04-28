@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw, PngImagePlugin, ImageEnhance, ImageFilter, Ima
 import database as db
 from config import get_temp_dir
 from model_health import get_default_legacy_model_path, get_model_health
+from services.indexed_file_mutation_service import save_and_reconcile
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -554,22 +555,6 @@ class CensorService:
             raise HTTPException(status_code=400, detail='Invalid output path')
         return str(output_path)
 
-    @staticmethod
-    def _refresh_indexed_output_entry(output_path: str) -> None:
-        """Refresh library metadata when a save overwrites an indexed path."""
-        resolved_output = str(Path(output_path).resolve())
-        indexed_output_row = db.get_image_by_path(resolved_output)
-        if not indexed_output_row:
-            return
-
-        try:
-            from image_manager import reparse_image_metadata
-
-            reparse_image_metadata(int(indexed_output_row["id"]), resolved_output)
-        except Exception:
-            logger.warning("Failed to refresh indexed metadata after saving %s", resolved_output, exc_info=True)
-
-
     def detect(self, request: CensorDetectRequest) -> Dict[str, Any]:
         """
         Run detection on an image to find regions to censor.
@@ -798,11 +783,18 @@ class CensorService:
             output_filename = f"{base_name}{safe_suffix}{ext}"
             output_path = self._ensure_output_path(output_folder, output_filename)
 
-            if ext.lower() in ['.jpg', '.jpeg']:
-                censored.save(output_path, format='JPEG', quality=95)
-            else:
-                censored.save(output_path, format='PNG')
-            self._refresh_indexed_output_entry(output_path)
+            def _write_censored_image(final_output_path: str, _overwrite_requested: bool) -> None:
+                if ext.lower() in ['.jpg', '.jpeg']:
+                    censored.save(final_output_path, format='JPEG', quality=95)
+                else:
+                    censored.save(final_output_path, format='PNG')
+
+            save_and_reconcile(
+                output_path,
+                _write_censored_image,
+                allow_overwrite=True,
+                backend_file=__file__,
+            )
 
             return {
                 "status": "ok",
@@ -854,8 +846,15 @@ class CensorService:
                     output_format
                 )
 
-            self._save_image_with_format(image, output_path, output_format, save_kwargs)
-            self._refresh_indexed_output_entry(output_path)
+            def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> None:
+                self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
+
+            save_and_reconcile(
+                output_path,
+                _write_canvas_save,
+                allow_overwrite=True,
+                backend_file=__file__,
+            )
 
             return {
                 "status": "ok",
@@ -916,8 +915,15 @@ class CensorService:
                     output_format,
                 )
 
-            self._save_image_with_format(image_to_save, output_path, output_format, save_kwargs)
-            self._refresh_indexed_output_entry(output_path)
+            def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> None:
+                self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
+
+            save_and_reconcile(
+                output_path,
+                _write_operations_save,
+                allow_overwrite=True,
+                backend_file=__file__,
+            )
 
             return {
                 "status": "ok",
