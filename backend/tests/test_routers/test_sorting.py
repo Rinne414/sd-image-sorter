@@ -1410,6 +1410,128 @@ class TestSortSession:
         assert restored["image_ids"] == []
         assert session_path.exists() is False
 
+    def test_load_session_from_disk_migrates_legacy_file_to_preferred_state_dir(self, test_client, tmp_path: Path, monkeypatch):
+        """Loading from the legacy backend-local file should rewrite the session into the preferred state path."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_legacy_file.png",
+            filename="restore_legacy_file.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is True
+        assert restored["image_ids"] == [image_id]
+        assert preferred_path.exists() is True
+        assert legacy_path.exists() is False
+
+        persisted = json.loads(preferred_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+        assert persisted["image_ids"] == [image_id]
+
+    def test_load_session_from_disk_falls_back_to_valid_legacy_when_preferred_is_invalid(self, test_client, tmp_path: Path, monkeypatch):
+        """A corrupt preferred session file should not block restore from a valid legacy payload."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_legacy_fallback.png",
+            filename="restore_legacy_fallback.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        preferred_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        preferred_path.write_text("{not-json", encoding="utf-8")
+        legacy_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is True
+        assert restored["image_ids"] == [image_id]
+        assert preferred_path.exists() is True
+        assert legacy_path.exists() is False
+
+        persisted = json.loads(preferred_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+        assert persisted["image_ids"] == [image_id]
+
+    def test_clear_sort_session_removes_preferred_and_legacy_session_files(self, tmp_path: Path, monkeypatch):
+        """Clearing a session should remove both the preferred state file and any leftover legacy file."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SortingService
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        preferred_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        preferred_path.write_text("{}", encoding="utf-8")
+        legacy_path.write_text("{}", encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        result = service.clear_sort_session()
+
+        assert result["status"] == "ok"
+        assert preferred_path.exists() is False
+        assert legacy_path.exists() is False
+
     def test_set_sort_folders(self, test_client, tmp_path: Path):
         """Setting sort folders should work."""
         response = test_client.post(

@@ -93,3 +93,39 @@ def test_resolve_existing_indexed_image_path_uses_translated_wsl_candidate(monke
     )
 
     assert resolved == translated
+
+
+def test_resolve_existing_indexed_image_path_rejects_symlink_by_default(tmp_path):
+    target = tmp_path / "target.png"
+    target.write_text("ok", encoding="utf-8")
+    symlink = tmp_path / "linked.png"
+    try:
+        symlink.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not available")
+
+    resolved = resolve_existing_indexed_image_path(
+        str(symlink),
+        backend_file="/repo/backend/services/image_service.py",
+    )
+
+    assert resolved is None
+
+
+def test_resolve_existing_indexed_image_path_allows_symlink_when_explicitly_enabled(tmp_path: Path):
+    target = tmp_path / "target.png"
+    target.write_bytes(b"png")
+    link = tmp_path / "linked.png"
+
+    try:
+        link.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation not available")
+
+    resolved = resolve_existing_indexed_image_path(
+        str(link),
+        backend_file="/repo/backend/services/image_service.py",
+        allow_symlink=True,
+    )
+
+    assert resolved == str(link)

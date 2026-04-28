@@ -371,10 +371,10 @@ class SortingService:
             raise ValueError("Invalid session_schema_version")
         return version
 
-    def _discard_persisted_session_file(self, reason: str) -> None:
-        """Delete an unusable persisted session file so future boots do not half-restore it."""
+    def _discard_persisted_session_file(self, reason: str, *, paths: Optional[List[Path]] = None) -> None:
+        """Delete unusable persisted session files so future boots do not half-restore them."""
         logger.warning("Discarding persisted sort session: %s", reason)
-        for path in self._get_session_file_candidates():
+        for path in (paths or self._get_session_file_candidates()):
             try:
                 if path.exists():
                     path.unlink()
@@ -1745,104 +1745,109 @@ class SortingService:
     def load_session_from_disk(self) -> None:
         """Load persisted session from disk on startup."""
         try:
-            session_file = self._find_existing_session_file()
-            if session_file is None:
-                return
-            with session_file.open('r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            try:
-                session_version = self._parse_persisted_session_version(data)
-            except ValueError as exc:
-                self._discard_persisted_session_file(str(exc))
-                return
-
-            if session_version not in {0, SORT_SESSION_SCHEMA_VERSION}:
-                self._discard_persisted_session_file(
-                    f"unsupported session_schema_version={session_version} (current={SORT_SESSION_SCHEMA_VERSION})"
-                )
-                return
-
-            if not data.get('active'):
-                return
-
-            # Batch validate image IDs in a single query (N+1 fix)
-            image_ids = data.get('image_ids', [])
-            if image_ids:
-                with db.get_db() as conn:
-                    cursor = conn.cursor()
-                    placeholders = ','.join(['?' for _ in image_ids])
-                    cursor.execute(f"SELECT id FROM images WHERE id IN ({placeholders})", image_ids)
-                    valid_set = {row[0] for row in cursor.fetchall()}
-                valid_ids = [iid for iid in image_ids if iid in valid_set]
-            else:
-                valid_ids = []
-
-            if not valid_ids:
+            for session_file in self._get_session_file_candidates():
+                if not session_file.exists():
+                    continue
                 try:
-                    session_file.unlink()
-                except OSError:
-                    pass
-                return
+                    with session_file.open('r', encoding='utf-8') as f:
+                        data = json.load(f)
 
-            original_index = data.get('current_index', 0)
-            try:
-                original_index = int(original_index)
-            except (TypeError, ValueError):
-                original_index = 0
-            original_index = max(0, min(original_index, len(image_ids)))
-
-            original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
-            restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
-            restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
-            history_image_ids = {entry.get('image_id') for entry in restored_history}
-            restored_redo_stack = [
-                entry for entry in restored_redo_stack
-                if entry.get('image_id') not in history_image_ids
-            ]
-            restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
-            restored_history = [
-                entry for entry in restored_history
-                if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
-            ]
-            restored_redo_stack = [
-                entry for entry in restored_redo_stack
-                if original_positions.get(entry.get('image_id'), -1) >= original_index
-            ]
-            restored_index = min(len(valid_ids), restored_index)
-            operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
-
-            # Validate all folder paths loaded from JSON
-            validated_folders = {}
-            for key, path in data.get('folders', {}).items():
-                try:
-                    normalized_path = normalize_user_path(path)
-                    is_valid, _error = validate_folder_path(normalized_path, allow_create=True)
-                    if is_valid:
-                        validated_folders[key] = normalized_path
-                    else:
-                        logger.warning("Skipping invalid folder path for key %s", key)
-                except Exception:
-                    logger.warning("Skipping invalid folder path for key %s", key)
-
-            with self._sort_session_lock:
-                self._sort_session = self._coerce_sort_session_state({
-                    'active': True,
-                    'image_ids': valid_ids,
-                    'current_index': restored_index,
-                    'folders': validated_folders,
-                    'operation_mode': operation_mode,
-                    'history': restored_history,
-                    'redo_stack': restored_redo_stack,
-                })
-                self._save_session_to_disk()
-                preferred_session_file = self._get_session_file_candidates()[0]
-                if session_file != preferred_session_file and session_file.exists():
                     try:
-                        session_file.unlink()
-                    except OSError as exc:
-                        logger.warning("Failed to remove legacy sort session file %s: %s", session_file, exc)
-            logger.info("Restored session: %d images", len(valid_ids))
+                        session_version = self._parse_persisted_session_version(data)
+                    except ValueError as exc:
+                        self._discard_persisted_session_file(str(exc), paths=[session_file])
+                        continue
+
+                    if session_version not in {0, SORT_SESSION_SCHEMA_VERSION}:
+                        self._discard_persisted_session_file(
+                            f"unsupported session_schema_version={session_version} (current={SORT_SESSION_SCHEMA_VERSION})",
+                            paths=[session_file],
+                        )
+                        continue
+
+                    if not data.get('active'):
+                        return
+
+                    # Batch validate image IDs in a single query (N+1 fix)
+                    image_ids = data.get('image_ids', [])
+                    if image_ids:
+                        with db.get_db() as conn:
+                            cursor = conn.cursor()
+                            placeholders = ','.join(['?' for _ in image_ids])
+                            cursor.execute(f"SELECT id FROM images WHERE id IN ({placeholders})", image_ids)
+                            valid_set = {row[0] for row in cursor.fetchall()}
+                        valid_ids = [iid for iid in image_ids if iid in valid_set]
+                    else:
+                        valid_ids = []
+
+                    if not valid_ids:
+                        try:
+                            session_file.unlink()
+                        except OSError:
+                            pass
+                        return
+
+                    original_index = data.get('current_index', 0)
+                    try:
+                        original_index = int(original_index)
+                    except (TypeError, ValueError):
+                        original_index = 0
+                    original_index = max(0, min(original_index, len(image_ids)))
+
+                    original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
+                    restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
+                    restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
+                    history_image_ids = {entry.get('image_id') for entry in restored_history}
+                    restored_redo_stack = [
+                        entry for entry in restored_redo_stack
+                        if entry.get('image_id') not in history_image_ids
+                    ]
+                    restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
+                    restored_history = [
+                        entry for entry in restored_history
+                        if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
+                    ]
+                    restored_redo_stack = [
+                        entry for entry in restored_redo_stack
+                        if original_positions.get(entry.get('image_id'), -1) >= original_index
+                    ]
+                    restored_index = min(len(valid_ids), restored_index)
+                    operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
+
+                    # Validate all folder paths loaded from JSON
+                    validated_folders = {}
+                    for key, path in data.get('folders', {}).items():
+                        try:
+                            normalized_path = normalize_user_path(path)
+                            is_valid, _error = validate_folder_path(normalized_path, allow_create=True)
+                            if is_valid:
+                                validated_folders[key] = normalized_path
+                            else:
+                                logger.warning("Skipping invalid folder path for key %s", key)
+                        except Exception:
+                            logger.warning("Skipping invalid folder path for key %s", key)
+
+                    with self._sort_session_lock:
+                        self._sort_session = self._coerce_sort_session_state({
+                            'active': True,
+                            'image_ids': valid_ids,
+                            'current_index': restored_index,
+                            'folders': validated_folders,
+                            'operation_mode': operation_mode,
+                            'history': restored_history,
+                            'redo_stack': restored_redo_stack,
+                        })
+                        self._save_session_to_disk()
+                        preferred_session_file = self._get_session_file_candidates()[0]
+                        if session_file != preferred_session_file and session_file.exists():
+                            try:
+                                session_file.unlink()
+                            except OSError as exc:
+                                logger.warning("Failed to remove legacy sort session file %s: %s", session_file, exc)
+                    logger.info("Restored session: %d images", len(valid_ids))
+                    return
+                except Exception as e:
+                    logger.warning("Failed to restore session from %s: %s", session_file, e)
         except Exception as e:
             logger.warning("Failed to restore session: %s", e)
 

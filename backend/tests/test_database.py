@@ -1038,6 +1038,112 @@ class TestImageFiltering:
         assert second_page["has_more"] is False
         assert second_page["next_cursor"] is None
 
+    def test_get_images_paginated_cursor_missing_row_falls_back_without_empty_page(self, test_db):
+        """Deleting the cursor row should not turn the next page into an empty result when ID fallback is applicable."""
+        ids = []
+        for index in range(6):
+            ids.append(
+                db.add_image(
+                    path=f"/test/cursor_missing_{index}.png",
+                    filename=f"cursor_missing_{index}.png",
+                    prompt=f"cursor missing {index}",
+                    created_at=None,
+                )
+            )
+
+        expected_ids = list(reversed(ids))
+        first_page = db.get_images_paginated(sort_by="newest", limit=3, skip_count=True)
+        assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
+        assert first_page["next_cursor"] == str(expected_ids[2])
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (expected_ids[2],))
+
+        second_page = db.get_images_paginated(
+            sort_by="newest",
+            limit=3,
+            cursor_id=expected_ids[2],
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in second_page["images"]] == expected_ids[3:]
+        assert second_page["has_more"] is False
+
+    def test_get_images_paginated_oldest_null_sort_value_cursor_fallback(self, test_db):
+        """Oldest-sort pagination must also fall back to ID comparisons when sort values are null."""
+        ids = []
+        for index in range(5):
+            ids.append(
+                db.add_image(
+                    path=f"/test/oldest_null_{index}.png",
+                    filename=f"oldest_null_{index}.png",
+                    prompt=f"oldest null {index}",
+                    created_at=None,
+                )
+            )
+
+        first_page = db.get_images_paginated(sort_by="oldest", limit=2, skip_count=True)
+        assert [img["id"] for img in first_page["images"]] == ids[:2]
+        assert first_page["next_cursor"] == str(ids[1])
+
+        second_page = db.get_images_paginated(
+            sort_by="oldest",
+            limit=2,
+            cursor_id=ids[1],
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in second_page["images"]] == ids[2:4]
+        assert second_page["has_more"] is True
+        assert second_page["next_cursor"] == str(ids[3])
+
+    def test_get_images_paginated_post_filter_cursor_missing_row_still_finds_sparse_matches(self, test_db):
+        """Post-filter pagination should keep finding sparse exact matches even if the cursor row was deleted."""
+        exact_ids = []
+        for index in range(4):
+            exact_ids.append(
+                db.add_image(
+                    path=f"/test/post_filter_missing_cursor_exact_{index}.png",
+                    filename=f"post_filter_missing_cursor_exact_{index}.png",
+                    prompt="hero, rim light",
+                    created_at=None,
+                )
+            )
+
+        for index in range(40):
+            db.add_image(
+                path=f"/test/post_filter_missing_cursor_false_positive_{index}.png",
+                filename=f"post_filter_missing_cursor_false_positive_{index}.png",
+                prompt="superhero, rim light",
+                created_at=None,
+            )
+
+        expected_ids = list(reversed(exact_ids))
+        first_page = db.get_images_paginated(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            limit=3,
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in first_page["images"]] == expected_ids[:3]
+        assert first_page["next_cursor"] == str(expected_ids[2])
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (expected_ids[2],))
+
+        second_page = db.get_images_paginated(
+            prompt_terms=["hero"],
+            sort_by="newest",
+            limit=3,
+            cursor_id=expected_ids[2],
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in second_page["images"]] == expected_ids[3:]
+        assert second_page["has_more"] is False
+        assert second_page["next_cursor"] is None
+
     def test_get_filtered_image_ids_streams_post_filter_batches_with_optional_limit(self, test_db):
         """Filtered ID lookup should support chunked scanning and an explicit result cap."""
         exact_ids = []
@@ -1072,6 +1178,35 @@ class TestImageFiltering:
             max_results=4,
         )
         assert limited_ids == expected_ids[:4]
+
+    def test_get_images_paginated_missing_cursor_row_falls_back_to_id_for_oldest(self, test_db):
+        """If the cursor row disappears between requests, oldest pagination should continue by ID."""
+        image_ids = [
+            db.add_image(
+                path=f"/test/missing_cursor_oldest_{index}.png",
+                filename=f"missing_cursor_oldest_{index}.png",
+                prompt="portrait",
+            )
+            for index in range(4)
+        ]
+
+        first_page = db.get_images_paginated(sort_by="oldest", limit=2, skip_count=True)
+        assert [img["id"] for img in first_page["images"]] == image_ids[:2]
+        cursor_id = int(first_page["next_cursor"])
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (cursor_id,))
+
+        second_page = db.get_images_paginated(
+            sort_by="oldest",
+            limit=2,
+            cursor_id=cursor_id,
+            skip_count=True,
+        )
+
+        assert [img["id"] for img in second_page["images"]] == [image_ids[2], image_ids[3]]
+        assert second_page["has_more"] is False
+        assert second_page["next_cursor"] is None
 
     def test_filter_by_lora_uses_exact_normalized_names(self, test_db):
         """LoRA filtering should not substring-match unrelated normalized names."""
