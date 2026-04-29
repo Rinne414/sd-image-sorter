@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-04-28
+**Updated:** 2026-04-29
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -246,6 +246,30 @@ Use this structure for future confirmed-debt entries:
   Revisit before adding new package-local runtime directories, changing portable package layout, or expanding updater asset types/channels.
 - Deferred because:
   The immediate string-literal duplication between builder and updater is removed by sharing updater-owned manifest/protection constants, but broader release-pipeline redesign is still intentionally deferred.
+
+
+### Debt-11: Thumbnail generation is still not scan-aware
+- Status: partially mitigated
+- Type: performance / UX contract
+- Impact: medium
+- Risk if ignored:
+  On very large folders or slow mounted drives, thumbnail requests triggered by the visible gallery can still compete with metadata parsing for disk and CPU. Users may perceive this as "scan is slow" even when the scan backend is progressing correctly.
+- Related files:
+  `frontend/js/app.js`
+  `frontend/js/gallery.js`
+  `backend/thumbnail_cache.py`
+  `backend/services/image_service.py`
+  `backend/image_manager.py`
+- Observed problem:
+  Current scan behavior now limits the first library-ready gallery refresh to a small preview page and avoids repeated gallery reloads while metadata continues. However, thumbnail generation itself still uses the normal async executor path and has no knowledge that a scan is active.
+- Why this is debt:
+  The product promise is a comfortable first-use scan experience for noob users with 10,000-100,000 images. Fixed preview limiting reduces the immediate thumbnail storm, but it is not a complete scheduling policy for mixed scan + thumbnail workloads.
+- Better long-term shape:
+  Add scan-aware thumbnail backpressure, such as a bounded thumbnail semaphore, lower thumbnail concurrency while scan status is running, or a background thumbnail warmup that starts only after metadata parsing has drained.
+- Revisit trigger:
+  Revisit when testing on a real 10,000+ image Windows/WSL folder, when users report gallery thumbnails slowing active scans, or before adding automatic thumbnail prewarming.
+- Deferred because:
+  The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
 
 ## Quick Debt Reductions Applied On 2026-04-27

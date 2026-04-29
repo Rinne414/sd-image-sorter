@@ -93,6 +93,7 @@ backend/thumbnails/
 backend/sort_session.json
 
 # Temp test directories
+.tools/
 .tmp/
 .tmp_*/
 .playwright-tmp-results/

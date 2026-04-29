@@ -204,3 +204,42 @@ def test_manual_sort_start_routes_unfinished_sessions_to_resume():
     assert "resumeSavedSession(savedSession)" in source
     assert "discard the saved session first" in source
     assert "replaceExisting = false" in source
+
+def test_gallery_context_menu_has_single_image_workflow_actions_without_disk_delete():
+    repo_root = Path(__file__).resolve().parents[2]
+    gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(encoding="utf-8")
+    app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    match = re.search(r"_showContextMenu\(e, image\) \{(?P<body>.*?)\n    \},\n\n    // Cleanup", gallery_source, re.DOTALL)
+    assert match is not None
+    body = match.group("body")
+
+    expected_keys = [
+        "gallery.contextPreview",
+        "gallery.contextSelectImage",
+        "gallery.contextMoveImage",
+        "gallery.contextCopyImage",
+        "gallery.contextSendToCensor",
+        "gallery.contextPromptHelper",
+        "gallery.contextReadMetadata",
+        "gallery.contextFilterCheckpoint",
+        "gallery.contextOpenFolder",
+        "gallery.contextCopyPath",
+    ]
+    for key in expected_keys:
+        assert key in body
+        assert key in en_source
+        assert key in zh_source
+
+    assert "moveOrCopyGalleryImages?.([image.id], 'move', { source: 'context' })" in body
+    assert "moveOrCopyGalleryImages?.([image.id], 'copy', { source: 'context' })" in body
+    assert "openPromptBuildFromImage?.(image.id)" in body
+    assert "openReaderFromImage?.(image.id" in body
+    assert "deleteSelectedGalleryImages" not in body
+    assert "contextDelete" not in body
+    assert "Delete from Disk" not in body
+
+    assert "moveOrCopyGalleryImages" in app_source
+    assert "emitSelectionStateChanged" in app_source

@@ -216,10 +216,7 @@ class MetadataParser:
     def _load_image_metadata(self, image_path: str) -> Dict[str, Any]:
         """Load dimensions and raw metadata with format-specific fast paths."""
         if os.path.splitext(image_path)[1].lower() == ".png":
-            try:
-                return self._load_png_metadata_fast(image_path)
-            except Exception as exc:
-                logger.debug("PNG fast-path fell back to Pillow for %s: %s", image_path, exc)
+            return self._load_png_metadata_fast(image_path)
 
         return self._load_image_metadata_via_pillow(image_path)
 
@@ -250,13 +247,21 @@ class MetadataParser:
         metadata: Dict[str, Any] = {}
         width = 0
         height = 0
+        seen_iend = False
+
+        file_size = os.path.getsize(image_path)
 
         with open(image_path, "rb") as png_file:
-            if png_file.read(len(PNG_SIGNATURE)) != PNG_SIGNATURE:
+            offset = 0
+
+            signature = png_file.read(len(PNG_SIGNATURE))
+            offset += len(signature)
+            if signature != PNG_SIGNATURE:
                 raise ValueError("Invalid PNG signature")
 
             while True:
                 chunk_length_raw = png_file.read(4)
+                offset += len(chunk_length_raw)
                 if not chunk_length_raw:
                     break
                 if len(chunk_length_raw) != 4:
@@ -264,17 +269,38 @@ class MetadataParser:
 
                 chunk_length = struct.unpack(">I", chunk_length_raw)[0]
                 chunk_type = png_file.read(4)
+                offset += len(chunk_type)
                 if len(chunk_type) != 4:
                     raise ValueError("Truncated PNG chunk type")
 
+                chunk_end = offset + chunk_length + 4
+                if chunk_end > file_size:
+                    raise ValueError("Truncated PNG chunk data")
+
+                if chunk_type == b"IEND":
+                    if chunk_length != 0:
+                        raise ValueError("Invalid PNG IEND chunk")
+                    png_file.seek(4, os.SEEK_CUR)
+                    offset += 4
+                    seen_iend = True
+                    break
+
+                should_read_chunk = chunk_type in {b"IHDR", b"tEXt", b"zTXt", b"iTXt", b"eXIf"}
+                if not should_read_chunk:
+                    png_file.seek(chunk_length + 4, os.SEEK_CUR)
+                    offset += chunk_length + 4
+                    continue
+
                 if chunk_length > _MAX_PNG_CHUNK_BYTES:
-                    break  # abort: chunk too large, likely malformed
+                    break  # abort: metadata chunk too large, likely malformed
 
                 chunk_data = png_file.read(chunk_length)
+                offset += len(chunk_data)
                 if len(chunk_data) != chunk_length:
                     raise ValueError("Truncated PNG chunk data")
 
                 chunk_crc = png_file.read(4)
+                offset += len(chunk_crc)
                 if len(chunk_crc) != 4:
                     raise ValueError("Truncated PNG chunk CRC")
 
@@ -298,11 +324,11 @@ class MetadataParser:
                     metadata.update(self._extract_exif_from_bytes(chunk_data))
                     metadata.update(self._extract_exif_ifd_from_bytes(chunk_data))
                     metadata.update(self._extract_sd_metadata_from_exif_bytes(chunk_data))
-                elif chunk_type == b"IEND":
-                    break
 
         if width <= 0 or height <= 0:
             raise ValueError("PNG dimensions missing")
+        if not seen_iend:
+            raise ValueError("Truncated PNG missing IEND chunk")
 
         return {
             "width": width,

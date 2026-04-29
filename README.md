@@ -186,6 +186,7 @@ run.bat
 ### GPU / 运行时说明
 
 - NVIDIA 显卡会优先使用 `onnxruntime-gpu`
+- NVIDIA 首次启动如果停在 `Checking Windows ONNX Runtime package state...`，可能是在补 CUDA / cuDNN 运行库；新版会显示真实 pip 进度，不是死机
 - Intel Arc / AMD Radeon 会切到 `onnxruntime-directml`
 - 没有合适 GPU 也能 CPU 跑，只是慢一些
 - `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
@@ -464,6 +465,8 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
+
+On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX Runtime package state...` while installing CUDA / cuDNN runtime wheels. The launcher now shows real pip progress there; it is not frozen.
 
 #### Linux / macOS
 

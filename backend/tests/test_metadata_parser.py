@@ -9,10 +9,13 @@ Tests metadata extraction for all supported generators:
 
 Priority: HIGH
 """
+import builtins
 import os
+import struct
 import sys
 import json
 import tempfile
+import zlib
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -111,6 +114,64 @@ class TestMetadataParserBase:
         assert result["width"] == 128
         assert result["height"] == 96
         assert open_calls["count"] == 1
+
+    def test_parse_png_fast_path_skips_large_image_data_chunks(self, tmp_path: Path, monkeypatch):
+        """PNG metadata scanning should not read IDAT image payloads into memory."""
+        img_path = tmp_path / "large-idat-after-text.png"
+
+        def chunk(chunk_type: bytes, payload: bytes) -> bytes:
+            crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+            return struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", crc)
+
+        ihdr = struct.pack(">IIBBBBB", 320, 240, 8, 2, 0, 0, 0)
+        large_idat = b"0" * (2 * 1024 * 1024)
+        params = (
+            b"parameters\x00"
+            b"masterpiece\nNegative prompt: lowres\n"
+            b"Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1, Size: 320x240, Model: skip-idat.safetensors"
+        )
+        img_path.write_bytes(
+            metadata_parser_module.PNG_SIGNATURE
+            + chunk(b"IHDR", ihdr)
+            + chunk(b"IDAT", large_idat)
+            + chunk(b"tEXt", params)
+            + chunk(b"IEND", b"")
+        )
+
+        stats = {"read_bytes": 0, "seek_bytes": 0}
+
+        class TrackingFile:
+            def __init__(self, file_obj):
+                self.file_obj = file_obj
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.file_obj.close()
+                return False
+
+            def read(self, size=-1):
+                data = self.file_obj.read(size)
+                stats["read_bytes"] += len(data)
+                return data
+
+            def seek(self, offset, whence=0):
+                if whence == os.SEEK_CUR and offset > 0:
+                    stats["seek_bytes"] += offset
+                return self.file_obj.seek(offset, whence)
+
+        def tracking_open(*args, **kwargs):
+            return TrackingFile(builtins.open(*args, **kwargs))
+
+        monkeypatch.setattr(metadata_parser_module, "open", tracking_open, raising=False)
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["checkpoint"] == "skip-idat.safetensors"
+        assert stats["seek_bytes"] >= len(large_idat)
+        assert stats["read_bytes"] < len(large_idat) // 10
 
 
 class TestComfyUIMetadata:

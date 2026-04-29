@@ -145,6 +145,25 @@ def test_scan_folder_starts_processing_without_count_preamble(test_db, tmp_path:
     assert "counted" not in [event["details"].get("phase") for event in progress_events]
 
 
+def test_scan_folder_throttles_bulk_import_progress(test_db, tmp_path: Path, monkeypatch):
+    for index in range(120):
+        Image.new("RGB", (16, 16), color="white").save(tmp_path / f"bulk-{index:03d}.png")
+
+    monkeypatch.setattr(image_manager, "SCAN_PROGRESS_MIN_INTERVAL_SECONDS", 9999)
+    monkeypatch.setattr(image_manager, "SCAN_PROGRESS_EVERY_N_ITEMS", 50)
+    progress_events = []
+
+    def progress_callback(current, total, filename, details=None):
+        if (details or {}).get("phase") == "importing":
+            progress_events.append((current, total, filename))
+
+    scan_folder(str(tmp_path), recursive=False, progress_callback=progress_callback)
+
+    assert progress_events[0][0] == 1
+    assert len(progress_events) < 120
+    assert progress_events[-1][0] >= 100
+
+
 def test_scan_folder_raises_cancelled_when_stop_requested_after_first_progress(test_db, tmp_path: Path):
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"cancel-{index}.png")
@@ -385,6 +404,42 @@ def test_scan_folder_force_reparses_unchanged_images(test_db, tmp_path: Path, mo
     assert second["unchanged"] == 0
     assert second["metadata_updated"] == 1
     assert parse_calls["count"] == 1
+
+
+def test_scan_folder_quick_import_uses_metadata_only_parse(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "quick-parse.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    validate_flags = []
+    original_parse = image_manager.parse_image
+
+    def tracking_parse(*args, **kwargs):
+        validate_flags.append(kwargs.get("validate_image_data"))
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(image_manager, "parse_image", tracking_parse)
+
+    scan_folder(str(tmp_path), recursive=False, quick_import=True)
+
+    assert validate_flags == [False]
+
+
+def test_scan_folder_full_import_keeps_image_validation(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "full-parse.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    validate_flags = []
+    original_parse = image_manager.parse_image
+
+    def tracking_parse(*args, **kwargs):
+        validate_flags.append(kwargs.get("validate_image_data"))
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(image_manager, "parse_image", tracking_parse)
+
+    scan_folder(str(tmp_path), recursive=False, quick_import=False)
+
+    assert validate_flags == [True]
 
 
 def test_scan_folder_persists_source_fingerprint_and_metadata_status(test_db, tmp_path: Path):

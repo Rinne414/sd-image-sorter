@@ -701,7 +701,7 @@ test('gallery selection actions should stay in the left sidebar instead of float
   const sidebar = page.locator('.filter-sidebar')
 
   await expect(selectionPanel).toBeVisible()
-  await expect(selectionPanel).toContainText('Selection mode is on')
+  await expect(selectionPanel).toContainText('Select images')
 
   const panelBox = await selectionPanel.boundingBox()
   const sidebarBox = await sidebar.boundingBox()

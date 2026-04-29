@@ -4,6 +4,7 @@
  */
 
 const API_BASE = '';  // Same origin
+const SCAN_PREVIEW_PAGE_SIZE = 80;
 
 // Utility: Debounce function
 function debounce(func, wait) {
@@ -1697,8 +1698,8 @@ function buildProgressText({
 
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
-    if (meta.etaText) parts.push(`ETA ${meta.etaText}`);
-    else if (meta.elapsedText) parts.push(`Elapsed ${meta.elapsedText}`);
+    if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
+    else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
 
     const detail = progress.current_item || progress.message || defaultMessage;
     if (detail) parts.push(detail);
@@ -2707,14 +2708,21 @@ function emitSelectionStateChanged() {
 
 function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visible') {
     if (scope === 'loaded') {
-        return appT('selection.scopeLoaded', 'Scope: loaded items in the current result list');
+        return appT('selection.scopeLoaded', 'Scope: loaded results');
     }
     if (scope === 'filtered') {
         return AppState.selectionToken
             ? appT('selection.scopeFiltered', 'Scope: all filtered results')
-            : appT('selection.scopeFilteredExplicit', 'Scope: selected from all filtered results');
+            : appT('selection.scopeFilteredExplicit', 'Scope: filtered selection');
     }
-    return appT('selection.scopeVisible', 'Scope: visible thumbnails currently on screen');
+    return appT('selection.scopeVisible', 'Scope: visible thumbnails');
+}
+
+function collapseSelectionMoreActions() {
+    const morePanel = document.querySelector('#selection-actions .selection-panel-more');
+    if (morePanel) {
+        morePanel.open = false;
+    }
 }
 
 function normalizeSelectionImageIds(rawIds) {
@@ -2921,6 +2929,10 @@ function setSelectionMode(enabled, options = {}) {
         }
     });
 
+    if (!nextMode) {
+        collapseSelectionMoreActions();
+    }
+
     if (!nextMode && clearSelectionWhenDisabled && window.Gallery) {
         window.Gallery.lastSelectedIndex = null;
     }
@@ -3008,6 +3020,7 @@ function switchView(viewName) {
     if (viewName !== 'gallery') {
         const selActions = $('#selection-actions');
         if (selActions) selActions.style.display = 'none';
+        collapseSelectionMoreActions();
     } else if (AppState.selectionMode && AppState.selectedIds && AppState.selectedIds.size > 0) {
         // Show FAB if we have selections and are returning to gallery
         const selActions = $('#selection-actions');
@@ -3067,7 +3080,7 @@ function deleteSelectedGalleryImages() {
         .filter((id) => Number.isFinite(id));
 
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select Visible.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
         return;
     }
 
@@ -3136,7 +3149,7 @@ function removeSelectedGalleryImages() {
     const ids = getSelectedGalleryIds();
 
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select All Filtered.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
         return;
     }
 
@@ -3190,11 +3203,12 @@ function removeSelectedGalleryImages() {
     });
 }
 
-async function moveOrCopySelectedGalleryImages(operation = 'move') {
+async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {}) {
     const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
-    const ids = getSelectedGalleryIds();
+    const ids = normalizeSelectionImageIds(imageIds);
+    const isSingleContext = options.source === 'context' && ids.length === 1;
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select All Filtered.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
         return;
     }
 
@@ -3202,8 +3216,12 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
         ? appT('selection.copyVerb', 'Copy')
         : appT('selection.moveVerb', 'Move');
     const destination = await showInputModal(
-        appT('selection.destinationPromptTitle', '{operation} selected images')
-            .replace('{operation}', operationLabel),
+        isSingleContext
+            ? (normalizedOperation === 'copy'
+                ? appT('gallery.contextCopyPromptTitle', 'Copy image')
+                : appT('gallery.contextMovePromptTitle', 'Move image'))
+            : appT('selection.destinationPromptTitle', '{operation} selected images')
+                .replace('{operation}', operationLabel),
         appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected image(s).')
             .replace('{count}', ids.length),
         getRecentFolders()[0] || ''
@@ -3211,12 +3229,20 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
     if (!destination || !destination.trim()) return;
 
     const trimmedDestination = destination.trim();
-    const confirmTitle = normalizedOperation === 'copy'
-        ? appT('selection.copyConfirmTitle', 'Copy selected image files?')
-        : appT('selection.moveConfirmTitle', 'Move selected image files?');
-    const confirmBody = (normalizedOperation === 'copy'
-        ? appT('selection.copyConfirmBody', 'This copies {count} file(s) to: {destination}. Originals stay in place.')
-        : appT('selection.moveConfirmBody', 'This moves {count} original file(s) to: {destination}'))
+    const confirmTitle = isSingleContext
+        ? (normalizedOperation === 'copy'
+            ? appT('gallery.contextCopyConfirmTitle', 'Copy this image file?')
+            : appT('gallery.contextMoveConfirmTitle', 'Move this image file?'))
+        : (normalizedOperation === 'copy'
+            ? appT('selection.copyConfirmTitle', 'Copy selected image files?')
+            : appT('selection.moveConfirmTitle', 'Move selected image files?'));
+    const confirmBody = (isSingleContext
+        ? (normalizedOperation === 'copy'
+            ? appT('gallery.contextCopyConfirmBody', 'This copies the file to: {destination}. Original stays in place.')
+            : appT('gallery.contextMoveConfirmBody', 'This moves the original file to: {destination}'))
+        : (normalizedOperation === 'copy'
+            ? appT('selection.copyConfirmBody', 'This copies {count} file(s) to: {destination}. Originals stay in place.')
+            : appT('selection.moveConfirmBody', 'This moves {count} original file(s) to: {destination}')))
         .replace('{count}', ids.length)
         .replace('{destination}', trimmedDestination);
 
@@ -3272,6 +3298,10 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
             );
         }
     });
+}
+
+async function moveOrCopySelectedGalleryImages(operation = 'move') {
+    return moveOrCopyGalleryImages(getSelectedGalleryIds(), operation, { source: 'selection' });
 }
 
 function updateNavigationOverflowState() {
@@ -4264,6 +4294,7 @@ async function startScan() {
         setScanCancelButtonState('running');
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
+        resetProgressTracker(_scanBackgroundProgressTracker);
         _scanLibraryReadyHandled = false;
         _scanLastAutoRefreshAt = 0;
         $('#scan-progress-text').textContent = appT('scan.waitingForUpdate', 'Import · waiting for first update...');
@@ -4329,6 +4360,7 @@ async function requestStopScan() {
 function _refreshScanDrivenViews(force = false, options = {}) {
     const {
         refreshGallery = true,
+        pageSizeOverride = null,
     } = options;
     const now = Date.now();
     if (!force && now - _scanLastAutoRefreshAt < 2500) {
@@ -4338,11 +4370,15 @@ function _refreshScanDrivenViews(force = false, options = {}) {
     promptsLibraryCache = null;
     if (refreshGallery) {
         if (AppState.currentView === 'gallery') {
-            loadImages(false, {
+            const loadOptions = {
                 silent: true,
                 preserveExisting: true,
                 coalesce: true,
-            });
+            };
+            if (Number.isFinite(pageSizeOverride) && pageSizeOverride > 0) {
+                loadOptions.pageSizeOverride = pageSizeOverride;
+            }
+            loadImages(false, loadOptions);
             AppState.galleryNeedsRefresh = false;
         } else {
             AppState.galleryNeedsRefresh = true;
@@ -4389,12 +4425,28 @@ function _updateBgScanProgress(progress) {
         if (progress?.status === 'cancelling') {
             textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
         } else if (progress?.step === 'metadata') {
-            textEl.textContent = `${appT('scan.backgroundMetadata', 'Filling in image details...')} ${metadataProcessed}/${metadataTotal || '?'}`;
+            textEl.textContent = buildOperationProgressText({
+                completed: metadataProcessed,
+                total: metadataTotal,
+                tracker: _scanBackgroundProgressTracker,
+                primaryLabel: appT('scan.progressLabel', 'Import'),
+                detail: appT('scan.backgroundMetadata', 'Filling in image details...'),
+                defaultMessage: appT('scan.backgroundMetadata', 'Filling in image details...'),
+            });
         } else if (!totalFinal) {
             textEl.textContent = appT('scan.backgroundDiscovering', '{count} scanned. Discovering more images...')
                 .replace('{count}', String(processed));
         } else {
-            textEl.textContent = progress?.message || appT('scan.backgroundImporting', 'Bringing images into your library...');
+            const remaining = Math.max(0, total - processed);
+            textEl.textContent = buildOperationProgressText({
+                completed: processed,
+                total,
+                tracker: _scanBackgroundProgressTracker,
+                primaryLabel: appT('scan.progressLabel', 'Import'),
+                extraParts: [appT('progress.left', '{count} left').replace('{count}', String(remaining))],
+                detail: progress?.message || appT('scan.backgroundImporting', 'Bringing images into your library...'),
+                defaultMessage: appT('scan.backgroundImporting', 'Bringing images into your library...'),
+            });
         }
     }
 }
@@ -4402,6 +4454,7 @@ function _updateBgScanProgress(progress) {
 function _hideBgScanProgress() {
     const bar = $('#bg-scan-progress');
     if (bar) bar.style.display = 'none';
+    resetProgressTracker(_scanBackgroundProgressTracker);
 }
 
 function _initBgScanProgressButtons() {
@@ -4483,7 +4536,10 @@ async function pollScanProgress(retryCount = 0) {
         if (progress.library_ready && !_scanLibraryReadyHandled && progress.status === 'running') {
             _scanLibraryReadyHandled = true;
             hideModal('scan-modal');
-            _refreshScanDrivenViews(true, { refreshGallery: true });
+            _refreshScanDrivenViews(true, {
+                refreshGallery: true,
+                pageSizeOverride: SCAN_PREVIEW_PAGE_SIZE,
+            });
             showToast(
                 appT('scan.libraryReadyToast', 'Library is ready. Metadata is still loading in the background.'),
                 'info'
@@ -4512,13 +4568,10 @@ async function pollScanProgress(retryCount = 0) {
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
-            const refreshGalleryOnDone = !libraryReadyWasHandled
-                || AppState.currentView !== 'gallery'
-                || AppState.images.length === 0;
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
-            _refreshScanDrivenViews(true, { refreshGallery: refreshGalleryOnDone });
+            _refreshScanDrivenViews(true, { refreshGallery: true });
             // Auto-tag: if checkbox was on, trigger tagging with current settings
             const autoTagCheckbox = document.getElementById('scan-auto-tag');
             if (autoTagCheckbox && autoTagCheckbox.checked) {
@@ -4613,6 +4666,7 @@ async function resumeScanProgress() {
         setScanCancelButtonState(progress?.status === 'cancelling' ? 'cancelling' : 'running');
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
+        resetProgressTracker(_scanBackgroundProgressTracker);
         $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
         _updateBgScanProgress(progress);
         pollScanProgress();
@@ -4631,6 +4685,7 @@ let _tagLastProgressText = '';
 let _tagLastCurrent = 0;
 let _tagLastTotal = 0;
 let _scanProgressTracker = createProgressTracker();
+let _scanBackgroundProgressTracker = createProgressTracker();
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
 let _tagProgressTracker = createProgressTracker();
@@ -5370,6 +5425,7 @@ async function loadImages(appendMode = false, options = {}) {
         silent = false,
         preserveExisting = false,
         coalesce = false,
+        pageSizeOverride = null,
     } = options;
 
     if (AppState.isLoading && coalesce) {
@@ -5408,9 +5464,13 @@ async function loadImages(appendMode = false, options = {}) {
     try {
         controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
         const useCursorPagination = supportsCursorPagination(AppState.filters.sortBy);
+        const overrideLimit = Number(pageSizeOverride);
+        const pageLimit = Number.isFinite(overrideLimit) && overrideLimit > 0
+            ? Math.floor(overrideLimit)
+            : AppState.pagination.pageSize;
         const filters = {
             ...AppState.filters,
-            limit: AppState.pagination.pageSize,
+            limit: pageLimit,
             cursor: appendMode && useCursorPagination ? AppState.pagination.cursor : null,
             offset: appendMode && !useCursorPagination ? AppState.pagination.offset : undefined
         };
@@ -6074,14 +6134,18 @@ function updateSelectionUI() {
         if (countEl) {
             countEl.textContent = hasSelection
                 ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
-                : (window.I18n?.t?.('selection.emptyHint') || 'Selection mode is on. Pick images or use Select Visible.');
+                : (window.I18n?.t?.('selection.emptyHint') || 'Select images, or choose all filtered results.');
         }
         if (scopeEl) {
             scopeEl.textContent = getSelectionScopeSummaryText();
         }
+        if (!hasSelection) {
+            collapseSelectionMoreActions();
+        }
         requestAnimationFrame(() => ensureSelectionPanelVisible(panel));
     } else if (panel) {
         panel.style.display = 'none';
+        collapseSelectionMoreActions();
     }
 }
 
@@ -8040,11 +8104,13 @@ function buildAppContext() {
         loadImages,
         loadStats,
         updateSelectionUI,
+        emitSelectionStateChanged,
         showConfirm,
         showRandomImage,
         showAnalytics,
         showExportModal,
         showExportTagsModal,
+        moveOrCopyGalleryImages,
         updateCollapsibleFilterUI,
         openModelSelect,
         renderModelSelectList,

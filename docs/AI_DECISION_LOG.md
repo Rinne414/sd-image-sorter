@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-04-28
+**Updated:** 2026-04-29
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -1635,3 +1635,113 @@ Use this structure for future entries:
   `backend/image_manager.py`, `backend/tests/test_image_manager.py`, `tests/e2e/specs/manual-regression.spec.ts`, `tests/e2e/specs/tagger-runtime.spec.ts`.
 - Validation:
   Targeted backend scan progress test and full backend suite cover the terminal metadata progress contract; Playwright config listing validates the browser spec syntax in this local WSL environment where Chromium runtime libraries are unavailable.
+
+### ADR-AI-20260429-64: Launcher ONNX Runtime repair must show long pip work
+
+- Status: accepted
+- Area: launcher / dependency repair / first-run UX
+- Context:
+  Windows launchers run `backend/repair_onnxruntime.py --auto` immediately after dependency installation. On NVIDIA machines, that repair may install `onnxruntime-gpu[cuda,cudnn]`, which pulls roughly 1.4 GB of CUDA/cuDNN runtime wheels. Previously those pip calls used captured output, so the console could sit at `Checking Windows ONNX Runtime package state...` with no visible activity, making a healthy first run look frozen.
+- Decision:
+  Launcher-triggered ONNX Runtime repair must stream pip output and print the concrete repair action before any long install, while machine-readable `--json` mode stays quiet/captured. Hidden multi-minute dependency downloads during startup are not acceptable UX.
+- Why:
+  This is a local beginner-facing tool. If startup needs to download or reinstall a large runtime, the user must see what is happening and why instead of guessing whether the app crashed.
+- Do not regress:
+  Do not reintroduce captured-only pip output for `--auto` launcher repair. Do not hide CUDA/cuDNN runtime installation behind a generic readiness check message. Keep `--json` suitable for automation by not streaming progress there.
+- Evidence:
+  `backend/repair_onnxruntime.py`, `backend/tests/test_repair_onnxruntime.py`, `README.md`, `docs/RELEASE_PACKS.md`.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp pytest -q tests/test_repair_onnxruntime.py`.
+
+### ADR-AI-20260429-65: Runtime lock includes small resolver-quiet compatibility deps
+
+- Status: accepted
+- Area: dependency lock / launcher UX / Windows install
+- Context:
+  A successful Windows first-run `pip install -r backend/requirements.txt` could still print scary resolver text such as `ERROR: pip's dependency resolver...`, because reused or previously packaged environments had `selenium` / `trio` installed while their small optional runtime dependencies were missing. The app setup completed, but normal users reasonably read that `ERROR` block as a failed install.
+- Decision:
+  Keep `websocket-client`, `sniffio`, `sortedcontainers`, and Windows-only `cffi`/`pycparser` in the runtime and dev locks. These packages close the observed `selenium` / `trio` resolver warning surface without changing app behavior. Release guard tests must keep them present and keep `cffi`/`pycparser` Windows/PyPy markers aligned with the upstream `trio` requirement.
+- Why:
+  First-run setup must look trustworthy. A local beginner-facing launcher should not show avoidable pip `ERROR` warnings after a successful dependency install.
+- Do not regress:
+  Do not remove these as "unused" just because app code does not import them. Do not regenerate the cross-platform lock in a way that drops platform markers for heavy Linux CUDA/Triton wheels or the Windows-only `cffi` closure.
+- Evidence:
+  `backend/requirements.in`, `backend/requirements.txt`, `backend/requirements-dev.txt`, `backend/tests/test_release_build.py`.
+- Validation:
+  `python3 scripts/check_lockfiles.py`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp pytest -q tests/test_release_build.py::test_runtime_requirements_keep_platform_specific_wheels_guarded tests/test_release_build.py::test_dev_requirements_keep_platform_specific_wheels_guarded`.
+
+### ADR-AI-20260429-66: Scan responsiveness protects large WSL/Windows libraries without hiding metadata work
+
+- Status: accepted
+- Area: scan performance / path semantics / frontend responsiveness
+- Context:
+  Large user libraries commonly contain 10,000-100,000 images on Windows/WSL-mounted drives. The scan path already used quick placeholder import plus background metadata parsing, but equivalent-path lookups used `LOWER(path)` for Windows/WSL case-insensitive matching without a matching expression index. Benchmarks against a 100,000-row temporary image table showed 200 equivalent-path lookups taking about 0.81s before the expression index and about 0.057s after it. The frontend also risked turning "library ready" into a thumbnail storm by immediately loading the normal gallery page size while metadata parsing was still active.
+- Decision:
+  Current behavior adds `idx_images_path_lower ON images(LOWER(path))` for fresh databases and migration `007_path_lookup_casefold_index` for existing databases. Scan progress callbacks are throttled to first/progress/error/final events instead of one backend lock update per image. The UI labels this as "Fast import (recommended)" / "快速导入（推荐）" with a short helper that says image info is kept while full bad-file checking is skipped. Scan modal helper/checkbox text should not use arbitrary word breaking because broken mixed-language terms look unpolished. Quick-import metadata parsing is metadata-only: PNG parsing skips non-metadata image payload chunks such as `IDAT`, and quick import does not run full Pillow image-data verification. Full non-quick scans keep image-data validation. Quick-import library-ready refresh loads a small gallery preview page (`SCAN_PREVIEW_PAGE_SIZE = 80`) while metadata continues, and scan completion performs one silent gallery refresh so resolved metadata appears without repeated gallery reloads during scanning.
+- Why:
+  The user-facing goal is not merely raw throughput; noob users should see that the app is working quickly, the gallery should not look stuck/reloading while a scan is running, and re-scanning already-known large libraries should avoid avoidable full-table path scans. Metadata is still parsed for changed/new files and skipped only when stored source size/mtime prove the file is unchanged. The tradeoff is explicit: quick import optimizes first-use responsiveness and may leave corrupt-but-metadata-readable files to be discovered later by thumbnail/detail loading, while non-quick scan remains the stricter validation path.
+- Do not regress:
+  Do not remove the `LOWER(path)` index while `_path_query_match_clause()` still emits `LOWER(path) IN (...)`. Do not rename quick import back to wording that sounds like metadata may be missing. Do not make quick import read/verify full PNG image payloads by default. Do not reintroduce per-image UI progress writes for large scans unless the frontend starts consuming per-file streaming updates. Do not refresh the full normal gallery page repeatedly during active quick-import metadata parsing.
+- Allowed evolution:
+  The preview page size may be tuned with real user hardware data. A future scan-aware thumbnail scheduler may replace the fixed preview limit if it can keep first-use gallery feedback without starving metadata parsing.
+- Evidence:
+  `backend/migrations/007_path_lookup_casefold_index.py`, `backend/migrations/_schema_common.py`, `backend/image_manager.py`, `backend/metadata_parser.py`, `frontend/js/app.js`, `backend/tests/test_database.py`, `backend/tests/test_image_manager.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `python3 -m py_compile backend/image_manager.py backend/metadata_parser.py backend/migrations/007_path_lookup_casefold_index.py backend/migrations/_schema_common.py`; `node --check frontend/js/app.js`; targeted scan/database/frontend/metadata-parser pytest; broader `python3 -m pytest -q --capture=no tests/test_metadata_parser.py tests/test_database.py tests/test_image_manager.py tests/test_db_repos_image_repo.py tests/test_frontend_contract.py` passed (`203 passed`). Temporary benchmark confirmed the casefold index query plan uses `idx_images_path_lower`; `/mnt/l` 5000-image quick scan measured about 12.65s first scan and 3.57s unchanged re-scan; quick import parsed metadata `5000/5000`; unchanged re-scan scheduled `0` metadata jobs.
+
+### ADR-AI-20260429-67: Gallery selection panel exposes common actions first
+
+- Status: accepted
+- Area: gallery selection UX / destructive action visibility / bilingual layout
+- Context:
+  Current Gallery selection mode previously exposed many batch buttons in the left sidebar at once: filtered/visible selection tools, invert actions, move/copy, export variants, Censor edit, remove-from-gallery, and delete-from-disk. On desktop sidebars this made selection mode feel noisy and annoying, and long bilingual labels increased the risk of broken button layout.
+- Decision:
+  Current behavior keeps the common path visible: compact `Visible` / `All Filtered` selection buttons plus `Move`, `Copy`, and `Censor`. Lower-frequency actions (`Invert`, prompt/tag/sidecar export) and destructive or semi-destructive actions (`Remove from Gallery`, `Delete from Disk`) live inside the collapsed `More actions` section. The visible selection copy is intentionally shorter in both English and `zh-CN`; scope text is also shortened and ellipsized in the sidebar. The `More actions` section auto-collapses when selection mode is disabled, the panel is hidden, or there is no active selection.
+- Why:
+  Beginner users need a calm, obvious path after selecting images, not a wall of buttons. Power-user actions still exist, but they no longer occupy prime space or sit next to common actions by default. Keeping destructive disk delete behind an extra expansion step also matches the product rule that dangerous actions should be harder to misclick than common actions.
+- Do not regress:
+  Do not put export, invert, remove, and disk-delete actions back into the always-visible selection sidebar without a new UX decision. Do not lengthen the visible selection labels in a way that breaks the desktop sidebar. Keep `Delete from Disk` visually and structurally separated from move/copy/censor.
+- Allowed evolution:
+  The exact common-action set can change after user testing, but the panel should preserve progressive disclosure: common actions first, advanced/dangerous actions behind an explicit expansion.
+- Evidence:
+  `frontend/index.html`, `frontend/css/ui-refresh.css`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `tests/e2e/specs/smoke.spec.ts`, `tests/e2e/specs/manual-regression.spec.ts`, `docs/AI_PRINCIPLES.md` principles 5, 6, and 8.
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `python3 -m pytest -q --capture=no tests/test_frontend_contract.py` from `backend/` (`12 passed`); static selection-panel DOM check confirmed 6 visible buttons including `Clear` and 7 collapsed buttons. After populating the local `.tools` Playwright runtime cache, `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "context menu|selection actions|selection scope summary|gallery batch actions"` passed the broader touched slice (`4 passed`).
+
+### ADR-AI-20260429-68: Gallery right-click menu is a single-image workflow shortcut, not a destructive cleanup panel
+
+- Status: accepted
+- Area: gallery context menu / local workflow UX / destructive action visibility
+- Context:
+  After the selection sidebar was simplified, the Gallery right-click menu still had too few useful actions for desktop users: it mostly exposed folder/path/filter/censor helpers, while common single-image work like previewing, selecting, moving, copying, reading metadata, or sending the image into Prompt Helper required leaving the immediate image context. At the same time, adding every batch/destructive action would recreate the same overload problem in a different surface.
+- Decision:
+  Current behavior treats the Gallery image context menu as a single-image quick workflow menu. It exposes `Preview`, `Select Image` / `Deselect Image`, `Move`, `Copy`, `Send to Censor`, `Prompt Helper`, `Read Metadata`, `Filter by Checkpoint` when a checkpoint exists, `Open in Folder`, and `Copy Path`. Single-image move/copy routes through the existing `/api/move` contract via `moveOrCopyGalleryImages(..., { source: 'context' })`, preserving the same confirmation and recent-folder behavior as selected batch move/copy. Permanent disk delete is intentionally not added to the right-click menu.
+- Why:
+  Desktop users expect right-click to accelerate work on the item under the pointer. These actions are all directly about the clicked image and map to existing app workflows. Permanent deletion remains outside this menu because it is too easy to trigger from a contextual click and the product rule says dangerous actions must be harder to misclick than common actions.
+- Do not regress:
+  Do not add `Delete from Disk` to the normal Gallery image context menu without a new explicit destructive-action UX decision. Do not fork a separate move/copy backend path for context-menu actions. Do not let the context menu become a second always-full batch sidebar; keep actions grouped and image-scoped.
+- Allowed evolution:
+  A future advanced settings toggle could expose extra context actions for pro users, but destructive disk deletion should still require stronger friction than an ordinary right-click menu item.
+- Evidence:
+  `frontend/js/gallery.js`, `frontend/js/app.js`, `frontend/css/styles.css`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_frontend_contract.py`, `tests/e2e/specs/smoke.spec.ts`, `docs/AI_PRINCIPLES.md` principles 6 and 8.
+- Validation:
+  `node --check frontend/js/gallery.js`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `cd backend && python3 -m pytest -q --capture=no tests/test_frontend_contract.py` (`13 passed`). After populating the local `.tools` Playwright runtime cache with `libnspr4`, `libnss3`, and `libasound2t64` `.deb` packages, `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "context menu|selection actions|selection scope summary|gallery batch actions"` passed (`4 passed`). `.tools/` is ignored because these local runtime packages are machine cache, not source.
+
+### ADR-AI-20260429-69: PNG quick import must reject structurally truncated files without full pixel decode
+
+- Status: accepted
+- Area: scan performance / data quality / quick import semantics
+- Context:
+  The scan speed work made quick import skip full Pillow image-data validation so large first scans can show the library sooner. A regression test caught that a truncated PNG could be accepted when the parser treated the fast metadata path as optional and fell back to Pillow after structural errors; Pillow can still expose dimensions/metadata for some cut-off PNGs unless `verify()` is run.
+- Decision:
+  Current behavior keeps quick import metadata-only for PNG pixel data, but the PNG fast path is authoritative for PNG structure. It reads only chunk headers and metadata chunks, skips large image chunks, and requires valid chunk bounds plus an `IEND` chunk. If the fast path detects invalid signature, truncation, or missing `IEND`, the file is reported as unreadable instead of falling back to Pillow and entering the library. Full import can still run Pillow `verify()` when the user disables quick import.
+- Why:
+  Users need quick import to be fast, but they should not see broken/truncated files silently indexed as valid gallery items. Chunk-structure validation is a cheap middle ground: it preserves the first-scan speed path while catching common file truncation.
+- Do not regress:
+  Do not reintroduce silent Pillow fallback for PNG fast-path structural errors. Do not make quick import do full pixel decode by default just to catch truncation. Keep the UI wording clear that quick import skips full bad-file validation, not all validation and not metadata parsing.
+- Allowed evolution:
+  A future parser can add similarly cheap structure checks for other formats or a separate advanced integrity-scan action, but that should be exposed as a deliberate user choice because it costs scan time.
+- Evidence:
+  `backend/metadata_parser.py`, `backend/image_manager.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_sorting.py`, `docs/AI_DECISION_LOG.md` ADR-AI-20260429-66.
+- Validation:
+  Targeted pytest passed for mixed-root bad PNG reporting and PNG fast-path validation: `python3 -m pytest -q --capture=no backend/tests/test_routers/test_sorting.py::TestScan::test_scan_mixed_root_skips_truncated_and_reports_filenames backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_text_metadata_uses_fast_path_without_pillow_open backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_validation_still_runs_verify_open` (`3 passed`).

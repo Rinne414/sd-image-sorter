@@ -66,8 +66,25 @@ class TestDatabaseInit:
         assert "idx_tags_tag_image" in indexes  # (tag, image_id) — covers tag lookups
         assert "idx_tags_image_id_tag" in indexes  # (image_id, tag) — covers image_id lookups
         assert "idx_images_generator" in indexes
+        assert "idx_images_path" in indexes
+        assert "idx_images_path_lower" in indexes
 
         conn.close()
+
+    def test_casefold_path_lookup_uses_expression_index(self, test_db):
+        """Equivalent Windows/WSL path lookups should not scan the whole image table."""
+        import sqlite3
+
+        conn = sqlite3.connect(db.DATABASE_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXPLAIN QUERY PLAN SELECT id FROM images WHERE LOWER(path) IN (?)",
+            ("/mnt/l/example.png",),
+        )
+        plan = " ".join(str(row[3]) for row in cursor.fetchall())
+        conn.close()
+
+        assert "idx_images_path_lower" in plan
 
     def test_init_creates_favorites_collection(self, test_db):
         """Favorites collection should be created by default."""

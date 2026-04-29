@@ -324,26 +324,36 @@
                     <div id="selection-actions" class="selection-panel" style="display: none;" aria-live="polite">
                         <div class="selection-panel-header">
                             <div class="selection-panel-copy">
-                                <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch Actions</span>
+                                <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch</span>
                                 <span id="selection-count" class="selection-panel-count">0 items selected</span>
                                 <span id="selection-scope-summary" class="selection-panel-scope"></span>
                             </div>
-                            <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Deselect All</button>
+                            <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Clear</button>
                         </div>
-                        <div class="selection-panel-actions">
-                            <button id="btn-select-all" class="btn btn-primary full-width"><span>✓✓</span> <span data-i18n="selection.selectAllFiltered">Select All Filtered</span></button>
-                            <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert All Filtered</span></button>
-                            <button id="btn-select-visible" class="btn btn-ghost full-width"><span>▦</span> <span data-i18n="selection.selectVisible">Select Visible</span></button>
-                            <button id="btn-invert-selection-visible" class="btn btn-ghost full-width"><span>⇄</span> <span data-i18n="selection.invertVisible">Invert Visible</span></button>
-                            <button id="btn-move-selected" class="btn btn-primary full-width"><span>📁</span> <span data-i18n="selection.moveSelected">Move Selected...</span></button>
-                            <button id="btn-copy-selected" class="btn btn-secondary full-width"><span>📄</span> <span data-i18n="selection.copySelected">Copy Selected...</span></button>
-                            <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Export Prompts</span></button>
-                            <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Export Tags</span></button>
-                            <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Export Sidecars</span></button>
-                            <button id="btn-send-to-censor" class="btn btn-primary full-width"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
-                            <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
-                            <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Delete Files from Disk...</span></button>
+                        <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
+                            <button id="btn-select-visible" class="btn btn-ghost full-width"><span>▦</span> <span data-i18n="selection.selectVisible">Visible</span></button>
+                            <button id="btn-select-all" class="btn btn-primary full-width"><span>✓✓</span> <span data-i18n="selection.selectAllFiltered">All Filtered</span></button>
                         </div>
+                        <div class="selection-panel-actions selection-panel-primary-actions" aria-label="Common batch actions">
+                            <button id="btn-move-selected" class="btn btn-primary full-width"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
+                            <button id="btn-copy-selected" class="btn btn-secondary full-width"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
+                            <button id="btn-send-to-censor" class="btn btn-primary full-width"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor</span></button>
+                        </div>
+                        <details class="selection-panel-more">
+                            <summary class="selection-panel-more-summary">
+                                <span data-i18n="selection.moreActions">More actions</span>
+                                <span class="selection-panel-more-hint" data-i18n="selection.moreActionsHint">Export, invert, delete</span>
+                            </summary>
+                            <div class="selection-panel-actions selection-panel-secondary-actions">
+                                <button id="btn-invert-selection-visible" class="btn btn-ghost full-width"><span>⇄</span> <span data-i18n="selection.invertVisible">Invert Visible</span></button>
+                                <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert Filtered</span></button>
+                                <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Prompts</span></button>
+                                <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Tags</span></button>
+                                <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Sidecars</span></button>
+                                <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
+                                <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Delete from Disk...</span></button>
+                            </div>
+                        </details>
                     </div>
                 </aside>
 
@@ -2484,10 +2494,10 @@
                     <label class="checkbox-label">
                         <input type="checkbox" id="scan-quick-import" checked>
                         <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Show images first, fill details in background (recommended)</span>
+                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Fast import (recommended)</span>
                     </label>
                 </div>
-                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keep the default settings for large libraries.</div>
+                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keeps image info; skips full bad-file check.</div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>

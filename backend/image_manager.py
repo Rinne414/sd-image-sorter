@@ -4,6 +4,7 @@ Image manager for file operations (scanning, moving, copying).
 import logging
 import os
 import shutil
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import List, Dict, Any, Optional, Callable, Iterator
 from datetime import datetime
@@ -33,6 +34,8 @@ from utils.source_paths import normalize_indexed_image_path, resolve_existing_in
 logger = logging.getLogger(__name__)
 
 SCAN_DB_BATCH_SIZE = 200
+SCAN_PROGRESS_MIN_INTERVAL_SECONDS = 0.25
+SCAN_PROGRESS_EVERY_N_ITEMS = 50
 DEFAULT_METADATA_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
 
 
@@ -281,7 +284,7 @@ def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         stat_result = os.stat(image_path)
-        metadata = parse_image(image_path, validate_image_data=True)
+        metadata = parse_image(image_path, validate_image_data=bool(job.get("validate_image_data", True)))
         parse_error = metadata.get("parse_error")
         if parse_error:
             return {
@@ -527,27 +530,59 @@ def scan_folder(
         delete_images_by_paths(paths)
         paths.clear()
 
+    progress_emit_state = {"phase": None, "current": 0, "emitted_at": 0.0}
+
+    def _emit_progress(
+        current: int,
+        total: int,
+        filename: str,
+        details: Dict[str, Any],
+        *,
+        force: bool = False,
+    ) -> None:
+        if not progress_callback:
+            return
+
+        phase = details.get("phase")
+        now = time.monotonic()
+        should_emit = (
+            force
+            or progress_emit_state["phase"] != phase
+            or current <= 1
+            or current - int(progress_emit_state["current"] or 0) >= SCAN_PROGRESS_EVERY_N_ITEMS
+            or now - float(progress_emit_state["emitted_at"] or 0.0) >= SCAN_PROGRESS_MIN_INTERVAL_SECONDS
+            or bool(details.get("last_error"))
+        )
+        if not should_emit:
+            return
+
+        progress_emit_state["phase"] = phase
+        progress_emit_state["current"] = current
+        progress_emit_state["emitted_at"] = now
+        try:
+            progress_callback(current, total, filename, details)
+        except TypeError:
+            progress_callback(current, total, filename)
+
     def _emit_library_ready() -> None:
         if result["library_ready"] or not quick_import or not progress_callback:
             return
         result["library_ready"] = True
-        try:
-            progress_callback(
-                processed_count,
-                result["total"],
-                "",
-                {
-                    "errors": result["errors"],
-                    "last_error": None,
-                    "phase": "library_ready",
-                    "library_ready": True,
-                    "metadata_processed": result["metadata_processed"],
-                    "metadata_total": result["metadata_total"],
-                    "total_final": result["total_final"],
-                },
-            )
-        except TypeError:
-            progress_callback(processed_count, result["total"], "")
+        _emit_progress(
+            processed_count,
+            result["total"],
+            "",
+            {
+                "errors": result["errors"],
+                "last_error": None,
+                "phase": "library_ready",
+                "library_ready": True,
+                "metadata_processed": result["metadata_processed"],
+                "metadata_total": result["metadata_total"],
+                "total_final": result["total_final"],
+            },
+            force=True,
+        )
 
     pending_placeholder_records: List[Dict[str, Any]] = []
     pending_metadata_records: List[Dict[str, Any]] = []
@@ -608,16 +643,13 @@ def scan_folder(
         if len(pending_deleted_new_paths) >= SCAN_DB_BATCH_SIZE:
             _flush_deleted_new_paths(pending_deleted_new_paths)
 
-        if progress_callback:
-            try:
-                progress_callback(
-                    result["metadata_processed"],
-                    result["metadata_total"],
-                    filename,
-                    progress_details,
-                )
-            except TypeError:
-                progress_callback(result["metadata_processed"], result["metadata_total"], filename)
+        _emit_progress(
+            result["metadata_processed"],
+            result["metadata_total"],
+            filename,
+            progress_details,
+            force=bool(progress_details.get("last_error")),
+        )
 
     def _drain_metadata_futures(wait_for_all: bool = False) -> None:
         while in_flight:
@@ -701,6 +733,7 @@ def scan_folder(
                                 "path": image_path,
                                 "filename": filename,
                                 "compute_content_fingerprint": _should_compute_content_fingerprint(existing),
+                                "validate_image_data": not quick_import,
                             }
                         )
                     except PermissionError as e:
@@ -716,23 +749,21 @@ def scan_folder(
                         progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
                         progress_details["errors"] = result["errors"]
                     finally:
-                        if progress_callback:
-                            try:
-                                progress_callback(
-                                    processed_count,
-                                    result["total"],
-                                    filename,
-                                    {
-                                        **progress_details,
-                                        "phase": "importing",
-                                        "library_ready": result["library_ready"],
-                                        "metadata_processed": result["metadata_processed"],
-                                        "metadata_total": result["metadata_total"],
-                                        "total_final": result["total_final"],
-                                    },
-                                )
-                            except TypeError:
-                                progress_callback(processed_count, result["total"], filename)
+                        import_details = {
+                            **progress_details,
+                            "phase": "importing",
+                            "library_ready": result["library_ready"],
+                            "metadata_processed": result["metadata_processed"],
+                            "metadata_total": result["metadata_total"],
+                            "total_final": result["total_final"],
+                        }
+                        _emit_progress(
+                            processed_count,
+                            result["total"],
+                            filename,
+                            import_details,
+                            force=bool(progress_details.get("last_error")),
+                        )
 
                 _flush_placeholder_records(pending_placeholder_records)
                 for job in batch_metadata_jobs:
@@ -747,24 +778,22 @@ def scan_folder(
             if result["total"] > 0:
                 _emit_library_ready()
             _drain_metadata_futures(wait_for_all=True)
-            if progress_callback and result["metadata_total"] > 0:
-                try:
-                    progress_callback(
-                        result["metadata_processed"],
-                        result["metadata_total"],
-                        "",
-                        {
-                            "errors": result["errors"],
-                            "last_error": None,
-                            "phase": "metadata",
-                            "library_ready": result["library_ready"],
-                            "metadata_processed": result["metadata_processed"],
-                            "metadata_total": result["metadata_total"],
-                            "total_final": result["total_final"],
-                        },
-                    )
-                except TypeError:
-                    progress_callback(result["metadata_processed"], result["metadata_total"], "")
+            if result["metadata_total"] > 0:
+                _emit_progress(
+                    result["metadata_processed"],
+                    result["metadata_total"],
+                    "",
+                    {
+                        "errors": result["errors"],
+                        "last_error": None,
+                        "phase": "metadata",
+                        "library_ready": result["library_ready"],
+                        "metadata_processed": result["metadata_processed"],
+                        "metadata_total": result["metadata_total"],
+                        "total_final": result["total_final"],
+                    },
+                    force=True,
+                )
     except ScanCancelledError:
         _reconcile_interrupted_scan_placeholders()
         raise

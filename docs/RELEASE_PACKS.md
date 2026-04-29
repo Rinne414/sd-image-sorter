@@ -17,6 +17,8 @@ Then:
 
 This package includes an embedded Python runtime — **no system Python install needed**.
 
+On NVIDIA machines, the first ONNX Runtime check may install CUDA / cuDNN runtime wheels after the normal dependency install. The launcher prints the actual pip progress during that step; do not close it just because it is still working under `Checking Windows ONNX Runtime package state...`.
+
 That package is meant to cover the common workflows:
 
 - Gallery

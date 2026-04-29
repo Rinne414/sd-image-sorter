@@ -135,13 +135,30 @@ def get_install_state() -> Dict[str, Any]:
     }
 
 
-def _run_pip(args: List[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "pip", "--disable-pip-version-check", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedProcess[str]:
+    command = [sys.executable, "-m", "pip", "--disable-pip-version-check", *args]
+    if stream:
+        print(
+            "[onnxruntime] Running: python -m pip --disable-pip-version-check "
+            + " ".join(args),
+            flush=True,
+        )
+        return subprocess.run(command, check=True, text=True)
+
+    try:
+        return subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        if exc.stdout:
+            print(exc.stdout, end="", file=sys.stdout)
+        if exc.stderr:
+            print(exc.stderr, end="", file=sys.stderr)
+        raise
+
+
+def _record_action(actions: List[str], message: str, *, stream_pip: bool) -> None:
+    actions.append(message)
+    if stream_pip:
+        print(f"[onnxruntime] {message}", flush=True)
 
 
 def _probe_ort_providers() -> List[str]:
@@ -167,7 +184,7 @@ def _target_runtime_for_vendor(primary_vendor: Optional[str]) -> str:
     return "onnxruntime-gpu"
 
 
-def repair_windows_onnxruntime() -> Dict[str, Any]:
+def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
     state = get_install_state()
     actions: List[str] = []
 
@@ -186,33 +203,69 @@ def repair_windows_onnxruntime() -> Dict[str, Any]:
     # a GPU runtime. The CPU package's DLLs override the GPU ones and silently
     # disable acceleration.
     if cpu_version and (gpu_version or dml_version):
-        actions.append(f"Uninstalling conflicting onnxruntime {cpu_version}")
-        _run_pip(["uninstall", "-y", "onnxruntime"])
+        _record_action(
+            actions,
+            f"Uninstalling conflicting onnxruntime {cpu_version}",
+            stream_pip=stream_pip,
+        )
+        _run_pip(["uninstall", "-y", "onnxruntime"], stream=stream_pip)
         # Reinstall the active GPU runtime so any overwritten files are restored.
         if gpu_version:
-            actions.append(f"Reinstalling onnxruntime-gpu {gpu_version} to restore overwritten files")
-            _run_pip(["install", "--no-deps", "--upgrade", "--force-reinstall", f"onnxruntime-gpu=={gpu_version}"])
+            _record_action(
+                actions,
+                f"Reinstalling onnxruntime-gpu {gpu_version} to restore overwritten files",
+                stream_pip=stream_pip,
+            )
+            _run_pip(
+                [
+                    "install",
+                    "--no-deps",
+                    "--upgrade",
+                    "--force-reinstall",
+                    f"onnxruntime-gpu=={gpu_version}",
+                ],
+                stream=stream_pip,
+            )
         if dml_version:
-            actions.append(f"Reinstalling onnxruntime-directml {dml_version} to restore overwritten files")
-            _run_pip(["install", "--no-deps", "--upgrade", "--force-reinstall", f"onnxruntime-directml=={dml_version}"])
+            _record_action(
+                actions,
+                f"Reinstalling onnxruntime-directml {dml_version} to restore overwritten files",
+                stream_pip=stream_pip,
+            )
+            _run_pip(
+                [
+                    "install",
+                    "--no-deps",
+                    "--upgrade",
+                    "--force-reinstall",
+                    f"onnxruntime-directml=={dml_version}",
+                ],
+                stream=stream_pip,
+            )
 
     # Step 2: if only the CPU package is installed on Windows, install the
     # appropriate GPU runtime for the detected vendor.
     elif cpu_version and not gpu_version and not dml_version:
-        actions.append(
+        _record_action(
+            actions,
             f"CPU-only onnxruntime detected on Windows. Installing {target_runtime} "
-            f"(primary GPU vendor: {primary_vendor or 'unknown'}) and removing onnxruntime."
+            f"(primary GPU vendor: {primary_vendor or 'unknown'}) and removing onnxruntime.",
+            stream_pip=stream_pip,
         )
-        _run_pip(["install", "--upgrade", "--force-reinstall", target_runtime])
-        _run_pip(["uninstall", "-y", "onnxruntime"])
+        _run_pip(["install", "--upgrade", "--force-reinstall", target_runtime], stream=stream_pip)
+        _run_pip(["uninstall", "-y", "onnxruntime"], stream=stream_pip)
 
     # Step 3: if both GPU runtimes are installed, keep only the one that
     # matches the detected vendor.
     if gpu_version and dml_version:
         keep = target_runtime
         drop = "onnxruntime-directml" if keep == "onnxruntime-gpu" else "onnxruntime-gpu"
-        actions.append(f"Both GPU runtimes installed. Keeping {keep}, removing {drop}.")
-        _run_pip(["uninstall", "-y", drop])
+        _record_action(
+            actions,
+            f"Both GPU runtimes installed. Keeping {keep}, removing {drop}.",
+            stream_pip=stream_pip,
+        )
+        _run_pip(["uninstall", "-y", drop], stream=stream_pip)
 
     # Step 4: swap between onnxruntime-gpu and onnxruntime-directml to match
     # the detected GPU vendor. This is the Intel/AMD support path: the
@@ -233,12 +286,14 @@ def repair_windows_onnxruntime() -> Dict[str, Any]:
             and current_runtime is not None
             and current_runtime != target_runtime
         ):
-            actions.append(
+            _record_action(
+                actions,
                 f"Primary GPU vendor is {primary_vendor}. Swapping {current_runtime} "
-                f"for {target_runtime} to enable hardware acceleration."
+                f"for {target_runtime} to enable hardware acceleration.",
+                stream_pip=stream_pip,
             )
-            _run_pip(["uninstall", "-y", current_runtime])
-            _run_pip(["install", "--upgrade", "--force-reinstall", target_runtime])
+            _run_pip(["uninstall", "-y", current_runtime], stream=stream_pip)
+            _run_pip(["install", "--upgrade", "--force-reinstall", target_runtime], stream=stream_pip)
 
     # Step 5: NVIDIA users need the CUDA 12 + cuDNN 9 runtime DLLs to
     # actually load CUDAExecutionProvider. onnxruntime-gpu 1.18+ stopped
@@ -256,15 +311,20 @@ def repair_windows_onnxruntime() -> Dict[str, Any]:
         and final_gpu_version
         and not _version("nvidia-cudnn-cu12")
     ):
-        actions.append(
+        _record_action(
+            actions,
             f"Installing CUDA 12 + cuDNN 9 runtime DLLs (~1.4 GB) so onnxruntime-gpu "
-            f"{final_gpu_version} can use CUDAExecutionProvider"
+            f"{final_gpu_version} can use CUDAExecutionProvider",
+            stream_pip=stream_pip,
         )
-        _run_pip([
-            "install",
-            "--no-warn-script-location",
-            f"onnxruntime-gpu[cuda,cudnn]=={final_gpu_version}",
-        ])
+        _run_pip(
+            [
+                "install",
+                "--no-warn-script-location",
+                f"onnxruntime-gpu[cuda,cudnn]=={final_gpu_version}",
+            ],
+            stream=stream_pip,
+        )
 
     if not actions:
         actions.append("No repair needed")
@@ -288,7 +348,7 @@ def main() -> int:
     args = parser.parse_args()
 
     state = get_install_state()
-    result = repair_windows_onnxruntime() if args.auto else state
+    result = repair_windows_onnxruntime(stream_pip=not args.json) if args.auto else state
 
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))

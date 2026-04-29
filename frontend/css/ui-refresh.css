@@ -3888,6 +3888,12 @@ html.lang-zh #view-censor .queue-action-btn span {
     max-width: 52ch;
 }
 
+#scan-modal .checkbox-text,
+#scan-modal .helper-text {
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
 #tag-modal .tagger-model-panel {
     margin: 12px 0 16px;
 }
@@ -3967,12 +3973,12 @@ html.lang-zh #view-censor .queue-action-btn span {
 
 .selection-panel-actions {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
 }
 
 .selection-panel-actions .btn {
     justify-content: flex-start;
-    min-height: 48px;
+    min-height: 44px;
     padding: 10px 12px;
     white-space: normal;
     text-align: left;
@@ -3983,6 +3989,98 @@ html.lang-zh #view-censor .queue-action-btn span {
     white-space: normal;
     line-height: 1.35;
     text-align: left;
+}
+
+.selection-panel-pick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.selection-panel-pick-actions .btn {
+    justify-content: center;
+    min-height: 38px;
+    padding: 8px 10px;
+}
+
+.selection-panel-pick-actions .btn span:last-child {
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selection-panel-primary-actions .btn {
+    min-height: 42px;
+}
+
+.selection-panel-scope {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selection-panel-more {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 2px;
+    padding-top: 4px;
+}
+
+.selection-panel-more-summary {
+    align-items: center;
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.82);
+    cursor: pointer;
+    display: grid;
+    gap: 2px 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    line-height: 1.25;
+    list-style: none;
+    padding: 9px 10px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.selection-panel-more-summary:hover,
+.selection-panel-more[open] .selection-panel-more-summary {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+}
+
+.selection-panel-more-summary::-webkit-details-marker {
+    display: none;
+}
+
+.selection-panel-more-summary::marker {
+    content: "";
+}
+
+.selection-panel-more-summary::after {
+    color: rgba(255, 255, 255, 0.56);
+    content: "v";
+    font-size: 14px;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    transition: transform 0.2s ease;
+}
+
+.selection-panel-more[open] .selection-panel-more-summary::after {
+    transform: rotate(180deg);
+}
+
+.selection-panel-more-hint {
+    color: rgba(255, 255, 255, 0.52);
+    display: block;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.selection-panel-secondary-actions {
+    margin-top: 8px;
+}
+
+.selection-panel-secondary-actions .btn {
+    min-height: 40px;
 }
 
 #view-censor .censor-sidebar-v2 {

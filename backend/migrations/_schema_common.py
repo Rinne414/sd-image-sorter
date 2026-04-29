@@ -180,6 +180,7 @@ FULL_SCHEMA_STATEMENTS: tuple[str, ...] = (
 INDEX_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_images_generator ON images(generator)",
     "CREATE INDEX IF NOT EXISTS idx_images_path ON images(path)",
+    "CREATE INDEX IF NOT EXISTS idx_images_path_lower ON images(LOWER(path))",
     "CREATE INDEX IF NOT EXISTS idx_tag_categories_tag ON tag_categories(tag)",
     "CREATE INDEX IF NOT EXISTS idx_tag_categories_category ON tag_categories(category)",
     "CREATE INDEX IF NOT EXISTS idx_tag_set_members_set ON tag_set_members(set_id)",

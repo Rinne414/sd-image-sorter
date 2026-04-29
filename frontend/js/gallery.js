@@ -1451,6 +1451,38 @@ const Gallery = {
         if (updateSelectionUI) updateSelectionUI();
     },
 
+    _setContextImageSelection(imageId, shouldSelect) {
+        const app = window.App || {};
+        const normalizedImageId = Number.isFinite(Number(imageId)) ? Number(imageId) : imageId;
+
+        if (typeof app.setSelectionMode === 'function' && !app.AppState?.selectionMode) {
+            app.setSelectionMode(true, { clearSelectionWhenDisabled: false });
+        }
+
+        if (typeof app.updateSelectionState !== 'function') {
+            this.toggleSelection(normalizedImageId);
+            return;
+        }
+
+        app.updateSelectionState((selection) => {
+            const nextIds = selectionBaseForScope(selection, 'visible');
+            if (shouldSelect) {
+                nextIds.add(normalizedImageId);
+            } else {
+                nextIds.delete(normalizedImageId);
+            }
+            selection.selectionMode = true;
+            selection.selectedIds = nextIds;
+            selection.scope = 'visible';
+            selection.filterKey = null;
+            selection.selectionToken = null;
+        });
+
+        app.resetSelectionDataCache?.();
+        this.syncSelectionState();
+        app.emitSelectionStateChanged?.();
+    },
+
     /**
      * Extract parsed metadata from image, with JS fallback for old images.
      * Returns { generation_params, is_img2img, img2img_info, character_prompts, prompt_nodes }
@@ -3097,52 +3129,90 @@ ${String(value)}`)
         // Remove existing menu
         document.querySelector('.gallery-context-menu')?.remove();
         const t = (key, fallback, params) => window.I18n?.t?.(key, params) || fallback;
+        const app = window.App || {};
+        const imageId = Number(image?.id);
+        const selectedIds = app.AppState?.selectedIds instanceof Set ? app.AppState.selectedIds : new Set();
+        const isSelected = selectedIds.has(imageId) || selectedIds.has(String(image?.id));
+        const checkpointFilterValue = app.normalizeCheckpointFilterValue?.(
+            image.checkpoint_normalized || image.checkpoint
+        ) || '';
 
         const menu = document.createElement('div');
         menu.className = 'gallery-context-menu';
         menu.style.left = `${e.clientX}px`;
         menu.style.top = `${e.clientY}px`;
+        menu.setAttribute('role', 'menu');
 
         const items = [
-            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: '\u{1F4C2}', action: () => {
-                window.App?.API?.openFolder?.(image.id);
+            { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
+            { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => this._setContextImageSelection(image.id, !isSelected) },
+            { type: 'separator' },
+            { label: t('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.([image.id], 'move', { source: 'context' }) },
+            { label: t('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.([image.id], 'copy', { source: 'context' }) },
+            { type: 'separator' },
+            { label: t('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
+                if (typeof app.addToCensorQueue === 'function') {
+                    app.addToCensorQueue([image.id]);
+                } else {
+                    app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
+                }
             }},
-            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: '\u{1F4CB}', action: () => {
-                navigator.clipboard.writeText(image.path || '');
-                window.App?.showToast?.(t('gallery.pathCopied', 'Path copied'), 'success');
-            }},
-            { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
-                const checkpointFilterValue = window.App?.normalizeCheckpointFilterValue?.(
-                    image.checkpoint_normalized || image.checkpoint
-                ) || '';
-                if (checkpointFilterValue && window.App?.AppState) {
-                    window.App.updateFilters?.((filters) => {
+            { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
+            { label: t('gallery.contextReadMetadata', 'Read Metadata'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
+                if (app.AppState) {
+                    app.updateFilters?.((filters) => {
                         if (!filters.checkpoints.includes(checkpointFilterValue)) {
                             filters.checkpoints = [...filters.checkpoints, checkpointFilterValue];
                         }
                     });
-                    window.App.updateFilterSummary?.();
-                    window.App.loadImages?.();
+                    app.updateFilterSummary?.();
+                    app.loadImages?.();
                 }
+            }} : null,
+            { type: 'separator' },
+            { label: t('gallery.contextOpenFolder', 'Open in Folder'), icon: '\u{1F4C2}', action: () => {
+                app.API?.openFolder?.(image.id);
             }},
-            { label: t('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
-                if (typeof window.App?.addToCensorQueue === 'function') {
-                    window.App.addToCensorQueue([image.id]);
+            { label: t('gallery.contextCopyPath', 'Copy Path'), icon: '\u{1F4CB}', action: () => {
+                if (typeof app.copyTextToClipboard === 'function') {
+                    app.copyTextToClipboard(image.path || '', t('gallery.pathCopied', 'Path copied'));
                 } else {
-                    window.App?.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
+                    navigator.clipboard.writeText(image.path || '');
+                    app.showToast?.(t('gallery.pathCopied', 'Path copied'), 'success');
                 }
             }},
-        ];
+        ].filter(Boolean);
 
-        menu.innerHTML = items.map(i =>
-            `<div class="context-menu-item">${i.icon} ${i.label}</div>`
-        ).join('');
+        items.forEach((item) => {
+            if (item.type === 'separator') {
+                const separator = document.createElement('div');
+                separator.className = 'context-menu-separator';
+                separator.setAttribute('role', 'separator');
+                menu.appendChild(separator);
+                return;
+            }
 
-        items.forEach((item, idx) => {
-            menu.children[idx].addEventListener('click', () => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'context-menu-item';
+            button.setAttribute('role', 'menuitem');
+
+            const icon = document.createElement('span');
+            icon.className = 'context-menu-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = item.icon;
+
+            const label = document.createElement('span');
+            label.className = 'context-menu-label';
+            label.textContent = item.label;
+
+            button.append(icon, label);
+            button.addEventListener('click', () => {
                 item.action();
                 menu.remove();
             });
+            menu.appendChild(button);
         });
 
         document.body.appendChild(menu);
@@ -3156,9 +3226,19 @@ ${String(value)}`)
             menu.style.top = `${window.innerHeight - menuRect.height - 8}px`;
         }
 
-        // Close on click outside
-        const closeMenu = () => { menu.remove(); document.removeEventListener('click', closeMenu); };
-        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+        // Close on click outside or Escape.
+        const closeMenu = () => {
+            menu.remove();
+            document.removeEventListener('click', closeMenu);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+        const closeOnEscape = (event) => {
+            if (event.key === 'Escape') closeMenu();
+        };
+        setTimeout(() => {
+            document.addEventListener('click', closeMenu);
+            document.addEventListener('keydown', closeOnEscape);
+        }, 0);
     },
 
     // Cleanup when switching views

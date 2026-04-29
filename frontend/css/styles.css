@@ -7220,22 +7220,49 @@ input[type="radio"],
 .gallery-context-menu {
     position: fixed;
     z-index: 10000;
-    background: rgba(30, 30, 40, 0.95);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 4px 0;
-    min-width: 180px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    background: rgba(24, 27, 36, 0.96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 6px;
+    min-width: 220px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
 }
 .context-menu-item {
-    padding: 8px 14px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: background 0.15s;
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 9px;
     color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    font-size: 0.86rem;
+    gap: 9px;
+    min-height: 34px;
+    padding: 8px 10px;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+    width: 100%;
 }
-.context-menu-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+.context-menu-item:hover,
+.context-menu-item:focus-visible {
+    background: rgba(255, 255, 255, 0.09);
+    outline: none;
+}
+.context-menu-icon {
+    flex: 0 0 20px;
+    text-align: center;
+}
+.context-menu-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.context-menu-separator {
+    background: rgba(255, 255, 255, 0.1);
+    height: 1px;
+    margin: 5px 6px;
 }

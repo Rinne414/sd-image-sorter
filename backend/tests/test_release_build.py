@@ -341,6 +341,21 @@ def _assert_platform_specific_wheels_guarded(requirements_path: Path):
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
     assert any(line.startswith("triton-windows==3.6.0.post") for line in requirement_lines["triton-windows"])
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])
+    assert any(line.startswith("websocket-client==") for line in requirement_lines["websocket-client"])
+    assert any(line.startswith("sniffio==") for line in requirement_lines["sniffio"])
+    assert any(line.startswith("sortedcontainers==") for line in requirement_lines["sortedcontainers"])
+    assert any(
+        line.startswith("cffi==")
+        and '; sys_platform == "win32"' in line
+        and 'platform_python_implementation != "PyPy"' in line
+        for line in requirement_lines["cffi"]
+    )
+    assert any(
+        line.startswith("pycparser==")
+        and '; sys_platform == "win32"' in line
+        and 'platform_python_implementation != "PyPy"' in line
+        for line in requirement_lines["pycparser"]
+    )
 
 
 def test_runtime_requirements_keep_platform_specific_wheels_guarded():
