@@ -125,6 +125,29 @@ async function countFiles(dir: string, extension?: string) {
   }).length
 }
 
+function ensureMoveSortFixtureImages() {
+  const script = `
+from pathlib import Path
+from PIL import Image
+
+repo_root = Path(${JSON.stringify(repoRoot)})
+manual_root = repo_root / ".tmp" / "manual-test"
+fixtures = {
+    manual_root / "autosep-inbox" / "manual-autosep-1.png": (255, 90, 90),
+    manual_root / "autosep-inbox" / "manual-autosep-2.png": (90, 180, 255),
+    manual_root / "manual-sort-inbox" / "manual-sort-1.png": (255, 180, 90),
+    manual_root / "manual-sort-inbox" / "manual-sort-2.png": (180, 255, 90),
+    manual_root / "manual-sort-inbox" / "manual-sort-3.png": (180, 90, 255),
+}
+for image_path, color in fixtures.items():
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    if not image_path.exists():
+        Image.new("RGB", (96, 96), color=color).save(image_path)
+print("ok")
+`
+  runBackendScript(script)
+}
+
 async function openView(page, view: string) {
   const desktopTab = page.locator(`.nav-tabs [data-view="${view}"]`).first()
   if (await desktopTab.count()) {
@@ -195,6 +218,7 @@ async function resetAutoSeparateFixture() {
   await ensureDir(autoSepOut)
   await moveFilesBack(autoSepOut, autoSepInbox)
   await clearDir(autoSepOut)
+  ensureMoveSortFixtureImages()
 }
 
 async function resetManualSortFixture() {
@@ -204,6 +228,7 @@ async function resetManualSortFixture() {
     await moveFilesBack(dir, manualSortInbox)
     await clearDir(dir)
   }
+  ensureMoveSortFixtureImages()
 }
 
 async function resetSaveOutputs() {

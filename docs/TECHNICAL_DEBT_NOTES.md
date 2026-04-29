@@ -615,4 +615,4 @@ Quality bar:
 - CI release guard tests now avoid ignored local `AGENTS.md` and the indexed file mutation contract initializes an isolated test DB, removing two clean-checkout-only GitHub Actions failures.
 - Service-layer `HTTPException` usage remains in older services; this pass intentionally avoided the dangerous broad exception migration.
 - CI Playwright E2E no longer depends on ignored `tests/e2e/storage/onboarding-complete.json` or ignored `.tmp` dataset builders; fixtures are inline or generated from tracked scripts before browser tests run.
-- CI E2E now avoids private local media assumptions for artist tests and scan progress now emits a terminal `total_final=true` metadata event after metadata backfill drains.
+- CI E2E now avoids private local media assumptions for artist and manual move/sort tests, and scan progress now emits a terminal `total_final=true` metadata event after metadata backfill drains.
