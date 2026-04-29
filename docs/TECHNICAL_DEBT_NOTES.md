@@ -612,4 +612,6 @@ Quality bar:
 - macOS browser E2E is still missing; the new macOS job is only dependency import plus release guard coverage.
 - `ui-refresh.js` still uses a broad MutationObserver to replay static translations. Dynamic UI code must keep using explicit i18n ownership until a narrower refresh contract/helper exists.
 - File move/copy operations still are not truly atomic across process crashes between filesystem and SQLite steps; the current mitigation handles normal DB exceptions with compensation, but a durable recovery journal is still deferred.
+- CI release guard tests now avoid ignored local `AGENTS.md` and the indexed file mutation contract initializes an isolated test DB, removing two clean-checkout-only GitHub Actions failures.
 - Service-layer `HTTPException` usage remains in older services; this pass intentionally avoided the dangerous broad exception migration.
+- CI Playwright E2E no longer depends on ignored `tests/e2e/storage/onboarding-complete.json` or ignored `.tmp` dataset builders; fixtures are inline or generated from tracked scripts before browser tests run.

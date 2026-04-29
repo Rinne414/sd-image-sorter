@@ -11,14 +11,26 @@ endpoints for optional model features.
 After building release assets:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff
+VERSION=3.1.0-techdebt.$(git rev-parse --short HEAD)
+python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend
 ```
+
+This runs package checks, backend/API smoke, and a real Playwright browser that clicks through the UI.
 
 Use the current version string from the package filename. If you only want to
 validate the zip/tar assets:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --skip-server
+VERSION=3.1.0-techdebt.$(git rev-parse --short HEAD)
+python3 scripts/lazy_release_qa.py --version "$VERSION" --skip-server
+```
+
+## Frontend Human Clicks
+
+Add `--frontend` when you want the lazy gate to act like a real user. It starts a real browser with Playwright against the isolated QA backend, then clicks through Gallery, filters, detail modal, selection/export, Censor, Reader, Obfuscation, Auto-Separate, Manual Sort controls, Queue Manager, Similarity, Prompt Lab, Artist, Model Manager, language toggle, and mobile navigation.
+
+```bash
+python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend
 ```
 
 ## Large Smoke
@@ -26,13 +38,13 @@ python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --skip-serve
 For a larger synthetic gallery/selection scan:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --image-count 10000 --scan-timeout 900
+python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend --image-count 10000 --scan-timeout 900
 ```
 
 For a heavier stress run:
 
 ```bash
-python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --image-count 50000 --scan-timeout 3600
+python3 scripts/lazy_release_qa.py --version "$VERSION" --frontend --image-count 50000 --scan-timeout 3600
 ```
 
 ## What It Covers
@@ -44,6 +56,7 @@ python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --image-coun
 - Isolated temporary app data and SQLite DB
 - Synthetic images with WebUI, Forge, NovelAI, ComfyUI, plain JPG, corrupt file, zero-byte file, unicode paths, nested folders, and long prompts
 - Backend startup on a random local port
+- Optional real browser UI click-through with `--frontend`
 - `/`, `/docs`, `/api/stats`
 - Model/status endpoints for Models, Censor, Aesthetic, Artist, Similarity, Prompt Lab, and Updates
 - Path validation and folder browsing
@@ -57,8 +70,8 @@ python3 scripts/lazy_release_qa.py --version 3.1.0-techdebt.48793ff --image-coun
 
 ## What It Does Not Replace
 
-This script does not fully validate human UX quality, visual regressions, real AI
-model inference quality, or destructive production-library workflows. It is a
+This script does not fully replace exploratory UX judgement, visual regression
+review, real AI model inference quality checks, or destructive production-library workflows. It is a
 fast release gate, not an excuse to never do exploratory QA before a major public
 release.
 

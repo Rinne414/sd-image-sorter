@@ -52,6 +52,20 @@ function toWindowsPathForWsl(candidate: string): string {
 
 const backendMainForPython = isWindowsExecutable(backendPython) ? toWindowsPathForWsl(backendMain) : backendMain
 const webServerCommand = `"${backendPython}" "${backendMainForPython}" --port ${basePort}`
+const onboardingStorageState = {
+  cookies: [],
+  origins: [
+    {
+      origin: new URL(baseURL).origin,
+      localStorage: [
+        {
+          name: 'sd-image-sorter-onboarding-completed',
+          value: JSON.stringify({ version: 1, completed: true, completedAt: '2026-04-08T00:00:00.000Z' }),
+        },
+      ],
+    },
+  ],
+}
 
 /**
  * E2E Test Configuration for SD Image Sorter
@@ -71,7 +85,7 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    storageState: './storage/onboarding-complete.json',
+    storageState: onboardingStorageState,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

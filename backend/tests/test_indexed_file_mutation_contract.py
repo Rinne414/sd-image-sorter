@@ -28,7 +28,7 @@ def test_preflight_output_write_rejects_same_source_without_confirmation(tmp_pat
         preflight_output_write(str(source), source_path=str(source), allow_overwrite=False)
 
 
-def test_save_and_reconcile_checked_reports_target_existence(tmp_path):
+def test_save_and_reconcile_checked_reports_target_existence(tmp_path, test_db):
     target = tmp_path / "existing.png"
     target.write_bytes(b"old")
 

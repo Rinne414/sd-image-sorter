@@ -378,13 +378,11 @@ def test_launchers_reject_python_older_than_runtime_lock():
 def test_current_install_docs_match_python_312_floor():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     release_packs = (ROOT / "docs" / "RELEASE_PACKS.md").read_text(encoding="utf-8")
-    agent_notes = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    current_docs = "\n".join([readme, release_packs, agent_notes])
+    current_docs = "\n".join([readme, release_packs])
 
     assert "python-3.12%2B" in readme
     assert "Windows 便携版自带 Python 3.12" in readme
     assert "Python 3.12+" in release_packs
-    assert "Python 3.12+" in agent_notes
     assert "python-3.9%2B" not in current_docs
     assert "Python 3.9+" not in current_docs
     assert "Python 3.11" not in current_docs
@@ -414,6 +412,19 @@ def test_playwright_specs_are_not_an_empty_ci_shell():
 
     assert len(specs) >= 1
     assert any(path.name == "smoke.spec.ts" for path in specs)
+
+
+def test_playwright_ci_inputs_are_tracked_or_generated():
+    run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
+    config = (ROOT / "tests" / "e2e" / "playwright.config.ts").read_text(encoding="utf-8")
+    reader_live = (ROOT / "tests" / "e2e" / "specs" / "reader-live.spec.ts").read_text(encoding="utf-8")
+
+    assert (ROOT / "scripts" / "build_review_dataset.py").exists()
+    assert "REVIEW_DATASET_BUILDER" in run_ci
+    assert "build_review_dataset.py" in run_ci
+    assert "storage/onboarding-complete.json" not in config
+    assert "onboardingStorageState" in config
+    assert "scripts/build_review_dataset.py" in reader_live
 
 
 def test_frontend_i18n_and_censor_css_keep_safety_contracts():

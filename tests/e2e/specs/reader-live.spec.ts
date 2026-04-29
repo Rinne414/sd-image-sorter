@@ -5,7 +5,7 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 const SAMPLE_IMAGE = path.resolve(__dirname, '../../../backend/favorites/ComfyUI_00208_.png')
 
 // Deterministic multi-generator review dataset built by
-// `python backend/.tmp/build_review_dataset.py`. Each fixture targets a specific
+// `python scripts/build_review_dataset.py`. Each fixture targets a specific
 // parser path so the live Reader exercise does not collapse into a single
 // ComfyUI happy-path check.
 const DATASET_DIR = path.resolve(__dirname, '../../../backend/.tmp/release_review_dataset')
@@ -260,7 +260,7 @@ test.describe('Image Reader multi-generator live coverage', () => {
       // eslint-disable-next-line no-console
       console.warn(
         `[reader-live] Release review dataset not found at ${DATASET_DIR}. ` +
-          'Run `python backend/.tmp/build_review_dataset.py` to generate the 8-image fixture set.',
+          'Run `python scripts/build_review_dataset.py` to generate the 8-image fixture set.',
       )
     }
   })

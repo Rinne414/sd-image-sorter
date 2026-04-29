@@ -32,6 +32,7 @@ E2E_PLAYWRIGHT = _first_existing(
 )
 PLAYWRIGHT_CLI = ROOT / "tests" / "e2e" / "node_modules" / "playwright" / "cli.js"
 PLAYWRIGHT_WRAPPER = ROOT / "tests" / "e2e" / "scripts" / "run-playwright.mjs"
+REVIEW_DATASET_BUILDER = ROOT / "scripts" / "build_review_dataset.py"
 FRONTEND_JS_FILES = sorted((ROOT / "frontend" / "js").glob("**/*.js"))
 
 
@@ -138,6 +139,14 @@ def _apply_stable_temp_env(env: dict[str, str]) -> None:
     env["TMP"] = stable_tmp
 
 
+def _prepare_playwright_fixtures(env: dict[str, str]) -> bool:
+    if not REVIEW_DATASET_BUILDER.exists():
+        print(f"[CI] Missing Playwright fixture builder: {REVIEW_DATASET_BUILDER}")
+        return False
+    result = subprocess.run([str(BACKEND_PYTHON), "scripts/build_review_dataset.py"], cwd=ROOT, env=env)
+    return result.returncode == 0
+
+
 def main() -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
@@ -210,6 +219,10 @@ def main() -> int:
         env = os.environ.copy()
         _apply_stable_temp_env(env)
         if name == "playwright e2e":
+            if not _prepare_playwright_fixtures(env):
+                print("[CI] FAILED: playwright fixture prep")
+                all_ok = False
+                continue
             env_values = {
                 "PW_REUSE_SERVER": "1",
                 "PW_WEB_SERVER_PORT": _find_available_port(19087, 19187, 19287),
