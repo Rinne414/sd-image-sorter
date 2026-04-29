@@ -30,7 +30,7 @@ import shutil
 import tempfile
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
@@ -54,6 +54,12 @@ _model_lock = threading.Lock()
 ARTIST_THRESHOLD_DEFAULT = 0.03
 _model_source = None
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+ARTIST_LSNET_RUNTIME_REVISION = "416d945e65b81ced93f1e762349d790ca92106b1"
+ARTIST_LSNET_RUNTIME_ZIP_URL = (
+    f"https://github.com/spawner1145/comfyui-lsnet/archive/{ARTIST_LSNET_RUNTIME_REVISION}.zip"
+)
+_MAX_ARTIST_RUNTIME_ZIP_ENTRIES = 1024
+_MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 
 def _is_kaloscope_model_id(model_id: Optional[str]) -> bool:
@@ -146,18 +152,49 @@ def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
         tmp_dir_path = Path(tmp_dir)
         zip_path = tmp_dir_path / "repo.zip"
         urllib.request.urlretrieve(zip_url, zip_path)
+        extract_dir = tmp_dir_path / "extract"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        extract_root = extract_dir.resolve()
+        total_uncompressed_bytes = 0
         with zipfile.ZipFile(zip_path, "r") as archive:
-            extract_dir = tmp_dir_path / "extract"
-            for member in archive.namelist():
-                member_path = extract_dir / member
-                if not str(member_path.resolve()).startswith(str(extract_dir.resolve())):
-                    raise ValueError(f"Zip contains path traversal: {member}")
-            archive.extractall(extract_dir)
+            members = archive.infolist()
+            if len(members) > _MAX_ARTIST_RUNTIME_ZIP_ENTRIES:
+                raise ValueError("Zip contains too many entries to extract safely")
+            for member in members:
+                normalized_name = str(member.filename or "").replace("\\", "/").strip()
+                relative_name = PurePosixPath(normalized_name)
+                if (
+                    not normalized_name
+                    or relative_name.is_absolute()
+                    or normalized_name[:2].endswith(":")
+                    or ".." in relative_name.parts
+                ):
+                    raise ValueError(f"Zip contains path traversal: {member.filename}")
+                member_path = (extract_root / relative_name).resolve()
+                try:
+                    member_path.relative_to(extract_root)
+                except ValueError as exc:
+                    raise ValueError(f"Zip contains path traversal: {member.filename}") from exc
+                if not member.is_dir():
+                    total_uncompressed_bytes += member.file_size
+                    if total_uncompressed_bytes > _MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES:
+                        raise ValueError("Zip uncompressed size exceeds the safe extraction limit")
+            for member in members:
+                normalized_name = str(member.filename or "").replace("\\", "/").strip()
+                member_path = (extract_root / PurePosixPath(normalized_name)).resolve()
+                if member.is_dir():
+                    member_path.mkdir(parents=True, exist_ok=True)
+                    continue
+                member_path.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member, "r") as src, member_path.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
-        extracted_root = next((tmp_dir_path / "extract").iterdir())
+        extracted_roots = [path for path in extract_dir.iterdir() if path.is_dir()]
+        if len(extracted_roots) != 1:
+            raise ValueError("Zip must contain exactly one runtime root directory")
         if target_dir.exists():
             shutil.rmtree(target_dir)
-        shutil.move(str(extracted_root), str(target_dir))
+        shutil.move(str(extracted_roots[0]), str(target_dir))
     return target_dir
 
 
@@ -168,8 +205,7 @@ def _ensure_comfyui_lsnet_runtime() -> str:
         return str(target_dir)
 
     logger.info("Downloading comfyui-lsnet runtime into %s", target_dir)
-    zip_url = "https://github.com/spawner1145/comfyui-lsnet/archive/refs/heads/main.zip"
-    _download_and_extract_github_zip(zip_url, target_dir)
+    _download_and_extract_github_zip(ARTIST_LSNET_RUNTIME_ZIP_URL, target_dir)
     return str(target_dir)
 
 

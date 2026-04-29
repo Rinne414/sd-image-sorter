@@ -55,10 +55,8 @@ for %%P in (
     "%USERPROFILE%\Anaconda3\python.exe"
     "%USERPROFILE%\miniconda3\python.exe"
     "C:\ProgramData\Anaconda3\python.exe"
+    "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
     "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python39\python.exe"
 ) do (
     if exist %%P (
         set "PYTHON_CMD=%%~P"
@@ -77,7 +75,7 @@ for %%C in (python python3 py) do (
 
 echo.
 echo [ERROR] Python is not installed or not in PATH.
-echo         Please install Python 3.9+ from https://python.org
+echo         Please install Python 3.12+ from https://python.org
 echo.
 pause
 exit /b 1
@@ -85,7 +83,7 @@ exit /b 1
 :found_python
 echo [OK] Found Python: !PYTHON_CMD!
 
-REM -- Check Python version (>= 3.9)
+REM -- Check Python version (>= 3.12)
 set "PY_VER="
 set "PY_MAJOR=0"
 set "PY_MINOR=0"
@@ -104,12 +102,12 @@ for /f "tokens=1,2 delims=." %%a in ("!PY_VER!") do (
 )
 
 if !PY_MAJOR! LSS 3 (
-    echo [ERROR] Python !PY_VER! is too old. Python 3.9+ required.
+    echo [ERROR] Python !PY_VER! is too old. Python 3.12+ required.
     pause
     exit /b 1
 )
-if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 9 (
-    echo [ERROR] Python !PY_VER! is too old. Python 3.9+ required.
+if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 12 (
+    echo [ERROR] Python !PY_VER! is too old. Python 3.12+ required.
     pause
     exit /b 1
 )

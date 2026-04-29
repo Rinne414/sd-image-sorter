@@ -1334,6 +1334,9 @@ function hideModal(modalId) {
         }
         // Remove visible immediately so Playwright/tests can detect closure
         modal.classList.remove('visible');
+        if (modalId === 'image-modal') {
+            window.Gallery?._cleanupZoomHandlers?.();
+        }
 
         // Clean up animation styles after transition
         if (content) {
@@ -4497,8 +4500,9 @@ async function pollScanProgress(retryCount = 0) {
         }
 
         if (progress.status === 'done') {
+            const libraryReadyWasHandled = _scanLibraryReadyHandled;
             const errorCount = Number(progress.errors || progress.result?.errors || 0);
-            const completionMessage = _scanLibraryReadyHandled
+            const completionMessage = libraryReadyWasHandled
                 ? appT('scan.completedBackgroundToast', 'The remaining image details are ready now.')
                 : (progress.message || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
             showToast(completionMessage, errorCount > 0 ? 'warning' : 'success');
@@ -4508,10 +4512,13 @@ async function pollScanProgress(retryCount = 0) {
             setScanCancelButtonState('idle');
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
+            const refreshGalleryOnDone = !libraryReadyWasHandled
+                || AppState.currentView !== 'gallery'
+                || AppState.images.length === 0;
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
-            _refreshScanDrivenViews(true, { refreshGallery: true });
+            _refreshScanDrivenViews(true, { refreshGallery: refreshGalleryOnDone });
             // Auto-tag: if checkbox was on, trigger tagging with current settings
             const autoTagCheckbox = document.getElementById('scan-auto-tag');
             if (autoTagCheckbox && autoTagCheckbox.checked) {

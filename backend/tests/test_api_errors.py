@@ -103,8 +103,19 @@ class TestHTTPErrorCodes:
         """Batch already running should return 409."""
         from routers import artists as artists_router
 
-        # Set batch progress to running
-        artists_router._batch_progress["running"] = True
+        service = artists_router.get_artist_service()
+        service.set_batch_progress_state({
+            "running": True,
+            "total": 3,
+            "processed": 0,
+            "errors": 0,
+            "results": [],
+            "step": "identifying",
+            "message": "running",
+            "current_item": None,
+            "started_at": 0.0,
+            "updated_at": 0.0,
+        })
 
         try:
             response = test_client.post(
@@ -114,7 +125,18 @@ class TestHTTPErrorCodes:
             # Should return 409 Conflict
             assert response.status_code == 409
         finally:
-            artists_router._batch_progress["running"] = False
+            service.set_batch_progress_state({
+                "running": False,
+                "total": 0,
+                "processed": 0,
+                "errors": 0,
+                "results": [],
+                "step": "idle",
+                "message": "",
+                "current_item": None,
+                "started_at": None,
+                "updated_at": None,
+            })
 
 
 class TestErrorResponseFormat:

@@ -153,7 +153,7 @@
     color: white;
 }
 .reader-generator-badge.gen-comfyui { background: #2d5fa0; }
-.reader-generator-badge.gen-nai { background: #a855f7; }
+.reader-generator-badge.gen-nai { background: var(--accent-primary); }
 .reader-generator-badge.gen-webui { background: #059669; }
 .reader-generator-badge.gen-forge { background: #d97706; }
 
@@ -343,7 +343,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(168, 85, 247, 0.12);
+    background: rgba(var(--accent-primary-rgb), 0.12);
     color: #c084fc;
     padding: 4px 8px;
     border-radius: 999px;

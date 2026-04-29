@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from config import get_temp_dir
 from services.image_service import ImageService
+from services.service_provider import ServiceProvider
 from utils.path_validation import PathValidationError
 
 
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["images"])
 
 # Service instance - will be set via dependency injection
-_image_service: Optional[ImageService] = None
+_image_service_provider = ServiceProvider(ImageService)
 READER_UPLOAD_TEMP_DIR = Path(get_temp_dir()) / "reader_uploads"
 READER_UPLOAD_TTL_SECONDS = 24 * 60 * 60
 PARSE_IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024
@@ -155,18 +156,12 @@ class SaveEditedMetadataResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
-def get_image_service() -> ImageService:
-    """Dependency injection for ImageService."""
-    global _image_service
-    if _image_service is None:
-        _image_service = ImageService()
-    return _image_service
+class OpenFolderRequest(BaseModel):
+    image_id: Optional[int] = None
 
 
-def set_image_service(service: ImageService) -> None:
-    """Set the image service instance (for testing or custom configuration)."""
-    global _image_service
-    _image_service = service
+get_image_service = _image_service_provider.get
+set_image_service = _image_service_provider.set
 
 
 @router.get(
@@ -744,16 +739,15 @@ Supports Windows (explorer), Linux (xdg-open), and macOS (open -R).
     }
 )
 async def open_folder(
-    body: dict,
+    body: OpenFolderRequest,
     service: ImageService = Depends(get_image_service),
 ):
     """Open the containing folder of an image in the OS file explorer."""
-    image_id = body.get("image_id")
-    if image_id is None:
+    if body.image_id is None:
         raise HTTPException(status_code=400, detail="image_id is required")
 
     return service.open_image_folder(
-        image_id,
+        body.image_id,
         platform=sys.platform,
         popen=subprocess.Popen,
     )

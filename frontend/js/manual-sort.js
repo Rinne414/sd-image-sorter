@@ -595,7 +595,7 @@ async function initManualSort() {
     // Resume session button
     const resumeBtn = $('#btn-resume-sorting');
     if (resumeBtn) {
-        resumeBtn.addEventListener('click', resumeSavedSession);
+        resumeBtn.addEventListener('click', () => resumeSavedSession());
     }
 
     // Discard saved session button
@@ -828,6 +828,10 @@ async function startSorting() {
         let previewCursor = null;
 
         while (previewImages.length < result.total_images && previewImages.length < MAX_MINIMAP_IMAGES) {
+            const remainingPreviewSlots = Math.min(
+                result.total_images - previewImages.length,
+                MAX_MINIMAP_IMAGES - previewImages.length
+            );
             const imagesResult = await API.getImages({
                 generators: generators,
                 tags: tags,
@@ -844,7 +848,7 @@ async function startSorting() {
                 aspectRatio: f.aspectRatio,
                 minAesthetic: f.minAesthetic,
                 maxAesthetic: f.maxAesthetic,
-                limit: 1000,
+                limit: remainingPreviewSlots,
                 cursor: previewCursor
             });
 
@@ -852,7 +856,7 @@ async function startSorting() {
                 break;
             }
 
-            previewImages.push(...imagesResult.images);
+            previewImages.push(...imagesResult.images.slice(0, remainingPreviewSlots));
 
             if (!imagesResult.has_more || !imagesResult.next_cursor) {
                 break;

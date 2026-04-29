@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import threading
 from typing import Any, Callable, Dict, Optional
 
 import database as db
@@ -21,6 +22,53 @@ ProgressCallback = Callable[[Dict[str, Any]], None]
 
 class AestheticService:
     """Service wrapper for aesthetic-scoring routes."""
+
+    def __init__(self) -> None:
+        self._scoring_lock = threading.Lock()
+        self._scoring_state: Dict[str, Any] = {
+            "running": False,
+            "total": 0,
+            "completed": 0,
+            "current": "",
+            "errors": 0,
+        }
+
+    def get_scoring_progress(self) -> Dict[str, Any]:
+        with self._scoring_lock:
+            return dict(self._scoring_state)
+
+    def is_scoring_running(self) -> bool:
+        with self._scoring_lock:
+            return bool(self._scoring_state["running"])
+
+    def start_scoring_progress(self, *, total: int) -> None:
+        with self._scoring_lock:
+            self._scoring_state = {
+                "running": True,
+                "total": int(total),
+                "completed": 0,
+                "current": "",
+                "errors": 0,
+            }
+
+    def apply_scoring_progress_update(self, update: Dict[str, Any]) -> None:
+        with self._scoring_lock:
+            self._scoring_state.update(update)
+
+    def finish_scoring_progress(self) -> None:
+        with self._scoring_lock:
+            self._scoring_state["running"] = False
+            self._scoring_state["current"] = ""
+
+    def set_scoring_progress_state(self, state: Dict[str, Any]) -> None:
+        with self._scoring_lock:
+            self._scoring_state = {
+                "running": bool(state.get("running", False)),
+                "total": int(state.get("total", 0) or 0),
+                "completed": int(state.get("completed", 0) or 0),
+                "current": str(state.get("current", "") or ""),
+                "errors": int(state.get("errors", 0) or 0),
+            }
 
     def _resolve_image_path(self, *, image_id: int, indexed_path: str) -> Optional[str]:
         resolved_path = resolve_existing_indexed_image_path(indexed_path, backend_file=__file__)

@@ -29,7 +29,7 @@ That package is meant to cover the common workflows:
 | Package | Python Included | Models Included | Best For |
 |:--------|:---------------:|:---------------:|:---------|
 | `sd-image-sorter-vX.X.X-windows-portable.zip` | Yes | None (auto-download) | **Most Windows users** — no system Python install |
-| `sd-image-sorter-vX.X.X-linux-mac.tar.gz` | No | None (auto-download) | Advanced Linux/Mac users with Python 3.9+ |
+| `sd-image-sorter-vX.X.X-linux-mac.tar.gz` | No | None (auto-download) | Advanced Linux/Mac users with Python 3.12+ |
 | `sd-image-sorter-vX.X.X-app-patch.zip` | No | None | In-app updater payload; not the recommended manual first install |
 | `sd-image-sorter-vX.X.X-release-manifest.json` | No | No | SHA256/size manifest used by the updater and release checks |
 

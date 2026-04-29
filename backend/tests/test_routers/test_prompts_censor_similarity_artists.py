@@ -1347,14 +1347,14 @@ class TestSimilarityRouterValidation:
         assert captured["path"] == str(resolved_path)
 
     def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
-        from routers import models as models_router
+        from services import model_service
 
-        def raise_auth_wall():
-            raise models_router.ExternalAuthRequiredError(
-                models_router._build_civitai_auth_error(Path("/tmp/privacy-yolo"))
+        def raise_auth_wall(self):
+            raise model_service.ExternalAuthRequiredError(
+                model_service.build_civitai_auth_error(Path("/tmp/privacy-yolo"))
             )
 
-        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_auth_wall)
+        monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_auth_wall)
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
 
@@ -1364,20 +1364,20 @@ class TestSimilarityRouterValidation:
         assert "Civitai" in data["message"]
         assert isinstance(data["manual_steps"], list)
         assert data["manual_steps"]
-        assert data["external_url"] == models_router.PRIVACY_YOLO_PAGE_URL
+        assert data["external_url"] == model_service.PRIVACY_YOLO_PAGE_URL
 
     def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
-        from routers import models as models_router
+        from services import model_service
 
-        def raise_prepare_failure():
-            raise models_router.ModelPreparationFailedError(
-                models_router._build_privacy_yolo_prepare_error(
+        def raise_prepare_failure(self):
+            raise model_service.ModelPreparationFailedError(
+                model_service.build_privacy_yolo_prepare_error(
                     Path("/tmp/privacy-yolo"),
                     "Downloaded file was not a valid zip archive.",
                 )
             )
 
-        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_prepare_failure)
+        monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_prepare_failure)
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
 
@@ -1544,6 +1544,19 @@ class TestArtistsRouterValidation:
         captured = {}
         model_path = tmp_path / "artist.onnx"
         model_path.write_bytes(b"fake-model")
+        service = artists_router.get_artist_service()
+        service.set_batch_progress_state({
+            "running": False,
+            "total": 0,
+            "processed": 0,
+            "errors": 0,
+            "results": [],
+            "step": "idle",
+            "message": "",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
+        })
 
         def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
             captured["image_ids"] = image_ids
@@ -1551,6 +1564,18 @@ class TestArtistsRouterValidation:
             captured["top_k"] = top_k
             captured["model_source"] = model_source
             captured["model_path"] = model_path
+            service.set_batch_progress_state({
+                "running": False,
+                "total": len(image_ids),
+                "processed": len(image_ids),
+                "errors": 0,
+                "results": [],
+                "step": "done",
+                "message": "done",
+                "current_item": None,
+                "started_at": 0.0,
+                "updated_at": 0.0,
+            })
 
         monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
 
@@ -1579,7 +1604,8 @@ class TestArtistsRouterValidation:
         from routers import artists as artists_router
 
         captured = {}
-        artists_router._batch_progress = {
+        service = artists_router.get_artist_service()
+        service.set_batch_progress_state({
             "running": False,
             "total": 0,
             "processed": 0,
@@ -1590,7 +1616,7 @@ class TestArtistsRouterValidation:
             "current_item": None,
             "started_at": None,
             "updated_at": None,
-        }
+        })
 
         def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
             captured["image_ids"] = image_ids
@@ -1598,6 +1624,18 @@ class TestArtistsRouterValidation:
             captured["top_k"] = top_k
             captured["model_source"] = model_source
             captured["model_path"] = model_path
+            service.set_batch_progress_state({
+                "running": False,
+                "total": len(image_ids),
+                "processed": len(image_ids),
+                "errors": 0,
+                "results": [],
+                "step": "done",
+                "message": "done",
+                "current_item": None,
+                "started_at": 0.0,
+                "updated_at": 0.0,
+            })
 
         monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
 

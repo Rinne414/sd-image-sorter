@@ -1652,9 +1652,9 @@ textarea:focus,
 }
 
 .promptlab-tab.active {
-    background: rgba(168, 85, 247, 0.15);
-    border-color: rgba(168, 85, 247, 0.4);
-    color: #e9d5ff;
+    background: rgba(var(--accent-primary-rgb), 0.15);
+    border-color: rgba(var(--accent-primary-rgb), 0.4);
+    color: var(--accent-contrast);
 }
 
 .promptlab-mode {
@@ -4630,7 +4630,7 @@ html.lang-zh #view-censor .queue-action-btn span {
 }
 
 #view-censor #cursor-overlay {
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+    box-shadow: 0 0 10px rgba(var(--accent-primary-rgb), 0.3);
 }
 
 #view-censor .censor-status-bar .status-filename {

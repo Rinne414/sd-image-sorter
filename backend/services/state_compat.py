@@ -27,5 +27,34 @@ class MutableStateProxy:
         state[key] = value
         self._state_setter(state)
 
+    def __contains__(self, key: object) -> bool:
+        return key in self._state_getter()
+
+    def __iter__(self):
+        return iter(self._state_getter())
+
+    def __len__(self) -> int:
+        return len(self._state_getter())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._state_getter().get(key, default)
+
+    def items(self):
+        return self._state_getter().items()
+
+    def keys(self):
+        return self._state_getter().keys()
+
+    def values(self):
+        return self._state_getter().values()
+
+    def update(self, other=None, **kwargs) -> None:
+        state = self._state_getter()
+        if other is not None:
+            state.update(other)
+        if kwargs:
+            state.update(kwargs)
+        self._state_setter(state)
+
     def copy(self) -> Dict[str, Any]:
         return self._state_getter().copy()

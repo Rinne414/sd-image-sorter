@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 echo "=========================================="
 echo "   SD Image Sorter - Starting..."
@@ -54,17 +55,17 @@ elif command -v python &> /dev/null; then
     PYTHON_CMD="python"
 else
     echo "[ERROR] Python is not installed or not in PATH."
-    echo "        Please install Python 3.9+ from https://python.org"
+    echo "        Please install Python 3.12+ from https://python.org"
     exit 1
 fi
 
-# ── Check Python version (must be >= 3.9) ────────────────────────
+# ── Check Python version (must be >= 3.12) ───────────────────────
 PY_VER=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
 
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 9 ]; }; then
-    echo "[ERROR] Python $PY_VER is too old. Python 3.9 or higher is required."
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 12 ]; }; then
+    echo "[ERROR] Python $PY_VER is too old. Python 3.12 or higher is required."
     echo "        Please upgrade from https://python.org"
     exit 1
 fi
@@ -101,8 +102,7 @@ fi
 # ── Create venv if needed ───────────────────────────────────────
 if [ "$FIRST_RUN" -eq 1 ]; then
     echo "[1/3] Creating Python virtual environment..."
-    $PYTHON_CMD -m venv backend/venv
-    if [ $? -ne 0 ]; then
+    if ! "$PYTHON_CMD" -m venv backend/venv; then
         echo "[ERROR] Failed to create virtual environment."
         echo "        On Debian/Ubuntu, you may need: sudo apt install python3-venv"
         exit 1
@@ -158,8 +158,7 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
     echo "      Please be patient, large AI models are being downloaded."
     echo
 
-    pip install -r backend/requirements.txt
-    if [ $? -ne 0 ]; then
+    if ! pip install -r backend/requirements.txt; then
         echo
         echo "[ERROR] Failed to install dependencies."
         echo "        Check your internet connection and try again."

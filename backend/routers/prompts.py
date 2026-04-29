@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from prompt_generator import get_generator
 from services.prompt_service import PromptService
+from services.service_provider import ServiceProvider
 
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
@@ -140,21 +141,23 @@ def _normalize_prompt_resource_ref(value: Any) -> str:
     return str(value or "").strip()
 
 
-_prompt_service: Optional[PromptService] = None
+def _configure_prompt_service(service: PromptService) -> None:
+    service.set_generator_getter(get_generator)
+
+
+_prompt_service_provider = ServiceProvider(
+    lambda: PromptService(generator_getter=get_generator),
+    on_set=_configure_prompt_service,
+)
 
 
 def get_prompt_service() -> PromptService:
-    global _prompt_service
-    if _prompt_service is None:
-        _prompt_service = PromptService(generator_getter=get_generator)
-    else:
-        _prompt_service.set_generator_getter(get_generator)
-    return _prompt_service
+    service = _prompt_service_provider.get()
+    service.set_generator_getter(get_generator)
+    return service
 
 
-def set_prompt_service(service: PromptService) -> None:
-    global _prompt_service
-    _prompt_service = service
+set_prompt_service = _prompt_service_provider.set
 
 
 # ============================================================

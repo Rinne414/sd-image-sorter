@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 
+from services.service_provider import ServiceProvider
+from services.state_compat import MutableStateProxy
 from services.tagging_service import (
     TaggingService,
     TagRequest,
@@ -19,7 +21,6 @@ from services.tagging_service import (
 router = APIRouter(prefix="/api", tags=["tags"])
 
 # Service instance - will be set via dependency injection
-_tagging_service: Optional[TaggingService] = None
 tag_progress: Any = None
 
 
@@ -29,20 +30,28 @@ def _bind_tagging_compat_state(service: TaggingService) -> None:
     tag_progress = service.get_progress_proxy()
 
 
+def _bind_lazy_tagging_compat_state() -> None:
+    """Expose legacy router-level progress without creating TaggingService at import time."""
+    global tag_progress
+    tag_progress = MutableStateProxy(
+        lambda: get_tagging_service().get_progress(),
+        lambda state: get_tagging_service().set_progress(state),
+    )
+
+
+_tagging_service_provider = ServiceProvider(TaggingService, on_set=_bind_tagging_compat_state)
+
+
 def get_tagging_service() -> TaggingService:
     """Dependency injection for TaggingService."""
-    global _tagging_service
-    if _tagging_service is None:
-        _tagging_service = TaggingService()
-        _bind_tagging_compat_state(_tagging_service)
-    return _tagging_service
+    return _tagging_service_provider.get()
 
 
-def set_tagging_service(service: TaggingService) -> None:
-    """Set the tagging service instance."""
-    global _tagging_service
-    _tagging_service = service
-    _bind_tagging_compat_state(service)
+def set_tagging_service(service: Optional[TaggingService]) -> None:
+    """Set or clear the tagging service instance."""
+    _tagging_service_provider.set(service)
+    if service is None:
+        _bind_lazy_tagging_compat_state()
 
 
 def set_tagger_getter(tagger_getter: "Callable[..., Any]") -> None:
@@ -61,8 +70,7 @@ def set_tag_progress_state(state: Dict[str, Any]) -> None:
     get_tagging_service().set_progress(state)
 
 
-if tag_progress is None:
-    _bind_tagging_compat_state(get_tagging_service())
+_bind_lazy_tagging_compat_state()
 
 
 @router.get(

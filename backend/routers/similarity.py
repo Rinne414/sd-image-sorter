@@ -10,27 +10,18 @@ from typing import Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Query, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
 
+from services.service_provider import ServiceProvider
 from services.similarity_service import SimilarityService
 
 
 router = APIRouter(prefix="/api/similarity", tags=["similarity"])
 
 # Service instance - will be set via dependency injection
-_similarity_service: Optional[SimilarityService] = None
+_similarity_service_provider = ServiceProvider(SimilarityService)
 
 
-def get_similarity_service() -> SimilarityService:
-    """Dependency injection for SimilarityService."""
-    global _similarity_service
-    if _similarity_service is None:
-        _similarity_service = SimilarityService()
-    return _similarity_service
-
-
-def set_similarity_service(service: SimilarityService) -> None:
-    """Set the similarity service instance."""
-    global _similarity_service
-    _similarity_service = service
+get_similarity_service = _similarity_service_provider.get
+set_similarity_service = _similarity_service_provider.set
 
 
 @router.post(

@@ -2828,6 +2828,7 @@ function syncAdvancedLegacyModelUi(legacyModel) {
         toggle.checked = CensorState.showAdvancedLegacyModels;
     }
     if (!help) return;
+    help.removeAttribute('data-i18n');
 
     const generalCount = Number(legacyModel?.general_model_count || 0);
     if (generalCount <= 0) {
@@ -2843,6 +2844,7 @@ function syncAdvancedLegacyModelUi(legacyModel) {
 function updateSelectedLegacyModelHelp(legacyModel) {
     const help = document.getElementById('censor-model-file-help');
     if (!help) return;
+    help.removeAttribute('data-i18n');
 
     const manualPath = String(document.getElementById('censor-model-path')?.value || '').trim();
     if (manualPath) {

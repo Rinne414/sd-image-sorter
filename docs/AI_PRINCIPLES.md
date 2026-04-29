@@ -1,6 +1,6 @@
 # AI Principles For This Repo
 
-**Updated:** 2026-04-27
+**Updated:** 2026-04-29
 **Purpose:** Give future AI agents a local decision framework so they do not overwrite deliberate product choices with generic "best practice" cleanup.
 
 ## Why This Exists
@@ -365,6 +365,44 @@ Do not casually redesign around:
 - network-first security semantics that ignore the local-only product context
 
 If the product direction changes, that should be an explicit product decision, not an accidental refactor side effect.
+
+### H. Routers translate HTTP; services own lifecycle and side effects
+
+Backend routers should stay thin. They may parse request/response contracts, convert domain errors into HTTP responses, and schedule framework background tasks.
+
+Do not put these in routers when a service can own them:
+
+- background job progress dictionaries or locks
+- model inventory and preparation workflows
+- external download / archive validation side effects
+- domain decisions that need non-HTTP tests
+
+If a route needs compatibility state for old callers, expose it through a service-owned seam instead of creating a second router-owned lifecycle.
+
+### I. Archive intake must be bounded before extraction
+
+Any code that downloads, validates, or extracts zip/tar archives must reject unsafe paths, excessive entry counts, and excessive uncompressed size before writing payload files.
+
+This applies even for local-first or release-owned flows:
+
+- update archives
+- model/runtime bundles
+- third-party GitHub/HuggingFace/Civitai assets
+- future import/export package formats
+
+Do not rely on `extractall()` plus string-prefix checks for safety. Prefer `Path.relative_to()`/normalized archive names and small, testable extraction helpers.
+
+### J. Dynamic UI text owns its translation binding
+
+Static `data-i18n` belongs to static copy. Runtime state-owned labels must either update their `data-i18n` key to the active state or remove the static binding before writing generated text.
+
+This matters because `ui-refresh.js` replays global translations after DOM mutations. A stale key can make visible text lie even when aria/title/state already changed.
+
+Examples that must preserve this rule:
+
+- move/copy action buttons
+- queue/filter summaries generated from current state
+- progress/status labels that are not a single static translation key
 
 ## What Future AI Must Not Do
 

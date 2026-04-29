@@ -50,6 +50,21 @@ def isolated_sorting_service():
 class TestRouterCompatibilityState:
     """Tests for legacy router compatibility shims delegating to service-owned state."""
 
+    def test_lazy_compat_state_does_not_create_service_until_used(self):
+        from routers import sorting as sorting_router
+        from services.sorting_service import SortingService
+
+        original_service = sorting_router._sorting_service_provider._instance
+        try:
+            sorting_router.set_sorting_service(None)
+            sorting_router._bind_lazy_sorting_compat_state()
+
+            assert sorting_router._sorting_service_provider._instance is None
+            assert sorting_router.scan_progress.copy()["status"] == "idle"
+            assert isinstance(sorting_router._sorting_service_provider._instance, SortingService)
+        finally:
+            sorting_router.set_sorting_service(original_service)
+
     def test_scan_progress_compat_helpers_delegate_to_service(self, isolated_sorting_service):
         from routers import sorting as sorting_router
 

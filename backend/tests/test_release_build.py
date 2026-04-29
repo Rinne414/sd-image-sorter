@@ -351,3 +351,80 @@ def test_runtime_requirements_keep_platform_specific_wheels_guarded():
 def test_dev_requirements_keep_platform_specific_wheels_guarded():
     """The dev lock must not regress to a Linux-only runtime closure."""
     _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements-dev.txt")
+
+
+def test_portable_python_version_matches_runtime_lock_header():
+    release_builder = load_release_builder()
+    requirements_text = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
+    compiled_with = re.search(r"pip-compile with Python (\d+\.\d+)", requirements_text)
+
+    assert compiled_with is not None
+    embed_minor = ".".join(release_builder.PYTHON_EMBED_VERSION.split(".")[:2])
+    assert embed_minor == compiled_with.group(1)
+
+
+def test_launchers_reject_python_older_than_runtime_lock():
+    run_sh = (ROOT / "run.sh").read_text(encoding="utf-8")
+    run_bat = (ROOT / "run.bat").read_text(encoding="utf-8")
+
+    assert "Python 3.12" in run_sh
+    assert "PY_MINOR\" -lt 12" in run_sh
+    assert "Python 3.9" not in run_sh
+    assert "Python 3.12" in run_bat
+    assert "LSS 12" in run_bat
+    assert "Python 3.9" not in run_bat
+
+
+def test_current_install_docs_match_python_312_floor():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    release_packs = (ROOT / "docs" / "RELEASE_PACKS.md").read_text(encoding="utf-8")
+    agent_notes = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    current_docs = "\n".join([readme, release_packs, agent_notes])
+
+    assert "python-3.12%2B" in readme
+    assert "Windows 便携版自带 Python 3.12" in readme
+    assert "Python 3.12+" in release_packs
+    assert "Python 3.12+" in agent_notes
+    assert "python-3.9%2B" not in current_docs
+    assert "Python 3.9+" not in current_docs
+    assert "Python 3.11" not in current_docs
+
+
+def test_release_ci_keeps_security_audit_and_macos_guardrails():
+    run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    security_check = (ROOT / "scripts" / "security_check.py").read_text(encoding="utf-8")
+
+    assert "scripts/security_check.py" in run_ci
+    assert "dependency security audit" in run_ci
+    assert "frontend js syntax" in run_ci
+    assert "--check" in run_ci
+    assert "FRONTEND_JS_FILES" in run_ci
+    assert "--no-deps" in security_check
+    assert "--disable-pip" in security_check
+    assert "macos-latest" in workflow
+    assert "macOS dependency import and release guard tests" in workflow
+    assert "cache: \"pip\"" in workflow
+
+
+def test_playwright_specs_are_not_an_empty_ci_shell():
+    specs_dir = ROOT / "tests" / "e2e" / "specs"
+    specs = sorted(specs_dir.glob("*.spec.ts"))
+
+    assert len(specs) >= 1
+    assert any(path.name == "smoke.spec.ts" for path in specs)
+
+
+def test_frontend_i18n_and_censor_css_keep_safety_contracts():
+    i18n_js = (ROOT / "frontend" / "js" / "i18n.js").read_text(encoding="utf-8")
+    styles_css = (ROOT / "frontend" / "css" / "styles.css").read_text(encoding="utf-8")
+    css_text = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "frontend" / "css").glob("*.css"))
+    censor_css = (ROOT / "frontend" / "css" / "censor-v2.css").read_text(encoding="utf-8")
+
+    assert "innerHTML = this.t" not in i18n_js
+    assert "height: calc(100vh - 60px);" not in styles_css
+    assert "height: calc(100vh - var(--nav-height))" in styles_css
+    for hardcoded_accent in ("rgba(168, 85, 247", "rgba(124, 58, 237", "#a855f7", "#7c3aed", "#e9d5ff"):
+        assert hardcoded_accent not in css_text
+    assert "var(--censor-accent" in censor_css

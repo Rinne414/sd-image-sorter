@@ -34,6 +34,7 @@
 
     let _nextSectionId = 1;
     let _marqueeInitialized = false;
+    let _toolbarInitialized = false;
     function newSectionId() { return `qs-sec-${_nextSectionId++}`; }
 
     // ── Helpers ────────────────────────────────────────────────────────
@@ -463,6 +464,14 @@
     function updateQueueFilterSummary() {
         const summaryEl = document.getElementById('qs-filter-summary');
         if (!summaryEl) return;
+        const setSummaryText = (text, i18nKey = null) => {
+            if (i18nKey) {
+                summaryEl.setAttribute('data-i18n', i18nKey);
+            } else {
+                summaryEl.removeAttribute('data-i18n');
+            }
+            summaryEl.textContent = text;
+        };
 
         let modeLabel = '';
         let parts = [];
@@ -479,20 +488,34 @@
         }
 
         if (!modeLabel) {
-            summaryEl.textContent = t('queueSolitaire.filterSummaryIdle', 'No queue filters active yet.');
+            setSummaryText(
+                t('queueSolitaire.filterSummaryIdle', 'No queue filters active yet.'),
+                'queueSolitaire.filterSummaryIdle'
+            );
             return;
         }
 
         if (!parts.length) {
-            summaryEl.textContent = state.appliedFilterMode === 'gallery'
-                ? t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.')
-                : (state.appliedFilterMode === 'advanced'
-                    ? t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.')
-                    : t('queueSolitaire.filterSummaryQuickAll', 'Quick queue filters are clear, so the whole queue is currently in scope.'));
+            if (state.appliedFilterMode === 'gallery') {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.'),
+                    'queueSolitaire.filterSummaryGalleryAll'
+                );
+            } else if (state.appliedFilterMode === 'advanced') {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.'),
+                    'queueSolitaire.filterSummaryAdvancedAll'
+                );
+            } else {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryQuickAll', 'Quick queue filters are clear, so the whole queue is currently in scope.'),
+                    'queueSolitaire.filterSummaryQuickAll'
+                );
+            }
             return;
         }
 
-        summaryEl.textContent = `${modeLabel}: ${parts.join(' • ')}`;
+        setSummaryText(`${modeLabel}: ${parts.join(' • ')}`);
     }
 
     function clearQuickFilterInputs() {
@@ -1457,11 +1480,55 @@
     // ── Marquee Selection ─────────────────────────────────────────────
     let marqueeState = null;
 
+    function handleMarqueeMouseMove(e) {
+        if (!marqueeState) return;
+        const x1 = Math.min(marqueeState.startX, e.clientX);
+        const y1 = Math.min(marqueeState.startY, e.clientY);
+        const x2 = Math.max(marqueeState.startX, e.clientX);
+        const y2 = Math.max(marqueeState.startY, e.clientY);
+        const el = marqueeState.el;
+        if (el) {
+            el.style.left = x1 + 'px';
+            el.style.top = y1 + 'px';
+            el.style.width = (x2 - x1) + 'px';
+            el.style.height = (y2 - y1) + 'px';
+        }
+        // Highlight intersecting thumbnails
+        document.querySelectorAll('.qs-thumb').forEach(thumb => {
+            const rect = thumb.getBoundingClientRect();
+            const intersects = !(rect.right < x1 || rect.left > x2 || rect.bottom < y1 || rect.top > y2);
+            const id = parseInt(thumb.dataset.id);
+            if (intersects) state.selected.add(id);
+        });
+    }
+
+    function handleMarqueeMouseUp() {
+        if (!marqueeState) return;
+        if (marqueeState.el) marqueeState.el.style.display = 'none';
+        marqueeState = null;
+        render();
+    }
+
+    function bindMarqueeDocumentListeners() {
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        document.addEventListener('mousemove', handleMarqueeMouseMove);
+        document.addEventListener('mouseup', handleMarqueeMouseUp);
+    }
+
+    function unbindMarqueeDocumentListeners() {
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        if (marqueeState?.el) marqueeState.el.style.display = 'none';
+        marqueeState = null;
+    }
+
     function initMarquee() {
+        bindMarqueeDocumentListeners();
         if (_marqueeInitialized) return;
-        _marqueeInitialized = true;
         const sections = document.getElementById('qs-sections');
         if (!sections) return;
+        _marqueeInitialized = true;
 
         sections.addEventListener('mousedown', (e) => {
             if (e.button !== 0 || e.target.closest('.qs-thumb, .qs-section-header, button, input')) return;
@@ -1471,35 +1538,6 @@
             };
             if (marqueeState.el) marqueeState.el.style.display = 'block';
             e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!marqueeState) return;
-            const x1 = Math.min(marqueeState.startX, e.clientX);
-            const y1 = Math.min(marqueeState.startY, e.clientY);
-            const x2 = Math.max(marqueeState.startX, e.clientX);
-            const y2 = Math.max(marqueeState.startY, e.clientY);
-            const el = marqueeState.el;
-            if (el) {
-                el.style.left = x1 + 'px';
-                el.style.top = y1 + 'px';
-                el.style.width = (x2 - x1) + 'px';
-                el.style.height = (y2 - y1) + 'px';
-            }
-            // Highlight intersecting thumbnails
-            document.querySelectorAll('.qs-thumb').forEach(thumb => {
-                const rect = thumb.getBoundingClientRect();
-                const intersects = !(rect.right < x1 || rect.left > x2 || rect.bottom < y1 || rect.top > y2);
-                const id = parseInt(thumb.dataset.id);
-                if (intersects) state.selected.add(id);
-            });
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (!marqueeState) return;
-            if (marqueeState.el) marqueeState.el.style.display = 'none';
-            marqueeState = null;
-            render();
         });
     }
 
@@ -1580,6 +1618,7 @@
         });
 
         document.removeEventListener('keydown', handleKeydown);
+        unbindMarqueeDocumentListeners();
 
         // Re-render the normal queue
         if (typeof window.renderQueue === 'function') window.renderQueue();
@@ -1588,6 +1627,8 @@
 
     // ── Toolbar Events (bound once) ───────────────────────────────────
     function initToolbar() {
+        if (_toolbarInitialized) return;
+        _toolbarInitialized = true;
         loadAutoSortProfiles();
         renderAutoSortProfileMenu();
         document.getElementById('qs-btn-add-section')?.addEventListener('click', addNewSection);

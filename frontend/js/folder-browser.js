@@ -320,7 +320,3 @@ if (document.readyState === 'loading') {
     bindFolderBrowserButton();
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    bindFolderBrowserButton();
-});
-

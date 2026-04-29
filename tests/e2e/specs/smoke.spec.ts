@@ -3568,7 +3568,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#confirm-title')).toContainText('Resume saved Manual Sort session?')
     await page.locator('#btn-confirm-ok').click()
 
-    await expect(page.locator('#manual-sort-interface')).toBeVisible()
+    await expect(page.locator('#sort-interface')).toBeVisible()
     await expect(page.locator('#sort-progress-text')).toHaveText('1 / 3')
     await expect.poll(() => startRequests).toBe(0)
     expect(setFolderRequests).toBe(0)
@@ -3576,16 +3576,14 @@ test.describe('Smoke Tests', () => {
 
 
   test('manual sort resume should restore counts and support redo after undoing a saved action', async ({ page }) => {
-    let currentCall = 0
+    let resumeRequested = false
 
     await mockImageAsset(page, 1)
     await mockImageAsset(page, 2)
     await mockImageAsset(page, 3)
 
     await page.route('**/api/sort/current', async (route) => {
-      currentCall += 1
-
-      if (currentCall === 1) {
+      if (!resumeRequested) {
         await route.fulfill({
           json: {
             image: { id: 1, filename: 'resume.png' },
@@ -3596,28 +3594,23 @@ test.describe('Smoke Tests', () => {
         return
       }
 
-      if (currentCall === 2) {
-        await route.fulfill({
-          json: {
-            image: { id: 1, filename: 'resume.png' },
-            tags: [],
-            index: 1,
-            total: 3,
-            remaining: 2,
-            sorted_count: 0,
-            skipped_count: 1,
-            undo_available: true,
-            redo_available: false,
-            image_ids: [1, 2, 3],
-            folders: {
-              a: 'C:/sorted/keep',
-            },
+      await route.fulfill({
+        json: {
+          image: { id: 1, filename: 'resume.png' },
+          tags: [],
+          index: 1,
+          total: 3,
+          remaining: 2,
+          sorted_count: 0,
+          skipped_count: 1,
+          undo_available: true,
+          redo_available: false,
+          image_ids: [1, 2, 3],
+          folders: {
+            a: 'C:/sorted/keep',
           },
-        })
-        return
-      }
-
-      await route.fulfill({ json: { done: true } })
+        },
+      })
     })
 
     await page.route('**/api/sort/action?action=undo', async (route) => {
@@ -3660,6 +3653,7 @@ test.describe('Smoke Tests', () => {
     await openSortingSubView(page, 'manual')
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
 
+    resumeRequested = true
     await page.locator('#btn-resume-sorting').click()
     await expect(page.locator('#sort-interface')).toBeVisible()
     await expect(page.locator('#sort-skipped-count')).toHaveText('1')
@@ -3674,14 +3668,12 @@ test.describe('Smoke Tests', () => {
   })
 
   test('manual sort resume should stay on setup if the saved session cannot be loaded', async ({ page }) => {
-    let currentCall = 0
+    let resumeRequested = false
 
     await mockImageAsset(page, 1)
 
     await page.route('**/api/sort/current', async (route) => {
-      currentCall += 1
-
-      if (currentCall === 1) {
+      if (!resumeRequested) {
         await route.fulfill({
           json: {
             image: { id: 1, filename: 'resume.png' },
@@ -3705,6 +3697,7 @@ test.describe('Smoke Tests', () => {
     await openSortingSubView(page, 'manual')
     await expect(page.locator('#sort-resume-banner')).toBeVisible()
 
+    resumeRequested = true
     await page.locator('#btn-resume-sorting').click()
 
     await expect(page.locator('#sort-setup')).toBeVisible()

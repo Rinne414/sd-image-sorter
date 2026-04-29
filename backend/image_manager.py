@@ -13,17 +13,16 @@ import json
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import (
     add_images_batch,
-    add_image,
-    add_tags,
-    copy_image_derived_state,
-    get_image_tags,
+    add_copied_image_with_state,
+    get_image_by_id,
     update_image_path,
     update_image_metadata,
     get_image_scan_state_by_paths,
     get_images_in_folder_scope,
     delete_images_by_ids,
     delete_images_by_paths,
-    get_db,
+    mark_pending_images_metadata_error,
+    STALE_PENDING_METADATA_READ_ERROR,
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import parse_image
@@ -35,9 +34,6 @@ logger = logging.getLogger(__name__)
 
 SCAN_DB_BATCH_SIZE = 200
 DEFAULT_METADATA_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
-SCAN_INTERRUPTED_METADATA_READ_ERROR = (
-    "Scan interrupted before metadata refresh completed. Re-scan the source folder to recover this row."
-)
 
 
 def _chunked(items: Iterator[Any], size: int) -> Iterator[List[Any]]:
@@ -666,22 +662,9 @@ def scan_folder(
                 if row.get("id") and str(row.get("metadata_status") or "").lower() == "pending"
             ]
             if image_ids:
-                placeholders = ",".join("?" for _ in image_ids)
-                with get_db() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        f"""
-                        UPDATE images
-                        SET is_readable = 0,
-                            metadata_status = 'error',
-                            read_error = ?,
-                            indexed_at = CURRENT_TIMESTAMP
-                        WHERE id IN ({placeholders})
-                        """,
-                        [SCAN_INTERRUPTED_METADATA_READ_ERROR, *image_ids],
-                    )
-                result["updated"] = max(0, result["updated"] - len(image_ids))
-                result["metadata_updated"] = max(0, result["metadata_updated"] - len(image_ids))
+                marked = mark_pending_images_metadata_error(image_ids, STALE_PENDING_METADATA_READ_ERROR)
+                result["updated"] = max(0, result["updated"] - marked)
+                result["metadata_updated"] = max(0, result["metadata_updated"] - marked)
 
     try:
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -873,13 +856,28 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
     try:
         image_path, new_path = _prepare_destination_path(image_path, destination_folder, "move")
 
-        # Move file
         shutil.move(image_path, new_path)
-
-        # Update database
-        update_image_path(image_id, new_path)
+        try:
+            update_image_path(image_id, new_path)
+        except Exception as db_error:
+            try:
+                if os.path.exists(new_path):
+                    shutil.move(new_path, image_path)
+            except Exception as rollback_error:
+                raise FileOperationError(
+                    f"Database update failed after moving file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                    path=image_path,
+                    operation="move",
+                ) from db_error
+            raise FileOperationError(
+                f"Database update failed after moving file; file was restored to original path: {db_error}",
+                path=image_path,
+                operation="move",
+            ) from db_error
 
         return new_path
+    except FileOperationError:
+        raise
     except PermissionError as e:
         raise FileOperationError(
             f"Permission denied: {e}",
@@ -926,25 +924,32 @@ def copy_image(
 
         shutil.copy2(image_path, new_path)
         stat_result = os.stat(new_path)
-        source = source_row or {}
-        copied_image_id = add_image(return_status=False, **_build_copied_image_record(source, new_path, stat_result))
-
-        source_tags = get_image_tags(image_id)
-        if source_tags:
-            add_tags(
-                copied_image_id,
-                [
-                    {"tag": tag.get("tag"), "confidence": tag.get("confidence", 1.0)}
-                    for tag in source_tags
-                    if tag.get("tag")
-                ],
-            )
-        copy_image_derived_state(image_id, copied_image_id)
+        source = source_row or get_image_by_id(image_id) or {}
+        copied_record = _build_copied_image_record(source, new_path, stat_result)
+        try:
+            copied_image_id = add_copied_image_with_state(image_id, copied_record)
+        except Exception as db_error:
+            try:
+                if os.path.exists(new_path):
+                    os.remove(new_path)
+            except Exception as rollback_error:
+                raise FileOperationError(
+                    f"Database update failed after copying file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                    path=image_path,
+                    operation="copy",
+                ) from db_error
+            raise FileOperationError(
+                f"Database update failed after copying file; copied file was removed: {db_error}",
+                path=image_path,
+                operation="copy",
+            ) from db_error
 
         return {
             "new_path": new_path,
             "new_image_id": copied_image_id,
         }
+    except FileOperationError:
+        raise
     except PermissionError as e:
         raise FileOperationError(
             f"Permission denied: {e}",
@@ -1086,6 +1091,8 @@ def get_folder_stats(folder_path: str) -> Dict[str, Any]:
     }
     
     for file_path in folder.rglob("*"):
+        if file_path.is_symlink():
+            continue
         if file_path.is_file():
             ext = file_path.suffix.lower()
             if ext in IMAGE_EXTENSIONS:

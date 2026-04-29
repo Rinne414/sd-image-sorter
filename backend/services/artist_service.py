@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from exceptions import ImageFileNotFoundError, ImageNotFoundError, ServiceError, ValidationError
@@ -29,6 +31,105 @@ class ArtistService:
 
     def __init__(self, identifier_getter: Optional[Callable[..., Any]] = None) -> None:
         self._identifier_getter = identifier_getter or default_get_artist_identifier
+        self._batch_lock = threading.Lock()
+        self._batch_progress: Dict[str, Any] = self._new_batch_progress_state()
+
+    @staticmethod
+    def _new_batch_progress_state() -> Dict[str, Any]:
+        return {
+            "running": False,
+            "total": 0,
+            "processed": 0,
+            "errors": 0,
+            "results": [],
+            "step": "idle",
+            "message": "",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
+        }
+
+    def get_batch_progress(self) -> Dict[str, Any]:
+        with self._batch_lock:
+            snapshot = dict(self._batch_progress)
+            snapshot["results"] = list(self._batch_progress.get("results", []))
+            return snapshot
+
+    def is_batch_running(self) -> bool:
+        with self._batch_lock:
+            return bool(self._batch_progress["running"])
+
+    def start_batch_progress(self, *, total: int) -> None:
+        now = time.time()
+        with self._batch_lock:
+            self._batch_progress = {
+                "running": True,
+                "total": int(total),
+                "processed": 0,
+                "errors": 0,
+                "results": [],
+                "step": "starting",
+                "message": "Preparing artist identification...",
+                "current_item": None,
+                "started_at": now,
+                "updated_at": now,
+            }
+
+    def apply_batch_progress_update(self, update: Dict[str, Any]) -> None:
+        with self._batch_lock:
+            if "step" in update:
+                self._batch_progress["step"] = update["step"]
+            if "message" in update:
+                self._batch_progress["message"] = update["message"]
+            if "current_item" in update:
+                self._batch_progress["current_item"] = update["current_item"]
+            if "result" in update:
+                self._batch_progress["results"].append(update["result"])
+            if "errors_delta" in update:
+                self._batch_progress["errors"] += int(update["errors_delta"] or 0)
+            if "processed_delta" in update:
+                self._batch_progress["processed"] += int(update["processed_delta"] or 0)
+            if "running" in update:
+                self._batch_progress["running"] = bool(update["running"])
+            if "total" in update:
+                self._batch_progress["total"] = int(update["total"] or 0)
+            self._batch_progress["updated_at"] = time.time()
+
+    def finish_batch_progress_done(self, result: Dict[str, Any]) -> None:
+        with self._batch_lock:
+            self._batch_progress["running"] = False
+            self._batch_progress["step"] = "done"
+            self._batch_progress["message"] = (
+                f"Completed artist identification: {result['processed']}/{result['total']} processed"
+                + (f", {result['errors']} failed." if result["errors"] else ".")
+            )
+            self._batch_progress["current_item"] = None
+            self._batch_progress["updated_at"] = time.time()
+
+    def finish_batch_progress_error(self, exc: Exception) -> None:
+        with self._batch_lock:
+            self._batch_progress["running"] = False
+            self._batch_progress["step"] = "error"
+            self._batch_progress["message"] = f"Artist identification failed: {exc}"
+            self._batch_progress["current_item"] = None
+            self._batch_progress["updated_at"] = time.time()
+
+    def set_batch_progress_state(self, state: Dict[str, Any]) -> None:
+        normalized = self._new_batch_progress_state()
+        normalized.update({
+            "running": bool(state.get("running", False)),
+            "total": int(state.get("total", 0) or 0),
+            "processed": int(state.get("processed", 0) or 0),
+            "errors": int(state.get("errors", 0) or 0),
+            "results": list(state.get("results", []) or []),
+            "step": state.get("step"),
+            "message": state.get("message"),
+            "current_item": state.get("current_item"),
+            "started_at": state.get("started_at"),
+            "updated_at": state.get("updated_at"),
+        })
+        with self._batch_lock:
+            self._batch_progress = normalized
 
     def set_identifier_getter(self, identifier_getter: Callable[..., Any]) -> None:
         self._identifier_getter = identifier_getter

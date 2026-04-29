@@ -1452,3 +1452,135 @@ Use this structure for future entries:
   Keyboard shortcuts cannot be more destructive than the primary visible UX. Generator buckets are final only after both import and metadata resolution make the indexed library ready.
 - Validation:
   `backend/tests/test_frontend_contract.py::test_gallery_delete_key_removes_from_gallery_not_disk`, `backend/tests/test_frontend_contract.py::test_metadata_resolving_chip_is_driven_by_stats_contract`, browser smoke tests for Gallery remove/delete and stale large-library loads.
+
+### ADR-AI-20260429-54: Background/model lifecycle state belongs in services, not routers
+
+- Status: accepted
+- Area: backend architecture / release stability
+- Context:
+  The full-repo debt audit found two repeated router ownership leaks: Aesthetic/Artist background progress used router-local dictionaries and locks while Sorting/Tagging already exposed service-owned state, and model-manager preparation mixed inventory, external downloads, archive validation, and HTTP response mapping inside `routers/models.py`.
+- Decision:
+  Routers should translate HTTP contracts and schedule framework background tasks; services own lifecycle state, model inventory, external preparation side effects, and testable domain errors. Aesthetic and Artist progress now lives in their service instances. Model Manager now uses `ModelService`; `routers/models.py` only keeps the request model and error-to-HTTP conversion.
+- Why:
+  Two lifecycle patterns in one app make future background jobs inconsistent and hard to test. External model preparation also needs unit-testable business logic without importing FastAPI router concerns.
+- Do not regress:
+  Do not add new router-level job state dictionaries/locks or move model download/prepare branches back into a router just because it is quicker. Do not make service code raise FastAPI `HTTPException` for these paths.
+- Allowed evolution:
+  Sorting/Tagging compatibility handles can be retired gradually once frontend/API callers are migrated. `ModelService` can be split further by provider if model preparation grows.
+- Evidence:
+  `backend/services/aesthetic_service.py`, `backend/services/artist_service.py`, `backend/services/model_service.py`, `backend/routers/aesthetic.py`, `backend/routers/artists.py`, `backend/routers/models.py`, `backend/tests/test_release_build.py`, `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`.
+- Validation:
+  Targeted pytest for model prepare/status errors, artist progress seams, aesthetic score-all seam, and release guard tests.
+
+### ADR-AI-20260429-55: External archives are validated with bounded extraction budgets
+
+- Status: accepted
+- Area: release security / model runtime preparation
+- Context:
+  The audit follow-up found several places that accepted external archives with path checks but no entry-count or uncompressed-size budget: Privacy YOLO model bundles, LSNet artist runtime zips, and self-update patch archives. The update worker also used Windows `os.kill(pid, 0)` process probing semantics that are not safe to rely on for update apply timing.
+- Decision:
+  Archive intake paths must validate normalized member names, reject traversal/absolute/drive-letter entries, cap entry counts, cap total uncompressed bytes, and only then extract/copy payloads. LSNet runtime downloads are pinned to a specific GitHub commit zip instead of `refs/heads/main.zip`. Windows update-worker PID probing uses a Windows process API helper instead of signal-zero probing. CI now also runs frontend JavaScript syntax checks before browser E2E.
+- Why:
+  This is a local app, but release and model/runtime preparation consume remote archives. A bad archive should fail as a controlled preparation/update error, not create Zip Slip writes, zip-bomb memory/disk pressure, or half-applied updates.
+- Do not regress:
+  Do not reintroduce `extractall()` guarded only by string `startswith()`, unbounded `ZipFile`/`tarfile` iteration, moving target branch zip URLs for runtime code, or Windows `os.kill(pid, 0)` as an updater liveness check.
+- Allowed evolution:
+  The numeric extraction budgets may be tuned if real release/model assets exceed them, but tests should continue to prove unsafe paths, too many entries, and oversized uncompressed payloads are rejected.
+- Evidence:
+  `backend/artist_identifier.py`, `backend/services/model_service.py`, `backend/services/update_service.py`, `backend/update_worker.py`, `frontend/js/manual-sort.js`, `scripts/run_ci.py`, `backend/tests/test_artist_identifier_runtime.py`, `backend/tests/test_model_service.py`, `backend/tests/test_update_worker.py`, `backend/tests/test_security_check.py`, `backend/tests/test_router_service_boundaries.py`, `backend/tests/test_release_build.py`.
+- Validation:
+  `python3 -m py_compile backend/update_worker.py backend/artist_identifier.py backend/services/model_service.py backend/services/update_service.py scripts/run_ci.py scripts/security_check.py`; `node --check frontend/js/manual-sort.js`; targeted pytest for update/model/artist/security/boundary/release guard tests.
+
+### ADR-AI-20260429-56: Dynamic UI text must own its i18n binding state
+
+- Status: accepted
+- Area: frontend i18n / UI refresh stability
+- Context:
+  Final E2E validation found dynamic labels being clobbered by the global `ui-refresh.js` / `I18n.applyToDOM()` replay cycle. Auto-Separate changed the execute button title/aria state to Copy but the visible label stayed Move after `ui-refresh` rebuilt the button. Queue Solitaire copied Gallery filters, then the filter summary reverted to the static idle text because the element still carried `data-i18n="queueSolitaire.filterSummaryIdle"`. Manual Sort's resume button also passed the DOM click event as the optional session payload, making the direct Resume path report no saved session.
+- Decision:
+  Dynamic state-owned UI text must not keep stale static i18n bindings. If a state switch maps to another static translation, update the `data-i18n` key and visible text together. If the text is generated from runtime state, remove the static `data-i18n` binding before writing the generated text. Event listeners that call payload-accepting functions must wrap the call so DOM events are not mistaken for domain payloads.
+- Why:
+  The global translation observer is useful for static bilingual UI, but it replays translations after DOM child mutations. Dynamic state labels therefore need explicit ownership or E2E will see honest state in aria/title while visible copy silently regresses.
+- Do not regress:
+  Do not set dynamic text on elements that still carry an unrelated `data-i18n` key. Do not rely on `querySelector('[data-i18n]')` only when `ui-refresh` can rebuild buttons with `.ui-label`. Do not pass event handlers directly to functions whose first parameter is a domain object.
+- Evidence:
+  `frontend/js/autosep.js`, `frontend/js/manual-sort.js`, `frontend/js/queue-solitaire.js`, `tests/e2e/specs/smoke.spec.ts`, `tests/e2e/specs/manual-regression.spec.ts`.
+- Validation:
+  Targeted Playwright slice passed for Auto-Separate copy mode and Manual Sort resume paths (`4 passed`); Queue Solitaire regression passed (`1 passed`); full `python3 scripts/run_ci.py` passed with lock freshness, dependency security audit, frontend JS syntax, backend suite (`793 collected`), and Playwright E2E (`113 passed, 2 skipped`).
+
+### ADR-AI-20260429-57: Tested repository seams are not dead code just because services still call `database.py`
+
+- Status: accepted
+- Area: backend architecture / debt triage
+- Context:
+  The 2026-04-29 debt audit flagged `backend/db_repos/` as a deletion quick win because production services mostly still import `database.py` directly. Current workspace evidence contradicts that: repository helpers are referenced by pagination/path-equivalence tests and ADR-AI-20260428-25 lists `ImageRepository` cursor contract files as part of the opaque pagination invariant.
+- Decision:
+  Keep `backend/db_repos/` while it has active tests or recorded API/storage-contract evidence. Treat it as a partially adopted repository seam, not an unused folder. Future cleanup may either migrate more callers into it or retire it only after replacing/removing the tests and superseding the related ADR evidence.
+- Why:
+  Deleting a tested compatibility seam to reduce visual file count would break regression coverage and erase a documented path-equivalence contract. The real debt is incomplete adoption and duplicated access patterns, not simply file presence.
+- Do not regress:
+  Do not delete `backend/db_repos/` or remove its tests as a drive-by quick win. Do not add new untested repository wrappers that only mirror `database.py` without owning a contract.
+- Allowed evolution:
+  A deliberate repository migration can move service callers behind the seam. A deliberate deletion can happen later if repository tests are ported to the canonical DB/service layer and ADR-AI-20260428-25 is superseded.
+- Evidence:
+  `backend/db_repos/repositories/image_repo.py`, `backend/db_repos/repositories/base.py`, `backend/tests/test_db_repos_image_repo.py`, `backend/database.py`, `docs/AI_DECISION_LOG.md`.
+- Validation:
+  Static reference check found active imports in `backend/tests/test_db_repos_image_repo.py` and related ADR evidence before the quick-win deletion was rejected.
+
+### ADR-AI-20260429-58: Move/copy consistency uses compensation plus DB transaction, not batch all-or-nothing
+
+- Status: accepted
+- Area: file lifecycle / database consistency
+- Context:
+  The debt audit correctly found that `move_image()` moved files before updating SQLite, and `copy_image()` wrote the copied file before three independent DB writes (`add_image`, tags, derived state). A crash or DB error could leave the file and index disagreeing. Batch move/copy already reports per-image partial failures, so making the whole batch all-or-nothing would be a user-visible semantic change.
+- Decision:
+  Keep per-image batch semantics, but make each image operation crash-safer. A move that cannot update SQLite after `shutil.move()` attempts to move the file back to the original path and reports whether rollback succeeded. A copy that cannot insert/copy indexed DB state removes the copied file. Copy DB writes now go through one transaction (`add_copied_image_with_state`) so copied row, tags, cached caption/aesthetic/embedding, and artist prediction succeed or roll back together.
+- Why:
+  SQLite and the filesystem cannot be made truly atomic together without a more invasive journal/recovery design. Compensation closes the common failure window while preserving the existing UI/API expectation that a batch can partially succeed and report per-file errors.
+- Do not regress:
+  Do not re-split copy state into independent `add_image` / `add_tags` / `copy_image_derived_state` transactions. Do not remove move rollback just because `shutil.move()` already succeeded. Do not turn batch move/copy into all-or-nothing without a new product decision and UX copy.
+- Allowed evolution:
+  A future recovery journal can cover process crashes between filesystem and DB steps. A future background job protocol can offer explicit transactional batches, but it must be a new API/UX contract rather than a silent behavior change.
+- Evidence:
+  `backend/image_manager.py`, `backend/database.py`, `backend/tests/test_image_manager.py`, `.plans/sd-image-sorter-release/docs/invariants.md`.
+- Validation:
+  Failure-injection tests cover DB-failed move rollback, DB-failed copy cleanup, and copied-row transaction rollback; existing move/copy route tests continue to pass.
+
+### ADR-AI-20260429-59: Router service lifecycle uses shared lazy providers
+
+- Status: accepted
+- Area: backend router/service lifecycle
+- Context:
+  The debt audit found repeated router-level `_service = None` / `get_*_service()` / `set_*_service()` boilerplate and a concrete bug risk in `routers/sorting.py`: compatibility binding called `get_sorting_service()` during module import, which could create a default `SortingService` before `main.py` or tests injected the intended instance. `routers/tags.py` had the same eager compatibility pattern. The same pass also confirmed `GALLERY_MAX_LIMIT` was a dead config value because the images router/service already enforce their own request limits.
+- Decision:
+  Router-owned services should use the shared `ServiceProvider` helper for lazy creation, test injection, clearing, and optional state-binding hooks. Legacy module-level compatibility handles may remain temporarily, but Tagging/Sorting progress/session handles must be backed by lazy `MutableStateProxy` objects until an explicit service is requested or injected. Dead config/env knobs that no runtime caller reads should be removed instead of documented as supported configuration.
+- Why:
+  Per-router copies of the same lazy-singleton pattern drift quickly, and import-time service construction creates split-brain state and fragile test/application lifecycle order. A shared provider preserves FastAPI dependency injection ergonomics while making service replacement/clearing consistent. Dead config values are worse than no config because users can set them and see no behavior change.
+- Do not regress:
+  Do not call `get_*_service()` from router module top level to initialize compatibility state. Do not reintroduce ad-hoc `_service = None` provider clones for new routers. Do not reintroduce `SD_IMAGE_SORTER_GALLERY_MAX_LIMIT` unless the images API actually reads it and tests prove the contract.
+- Allowed evolution:
+  Once legacy router-level state access is gone, compatibility proxies can be removed entirely. `ServiceProvider` may grow only small lifecycle hooks; larger application-scoped service containers should be a deliberate FastAPI lifecycle refactor.
+- Evidence:
+  `backend/services/service_provider.py`, `backend/routers/aesthetic.py`, `backend/routers/artists.py`, `backend/routers/censor.py`, `backend/routers/images.py`, `backend/routers/prompts.py`, `backend/routers/similarity.py`, `backend/routers/sorting.py`, `backend/routers/tags.py`, `backend/routers/updates.py`, `backend/config.py`, `backend/image_manager.py`, `backend/tests/test_service_provider.py`, `backend/tests/test_routers/test_sorting.py`, `docs/TECHNICAL_DEBT_NOTES.md`.
+- Validation:
+  Provider/router targeted pytest passed for service provider, state compatibility, sorting compatibility, tags, prompts/censor/similarity/artists, updates, and images (`201 passed`); config/image-manager targeted pytest also passed; full `python3 scripts/run_ci.py` passed afterward (`800 passed, 5 skipped` backend; `113 passed, 2 skipped` Playwright).
+
+
+### ADR-AI-20260429-60: Frontend listener debt gets local cleanup, not a global lifecycle rewrite
+
+- Status: accepted
+- Area: frontend event lifecycle / stability
+- Context:
+  The debt audit flagged a high add/remove listener imbalance. A full teardown lifecycle for `app.js`, `gallery.js`, and `censor-edit.js` is a Dangerous Refactor, but several isolated leaks were safe to reduce: Gallery preview zoom left document-level mouse handlers alive after the image modal closed, Queue Solitaire toolbar init could stack handlers if the exported initializer was called again, Folder Browser registered the same ready callback twice, and Reader/Obfuscator exposed init methods that could rebind drop/paste/click listeners.
+- Decision:
+  Apply local, idempotent cleanup only where the owner is clear. Gallery owns `_cleanupZoomHandlers()` and `hideModal('image-modal')` calls it on the canonical close path. Queue Solitaire, Image Reader, and Image Obfuscator use small `_toolbarInitialized` / `_eventsBound` guards. Folder Browser keeps one ready path.
+- Why:
+  These changes remove concrete duplicate-listener paths without inventing a cross-view lifecycle system or touching Censor canvas re-entry behavior.
+- Do not regress:
+  Do not re-add document-level Gallery zoom handlers without close cleanup. Do not call exported frontend `init()` functions in a way that stacks DOM listeners. Do not use this local cleanup as justification for a mechanical whole-app listener rewrite.
+- Allowed evolution:
+  A future frontend architecture pass can replace these local guards with explicit view init/teardown contracts after E2E coverage is strong enough.
+- Evidence:
+  `frontend/js/gallery.js`, `frontend/js/app.js`, `frontend/js/queue-solitaire.js`, `frontend/js/folder-browser.js`, `frontend/js/image-reader.js`, `frontend/js/image-obfuscate.js`.
+- Validation:
+  `node --check` passed for the touched frontend files; targeted/full validation should continue to cover Gallery modal close, Queue Solitaire, Reader paste, and Obfuscation workflows.

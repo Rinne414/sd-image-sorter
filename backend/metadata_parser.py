@@ -320,6 +320,38 @@ class MetadataParser:
             text.decode("utf-8", errors="replace"),
         )
 
+    def _safe_zlib_decompress_limited(self, compressed_data: bytes, max_output_bytes: int) -> Optional[bytes]:
+        """
+        Safely decompress zlib data with a hard output cap.
+
+        Returns None on malformed streams or when decompressed bytes exceed
+        the configured limit.
+        """
+        try:
+            decompressor = zlib.decompressobj()
+            max_probe = max_output_bytes + 1
+            decompressed = decompressor.decompress(compressed_data, max_probe)
+
+            if len(decompressed) > max_output_bytes:
+                return None
+
+            if decompressor.unconsumed_tail:
+                return None
+
+            remaining_budget = max_probe - len(decompressed)
+            if remaining_budget > 0:
+                decompressed += decompressor.flush(remaining_budget)
+
+            if len(decompressed) > max_output_bytes:
+                return None
+
+            if not decompressor.eof:
+                return None
+
+            return decompressed
+        except zlib.error:
+            return None
+
     def _decode_png_ztxt_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
         """Decode a PNG zTXt chunk into a key/value pair."""
         if b"\x00" not in chunk_data:
@@ -330,8 +362,8 @@ class MetadataParser:
         compression_method = remainder[0]
         if compression_method != 0:
             return None
-        text = zlib.decompress(remainder[1:])
-        if len(text) > _MAX_DECOMPRESSED_BYTES:
+        text = self._safe_zlib_decompress_limited(remainder[1:], _MAX_DECOMPRESSED_BYTES)
+        if text is None:
             return None
         return (
             keyword.decode("latin-1", errors="replace"),
@@ -360,8 +392,8 @@ class MetadataParser:
         if compression_flag == 1:
             if compression_method != 0:
                 return None
-            text_bytes = zlib.decompress(text_bytes)
-            if len(text_bytes) > _MAX_DECOMPRESSED_BYTES:
+            text_bytes = self._safe_zlib_decompress_limited(text_bytes, _MAX_DECOMPRESSED_BYTES)
+            if text_bytes is None:
                 return None
 
         return (

@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, BackgroundTasks, Query
 
+from services.service_provider import ServiceProvider
+from services.state_compat import MutableStateProxy
 from services.sorting_service import (
     SortingService,
     ScanRequest,
@@ -22,7 +24,6 @@ from services.sorting_service import (
 router = APIRouter(prefix="/api", tags=["sorting"])
 
 # Service instance - will be set via dependency injection
-_sorting_service: Optional[SortingService] = None
 scan_progress: Any = None
 sort_session: Any = None
 
@@ -34,20 +35,32 @@ def _bind_sorting_compat_state(service: SortingService) -> None:
     sort_session = service.get_sort_session_proxy()
 
 
+def _bind_lazy_sorting_compat_state() -> None:
+    """Expose legacy router-level state without creating SortingService at import time."""
+    global scan_progress, sort_session
+    scan_progress = MutableStateProxy(
+        lambda: get_sorting_service().get_scan_progress(),
+        lambda state: get_sorting_service().set_scan_progress(state),
+    )
+    sort_session = MutableStateProxy(
+        lambda: get_sorting_service().get_sort_session(),
+        lambda state: get_sorting_service().set_sort_session(state),
+    )
+
+
+_sorting_service_provider = ServiceProvider(SortingService, on_set=_bind_sorting_compat_state)
+
+
 def get_sorting_service() -> SortingService:
     """Dependency injection for SortingService."""
-    global _sorting_service
-    if _sorting_service is None:
-        _sorting_service = SortingService()
-        _bind_sorting_compat_state(_sorting_service)
-    return _sorting_service
+    return _sorting_service_provider.get()
 
 
-def set_sorting_service(service: SortingService) -> None:
-    """Set the sorting service instance."""
-    global _sorting_service
-    _sorting_service = service
-    _bind_sorting_compat_state(service)
+def set_sorting_service(service: Optional[SortingService]) -> None:
+    """Set or clear the sorting service instance."""
+    _sorting_service_provider.set(service)
+    if service is None:
+        _bind_lazy_sorting_compat_state()
 
 
 def load_session_from_disk() -> None:
@@ -75,8 +88,7 @@ def set_sort_session(session: Dict[str, Any]) -> None:
     get_sorting_service().set_sort_session(session)
 
 
-if scan_progress is None or sort_session is None:
-    _bind_sorting_compat_state(get_sorting_service())
+_bind_lazy_sorting_compat_state()
 
 
 @router.post(

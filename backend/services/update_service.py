@@ -47,6 +47,8 @@ _HTTP_HEADERS = {
     "User-Agent": f"sd-image-sorter/{APP_VERSION}",
 }
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_MAX_UPDATE_ARCHIVE_ENTRIES = 20000
+_MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _normalize_version(text: Optional[str]) -> str:
@@ -500,8 +502,16 @@ class UpdateService:
                 raise RuntimeError(f"Downloaded patch is not a valid zip archive: {archive_path.name}")
             package_manifest: dict[str, Any] | None = None
             with zipfile.ZipFile(archive_path, "r") as archive:
-                for member in archive.infolist():
+                total_uncompressed_bytes = 0
+                members = archive.infolist()
+                if len(members) > _MAX_UPDATE_ARCHIVE_ENTRIES:
+                    raise RuntimeError("Downloaded update archive contains too many entries")
+                for member in members:
                     _validate_archive_member_name(member.filename)
+                    if not member.is_dir():
+                        total_uncompressed_bytes += member.file_size
+                        if total_uncompressed_bytes > _MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES:
+                            raise RuntimeError("Downloaded update archive uncompressed size exceeds the safe limit")
                     manifest_member_name = _package_manifest_member_name(member.filename)
                     if manifest_member_name is not None:
                         package_manifest = _load_single_package_manifest(
@@ -522,10 +532,18 @@ class UpdateService:
                 raise RuntimeError(f"Downloaded patch is not a valid tar archive: {archive_path.name}")
             package_manifest = None
             with tarfile.open(archive_path, "r:gz") as archive:
-                for member in archive.getmembers():
+                total_uncompressed_bytes = 0
+                members = archive.getmembers()
+                if len(members) > _MAX_UPDATE_ARCHIVE_ENTRIES:
+                    raise RuntimeError("Downloaded update archive contains too many entries")
+                for member in members:
                     _validate_archive_member_name(member.name)
                     if not (member.isfile() or member.isdir()):
                         raise RuntimeError(f"Downloaded update contains unsupported archive entry: {member.name}")
+                    if member.isfile():
+                        total_uncompressed_bytes += member.size
+                        if total_uncompressed_bytes > _MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES:
+                            raise RuntimeError("Downloaded update archive uncompressed size exceeds the safe limit")
                     manifest_member_name = _package_manifest_member_name(member.name)
                     if member.isfile() and manifest_member_name is not None:
                         manifest_file = archive.extractfile(member)

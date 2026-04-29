@@ -86,10 +86,6 @@ from services import (
 )
 
 
-# Lazy import tagger to avoid loading model at startup
-_tagger = None
-_tagger_settings: Dict[str, Any] = {}
-
 # Service instances (singleton pattern)
 _image_service: Optional[ImageService] = None
 _sorting_service: Optional[SortingService] = None
@@ -109,7 +105,6 @@ def get_tagger(
     use_gpu: bool = True
 ) -> "WD14Tagger":
     """Get or create the tagger instance with given settings."""
-    global _tagger, _tagger_settings
     from tagger import get_tagger as _get_tagger, DEFAULT_MODEL
 
     model_name = model_name or DEFAULT_MODEL

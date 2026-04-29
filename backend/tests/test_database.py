@@ -253,6 +253,46 @@ class TestDatabaseInit:
         assert row["embedding"] == b"\x01\x02"
         assert tag_row["tag"] == "kept_until_rescan"
 
+    def test_mark_pending_images_metadata_error_only_updates_pending_rows(self, test_db):
+        pending_id = db.add_image(
+            path="/stale/pending-mark.png",
+            filename="pending-mark.png",
+            metadata_json="{}",
+            width=32,
+            height=32,
+            file_size=123,
+            is_readable=True,
+            metadata_status="pending",
+        )
+        complete_id = db.add_image(
+            path="/stale/complete-mark.png",
+            filename="complete-mark.png",
+            metadata_json="{}",
+            width=32,
+            height=32,
+            file_size=123,
+            is_readable=True,
+            metadata_status="complete",
+        )
+
+        marked = db.mark_pending_images_metadata_error([pending_id, complete_id], "scan stopped")
+
+        with db.get_db() as conn:
+            rows = {
+                int(row["id"]): row
+                for row in conn.execute(
+                    "SELECT id, is_readable, metadata_status, read_error FROM images WHERE id IN (?, ?)",
+                    (pending_id, complete_id),
+                ).fetchall()
+            }
+
+        assert marked == 1
+        assert rows[pending_id]["is_readable"] == 0
+        assert rows[pending_id]["metadata_status"] == "error"
+        assert rows[pending_id]["read_error"] == "scan stopped"
+        assert rows[complete_id]["is_readable"] == 1
+        assert rows[complete_id]["metadata_status"] == "complete"
+
     def test_init_upgrades_versioned_database_with_pending_backfill_migration(self, tmp_path):
         """Versioned databases should apply remaining migrations and land on the latest version."""
         import sqlite3

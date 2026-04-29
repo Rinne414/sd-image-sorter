@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 import update_worker
+from services import update_service
 from services.update_service import UpdateService
 
 
@@ -17,6 +18,30 @@ def test_safe_relative_path_rejects_archive_escape_entries():
             update_worker._safe_relative_path(name)
 
     assert update_worker._safe_relative_path("frontend/index.html") == Path("frontend") / "index.html"
+
+
+def test_pid_exists_uses_windows_process_api_without_signal_zero(monkeypatch):
+    monkeypatch.setattr(update_worker.sys, "platform", "win32")
+    monkeypatch.setattr(update_worker, "_windows_pid_exists", lambda pid: pid == 1234)
+
+    def fail_kill(pid: int, signal: int) -> None:
+        raise AssertionError("Windows PID checks must not call os.kill(pid, 0)")
+
+    monkeypatch.setattr(update_worker.os, "kill", fail_kill)
+
+    assert update_worker._pid_exists(1234) is True
+    assert update_worker._pid_exists(4321) is False
+
+
+def test_pid_exists_treats_posix_permission_error_as_existing(monkeypatch):
+    monkeypatch.setattr(update_worker.sys, "platform", "linux")
+
+    def deny_signal(pid: int, signal: int) -> None:
+        raise PermissionError
+
+    monkeypatch.setattr(update_worker.os, "kill", deny_signal)
+
+    assert update_worker._pid_exists(1234) is True
 
 
 def _write_text_files(root: Path, files: dict[str, str]) -> None:
@@ -284,6 +309,33 @@ def test_update_service_validate_zip_requires_package_manifest(tmp_path: Path):
         service._validate_archive(archive_path)
 
 
+def test_update_service_validate_zip_rejects_oversized_uncompressed_payload(monkeypatch, tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    manifest = json.dumps({"managed_paths": ["frontend/index.html", "update/package-manifest.json"]})
+    monkeypatch.setattr(update_service, "_MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES", len(manifest) + 4)
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("update/package-manifest.json", manifest)
+        archive.writestr("frontend/index.html", "<html></html>\n")
+
+    with pytest.raises(RuntimeError, match="uncompressed size exceeds"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_zip_rejects_too_many_entries(monkeypatch, tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.zip"
+    monkeypatch.setattr(update_service, "_MAX_UPDATE_ARCHIVE_ENTRIES", 1)
+
+    with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("update/package-manifest.json", json.dumps({"managed_paths": ["update/package-manifest.json"]}))
+        archive.writestr("frontend/index.html", "<html></html>\n")
+
+    with pytest.raises(RuntimeError, match="too many entries"):
+        service._validate_archive(archive_path)
+
+
 def test_update_service_validate_zip_accepts_single_payload_root_manifest(tmp_path: Path):
     service = UpdateService()
     archive_path = tmp_path / "patch.zip"
@@ -350,6 +402,25 @@ def test_update_service_validate_tar_requires_package_manifest(tmp_path: Path):
         archive.addfile(member, io.BytesIO(payload))
 
     with pytest.raises(RuntimeError, match="missing update/package-manifest.json"):
+        service._validate_archive(archive_path)
+
+
+def test_update_service_validate_tar_rejects_oversized_uncompressed_payload(monkeypatch, tmp_path: Path):
+    service = UpdateService()
+    archive_path = tmp_path / "patch.tar.gz"
+    manifest_bytes = json.dumps({"managed_paths": ["frontend/index.html", "update/package-manifest.json"]}).encode("utf-8")
+    payload = b"<html></html>\n"
+    monkeypatch.setattr(update_service, "_MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES", len(manifest_bytes) + 4)
+
+    with tarfile.open(archive_path, "w:gz") as archive:
+        manifest_member = tarfile.TarInfo("update/package-manifest.json")
+        manifest_member.size = len(manifest_bytes)
+        archive.addfile(manifest_member, io.BytesIO(manifest_bytes))
+        payload_member = tarfile.TarInfo("frontend/index.html")
+        payload_member.size = len(payload)
+        archive.addfile(payload_member, io.BytesIO(payload))
+
+    with pytest.raises(RuntimeError, match="uncompressed size exceeds"):
         service._validate_archive(archive_path)
 
 

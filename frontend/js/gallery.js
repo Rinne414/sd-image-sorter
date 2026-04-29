@@ -2649,6 +2649,32 @@ ${String(value)}`)
             .join('\n\n');
     },
 
+    _cleanupZoomHandlers(modalImg = document.getElementById('modal-image')) {
+        if (modalImg) {
+            if (this._zoomWheelHandler) {
+                modalImg.removeEventListener('wheel', this._zoomWheelHandler);
+            }
+            if (this._zoomMousedownHandler) {
+                modalImg.removeEventListener('mousedown', this._zoomMousedownHandler);
+            }
+            if (this._zoomDblclickHandler) {
+                modalImg.removeEventListener('dblclick', this._zoomDblclickHandler);
+            }
+            modalImg.style.cursor = 'default';
+        }
+        if (this._zoomMousemoveHandler) {
+            document.removeEventListener('mousemove', this._zoomMousemoveHandler);
+        }
+        if (this._zoomMouseupHandler) {
+            document.removeEventListener('mouseup', this._zoomMouseupHandler);
+        }
+        this._zoomWheelHandler = null;
+        this._zoomMousedownHandler = null;
+        this._zoomDblclickHandler = null;
+        this._zoomMousemoveHandler = null;
+        this._zoomMouseupHandler = null;
+    },
+
     async openPreview(imageId) {
         const { $, showModal, formatSize, showToast } = getGalleryAppContext();
         const API = getRequiredGalleryAPI();
@@ -2813,23 +2839,7 @@ ${String(value)}`)
                 modalImg.style.cursor = 'default';
             };
 
-            // Remove previous listeners by replacing the element reference
-            // (use a fresh set of closures each time openPreview is called)
-            if (this._zoomWheelHandler) {
-                modalImg.removeEventListener('wheel', this._zoomWheelHandler);
-            }
-            if (this._zoomMousedownHandler) {
-                modalImg.removeEventListener('mousedown', this._zoomMousedownHandler);
-            }
-            if (this._zoomDblclickHandler) {
-                modalImg.removeEventListener('dblclick', this._zoomDblclickHandler);
-            }
-            if (this._zoomMousemoveHandler) {
-                document.removeEventListener('mousemove', this._zoomMousemoveHandler);
-            }
-            if (this._zoomMouseupHandler) {
-                document.removeEventListener('mouseup', this._zoomMouseupHandler);
-            }
+            this._cleanupZoomHandlers(modalImg);
 
             this._zoomWheelHandler = (e) => {
                 e.preventDefault();

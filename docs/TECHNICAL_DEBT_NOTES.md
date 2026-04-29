@@ -284,8 +284,8 @@ This refresh aligns the long audit report with the current shipped workspace aft
   `requirements.in` / `requirements-dev.in`, compiled lock outputs, GitHub Actions CI, coverage reporting, and a lock-freshness guard now exist. Cross-platform lock maintenance still needs ongoing care.
 - TD-06 `created_at` mixed semantics: mitigated.
   The schema now separates `library_order_time` from `source_file_mtime`, default ordering uses `library_order_time`, and `created_at` is reduced to a compatibility alias. The remaining cleanup is future alias removal, not unresolved mixed live semantics.
-- TD-07 Router/service boundary leakage: open.
-  New hardening work avoided adding fresh leakage, but the older mixed boundaries remain.
+- TD-07 Router/service boundary leakage: partially mitigated.
+  Router service getter/setter boilerplate now shares `ServiceProvider`, and Tagging/Sorting compatibility state no longer creates services at import time. Older service-layer `HTTPException` usage remains intentionally deferred because broad exception migration is a Dangerous Refactor.
 - TD-08 Manual sort session persistence split-brain: partially mitigated.
   Persisted session storage now lives under package-local runtime state with legacy-path migration, but broader multi-layer session-state ownership is still not unified.
 - TD-09 Selection semantics ambiguity: partially mitigated.
@@ -572,3 +572,44 @@ Quality bar:
 - Quick-import generator counts now expose `metadata_pending`, `scan_status`, and `scan_library_ready` through `/api/stats`; the UI labels unresolved generator buckets as resolving while metadata is pending or scan import is not library-ready. Remaining debt is historical rows that need explicit reparse/rescan when old parser logic already saved the wrong generator.
 - Existing already-indexed Forge rows may require reparse/rescan to move buckets if they were previously saved as `webui`; the parser fix improves new or re-parsed metadata, not historical rows automatically.
 - Local Playwright still depends on either host Chromium shared libraries or the wrapper's `.tools` runtime package cache being present. The touched smoke slice passes through the wrapper, but a clean WSL workspace without system libs still needs the local `.deb` cache before browser tests can run.
+
+## Audit Debt Reduced On 2026-04-29
+
+- E2E false-green risk is now guarded: `tests/e2e/specs/` exists with real specs, and `backend/tests/test_release_build.py` fails if it becomes an empty shell again.
+- Portable Python compatibility is guarded: launcher scripts require Python 3.12+, release embed Python is 3.12.8, and tests assert the embed minor matches the compiled requirements header.
+- PNG metadata parsing no longer relies on unbounded zlib output; compressed text chunks use capped streaming decompression, and oversized chunk reads are bounded by `_MAX_PNG_CHUNK_BYTES`.
+- Aesthetic and Artist background state now lives in services, not router-level dictionaries. Future background jobs should follow service-owned state with thin router adapters.
+- Model manager logic now has `ModelService`; inventory building, Privacy YOLO download/zip validation, and prepare-model branches no longer live in `routers/models.py`.
+- Frontend i18n no longer has a translation-to-`innerHTML` sink; `data-i18n-html` remains only as a legacy text-only alias.
+- The old hardcoded purple CSS accent has been moved behind CSS variables across `frontend/css/*.css`; this reduces theme drift but does not merge `styles.css`, `ui-refresh.css`, and `censor-v2.css` ownership.
+- CI now runs dependency security audit through `scripts/run_ci.py`, GitHub Actions has a `macos-latest` dependency/import/release-guard job, and frontend JavaScript syntax is checked with `node --check` before E2E.
+- Remote archive intake is now bounded in the touched release/model paths: Privacy YOLO zip, LSNet artist runtime zip, and update zip/tar validation reject unsafe paths, too many entries, and excessive uncompressed size.
+- LSNet artist runtime downloads are pinned to a GitHub commit zip, and the Windows update worker no longer uses `os.kill(pid, 0)` for PID liveness checks.
+- Manual Sort minimap preview now requests only remaining preview slots and slices backend responses so the 1000-image cap cannot overshoot.
+- Dynamic frontend labels now avoid stale translation replay: Auto-Separate updates the active move/copy label key, Queue Solitaire removes static `data-i18n` before generated summaries, and Manual Sort wraps the resume click handler instead of passing the DOM event as a session payload.
+- `pip-audit` is now in the compiled dev lock; `scripts/security_check.py` still keeps a disposable temp-venv fallback for externally managed or incomplete Python installations.
+- Aesthetic predictor lazy loading now uses a singleton lock, matching the heavy-model patterns in tagger/similarity and preventing duplicate CLIP/head loads under concurrent requests.
+- Numeric environment variables now route through typed config readers with explicit `Invalid <ENV>: expected ...` startup errors instead of raw `int()` / `float()` tracebacks.
+- ToriiGate downloads are pinned to HuggingFace revision `667e771497abcfa38637e1d308cb495beb68d803` instead of the moving `main` ref, and its CUDA memory fraction uses the shared env parser.
+- `/api/open-folder` now has a Pydantic request body model, so the OpenAPI contract reflects the expected `image_id` payload while preserving the existing 400 response for missing IDs.
+- Queue Solitaire marquee selection now tears down its document-level mouse listeners when the workspace closes, reducing cross-view listener residue without introducing a full frontend lifecycle refactor.
+- Gallery preview zoom handlers now have an explicit close-path cleanup hook, and Reader/Obfuscator/Queue Solitaire local initializers are idempotent so repeated exported `init()` calls do not stack duplicate UI listeners.
+- Censor dynamic helper text now drops stale static `data-i18n` bindings before writing runtime model-status copy, and scan completion no longer forces an extra gallery image reload after the library-ready refresh already populated the gallery.
+- `scripts/run_ci.py` now normalizes Linux/WSL `TMPDIR`/`TEMP`/`TMP` to `/tmp` for subprocesses, avoiding pytest capture crashes caused by inherited Windows temp paths.
+- File move/copy consistency is now protected for ordinary DB failures: move restores the file when SQLite path update fails, copy deletes the copied file when indexed-state insertion fails, and copied row/tags/derived state are written in one transaction.
+- Router service lifecycle boilerplate now uses shared `ServiceProvider`; simple routers no longer carry per-file `_service = None` / `get_*` / `set_*` clones, and Tagging/Sorting compatibility state is lazy instead of constructing services at import time.
+- The dead `GALLERY_MAX_LIMIT` config/env knob was removed; gallery request limits are enforced by the images router/service contracts (`le=1000` / `LIMIT_MAX`) instead of a disconnected config constant.
+- Interrupted-scan metadata recovery now uses the database-owned stale-metadata error constant directly from `image_manager.py`, removing the last alias left from the duplicated error-message quick win.
+- The audit's proposed deletion of `backend/db_repos/` was rejected: current tests and ADR-AI-20260428-25 still use it as a repository/path-equivalence seam, so the debt is partial adoption rather than dead code.
+- The audit's `nudenet_detector.py` singleton deletion quick win was rejected: `_nudenet_instance` backs `get_nudenet_detector()` and is imported by censor/model-service paths, so deleting it would break runtime callers.
+
+### Still Intentionally Deferred
+
+- Frontend God-file decomposition (`app.js`, `censor-edit.js`, `gallery.js`) remains risky and should be done only behind broader E2E coverage. Local listener cleanup is improved, but a full view lifecycle/teardown model is still intentionally deferred.
+- CSS ownership is still split across several large files; variables are aligned, but selector duplication and `!important` debt remain.
+- Archive-size budgets are conservative guardrails, not a full artifact provenance system; full portable release package smoke and model-asset install smoke are still missing.
+- Several older services still raise FastAPI `HTTPException`; this pass fixed the audit-named Aesthetic/Artist path and added ModelService, not a whole-service-layer exception migration.
+- macOS browser E2E is still missing; the new macOS job is only dependency import plus release guard coverage.
+- `ui-refresh.js` still uses a broad MutationObserver to replay static translations. Dynamic UI code must keep using explicit i18n ownership until a narrower refresh contract/helper exists.
+- File move/copy operations still are not truly atomic across process crashes between filesystem and SQLite steps; the current mitigation handles normal DB exceptions with compensation, but a durable recovery journal is still deferred.
+- Service-layer `HTTPException` usage remains in older services; this pass intentionally avoided the dangerous broad exception migration.

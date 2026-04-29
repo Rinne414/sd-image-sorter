@@ -32,6 +32,7 @@ E2E_PLAYWRIGHT = _first_existing(
 )
 PLAYWRIGHT_CLI = ROOT / "tests" / "e2e" / "node_modules" / "playwright" / "cli.js"
 PLAYWRIGHT_WRAPPER = ROOT / "tests" / "e2e" / "scripts" / "run-playwright.mjs"
+FRONTEND_JS_FILES = sorted((ROOT / "frontend" / "js").glob("**/*.js"))
 
 
 def _first_executable(*candidates: str | Path) -> str:
@@ -62,6 +63,21 @@ NODE_EXECUTABLE = _first_executable(
             Path("/usr/local/bin/node"),
             Path("/mnt/c/Program Files/nodejs/node.exe"),
             Path("C:/Program Files/nodejs/node.exe"),
+        ]
+    )
+)
+HOST_NODE_EXECUTABLE = _first_executable(
+    *(
+        [
+            Path("C:/Program Files/nodejs/node.exe"),
+            "node",
+        ]
+        if os.name == "nt"
+        else [
+            "node",
+            Path("/usr/bin/node"),
+            Path("/usr/local/bin/node"),
+            Path("/mnt/c/Program Files/nodejs/node.exe"),
         ]
     )
 )
@@ -111,6 +127,17 @@ def _find_available_port(*preferred_ports: int) -> str:
     raise RuntimeError("Could not find a free localhost port for Playwright webServer")
 
 
+def _apply_stable_temp_env(env: dict[str, str]) -> None:
+    """Keep Linux/WSL pytest capture away from inherited Windows temp paths."""
+    if os.name == "nt":
+        return
+
+    stable_tmp = "/tmp"
+    env["TMPDIR"] = stable_tmp
+    env["TEMP"] = stable_tmp
+    env["TMP"] = stable_tmp
+
+
 def main() -> int:
     checks: list[tuple[str, list[str], Path]] = [
         (
@@ -118,6 +145,31 @@ def main() -> int:
             [
                 str(BACKEND_PYTHON),
                 "scripts/check_lockfiles.py",
+            ],
+            ROOT,
+        ),
+        (
+            "dependency security audit",
+            [
+                str(BACKEND_PYTHON),
+                "scripts/security_check.py",
+            ],
+            ROOT,
+        ),
+        (
+            "frontend js syntax",
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import subprocess, sys; "
+                    "node = sys.argv[1]; files = sys.argv[2:]; "
+                    "failed = [path for path in files if subprocess.run([node, '--check', path]).returncode != 0]; "
+                    "print(f'Checked {len(files)} frontend JS files'); "
+                    "sys.exit(1 if failed else 0)"
+                ),
+                str(HOST_NODE_EXECUTABLE),
+                *[str(path) for path in FRONTEND_JS_FILES],
             ],
             ROOT,
         ),
@@ -156,6 +208,7 @@ def main() -> int:
     for name, command, cwd in checks:
         print(f"[CI] Working directory: {cwd}")
         env = os.environ.copy()
+        _apply_stable_temp_env(env)
         if name == "playwright e2e":
             env_values = {
                 "PW_REUSE_SERVER": "1",

@@ -4,11 +4,9 @@ Artist Identification API Router for SD Image Sorter.
 Endpoints for identifying artist/style in images using LSNet-style classification.
 """
 import os
-import threading
 import logging
-import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -20,6 +18,7 @@ from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
 from exceptions import ImageNotFoundError, ServiceError, ValidationError
 from model_health import get_model_health
 from services.artist_service import ArtistService
+from services.service_provider import ServiceProvider
 
 logger = logging.getLogger(__name__)
 
@@ -122,55 +121,23 @@ class ArtistImageListResponse(BaseModel):
     images: List[ArtistImageResponse]
 
 
-# ============== Background Task State ==============
+def _configure_artist_service(service: ArtistService) -> None:
+    service.set_identifier_getter(get_artist_identifier)
 
-_batch_progress: Dict[str, Any] = {
-    "running": False,
-    "total": 0,
-    "processed": 0,
-    "errors": 0,
-    "results": [],
-    "step": "idle",
-    "message": "",
-    "current_item": None,
-    "started_at": None,
-    "updated_at": None,
-}
 
-# Lock for thread-safe batch progress dict access
-_batch_lock = threading.Lock()
-_artist_service: Optional[ArtistService] = None
+_artist_service_provider = ServiceProvider(
+    lambda: ArtistService(identifier_getter=get_artist_identifier),
+    on_set=_configure_artist_service,
+)
 
 
 def get_artist_service() -> ArtistService:
-    global _artist_service
-    if _artist_service is None:
-        _artist_service = ArtistService(identifier_getter=get_artist_identifier)
-    else:
-        _artist_service.set_identifier_getter(get_artist_identifier)
-    return _artist_service
+    service = _artist_service_provider.get()
+    service.set_identifier_getter(get_artist_identifier)
+    return service
 
 
-def set_artist_service(service: ArtistService) -> None:
-    global _artist_service
-    _artist_service = service
-
-
-def _apply_batch_progress_update(update: Dict[str, Any]) -> None:
-    with _batch_lock:
-        if "step" in update:
-            _batch_progress["step"] = update["step"]
-        if "message" in update:
-            _batch_progress["message"] = update["message"]
-        if "current_item" in update:
-            _batch_progress["current_item"] = update["current_item"]
-        if "result" in update:
-            _batch_progress["results"].append(update["result"])
-        if "errors_delta" in update:
-            _batch_progress["errors"] += int(update["errors_delta"] or 0)
-        if "processed_delta" in update:
-            _batch_progress["processed"] += int(update["processed_delta"] or 0)
-        _batch_progress["updated_at"] = time.time()
+set_artist_service = _artist_service_provider.set
 
 
 # ============== Endpoints ==============
@@ -280,6 +247,7 @@ Results are stored in the artist_predictions table.
 async def identify_batch(
     request: IdentifyBatchRequest,
     background_tasks: BackgroundTasks,
+    service: ArtistService = Depends(get_artist_service),
 ):
     """
     Start batch artist identification for multiple images.
@@ -302,25 +270,10 @@ async def identify_batch(
     Note:
         Only one batch can run at a time.
     """
-    global _batch_progress
+    if service.is_batch_running():
+        raise HTTPException(status_code=409, detail="Batch identification already in progress")
 
-    with _batch_lock:
-        if _batch_progress["running"]:
-            raise HTTPException(status_code=409, detail="Batch identification already in progress")
-
-        # Reset progress
-        _batch_progress = {
-            "running": True,
-            "total": len(request.image_ids),
-            "processed": 0,
-            "errors": 0,
-            "results": [],
-            "step": "starting",
-            "message": "Preparing artist identification...",
-            "current_item": None,
-            "started_at": time.time(),
-            "updated_at": time.time(),
-        }
+    service.start_batch_progress(total=len(request.image_ids))
 
     # Start background task
     background_tasks.add_task(
@@ -346,43 +299,26 @@ def _run_batch_identification(
     model_path: Optional[str] = None,
 ):
     """Background task for batch identification with optimized batch operations."""
-    global _batch_progress
-
+    service = get_artist_service()
     try:
-        service = get_artist_service()
         result = service.run_batch_identification(
             image_ids=image_ids,
             threshold=threshold,
             top_k=top_k,
             model_source=model_source,
             model_path=model_path,
-            progress_callback=_apply_batch_progress_update,
+            progress_callback=service.apply_batch_progress_update,
         )
-
-        with _batch_lock:
-            _batch_progress["running"] = False
-            _batch_progress["step"] = "done"
-            _batch_progress["message"] = (
-                f"Completed artist identification: {result['processed']}/{result['total']} processed"
-                + (f", {result['errors']} failed." if result["errors"] else ".")
-            )
-            _batch_progress["current_item"] = None
-            _batch_progress["updated_at"] = time.time()
+        service.finish_batch_progress_done(result)
     except Exception as exc:
         logger.error("Artist batch job failed: %s", exc)
-        with _batch_lock:
-            _batch_progress["running"] = False
-            _batch_progress["step"] = "error"
-            _batch_progress["message"] = f"Artist identification failed: {exc}"
-            _batch_progress["current_item"] = None
-            _batch_progress["updated_at"] = time.time()
+        service.finish_batch_progress_error(exc)
 
 
 @router.get("/batch-progress", response_model=BatchProgress)
-async def get_batch_progress():
+async def get_batch_progress(service: ArtistService = Depends(get_artist_service)):
     """Get the current batch identification progress."""
-    with _batch_lock:
-        return BatchProgress(**_batch_progress)
+    return BatchProgress(**service.get_batch_progress())
 
 
 @router.get("/models", response_model=List[ModelInfo])

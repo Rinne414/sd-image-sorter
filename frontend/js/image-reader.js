@@ -17,6 +17,7 @@
         _languageBound: false,
         _currentSourceKind: 'file',
         _awaitingClipboardPaste: false,
+        _eventsBound: false,
         _lastSuggestedOutputPath: '',
         _metadataEditorStorageKey: 'reader_metadata_editor_last_dir_v1',
         _collapsedState: {
@@ -35,6 +36,11 @@
             const container = document.getElementById('view-reader');
             if (!dropZone) return;
 
+            if (this._eventsBound) {
+                this._syncStaticLabels();
+                return;
+            }
+            this._eventsBound = true;
             this._bindWorkspaceTabs();
 
             // Drop zone handlers

@@ -6,6 +6,7 @@ Outputs a score from ~1 to ~10. Model downloads automatically on first use (~400
 """
 import os
 import logging
+import threading
 from typing import Optional
 from pathlib import Path
 
@@ -15,6 +16,7 @@ _predictor = None
 _clip_model = None
 _clip_preprocess = None
 _device = None
+_load_lock = threading.Lock()
 
 
 def _get_models_dir() -> Path:
@@ -29,6 +31,17 @@ def _ensure_loaded():
 
     if _predictor is not None:
         return
+
+    with _load_lock:
+        if _predictor is not None:
+            return
+
+        _load_predictor()
+
+
+def _load_predictor():
+    """Load CLIP + aesthetic head under the singleton load lock."""
+    global _predictor, _clip_model, _clip_preprocess, _device
 
     try:
         import torch
@@ -90,11 +103,7 @@ def predict_score(image_path: str) -> Optional[float]:
         img.close()
 
         with torch.no_grad():
-            try:
-                import open_clip
-                features = _clip_model.encode_image(img_tensor)
-            except ImportError:
-                features = _clip_model.encode_image(img_tensor)
+            features = _clip_model.encode_image(img_tensor)
 
             features = features / features.norm(dim=-1, keepdim=True)
             score = _predictor(features.float())

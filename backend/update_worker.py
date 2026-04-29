@@ -57,13 +57,39 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _windows_pid_exists(pid: int) -> bool:
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        return _windows_pid_exists(pid)
+
     try:
         os.kill(pid, 0)
-    except OSError:
-        return False
     except PermissionError:
         return True
+    except OSError:
+        return False
     return True
 
 

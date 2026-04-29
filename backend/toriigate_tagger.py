@@ -18,15 +18,14 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-from config import TAGGER_MODELS, get_toriigate_model_dir
+from config import TAGGER_MODELS, get_toriigate_model_dir, read_float_env
 
 logger = logging.getLogger(__name__)
 
 # SECURITY: Pin HuggingFace model revision to prevent supply-chain attacks.
 # snapshot_download() fetches from a remote repo; without a pinned commit, a
 # compromised or hijacked repo could serve malicious model files.
-# TODO: pin to specific commit hash after verification (e.g. "abc1234...")
-TORIIGATE_COMMIT_HASH = "main"  # TODO: pin to specific commit after verification
+TORIIGATE_COMMIT_HASH = "667e771497abcfa38637e1d308cb495beb68d803"
 
 torch = None
 hf_hub = None
@@ -59,7 +58,7 @@ TORIIGATE_SHORT_QUERY = (
 TORIIGATE_MAX_IMAGE_PIXELS = 1024 * 1024
 TORIIGATE_CUDA_MEMORY_FRACTION = max(
     0.30,
-    min(0.95, float(os.environ.get("SD_TORIIGATE_CUDA_MEMORY_FRACTION", "0.80"))),
+    min(0.95, read_float_env("SD_TORIIGATE_CUDA_MEMORY_FRACTION", 0.80)),
 )
 CAPTION_COUNT_PATTERNS = (
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?(?:girl|woman)\b"), "1girl"),

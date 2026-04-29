@@ -110,12 +110,19 @@ function getAutoSepCompletedLabel(mode = getAutoSepOperationMode(), count = '{co
 
 function updateAutoSepActionUi() {
     const executeBtn = document.getElementById('btn-execute-autosep');
-    const labelSpan = executeBtn?.querySelector('[data-i18n]');
+    const labelSpan = executeBtn?.querySelector('[data-i18n], .ui-label, span:last-child');
     const operationMode = getAutoSepOperationMode();
+    const labelKey = operationMode === 'copy' ? 'autosep.copyBtn' : 'autosep.moveBtn';
+    const labelText = operationMode === 'copy'
+        ? tKey(labelKey, 'Copy Images', '复制图片')
+        : tKey(labelKey, 'Move Images', '移动图片');
     if (labelSpan) {
-        labelSpan.textContent = operationMode === 'copy'
-            ? tKey('autosep.copyBtn', 'Copy Images', '复制图片')
-            : tKey('autosep.moveBtn', 'Move Images', '移动图片');
+        labelSpan.setAttribute('data-i18n', labelKey);
+        labelSpan.textContent = labelText;
+    }
+    if (executeBtn) {
+        executeBtn.title = labelText;
+        executeBtn.setAttribute('aria-label', labelText);
     }
 }
 
@@ -465,10 +472,12 @@ function initAutoSeparate() {
     $('#btn-save-autosep-settings')?.addEventListener('click', saveAutoSepSettingsFromUi);
     $('#btn-reset-autosep-settings')?.addEventListener('click', resetAutoSepSettings);
     document.querySelectorAll('input[data-autosep-operation-mode]').forEach((input) => {
-        input.addEventListener('change', () => {
+        const handleOperationModeInput = () => {
             if (!input.checked) return;
             setAutoSepOperationMode(input.value, { persist: true });
-        });
+        };
+        input.addEventListener('input', handleOperationModeInput);
+        input.addEventListener('change', handleOperationModeInput);
     });
     document.querySelectorAll('input[data-autosep-setting]').forEach((input) => {
         input.addEventListener('change', () => {

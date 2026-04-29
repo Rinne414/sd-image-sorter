@@ -8,15 +8,113 @@ from datetime import datetime
 from pathlib import Path
 
 import database as db
+import pytest
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from exceptions import ScanCancelledError  # noqa: E402
+from exceptions import FileOperationError, ScanCancelledError  # noqa: E402
 import image_manager  # noqa: E402
 from image_fingerprint import compute_image_content_fingerprint  # noqa: E402
 from image_manager import scan_folder  # noqa: E402
+
+
+def test_move_image_restores_file_when_database_update_fails(test_db, tmp_path: Path, monkeypatch):
+    source_dir = tmp_path / "move-source"
+    destination_dir = tmp_path / "move-dest"
+    source_dir.mkdir()
+    destination_dir.mkdir()
+    source_path = source_dir / "rollback-move.png"
+    Image.new("RGB", (32, 32), color="green").save(source_path)
+    image_id = db.add_image(path=str(source_path), filename=source_path.name)
+
+    def fail_update_path(_image_id: int, _new_path: str):
+        raise RuntimeError("simulated database failure")
+
+    monkeypatch.setattr(image_manager, "update_image_path", fail_update_path)
+
+    with pytest.raises(FileOperationError, match="file was restored"):
+        image_manager.move_image(image_id, str(destination_dir), str(source_path))
+
+    assert source_path.exists()
+    assert not (destination_dir / source_path.name).exists()
+    assert db.get_image_by_id(image_id)["path"] == str(source_path)
+
+
+def test_copy_image_removes_copied_file_when_database_update_fails(test_db, tmp_path: Path, monkeypatch):
+    source_dir = tmp_path / "copy-source"
+    destination_dir = tmp_path / "copy-dest"
+    source_dir.mkdir()
+    destination_dir.mkdir()
+    source_path = source_dir / "rollback-copy.png"
+    Image.new("RGB", (32, 32), color="purple").save(source_path)
+    image_id = db.add_image(path=str(source_path), filename=source_path.name)
+
+    def fail_copy_state(*_args, **_kwargs):
+        raise RuntimeError("simulated database failure")
+
+    monkeypatch.setattr(image_manager, "add_copied_image_with_state", fail_copy_state)
+
+    with pytest.raises(FileOperationError, match="copied file was removed"):
+        image_manager.copy_image(image_id, str(destination_dir), str(source_path), db.get_image_by_id(image_id))
+
+    assert source_path.exists()
+    assert not (destination_dir / source_path.name).exists()
+    assert db.get_image_by_path(str(destination_dir / source_path.name)) is None
+
+
+def test_copy_image_replaces_stale_target_row_state(test_db, tmp_path: Path):
+    source_dir = tmp_path / "copy-source"
+    destination_dir = tmp_path / "copy-dest"
+    source_dir.mkdir()
+    destination_dir.mkdir()
+    source_path = source_dir / "stale-copy.png"
+    target_path = destination_dir / source_path.name
+    Image.new("RGB", (32, 32), color="orange").save(source_path)
+    source_id = db.add_image(path=str(source_path), filename=source_path.name)
+    stale_id = db.add_image(path=str(target_path), filename=target_path.name)
+    db.add_tags(source_id, [{"tag": "fresh_tag", "confidence": 0.9}])
+    db.add_tags(stale_id, [{"tag": "stale_tag", "confidence": 0.8}])
+    with db.get_db() as conn:
+        conn.execute(
+            "INSERT INTO artist_predictions (image_id, artist, confidence, top_predictions) VALUES (?, ?, ?, ?)",
+            (stale_id, "stale_artist", 0.5, "[]"),
+        )
+
+    result = image_manager.copy_image(source_id, str(destination_dir), str(source_path), db.get_image_by_id(source_id))
+
+    copied_id = result["new_image_id"]
+    assert copied_id == stale_id
+    assert target_path.exists()
+    assert {tag["tag"] for tag in db.get_image_tags(copied_id)} == {"fresh_tag"}
+    with db.get_db() as conn:
+        artist_count = conn.execute(
+            "SELECT COUNT(*) FROM artist_predictions WHERE image_id = ?",
+            (copied_id,),
+        ).fetchone()[0]
+    assert artist_count == 0
+
+
+def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, tmp_path: Path):
+    source_path = tmp_path / "source.png"
+    copied_path = tmp_path / "copied.png"
+    Image.new("RGB", (32, 32), color="blue").save(source_path)
+    source_id = db.add_image(path=str(source_path), filename=source_path.name)
+    source_row = db.get_image_by_id(source_id)
+    record = image_manager._build_copied_image_record(source_row, str(copied_path), source_path.stat())
+
+    with pytest.raises(Exception):
+        db.add_copied_image_with_state(
+            source_id,
+            record,
+            [
+                {"tag": "duplicate_tag", "confidence": 0.9},
+                {"tag": "duplicate_tag", "confidence": 0.8},
+            ],
+        )
+
+    assert db.get_image_by_path(str(copied_path)) is None
 
 
 def test_scan_folder_starts_processing_without_count_preamble(test_db, tmp_path: Path):
@@ -375,3 +473,19 @@ def test_scan_folder_cleanup_missing_entries(test_db, tmp_path: Path):
 
     assert result["removed"] == 1
     assert [image["filename"] for image in images] == ["good.png"]
+
+
+def test_get_folder_stats_skips_symlinked_images(tmp_path: Path):
+    real_image = tmp_path / "real.png"
+    Image.new("RGB", (32, 32), color="white").save(real_image)
+
+    symlink_image = tmp_path / "linked.png"
+    try:
+        symlink_image.symlink_to(real_image)
+    except (OSError, NotImplementedError):
+        return
+
+    stats = image_manager.get_folder_stats(str(tmp_path))
+
+    assert stats["total_files"] == 1
+    assert stats["by_extension"] == {".png": 1}

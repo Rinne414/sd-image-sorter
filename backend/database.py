@@ -1041,6 +1041,17 @@ def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List
     ]
 
 
+def _mark_image_tagged(
+    cursor: sqlite3.Cursor,
+    image_id: int,
+    content_fingerprint: Optional[str],
+) -> None:
+    cursor.execute(
+        "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
+        (content_fingerprint, image_id),
+    )
+
+
 def delete_images_by_ids(image_ids: List[int]) -> int:
     """Delete many image rows in chunks and return the removed count."""
     if not image_ids:
@@ -1085,6 +1096,30 @@ def delete_images_by_paths(paths: List[str]) -> int:
     return removed
 
 
+def mark_pending_images_metadata_error(image_ids: List[int], read_error: str) -> int:
+    """Mark pending metadata rows as errored without changing derived state."""
+    normalized_ids = [int(image_id) for image_id in image_ids if image_id]
+    if not normalized_ids:
+        return 0
+
+    placeholders = ",".join("?" for _ in normalized_ids)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            UPDATE images
+            SET is_readable = 0,
+                metadata_status = 'error',
+                read_error = ?,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id IN ({placeholders})
+              AND LOWER(COALESCE(metadata_status, '')) = 'pending'
+            """,
+            [read_error, *normalized_ids],
+        )
+        return int(cursor.rowcount or 0)
+
+
 def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Optional[str] = None) -> None:
     """Add tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
 
@@ -1106,11 +1141,7 @@ def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Opt
                 "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
                 tag_values
             )
-        # Update tagged timestamp
-        cursor.execute(
-            "UPDATE images SET tagged_at = CURRENT_TIMESTAMP, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-            (content_fingerprint, image_id)
-        )
+        _mark_image_tagged(cursor, image_id, content_fingerprint)
     _invalidate_tags_cache()
 
 
@@ -2508,71 +2539,112 @@ def get_image_tags(image_id: int) -> List[Dict[str, Any]]:
         return _rows_to_dicts(cursor.fetchall())
 
 
-def copy_image_derived_state(source_image_id: int, target_image_id: int) -> None:
-    """Copy cached derived fields that remain valid for file duplicates."""
+def _copy_image_derived_state(cursor: sqlite3.Cursor, source_image_id: int, target_image_id: int) -> None:
+    """Copy cached derived fields that remain valid for file duplicates using an existing transaction."""
     if source_image_id == target_image_id:
         return
 
-    with get_db() as conn:
-        cursor = conn.cursor()
-        source_row = cursor.execute(
+    source_row = cursor.execute(
+        """
+        SELECT tagged_at, ai_caption, aesthetic_score, embedding, content_fingerprint
+        FROM images
+        WHERE id = ?
+        """,
+        (source_image_id,),
+    ).fetchone()
+    if source_row:
+        cursor.execute(
             """
-            SELECT tagged_at, ai_caption, aesthetic_score, embedding, content_fingerprint
-            FROM images
+            UPDATE images
+            SET tagged_at = ?,
+                ai_caption = ?,
+                aesthetic_score = ?,
+                embedding = ?,
+                content_fingerprint = COALESCE(?, content_fingerprint)
             WHERE id = ?
             """,
-            (source_image_id,),
-        ).fetchone()
-        if source_row:
-            cursor.execute(
-                """
-                UPDATE images
-                SET tagged_at = ?,
-                    ai_caption = ?,
-                    aesthetic_score = ?,
-                    embedding = ?,
-                    content_fingerprint = COALESCE(?, content_fingerprint)
-                WHERE id = ?
-                """,
-                (
-                    source_row["tagged_at"],
-                    source_row["ai_caption"],
-                    source_row["aesthetic_score"],
-                    source_row["embedding"],
-                    source_row["content_fingerprint"],
-                    target_image_id,
-                ),
-            )
+            (
+                source_row["tagged_at"],
+                source_row["ai_caption"],
+                source_row["aesthetic_score"],
+                source_row["embedding"],
+                source_row["content_fingerprint"],
+                target_image_id,
+            ),
+        )
 
-        artist_row = cursor.execute(
+    artist_row = cursor.execute(
+        """
+        SELECT artist, confidence, top_predictions, identified_at
+        FROM artist_predictions
+        WHERE image_id = ?
+        """,
+        (source_image_id,),
+    ).fetchone()
+    if artist_row:
+        cursor.execute(
             """
-            SELECT artist, confidence, top_predictions, identified_at
-            FROM artist_predictions
-            WHERE image_id = ?
-            """,
-            (source_image_id,),
-        ).fetchone()
-        if artist_row:
-            cursor.execute(
-                """
-                INSERT INTO artist_predictions (
-                    image_id, artist, confidence, top_predictions, identified_at
-                )
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(image_id) DO UPDATE SET
-                    artist = excluded.artist,
-                    confidence = excluded.confidence,
-                    top_predictions = excluded.top_predictions,
-                    identified_at = excluded.identified_at
-                """,
-                (
-                    target_image_id,
-                    artist_row["artist"],
-                    artist_row["confidence"],
-                    artist_row["top_predictions"],
-                    artist_row["identified_at"],
-                ),
+            INSERT INTO artist_predictions (
+                image_id, artist, confidence, top_predictions, identified_at
             )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(image_id) DO UPDATE SET
+                artist = excluded.artist,
+                confidence = excluded.confidence,
+                top_predictions = excluded.top_predictions,
+                identified_at = excluded.identified_at
+            """,
+            (
+                target_image_id,
+                artist_row["artist"],
+                artist_row["confidence"],
+                artist_row["top_predictions"],
+                artist_row["identified_at"],
+            ),
+        )
+
+
+def copy_image_derived_state(source_image_id: int, target_image_id: int) -> None:
+    """Copy cached derived fields that remain valid for file duplicates."""
+    with get_db() as conn:
+        _copy_image_derived_state(conn.cursor(), source_image_id, target_image_id)
+
+
+def add_copied_image_with_state(
+    source_image_id: int,
+    copied_record: Dict[str, Any],
+    source_tags: Optional[List[Dict[str, Any]]] = None,
+) -> int:
+    """Insert a copied image row plus copied tags/derived state in one transaction."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        copied_image_id, _ = _upsert_image_record(cursor, copied_record)
+        cursor.execute("DELETE FROM tags WHERE image_id = ?", (copied_image_id,))
+        cursor.execute("DELETE FROM artist_predictions WHERE image_id = ?", (copied_image_id,))
+        tags_to_copy = source_tags
+        if tags_to_copy is None:
+            cursor.execute(
+                "SELECT tag, confidence FROM tags WHERE image_id = ? ORDER BY confidence DESC",
+                (source_image_id,),
+            )
+            tags_to_copy = _rows_to_dicts(cursor.fetchall())
+
+        tag_values = [
+            (copied_image_id, tag_data.get("tag", ""), tag_data.get("confidence", 1.0))
+            for tag_data in tags_to_copy
+            if tag_data.get("tag")
+        ]
+        if tag_values:
+            cursor.executemany(
+                "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                tag_values,
+            )
+            _mark_image_tagged(cursor, copied_image_id, copied_record.get("content_fingerprint"))
+
+        _copy_image_derived_state(cursor, source_image_id, copied_image_id)
+
+    _invalidate_tags_cache()
+    return copied_image_id
 
 
 def get_image_tags_map(image_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:

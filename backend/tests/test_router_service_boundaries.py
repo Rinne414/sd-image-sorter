@@ -73,3 +73,22 @@ def test_sorting_router_does_not_define_local_session_or_scan_proxy_logic():
 
     assert "class _ScanProgressProxy" not in text
     assert "class _SortSessionProxy" not in text
+
+def test_models_router_stays_thin_and_delegates_runtime_downloads():
+    """The models router should not regain model preparation or archive-download logic."""
+    source = Path(__file__).resolve().parents[1] / "routers" / "models.py"
+    text = source.read_text(encoding="utf-8")
+
+    forbidden_fragments = [
+        "import tagger",
+        "import similarity",
+        "import artist_identifier",
+        "import censor",
+        "import urllib",
+        "import zipfile",
+        "urlopen",
+        "extractall",
+        "_get_model_paths",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in text
