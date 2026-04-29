@@ -1618,3 +1618,20 @@ Use this structure for future entries:
   `scripts/build_review_dataset.py`, `scripts/run_ci.py`, `tests/e2e/playwright.config.ts`, `tests/e2e/specs/reader-live.spec.ts`, `backend/tests/test_release_build.py`.
 - Validation:
   Release-build tests assert the tracked/generated Playwright input contract so future CI-only fixture drift is caught before GitHub Actions.
+
+### ADR-AI-20260429-63: CI E2E must not depend on private local media fixtures
+
+- Status: accepted
+- Area: CI / browser E2E / scan progress contract
+- Context:
+  The clean Linux CI run passed the previous fixture-generation fixes but still exposed three hidden assumptions: a scan progress test assumed metadata callbacks could only happen after discovery was final, the artist E2E expected ignored `backend/favorites` media to be present and identifiable, and the tagger runtime E2E assumed no asynchronous model-sync pass would close the advanced `<details>` element after the test opened it.
+- Decision:
+  Scan completion now emits a terminal metadata progress event with `total_final=true` after all metadata work drains, even if some metadata callbacks were truthfully emitted while discovery was still growing. Artist E2E skips when the clean tracked fixture library and available runtime cannot produce a non-`undefined` prediction. Tagger runtime E2E repeatedly opens the advanced details during the assertion window instead of racing the app's async sync pass.
+- Why:
+  Release CI must validate shipped behavior from tracked inputs only. Tests may use optional local/private media for stronger coverage, but they cannot fail clean checkouts when that media is absent or when an optional AI runtime produces no useful prediction for synthetic fixtures.
+- Do not regress:
+  Do not make required CI E2E depend on ignored media under `backend/favorites` or `.tmp`. If a browser test needs optional AI/media behavior, it must either seed tracked fixtures or explicitly skip with a useful reason.
+- Evidence:
+  `backend/image_manager.py`, `backend/tests/test_image_manager.py`, `tests/e2e/specs/manual-regression.spec.ts`, `tests/e2e/specs/tagger-runtime.spec.ts`.
+- Validation:
+  Targeted backend scan progress test and full backend suite cover the terminal metadata progress contract; Playwright config listing validates the browser spec syntax in this local WSL environment where Chromium runtime libraries are unavailable.

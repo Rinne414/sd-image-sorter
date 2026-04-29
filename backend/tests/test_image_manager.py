@@ -439,7 +439,8 @@ def test_scan_folder_marks_total_as_growing_until_discovery_finishes(test_db, tm
     assert importing_total_final
     assert any(flag is False for flag in importing_total_final)
     assert metadata_total_final
-    assert all(flag is True for flag in metadata_total_final)
+    assert any(flag is True for flag in metadata_total_final)
+    assert metadata_total_final[-1] is True
     assert result["total_final"] is True
 
 

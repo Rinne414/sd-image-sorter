@@ -747,6 +747,24 @@ def scan_folder(
             if result["total"] > 0:
                 _emit_library_ready()
             _drain_metadata_futures(wait_for_all=True)
+            if progress_callback and result["metadata_total"] > 0:
+                try:
+                    progress_callback(
+                        result["metadata_processed"],
+                        result["metadata_total"],
+                        "",
+                        {
+                            "errors": result["errors"],
+                            "last_error": None,
+                            "phase": "metadata",
+                            "library_ready": result["library_ready"],
+                            "metadata_processed": result["metadata_processed"],
+                            "metadata_total": result["metadata_total"],
+                            "total_final": result["total_final"],
+                        },
+                    )
+                except TypeError:
+                    progress_callback(result["metadata_processed"], result["metadata_total"], "")
     except ScanCancelledError:
         _reconcile_interrupted_scan_placeholders()
         raise

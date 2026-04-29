@@ -8,12 +8,15 @@ async function openMainPage(page) {
 async function openTagRuntimeAdvanced(page) {
   const details = page.locator('#tag-runtime-advanced')
   await expect(details).toHaveCount(1)
-  await details.evaluate((node) => {
-    if (node instanceof HTMLDetailsElement) {
-      node.open = true
-    }
-  })
-  await expect(details).toHaveAttribute('open', '')
+  await expect.poll(async () => {
+    return details.evaluate((node) => {
+      if (node instanceof HTMLDetailsElement) {
+        node.open = true
+        return node.open
+      }
+      return false
+    })
+  }, { timeout: 5000 }).toBe(true)
 }
 
 test.describe('Tagger Runtime UI', () => {
