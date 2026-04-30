@@ -354,6 +354,27 @@ class TestSelectionIds:
         assert response.status_code == 400
         assert "Invalid sort_by value" in response.text
 
+    def test_selection_ids_treats_empty_aspect_ratio_as_no_filter(self, test_client, test_db_with_images):
+        """Frontend empty aspect-ratio values should not make all-filtered selection fail."""
+        response = test_client.post("/api/images/selection-ids", json={
+            "aspectRatio": "",
+            "sortBy": "name_asc",
+        })
+
+        assert response.status_code == 200
+        assert response.json()["total"] == len(test_db_with_images["image_ids"])
+
+    def test_selection_token_treats_empty_aspect_ratio_as_no_filter(self, test_client, test_db_with_images):
+        """Chunked all-filtered selection should also accept frontend empty aspect-ratio values."""
+        response = test_client.post("/api/images/selection-token", json={
+            "aspectRatio": "",
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 200
+        assert response.json()["total_estimate"] == len(test_db_with_images["image_ids"])
+
     def test_selection_ids_post_filter_scans_sparse_matches_without_truncation(self, test_client, test_db_with_images):
         """Selection ID resolution should not truncate when SQL prefilter returns many false positives."""
         exact_ids = []
@@ -991,9 +1012,18 @@ class TestDeleteSelectedImages:
         assert image_path.exists()
         assert db.get_image_by_id(image_id) is not None
 
-    def test_delete_selected_images_removes_files_and_database_rows(self, test_client, test_db, tmp_path):
+    def test_delete_selected_images_moves_files_to_trash_and_removes_database_rows(self, test_client, test_db, tmp_path, monkeypatch):
         import database as db
         from PIL import Image
+        from services import image_service
+
+        trashed_paths = []
+
+        def fake_move_file_to_trash(path):
+            trashed_paths.append(Path(path))
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
 
         image_path = tmp_path / "delete-success.png"
         Image.new("RGB", (8, 8), color="white").save(image_path)
@@ -1012,13 +1042,21 @@ class TestDeleteSelectedImages:
         payload = response.json()
         assert payload["deleted"] == 1
         assert payload["failed"] == []
-        assert payload["permanent_delete"] is True
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
+        assert trashed_paths == [image_path]
         assert not image_path.exists()
         assert db.get_image_by_id(image_id) is None
 
-    def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path):
+    def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path, monkeypatch):
         import database as db
         from PIL import Image
+        from services import image_service
+
+        def fake_move_file_to_trash(path):
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
 
         existing_path = tmp_path / "delete-partial-existing.png"
         missing_path = tmp_path / "delete-partial-missing.png"
@@ -1043,7 +1081,8 @@ class TestDeleteSelectedImages:
         assert response.status_code == 200
         payload = response.json()
         assert payload["deleted"] == 1
-        assert payload["permanent_delete"] is True
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
         assert len(payload["failed"]) == 1
         assert payload["failed"][0]["image_id"] == missing_id
         assert payload["failed"][0]["filename"] == missing_path.name
@@ -1051,6 +1090,39 @@ class TestDeleteSelectedImages:
         assert not existing_path.exists()
         assert db.get_image_by_id(existing_id) is None
         assert db.get_image_by_id(missing_id) is not None
+
+    def test_delete_selected_images_does_not_permanently_delete_when_trash_fails(self, test_client, test_db, tmp_path, monkeypatch):
+        import database as db
+        from PIL import Image
+        from services import image_service
+
+        image_path = tmp_path / "delete-trash-fails.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        def fail_move_file_to_trash(path):
+            raise RuntimeError("trash unavailable")
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fail_move_file_to_trash)
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": True},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted"] == 0
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
+        assert len(payload["failed"]) == 1
+        assert "trash unavailable" in payload["failed"][0]["error"]
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is not None
 
 
 class TestReparseImage:

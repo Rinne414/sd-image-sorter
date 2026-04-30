@@ -241,6 +241,54 @@ class TestScan:
         assert "current" in data
         assert "total" in data
 
+    def test_scan_progress_counts_total_before_import_and_keeps_metadata_separate(self, test_client, tmp_path: Path):
+        """Scan progress should count files first and not let metadata progress overwrite import totals."""
+        from PIL import Image
+        from image_manager import scan_folder
+
+        for i in range(3):
+            Image.new("RGB", (32, 32), color="blue").save(tmp_path / f"counted_{i}.png")
+
+        events = []
+
+        def progress_callback(current, total, filename, details=None):
+            events.append({
+                "current": current,
+                "total": total,
+                "filename": filename,
+                "details": details or {},
+            })
+
+        result = scan_folder(
+            str(tmp_path),
+            recursive=False,
+            progress_callback=progress_callback,
+            quick_import=True,
+        )
+
+        phases = [event["details"].get("phase") for event in events]
+        assert "counting" in phases
+        assert "counted" in phases
+        assert phases.index("counted") < phases.index("importing")
+
+        counted_event = next(event for event in events if event["details"].get("phase") == "counted")
+        assert counted_event["total"] == 3
+        assert counted_event["details"]["import_total"] == 3
+        assert counted_event["details"]["total_final"] is True
+
+        import_events = [event for event in events if event["details"].get("phase") == "importing"]
+        assert import_events
+        assert all(event["total"] == 3 for event in import_events)
+        assert all(event["details"]["import_total"] == 3 for event in import_events)
+
+        metadata_events = [event for event in events if event["details"].get("phase") == "metadata"]
+        assert metadata_events
+        assert all(event["details"]["import_total"] == 3 for event in metadata_events)
+        assert metadata_events[-1]["details"]["metadata_total_final"] is True
+        assert result["counted"] == 3
+        assert result["total"] == 3
+        assert result["metadata_total_final"] is True
+
     def test_scan_skips_unreadable_images(self, test_client, tmp_path: Path):
         """Unreadable image files should count as errors and not be inserted."""
         import database as db

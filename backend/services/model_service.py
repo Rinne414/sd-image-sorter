@@ -144,18 +144,93 @@ class ModelService:
                 return {"status": "downloaded", "status_label": "Downloaded"}
             return {"status": "missing", "status_label": "Missing"}
 
+        # -- WD14 --
+        if installed_wd14:
+            wd14_message_key = "models.wd14.readyCount"
+            wd14_message = f"{len(installed_wd14)} WD14 variant(s) are ready."
+            wd14_message_params = {"count": len(installed_wd14)}
+        else:
+            wd14_message_key = "models.wd14.missing"
+            wd14_message = "WD14 model files are missing and can be downloaded on demand."
+            wd14_message_params = {}
+
+        # -- CLIP --
+        clip_health = health["clip"]
+        clip_runtime_loaded = clip_health.get("runtime_loaded", False)
+        clip_available = clip_health["available"] or clip_runtime_loaded
+        if clip_runtime_loaded and not clip_health["available"]:
+            clip_message_key = "models.clip.loaded"
+            clip_message = "CLIP model is loaded and ready."
+        elif clip_health["available"]:
+            clip_message_key = "models.clip.ready"
+            clip_message = clip_health["message"]
+        elif clip_health["model_path"]:
+            clip_message_key = "models.clip.missingRuntime"
+            clip_message = clip_health["message"]
+        else:
+            clip_message_key = "models.clip.missingModel"
+            clip_message = clip_health["message"]
+
+        # -- Aesthetic --
+        if aesthetic_available:
+            aesthetic_msg_key = "models.aesthetic.ready"
+        elif aesthetic_head_exists:
+            aesthetic_msg_key = "models.aesthetic.headOnly"
+        else:
+            aesthetic_msg_key = "models.aesthetic.missing"
+
+        # -- Artist --
+        if artist["available"]:
+            artist_message_key = "models.artist.ready"
+        else:
+            artist_message_key = "models.artist.missing"
+
+        # -- Censor Legacy --
+        legacy = censor["legacy"]
+        privacy_yolo_files = [f for f in legacy.get("files", []) if f.get("recommended_for_censor")]
+        general_yolo_files = [f for f in legacy.get("files", []) if not f.get("recommended_for_censor")]
+        if legacy["available"] and privacy_yolo_files:
+            if general_yolo_files:
+                censor_legacy_key = "models.censorLegacy.readyPrivacyWithGeneral"
+            else:
+                censor_legacy_key = "models.censorLegacy.readyPrivacy"
+        elif legacy["available"]:
+            censor_legacy_key = "models.censorLegacy.readyNonPrivacy"
+        else:
+            censor_legacy_key = "models.censorLegacy.missing"
+
+        # -- NudeNet --
+        nudenet = censor["nudenet"]
+        if nudenet["available"] and nudenet.get("model_downloaded"):
+            nudenet_key = "models.censorNudenet.ready"
+        elif nudenet["available"]:
+            nudenet_key = "models.censorNudenet.installed"
+        else:
+            nudenet_key = "models.censorNudenet.missing"
+
+        # -- SAM3 --
+        sam3 = censor["sam3"]
+        if sam3["available"]:
+            sam3_key = "models.sam3.ready"
+        elif sam3["checkpoint_path"] and not sam3.get("missing_dependencies"):
+            if sam3.get("torch_cuda_build") is None:
+                sam3_key = "models.sam3.cpuTorch"
+            else:
+                sam3_key = "models.sam3.noCuda"
+        else:
+            sam3_key = "models.sam3.missing"
+
         return [
             {
                 "id": "wd14",
                 "name": "WD14 Tagger",
                 "group": "Tagging",
+                "group_key": "models.group.tagging",
                 "available": bool(installed_wd14),
                 **with_status(is_ready=bool(installed_wd14), is_downloaded=bool(installed_wd14)),
-                "message": (
-                    f"{len(installed_wd14)} WD14 variant(s) are ready."
-                    if installed_wd14
-                    else "WD14 model files are missing and can be downloaded on demand."
-                ),
+                "message": wd14_message,
+                "message_key": wd14_message_key,
+                "message_params": wd14_message_params,
                 "path": health["wd14"]["model_path"] or wd14_primary_path,
                 "download_supported": True,
                 "variants": [item["name"] for item in health["wd14"]["installed_models"]],
@@ -165,26 +240,26 @@ class ModelService:
                 "id": "clip",
                 "name": "CLIP Similarity",
                 "group": "Search",
-                "available": health["clip"]["available"] or health["clip"].get("runtime_loaded", False),
+                "group_key": "models.group.search",
+                "available": clip_available,
                 **with_status(
-                    is_ready=bool(health["clip"]["available"] or health["clip"].get("runtime_loaded", False)),
-                    is_downloaded=bool(health["clip"]["model_path"] or health["clip"].get("runtime_loaded", False)),
+                    is_ready=bool(clip_available),
+                    is_downloaded=bool(clip_health["model_path"] or clip_runtime_loaded),
                 ),
-                "message": (
-                    health["clip"]["message"]
-                    if not health["clip"].get("runtime_loaded") or health["clip"]["available"]
-                    else "CLIP model is loaded and ready."
-                ),
-                "path": health["clip"]["model_path"],
+                "message": clip_message,
+                "message_key": clip_message_key,
+                "path": clip_health["model_path"],
                 "download_supported": True,
             },
             {
                 "id": "aesthetic",
                 "name": "Aesthetic Predictor",
                 "group": "Scoring",
+                "group_key": "models.group.scoring",
                 "available": aesthetic_available,
                 **with_status(is_ready=aesthetic_available, is_downloaded=aesthetic_head_exists),
                 "message": aesthetic_message,
+                "message_key": aesthetic_msg_key,
                 "path": aesthetic_head_path if aesthetic_head_exists else None,
                 "download_supported": True,
                 "note": "Uses CLIP ViT-L/14 + LAION linear head (~3KB). CLIP model (~400MB) downloads on first use via open_clip.",
@@ -193,12 +268,14 @@ class ModelService:
                 "id": "artist",
                 "name": "Artist ID / Kaloscope",
                 "group": "Artist ID",
+                "group_key": "models.group.artistId",
                 "available": artist["available"],
                 **with_status(
                     is_ready=bool(artist["available"]),
                     is_downloaded=bool(artist["checkpoint_path"] or artist["runtime_path"]),
                 ),
                 "message": artist["message"],
+                "message_key": artist_message_key,
                 "path": artist["checkpoint_path"],
                 "download_supported": True,
                 "sources": ["auto", "huggingface", "modelscope"],
@@ -208,13 +285,15 @@ class ModelService:
                 "id": "censor-legacy",
                 "name": "Privacy YOLO",
                 "group": "Censor",
-                "available": censor["legacy"]["available"],
+                "group_key": "models.group.censor",
+                "available": legacy["available"],
                 **with_status(
-                    is_ready=bool(censor["legacy"]["available"]),
-                    is_downloaded=bool(censor["legacy"]["default_model_path"]),
+                    is_ready=bool(legacy["available"]),
+                    is_downloaded=bool(legacy["default_model_path"]),
                 ),
-                "message": censor["legacy"]["message"],
-                "path": censor["legacy"]["default_model_path"],
+                "message": legacy["message"],
+                "message_key": censor_legacy_key,
+                "path": legacy["default_model_path"],
                 "download_supported": True,
                 "external_links": [
                     {
@@ -227,26 +306,30 @@ class ModelService:
                 "id": "censor-nudenet",
                 "name": "NudeNet v3",
                 "group": "Censor",
-                "available": censor["nudenet"]["available"],
+                "group_key": "models.group.censor",
+                "available": nudenet["available"],
                 **with_status(
-                    is_ready=bool(censor["nudenet"]["available"]),
-                    is_downloaded=bool(censor["nudenet"]["model_downloaded"] or censor["nudenet"]["available"]),
+                    is_ready=bool(nudenet["available"]),
+                    is_downloaded=bool(nudenet["model_downloaded"] or nudenet["available"]),
                 ),
-                "message": censor["nudenet"]["message"],
-                "path": censor["nudenet"]["model_path"],
+                "message": nudenet["message"],
+                "message_key": nudenet_key,
+                "path": nudenet["model_path"],
                 "download_supported": True,
             },
             {
                 "id": "sam3",
                 "name": "SAM 3",
                 "group": "Censor",
-                "available": censor["sam3"]["available"],
+                "group_key": "models.group.censor",
+                "available": sam3["available"],
                 **with_status(
-                    is_ready=bool(censor["sam3"]["available"]),
-                    is_downloaded=bool(censor["sam3"]["checkpoint_path"]),
+                    is_ready=bool(sam3["available"]),
+                    is_downloaded=bool(sam3["checkpoint_path"]),
                 ),
-                "message": censor["sam3"]["message"],
-                "path": censor["sam3"]["checkpoint_path"],
+                "message": sam3["message"],
+                "message_key": sam3_key,
+                "path": sam3["checkpoint_path"],
                 "download_supported": True,
                 "external_links": [
                     {

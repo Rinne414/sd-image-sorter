@@ -176,7 +176,9 @@ class SortingService:
             "current": 0,
             "processed": 0,
             "total": 0,
+            "counted": 0,
             "total_final": False,
+            "import_complete": False,
             "errors": 0,
             "new": 0,
             "updated": 0,
@@ -185,6 +187,7 @@ class SortingService:
             "quick_import": True,
             "metadata_processed": 0,
             "metadata_total": 0,
+            "metadata_total_final": False,
             "message": "",
             "current_item": None,
             "started_at": None,
@@ -724,7 +727,9 @@ class SortingService:
                 "current": 0,
                 "processed": 0,
                 "total": 0,
+                "counted": 0,
                 "total_final": False,
+                "import_complete": False,
                 "errors": 0,
                 "new": 0,
                 "updated": 0,
@@ -733,9 +738,8 @@ class SortingService:
                 "quick_import": request.quick_import,
                 "metadata_processed": 0,
                 "metadata_total": 0,
-                "message": "Syncing folder index..." if request.cleanup_missing else (
-                    "Starting fast library import..." if request.quick_import else "Preparing full scan..."
-                ),
+                "metadata_total_final": False,
+                "message": "Syncing folder index..." if request.cleanup_missing else "Counting images before import...",
                 "current_item": None,
                 "started_at": started_at,
                 "updated_at": started_at,
@@ -754,13 +758,33 @@ class SortingService:
                     library_ready = bool(details.get("library_ready", self._scan_progress.get("library_ready", False))) if isinstance(details, dict) else self._scan_progress.get("library_ready", False)
                     metadata_processed = int(details.get("metadata_processed", self._scan_progress.get("metadata_processed", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_processed", 0) or 0)
                     metadata_total = int(details.get("metadata_total", self._scan_progress.get("metadata_total", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_total", 0) or 0)
+                    metadata_total_final = bool(details.get("metadata_total_final", self._scan_progress.get("metadata_total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("metadata_total_final", False))
                     total_final = bool(details.get("total_final", self._scan_progress.get("total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("total_final", False))
+                    counted = int(details.get("counted", self._scan_progress.get("counted", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("counted", 0) or 0)
+                    import_processed = int(details.get("import_processed", current) or 0) if isinstance(details, dict) else int(current or 0)
+                    import_total = int(details.get("import_total", total) or 0) if isinstance(details, dict) else int(total or 0)
+                    import_complete = bool(details.get("import_complete", self._scan_progress.get("import_complete", False))) if isinstance(details, dict) else bool(self._scan_progress.get("import_complete", False))
+                    state_current = import_processed
+                    state_total = import_total or total
                     message = f"Processing: {filename}" if filename else "Scanning files..."
                     current_item = filename or None
                     step = "importing"
                     status = "running"
                     removed_count = details.get("removed", self._scan_progress.get("removed", 0)) if isinstance(details, dict) else self._scan_progress.get("removed", 0)
-                    if phase == "cleanup":
+
+                    if phase == "counting":
+                        state_current = counted or current
+                        state_total = 0
+                        message = f"Counting images... ({state_current} found)"
+                        current_item = None
+                        step = "counting"
+                    elif phase == "counted":
+                        state_current = 0
+                        state_total = import_total or total
+                        message = f"Found {state_total} images. Starting import..."
+                        current_item = None
+                        step = "importing"
+                    elif phase == "cleanup":
                         message = (
                             f"Folder sync complete. Removed {removed_count} missing entr"
                             f"{'y' if removed_count == 1 else 'ies'}."
@@ -768,20 +792,33 @@ class SortingService:
                         current_item = None
                         step = "cleanup"
                     elif phase == "library_ready":
-                        step = "importing"
+                        step = "metadata" if import_complete and metadata_total > metadata_processed else "importing"
                         current_item = None
-                        if total_final and metadata_total > 0:
+                        if import_complete and metadata_total > 0:
                             message = f"Library ready. Finishing metadata in background ({metadata_processed}/{metadata_total})..."
                         else:
-                            message = f"Library is browseable. Importing continues in background ({current} scanned)..."
+                            message = f"Library is browseable. Importing continues in background ({state_current}/{state_total or '?'})..."
                     elif phase == "metadata":
-                        step = "metadata"
-                        message = f"Reading metadata: {filename}" if filename else "Reading metadata..."
-                        current_item = filename or None
+                        if import_complete:
+                            step = "metadata"
+                            message = f"Reading image details: {filename}" if filename else "Reading image details..."
+                            current_item = filename or None
+                        else:
+                            step = "importing"
+                            message = (
+                                f"Importing library and reading details... ({state_current}/{state_total})"
+                                if state_total > 0
+                                else "Importing library and reading details..."
+                            )
+                            current_item = None
                     elif not total_final:
-                        message = f"Fast importing library... ({current} scanned)"
+                        state_current = counted or current
+                        state_total = 0
+                        message = f"Counting images... ({state_current} found)"
                         current_item = None
-                    elif last_error:
+                        step = "counting"
+
+                    if last_error:
                         message = (
                             f"Skipped unreadable image: {last_error.get('filename', filename)}"
                             f" ({last_error.get('error', 'Unreadable image')})"
@@ -790,17 +827,19 @@ class SortingService:
                         status = "cancelling"
                         step = "cancelling"
                         message = (
-                            f"Cancelling scan... ({current}/{total})"
-                            if total_final and total > 0
-                            else f"Cancelling scan... ({current} scanned)"
+                            f"Cancelling scan... ({state_current}/{state_total})"
+                            if total_final and state_total > 0
+                            else f"Cancelling scan... ({state_current} scanned)"
                         )
                     self._update_scan_progress_if_current(
                         run_id,
                         status=status,
-                        current=current,
-                        processed=current,
-                        total=total,
+                        current=state_current,
+                        processed=state_current,
+                        total=state_total,
+                        counted=counted,
                         total_final=total_final,
+                        import_complete=import_complete,
                         step=step,
                         errors=details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0),
                         removed=removed_count,
@@ -808,6 +847,7 @@ class SortingService:
                         quick_import=request.quick_import,
                         metadata_processed=metadata_processed,
                         metadata_total=metadata_total,
+                        metadata_total_final=metadata_total_final,
                         message=message,
                         current_item=current_item,
                         updated_at=now,
@@ -846,7 +886,9 @@ class SortingService:
                         "current": result["total"],
                         "processed": result["total"],
                         "total": result["total"],
+                        "counted": result.get("counted", result["total"]),
                         "total_final": result.get("total_final", True),
+                        "import_complete": result.get("import_complete", True),
                         "errors": errors,
                         "new": new_count,
                         "updated": updated_count,
@@ -855,6 +897,7 @@ class SortingService:
                         "quick_import": request.quick_import,
                         "metadata_processed": result.get("metadata_processed", 0),
                         "metadata_total": result.get("metadata_total", 0),
+                        "metadata_total_final": result.get("metadata_total_final", True),
                         "message": summary,
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
@@ -877,7 +920,9 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "counted": current_state.get("counted", 0),
                             "total_final": current_state.get("total_final", False),
+                            "import_complete": current_state.get("import_complete", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
@@ -886,6 +931,7 @@ class SortingService:
                             "quick_import": current_state.get("quick_import", True),
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
+                            "metadata_total_final": current_state.get("metadata_total_final", False),
                             "message": (
                                 f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
                                 if current_state.get("total_final", False) and current_state.get("total", 0)
@@ -906,7 +952,9 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "counted": current_state.get("counted", 0),
                             "total_final": current_state.get("total_final", False),
+                            "import_complete": current_state.get("import_complete", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
@@ -915,6 +963,7 @@ class SortingService:
                             "quick_import": current_state.get("quick_import", True),
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
+                            "metadata_total_final": current_state.get("metadata_total_final", False),
                             "message": "Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),

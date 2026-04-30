@@ -7251,6 +7251,14 @@ input[type="radio"],
     background: rgba(255, 255, 255, 0.09);
     outline: none;
 }
+.context-menu-item.is-danger {
+    color: #ffb4a8;
+}
+.context-menu-item.is-danger:hover,
+.context-menu-item.is-danger:focus-visible {
+    background: rgba(255, 92, 92, 0.15);
+    color: #ffd1ca;
+}
 .context-menu-icon {
     flex: 0 0 20px;
     text-align: center;

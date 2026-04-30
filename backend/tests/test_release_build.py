@@ -35,6 +35,8 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL" in launcher_bytes
     assert b"Installing dependencies - first run may take a few minutes" in launcher_bytes
+    assert b"backend\\launcher_pip.py install -r backend\\requirements.txt" in launcher_bytes
+    assert b"-m pip install -r backend\\requirements.txt" not in launcher_bytes
     assert launcher_bytes.endswith(b"pause\r\n")
 
 

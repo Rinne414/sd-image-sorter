@@ -274,6 +274,29 @@ Request body:
 
 Response includes `removed`, `missing_ids`, and `permanent_delete: false`. Re-scanning the source folder can add the files back.
 
+#### POST /api/images/reconnect-missing/start
+Start a background search for gallery records whose original files no longer exist. The search scans `search_folder`, optionally recursively, and reconnects matching records to found files by updating the library path only. It does not move, copy, delete, or edit image files.
+
+Request body:
+
+```json
+{
+  "search_folder": "L:/Images/moved-folder",
+  "recursive": true,
+  "verify_uncertain": true
+}
+```
+
+Response includes `status` and `message`.
+
+#### GET /api/images/reconnect-missing/progress
+Return the current missing-file reconnect progress.
+
+Response includes `status`, `step`, `current`, `processed`, `total`, `total_final`, `checked_files`, `missing_total`, `matched`, `ambiguous`, `conflicts`, `skipped`, `errors`, `message`, `current_item`, and optional `result` when finished.
+
+#### POST /api/images/reconnect-missing/cancel
+Request cancellation of the current missing-file reconnect search. The task stops between files and returns the latest progress snapshot.
+
 #### POST /api/image-metadata/save-edited
 Save an image copy with edited metadata fields.
 

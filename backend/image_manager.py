@@ -397,7 +397,9 @@ def scan_folder(
     """
     result: Dict[str, Any] = {
         "total": 0,
+        "counted": 0,
         "total_final": False,
+        "import_complete": False,
         "new": 0,
         "updated": 0,
         "unchanged": 0,
@@ -408,13 +410,13 @@ def scan_folder(
         "recent_errors": [],
         "metadata_total": 0,
         "metadata_processed": 0,
+        "metadata_total_final": False,
         "library_ready": False,
     }
     
-    # C5: Keep scans streaming even for large libraries.
-    # Do not pre-count the full tree. We start importing on the first
-    # discovered file and let the UI treat totals as "still growing"
-    # until directory traversal finishes.
+    # Count image files first. Users need a real denominator before an ETA can be useful.
+    # The count pass only walks filenames/stats; metadata parsing still happens in the
+    # import pipeline below.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
@@ -485,6 +487,11 @@ def scan_folder(
                         "last_error": None,
                         "phase": "cleanup",
                         "removed": result["removed"],
+                        "counted": 0,
+                        "import_processed": 0,
+                        "import_total": 0,
+                        "import_complete": False,
+                        "metadata_total_final": False,
                         "total_final": False,
                     },
                 )
@@ -564,21 +571,73 @@ def scan_folder(
         except TypeError:
             progress_callback(current, total, filename)
 
+    def _count_images_for_total() -> int:
+        counted = 0
+        for _entry in _iter_images():
+            counted += 1
+            _emit_progress(
+                counted,
+                0,
+                "",
+                {
+                    "errors": result["errors"],
+                    "last_error": None,
+                    "phase": "counting",
+                    "counted": counted,
+                    "library_ready": result["library_ready"],
+                    "import_processed": 0,
+                    "import_total": 0,
+                    "import_complete": False,
+                    "metadata_processed": result["metadata_processed"],
+                    "metadata_total": result["metadata_total"],
+                    "metadata_total_final": False,
+                    "total_final": False,
+                },
+                force=counted == 1,
+            )
+
+        _emit_progress(
+            0,
+            counted,
+            "",
+            {
+                "errors": result["errors"],
+                "last_error": None,
+                "phase": "counted",
+                "counted": counted,
+                "library_ready": result["library_ready"],
+                "import_processed": 0,
+                "import_total": counted,
+                "import_complete": False,
+                "metadata_processed": result["metadata_processed"],
+                "metadata_total": result["metadata_total"],
+                "metadata_total_final": False,
+                "total_final": True,
+            },
+            force=True,
+        )
+        return counted
+
     def _emit_library_ready() -> None:
         if result["library_ready"] or not quick_import or not progress_callback:
             return
         result["library_ready"] = True
         _emit_progress(
             processed_count,
-            result["total"],
+            result["counted"] or result["total"],
             "",
             {
                 "errors": result["errors"],
                 "last_error": None,
                 "phase": "library_ready",
                 "library_ready": True,
+                "counted": result["counted"],
+                "import_processed": processed_count,
+                "import_total": result["counted"] or result["total"],
+                "import_complete": result["import_complete"],
                 "metadata_processed": result["metadata_processed"],
                 "metadata_total": result["metadata_total"],
+                "metadata_total_final": result["metadata_total_final"],
                 "total_final": result["total_final"],
             },
             force=True,
@@ -608,7 +667,12 @@ def scan_folder(
             "phase": "metadata",
             "library_ready": result["library_ready"],
             "metadata_total": result["metadata_total"],
+            "metadata_total_final": result["metadata_total_final"],
             "last_error": None,
+            "counted": result["counted"],
+            "import_processed": processed_count,
+            "import_total": result["counted"] or result["total"],
+            "import_complete": result["import_complete"],
             "total_final": result["total_final"],
         }
 
@@ -699,6 +763,9 @@ def scan_folder(
                 result["metadata_updated"] = max(0, result["metadata_updated"] - marked)
 
     try:
+        result["counted"] = _count_images_for_total()
+        result["total_final"] = True
+
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             # Pipeline: placeholder import and metadata backfill overlap.
             for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
@@ -753,13 +820,18 @@ def scan_folder(
                             **progress_details,
                             "phase": "importing",
                             "library_ready": result["library_ready"],
+                            "counted": result["counted"],
+                            "import_processed": processed_count,
+                            "import_total": result["counted"] or result["total"],
+                            "import_complete": result["import_complete"],
                             "metadata_processed": result["metadata_processed"],
                             "metadata_total": result["metadata_total"],
+                            "metadata_total_final": result["metadata_total_final"],
                             "total_final": result["total_final"],
                         }
                         _emit_progress(
                             processed_count,
-                            result["total"],
+                            result["counted"] or result["total"],
                             filename,
                             import_details,
                             force=bool(progress_details.get("last_error")),
@@ -773,7 +845,9 @@ def scan_folder(
                     _emit_library_ready()
                 _drain_metadata_futures(wait_for_all=False)
 
+            result["import_complete"] = True
             result["total_final"] = True
+            result["metadata_total_final"] = True
             _flush_placeholder_records(pending_placeholder_records)
             if result["total"] > 0:
                 _emit_library_ready()
@@ -788,8 +862,13 @@ def scan_folder(
                         "last_error": None,
                         "phase": "metadata",
                         "library_ready": result["library_ready"],
+                        "counted": result["counted"],
+                        "import_processed": result["total"],
+                        "import_total": result["total"],
+                        "import_complete": result["import_complete"],
                         "metadata_processed": result["metadata_processed"],
                         "metadata_total": result["metadata_total"],
+                        "metadata_total_final": result["metadata_total_final"],
                         "total_final": result["total_final"],
                     },
                     force=True,

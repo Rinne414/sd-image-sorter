@@ -582,7 +582,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "\n"
             "if !NEED_INSTALL! EQU 1 (\n"
             "    echo [INFO] Installing dependencies - first run may take a few minutes...\n"
-            "    \"!PYTHON_CMD!\" -m pip install -r backend\\requirements.txt --no-warn-script-location\n"
+            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install -r backend\\requirements.txt --no-warn-script-location\n"
             "    if errorlevel 1 (\n"
             "        echo [ERROR] Failed to install dependencies.\n"
             "        pause\n"

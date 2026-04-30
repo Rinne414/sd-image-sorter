@@ -1041,6 +1041,89 @@ def get_images_in_folder_scope(folder_path: str, recursive: bool = True) -> List
     ]
 
 
+def get_missing_image_reconnect_candidates(limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Return image rows whose stored source path no longer resolves on disk."""
+    from utils.source_paths import resolve_existing_indexed_image_path
+
+    query = f"SELECT {_IMAGE_COLUMNS_BARE} FROM images ORDER BY id"
+    params: List[Any] = []
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(max(0, int(limit)))
+
+    candidates: List[Dict[str, Any]] = []
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = _rows_to_dicts(cursor.fetchall())
+
+    for row in rows:
+        source_path = row.get("path") or ""
+        resolved_path = resolve_existing_indexed_image_path(source_path, backend_file=__file__)
+        if resolved_path:
+            continue
+        candidates.append(row)
+
+    return candidates
+
+
+def reconnect_image_source_path(
+    image_id: int,
+    new_path: str,
+    *,
+    source_mtime_ns: Optional[int] = None,
+    source_size: Optional[int] = None,
+    source_file_mtime: Optional[datetime] = None,
+) -> None:
+    """Reconnect a missing library row to a found file path without clearing derived data."""
+    normalized_path = _normalize_indexed_image_path(new_path)
+    filename = os.path.basename(normalized_path)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE images
+            SET path = ?,
+                filename = ?,
+                is_readable = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN 1
+                    ELSE is_readable
+                END,
+                read_error = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN NULL
+                    ELSE read_error
+                END,
+                metadata_status = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN 'complete'
+                    ELSE COALESCE(metadata_status, 'complete')
+                END,
+                source_mtime_ns = COALESCE(?, source_mtime_ns),
+                source_size = COALESCE(?, source_size),
+                source_file_mtime = COALESCE(?, source_file_mtime),
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (
+                normalized_path,
+                filename,
+                source_mtime_ns,
+                source_size,
+                source_file_mtime,
+                image_id,
+            ),
+        )
+    _invalidate_tags_cache()
+
+
 def _mark_image_tagged(
     cursor: sqlite3.Cursor,
     image_id: int,

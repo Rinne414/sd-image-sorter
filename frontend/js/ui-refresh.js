@@ -378,11 +378,15 @@
 
         _translateLibraryAndExport: function () {
             this._setText('#batch-export-modal h3', 'batchExport.title');
-            this._setTextAll('#batch-export-modal label', ['batchExport.outputFolder', 'batchExport.tagPrefix', 'batchExport.tagBlacklist']);
+            this._setText('#batch-export-folder + .helper-text', 'batchExport.outputFolderHelper');
+            this._setText('label[for="batch-export-content-mode"]', 'batchExport.contentMode');
+            this._setText('#batch-export-content-mode + .helper-text', 'batchExport.contentModeHelper');
+            this._setText('label[for="batch-export-overwrite"]', 'batchExport.overwritePolicy');
+            this._setText('#batch-export-prefix + .helper-text', 'batchExport.tagPrefixHelper');
+            this._setText('#batch-export-blacklist + .helper-text', 'batchExport.tagBlacklistHelper');
             this._setPlaceholder('#batch-export-folder', 'batchExport.outputFolder');
             this._setPlaceholder('#batch-export-prefix', 'batchExport.tagPrefix');
             this._setPlaceholder('#batch-export-blacklist', 'batchExport.tagBlacklist');
-            this._setTextAll('#batch-export-modal .helper-text', ['batchExport.outputFolderHelper', 'batchExport.tagPrefixHelper', 'batchExport.tagBlacklistHelper']);
             this._setText('#batch-export-progress-text', 'batchExport.exporting');
             this._setButton('#btn-cancel-batch-export', 'batchExport.cancel');
             this._setButton('#btn-start-batch-export', 'batchExport.exportFiles');
@@ -463,13 +467,8 @@
 
             this._setButton('#btn-select-all', 'selection.selectAllFiltered', '✓✓', 'selection.selectAllFiltered');
             this._setButton('#btn-invert-selection-filtered', 'selection.invertAllFiltered', '⇄', 'selection.invertAllFiltered');
-            this._setButton('#btn-select-visible', 'selection.selectVisible', '▦', 'selection.selectVisible');
-            this._setButton('#btn-invert-selection-visible', 'selection.invertVisible', '⇄', 'selection.invertVisible');
             this._setButton('#btn-move-selected', 'selection.moveSelected', '📁', 'selection.moveSelected');
             this._setButton('#btn-copy-selected', 'selection.copySelected', '📄', 'selection.copySelected');
-            this._setButton('#btn-export-selected', 'selection.exportPrompts', '📤', 'selection.exportPrompts');
-            this._setButton('#btn-export-tags-selected', 'selection.exportTags', '🏷️', 'selection.exportTags');
-            this._setButton('#btn-batch-export-tags', 'selection.exportTagsToFiles', '📝', 'selection.exportTagsToFiles');
             this._setButton('#btn-send-to-censor', 'selection.censorEdit', '🔳', 'selection.censorEdit');
             this._setButton('#btn-remove-selected-gallery', 'selection.removeFromGallery', '🧹', 'selection.removeFromGallery');
             this._setButton('#btn-delete-selected-files', 'selection.deleteSelectedFiles', '🗑', 'selection.deleteSelectedFiles');

@@ -205,7 +205,7 @@ def test_manual_sort_start_routes_unfinished_sessions_to_resume():
     assert "discard the saved session first" in source
     assert "replaceExisting = false" in source
 
-def test_gallery_context_menu_has_single_image_workflow_actions_without_disk_delete():
+def test_gallery_context_menu_has_workflow_actions_and_trash_is_explicit():
     repo_root = Path(__file__).resolve().parents[2]
     gallery_source = (repo_root / "frontend" / "js" / "gallery.js").read_text(encoding="utf-8")
     app_source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
@@ -222,24 +222,133 @@ def test_gallery_context_menu_has_single_image_workflow_actions_without_disk_del
         "gallery.contextMoveImage",
         "gallery.contextCopyImage",
         "gallery.contextSendToCensor",
+        "gallery.contextFindSimilar",
         "gallery.contextPromptHelper",
         "gallery.contextReadMetadata",
         "gallery.contextFilterCheckpoint",
         "gallery.contextOpenFolder",
         "gallery.contextCopyPath",
+        "gallery.contextRemoveFromGallery",
+        "gallery.contextMoveToTrash",
+        "gallery.contextApplyToSelected",
     ]
     for key in expected_keys:
         assert key in body
         assert key in en_source
         assert key in zh_source
 
-    assert "moveOrCopyGalleryImages?.([image.id], 'move', { source: 'context' })" in body
-    assert "moveOrCopyGalleryImages?.([image.id], 'copy', { source: 'context' })" in body
+    assert "const actionImageIds = isSelected && selectedImageIds.length > 1 ? selectedImageIds : [imageId];" in body
+    assert "app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' })" in body
+    assert "app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' })" in body
     assert "openPromptBuildFromImage?.(image.id)" in body
     assert "openReaderFromImage?.(image.id" in body
-    assert "deleteSelectedGalleryImages" not in body
+    assert "app.removeGalleryImagesByIds?.(actionImageIds)" in body
+    assert "app.deleteGalleryImagesByIds?.(actionImageIds)" in body
     assert "contextDelete" not in body
     assert "Delete from Disk" not in body
 
     assert "moveOrCopyGalleryImages" in app_source
+    assert "deleteGalleryImagesByIds" in app_source
+    assert "removeGalleryImagesByIds" in app_source
+    assert "operating system Trash / Recycle Bin" in app_source
     assert "emitSelectionStateChanged" in app_source
+
+
+def test_gallery_selection_panel_is_desktop_user_facing_not_visible_dom_jargon():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    ui_refresh = (repo_root / "frontend" / "js" / "ui-refresh.js").read_text(encoding="utf-8")
+    filter_store = (repo_root / "frontend" / "js" / "stores" / "filter-store.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "btn-select-visible" not in html
+    assert "selection-panel-more" not in html
+    assert "selection.selectVisible" not in ui_refresh
+    assert "selection.invertVisible" not in ui_refresh
+    assert "selection.moreActions" not in en_source
+    assert "selection.selectVisible" not in zh_source
+    assert "selection-panel-section" in html
+    assert "selection.selectAllFilteredHelp" in html
+    assert "选择当前筛选全部" in zh_source
+    assert "作用域" not in zh_source[zh_source.find("'scope.useGallery'"):zh_source.find("// ========================", zh_source.find("'scope.useGallery'"))]
+    assert "const VALID_ASPECT_RATIO_FILTERS = new Set(['square', 'landscape', 'portrait']);" in source
+    assert "aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null" in source
+    assert "normalizeAspectRatioFilter(filters.aspectRatio)" in source
+    assert "normalizeAspectRatioFilter(dimensions?.aspectRatio)" in source
+    assert "const savedFilters = cloneFilterState(loadSavedFilterState());" in source
+    assert "['square', 'landscape', 'portrait'].includes" in filter_store
+    assert ".selection-panel-section" in css
+
+
+def test_gallery_setup_button_lives_in_header_not_over_sidebar():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+
+    assert "gallery-model-manager-button" in html
+    assert "gallery-model-manager-fab" not in html
+    assert "gallery-model-manager-fab" not in css
+    assert "position: fixed;" not in css[css.find(".gallery-model-manager-button"):css.find(".model-manager-summary")]
+
+
+def test_export_ui_explains_output_formats_before_action():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "export-format-description" in html
+    assert "batch-export-content-description" in html
+    assert 'value="prompt_numbered"' in html
+    assert 'data-i18n="export.groupAdvanced"' in html
+    assert 'data-i18n="batchExport.groupAdvanced"' in html
+    assert "function getExportFormatDescription" in source
+    assert "function getBatchExportContentDescription" in source
+    assert "export.descPromptNumbered" in en_source
+    assert "export.descPromptNumbered" in zh_source
+    assert "Combined Export..." in en_source
+    assert "合并导出..." in zh_source
+    assert "Same-name .txt..." in en_source
+    assert "同名 .txt..." in zh_source
+    assert "Sidecar caption" in zh_source
+    assert "训练用 .txt" in zh_source
+    assert "Prompt Sheet..." not in en_source
+    assert "Caption Files..." not in en_source
+
+
+def test_scan_modal_advanced_summary_does_not_break_chinese_label():
+    repo_root = Path(__file__).resolve().parents[2]
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+
+    assert '#scan-modal .guided-advanced-summary > [data-i18n="scan.advancedSummary"]' in css
+    assert "white-space: nowrap;" in css
+    assert "word-break: keep-all;" in css
+    assert "#scan-modal .guided-advanced-hint" in css
+    assert "grid-template-columns: max-content minmax(0, 1fr) max-content;" in css
+    assert "text-overflow: ellipsis;" in css
+    assert "min-width: 0;" in css
+
+
+def test_scan_progress_eta_uses_real_counted_totals_and_separate_metadata_totals():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "function getScanProgressMetrics(progress)" in source
+    assert "const totalFinal = progress?.total_final === true;" in source
+    assert "const metadataTotalFinal = progress?.metadata_total_final === true;" in source
+    assert "const showingMetadata = progress?.step === 'metadata' && importComplete;" in source
+    assert "const showEta = showingMetadata" in source
+    assert "scan-import:${totalFinal ? total : 'counting'}" in source
+    assert "scan-metadata:${metadataTotalFinal ? metadataTotal : 'growing'}" in source
+    assert "progress.countingImages" in source
+    assert "progress.detailsStillCounting" in source
+    assert "Counting images... {count} found" in en_source
+    assert "checking the final detail count" in en_source
+    assert "正在统计图片... 已找到 {count} 张" in zh_source
+    assert "正在确认详细信息总数" in zh_source

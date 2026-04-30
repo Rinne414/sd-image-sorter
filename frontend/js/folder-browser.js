@@ -32,22 +32,33 @@ async function fetchFolderContents(path) {
 /** Currently active folder browser state (null when closed). */
 let _folderBrowserState = null;
 
+function _getFolderBrowserContainer(inputElement) {
+    const customId = inputElement?.dataset?.folderBrowserContainer || '';
+    if (customId) {
+        return document.getElementById(customId);
+    }
+    return document.getElementById('folder-browser-container');
+}
+
 /**
  * Show the folder browser panel below the given input element.
  * @param {HTMLInputElement} inputElement - The path input to fill when a folder is selected
  */
 async function showFolderBrowser(inputElement) {
-    const container = document.getElementById('folder-browser-container');
+    const container = _getFolderBrowserContainer(inputElement);
     if (!container) return;
     const requestedPath = inputElement.value.trim() || '';
     if (_folderBrowserState && _folderBrowserState.inputElement === inputElement) {
         _folderBrowserState.currentPath = requestedPath || _folderBrowserState.currentPath || '';
         _folderBrowserState.selectedPath = _folderBrowserState.currentPath;
+        _folderBrowserState.container = container;
         await _renderFolderBrowser(container, _folderBrowserState.currentPath);
         return;
     }
+    hideFolderBrowser();
     _folderBrowserState = {
         inputElement: inputElement,
+        container: container,
         currentPath: requestedPath,
         selectedPath: null
     };
@@ -59,7 +70,7 @@ window.hideFolderBrowser = hideFolderBrowser;
 
 /** Hide and destroy the folder browser panel. */
 function hideFolderBrowser() {
-    const container = document.getElementById('folder-browser-container');
+    const container = _folderBrowserState?.container || document.getElementById('folder-browser-container');
     if (container) container.innerHTML = '';
     _folderBrowserState = null;
 }

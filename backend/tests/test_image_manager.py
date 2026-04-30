@@ -117,7 +117,7 @@ def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, t
     assert db.get_image_by_path(str(copied_path)) is None
 
 
-def test_scan_folder_starts_processing_without_count_preamble(test_db, tmp_path: Path):
+def test_scan_folder_counts_before_import_for_real_scan_total(test_db, tmp_path: Path):
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"sample-{index}.png")
 
@@ -137,12 +137,21 @@ def test_scan_folder_starts_processing_without_count_preamble(test_db, tmp_path:
 
     assert result["total"] == 2
     assert progress_events
-    assert progress_events[0]["current"] == 1
-    assert progress_events[0]["total"] == 1
-    assert progress_events[0]["filename"]
-    assert progress_events[0]["details"].get("phase") == "importing"
-    assert progress_events[0]["details"].get("total_final") is False
-    assert "counted" not in [event["details"].get("phase") for event in progress_events]
+    phases = [event["details"].get("phase") for event in progress_events]
+    assert phases[0] == "counting"
+    assert "counted" in phases
+    assert "importing" in phases
+    assert phases.index("counted") < phases.index("importing")
+
+    counted_event = next(event for event in progress_events if event["details"].get("phase") == "counted")
+    assert counted_event["total"] == 2
+    assert counted_event["details"].get("total_final") is True
+
+    first_import = next(event for event in progress_events if event["details"].get("phase") == "importing")
+    assert first_import["current"] == 1
+    assert first_import["total"] == 2
+    assert first_import["filename"]
+    assert first_import["details"].get("total_final") is True
 
 
 def test_scan_folder_throttles_bulk_import_progress(test_db, tmp_path: Path, monkeypatch):
@@ -475,27 +484,32 @@ def test_scan_folder_emits_library_ready_before_metadata_progress(test_db, tmp_p
     assert phases.index("library_ready") < phases.index("metadata")
 
 
-def test_scan_folder_marks_total_as_growing_until_discovery_finishes(test_db, tmp_path: Path):
+def test_scan_folder_marks_total_final_after_counting_before_import(test_db, tmp_path: Path):
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"growing-{index}.png")
 
-    importing_total_final = []
-    metadata_total_final = []
+    total_final_by_phase = {
+        "counting": [],
+        "counted": [],
+        "importing": [],
+        "metadata": [],
+    }
 
     def progress_callback(current, total, filename, details=None):
         details = details or {}
-        if details.get("phase") == "importing":
-            importing_total_final.append(details.get("total_final"))
-        elif details.get("phase") == "metadata":
-            metadata_total_final.append(details.get("total_final"))
+        phase = details.get("phase")
+        if phase in total_final_by_phase:
+            total_final_by_phase[phase].append(details.get("total_final"))
 
     result = scan_folder(str(tmp_path), recursive=False, progress_callback=progress_callback, quick_import=True)
 
-    assert importing_total_final
-    assert any(flag is False for flag in importing_total_final)
-    assert metadata_total_final
-    assert any(flag is True for flag in metadata_total_final)
-    assert metadata_total_final[-1] is True
+    assert total_final_by_phase["counting"]
+    assert any(flag is False for flag in total_final_by_phase["counting"])
+    assert total_final_by_phase["counted"][-1] is True
+    assert total_final_by_phase["importing"]
+    assert all(flag is True for flag in total_final_by_phase["importing"])
+    assert total_final_by_phase["metadata"]
+    assert total_final_by_phase["metadata"][-1] is True
     assert result["total_final"] is True
 
 

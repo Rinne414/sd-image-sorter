@@ -3133,6 +3133,11 @@ ${String(value)}`)
         const imageId = Number(image?.id);
         const selectedIds = app.AppState?.selectedIds instanceof Set ? app.AppState.selectedIds : new Set();
         const isSelected = selectedIds.has(imageId) || selectedIds.has(String(image?.id));
+        const selectedImageIds = Array.from(selectedIds)
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0);
+        const actionImageIds = isSelected && selectedImageIds.length > 1 ? selectedImageIds : [imageId];
+        const actionCount = actionImageIds.length;
         const checkpointFilterValue = app.normalizeCheckpointFilterValue?.(
             image.checkpoint_normalized || image.checkpoint
         ) || '';
@@ -3143,22 +3148,32 @@ ${String(value)}`)
         menu.style.top = `${e.clientY}px`;
         menu.setAttribute('role', 'menu');
 
+        const scopeLabel = actionCount > 1
+            ? t('gallery.contextApplyToSelected', 'Use selected ({count})', { count: actionCount })
+                .replace('{count}', String(actionCount))
+            : '';
+        const labelWithScope = (key, fallback) => {
+            const label = t(key, fallback);
+            return scopeLabel ? `${label} · ${scopeLabel}` : label;
+        };
+
         const items = [
             { label: t('gallery.contextPreview', 'Preview'), icon: '\u{1F5BC}', action: () => this.openPreview(image.id) },
             { label: isSelected ? t('gallery.contextDeselectImage', 'Deselect Image') : t('gallery.contextSelectImage', 'Select Image'), icon: isSelected ? '\u2715' : '\u2713', action: () => this._setContextImageSelection(image.id, !isSelected) },
             { type: 'separator' },
-            { label: t('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.([image.id], 'move', { source: 'context' }) },
-            { label: t('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.([image.id], 'copy', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextMoveImage', 'Move...'), icon: '\u{1F4C1}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'move', { source: 'context' }) },
+            { label: labelWithScope('gallery.contextCopyImage', 'Copy...'), icon: '\u{1F4C4}', action: () => app.moveOrCopyGalleryImages?.(actionImageIds, 'copy', { source: 'context' }) },
             { type: 'separator' },
-            { label: t('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
+            { label: labelWithScope('gallery.contextSendToCensor', 'Send to Censor'), icon: '\u{1F533}', action: () => {
                 if (typeof app.addToCensorQueue === 'function') {
-                    app.addToCensorQueue([image.id]);
+                    app.addToCensorQueue(actionImageIds);
                 } else {
                     app.showToast?.(t('gallery.contextSendToCensorFailed', 'Failed to send image to Edit'), 'error');
                 }
             }},
+            { label: t('gallery.contextFindSimilar', 'Find Similar'), icon: '\u{1F50E}', action: () => app.openSimilarFromImage?.(image.id) },
             { label: t('gallery.contextPromptHelper', 'Prompt Helper'), icon: '\u{1F9EA}', action: () => app.openPromptBuildFromImage?.(image.id) },
-            { label: t('gallery.contextReadMetadata', 'Read Metadata'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
+            { label: t('gallery.contextReadMetadata', 'Metadata / Info'), icon: '\u{1F4D6}', action: () => app.openReaderFromImage?.(image.id, image.filename || '') },
             checkpointFilterValue ? { label: t('gallery.contextFilterCheckpoint', 'Filter by Checkpoint'), icon: '\u{1F50D}', action: () => {
                 if (app.AppState) {
                     app.updateFilters?.((filters) => {
@@ -3182,6 +3197,9 @@ ${String(value)}`)
                     app.showToast?.(t('gallery.pathCopied', 'Path copied'), 'success');
                 }
             }},
+            { type: 'separator' },
+            { label: labelWithScope('gallery.contextRemoveFromGallery', 'Remove from Gallery'), icon: '\u{1F9F9}', danger: true, action: () => app.removeGalleryImagesByIds?.(actionImageIds) },
+            { label: labelWithScope('gallery.contextMoveToTrash', 'Move to Trash...'), icon: '\u{1F5D1}', danger: true, action: () => app.deleteGalleryImagesByIds?.(actionImageIds) },
         ].filter(Boolean);
 
         items.forEach((item) => {
@@ -3195,7 +3213,7 @@ ${String(value)}`)
 
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'context-menu-item';
+            button.className = `context-menu-item${item.danger ? ' is-danger' : ''}`;
             button.setAttribute('role', 'menuitem');
 
             const icon = document.createElement('span');

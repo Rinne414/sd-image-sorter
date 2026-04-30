@@ -5,6 +5,7 @@
 
 const API_BASE = '';  // Same origin
 const SCAN_PREVIEW_PAGE_SIZE = 80;
+const VALID_ASPECT_RATIO_FILTERS = new Set(['square', 'landscape', 'portrait']);
 
 // Utility: Debounce function
 function debounce(func, wait) {
@@ -42,6 +43,11 @@ function throttle(func, limit) {
 function appT(key, fallback, params) {
     const val = window.I18n?.t?.(key, params);
     return (val && val !== key) ? val : (fallback || key);
+}
+
+function normalizeAspectRatioFilter(value) {
+    const text = String(value || '').trim();
+    return VALID_ASPECT_RATIO_FILTERS.has(text) ? text : '';
 }
 
 function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
@@ -191,7 +197,7 @@ function cloneFilterState(filters) {
         maxWidth: source.maxWidth ?? null,
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
-        aspectRatio: source.aspectRatio || '',
+        aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null
     };
@@ -249,7 +255,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         maxWidth: source.maxWidth ?? null,
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
-        aspectRatio: source.aspectRatio || '',
+        aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
     };
@@ -335,7 +341,7 @@ function loadSavedFilterState() {
     return null;
 }
 
-const savedFilters = loadSavedFilterState();
+const savedFilters = cloneFilterState(loadSavedFilterState());
 const AppFilterStore = window.FilterStore?.create(savedFilters || createDefaultFilterState()) || null;
 const AppSelectionStore = window.SelectionStore?.create(createDefaultSelectionState()) || null;
 
@@ -348,6 +354,7 @@ const AppState = {
     selectedImage: null,
     isLoading: false,
     galleryNeedsRefresh: false,
+    gallerySuppressNextAutoLoadMore: false,
 
     // Pagination state
     pagination: {
@@ -748,7 +755,8 @@ const API = {
         if (filters.maxWidth) params.set('max_width', filters.maxWidth);
         if (filters.minHeight) params.set('min_height', filters.minHeight);
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
-        if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
+        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
 
@@ -920,6 +928,22 @@ const API = {
         return this.post('/api/scan/cancel');
     },
 
+    async startReconnectMissing(folderPath, options = {}) {
+        return this.post('/api/images/reconnect-missing/start', {
+            search_folder: folderPath,
+            recursive: options.recursive ?? true,
+            verify_uncertain: options.verifyUncertain ?? true,
+        });
+    },
+
+    async getReconnectProgress() {
+        return this.get('/api/images/reconnect-missing/progress');
+    },
+
+    async cancelReconnectMissing() {
+        return this.post('/api/images/reconnect-missing/cancel');
+    },
+
     // Tagging - with all new options
     async startTagging(options = {}) {
         return this.post('/api/tag/start', { // Unified with backend endpoint
@@ -971,7 +995,7 @@ const API = {
             max_width: dimensions?.maxWidth || null,
             min_height: dimensions?.minHeight || null,
             max_height: dimensions?.maxHeight || null,
-            aspect_ratio: dimensions?.aspectRatio || null,
+            aspect_ratio: normalizeAspectRatioFilter(dimensions?.aspectRatio) || null,
             min_aesthetic: aesthetic?.min ?? null,
             max_aesthetic: aesthetic?.max ?? null,
             destination_folder: destinationFolder,
@@ -994,7 +1018,8 @@ const API = {
         if (dimensions?.maxWidth) params.set('max_width', dimensions.maxWidth);
         if (dimensions?.minHeight) params.set('min_height', dimensions.minHeight);
         if (dimensions?.maxHeight) params.set('max_height', dimensions.maxHeight);
-        if (dimensions?.aspectRatio) params.set('aspect_ratio', dimensions.aspectRatio);
+        const aspectRatio = normalizeAspectRatioFilter(dimensions?.aspectRatio);
+        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (aesthetic?.min != null) params.set('min_aesthetic', aesthetic.min);
         if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
         if (folders) params.set('folders', JSON.stringify(folders));
@@ -1621,15 +1646,19 @@ async function handleAppUpdateButtonClick() {
 function createProgressTracker(maxSamples = 12) {
     return {
         maxSamples,
+        scopeKey: '',
         startedAt: null,
         samples: [],
+        lastEtaSeconds: null,
     };
 }
 
 function resetProgressTracker(tracker) {
     if (!tracker) return;
+    tracker.scopeKey = '';
     tracker.startedAt = null;
     tracker.samples = [];
+    tracker.lastEtaSeconds = null;
 }
 
 function formatDurationCompact(seconds) {
@@ -1643,12 +1672,20 @@ function formatDurationCompact(seconds) {
     return `${secs}s`;
 }
 
-function updateProgressTracker(tracker, completed, total) {
+function updateProgressTracker(tracker, completed, total, options = {}) {
     if (!tracker) return { elapsedText: '', etaText: '' };
 
     const safeCompleted = Math.max(0, Number(completed) || 0);
     const safeTotal = Math.max(0, Number(total) || 0);
+    const scopeKey = String(options.scopeKey || '');
     const now = Date.now();
+
+    if (tracker.scopeKey !== scopeKey) {
+        tracker.scopeKey = scopeKey;
+        tracker.startedAt = null;
+        tracker.samples = [];
+        tracker.lastEtaSeconds = null;
+    }
 
     if (!tracker.startedAt && safeCompleted > 0) {
         tracker.startedAt = now;
@@ -1663,7 +1700,7 @@ function updateProgressTracker(tracker, completed, total) {
 
     const elapsedSeconds = tracker.startedAt ? Math.max(0, (now - tracker.startedAt) / 1000) : 0;
     let etaSeconds = null;
-    if (safeTotal > 0 && tracker.samples.length >= 3) {
+    if (options.showEta !== false && safeTotal > 0 && tracker.samples.length >= 3) {
         const first = tracker.samples[0];
         const last = tracker.samples[tracker.samples.length - 1];
         const completedDelta = last.completed - first.completed;
@@ -1673,8 +1710,15 @@ function updateProgressTracker(tracker, completed, total) {
             const remaining = Math.max(0, safeTotal - safeCompleted);
             if (rate > 0 && remaining > 0) {
                 etaSeconds = remaining / rate;
+                if (tracker.lastEtaSeconds != null && Number.isFinite(tracker.lastEtaSeconds)) {
+                    etaSeconds = (tracker.lastEtaSeconds * 0.65) + (etaSeconds * 0.35);
+                }
+                tracker.lastEtaSeconds = etaSeconds;
             }
         }
+    }
+    if (etaSeconds == null && safeTotal > 0 && safeCompleted >= safeTotal) {
+        tracker.lastEtaSeconds = null;
     }
 
     return {
@@ -1715,14 +1759,16 @@ function buildOperationProgressText({
     extraParts = [],
     detail = '',
     defaultMessage = 'Processing...',
+    showEta = true,
+    progressKey = '',
 }) {
-    const meta = updateProgressTracker(tracker, completed, total);
+    const meta = updateProgressTracker(tracker, completed, total, { showEta, scopeKey: progressKey });
     const parts = [];
 
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
     extraParts.filter(Boolean).forEach((part) => parts.push(part));
-    if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
+    if (showEta && meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
     else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
 
     parts.push(detail || defaultMessage);
@@ -2708,21 +2754,18 @@ function emitSelectionStateChanged() {
 
 function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visible') {
     if (scope === 'loaded') {
-        return appT('selection.scopeLoaded', 'Scope: loaded results');
+        return appT('selection.scopeLoaded', 'Selected from loaded gallery items');
     }
     if (scope === 'filtered') {
         return AppState.selectionToken
-            ? appT('selection.scopeFiltered', 'Scope: all filtered results')
-            : appT('selection.scopeFilteredExplicit', 'Scope: filtered selection');
+            ? appT('selection.scopeFiltered', 'Selected all current filter matches')
+            : appT('selection.scopeFilteredExplicit', 'Selected current filter matches');
     }
-    return appT('selection.scopeVisible', 'Scope: visible thumbnails');
+    return appT('selection.scopeVisible', 'Selected manually from Gallery');
 }
 
 function collapseSelectionMoreActions() {
-    const morePanel = document.querySelector('#selection-actions .selection-panel-more');
-    if (morePanel) {
-        morePanel.open = false;
-    }
+    // Selection actions are now always visible in sections; kept as a no-op for older callers.
 }
 
 function normalizeSelectionImageIds(rawIds) {
@@ -2847,7 +2890,7 @@ async function selectAllFilteredResults() {
         emitSelectionStateChanged();
     } catch (error) {
         showToast(
-            formatUserError(error, appT('selection.selectFilteredFailed', 'Failed to select all filtered results')),
+            formatUserError(error, appT('selection.selectFilteredFailed', 'Failed to select all current filter matches')),
             'error'
         );
         updateSelectionUI();
@@ -2894,7 +2937,7 @@ async function invertAllFilteredResults() {
         emitSelectionStateChanged();
     } catch (error) {
         showToast(
-            formatUserError(error, appT('selection.invertFilteredFailed', 'Failed to invert all filtered results')),
+            formatUserError(error, appT('selection.invertFilteredFailed', 'Failed to invert current filter matches')),
             'error'
         );
         updateSelectionUI();
@@ -3029,15 +3072,19 @@ function switchView(viewName) {
 
     // View-specific initialization
     if (viewName === 'gallery') {
+        let suppressInitialGalleryAutoLoadMore = false;
         setGalleryViewMode(AppState.viewMode);
         // Re-render existing images immediately, only reload from API if needed
         if (AppState.galleryNeedsRefresh) {
+            suppressInitialGalleryAutoLoadMore = AppState.gallerySuppressNextAutoLoadMore;
             loadImages(false, {
                 silent: AppState.images.length > 0,
                 preserveExisting: AppState.images.length > 0,
                 coalesce: true,
+                suppressAutoLoadMore: suppressInitialGalleryAutoLoadMore,
             });
             AppState.galleryNeedsRefresh = false;
+            AppState.gallerySuppressNextAutoLoadMore = false;
         } else if (AppState.images.length > 0 && window.Gallery) {
             Gallery.setImages(AppState.images);
         } else {
@@ -3045,7 +3092,9 @@ function switchView(viewName) {
         }
         requestAnimationFrame(() => {
             attachGalleryPaginationListener();
-            _onGalleryScroll();
+            if (!suppressInitialGalleryAutoLoadMore) {
+                _onGalleryScroll();
+            }
         });
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
@@ -3074,21 +3123,25 @@ function getSelectedGalleryExamples(ids, limit = 5) {
         .join(', ');
 }
 
-function deleteSelectedGalleryImages() {
-    const ids = Array.from(AppState.selectedIds)
+function getSelectedGalleryIds() {
+    return Array.from(AppState.selectedIds)
         .map((id) => Number(id))
-        .filter((id) => Number.isFinite(id));
+        .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+async function deleteGalleryImagesByIds(imageIds) {
+    const ids = normalizeSelectionImageIds(imageIds);
 
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
     const examples = getSelectedGalleryExamples(ids);
-    const title = appT('selection.deleteConfirmTitle', 'Delete selected image files?');
+    const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
     const message = appT(
         'selection.deleteConfirmBody',
-        'This will permanently delete {count} files from disk. Examples: {examples}'
+        'This moves {count} original file(s) to the operating system Trash / Recycle Bin and removes them from this gallery. Use Remove from Gallery if you only want to clean the index. Examples: {examples}'
     )
         .replace('{count}', ids.length)
         .replace('{examples}', examples || ids.slice(0, 5).join(', '));
@@ -3117,7 +3170,7 @@ function deleteSelectedGalleryImages() {
 
             if (failed.length > 0) {
                 showToast(
-                    appT('selection.deletePartial', 'Deleted {deleted} file(s). {failed} failed.')
+                    appT('selection.deletePartial', 'Moved {deleted} file(s) to Trash. {failed} failed.')
                         .replace('{deleted}', result.deleted || 0)
                         .replace('{failed}', failed.length),
                     'warning'
@@ -3126,30 +3179,28 @@ function deleteSelectedGalleryImages() {
             }
 
             showToast(
-                appT('selection.deleteSuccess', 'Deleted {count} image file(s).')
+                appT('selection.deleteSuccess', 'Moved {count} image file(s) to Trash.')
                     .replace('{count}', result.deleted || 0),
                 'success'
             );
         } catch (error) {
             showToast(
-                formatUserError(error, appT('selection.deleteFailed', 'Failed to delete selected image files')),
+                formatUserError(error, appT('selection.deleteFailed', 'Failed to move selected image files to Trash')),
                 'error'
             );
         }
     });
 }
 
-function getSelectedGalleryIds() {
-    return Array.from(AppState.selectedIds)
-        .map((id) => Number(id))
-        .filter((id) => Number.isFinite(id) && id > 0);
+function deleteSelectedGalleryImages() {
+    return deleteGalleryImagesByIds(getSelectedGalleryIds());
 }
 
-function removeSelectedGalleryImages() {
-    const ids = getSelectedGalleryIds();
+async function removeGalleryImagesByIds(imageIds) {
+    const ids = normalizeSelectionImageIds(imageIds);
 
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
@@ -3203,12 +3254,16 @@ function removeSelectedGalleryImages() {
     });
 }
 
+function removeSelectedGalleryImages() {
+    return removeGalleryImagesByIds(getSelectedGalleryIds());
+}
+
 async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {}) {
     const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
     const ids = normalizeSelectionImageIds(imageIds);
     const isSingleContext = options.source === 'context' && ids.length === 1;
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Select images, or choose all filtered results.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
@@ -3361,6 +3416,14 @@ function initEventListeners() {
         }
     });
 
+    $('#btn-reconnect-missing')?.addEventListener('click', () => showModal('reconnect-modal'));
+    $('#btn-browse-reconnect-folder')?.addEventListener('click', () => {
+        const input = $('#reconnect-folder-path');
+        if (input && typeof window.showFolderBrowser === 'function') {
+            window.showFolderBrowser(input);
+        }
+    });
+
     // Tag button
     $('#btn-tag').addEventListener('click', () => showModal('tag-modal'));
     $('#btn-score-aesthetic')?.addEventListener('click', async () => {
@@ -3399,6 +3462,8 @@ function initEventListeners() {
     // Scan modal
     $('#btn-cancel-scan').addEventListener('click', requestStopScan);
     $('#btn-start-scan').addEventListener('click', startScan);
+    $('#btn-cancel-reconnect')?.addEventListener('click', requestStopReconnectMissing);
+    $('#btn-start-reconnect')?.addEventListener('click', startReconnectMissing);
 
     // Tag modal X close button — minimize to background if tagging
     $('#btn-close-tag-modal')?.addEventListener('click', () => minimizeTaggingToBackground());
@@ -3408,6 +3473,12 @@ function initEventListeners() {
         const debouncedValidation = debounce(validateScanFolderPath, 300);
         scanFolderPathInput.addEventListener('input', debouncedValidation);
         scanFolderPathInput.addEventListener('blur', validateScanFolderPath);
+    }
+    const reconnectFolderPathInput = $('#reconnect-folder-path');
+    if (reconnectFolderPathInput) {
+        const debouncedReconnectValidation = debounce(validateReconnectFolderPath, 300);
+        reconnectFolderPathInput.addEventListener('input', debouncedReconnectValidation);
+        reconnectFolderPathInput.addEventListener('blur', validateReconnectFolderPath);
     }
 
     // Tag modal
@@ -3592,18 +3663,6 @@ function initEventListeners() {
         invertAllFilteredResults();
     });
 
-    $('#btn-select-visible')?.addEventListener('click', () => {
-        if (window.Gallery && typeof Gallery.selectAllVisible === 'function') {
-            Gallery.selectAllVisible();
-        }
-    });
-
-    $('#btn-invert-selection-visible')?.addEventListener('click', () => {
-        if (window.Gallery && typeof Gallery.invertVisibleSelection === 'function') {
-            Gallery.invertVisibleSelection();
-        }
-    });
-
     $('#btn-move-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('move'));
     $('#btn-copy-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('copy'));
     $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
@@ -3635,8 +3694,8 @@ function initEventListeners() {
         renderExportModalText(event.target.value);
     });
     $('#btn-download-export')?.addEventListener('click', downloadCurrentExportText);
-    // --- Export Tags from FAB ---
-    $('#btn-export-tags-selected').addEventListener('click', () => {
+    // --- Export Tags from legacy direct button, if present ---
+    $('#btn-export-tags-selected')?.addEventListener('click', () => {
         resetSelectionDataCache();
         showExportTagsModal();
     });
@@ -3794,10 +3853,13 @@ function initEventListeners() {
     });
 
     // --- Batch Tag Export Modal ---
-    $('#btn-batch-export-tags').addEventListener('click', showBatchExportModal);
-    $('#btn-close-batch-export').addEventListener('click', () => hideModal('batch-export-modal'));
-    $('#btn-cancel-batch-export').addEventListener('click', () => hideModal('batch-export-modal'));
-    $('#btn-start-batch-export').addEventListener('click', executeBatchExport);
+    $('#btn-batch-export-tags')?.addEventListener('click', showBatchExportModal);
+    $('#btn-close-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
+    $('#btn-cancel-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
+    $('#btn-start-batch-export')?.addEventListener('click', executeBatchExport);
+    $('#batch-export-content-mode')?.addEventListener('change', (event) => {
+        updateBatchExportContentDescription(event.target.value);
+    });
 
     // --- Import Tags (from Tag Modal) ---
     $('#btn-import-tags')?.addEventListener('click', () => {
@@ -4151,6 +4213,416 @@ function filterModalList(listId, query) {
 }
 
 
+// ============== Missing File Reconnect ==============
+
+function resetReconnectFolderValidation() {
+    const input = $('#reconnect-folder-path');
+    const feedback = $('#reconnect-folder-feedback');
+    if (input) {
+        input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    }
+    if (feedback) {
+        feedback.className = 'validation-feedback';
+        feedback.textContent = '';
+    }
+}
+
+function setReconnectFolderValidation(state, message = '') {
+    const input = $('#reconnect-folder-path');
+    const feedback = $('#reconnect-folder-feedback');
+    if (!input || !feedback) return;
+
+    input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    feedback.className = 'validation-feedback';
+    if (state === 'success') {
+        input.classList.add('input-valid');
+        feedback.classList.add('success');
+    } else if (state === 'error') {
+        input.classList.add('input-invalid');
+        feedback.classList.add('error');
+    } else if (state === 'checking') {
+        input.classList.add('input-checking');
+        feedback.classList.add('checking');
+    }
+    feedback.textContent = message;
+}
+
+function validateReconnectFolderPath() {
+    const input = $('#reconnect-folder-path');
+    if (!input) return true;
+    const value = input.value.trim();
+    resetReconnectFolderValidation();
+    if (!value) return true;
+
+    const invalidChars = /[<>"|?*]/;
+    if (invalidChars.test(value)) {
+        setReconnectFolderValidation('error', appT('scan.invalidPathChars', 'Path contains invalid characters'));
+        return false;
+    }
+
+    setReconnectFolderValidation('checking', appT('scan.pathChecking', 'Checking path...'));
+    const requestValue = value;
+    API.post('/api/validate-path', { path: value })
+        .then(result => {
+            if (input.value.trim() !== requestValue) return;
+            if (result.valid) {
+                setReconnectFolderValidation('success', appT('scan.folderFound', 'Folder found'));
+            } else {
+                setReconnectFolderValidation('error', mapScanPathError(result.error || appT('scan.invalidPath', 'Path format is invalid')));
+            }
+        })
+        .catch((error) => {
+            if (input.value.trim() !== requestValue) return;
+            setReconnectFolderValidation('', isScanPathError(error) ? mapScanPathError(error) : '');
+        });
+    return true;
+}
+
+function _setReconnectRunningUi(isRunning) {
+    const startBtn = $('#btn-start-reconnect');
+    const cancelBtn = $('#btn-cancel-reconnect');
+    if (startBtn) startBtn.disabled = Boolean(isRunning);
+    if (cancelBtn) {
+        if (isRunning) {
+            cancelBtn.removeAttribute('data-i18n');
+            cancelBtn.textContent = appT('reconnect.stopButton', 'Stop Search');
+        } else {
+            cancelBtn.setAttribute('data-i18n', 'modal.cancel');
+            cancelBtn.textContent = appT('modal.cancel', 'Cancel');
+        }
+    }
+}
+
+function _formatReconnectStatus(progress) {
+    const checked = Number(progress?.checked_files ?? progress?.processed ?? progress?.current ?? 0);
+    const matched = Number(progress?.matched || 0);
+    const missingTotal = Number(progress?.missing_total || 0);
+    const ambiguous = Number(progress?.ambiguous || 0);
+    const conflicts = Number(progress?.conflicts || 0);
+    const errors = Number(progress?.errors || 0);
+    const base = missingTotal > 0
+        ? appT('reconnect.progressText', 'Checked {checked} files · found {matched}/{missing} missing')
+            .replace('{checked}', String(checked))
+            .replace('{matched}', String(matched))
+            .replace('{missing}', String(missingTotal))
+        : appT('reconnect.progressNoMissing', 'Checking files... {checked} checked')
+            .replace('{checked}', String(checked));
+    const extras = [];
+    if (ambiguous) {
+        extras.push(appT('reconnect.ambiguousShort', '{count} need review').replace('{count}', String(ambiguous)));
+    }
+    if (conflicts) {
+        extras.push(appT('reconnect.conflictsShort', '{count} already in gallery').replace('{count}', String(conflicts)));
+    }
+    if (errors) {
+        extras.push(appT('reconnect.errorsShort', '{count} errors').replace('{count}', String(errors)));
+    }
+    return extras.length ? `${base} · ${extras.join(' · ')}` : base;
+}
+
+function _renderReconnectResultPanel(progress) {
+    const panel = $('#reconnect-result-panel');
+    if (!panel) return;
+
+    if (progress?.status !== 'done' || !progress?.result) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+
+    const result = progress.result || {};
+    const updated = Array.isArray(result.updated) ? result.updated : [];
+    const needsReview = Array.isArray(result.needs_review) ? result.needs_review : [];
+    const conflicts = Array.isArray(result.conflict_samples) ? result.conflict_samples : [];
+    const stillMissing = Array.isArray(result.still_missing_samples) ? result.still_missing_samples : [];
+    const errors = Array.isArray(result.recent_errors) ? result.recent_errors : [];
+    const matched = Number(result.matched || progress.matched || 0);
+    const missingTotal = Number(result.missing_total || progress.missing_total || 0);
+    const libraryMissingTotal = Number(result.library_missing_total || progress.library_missing_total || 0);
+    const missing = Number(result.still_missing || 0);
+    const resultSummaryKey = missingTotal === 0 && libraryMissingTotal > 0
+        ? 'reconnect.resultNoMatches'
+        : 'reconnect.resultSummary';
+
+    const pathLine = (label, value) => value
+        ? `<div class="reconnect-result-path"><span>${escapeHtml(label)}</span><code>${escapeHtml(value)}</code></div>`
+        : '';
+    const emptyText = appT('reconnect.resultEmpty', 'Nothing to show here.');
+    const renderItems = (items, renderItem) => items.length
+        ? items.slice(0, 5).map(renderItem).join('')
+        : `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`;
+
+    panel.innerHTML = `
+        <div class="reconnect-result-summary">
+            <strong>${escapeHtml(appT('reconnect.resultTitle', 'Search result'))}</strong>
+            <span>${escapeHtml(appT(resultSummaryKey, '{matched} reconnected · {missing} still missing')
+                .replace('{matched}', String(matched))
+                .replace('{missing}', String(missing))
+                .replace('{libraryMissing}', String(libraryMissingTotal)))}</span>
+        </div>
+        <details class="reconnect-result-group" open>
+            <summary>${escapeHtml(appT('reconnect.resultUpdated', 'Reconnected'))} <span>${updated.length}</span></summary>
+            ${renderItems(updated, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                    ${pathLine(appT('reconnect.newPathLabel', 'New'), item.new_path)}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${needsReview.length ? 'open' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${needsReview.length}</span></summary>
+            ${renderItems(needsReview, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(appT('reconnect.needsReviewHelp', 'Several old records could match this file. Choose a smaller folder and run Find Moved Images again, or review the paths manually.'))}</p>
+                    ${pathLine(appT('reconnect.foundPathLabel', 'Found'), item.found_path)}
+                    ${(Array.isArray(item.old_paths) ? item.old_paths : []).map((path) => pathLine(appT('reconnect.possibleOldPathLabel', 'Possible old'), path)).join('')}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${conflicts.length ? 'open' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultConflicts', 'Already in gallery'))} <span>${conflicts.length}</span></summary>
+            ${renderItems(conflicts, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(appT('reconnect.conflictHelp', 'The new file path is already another gallery item. If the old missing record is only a duplicate, remove the old record from the gallery.'))}</p>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                    ${pathLine(appT('reconnect.existingPathLabel', 'Already indexed'), item.existing_path)}
+                    ${item.old_image_id ? `<button type="button" class="btn btn-ghost btn-small reconnect-remove-old" data-reconnect-remove-id="${escapeHtml(item.old_image_id)}">${escapeHtml(appT('reconnect.removeOldRecord', 'Remove old gallery record'))}</button>` : ''}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${stillMissing.length ? '' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultStillMissing', 'Still missing'))} <span>${stillMissing.length}</span></summary>
+            ${renderItems(stillMissing, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
+                    <p>${escapeHtml(appT('reconnect.stillMissingHelp', 'The file was not found in the folder you chose. Try a wider folder or reconnect the drive.'))}</p>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                </div>
+            `)}
+        </details>
+        ${errors.length ? `<details class="reconnect-result-group" open>
+            <summary>${escapeHtml(appT('reconnect.resultErrors', 'Errors'))} <span>${errors.length}</span></summary>
+            ${renderItems(errors, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(item.error || '')}</p>
+                </div>
+            `)}
+        </details>` : ''}
+    `;
+
+    panel.querySelectorAll('[data-reconnect-remove-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const imageId = Number(button.getAttribute('data-reconnect-remove-id'));
+            if (Number.isFinite(imageId) && imageId > 0) {
+                removeGalleryImagesByIds([imageId]);
+            }
+        });
+    });
+    panel.style.display = 'grid';
+}
+
+function _updateReconnectProgressUi(progress) {
+    const container = $('#reconnect-progress-container');
+    const fill = $('#reconnect-progress-fill');
+    const textEl = $('#reconnect-progress-text');
+    const running = ['running', 'cancelling'].includes(progress?.status);
+    if (container) container.style.display = running || ['done', 'error', 'cancelled'].includes(progress?.status) ? 'block' : 'none';
+    if (fill) {
+        fill.classList.toggle('is-indeterminate', running);
+        fill.style.width = running ? '' : (progress?.status === 'done' ? '100%' : '0%');
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('reconnect.cancelling', 'Stopping search...');
+        } else if (progress?.status === 'done') {
+            textEl.textContent = progress.message || appT('reconnect.done', 'Search complete.');
+        } else if (progress?.status === 'error') {
+            textEl.textContent = progress.message || appT('reconnect.failedStatus', 'Search failed');
+        } else if (progress?.status === 'cancelled') {
+            textEl.textContent = progress.message || appT('reconnect.cancelled', 'Search stopped');
+        } else {
+            textEl.textContent = _formatReconnectStatus(progress);
+        }
+    }
+    _setReconnectRunningUi(running);
+    _renderReconnectResultPanel(progress);
+}
+
+function _updateBgReconnectProgress(progress) {
+    const bar = $('#bg-reconnect-progress');
+    if (!bar) return;
+    if (!['running', 'cancelling'].includes(progress?.status)) {
+        bar.style.display = 'none';
+        return;
+    }
+    const modal = $('#reconnect-modal');
+    const modalOpen = modal && modal.classList.contains('visible');
+    bar.style.display = modalOpen ? 'none' : 'flex';
+    const fill = $('#bg-reconnect-progress-fill');
+    if (fill) {
+        fill.classList.add('is-indeterminate');
+        fill.style.width = '';
+    }
+    const textEl = $('#bg-reconnect-progress-text');
+    if (textEl) {
+        textEl.textContent = progress?.status === 'cancelling'
+            ? appT('reconnect.cancelling', 'Stopping search...')
+            : _formatReconnectStatus(progress);
+    }
+}
+
+function _hideBgReconnectProgress() {
+    const bar = $('#bg-reconnect-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _clearReconnectPollTimer() {
+    if (_reconnectPollTimer) {
+        clearTimeout(_reconnectPollTimer);
+        _reconnectPollTimer = null;
+    }
+}
+
+function _initBgReconnectProgressButtons() {
+    $('#bg-reconnect-cancel')?.addEventListener('click', async () => {
+        await requestStopReconnectMissing();
+    });
+    $('#bg-reconnect-open')?.addEventListener('click', () => {
+        showModal('reconnect-modal');
+    });
+}
+
+async function startReconnectMissing() {
+    const folderPath = $('#reconnect-folder-path')?.value?.trim() || '';
+    if (!folderPath) {
+        showToast(appT('reconnect.enterFolder', 'Choose where the moved images may be now.'), 'error');
+        return;
+    }
+    const recursive = $('#reconnect-recursive')?.checked ?? true;
+    const verifyUncertain = $('#reconnect-verify-uncertain')?.checked ?? true;
+
+    try {
+        await API.startReconnectMissing(folderPath, { recursive, verifyUncertain });
+        const initialProgress = {
+            status: 'running',
+            checked_files: 0,
+            matched: 0,
+            missing_total: 0,
+            ambiguous: 0,
+            errors: 0,
+        };
+        _updateReconnectProgressUi(initialProgress);
+        hideModal('reconnect-modal');
+        _updateBgReconnectProgress(initialProgress);
+        showToast(appT('reconnect.startedToast', 'Search started in the background. You can keep using the gallery.'), 'info');
+        pollReconnectProgress();
+    } catch (error) {
+        const userMessage = mapScanPathError(error);
+        if (isScanPathError(error)) {
+            setReconnectFolderValidation('error', userMessage);
+        }
+        showToast(formatUserError(error, appT('reconnect.failedStart', 'Failed to start finding moved files')), 'error');
+    }
+}
+
+async function requestStopReconnectMissing() {
+    const progress = await API.getReconnectProgress().catch(() => null);
+    if (!progress || !['running', 'cancelling'].includes(progress.status)) {
+        hideModal('reconnect-modal');
+        _setReconnectRunningUi(false);
+        return;
+    }
+    try {
+        const result = await API.cancelReconnectMissing();
+        _updateReconnectProgressUi(result);
+        _updateBgReconnectProgress(result);
+        showToast(appT('reconnect.cancelling', 'Stopping search...'), 'info');
+        pollReconnectProgress();
+    } catch (error) {
+        showToast(formatUserError(error, appT('reconnect.failedCancel', 'Failed to stop finding moved files')), 'error');
+    }
+}
+
+async function pollReconnectProgress(retryCount = 0) {
+    _clearReconnectPollTimer();
+    try {
+        const progress = await API.getReconnectProgress();
+        _updateReconnectProgressUi(progress);
+        _updateBgReconnectProgress(progress);
+
+        if (progress.status === 'running' || progress.status === 'cancelling') {
+            _reconnectPollTimer = setTimeout(() => pollReconnectProgress(0), progress.status === 'cancelling' ? 250 : 700);
+            return;
+        }
+
+        if (progress.status === 'done') {
+            const result = progress.result || {};
+            const matched = Number(progress.matched || result.matched || 0);
+            const stillMissing = Number(result.still_missing || 0);
+            const missingTotal = Number(progress.missing_total || result.missing_total || 0);
+            const libraryMissingTotal = Number(progress.library_missing_total || result.library_missing_total || 0);
+            const ambiguous = Number(progress.ambiguous || result.ambiguous || 0);
+            const conflicts = Number(progress.conflicts || result.conflicts || 0);
+            const doneKey = missingTotal === 0 && libraryMissingTotal > 0
+                ? 'reconnect.doneNoMatchesToast'
+                : 'reconnect.doneToast';
+            showToast(
+                appT(doneKey, 'Found {matched} moved images. {missing} still missing. {ambiguous} need review. {conflicts} already in gallery.')
+                    .replace('{matched}', String(matched))
+                    .replace('{missing}', String(stillMissing))
+                    .replace('{libraryMissing}', String(libraryMissingTotal))
+                    .replace('{ambiguous}', String(ambiguous))
+                    .replace('{conflicts}', String(conflicts)),
+                ambiguous > 0 || stillMissing > 0 || conflicts > 0 || (missingTotal === 0 && libraryMissingTotal > 0) ? 'warning' : 'success'
+            );
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+            _refreshScanDrivenViews(true, { refreshGallery: true });
+            return;
+        }
+
+        if (progress.status === 'cancelled') {
+            showToast(progress.message || appT('reconnect.cancelled', 'Search stopped'), 'info');
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+            return;
+        }
+
+        if (progress.status === 'error') {
+            showToast(progress.message || appT('reconnect.failedStatus', 'Search failed'), 'error');
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+        }
+    } catch (error) {
+        if (retryCount < 3) {
+            _reconnectPollTimer = setTimeout(() => pollReconnectProgress(retryCount + 1), 1000);
+            return;
+        }
+        showToast(formatUserError(error, appT('reconnect.failedProgress', 'Could not update moved-file search progress')), 'error');
+        _hideBgReconnectProgress();
+        _setReconnectRunningUi(false);
+    }
+}
+
+async function resumeReconnectProgress() {
+    try {
+        const progress = await API.getReconnectProgress();
+        if (!['running', 'cancelling'].includes(progress?.status)) {
+            _hideBgReconnectProgress();
+            return;
+        }
+        _updateReconnectProgressUi(progress);
+        _updateBgReconnectProgress(progress);
+        pollReconnectProgress();
+    } catch (error) {
+        Logger.warn('Failed to resume moved-file search progress:', error);
+    }
+}
+
 // ============== Scanning ==============
 
 function resetScanFolderValidation() {
@@ -4297,7 +4769,7 @@ async function startScan() {
         resetProgressTracker(_scanBackgroundProgressTracker);
         _scanLibraryReadyHandled = false;
         _scanLastAutoRefreshAt = 0;
-        $('#scan-progress-text').textContent = appT('scan.waitingForUpdate', 'Import · waiting for first update...');
+        $('#scan-progress-text').textContent = appT('progress.countingImages', 'Counting images... {count} found').replace('{count}', '0');
         showToast(
             appT('scan.startedToast', 'Import started. The first images will appear soon, and the rest of the details will keep filling in.'),
             'info'
@@ -4329,7 +4801,7 @@ async function requestStopScan() {
         const result = await API.cancelScan();
         const processed = Number(progress.processed ?? progress.current ?? 0);
         const total = Number(progress.total || 0);
-        const totalFinal = progress?.total_final !== false;
+        const totalFinal = progress?.total_final === true;
         setScanCancelButtonState(result?.status === 'cancelled' ? 'idle' : 'cancelling');
         $('#scan-progress-text').textContent = (result?.status === 'cancelled')
             ? appT('scan.cancelled', 'Scan cancelled')
@@ -4374,6 +4846,7 @@ function _refreshScanDrivenViews(force = false, options = {}) {
                 silent: true,
                 preserveExisting: true,
                 coalesce: true,
+                suppressAutoLoadMore: true,
             };
             if (Number.isFinite(pageSizeOverride) && pageSizeOverride > 0) {
                 loadOptions.pageSizeOverride = pageSizeOverride;
@@ -4382,9 +4855,54 @@ function _refreshScanDrivenViews(force = false, options = {}) {
             AppState.galleryNeedsRefresh = false;
         } else {
             AppState.galleryNeedsRefresh = true;
+            AppState.gallerySuppressNextAutoLoadMore = true;
         }
     }
     loadStats();
+}
+
+function getScanProgressMetrics(progress) {
+    const processed = Number(progress?.processed ?? progress?.current ?? 0);
+    const total = Number(progress?.total || 0);
+    const totalFinal = progress?.total_final === true;
+    const counted = Number(progress?.counted || total || 0);
+    const metadataProcessed = Number(progress?.metadata_processed || 0);
+    const metadataTotal = Number(progress?.metadata_total || 0);
+    const importComplete = progress?.import_complete === true || (totalFinal && total > 0 && processed >= total);
+    const metadataTotalFinal = progress?.metadata_total_final === true;
+    const isCounting = progress?.step === 'counting' || !totalFinal;
+    const showingMetadata = progress?.step === 'metadata' && importComplete;
+    const completed = showingMetadata ? metadataProcessed : processed;
+    const stableTotal = showingMetadata
+        ? (metadataTotalFinal ? metadataTotal : 0)
+        : (totalFinal ? total : 0);
+    const showEta = showingMetadata
+        ? (metadataTotalFinal && metadataTotal > 0 && metadataProcessed > 0)
+        : (totalFinal && total > 0 && processed > 0 && !isCounting);
+    const percent = showingMetadata
+        ? (metadataTotal > 0 ? Math.min(100, (metadataProcessed / metadataTotal) * 100) : 0)
+        : (totalFinal && total > 0 ? Math.min(100, (processed / total) * 100) : 0);
+    const progressKey = showingMetadata
+        ? `scan-metadata:${metadataTotalFinal ? metadataTotal : 'growing'}`
+        : `scan-import:${totalFinal ? total : 'counting'}`;
+
+    return {
+        processed,
+        total,
+        totalFinal,
+        counted,
+        metadataProcessed,
+        metadataTotal,
+        metadataTotalFinal,
+        importComplete,
+        isCounting,
+        showingMetadata,
+        completed,
+        stableTotal,
+        showEta,
+        percent,
+        progressKey,
+    };
 }
 
 function _updateBgScanProgress(progress) {
@@ -4400,55 +4918,60 @@ function _updateBgScanProgress(progress) {
     const modalOpen = scanModal && scanModal.classList.contains('visible');
     bar.style.display = modalOpen ? 'none' : 'flex';
 
-    const processed = Number(progress?.processed ?? progress?.current ?? 0);
-    const total = Number(progress?.total || 0);
-    const totalFinal = progress?.total_final !== false;
-    const metadataProcessed = Number(progress?.metadata_processed || 0);
-    const metadataTotal = Number(progress?.metadata_total || 0);
-    const percentBase = progress?.step === 'metadata' && metadataTotal > 0
-        ? (metadataProcessed / metadataTotal) * 100
-        : (totalFinal && total > 0 ? (processed / total) * 100 : 0);
-
+    const metrics = getScanProgressMetrics(progress);
     const fill = $('#bg-scan-progress-fill');
     const textEl = $('#bg-scan-progress-text');
     const isIndeterminate = ['running', 'cancelling'].includes(progress?.status) && (
-        progress?.step === 'metadata'
-            ? (!percentBase || percentBase === 0)
-            : (!totalFinal || !percentBase || percentBase === 0)
+        metrics.isCounting || !metrics.percent || metrics.percent <= 0
     );
     if (fill) {
         fill.classList.toggle('is-indeterminate', isIndeterminate);
-        fill.style.width = isIndeterminate ? '' : (Math.min(100, percentBase) + '%');
+        fill.style.width = isIndeterminate ? '' : (Math.min(100, metrics.percent) + '%');
     }
 
-    if (textEl) {
-        if (progress?.status === 'cancelling') {
-            textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
-        } else if (progress?.step === 'metadata') {
-            textEl.textContent = buildOperationProgressText({
-                completed: metadataProcessed,
-                total: metadataTotal,
-                tracker: _scanBackgroundProgressTracker,
-                primaryLabel: appT('scan.progressLabel', 'Import'),
-                detail: appT('scan.backgroundMetadata', 'Filling in image details...'),
-                defaultMessage: appT('scan.backgroundMetadata', 'Filling in image details...'),
-            });
-        } else if (!totalFinal) {
-            textEl.textContent = appT('scan.backgroundDiscovering', '{count} scanned. Discovering more images...')
-                .replace('{count}', String(processed));
-        } else {
-            const remaining = Math.max(0, total - processed);
-            textEl.textContent = buildOperationProgressText({
-                completed: processed,
-                total,
-                tracker: _scanBackgroundProgressTracker,
-                primaryLabel: appT('scan.progressLabel', 'Import'),
-                extraParts: [appT('progress.left', '{count} left').replace('{count}', String(remaining))],
-                detail: progress?.message || appT('scan.backgroundImporting', 'Bringing images into your library...'),
-                defaultMessage: appT('scan.backgroundImporting', 'Bringing images into your library...'),
-            });
-        }
+    if (!textEl) return;
+
+    if (progress?.status === 'cancelling') {
+        textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
+        return;
     }
+
+    if (metrics.isCounting) {
+        textEl.textContent = appT('progress.countingImages', 'Counting images... {count} found')
+            .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        return;
+    }
+
+    const extraParts = [];
+    if (metrics.showingMetadata && metrics.metadataTotal > 0) {
+        extraParts.push(
+            appT('progress.metadataCount', '{current}/{total} details')
+                .replace('{current}', String(metrics.metadataProcessed))
+                .replace('{total}', String(metrics.metadataTotal))
+        );
+        if (!metrics.metadataTotalFinal) {
+            extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
+        }
+    } else if (metrics.totalFinal && metrics.total > 0) {
+        extraParts.push(
+            appT('progress.left', '{count} left')
+                .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+        );
+    }
+
+    textEl.textContent = buildOperationProgressText({
+        completed: metrics.completed,
+        total: metrics.stableTotal,
+        tracker: _scanBackgroundProgressTracker,
+        primaryLabel: appT('scan.progressLabel', 'Import'),
+        extraParts,
+        detail: progress?.message || (metrics.showingMetadata
+            ? appT('scan.backgroundMetadata', 'Filling in image details...')
+            : appT('scan.backgroundImporting', 'Bringing images into your library...')),
+        defaultMessage: appT('scan.backgroundImporting', 'Bringing images into your library...'),
+        showEta: metrics.showEta,
+        progressKey: metrics.progressKey,
+    });
 }
 
 function _hideBgScanProgress() {
@@ -4478,37 +5001,41 @@ async function pollScanProgress(retryCount = 0) {
     try {
         const progress = await API.getScanProgress();
 
-        const processed = Number(progress.processed ?? progress.current ?? 0);
-        const total = Number(progress.total || 0);
-        const totalFinal = progress.total_final !== false;
-        const metadataProcessed = Number(progress.metadata_processed || 0);
-        const metadataTotal = Number(progress.metadata_total || 0);
-        const effectiveTotal = totalFinal ? total : 0;
-        const percent = effectiveTotal > 0 ? Math.min(100, (processed / effectiveTotal) * 100) : 0;
+        const metrics = getScanProgressMetrics(progress);
         const scanFillEl = $('#scan-progress-fill');
-        const scanIndeterminate = progress.status === 'running' && (!totalFinal || effectiveTotal === 0);
+        const scanIndeterminate = progress.status === 'running' && (
+            metrics.isCounting || !metrics.percent || metrics.percent <= 0
+        );
         if (scanFillEl) {
             scanFillEl.classList.toggle('is-indeterminate', scanIndeterminate);
-            scanFillEl.style.width = scanIndeterminate ? '' : (percent + '%');
+            scanFillEl.style.width = scanIndeterminate ? '' : (metrics.percent + '%');
         }
 
         const errorCount = Number(progress.errors || 0);
         const newCount = Number(progress.new || 0);
         const updatedCount = Number(progress.updated || 0);
         const removedCount = Number(progress.removed || 0);
-        const remaining = totalFinal && total > 0 ? Math.max(0, total - processed) : 0;
         const extraParts = [];
-        if (totalFinal && total > 0) {
-            extraParts.push(appT('progress.left', '{count} left').replace('{count}', remaining));
-        } else if (processed > 0) {
-            extraParts.push(appT('progress.discoveredCount', '{count} scanned').replace('{count}', processed));
+        if (metrics.isCounting) {
+            extraParts.push(
+                appT('progress.discoveredCount', '{count} found')
+                    .replace('{count}', String(metrics.counted || metrics.processed || 0))
+            );
+        } else if (metrics.totalFinal && metrics.total > 0 && !metrics.showingMetadata) {
+            extraParts.push(
+                appT('progress.left', '{count} left')
+                    .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+            );
         }
-        if (progress.step === 'metadata' && metadataTotal > 0) {
+        if (metrics.metadataTotal > 0) {
             extraParts.push(
                 appT('progress.metadataCount', '{current}/{total} metadata')
-                    .replace('{current}', metadataProcessed)
-                    .replace('{total}', metadataTotal)
+                    .replace('{current}', String(metrics.metadataProcessed))
+                    .replace('{total}', String(metrics.metadataTotal))
             );
+            if (!metrics.metadataTotalFinal && metrics.importComplete) {
+                extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
+            }
         }
         if (newCount > 0) extraParts.push(appT('progress.newCount', '{count} new').replace('{count}', newCount));
         if (updatedCount > 0) extraParts.push(appT('progress.updatedCount', '{count} updated').replace('{count}', updatedCount));
@@ -4516,19 +5043,26 @@ async function pollScanProgress(retryCount = 0) {
         if (errorCount > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errorCount));
 
         let scanDetail = progress.current_item || progress.message || 'Importing images...';
-        if (progress.step === 'importing' && !totalFinal) {
-            scanDetail = appT('progress.discoveringMore', '{count} scanned. Discovering more images...')
-                .replace('{count}', processed);
+        if (metrics.isCounting) {
+            scanDetail = appT('progress.countingImages', 'Counting images... {count} found')
+                .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        } else if (metrics.totalFinal && metrics.processed === 0 && metrics.total > 0) {
+            scanDetail = appT('progress.foundStarting', 'Found {total} images. Starting scan...')
+                .replace('{total}', String(metrics.total));
+        } else if (metrics.showingMetadata && !metrics.metadataTotalFinal) {
+            scanDetail = appT('progress.detailsStillCounting', 'details total still being checked');
         }
 
         $('#scan-progress-text').textContent = buildOperationProgressText({
-            completed: processed,
-            total: effectiveTotal,
+            completed: metrics.completed,
+            total: metrics.stableTotal,
             tracker: _scanProgressTracker,
             primaryLabel: appT('scan.progressLabel', 'Import'),
             extraParts,
             detail: scanDetail,
             defaultMessage: 'Importing images...',
+            showEta: metrics.showEta,
+            progressKey: metrics.progressKey,
         });
 
         _updateBgScanProgress(progress);
@@ -4552,6 +5086,7 @@ async function pollScanProgress(retryCount = 0) {
             // the gallery was stuck loading again.
             if (AppState.currentView !== 'gallery') {
                 AppState.galleryNeedsRefresh = true;
+                AppState.gallerySuppressNextAutoLoadMore = true;
             }
         }
 
@@ -4688,6 +5223,7 @@ let _scanProgressTracker = createProgressTracker();
 let _scanBackgroundProgressTracker = createProgressTracker();
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
+let _reconnectPollTimer = null;
 let _tagProgressTracker = createProgressTracker();
 
 function clearTagProgressTimer() {
@@ -4819,7 +5355,7 @@ async function loadTaggerModels() {
         options.push('<option value="custom">Custom Local Model...</option>');
 
         select.innerHTML = options.join('');
-        select.value = models.some((model) => model.name === currentValue)
+        select.value = currentValue === 'custom' || models.some((model) => model.name === currentValue)
             ? currentValue
             : defaultModel;
         select.dispatchEvent(new Event('change'));
@@ -5426,6 +5962,7 @@ async function loadImages(appendMode = false, options = {}) {
         preserveExisting = false,
         coalesce = false,
         pageSizeOverride = null,
+        suppressAutoLoadMore = false,
     } = options;
 
     if (AppState.isLoading && coalesce) {
@@ -5577,7 +6114,9 @@ async function loadImages(appendMode = false, options = {}) {
 
         requestAnimationFrame(() => {
             attachGalleryPaginationListener();
-            _onGalleryScroll();
+            if (!suppressAutoLoadMore) {
+                _onGalleryScroll();
+            }
         });
 
         const pendingReload = _pendingImageReload;
@@ -6084,7 +6623,6 @@ function updateSelectionUI() {
         'btn-move-selected',
         'btn-copy-selected',
         'btn-export-selected',
-        'btn-export-tags-selected',
         'btn-batch-export-tags',
         'btn-send-to-censor',
         'btn-remove-selected-gallery',
@@ -6107,16 +6645,6 @@ function updateSelectionUI() {
         invertFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
     }
 
-    const selectVisibleBtn = $('#btn-select-visible');
-    if (selectVisibleBtn) {
-        selectVisibleBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
-    }
-
-    const invertVisibleBtn = $('#btn-invert-selection-visible');
-    if (invertVisibleBtn) {
-        invertVisibleBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
-    }
-
     const clearSelectionBtn = $('#btn-clear-selection');
     if (clearSelectionBtn) {
         clearSelectionBtn.disabled = !selectionPanelVisible || !hasSelection;
@@ -6134,7 +6662,7 @@ function updateSelectionUI() {
         if (countEl) {
             countEl.textContent = hasSelection
                 ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
-                : (window.I18n?.t?.('selection.emptyHint') || 'Select images, or choose all filtered results.');
+                : (window.I18n?.t?.('selection.emptyHint') || 'Select images, or choose all current filter matches.');
         }
         if (scopeEl) {
             scopeEl.textContent = getSelectionScopeSummaryText();
@@ -6284,17 +6812,62 @@ let _currentExportFormat = 'prompt';
 
 function getExportFormatLabel(format) {
     const labels = {
-        prompt: appT('export.formatPrompt', 'Prompt only'),
-        negative: appT('export.formatNegative', 'Negative prompt only'),
-        prompt_negative: appT('export.formatPromptNegative', 'Prompt + negative'),
-        a1111: appT('export.formatA1111', 'A1111 / Forge parameter blocks'),
-        tags: appT('export.formatTags', 'Unique tags'),
-        caption_tags: appT('export.formatCaptionTags', 'Caption + tags'),
-        caption_merged: appT('export.formatCaptionMerged', 'Caption + prompt + tags'),
-        jsonl: appT('export.formatJsonl', 'JSONL dataset'),
-        csv: appT('export.formatCsv', 'CSV dataset'),
+        prompt: appT('export.formatPrompt', 'Prompt text'),
+        prompt_numbered: appT('export.formatPromptNumbered', 'Prompt text + filenames'),
+        negative: appT('export.formatNegative', 'Negative prompt'),
+        prompt_negative: appT('export.formatPromptNegative', 'Prompt + Negative'),
+        a1111: appT('export.formatA1111', 'A1111 / Forge block'),
+        tags: appT('export.formatTags', 'Tags list'),
+        caption_tags: appT('export.formatCaptionTags', 'Caption + Tags lines'),
+        caption_merged: appT('export.formatCaptionMerged', 'Merged caption lines'),
+        jsonl: appT('export.formatJsonl', 'JSONL'),
+        csv: appT('export.formatCsv', 'CSV table'),
     };
     return labels[format] || labels.prompt;
+}
+
+function getExportFormatDescription(format) {
+    const descriptions = {
+        prompt: appT('export.descPrompt', 'One .txt: each image Prompt is separated by a blank line.'),
+        prompt_numbered: appT('export.descPromptNumbered', 'One .txt: filename title + Prompt for each image.'),
+        negative: appT('export.descNegative', 'One .txt: Negative prompt only, separated by blank lines.'),
+        prompt_negative: appT('export.descPromptNegative', 'One .txt: Prompt plus Negative prompt for each image.'),
+        a1111: appT('export.descA1111', 'One .txt: WebUI/A1111-style parameter blocks for regeneration.'),
+        tags: appT('export.descTags', 'One .txt: merged unique Tags from all selected images.'),
+        caption_tags: appT('export.descCaptionTags', 'One .txt: one AI caption + Tags line per image.'),
+        caption_merged: appT('export.descCaptionMerged', 'One .txt: one merged caption line per image, built from AI caption, Prompt, and Tags.'),
+        jsonl: appT('export.descJsonl', 'One .jsonl: one JSON object per image for scripts and dataset tools.'),
+        csv: appT('export.descCsv', 'One .csv table: filename, Prompt, Tags, model, and size columns.'),
+    };
+    return descriptions[format] || descriptions.prompt;
+}
+
+function getBatchExportContentDescription(mode) {
+    const descriptions = {
+        caption_merged: appT('batchExport.descCaptionMerged', 'Writes one same-name .txt per image for LoRA training: AI caption, Prompt, and Tags merged into one caption.'),
+        prompt: appT('batchExport.descPrompt', 'Writes one same-name .txt per image containing only Prompt text.'),
+        tags: appT('batchExport.descTags', 'Writes one same-name .txt per image containing only Tags.'),
+        negative: appT('batchExport.descNegative', 'Writes one same-name .txt per image containing only Negative prompt.'),
+        prompt_negative: appT('batchExport.descPromptNegative', 'Writes one same-name .txt per image with Prompt plus Negative prompt.'),
+        a1111: appT('batchExport.descA1111', 'Writes one same-name .txt per image in A1111 / Forge parameter-block format for regeneration.'),
+        caption_tags: appT('batchExport.descCaptionTags', 'Writes one same-name .txt per image with AI caption plus Tags, without the original Prompt.'),
+        json: appT('batchExport.descJson', 'Writes one same-name .json per image with Prompt, Tags, model, size, and generation parameters.'),
+    };
+    return descriptions[mode] || descriptions.caption_merged;
+}
+
+function updateExportFormatDescription(format) {
+    const description = $('#export-format-description');
+    if (description) {
+        description.textContent = getExportFormatDescription(format || $('#export-format')?.value || _currentExportFormat || 'prompt');
+    }
+}
+
+function updateBatchExportContentDescription(mode) {
+    const description = $('#batch-export-content-description');
+    if (description) {
+        description.textContent = getBatchExportContentDescription(mode || $('#batch-export-content-mode')?.value || 'caption_merged');
+    }
 }
 
 function normalizeExportTextPart(value) {
@@ -6392,6 +6965,13 @@ function buildExportText(exportData, format) {
 
     if (format === 'prompt') {
         text = images.map(image => String(image.prompt || '').trim()).filter(Boolean).join('\n\n');
+    } else if (format === 'prompt_numbered') {
+        text = images.map((image, index) => {
+            const prompt = String(image.prompt || '').trim();
+            if (!prompt) return '';
+            const filename = String(image.filename || `Image ${image.id || index + 1}`).trim();
+            return `${index + 1}. ${filename}\n${prompt}`;
+        }).filter(Boolean).join('\n\n');
     } else if (format === 'negative') {
         text = images.map(image => String(image.negative_prompt || '').trim()).filter(Boolean).join('\n\n');
     } else if (format === 'prompt_negative') {
@@ -6448,7 +7028,7 @@ function buildExportText(exportData, format) {
     if (previewOnly) {
         text = `${text}\n\n${appT(
             'export.previewLimited',
-            'Preview only shows the first {preview} of {total} selected images. Use "Export Sidecars" for full output.',
+            'Preview only shows the first {preview} of {total} selected images. Use "Same-name .txt" when you need one complete caption file per image.',
             { preview: previewCount, total: totalSelected }
         )}`;
     }
@@ -6462,8 +7042,8 @@ function setExportModalMode(mode) {
     const normalizedMode = mode === 'tags' ? 'tags' : 'prompts';
     exportAltBtn.dataset.exportView = normalizedMode;
     exportAltBtn.innerHTML = normalizedMode === 'prompts'
-        ? `🏷️ ${appT('export.tagsInstead', 'Export Tags Instead')}`
-        : `📤 ${appT('export.promptsInstead', 'Export Prompts Instead')}`;
+        ? `🏷️ ${appT('export.tagsInstead', 'Show Tags')}`
+        : `📤 ${appT('export.promptsInstead', 'Show Prompt Text')}`;
 }
 
 function renderExportModalText(format = null) {
@@ -6474,6 +7054,7 @@ function renderExportModalText(format = null) {
 
     $('#export-title').textContent = `${selectedFormat === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(selectedFormat)}`;
     setExportModalMode(selectedFormat === 'tags' ? 'tags' : 'prompts');
+    updateExportFormatDescription(selectedFormat);
 
     const textArea = $('#export-text');
     if (!textArea || !_currentExportModalData) return;
@@ -6492,6 +7073,7 @@ async function showExportModalWithFormat(format = 'prompt') {
     if (select) select.value = format;
     setExportModalMode(format === 'tags' ? 'tags' : 'prompts');
     $('#export-title').textContent = `${format === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(format)}`;
+    updateExportFormatDescription(format);
     const textArea = $('#export-text');
     textArea.value = format === 'tags'
         ? appT('export.loadingTags', 'Loading tags...')
@@ -6549,6 +7131,11 @@ function showBatchExportModal() {
     $('#batch-export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
         count: AppState.selectedIds.size,
     });
+    const contentModeSelect = $('#batch-export-content-mode');
+    if (contentModeSelect && !contentModeSelect.value) {
+        contentModeSelect.value = 'caption_merged';
+    }
+    updateBatchExportContentDescription(contentModeSelect?.value || 'caption_merged');
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
@@ -6708,7 +7295,7 @@ async function executeBatchExport() {
     const prefix = $('#batch-export-prefix')?.value || '';
     const blacklistText = $('#batch-export-blacklist')?.value || '';
     const blacklist = blacklistText ? blacklistText.split(',').map(t => t.trim()).filter(t => t) : [];
-    const contentMode = $('#batch-export-content-mode')?.value || 'tags';
+    const contentMode = $('#batch-export-content-mode')?.value || 'caption_merged';
     const overwritePolicy = $('#batch-export-overwrite')?.value || 'unique';
 
     const imageIds = Array.from(AppState.selectedIds);
@@ -6740,12 +7327,12 @@ async function executeBatchExport() {
             hideModal('batch-export-modal');
         } else if (result.status === 'partial' || exported > 0 || skipped > 0) {
             const baseMessage = exported > 0
-                ? appT('batchExport.partialSuccess', 'Exported {count} sidecar file(s). {failed} failed.')
+                ? appT('batchExport.partialSuccess', 'Exported {count} file(s). {failed} failed.')
                     .replace('{count}', exported)
                     .replace('{failed}', errorCount)
-                : appT('batchExport.noFilesWritten', 'No sidecar files were written.');
+                : appT('batchExport.noFilesWritten', 'No .txt / .json files were written.');
             const skippedMessage = skipped > 0
-                ? ` ${appT('batchExport.skippedExisting', 'Skipped {skipped} existing sidecar(s).').replace('{skipped}', skipped)}`
+                ? ` ${appT('batchExport.skippedExisting', 'Skipped {skipped} existing file(s).').replace('{skipped}', skipped)}`
                 : '';
             showToast(`${baseMessage}${skippedMessage}`.trim(), errorCount > 0 || skipped > 0 ? 'warning' : 'success');
             hideModal('batch-export-modal');
@@ -7075,12 +7662,12 @@ function renderModelManager(models = []) {
             <article class="model-card ${statusClass}" data-model-id="${safeId}">
                 <div class="model-card-header">
                     <div>
-                        <div class="model-card-group">${escapeHtml(model.group || appT('models.groupFallback', 'Feature'))}</div>
+                        <div class="model-card-group">${escapeHtml(model.group_key ? appT(model.group_key, model.group || appT('models.groupFallback', 'Feature')) : (model.group || appT('models.groupFallback', 'Feature')))}</div>
                         <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
-                <div class="model-card-message">${escapeHtml(model.message || '')}</div>
+                <div class="model-card-message">${escapeHtml(model.message_key ? appT(model.message_key, model.message || '', model.message_params || {}) : (model.message || ''))}</div>
                 ${model.path ? `<div class="model-card-path">${escapeHtml(appT('models.path', 'Current path'))}:<code>${escapeHtml(model.path)}</code></div>` : ''}
                 ${model.runtime_path ? `<div class="model-card-path">${escapeHtml(appT('models.runtimePath', 'Runtime files'))}:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
                 ${installedVariants}
@@ -7985,9 +8572,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateFilterSummary();
     updateSelectionUI();
     resumeScanProgress();
+    resumeReconnectProgress();
     resumeTaggingProgress();
     _initBgTagProgressButtons();
     _initBgScanProgressButtons();
+    _initBgReconnectProgressButtons();
     document.addEventListener('languageChanged', refreshLocalizedDynamicUi);
     document.addEventListener('languageChanged', () => setUpdateButtonState(AppState.update.status, AppState.update.checking));
     setUpdateButtonState();
@@ -8083,6 +8672,26 @@ async function openReaderFromImage(imageId, filename = '') {
 }
 
 
+async function openSimilarFromImage(imageId) {
+    const normalizedId = Number(imageId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+        return false;
+    }
+
+    switchView('similar');
+    if (typeof window.initSimilar === 'function') {
+        window.initSimilar();
+    }
+    const input = $('#similar-search-id');
+    if (input) input.value = String(normalizedId);
+    if (window.SimilarImages?.searchByImage) {
+        window.SimilarImages.searchByImage(normalizedId);
+        return true;
+    }
+    return false;
+}
+
+
 function buildAppContext() {
     return {
         API,
@@ -8157,6 +8766,9 @@ function buildAppContext() {
         sendToCensor: addToCensorQueue,
         openPromptBuildFromImage,
         openReaderFromImage,
+        openSimilarFromImage,
+        deleteGalleryImagesByIds,
+        removeGalleryImagesByIds,
         addRecentFolder,
         getRecentFolders,
         clampTaggerChunkToAvailableOption,

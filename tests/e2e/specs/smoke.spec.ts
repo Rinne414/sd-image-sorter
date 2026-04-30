@@ -123,9 +123,7 @@ async function getGalleryScrollState(page) {
 }
 
 async function openSelectionMoreActions(page) {
-  await page.locator('.selection-panel-more').evaluate((element: HTMLDetailsElement) => {
-    element.open = true
-  })
+  await expect(page.locator('#selection-actions')).toBeVisible()
 }
 
 async function getVisibleGalleryRects(page, count = 4) {
@@ -1827,11 +1825,14 @@ test.describe('Smoke Tests', () => {
     await expect(menu).toContainText('Move...')
     await expect(menu).toContainText('Copy...')
     await expect(menu).toContainText('Send to Censor')
+    await expect(menu).toContainText('Find Similar')
     await expect(menu).toContainText('Prompt Helper')
-    await expect(menu).toContainText('Read Metadata')
+    await expect(menu).toContainText('Metadata / Generation Info')
     await expect(menu).toContainText('Filter by Checkpoint')
     await expect(menu).toContainText('Open in Folder')
     await expect(menu).toContainText('Copy Path')
+    await expect(menu).toContainText('Remove from Gallery')
+    await expect(menu).toContainText('Move to Trash')
     await expect(menu).not.toContainText('Delete from Disk')
 
     await menu.getByRole('menuitem', { name: /Select Image/ }).click()
@@ -1868,14 +1869,15 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeVisible()
-    await expect(page.locator('#selection-scope-summary')).toContainText('visible thumbnails')
+    await expect(page.locator('#selection-scope-summary')).toContainText('Selected manually from Gallery')
     await expect(page.locator('#btn-move-selected')).toBeVisible()
     await expect(page.locator('#btn-copy-selected')).toBeVisible()
     await expect(page.locator('#btn-send-to-censor')).toBeVisible()
-    await expect(page.locator('#btn-export-selected')).toBeHidden()
-    await expect(page.locator('#btn-delete-selected-files')).toBeHidden()
+    await expect(page.locator('#btn-export-selected')).toBeVisible()
+    await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
     await expect(page.locator('#btn-export-selected')).toBeDisabled()
     await expect(page.locator('#btn-send-to-censor')).toBeDisabled()
+    await expect(page.locator('#btn-delete-selected-files')).toBeDisabled()
 
     const firstGalleryItem = page.locator('#gallery-grid .gallery-item').first()
     await expect(firstGalleryItem).toBeVisible()
@@ -1884,15 +1886,13 @@ test.describe('Smoke Tests', () => {
     await expect(selectionFab).toBeVisible()
     await expect(page.locator('#btn-export-selected')).toBeEnabled()
     await expect(page.locator('#btn-send-to-censor')).toBeEnabled()
-    await openSelectionMoreActions(page)
-    await expect(page.locator('#btn-export-selected')).toBeVisible()
-    await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
+    await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
 
     await page.locator('#btn-toggle-select').click()
     await expect(selectionFab).toBeHidden()
   })
 
-  test('selection scope summary should distinguish visible actions from loaded range selection', async ({ page }) => {
+  test('selection scope summary should distinguish manual selection from loaded range selection', async ({ page }) => {
     await Promise.all([101, 102, 103].map((id) => mockImageAsset(page, id)))
     await page.route('**/api/images**', async (route) => {
       const pathname = new URL(route.request().url()).pathname
@@ -1923,16 +1923,15 @@ test.describe('Smoke Tests', () => {
 
     await page.locator('#btn-toggle-select').click()
     await expect(galleryItems).toHaveCount(3)
-    await expect(scopeSummary).toContainText('visible thumbnails')
+    await expect(scopeSummary).toContainText('Selected manually from Gallery')
 
     await galleryItems.nth(0).click()
     await page.keyboard.down('Shift')
     await galleryItems.nth(2).click()
     await page.keyboard.up('Shift')
-    await expect(scopeSummary).toContainText('loaded results')
+    await expect(scopeSummary).toContainText('loaded gallery items')
 
-    await page.locator('#btn-select-visible').click()
-    await expect(scopeSummary).toContainText('visible thumbnails')
+    await expect(page.locator('#btn-select-visible')).toHaveCount(0)
   })
 
   test('filtered selection should resolve all matching ids and survive same-filter reloads', async ({ page }) => {
@@ -2044,13 +2043,12 @@ test.describe('Smoke Tests', () => {
     expect(legacySelectionIdsRequests).toBe(0)
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
     await expect(page.locator('#selection-count')).toContainText('4 items selected')
-    await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
+    await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
     await page.evaluate(() => window.App.loadImages())
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
-    await expect(page.locator('#selection-scope-summary')).toContainText('all filtered results')
+    await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
-    await openSelectionMoreActions(page)
     await page.locator('#btn-export-selected').click()
     await expect(page.locator('#export-modal.visible')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue(/filtered one/)
@@ -2071,7 +2069,7 @@ test.describe('Smoke Tests', () => {
       return window.App.loadImages()
     })
     await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
-    await expect(page.locator('#selection-scope-summary')).toContainText('visible thumbnails')
+    await expect(page.locator('#selection-scope-summary')).toContainText('Selected manually from Gallery')
   })
 
   test('filtered selection should require confirmation for very large result sets', async ({ page }) => {
@@ -2161,7 +2159,7 @@ test.describe('Smoke Tests', () => {
     })
   })
 
-  test('gallery batch actions should separate remove-from-gallery from permanent delete', async ({ page }) => {
+  test('gallery batch actions should separate remove-from-gallery from move-to-trash', async ({ page }) => {
     await mockGalleryImages(page, [
       { id: 301, filename: 'remove-vs-delete.png' },
     ])
@@ -2195,13 +2193,14 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-toggle-select').click()
-    await expect(page.locator('#btn-remove-selected-gallery')).toBeHidden()
-    await expect(page.locator('#btn-delete-selected-files')).toBeHidden()
-    await openSelectionMoreActions(page)
     await expect(page.locator('#btn-remove-selected-gallery')).toBeVisible()
     await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
+    await expect(page.locator('#btn-remove-selected-gallery')).toBeDisabled()
+    await expect(page.locator('#btn-delete-selected-files')).toBeDisabled()
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
+    await expect(page.locator('#btn-remove-selected-gallery')).toBeEnabled()
+    await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
     await page.locator('#btn-remove-selected-gallery').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
     await expect(page.locator('#confirm-message')).toContainText('Files stay on disk')
@@ -2222,12 +2221,10 @@ test.describe('Smoke Tests', () => {
     expect(deletePayloads).toHaveLength(0)
 
     await page.locator('#gallery-grid .gallery-item[data-id="301"]').click()
-    await expect(page.locator('#btn-delete-selected-files')).toBeHidden()
-    await openSelectionMoreActions(page)
-    await expect(page.locator('#btn-delete-selected-files')).toBeVisible()
+    await expect(page.locator('#btn-delete-selected-files')).toBeEnabled()
     await page.locator('#btn-delete-selected-files').click()
     await expect(page.locator('#confirm-modal.visible')).toBeVisible()
-    await expect(page.locator('#confirm-message')).toContainText('permanently deletes')
+    await expect(page.locator('#confirm-message')).toContainText('Recycle Bin')
     await page.locator('#btn-confirm-ok').click()
 
     await expect.poll(() => deletePayloads.length).toBe(1)
@@ -2343,7 +2340,9 @@ test.describe('Smoke Tests', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('#btn-toggle-select').click()
-    await page.locator('#btn-select-visible').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="401"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="402"]').click()
+    await expect(page.locator('#btn-move-selected')).toBeEnabled()
     await page.locator('#btn-move-selected').click()
     await expect(page.locator('#input-modal.visible')).toBeVisible()
     await page.locator('#input-modal-field').fill('C:/sorted/move')
@@ -2358,7 +2357,10 @@ test.describe('Smoke Tests', () => {
       operation: 'move',
     })
 
-    await page.locator('#btn-select-visible').click()
+    await expect(page.locator('#gallery-grid .gallery-item[data-id="401"]')).toBeVisible()
+    await page.locator('#gallery-grid .gallery-item[data-id="401"]').click()
+    await page.locator('#gallery-grid .gallery-item[data-id="402"]').click()
+    await expect(page.locator('#btn-copy-selected')).toBeEnabled()
     await page.locator('#btn-copy-selected').click()
     await expect(page.locator('#input-modal.visible')).toBeVisible()
     await page.locator('#input-modal-field').fill('C:/sorted/copy')
@@ -2429,17 +2431,22 @@ test.describe('Smoke Tests', () => {
     await page.locator('#gallery-grid .gallery-item[data-id="11"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="22"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="33"]').click()
-    await openSelectionMoreActions(page)
+    await expect(page.locator('#btn-export-selected')).toContainText('Combined Export')
     await page.locator('#btn-export-selected').click()
 
     await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-title')).toContainText('Prompt text')
     await expect(page.locator('#export-format')).toHaveValue('prompt')
+    await expect(page.locator('#export-format option[data-i18n="export.groupAdvanced"]')).toHaveText('Advanced formats')
+    await expect(page.locator('#export-format option[value="prompt"]')).toHaveText('Prompt text')
+    await expect(page.locator('#export-format-description')).toContainText('One .txt')
     await expect(page.locator('#btn-download-export')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue('prompt one\n\nprompt two\n\nprompt three')
     await expect.poll(() => selectionDataRequests).toBe(1)
     expect(detailRequests).toHaveLength(0)
 
     await page.locator('#export-format').selectOption('tags')
+    await expect(page.locator('#export-format-description')).toContainText('merged unique Tags')
     await expect(page.locator('#export-text')).toHaveValue('alpha, beta, gamma')
     await expect.poll(() => selectionDataRequests).toBe(1)
     expect(detailRequests).toHaveLength(0)
@@ -2533,11 +2540,14 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-toggle-select').click()
     await page.locator('#gallery-grid .gallery-item[data-id="71"]').click()
     await page.locator('#gallery-grid .gallery-item[data-id="72"]').click()
-    await openSelectionMoreActions(page)
+    await expect(page.locator('#btn-batch-export-tags')).toContainText('Same-name .txt')
     await page.locator('#btn-batch-export-tags').click()
 
     await expect(page.locator('#batch-export-modal.visible')).toBeVisible()
     await expect(page.locator('#batch-export-content-mode')).toBeVisible()
+    await expect(page.locator('#batch-export-content-mode option[value="caption_merged"]')).toHaveText('LoRA caption file')
+    await expect(page.locator('#batch-export-content-mode option[data-i18n="batchExport.groupAdvanced"]')).toHaveText('Advanced formats')
+    await expect(page.locator('#batch-export-content-description')).toContainText('LoRA training')
     await expect(page.locator('#batch-export-overwrite')).toBeVisible()
 
     await page.locator('#batch-export-folder').fill('C:/exports/sidecars')

@@ -265,11 +265,11 @@ function updateAutoSepPreviewScopeSummary() {
     const status = getAutoSepScopeStatus();
     const tool = getAutoSepToolLabel();
     summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? _formatAutoSepI18n('scope.previewSynced', 'Preview uses the {tool} scope synced from Gallery at {time}.', {
+        ? _formatAutoSepI18n('scope.previewSynced', 'Preview uses {tool} filters copied from Gallery at {time}.', {
             tool,
             time: status.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.previewSaved', 'Preview uses the saved {tool} scope, not the live Gallery filters.', {
+        : _formatAutoSepI18n('scope.previewSaved', 'Preview uses the saved {tool} filters shown here, not the live Gallery filters.', {
             tool,
         });
 }
@@ -287,31 +287,31 @@ function updateAutoSepScopeStatus() {
     const tool = getAutoSepToolLabel();
     const status = getAutoSepScopeStatus();
 
-    badge.textContent = _formatAutoSepI18n('scope.usingSaved', 'Using saved {tool} scope', { tool });
+    badge.textContent = _formatAutoSepI18n('scope.usingSaved', '{tool} will use these saved filters', { tool });
     meta.textContent = status.lastSyncedLabel
-        ? _formatAutoSepI18n('scope.syncedAt', 'Synced from current Gallery filters at {time}', {
+        ? _formatAutoSepI18n('scope.syncedAt', 'Copied from Gallery: {time}', {
             time: status.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.standalone', 'This saved scope will not change when Gallery filters change later.');
+        : _formatAutoSepI18n('scope.standalone', 'These filters will not change automatically when Gallery filters change later.');
 
     if (status.matchesGallery && status.lastSyncedLabel) {
         detail.textContent = _formatAutoSepI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
     } else if (status.matchesGallery) {
         detail.textContent = _formatAutoSepI18n(
             'scope.alignedUnsynced',
-            '{tool} currently matches the Gallery filters, but future Gallery changes will not update it automatically.',
+            '{tool} currently matches the Gallery filters. Later Gallery changes will not be copied automatically.',
             { tool }
         );
     } else if (status.isAcknowledged) {
         detail.textContent = _formatAutoSepI18n(
             'scope.kept',
-            'Continuing with the saved {tool} scope. Current Gallery filters were not copied.',
+            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
             { tool }
         );
     } else {
         detail.textContent = _formatAutoSepI18n(
             'scope.mismatch',
-            'Gallery filters changed. {tool} will keep using its saved scope until you resync.',
+            'Gallery filters changed. {tool} will still use the saved filters shown here.',
             { tool }
         );
     }
@@ -1555,11 +1555,11 @@ async function executeAutoSeparateWithProgress() {
     const total = AutoSepState.matchCount;
     const scopeStatus = getAutoSepScopeStatus();
     const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
-        ? _formatAutoSepI18n('scope.executeSynced', 'Scope: saved {tool} filters (last synced from Gallery at {time})', {
+        ? _formatAutoSepI18n('scope.executeSynced', 'Using saved {tool} filters copied from Gallery at {time}', {
             tool: getAutoSepToolLabel(),
             time: scopeStatus.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.executeSaved', 'Scope: saved {tool} filters', {
+        : _formatAutoSepI18n('scope.executeSaved', 'Using saved {tool} filters', {
             tool: getAutoSepToolLabel(),
         });
 

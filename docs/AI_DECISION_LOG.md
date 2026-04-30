@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-04-29
+**Updated:** 2026-04-30
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -1745,3 +1745,229 @@ Use this structure for future entries:
   `backend/metadata_parser.py`, `backend/image_manager.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_sorting.py`, `docs/AI_DECISION_LOG.md` ADR-AI-20260429-66.
 - Validation:
   Targeted pytest passed for mixed-root bad PNG reporting and PNG fast-path validation: `python3 -m pytest -q --capture=no backend/tests/test_routers/test_sorting.py::TestScan::test_scan_mixed_root_skips_truncated_and_reports_filenames backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_text_metadata_uses_fast_path_without_pillow_open backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_validation_still_runs_verify_open` (`3 passed`).
+
+### ADR-AI-20260430-70: Launcher dependency install hides platform-marker noise but keeps progress
+
+- Status: accepted
+- Area: launcher / dependency install UX / portable release
+- Context:
+  Windows portable first-run installs from the shared cross-platform `backend/requirements.txt`. Correct platform markers intentionally keep Linux CUDA/Triton and macOS-only wheels out of Windows installs, but pip prints one `Ignoring ... markers ... don't match your environment` line for every skipped dependency. A successful install can therefore show a long wall of irrelevant package-resolution text before the app starts, which looks broken to normal users.
+- Decision:
+  Launcher dependency installs now run through `backend/launcher_pip.py`, which streams meaningful pip progress while filtering only platform-marker `Ignoring ... don't match your environment` lines. Keep real progress (`Collecting`, `Downloading`, installs), warnings, and errors visible. `run-portable.bat`, generated portable launchers, `run.bat`, and `run.sh` must use this wrapper for first-run requirements installation.
+- Why:
+  ADR-AI-20260429-64 remains valid: long dependency work must not be hidden. The fix is not silent install; it is readable install. Users should see that setup is doing work, without being forced to parse irrelevant cross-platform marker noise.
+- Do not regress:
+  Do not route launcher requirements installation back to raw `pip install -r backend/requirements.txt`. Do not use fully quiet pip output for long first-run setup. Do not broaden the filter to hide actual pip warnings/errors or package download/install progress.
+- Evidence:
+  `backend/launcher_pip.py`, `run-portable.bat`, `run.bat`, `run.sh`, `scripts/build_release_packages.py`, `backend/tests/test_launcher_pip.py`, `backend/tests/test_release_build.py`.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp pytest -q backend/tests/test_launcher_pip.py backend/tests/test_release_build.py::test_write_portable_launcher_uses_clean_crlf_endings`.
+
+### ADR-AI-20260430-71: Scan progress should not show ETA while image discovery is still growing
+
+- Status: accepted
+- Area: scan progress UX / desktop scan modal / bilingual layout
+- Context:
+  During large folder imports, the scan total can keep increasing while the app is still walking the folder. Showing a normal countdown ETA in that phase makes the estimate jump whenever more images are discovered, which looks fake to users. The same scan modal also regressed visually in Chinese: the short `高级选项` advanced-options label could break with only the last character on a new line while unused space remained elsewhere in the summary row.
+- Decision:
+  Scan import/discovery progress now avoids ETA and uses discovery wording instead: the UI shows how many images have been found and that the folder is still being counted. ETA is only shown after the backend reports a stable total and the UI is displaying the metadata backfill phase. Metadata ETA tracker keys include the metadata total so old rate samples are discarded if the backend discovers a larger metadata denominator. The scan modal's advanced-options label is treated as an unbreakable short label; the hint text is the flexible part of that row.
+- Why:
+  A beginner-facing local tool should not present unstable math as a precise promise. It is better to be honest that the app is still counting the folder than to show a countdown that changes every time more images appear. Short UI labels in Chinese and English should also look intentional on desktop, not split as single orphan characters.
+- Do not regress:
+  Do not show `progress.eta` for scan import/discovery while `total_final` is false or while the folder total can still grow. Do not let the scan advanced summary label use arbitrary word breaking. If future scan phases add ETA, gate it on a stable denominator and use separate progress tracker scope keys so old samples do not leak across phases.
+- Evidence:
+  `frontend/js/app.js`, `frontend/css/ui-refresh.css`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_frontend_contract.py`, `docs/AI_PRINCIPLES.md` principles 4, 5, and 6.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py::test_scan_modal_advanced_summary_does_not_break_chinese_label backend/tests/test_frontend_contract.py::test_scan_progress_eta_is_only_shown_for_stable_metadata_work`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`.
+
+### ADR-AI-20260430-72: Gallery batch selection means current filtered result set, not visible DOM thumbnails
+
+- Status: accepted
+- Area: gallery selection UX / filter contract / desktop layout
+- Context:
+  The Gallery selection sidebar exposed `Visible`, `All Filtered`, and a `More actions` hamburger. This matched implementation terms but not the user's mental model: normal users expect “all” to mean all images currently shown by the Gallery filters, including images not yet scrolled into the DOM. A concrete bug also proved the contract was fragile: `All Filtered` could fail when the frontend sent an empty `aspectRatio` string and the backend validated it as an invalid value.
+- Decision:
+  The primary Gallery selection action is now “select all current filter matches.” The `Visible` button and the `More actions` hamburger are removed from the user-facing panel. Batch controls are grouped as range, common actions, export, and remove/danger sections. Empty or unknown `aspectRatio` values are normalized to no filter in saved frontend filter state, frontend request payloads, and backend token/selection contracts.
+- Why:
+  A desktop sorting tool should use user-facing range language, not DOM/virtualization jargon. The sidebar should present the workflow in the order users think about it: choose the target set, act on it, export if needed, then use dangerous removal actions only deliberately.
+- Do not regress:
+  Do not reintroduce `Visible` as a primary Gallery batch button. Do not put export/remove/delete behind a generic hamburger again unless a new explicit UX decision supersedes this one. Do not treat empty or unknown aspect-ratio values from stale frontend state as invalid selection filters.
+- Allowed evolution:
+  A future advanced/preferences surface can expose visible-page selection for power users, but the default Gallery sidebar should keep “all” tied to the current filtered Gallery result set.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `frontend/index.html`, `frontend/css/ui-refresh.css`, `frontend/js/app.js`, `backend/services/image_service.py`, `backend/tests/test_frontend_contract.py`, `backend/tests/test_routers/test_images.py`.
+- Supersedes:
+  ADR-AI-20260429-67's decision to keep advanced actions behind an expansion in the selection sidebar.
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/ui-refresh.js`; `node --check frontend/js/autosep.js`; `node --check frontend/js/manual-sort.js`; `node --check frontend/js/stores/filter-store.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py backend/tests/test_routers/test_images.py::TestSelectionIds backend/tests/test_routers/test_images.py::TestDeleteSelectedImages` (`34 passed`); `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "selection scope summary|filtered selection|gallery selected move and copy|export modal|batch sidecar"` (`7 passed`); `python3 scripts/check_lockfiles.py`.
+
+### ADR-AI-20260430-73: Gallery disk removal moves files to OS Trash, never silent permanent unlink
+
+- Status: accepted
+- Area: file lifecycle / destructive action UX / cross-platform behavior
+- Context:
+  The Gallery “Delete from Disk” action permanently unlinked files. The user explicitly rejected this because normal desktop users expect file deletion to go to the computer's Trash / Recycle Bin and because permanent deletion is too harsh for a local image-management tool.
+- Decision:
+  The user-facing action is now “Move to Trash.” Backend deletion uses `send2trash` to route files through the operating system Trash / Recycle Bin / wastebasket where supported, removes the gallery row only after the trash move succeeds, and reports per-image failures. The backend must not silently fall back to permanent deletion when trash support is unavailable.
+- Why:
+  Dangerous actions must be harder to regret than common actions. “Remove from Gallery” remains the non-file-destructive cleanup action; “Move to Trash” is still destructive but recoverable through the OS.
+- Do not regress:
+  Do not use `Path.unlink()` / permanent delete for the Gallery batch disk-removal path. Do not label the action “Delete from Disk” if it is recoverable trash movement. Do not add this destructive action to the normal right-click image context menu without a new explicit UX decision.
+- Allowed evolution:
+  The response contract can expose richer platform/trash diagnostics, and the UI can add recovery guidance. A future dedicated “permanently delete” action would require explicit user approval, stronger confirmation, and separate API semantics.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `backend/services/image_service.py`, `backend/routers/images.py`, `backend/requirements.in`, `backend/requirements.txt`, `frontend/index.html`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_routers/test_images.py`.
+- Validation:
+  `python3 -m py_compile backend/services/image_service.py backend/routers/images.py`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py backend/tests/test_routers/test_images.py::TestSelectionIds backend/tests/test_routers/test_images.py::TestDeleteSelectedImages` (`34 passed`); `python3 scripts/check_lockfiles.py`.
+
+### ADR-AI-20260430-74: Export buttons must disclose output shape before users commit
+
+- Status: accepted
+- Area: export UX / LoRA training workflow / bilingual copy
+- Context:
+  The Gallery selection sidebar used short labels `Prompts`, `Tags`, and `Sidecars`. Those labels did not tell users what file/text format would be produced. The user explicitly called out two real workflows: LoRA training users often need one same-name `.txt` caption file per image, while other users need prompt lists separated by blank lines or numbered per image.
+- Decision:
+  Gallery batch export now exposes two user-facing entry points: `Text / CSV...` for previewable prompt/tag/JSONL/CSV text exports, and `Training .txt files...` for one-file-per-image caption/prompt outputs. The text export modal includes per-format descriptions and adds a numbered prompt-list format. The `.txt` export modal defaults to `caption_merged` because that is the most useful LoRA-dataset starting point, while still allowing prompt-only, tags-only, A1111 parameter block, and JSON outputs.
+- Why:
+  Export is not one thing. Users should know whether they will get clipboard text, one downloaded text/CSV file, or many same-name `.txt` files before they click the final action.
+- Do not regress:
+  Do not reduce the Gallery export buttons back to unexplained `Prompts`, `Tags`, or `Sidecars`. Do not remove same-name `.txt` training export from the main batch selection flow. Do not hide output-format details until after the export is already run.
+- Allowed evolution:
+  Export presets, examples, and pro templates are allowed as long as the first screen still makes output shape clear for beginners.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `frontend/index.html`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/services/tag_export_service.py`, `backend/tests/test_frontend_contract.py`, `tests/e2e/specs/smoke.spec.ts`.
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/ui-refresh.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py` (`18 passed` inside the combined `34 passed` targeted run); `node tests/e2e/scripts/run-playwright.mjs test specs/smoke.spec.ts -g "selection scope summary|filtered selection|gallery selected move and copy|export modal|batch sidecar"` (`7 passed`).
+
+### ADR-AI-20260430-75: Saved tool filters must be explained without “scope” jargon
+
+- Status: accepted
+- Area: Auto-Separate / Manual Sort filter UX / bilingual wording
+- Context:
+  The saved-filter status text said things like “saved scope,” “synced from Gallery,” and “keep saved scope.” The user explicitly said this was not understandable, even to them.
+- Decision:
+  User-facing wording now describes the behavior as copying and using a saved set of filters. The key mental model is: the tool uses the filters shown in that tool, and later Gallery filter changes are not copied automatically. Buttons now say “copy current Gallery filters” / “continue using these filters” instead of “use/resync/keep scope,” and implementation fallbacks/HTML defaults avoid showing “saved scope” before i18n loads.
+- Why:
+  “Scope” is an implementation concept. Users need to know whether the tool will use the current Gallery view or an older saved filter set.
+- Do not regress:
+  Do not reintroduce `作用域` / “scope” in user-facing saved-filter copy. Do not use “sync” as the main button language when the actual action is copying the current Gallery filters into the tool.
+- Allowed evolution:
+  A compact visual diff between Gallery filters and tool filters would be useful, as long as the copy still states the current behavior directly.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `frontend/js/autosep.js`, `frontend/js/manual-sort.js`, `frontend/index.html`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/ui-refresh.js`; `node --check frontend/js/autosep.js`; `node --check frontend/js/manual-sort.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py` (`18 passed` inside the combined `34 passed` targeted run).
+
+### ADR-AI-20260430-76: Scan ETA must use a real counted image total and separate metadata totals
+
+- Status: accepted
+- Area: scan progress UX / backend progress contract / large-library first-use experience
+- Context:
+  ADR-AI-20260430-71 removed unstable scan ETA while the folder total was still growing. The user correctly rejected that as incomplete: the product still needs to tell users roughly how long a 10,000-100,000 image import will take near the start of the scan, not simply hide the estimate. The old payload also allowed metadata backfill progress to overwrite the main `processed` / `total` image-import counters, which made scan progress and ETA appear to jump or regress.
+- Decision:
+  Scans now perform a lightweight count pass over image files before import/metadata work. The count pass emits a `counting` phase, then import begins with `total_final=true` and a real image denominator. Frontend import ETA is allowed once the counted total is known and at least some images have been processed. Metadata backfill has separate `metadata_processed`, `metadata_total`, and `metadata_total_final` fields; metadata ETA is shown only after that metadata denominator is final. Frontend progress trackers use separate scope keys for counted import, growing metadata, and final metadata so old rate samples do not leak across phases.
+- Why:
+  Users deciding whether to keep the app open need an early, honest estimate. Hiding ETA avoids fake math but does not solve the user problem. Counting filenames first gives a real denominator without parsing image metadata twice, while separating metadata totals prevents background detail work from corrupting the visible import count.
+- Do not regress:
+  Do not show ETA from a denominator that is still growing. Do not let metadata callbacks overwrite the main image import `processed` / `total` counters. Do not remove the count phase unless a replacement provides an equally real early denominator. If future optimizations avoid the second directory walk, they must preserve the same progress semantics.
+- Supersedes:
+  Supersedes the part of ADR-AI-20260430-71 that said scan ETA is only shown for stable metadata work. ADR-AI-20260430-71 remains valid for the advanced-options label layout and the rule that ETA must not use a growing denominator.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `backend/image_manager.py`, `backend/services/sorting_service.py`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_routers/test_sorting.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `python3 -m py_compile backend/image_manager.py backend/services/sorting_service.py`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py backend/tests/test_routers/test_sorting.py::TestScan::test_scan_progress_counts_total_before_import_and_keeps_metadata_separate` (`19 passed`).
+
+### ADR-AI-20260430-77: Missing-file repair is user-triggered background path reconnection, not automatic scanning
+
+- Status: accepted
+- Area: path identity / missing-file UX / background task behavior / large-library performance
+- Context:
+  Users may move or delete original image files outside the app. Current library rows store source paths, so an external move makes the old row look missing and a later scan of the new folder can import the file as a new row. The user asked whether a repair flow would cost time, hurt performance, or block work, and then explicitly asked that it run in the background.
+- Decision:
+  The app now exposes a user-triggered `Find Missing` / `找回图片` flow. The user chooses the folder or drive to search; the backend runs a separate background task with independent progress and cancellation under `/api/images/reconnect-missing/*`. The task only updates SQLite library records when a safe match is found. It does not move, delete, or edit image files. Matching prefers filename + size + modification time, and only reads image pixels for content fingerprint confirmation when an uncertain candidate has a stored fingerprint and the user leaves the safety option enabled. Ambiguous matches and already-indexed target-path conflicts are counted but not auto-applied, so the repair task cannot create duplicate rows for the same found file path.
+- Why:
+  This matches normal desktop expectations: beginners need a visible repair action when files were moved, but the app must not unexpectedly scan whole disks or mutate files. Large-library users can keep browsing while repair runs, and advanced users can choose a wider search scope when they really do not know where files went.
+- Do not regress:
+  Do not make missing-file repair run automatically on every app start or gallery refresh. Do not combine it with normal import scanning in a way that makes ordinary folder scans slower. Do not auto-update ambiguous duplicate-name matches or reconnect onto a path that is already represented by a different gallery row. Do not move/delete files as part of this repair path. Do not use “sync” wording if the action is only reconnecting stored source paths.
+- Allowed evolution:
+  A future UI can add a review list for ambiguous matches, search previously scanned folders first, and provide clearer time estimates for very large drives. A future deeper mode can compute fingerprints more broadly, but it must remain opt-in, cancellable, and honest about disk work.
+- Evidence:
+  User discussion on 2026-04-30; `backend/database.py`; `backend/services/image_service.py`; `backend/routers/images.py`; `backend/tests/test_reconnect_missing_files.py`; `frontend/index.html`; `frontend/js/app.js`; `frontend/js/folder-browser.js`; `frontend/js/lang/en.js`; `frontend/js/lang/zh-CN.js`.
+- Validation:
+  `python3 -m py_compile backend/database.py backend/services/image_service.py backend/routers/images.py backend/tests/test_reconnect_missing_files.py`; `node --check frontend/js/app.js frontend/js/folder-browser.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_reconnect_missing_files.py` (`5 passed`); `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py` (`18 passed`); targeted delete/missing-file regression tests (`5 passed`).
+
+### ADR-AI-20260430-78: Export labels name the output shape, not internal feature names
+
+- Status: accepted
+- Area: export UX / bilingual terminology / SD-user workflow copy
+- Context:
+  ADR-AI-20260430-74 fixed the bigger export-shape problem, but the follow-up labels still used mixed wording such as `Prompt Sheet`, `Caption Files`, and old sidecar/export terms. The user explicitly asked for wording that noob users can understand without hiding pro SD terms: `Prompt text`, `Negative prompt`, `Tags`, `LoRA caption file`, `Sidecar caption / same-name .txt`, `Metadata / generation info`, `WD14 auto tagging`, and `SAM3 text segmentation`.
+- Decision:
+  Gallery export now has two compact entry points: `Combined Export...` / `合并导出...` for previewable one-file or clipboard outputs, and `Same-name .txt...` / `同名 .txt...` for one caption file per image. The export modal labels describe output format directly: `Prompt text`, `Prompt text + filenames`, `Negative prompt`, `Prompt + Negative`, `Tags list`, `Merged caption lines`, `CSV table`, `JSONL`, and `A1111 / Forge block`. The same-name export modal uses `LoRA caption file`, `Prompt text`, `Tags`, `Negative prompt`, `Caption + Tags`, `A1111 / Forge block`, and `JSON`. Explanations live in helper/preview text rather than long button labels. Related technical terms were aligned to `Metadata / Generation Info`, `WD14 Auto Tagging`, and `SAM3 Text Segmentation` in the touched UI surfaces.
+- Why:
+  Export decisions are about file shape, not feature names. A beginner should know before clicking whether they will get one merged text/table file or many same-name `.txt` files, while pro SD users still need the exact terms they recognize for LoRA training and metadata workflows. Short button labels protect the desktop layout; longer explanations belong in preview/helper text.
+- Do not regress:
+  Do not rename the two main Gallery export actions back to vague `Prompts`, `Tags`, `Sidecars`, `Prompt Sheet`, or generic `Caption Files` without a new superseding decision. Do not put long explanations inside the sidebar buttons. Do not translate SD terms so aggressively that `Prompt`, `Negative prompt`, `Tags`, `LoRA`, `WD14`, `SAM3`, or `Metadata` become less precise.
+- Supersedes:
+  Supersedes only the user-facing label names in ADR-AI-20260430-74. ADR-AI-20260430-74 remains valid for the export semantics: output shape must be disclosed before commit, and one-file-per-image `.txt` remains a main batch flow.
+- Evidence:
+  Explicit user instruction on 2026-04-30; `frontend/index.html`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_frontend_contract.py`, `tests/e2e/specs/smoke.spec.ts`.
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/gallery.js`; `node --check frontend/js/modules/utils/errors.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_frontend_contract.py` (`18 passed`); `npm --prefix tests/e2e test -- smoke.spec.ts -g "export modal|batch sidecar export"` (`3 passed`); `npm --prefix tests/e2e test -- smoke.spec.ts -g "gallery context menu"` (`1 passed`).
+
+### ADR-AI-20260430-79: Scan-driven gallery refresh must not auto-page without user scroll
+
+- Status: accepted
+- Area: scan progress UX / gallery refresh performance / large-library browsing
+- Context:
+  After quick-import library readiness, the frontend refreshes the Gallery so users can start browsing while metadata continues in the background. A regression test caught that returning to Gallery from another view could trigger an initial refresh, an automatic load-more request, and the final scan-complete refresh. For large libraries this creates extra `/api/images` work and makes the UI feel like it is still loading even when the user only expected the first visible page.
+- Decision:
+  Refreshes caused by scan progress now suppress the immediate automatic load-more check. The Gallery still attaches its pagination listener, so explicit user scrolling can load more images normally. The scan flow may still do one early library-ready refresh and one final completion refresh, but it must not auto-page extra results just because the grid is near the viewport after an automatic scan refresh.
+- Why:
+  Large-library users need the Gallery to become usable quickly and stay stable during background metadata work. Automatic scan refresh should show the first usable page, not spend extra time fetching additional pages the user did not ask for. This keeps the UI responsive without removing normal infinite scroll.
+- Do not regress:
+  Do not call `_onGalleryScroll()` immediately after a scan-driven `loadImages()` refresh. Do not remove user-scroll pagination. Do not refresh the Gallery while the user is on another view; mark it for refresh and wait until the user returns.
+- Allowed evolution:
+  A future implementation can prefetch more pages after the app is idle, but it must be cancellable/coalesced and must not make scan progress or Gallery loading feel stuck.
+- Evidence:
+  `frontend/js/app.js`; `tests/e2e/specs/scan-gallery-refresh.spec.ts`; failing CI run on 2026-04-30 showed 3 image fetches where the contract allows at most 2.
+- Validation:
+  `node --check frontend/js/app.js`; `npm --prefix tests/e2e test -- scan-gallery-refresh.spec.ts` (`2 passed`); `python3 scripts/run_ci.py` (`PASSED: compiled lock freshness`, `dependency security audit`, `frontend js syntax`, `backend full suite`, `playwright e2e`; Playwright `115 passed`, `3 skipped`).
+
+### ADR-AI-20260430-80: Desktop modal controls must keep common actions visible and advanced-only settings out of the default path
+
+- Status: accepted
+- Area: desktop UI hardening / modal layout / Censor controls / export UX
+- Context:
+  A Chinese desktop visual audit before real-user testing found several user-facing regressions outside the Gallery-only path: the Censor right sidebar save/queue card could stick over filter sliders, the top brand could wrap on a 1366px desktop width, checkbox marks could collapse because inline checkbox boxes ignored fixed sizing, ordinary modal action bars could cover content on short desktop windows, and the same-name `.txt` export modal forced LoRA-only advanced fields into the beginner path.
+- Decision:
+  Common actions must remain visible without covering form content or controls. Censor's save/queue card is static rather than sticky, because it shares a narrow sidebar with sliders. The top brand and short checkbox controls are protected from accidental wrapping/collapse on normal desktop widths. Ordinary modal action bars do not use the global sticky behavior on short desktop windows; only explicitly sticky modal surfaces should keep sticky action rows. The same-name `.txt` export modal keeps the normal output choice and export action visible first, while `Prefix / Class Token` and `Tag Blacklist` live under `Advanced options` because they are LoRA caption tuning fields, not required beginner settings.
+- Why:
+  This project is a desktop local tool, so 1366x768 desktop layout is a real release target. Users should not need to understand every advanced SD training option just to export captions, and controls must not hide each other during normal use. Short labels belong in controls; longer explanations belong in helper text, preview text, or collapsible advanced sections.
+- Do not regress:
+  Do not make Censor sidebar bottom actions sticky again unless the sidebar layout is redesigned so it cannot cover sliders. Do not put LoRA-only advanced caption options back into the default same-name export path. Do not apply broad sticky modal action behavior to every modal on short desktop windows. Do not allow short Chinese labels such as `高级选项` or the brand text to wrap into orphan characters on normal desktop widths.
+- Evidence:
+  `frontend/css/ui-refresh.css`, `frontend/index.html`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `tests/e2e/specs/smoke.spec.ts`, `artifacts/ui-audit-zh/zh-ui-audit.json`, `artifacts/ui-audit-target/scan-modal-fixed.png`, `artifacts/ui-audit-target/censor-fixed.png`, `artifacts/ui-audit-target/batch-inspect-1s.png`.
+- Related decisions:
+  ADR-AI-20260430-78 remains the export wording/format contract. This ADR narrows the desktop layout/default-path behavior around that export flow.
+- Validation:
+  `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `git diff --check`; `npm --prefix tests/e2e test -- smoke.spec.ts -g "batch sidecar export|export modal"` (`3 passed`); `python3 scripts/lazy_release_qa.py --skip-package --image-count 120 --frontend` (`PASS`).
+
+### ADR-AI-20260430-81: Missing-file reconnect completion reports the selected search scope, not the whole library backlog
+
+- Status: accepted
+- Area: missing-file UX / path repair result semantics / large-library clarity
+- Context:
+  Full Playwright CI found a real user-facing failure in the `Find moved images` flow: reconnecting one moved file through the UI succeeded, but the final progress payload still reported hundreds of unrelated `still_missing` rows from the dirty library. That made the background search look stuck or unsuccessful even though the file in the user-selected folder had been found.
+- Decision:
+  Missing-file reconnect now keeps two counts separate. `library_missing_total` is the whole library backlog for context, while `missing_total` and `still_missing` describe only missing records that were actually relevant to files seen in the selected search folder. Matches, ambiguous candidates, and already-indexed conflicts all remove those scoped records from `still_missing`, because they were found and need either automatic reconnect, user review, or duplicate cleanup. If the selected folder contains no files that match any missing library row, the frontend shows a warning that this folder did not match the missing records and suggests choosing a wider folder or reconnecting the drive.
+- Why:
+  Users choose a concrete folder because they are asking “are my moved images here?” The completion message must answer that question, not punish them with unrelated missing records from old tests, removed drives, or other folders. Keeping the whole-library backlog as a separate field preserves diagnostics without making the normal completion result feel false.
+- Do not regress:
+  Do not compute `still_missing` from every missing row in the database for a folder-scoped reconnect run. Do not show a success-looking “0 found” message when the app checked a folder but found no matching missing records. Do not automatically reconnect ambiguous rows or merge duplicate found paths just to reduce the count.
+- Evidence:
+  `backend/services/image_service.py`, `backend/tests/test_reconnect_missing_files.py`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `tests/e2e/specs/reconnect-missing.spec.ts`.
+- Related decisions:
+  Extends ADR-AI-20260430-77. Debt-14 remains open for the larger ambiguous/conflict review UI.
+- Validation:
+  `python3 -m py_compile backend/services/image_service.py`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_reconnect_missing_files.py` (`6 passed`); `npm --prefix tests/e2e test -- reconnect-missing.spec.ts` (`1 passed`).

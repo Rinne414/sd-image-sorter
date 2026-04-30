@@ -163,7 +163,7 @@ if !FIRST_RUN! EQU 1 (
 
 if !NEED_INSTALL! EQU 1 (
     echo [2/3] Installing dependencies...
-    backend\venv\Scripts\pip.exe install -r backend\requirements.txt
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install -r backend\requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause

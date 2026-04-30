@@ -324,11 +324,11 @@ function updateManualSortExecutionScopeSummary() {
     const status = getManualSortScopeStatus();
     const tool = getManualSortToolLabel();
     summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? formatManualSortI18n('scope.sessionSynced', 'Session will use the {tool} scope synced from Gallery at {time}.', {
+        ? formatManualSortI18n('scope.sessionSynced', 'This session uses {tool} filters copied from Gallery at {time}.', {
             tool,
             time: status.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.sessionSaved', 'Session will use the saved {tool} scope, not the live Gallery filters.', {
+        : formatManualSortI18n('scope.sessionSaved', 'This session uses the saved {tool} filters shown here, not the live Gallery filters.', {
             tool,
         });
 }
@@ -346,31 +346,31 @@ function updateManualSortScopeStatus() {
     const tool = getManualSortToolLabel();
     const status = getManualSortScopeStatus();
 
-    badge.textContent = formatManualSortI18n('scope.usingSaved', 'Using saved {tool} scope', { tool });
+    badge.textContent = formatManualSortI18n('scope.usingSaved', '{tool} will use these saved filters', { tool });
     meta.textContent = status.lastSyncedLabel
-        ? formatManualSortI18n('scope.syncedAt', 'Synced from current Gallery filters at {time}', {
+        ? formatManualSortI18n('scope.syncedAt', 'Copied from Gallery: {time}', {
             time: status.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.standalone', 'This saved scope will not change when Gallery filters change later.');
+        : formatManualSortI18n('scope.standalone', 'These filters will not change automatically when Gallery filters change later.');
 
     if (status.matchesGallery && status.lastSyncedLabel) {
         detail.textContent = formatManualSortI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
     } else if (status.matchesGallery) {
         detail.textContent = formatManualSortI18n(
             'scope.alignedUnsynced',
-            '{tool} currently matches the Gallery filters, but future Gallery changes will not update it automatically.',
+            '{tool} currently matches the Gallery filters. Later Gallery changes will not be copied automatically.',
             { tool }
         );
     } else if (status.isAcknowledged) {
         detail.textContent = formatManualSortI18n(
             'scope.kept',
-            'Continuing with the saved {tool} scope. Current Gallery filters were not copied.',
+            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
             { tool }
         );
     } else {
         detail.textContent = formatManualSortI18n(
             'scope.mismatch',
-            'Gallery filters changed. {tool} will keep using its saved scope until you resync.',
+            'Gallery filters changed. {tool} will still use the saved filters shown here.',
             { tool }
         );
     }
@@ -730,11 +730,11 @@ async function startSorting() {
     // Confirmation dialog before starting (files will be moved/copied)
     const scopeStatus = getManualSortScopeStatus();
     const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
-        ? formatManualSortI18n('scope.executeSynced', 'Scope: saved {tool} filters (last synced from Gallery at {time})', {
+        ? formatManualSortI18n('scope.executeSynced', 'Using saved {tool} filters copied from Gallery at {time}', {
             tool: getManualSortToolLabel(),
             time: scopeStatus.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.executeSaved', 'Scope: saved {tool} filters', {
+        : formatManualSortI18n('scope.executeSaved', 'Using saved {tool} filters', {
             tool: getManualSortToolLabel(),
         });
     const confirmMessage = window.I18n?.getLang?.() === 'zh-CN'

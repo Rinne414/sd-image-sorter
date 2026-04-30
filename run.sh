@@ -158,7 +158,7 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
     echo "      Please be patient, large AI models are being downloaded."
     echo
 
-    if ! pip install -r backend/requirements.txt; then
+    if ! backend/venv/bin/python backend/launcher_pip.py install -r backend/requirements.txt; then
         echo
         echo "[ERROR] Failed to install dependencies."
         echo "        Check your internet connection and try again."

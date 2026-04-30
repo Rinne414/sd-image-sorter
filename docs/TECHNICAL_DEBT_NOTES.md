@@ -272,6 +272,51 @@ Use this structure for future confirmed-debt entries:
   The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
 
+### Debt-12: Trash / Recycle Bin behavior still needs real OS matrix validation
+- Status: open
+- Type: file lifecycle / operability / platform compatibility
+- Impact: medium
+- Risk if ignored:
+  The Gallery “Move to Trash” action may behave differently on Windows portable Python, macOS, Linux desktop sessions, and WSL-mounted drives. If a platform lacks a supported trash implementation, users could see failures that are technically safe but confusing.
+- Related files:
+  `backend/services/image_service.py`
+  `backend/routers/images.py`
+  `backend/requirements.in`
+  `backend/tests/test_routers/test_images.py`
+- Observed problem:
+  Current code intentionally uses `send2trash` and does not fall back to permanent deletion. Tests cover success/failure by monkeypatching the trash mover, but this session did not run a real Windows Recycle Bin, macOS Trash, Linux freedesktop trash, or WSL-mounted-drive matrix.
+- Why this is debt:
+  The new product semantic is correct, but recoverable deletion is a platform integration behavior. Unit tests cannot prove the exact OS trash target that end users will see.
+- Better long-term shape:
+  Add a small manual/automated platform QA checklist for Windows portable, Windows path from WSL if supported, macOS, and Linux. Surface a clearer failure message that tells users their OS trash integration is unavailable and that no permanent delete was performed.
+- Revisit trigger:
+  Revisit before release packaging, after any file-deletion refactor, or if users report “Move to Trash” failures on WSL/network/external drives.
+- Deferred because:
+  The current code blocks permanent deletion and reports per-file failures, which is the safe release-hardening behavior. Full OS trash matrix validation requires real platform runs outside the current targeted unit tests.
+
+### Debt-13: Scan count pass needs real large-folder timing validation
+- Status: open
+- Type: performance / release validation
+- Impact: medium
+- Risk if ignored:
+  The scan UX now counts image files before import so ETA has a real denominator. On normal local folders this should be cheap, but on very slow network drives, external disks, or WSL-mounted paths, the extra directory walk could delay first thumbnails more than expected.
+- Related files:
+  `backend/image_manager.py`
+  `backend/services/sorting_service.py`
+  `frontend/js/app.js`
+  `backend/tests/test_routers/test_sorting.py`
+- Observed problem:
+  Current code deliberately trades one lightweight filename/stat pass for truthful ETA. Unit tests prove the progress contract, but this session did not run a real 100,000-image Windows/WSL timing matrix.
+- Why this is debt:
+  The product target includes users with 10,000-100,000 images. The count pass is the right user-facing behavior, but the acceptable cost must be verified on the same disks and mounts those users actually use.
+- Better long-term shape:
+  Add release QA measurements for local SSD, HDD/external drive, WSL-mounted drive, and network folder. If counting is too slow on any target, replace the double walk with a counted path spool or a hybrid count/import scheduler that keeps the same stable-total progress contract.
+- Revisit trigger:
+  Revisit before release packaging, after real 100,000-image timing tests, or if users report a long pause before first thumbnails.
+- Deferred because:
+  The current change fixes the confirmed fake-ETA problem and adds contract tests. Real disk timing requires the user's Windows/WSL environment and representative large folders.
+
+
 ## Quick Debt Reductions Applied On 2026-04-27
 
 These do not close the major structural debts from the whole-repo audit, but they reduce small confirmed drift without risky rewrites.
@@ -640,3 +685,50 @@ Quality bar:
 - Service-layer `HTTPException` usage remains in older services; this pass intentionally avoided the dangerous broad exception migration.
 - CI Playwright E2E no longer depends on ignored `tests/e2e/storage/onboarding-complete.json` or ignored `.tmp` dataset builders; fixtures are inline or generated from tracked scripts before browser tests run.
 - CI E2E now avoids private local media assumptions for artist and manual move/sort tests, and scan progress now emits a terminal `total_final=true` metadata event after metadata backfill drains.
+
+### Debt-14: Missing-file repair has no ambiguous/conflict review UI yet
+
+- Status: open
+- Type: UX / data safety / large-library workflow debt
+- Impact: medium
+- Risk if ignored:
+  Users who moved folders containing duplicate filenames, or who already scanned the new location before running repair, may see “needs review” / “already in gallery” counts but cannot resolve those cases inside the app yet. They may need to narrow the search folder or manually remove duplicate records, which is safe but not smooth.
+- Related files:
+  `backend/services/image_service.py`
+  `backend/routers/images.py`
+  `frontend/index.html`
+  `frontend/js/app.js`
+- Observed problem:
+  The first implementation intentionally refuses ambiguous reconnects and refuses to reconnect a missing row onto a found path that is already indexed by another row. The result payload keeps only a short sample of updated rows and counts ambiguous/conflict candidates; it does not expose a full candidate-review table, merge flow, or manual per-image confirmation UI.
+- Why this is debt:
+  Refusing ambiguous auto-repair and duplicate-path auto-merge is the correct safety behavior, but users still need a follow-up path when duplicate filenames are common or when they scanned the new location first. Without a review/merge UI, the workflow is incomplete for some real moved-folder cases.
+- Better long-term shape:
+  Store or return paginated ambiguous/conflict candidates, show old path and possible new paths or existing gallery rows, allow the user to pick a match or merge/remove a duplicate per image, and update paths only after explicit confirmation. Keep this separate from automatic safe reconnects.
+- Revisit trigger:
+  Revisit before publishing this as a headline “repair moved files” feature, or when real testing shows many ambiguous matches in common SD output folders.
+- Deferred because:
+  The current user request required a non-blocking safe background repair first. Adding a review table is larger UI work and should be driven by real ambiguous-match test data rather than guessed layouts.
+
+
+### Debt-15: E2E TypeScript files have no local typecheck command
+
+- Status: open
+- Type: test tooling / frontend QA gap
+- Impact: low to medium
+- Risk if ignored:
+  Playwright tests can still run, but TypeScript-only mistakes in `tests/e2e/**/*.ts` are not caught by a fast typecheck step. Some mistakes will only appear when a specific browser test executes.
+- Related files:
+  `package.json`
+  `tests/e2e/package.json`
+  `tests/e2e/tsconfig.json`
+  `tests/e2e/specs/smoke.spec.ts`
+- Observed problem:
+  Running `npx tsc --noEmit --project tests/e2e/tsconfig.json` does not invoke a project-installed TypeScript compiler. It prints npm's placeholder message: "This is not the tsc command you are looking for". The current E2E package has Playwright and Node types but no `typescript` dev dependency or typecheck script.
+- Why this is debt:
+  The repo has TS-based E2E tests and release-critical browser flows. Runtime Playwright coverage is valuable but slower and narrower than a typecheck pass for catching test-source drift.
+- Better long-term shape:
+  Add `typescript` to the E2E dev dependencies, add an `npm --prefix tests/e2e run typecheck` script, and include it in the local/CI verification path if runtime cost stays acceptable.
+- Revisit trigger:
+  Revisit before relying on newly added or refactored E2E test helpers as release gates.
+- Deferred because:
+  The current task was product wording and export/right-click UX. The affected browser flows were validated with targeted Playwright tests, so adding a new Node dependency and lockfile change was kept separate.

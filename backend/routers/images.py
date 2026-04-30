@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -41,6 +41,12 @@ class DeleteSelectedImagesRequest(BaseModel):
 
 class RemoveSelectedImagesRequest(BaseModel):
     image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+
+
+class ReconnectMissingFilesRequest(BaseModel):
+    search_folder: str = Field(..., min_length=1, max_length=4096)
+    recursive: bool = True
+    verify_uncertain: bool = True
 
 
 class ExportSelectionRequest(BaseModel):
@@ -132,7 +138,8 @@ class ExportSelectionResponse(BaseModel):
 class DeleteSelectedImagesResponse(BaseModel):
     deleted: int
     failed: List[dict[str, Any]]
-    permanent_delete: bool = True
+    permanent_delete: bool = False
+    trash_used: bool = True
 
 
 class RemoveSelectedImagesResponse(BaseModel):
@@ -417,6 +424,39 @@ async def get_selection_chunk(
     return service.get_selection_chunk(selection_token, offset=offset, limit=limit)
 
 
+@router.post(
+    "/images/reconnect-missing/start",
+    summary="Find moved files for missing gallery records",
+    description="Start a background search that reconnects missing library records to files found under a user-selected folder. It does not move, delete, or modify image files.",
+)
+async def start_reconnect_missing_files(
+    request: ReconnectMissingFilesRequest,
+    background_tasks: BackgroundTasks,
+    service: ImageService = Depends(get_image_service),
+):
+    return service.start_reconnect_missing_files(request, background_tasks)
+
+
+@router.get(
+    "/images/reconnect-missing/progress",
+    summary="Get moved-file search progress",
+)
+async def get_reconnect_missing_files_progress(
+    service: ImageService = Depends(get_image_service),
+):
+    return service.get_reconnect_progress()
+
+
+@router.post(
+    "/images/reconnect-missing/cancel",
+    summary="Stop moved-file search",
+)
+async def cancel_reconnect_missing_files(
+    service: ImageService = Depends(get_image_service),
+):
+    return service.cancel_reconnect_missing_files()
+
+
 @router.get(
     "/images/{image_id}",
     summary="Get a single image",
@@ -526,19 +566,21 @@ async def get_selection_ids(
 @router.post(
     "/images/delete-selected",
     response_model=DeleteSelectedImagesResponse,
-    summary="Delete selected image files from disk",
+    summary="Move selected image files to OS trash",
     description="""
-Delete the selected image files from disk and remove their database rows.
+Move the selected image files to the operating system Trash / Recycle Bin and
+remove their database rows.
 
 This is a destructive action and requires explicit confirmation from the client.
-The response reports partial failures per image instead of hiding them.
+The response reports partial failures per image instead of hiding them. The
+backend must not fall back to permanent deletion when trash is unavailable.
     """,
 )
 async def delete_selected_images(
     request: DeleteSelectedImagesRequest,
     service: ImageService = Depends(get_image_service),
 ):
-    """Delete selected image files from disk with partial-failure reporting."""
+    """Move selected image files to OS trash with partial-failure reporting."""
     if not request.confirm_delete_files:
         raise HTTPException(
             status_code=400,

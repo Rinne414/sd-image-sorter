@@ -38,7 +38,9 @@
             maxWidth: source.maxWidth ?? null,
             minHeight: source.minHeight ?? null,
             maxHeight: source.maxHeight ?? null,
-            aspectRatio: source.aspectRatio || '',
+            aspectRatio: ['square', 'landscape', 'portrait'].includes(String(source.aspectRatio || '').trim())
+                ? String(source.aspectRatio || '').trim()
+                : '',
             minAesthetic: source.minAesthetic ?? null,
             maxAesthetic: source.maxAesthetic ?? null,
         };

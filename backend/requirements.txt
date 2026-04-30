@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements.txt backend/requirements.in
 #
-# lock-input-sha256: 45144fd5b5020915ef995971d9b99d52f5963b849356a34c7869914f3dd09f24
+# lock-input-sha256: 9ec36ec2bbccd4046b71a09b3d6668c1c037f57733d21bea63ef1e9487b90ea7
 #
 aiofiles==25.1.0
     # via -r backend/requirements.in
@@ -255,6 +255,8 @@ safetensors==0.7.0
     #   transformers
 scipy==1.17.1
     # via ultralytics
+send2trash==2.1.0
+    # via -r backend/requirements.in
 shellingham==1.5.4
     # via typer
 six==1.17.0

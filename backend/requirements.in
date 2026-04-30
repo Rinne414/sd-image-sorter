@@ -33,3 +33,4 @@ open-clip-torch>=2.24.0
 triton-windows>=3.6.0; sys_platform == "win32"
 slowapi>=0.1.9
 psutil>=5.9.0
+send2trash>=1.8.3
