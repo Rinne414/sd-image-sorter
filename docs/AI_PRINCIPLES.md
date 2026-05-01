@@ -1,6 +1,6 @@
 # AI Principles For This Repo
 
-**Updated:** 2026-04-29
+**Updated:** 2026-05-01
 **Purpose:** Give future AI agents a local decision framework so they do not overwrite deliberate product choices with generic "best practice" cleanup.
 
 ## Why This Exists
@@ -206,6 +206,19 @@ Keep these rules aligned unless the user explicitly changes product direction:
 - preserve package-local user/runtime state such as `data/`, downloaded models, caches, and updater working files
 - keep advanced update-channel override as an opt-in path for advanced users or forks, not as forced complexity for normal users
 - if the default GitHub update path is unreachable, say so honestly and tell the user to use VPN rather than pretending there is a seamless default mirror
+
+### 12. Heavy local AI must be resource-aware, not blanket-disabled
+
+For local model features, stability and speed are both product requirements.
+
+Prefer targeted resource controls:
+
+- shared gates for heavyweight model load/inference critical sections
+- chunked preprocessing/search instead of whole-library or whole-batch memory spikes
+- GPU headroom checks and CPU fallback only when GPU is unsafe
+- explicit payload/pixel budgets for large image edits
+
+Do not make every workflow slower, disable GPU by default, or serialize cheap metadata/UI work just to hide a crash bug in one heavy AI path.
 
 ## Core Principles
 

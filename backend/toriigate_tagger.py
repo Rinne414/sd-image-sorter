@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 from PIL import Image
 
 from config import TAGGER_MODELS, get_toriigate_model_dir, read_float_env
+from ai_runtime_guard import exclusive_ai_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -249,26 +250,27 @@ class ToriiGateTagger:
             # arbitrary Python.  This is required by the Qwen architecture but
             # means a compromised repo could run code on load.  Mitigate by
             # pinning TORIIGATE_COMMIT_HASH and only downloading safetensors.
-            self.processor = AutoProcessor.from_pretrained(
-                local_dir,
-                trust_remote_code=True,
-                padding_side="right",
-                use_safetensors=True,
-            )
-            self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
-                local_dir,
-                torch_dtype=dtype,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                use_safetensors=True,
-            )
-            if self.use_gpu and torch.cuda.is_available():
-                self.model.to("cuda")
-                self.device = "cuda"
-            else:
-                self.model.to("cpu")
-                self.device = "cpu"
-                self.use_gpu = False
+            with exclusive_ai_runtime("toriigate-load"):
+                self.processor = AutoProcessor.from_pretrained(
+                    local_dir,
+                    trust_remote_code=True,
+                    padding_side="right",
+                    use_safetensors=True,
+                )
+                self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
+                    local_dir,
+                    torch_dtype=dtype,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                    use_safetensors=True,
+                )
+                if self.use_gpu and torch.cuda.is_available():
+                    self.model.to("cuda")
+                    self.device = "cuda"
+                else:
+                    self.model.to("cpu")
+                    self.device = "cpu"
+                    self.use_gpu = False
 
             self.model.eval()
             self._loaded = True
@@ -279,20 +281,21 @@ class ToriiGateTagger:
                 self.use_gpu = False
                 self.device = "cpu"
                 self._teardown_model()
-                self.processor = AutoProcessor.from_pretrained(
-                    local_dir,
-                    trust_remote_code=True,  # required by Qwen architecture
-                    padding_side="right",
-                    use_safetensors=True,
-                )
-                self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
-                    local_dir,
-                    torch_dtype=torch.float32,
-                    low_cpu_mem_usage=True,
-                    trust_remote_code=True,  # required by Qwen architecture
-                    use_safetensors=True,
-                )
-                self.model.to("cpu")
+                with exclusive_ai_runtime("toriigate-load-cpu-retry"):
+                    self.processor = AutoProcessor.from_pretrained(
+                        local_dir,
+                        trust_remote_code=True,  # required by Qwen architecture
+                        padding_side="right",
+                        use_safetensors=True,
+                    )
+                    self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
+                        local_dir,
+                        torch_dtype=torch.float32,
+                        low_cpu_mem_usage=True,
+                        trust_remote_code=True,  # required by Qwen architecture
+                        use_safetensors=True,
+                    )
+                    self.model.to("cpu")
                 self.model.eval()
                 self._loaded = True
             else:
@@ -553,7 +556,7 @@ class ToriiGateTagger:
             for key, value in inputs.items()
         }
 
-        with torch.inference_mode():
+        with torch.inference_mode(), exclusive_ai_runtime("toriigate-inference"):
             generated = self.model.generate(
                 **inputs,
                 do_sample=False,

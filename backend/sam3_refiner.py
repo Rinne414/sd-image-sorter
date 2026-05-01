@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image
 
 from config import get_sam3_model_dir
+from ai_runtime_guard import exclusive_ai_runtime
 
 
 logger = logging.getLogger(__name__)
@@ -163,32 +164,33 @@ def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface
                 resolved_checkpoint = _resolve_checkpoint_path(checkpoint_path)
 
                 logger.info("Loading SAM3 on %s", device)
-                if resolved_checkpoint:
-                    logger.info("Using local SAM3 checkpoint: %s", resolved_checkpoint)
-                    model = build_sam3_image_model(
-                        checkpoint_path=resolved_checkpoint,
-                        load_from_HF=False,
-                        device=device,
-                        eval_mode=True,
-                    )
-                elif source == "modelscope":
-                    model = _load_from_modelscope(device=device)
-                else:
-                    try:
+                with exclusive_ai_runtime("sam3-load"):
+                    if resolved_checkpoint:
+                        logger.info("Using local SAM3 checkpoint: %s", resolved_checkpoint)
                         model = build_sam3_image_model(
+                            checkpoint_path=resolved_checkpoint,
+                            load_from_HF=False,
                             device=device,
                             eval_mode=True,
-                            load_from_HF=True,
                         )
-                    except Exception as hf_error:
-                        message = str(hf_error).lower()
-                        if any(token in message for token in ("auth", "token", "403", "401")):
-                            logger.warning("SAM3 HuggingFace access failed, falling back to ModelScope.")
-                            model = _load_from_modelscope(device=device)
-                        else:
-                            raise
+                    elif source == "modelscope":
+                        model = _load_from_modelscope(device=device)
+                    else:
+                        try:
+                            model = build_sam3_image_model(
+                                device=device,
+                                eval_mode=True,
+                                load_from_HF=True,
+                            )
+                        except Exception as hf_error:
+                            message = str(hf_error).lower()
+                            if any(token in message for token in ("auth", "token", "403", "401")):
+                                logger.warning("SAM3 HuggingFace access failed, falling back to ModelScope.")
+                                model = _load_from_modelscope(device=device)
+                            else:
+                                raise
 
-                model = model.to(device)
+                    model = model.to(device)
                 model.eval()
 
                 _sam3_model = model
@@ -288,7 +290,7 @@ class SAM3Refiner:
             if prompt_box is None:
                 return None
 
-            with self._inference_context():
+            with exclusive_ai_runtime("sam3-inference"), self._inference_context():
                 state = self.processor.set_image(image.convert("RGB"))
                 if text_prompt:
                     state = self.processor.set_text_prompt(text_prompt, state)
@@ -314,7 +316,7 @@ class SAM3Refiner:
 
     def segment_by_text(self, image: Image.Image, text_prompt: str) -> Optional[np.ndarray]:
         try:
-            with self._inference_context():
+            with exclusive_ai_runtime("sam3-inference"), self._inference_context():
                 state = self.processor.set_image(image.convert("RGB"))
                 state = self.processor.set_text_prompt(text_prompt, state)
             return _extract_best_mask(state)

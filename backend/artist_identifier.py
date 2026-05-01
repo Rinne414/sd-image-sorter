@@ -35,6 +35,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 from PIL import Image
+from ai_runtime_guard import exclusive_ai_runtime
 from config import (
     ARTIST_MODEL_SOURCE_DEFAULT,
     ARTIST_HF_MODEL_ID,
@@ -950,7 +951,8 @@ class ArtistIdentifier:
         import torch
 
         create_model, resolve_data_config, create_transform = self._load_kaloscope_runtime_modules()
-        checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
         args = checkpoint.get("args")
         model_name = getattr(args, "model", None) or "lsnet_xl_artist_448"
         feature_dim = getattr(args, "feature_dim", None)
@@ -962,13 +964,14 @@ class ArtistIdentifier:
             raise RuntimeError("Kaloscope checkpoint is missing model weights.")
         state_dict = _normalize_state_dict_keys(state_dict)
 
-        model = create_model(
-            model_name,
-            pretrained=False,
-            num_classes=len(artists),
-            feature_dim=feature_dim,
-        )
-        load_result = model.load_state_dict(state_dict, strict=False)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            model = create_model(
+                model_name,
+                pretrained=False,
+                num_classes=len(artists),
+                feature_dim=feature_dim,
+            )
+            load_result = model.load_state_dict(state_dict, strict=False)
         unexpected = [key for key in load_result.unexpected_keys if not key.startswith("head_dist")]
         if unexpected:
             logger.warning("Kaloscope unexpected keys ignored: %s", unexpected[:10])
@@ -976,7 +979,8 @@ class ArtistIdentifier:
             logger.warning("Kaloscope missing keys during load: %s", load_result.missing_keys[:10])
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model.to(device)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            model.to(device)
         model.eval()
 
         data_config = resolve_data_config(
@@ -1017,7 +1021,8 @@ class ArtistIdentifier:
         try:
             if path.endswith('.onnx'):
                 import onnxruntime as ort  # type: ignore
-                self._session = ort.InferenceSession(path)
+                with exclusive_ai_runtime("artist-onnx-load"):
+                    self._session = ort.InferenceSession(path)
                 self._model = "onnx"
                 self._backend = "onnx"
             else:
@@ -1028,13 +1033,15 @@ class ArtistIdentifier:
                     # Try generic PyTorch model as legacy fallback
                     try:
                         import torch
-                        self._model = torch.load(path, map_location='cpu')
+                        with exclusive_ai_runtime("artist-torch-load"):
+                            self._model = torch.load(path, map_location='cpu')
                         self._model.eval()
                         self._backend = "torch-generic"
                     except Exception:
                         # Fall back to ONNX runtime
                         import onnxruntime as ort  # type: ignore
-                        self._session = ort.InferenceSession(path)
+                        with exclusive_ai_runtime("artist-onnx-load"):
+                            self._session = ort.InferenceSession(path)
                         self._model = "onnx"
                         self._backend = "onnx"
             self._load_error = None
@@ -1058,8 +1065,9 @@ class ArtistIdentifier:
             else:
                 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-                self._processor = AutoImageProcessor.from_pretrained(model_name)
-                self._model = AutoModelForImageClassification.from_pretrained(model_name)
+                with exclusive_ai_runtime("artist-transformers-load"):
+                    self._processor = AutoImageProcessor.from_pretrained(model_name)
+                    self._model = AutoModelForImageClassification.from_pretrained(model_name)
                 self._model.eval()
                 self._backend = "transformers"
 
@@ -1127,7 +1135,8 @@ class ArtistIdentifier:
 
         try:
             # Load and preprocess image
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as source_image:
+                image = source_image.convert("RGB")
 
             if self._session is not None:
                 # ONNX inference
@@ -1178,7 +1187,8 @@ class ArtistIdentifier:
         input_name = self._session.get_inputs()[0].name
 
         # Run inference
-        outputs = self._session.run(None, {input_name: img_array})
+        with exclusive_ai_runtime("artist-onnx-inference"):
+            outputs = self._session.run(None, {input_name: img_array})
 
         # Apply softmax
         logits = outputs[0][0]
@@ -1195,7 +1205,7 @@ class ArtistIdentifier:
         tensor = self._transform(image).unsqueeze(0)
         assert self._model is not None
         device = next(self._model.parameters()).device
-        with torch.no_grad():
+        with torch.no_grad(), exclusive_ai_runtime("artist-kaloscope-inference"):
             logits = self._model(tensor.to(device))
             if isinstance(logits, tuple):
                 logits = logits[0]
@@ -1214,7 +1224,7 @@ class ArtistIdentifier:
         inputs = self._processor(images=image, return_tensors="pt")
 
         assert self._model is not None
-        with torch.no_grad():
+        with torch.no_grad(), exclusive_ai_runtime("artist-transformers-inference"):
             outputs = self._model(**inputs)
             logits = outputs.logits[0]
 

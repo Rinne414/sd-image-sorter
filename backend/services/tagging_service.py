@@ -355,7 +355,10 @@ def _tagging_worker_main(
 
         # Eagerly load the model so progress transitions from "loading" to "tagging"
         if hasattr(tagger, "load"):
-            tagger.load()
+            from ai_runtime_guard import exclusive_ai_runtime
+
+            with exclusive_ai_runtime(f"tagger-load:{effective_model_name}"):
+                tagger.load()
 
         if hasattr(tagger, "set_session_refresh_interval"):
             tagger.set_session_refresh_interval(session_refresh_interval)

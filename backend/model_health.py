@@ -36,6 +36,7 @@ from config import (
     get_yolo_model_dir,
 )
 from hardware_monitor import get_system_info, recommend_tagger_config
+from ai_runtime_guard import exclusive_ai_runtime
 
 from censor import canonicalize_class_name as _canonicalize_yolo_class_name
 
@@ -112,8 +113,9 @@ def _load_yolo_class_names(model_path: Path) -> List[str]:
             prepare_onnxruntime_environment()
             import onnxruntime as ort
 
-            session = ort.InferenceSession(str(candidate), providers=["CPUExecutionProvider"])
-            metadata = session.get_modelmeta().custom_metadata_map or {}
+            with exclusive_ai_runtime("model-health-onnx-metadata"):
+                session = ort.InferenceSession(str(candidate), providers=["CPUExecutionProvider"])
+                metadata = session.get_modelmeta().custom_metadata_map or {}
             raw_names = metadata.get("names")
             if not raw_names:
                 continue
@@ -125,7 +127,8 @@ def _load_yolo_class_names(model_path: Path) -> List[str]:
         try:
             from ultralytics import YOLO
 
-            return _parse_class_mapping(getattr(YOLO(str(model_path)), "names", {}))
+            with exclusive_ai_runtime("model-health-ultralytics-metadata"):
+                return _parse_class_mapping(getattr(YOLO(str(model_path)), "names", {}))
         except Exception:
             return []
 

@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-04-30
+**Updated:** 2026-05-01
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -67,6 +67,42 @@ Use this structure for future entries:
 - Validation:
 
 ## Current Records
+
+### ADR-AI-20260501-02: Heavy local AI work must be resource-gated without blanket slowdowns
+- Status: active
+- Area: backend runtime / stability / performance
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  Route heavyweight local model loading and inference through a shared AI runtime guard, keep memory-heavy algorithms chunked or bounded, and use targeted CPU fallback only when GPU memory is unsafe or after a real GPU OOM. Do not globally slow every workflow just to avoid crashes.
+- Why:
+  Aesthetic scoring, WD14 tagging, CLIP similarity, YOLO/SAM censoring, ToriiGate, and artist identification can all load large ONNX/Torch/Transformers runtimes. Letting them run concurrently or build unbounded in-memory batches can exhaust RAM/VRAM and make the whole computer freeze. The user explicitly reported aesthetic scoring crashing the computer and called out historical tagger crashes, while also requiring speed to remain important.
+- Do not "improve" this by:
+  Removing the shared runtime guard because individual features pass tests, restoring whole-batch image preprocessing, restoring full-library embedding matrices for similarity search, disabling GPU by default for all users, or serializing cheap non-AI work behind the heavyweight guard.
+- Allowed evolution:
+  Replace the coarse guard with a smarter scheduler, priority queue, per-device VRAM reservation, model residency manager, or ANN-backed similarity index if it preserves the same crash-safety contract and keeps fast paths fast.
+- Evidence:
+  `backend/ai_runtime_guard.py` now owns the shared process/file lock, CUDA headroom check, OOM detection, and cleanup helpers. Aesthetic scoring does GPU headroom checks plus CPU retry after CUDA OOM. Tagger preprocessing streams by runtime chunks. Similarity search scans embeddings in DB chunks with bounded top-k. Censor save operations enforce edit/mask/pixel budgets and crop cached masks to affected boxes. Heavy model paths in tagger, aesthetic, similarity, censor, NudeNet, SAM3, ToriiGate, artist identification, and model-health metadata probing use the guard.
+- Last verified:
+  2026-05-01 against current workspace code and CI.
+- Related files:
+  `backend/ai_runtime_guard.py`
+  `backend/aesthetic.py`
+  `backend/tagger.py`
+  `backend/services/tagging_service.py`
+  `backend/similarity.py`
+  `backend/services/similarity_service.py`
+  `backend/censor.py`
+  `backend/services/censor_service.py`
+  `backend/nudenet_detector.py`
+  `backend/model_health.py`
+  `backend/sam3_refiner.py`
+  `backend/toriigate_tagger.py`
+  `backend/artist_identifier.py`
+  `backend/tests/test_resource_safety.py`
+- Supersedes:
+  None
+- Validation:
+  `python3 -m pytest -s tests/test_resource_safety.py tests/test_tagger.py`; `python3 -m pytest -s tests/test_routers/test_prompts_censor_similarity_artists.py tests/test_tagging_service.py tests/test_hardware_monitor.py`; `python3 scripts/run_ci.py`.
 
 ### ADR-AI-20260427-01: Copy mode is a first-class workflow, not a redundant duplicate of move
 - Status: active

@@ -16,6 +16,7 @@ from similarity import (
     SimilarityInsufficientEmbeddingsError,
     SimilarityInvalidImageError,
     SimilarityDuplicateSearchTooLargeError,
+    SimilaritySearchWindowTooLargeError,
     ensure_clip_model_ready,
     get_similarity_index,
 )
@@ -77,6 +78,8 @@ class SimilarityService:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SimilarityEmbeddingMissingError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SimilaritySearchWindowTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         return {
             "query_image_id": image_id,
             "results": result["results"],
@@ -123,6 +126,8 @@ class SimilarityService:
             )
         except SimilarityInvalidImageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SimilaritySearchWindowTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         finally:
             await file.close()
         return {

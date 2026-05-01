@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 
 from PIL import Image
 from config import get_nudenet_model_dir
+from ai_runtime_guard import exclusive_ai_runtime
 
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,8 @@ def _get_nudenet():
                     )
                 logger.info("[NudeNet] Loading detector...")
                 local_model = os.path.join(get_nudenet_model_dir(), "320n.onnx")
-                _detector = NudeDetector(model_path=local_model if os.path.exists(local_model) else None)
+                with exclusive_ai_runtime("nudenet-load"):
+                    _detector = NudeDetector(model_path=local_model if os.path.exists(local_model) else None)
                 logger.info("[NudeNet] Detector loaded")
     return _detector
 
@@ -122,7 +124,9 @@ class NudeNetDetector:
             List of detection dicts with keys:
                 class, class_id, confidence, box [x1,y1,x2,y2], label
         """
-        raw_detections = self.detector.detect(self._prepare_detector_input(image_path))
+        detector_input = self._prepare_detector_input(image_path)
+        with exclusive_ai_runtime("nudenet-inference"):
+            raw_detections = self.detector.detect(detector_input)
         return self._filter_detections(raw_detections, conf_threshold, exposed_only)
 
     def detect_from_pil(
@@ -133,7 +137,9 @@ class NudeNetDetector:
     ) -> List[Dict]:
         """Run NudeNet detection on a PIL Image."""
         try:
-            raw_detections = self.detector.detect(self._pil_to_detector_input(image))
+            detector_input = self._pil_to_detector_input(image)
+            with exclusive_ai_runtime("nudenet-inference"):
+                raw_detections = self.detector.detect(detector_input)
             return self._filter_detections(raw_detections, conf_threshold, exposed_only)
         except Exception as exc:
             raise RuntimeError(f"NudeNet could not read the image input: {exc}") from exc

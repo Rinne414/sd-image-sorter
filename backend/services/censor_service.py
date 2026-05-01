@@ -32,6 +32,13 @@ MAX_SAVE_DATA_PIXELS = 40_000_000
 MASK_INLINE_DATA_PIXEL_THRESHOLD = 8_000_000
 MASK_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 MASK_CACHE_DIR = Path(get_temp_dir()) / "censor_mask_cache"
+MAX_EDIT_OPERATION_COUNT = 5000
+MAX_EDIT_STROKE_POINTS = 250_000
+MAX_EDIT_GEOMETRY_POINTS = 250_000
+MAX_INLINE_OPERATION_MASK_BYTES = 12 * 1024 * 1024
+MAX_INLINE_OPERATION_MASK_PIXELS = 12_000_000
+MAX_FULL_IMAGE_FILTER_PIXELS = 45_000_000
+MAX_SERVER_EDIT_CANVAS_PIXELS = 80_000_000
 
 
 def _paths_match_runtime_case(candidate: Path, resolved: Path) -> bool:
@@ -121,7 +128,7 @@ class CensorSaveDataRequest(BaseModel):
 class CensorSaveOperationsRequest(BaseModel):
     """Request to save non-destructive edit operations on top of the original image."""
     original_image_id: int = Field(..., ge=1)
-    operations: List[Dict[str, Any]] = Field(default_factory=list, max_length=5000)
+    operations: List[Dict[str, Any]] = Field(default_factory=list, max_length=MAX_EDIT_OPERATION_COUNT)
     filename: str = Field(..., min_length=1)
     output_folder: str = Field(..., min_length=1)
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
@@ -924,6 +931,7 @@ class CensorService:
             width, height = original_image.size
             if width <= 0 or height <= 0:
                 raise HTTPException(status_code=400, detail="Invalid source image")
+            self._validate_edit_operation_budget(request.operations, image_size=(width, height))
 
             working_image = original_image.copy()
             self._apply_edit_operations(working_image, original_image, request.operations)
@@ -991,6 +999,108 @@ class CensorService:
         return normalized
 
     @staticmethod
+    def _count_polygon_points(regions: Any) -> int:
+        if not isinstance(regions, list):
+            return 0
+        total = 0
+        for region in regions:
+            if not isinstance(region, dict):
+                continue
+            polygon = region.get("polygon")
+            if isinstance(polygon, list):
+                total += len(polygon)
+        return total
+
+    @classmethod
+    def _decode_operation_mask_header(cls, mask_data: str) -> tuple[bytes, str]:
+        mask_bytes, _ = cls._decode_base64_image(mask_data)
+        if len(mask_bytes) > MAX_INLINE_OPERATION_MASK_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Inline edit mask is too large. Use cached mask refs for large masks.",
+            )
+        return mask_bytes, mask_data
+
+    @classmethod
+    def _validate_edit_operation_budget(
+        cls,
+        operations: List[Dict[str, Any]],
+        *,
+        image_size: tuple[int, int],
+    ) -> None:
+        width, height = image_size
+        total_pixels = width * height
+        if total_pixels > MAX_SERVER_EDIT_CANVAS_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Source image is too large for server-side edit saving. Export a smaller version first.",
+            )
+
+        stroke_points = 0
+        geometry_points = 0
+        inline_mask_pixels = 0
+        has_full_image_filter = False
+
+        if len(operations or []) > MAX_EDIT_OPERATION_COUNT:
+            raise HTTPException(status_code=413, detail="Too many edit operations to save safely")
+
+        for operation in operations or []:
+            if not isinstance(operation, dict):
+                continue
+            kind = str(operation.get("kind") or "").strip().lower()
+            if kind == "stroke":
+                points = operation.get("points") or []
+                if isinstance(points, list):
+                    stroke_points += len(points)
+            elif kind == "geometry_effect":
+                geometry_points += cls._count_polygon_points(operation.get("regions"))
+            elif kind == "mask_effect":
+                mask_ref = str(operation.get("mask_ref") or "").strip()
+                mask_data = str(operation.get("mask_data") or "").strip()
+                if mask_ref:
+                    entry = cls._get_cached_mask_entry(mask_ref)
+                    bounds = cls._normalize_mask_bounds(
+                        operation.get("mask_bounds") or entry.get("bounds"),
+                        image_size=image_size,
+                    )
+                    if bounds is None:
+                        raise HTTPException(status_code=400, detail="Invalid cached mask bounds")
+                    inline_mask_pixels += max(0, bounds[2] - bounds[0]) * max(0, bounds[3] - bounds[1])
+                elif mask_data:
+                    mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
+                    try:
+                        with Image.open(BytesIO(mask_bytes)) as mask_image:
+                            mask_image.verify()
+                            inline_mask_pixels += mask_image.width * mask_image.height
+                    except HTTPException:
+                        raise
+                    except Exception as exc:
+                        raise HTTPException(status_code=400, detail="Invalid edit mask data") from exc
+            elif kind == "filter":
+                has_full_image_filter = True
+
+        if stroke_points > MAX_EDIT_STROKE_POINTS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Too many brush points to save safely ({stroke_points:,} > {MAX_EDIT_STROKE_POINTS:,})",
+            )
+        if geometry_points > MAX_EDIT_GEOMETRY_POINTS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Too many polygon points to save safely ({geometry_points:,} > {MAX_EDIT_GEOMETRY_POINTS:,})",
+            )
+        if inline_mask_pixels > MAX_INLINE_OPERATION_MASK_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Edit masks are too large to save inline. Re-run mask refinement so cached mask refs are used.",
+            )
+        if has_full_image_filter and total_pixels > MAX_FULL_IMAGE_FILTER_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Full-image filters are too large for server-side saving on this image. Disable the filter or export a smaller version.",
+            )
+
+    @staticmethod
     def _draw_stroke_mask(mask: Image.Image, points: List[tuple[float, float]], brush_size: float) -> None:
         if not points:
             return
@@ -1037,11 +1147,12 @@ class CensorService:
         image.paste(composited, bbox)
 
     @classmethod
-    def _apply_mask_style(
+    def _apply_mask_crop_style(
         cls,
         image: Image.Image,
         original_image: Image.Image,
-        mask: Image.Image,
+        mask_crop: Image.Image,
+        bbox: tuple[int, int, int, int],
         *,
         style: str,
         block_size: int,
@@ -1049,13 +1160,13 @@ class CensorService:
         pen_color: str = "#ff0000",
         pen_opacity: float = 1.0,
     ) -> None:
-        bbox = mask.getbbox()
-        if not bbox:
+        x1, y1, x2, y2 = [int(value) for value in bbox]
+        if x2 <= x1 or y2 <= y1 or mask_crop.getbbox() is None:
             return
 
-        x1, y1, x2, y2 = [int(value) for value in bbox]
         bbox = (x1, y1, x2, y2)
-        mask_crop = mask.crop(bbox)
+        if mask_crop.size != (x2 - x1, y2 - y1):
+            mask_crop = mask_crop.resize((x2 - x1, y2 - y1), Image.Resampling.LANCZOS)
         normalized_style = str(style or "").strip().lower()
 
         if normalized_style == "pen":
@@ -1086,6 +1197,38 @@ class CensorService:
 
         effect_crop = cls._pixelate_image_crop(image, bbox, max(1, int(round(block_size))))
         cls._composite_crop_with_mask(image, effect_crop.convert("RGBA"), mask_crop, bbox)
+
+    @classmethod
+    def _apply_mask_style(
+        cls,
+        image: Image.Image,
+        original_image: Image.Image,
+        mask: Image.Image,
+        *,
+        style: str,
+        block_size: int,
+        blur_radius: int,
+        pen_color: str = "#ff0000",
+        pen_opacity: float = 1.0,
+    ) -> None:
+        bbox = mask.getbbox()
+        if not bbox:
+            return
+
+        x1, y1, x2, y2 = [int(value) for value in bbox]
+        bbox = (x1, y1, x2, y2)
+        mask_crop = mask.crop(bbox)
+        cls._apply_mask_crop_style(
+            image,
+            original_image,
+            mask_crop,
+            bbox,
+            style=style,
+            block_size=block_size,
+            blur_radius=blur_radius,
+            pen_color=pen_color,
+            pen_opacity=pen_opacity,
+        )
 
     @classmethod
     def _apply_clone_operation(
@@ -1241,11 +1384,25 @@ class CensorService:
             expected_size = (bounds[2] - bounds[0], bounds[3] - bounds[1])
             if crop_mask.size != expected_size:
                 crop_mask = crop_mask.resize(expected_size, Image.Resampling.LANCZOS)
-            alpha = Image.new("L", image.size, 0)
-            alpha.paste(crop_mask, (bounds[0], bounds[1]))
+            cls._apply_mask_crop_style(
+                image,
+                original_image,
+                crop_mask,
+                bounds,
+                style=str(operation.get("style") or "mosaic"),
+                block_size=int(operation.get("block_size", 16) or 16),
+                blur_radius=int(operation.get("blur_radius", 20) or 20),
+            )
+            return
         elif mask_data:
-            mask_bytes, _ = cls._decode_base64_image(mask_data)
+            mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
             mask_image = Image.open(BytesIO(mask_bytes)).convert("RGBA")
+            mask_pixels = mask_image.width * mask_image.height
+            if mask_pixels > MAX_INLINE_OPERATION_MASK_PIXELS:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Inline edit mask is too large. Use cached mask refs for large masks.",
+                )
             alpha = mask_image.getchannel("A") if "A" in mask_image.getbands() else mask_image.convert("L")
             if mask_image.size != image.size:
                 alpha = alpha.resize(image.size, Image.Resampling.LANCZOS)

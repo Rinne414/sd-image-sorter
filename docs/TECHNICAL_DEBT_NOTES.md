@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-04-29
+**Updated:** 2026-05-01
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -732,3 +732,76 @@ Quality bar:
   Revisit before relying on newly added or refactored E2E test helpers as release gates.
 - Deferred because:
   The current task was product wording and export/right-click UX. The affected browser flows were validated with targeted Playwright tests, so adding a new Node dependency and lockfile change was kept separate.
+
+### Debt-16: AI runtime guard is coarse and not yet a real scheduler
+
+- Status: partially mitigated
+- Type: runtime stability / performance debt
+- Impact: high
+- Risk if ignored:
+  The current guard prevents the worst RAM/VRAM pileups, but long model jobs can still make other heavyweight AI tasks wait without priority, progress fairness, or model residency decisions. Future contributors may also add new large-model entry points and forget to use the guard.
+- Related files:
+  `backend/ai_runtime_guard.py`
+  `backend/aesthetic.py`
+  `backend/tagger.py`
+  `backend/similarity.py`
+  `backend/censor.py`
+  `backend/nudenet_detector.py`
+  `backend/model_health.py`
+  `backend/sam3_refiner.py`
+  `backend/toriigate_tagger.py`
+  `backend/artist_identifier.py`
+- Observed problem:
+  Aesthetic scoring, older tagger flows, censor detector variants, artist identification, model-health probes, and similarity search could crash or freeze the computer when large model loads, GPU inference, and memory-heavy preprocessing/search overlapped. The mitigation now serializes heavyweight critical sections and checks CUDA headroom, but it is intentionally a safety gate rather than a full resource scheduler.
+- Why this is debt:
+  A coarse gate is much safer than uncoordinated large-model execution, but it cannot optimize queue order, reserve model-specific VRAM precisely, reuse loaded models based on pressure, or provide user-visible scheduling. New AI features still need code review discipline to opt in.
+- Better long-term shape:
+  Add a central AI job scheduler with model/device budgets, priority, cancellation, timeout/progress reporting, per-runtime VRAM estimates, and an allowlist test that fails when a new large-model owner bypasses the guard.
+- Revisit trigger:
+  Revisit before adding another heavyweight local model, enabling concurrent background AI jobs by default, or exposing multi-GPU / GPU-priority settings.
+- Deferred because:
+  The immediate user-facing blocker was computer crashes. The current guard fixes the root crash class without globally slowing normal browsing, scanning, sorting, or cheap metadata operations.
+
+### Debt-17: Similarity search is bounded and chunked but still linear-scan
+
+- Status: partially mitigated
+- Type: performance / scalability debt
+- Impact: medium to high
+- Risk if ignored:
+  Very large libraries will no longer build one giant embedding matrix, but every search still scans all candidate embeddings in chunks. Latency will grow with library size, and duplicate search remains a bounded synchronous all-pairs style workflow.
+- Related files:
+  `backend/similarity.py`
+  `backend/services/similarity_service.py`
+  `backend/tests/test_resource_safety.py`
+- Observed problem:
+  Previous similarity search loaded all matching embeddings with `fetchall()` and built a full NumPy matrix, which risked OOM on large libraries. The fix changed search-by-id and search-by-upload to DB `fetchmany()` chunks plus a bounded top-k heap.
+- Why this is debt:
+  Chunking removes the crash-shaped memory spike, but it does not create an index. Large-library speed will eventually need an approximate nearest-neighbor or persisted vector-index strategy.
+- Better long-term shape:
+  Add a local ANN index or SQLite-compatible vector index with content-fingerprint invalidation, background rebuilds, and safe fallback to chunked exact search when the index is missing or stale.
+- Revisit trigger:
+  Revisit when libraries above tens/hundreds of thousands of images become common test targets, or when similarity latency becomes a visible UX blocker.
+- Deferred because:
+  The urgent requirement was to stop computer-crashing memory spikes while preserving correctness and acceptable speed. A vector index needs separate design and invalidation work.
+
+### Debt-18: Large-image edit paths still need deeper crop-first auditing
+
+- Status: partially mitigated
+- Type: memory / image-processing debt
+- Impact: medium
+- Risk if ignored:
+  The most dangerous censor save-operation paths now have budgets and cached-mask crop application, but future brush/filter/mask operations could reintroduce full-canvas temporary allocations on very large images.
+- Related files:
+  `backend/services/censor_service.py`
+  `backend/censor.py`
+  `frontend/js/censor-edit.js`
+- Observed problem:
+  Censor save operations accepted large operation lists, large inline masks, many stroke/polygon points, and full-image filters without enough server-side resource budgeting. Cached masks were also expanded as full-image alpha masks before application.
+- Why this is debt:
+  The new limits stop unbounded payloads and crop cached masks, but the image editor has many operation types and client/server surfaces. A full memory-profile pass should confirm every operation uses the smallest affected region possible.
+- Better long-term shape:
+  Define per-operation memory budgets, prefer bbox/crop transforms for every localized edit, add stress tests for high-resolution images, and show user-friendly “too large for this operation” errors rather than risking process or machine instability.
+- Revisit trigger:
+  Revisit before adding new censor tools, batch-edit features, or high-resolution export paths.
+- Deferred because:
+  The immediate crash-risk fixes covered the known high-risk server paths and were validated by resource-safety tests; a full image-editor memory audit is larger than this stability slice.
