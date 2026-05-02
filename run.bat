@@ -125,7 +125,7 @@ set OLD_HASH=
 if !FIRST_RUN! EQU 1 (
     echo ==========================================
     echo   First run - setting up environment...
-    echo   This may take 5-10 minutes.
+    echo   This may take 10-20 minutes if GPU runtimes are needed.
     echo ==========================================
     echo.
 
@@ -161,9 +161,24 @@ if !FIRST_RUN! EQU 1 (
     )
 )
 
+if !NEED_INSTALL! EQU 0 (
+    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm, sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2" >nul 2>&1
+    if errorlevel 1 (
+        echo [INFO] Python runtime packages look incomplete. Reinstalling dependencies...
+        set NEED_INSTALL=1
+    )
+)
+
 if !NEED_INSTALL! EQU 1 (
-    echo [2/3] Installing dependencies...
-    backend\venv\Scripts\python.exe backend\launcher_pip.py install -r backend\requirements.txt
+    echo [INFO] Preparing Python build tools for source-only packages...
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install setuptools wheel
+    if errorlevel 1 (
+        echo [ERROR] Failed to install Python build tools.
+        pause
+        exit /b 1
+    )
+    echo [2/3] Installing full AI runtime dependencies...
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation -r backend\requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause
@@ -190,6 +205,14 @@ backend\venv\Scripts\python.exe backend\repair_onnxruntime.py --auto
 if errorlevel 1 (
     echo [WARN] Could not auto-repair ONNX Runtime package state.
     echo        The app can still start, but WD14 tagging may stay on CPU.
+)
+echo.
+
+echo [Info] Checking Windows PyTorch / SAM3 runtime package state...
+backend\venv\Scripts\python.exe backend\repair_torch_runtime.py --auto
+if errorlevel 1 (
+    echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.
+    echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.
 )
 echo.
 

@@ -10,6 +10,7 @@ Tests:
 
 Priority: CRITICAL (file operations)
 """
+import asyncio
 import os
 import sys
 import json
@@ -397,6 +398,27 @@ class TestScan:
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
+
+    def test_scan_reset_restores_canonical_progress_fields(self, isolated_sorting_service):
+        """Reset should not return a partial idle state that breaks frontend progress reads."""
+        isolated_sorting_service._scan_progress = {
+            "status": "error",
+            "step": "error",
+            "current": 4,
+            "processed": 4,
+            "total": 10,
+            "message": "stuck",
+        }
+        isolated_sorting_service._scan_worker_thread = None
+
+        result = isolated_sorting_service.reset_scan_progress()
+        progress = isolated_sorting_service.get_scan_progress()
+
+        assert result["status"] == "reset"
+        assert progress["status"] == "idle"
+        assert progress["message"] == "Reset by user"
+        for key in ["counted", "import_complete", "metadata_total_final", "total_final", "quick_import"]:
+            assert key in progress
 
     def test_scan_cleanup_missing_removes_stale_entries_in_scope(self, test_client, tmp_path: Path):
         """Folder sync should remove indexed rows whose files no longer exist under the scanned scope."""
@@ -885,6 +907,37 @@ class TestBatchMove:
         assert (data.get("detail") or data.get("error")) == "Cannot reset batch move while it is still running"
         assert isolated_sorting_service.get_batch_move_progress()["status"] == "running"
         assert isolated_sorting_service.get_batch_move_progress()["current"] == 2
+
+    def test_batch_copy_completion_message_uses_copy_word(self, tmp_path: Path, isolated_sorting_service, monkeypatch):
+        """Copy mode progress must not tell users files were moved."""
+        from services import sorting_service as sorting_service_module
+        from services.sorting_service import BatchMoveRequest
+
+        background_tasks = BackgroundTasks()
+        source_path = tmp_path / "source.png"
+        source_path.write_bytes(b"image")
+
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_count", lambda **_kwargs: 1)
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_ids", lambda **_kwargs: [1])
+        monkeypatch.setattr(
+            sorting_service_module.db,
+            "get_images_by_ids",
+            lambda _ids: {1: {"id": 1, "filename": "source.png", "path": str(source_path)}},
+        )
+        monkeypatch.setattr(isolated_sorting_service, "_filter_readable_image_ids", lambda ids: (ids, []))
+        monkeypatch.setattr(isolated_sorting_service, "_resolve_image_path", lambda _path: str(source_path))
+        monkeypatch.setattr(isolated_sorting_service, "_apply_file_operation", lambda **_kwargs: None)
+
+        isolated_sorting_service.batch_move_images(
+            BatchMoveRequest(destination_folder=str(tmp_path / "dest"), operation="copy"),
+            background_tasks,
+        )
+        background_tasks.tasks[0].func()
+
+        progress = isolated_sorting_service.get_batch_move_progress()
+        assert progress["status"] == "done"
+        assert "Copied 1 images" in progress["message"]
+        assert "Moved" not in progress["message"]
 
 
 class TestSortSession:
@@ -1888,3 +1941,110 @@ class TestSecurity:
 
         # Should not crash, either succeeds with no matches or rejects
         assert response.status_code in [200, 400]
+
+
+class TestImportUploadedFilesSecurity:
+    """Regression tests for the path-traversal hardening in import_uploaded_files.
+
+    Background: a previous version of the endpoint passed the browser-supplied
+    ``UploadFile.filename`` directly into ``import_dir / filename``. A malicious
+    or buggy client could submit ``"../../etc/passwd.png"`` and write outside
+    ``import_dir``. The fix reduces the filename to its basename and rejects
+    anything that resolves outside the import directory.
+    """
+
+    @pytest.fixture
+    def fake_upload(self):
+        """Build a minimal stand-in for FastAPI's UploadFile."""
+        class _FakeUpload:
+            def __init__(self, filename: str, content: bytes = b"\x89PNG\r\n\x1a\n"):
+                self.filename = filename
+                self._content = content
+
+            async def read(self) -> bytes:
+                return self._content
+
+        return _FakeUpload
+
+    def test_rejects_parent_directory_traversal(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        uploads = [
+            fake_upload("../../escape.png"),
+            fake_upload("..\\..\\windows-escape.png"),
+            fake_upload("/abs/path/escape.png"),
+        ]
+        asyncio.run(service.import_uploaded_files(uploads))
+
+        # All saved files must land inside import_dir as plain basenames.
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        for child in import_dir.iterdir():
+            child.resolve().relative_to(import_dir)  # raises if it escaped
+
+    def test_rejects_dotfile_only_filename(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        # ".png" on its own (suffix matches) but the basename is empty/dotfile —
+        # the service should fall back to a numbered "upload_N.png" name.
+        uploads = [fake_upload(".png")]
+        asyncio.run(service.import_uploaded_files(uploads))
+
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        names = [p.name for p in import_dir.iterdir()]
+        assert all(not n.startswith(".") for n in names), names
+
+    def test_skips_files_with_disallowed_extension(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        uploads = [fake_upload("evil.exe"), fake_upload("safe.png")]
+        result = asyncio.run(service.import_uploaded_files(uploads))
+
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        saved = list(import_dir.iterdir()) if import_dir.exists() else []
+        assert len(saved) == 1
+        assert saved[0].suffix.lower() == ".png"
+        assert result["total"] == 1
+
+
+class TestResolveDropSecurity:
+    """Folder names from the browser must not escape common image roots."""
+
+    def test_rejects_traversal_in_folder_name(self, isolated_sorting_service):
+        # ``../../Windows`` etc. must not match any of the common roots even if
+        # such a path coincidentally exists on disk.
+        assert isolated_sorting_service.resolve_drop("../etc", [], None) == {"folder_path": ""}
+        assert isolated_sorting_service.resolve_drop("..\\Windows", [], None) == {"folder_path": ""}
+
+    def test_rejects_separator_in_folder_name(self, isolated_sorting_service):
+        assert isolated_sorting_service.resolve_drop("foo/bar", [], None) == {"folder_path": ""}
+        assert isolated_sorting_service.resolve_drop("C:\\Windows", [], None) == {"folder_path": ""}
+
+    def test_like_wildcards_are_escaped(self, isolated_sorting_service):
+        # ``%`` is a SQL LIKE wildcard. The fix must escape it before binding,
+        # so submitting ``%`` does not match every row.
+        result = isolated_sorting_service.resolve_drop("%", [], None)
+        assert result["folder_path"] == ""

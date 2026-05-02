@@ -99,7 +99,7 @@ def _prepare_pending_update(
         encoding="utf-8",
     )
 
-    archive_path = downloads / f"sd-image-sorter-v{target_version}-linux-mac.tar.zip"
+    archive_path = downloads / f"sd-image-sorter-v{target_version}-linux.tar.zip"
     with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for file_path in sorted((tmp_path / "payload").rglob("*")):
             if file_path.is_dir():

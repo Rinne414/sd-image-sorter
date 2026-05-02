@@ -666,17 +666,18 @@ class Censor:
         **kwargs
     ) -> Image.Image:
         """Apply censoring with specified style."""
-        if style == "mosaic":
+        normalized_style = str(style or "mosaic").lower()
+        if normalized_style == "mosaic":
             block_size = kwargs.get("block_size", 16)
             return Censor.apply_mosaic(image, regions, block_size)
-        elif style == "black_bar":
+        elif normalized_style in {"black_bar", "solid", "black"}:
             return Censor.apply_bar(image, regions, (0, 0, 0))
-        elif style == "white_bar":
+        elif normalized_style == "white_bar":
             return Censor.apply_bar(image, regions, (255, 255, 255))
-        elif style == "blur":
+        elif normalized_style == "blur":
             blur_radius = kwargs.get("blur_radius", 20)
             return Censor.apply_blur(image, regions, blur_radius)
-        elif style == "sticker":
+        elif normalized_style == "sticker":
             sticker_path = kwargs.get("sticker_path")
             return Censor.apply_sticker(image, regions, sticker_path)
         else:

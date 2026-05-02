@@ -94,6 +94,13 @@ def _score_batch(force: bool = False):
         service.finish_scoring_progress()
 
 
+@router.post("/aesthetic/cancel")
+def cancel_scoring(service: AestheticService = Depends(get_aesthetic_service)):
+    """Request cancellation of the running aesthetic scoring batch."""
+    cancelled = service.request_cancel()
+    return {"status": "cancelled" if cancelled else "not_running"}
+
+
 @router.get("/aesthetic/progress")
 def scoring_progress(service: AestheticService = Depends(get_aesthetic_service)):
     """Get the progress of background aesthetic scoring."""

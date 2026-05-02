@@ -1508,11 +1508,7 @@ const Gallery = {
         return this._fallbackParseMeta(metaObj, image);
     },
 
-    /**
-     * Fallback parser for metadata (stub - should be implemented based on project needs)
-     */
     _fallbackParseMeta(metaObj, image) {
-        // Basic fallback - return empty parsed data
         return {
             generation_params: {},
             is_img2img: false,

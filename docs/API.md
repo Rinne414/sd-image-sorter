@@ -463,6 +463,15 @@ List subdirectories for folder picker flows.
 #### GET /api/models/status
 Get local model/runtime readiness status.
 
+#### GET /api/models/mirror
+Get the current download mirror preference.
+
+#### POST /api/models/mirror
+Set the download mirror preference (auto, hf-mirror, modelscope).
+
+#### GET /api/models/download-progress
+Get active model download progress (bytes downloaded, total size).
+
 #### POST /api/models/prepare
 Prepare or download a model/runtime.
 
@@ -698,8 +707,23 @@ Score a single image.
 #### POST /api/aesthetic/score-all
 Start batch aesthetic scoring.
 
+#### POST /api/aesthetic/cancel
+Cancel the running aesthetic scoring batch.
+
 #### GET /api/aesthetic/progress
 Get batch aesthetic scoring progress.
+
+#### POST /api/similarity/cancel
+Cancel the running similarity embedding batch.
+
+#### POST /api/artists/batch-cancel
+Cancel the running artist batch identification.
+
+#### POST /api/resolve-drop
+Resolve dropped filenames or folder name to a filesystem path.
+
+#### POST /api/import-files
+Import uploaded image files directly into the gallery.
 
 ### Updates
 

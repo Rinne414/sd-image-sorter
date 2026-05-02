@@ -22,7 +22,7 @@ from typing import Any, Optional
 from app_info import (
     APP_VERSION,
     GITHUB_LATEST_RELEASE_API_URL,
-    LINUX_MAC_FULL_ASSET_TEMPLATE,
+    LINUX_FULL_ASSET_TEMPLATE,
     PATCH_ASSET_TEMPLATE,
     WINDOWS_FULL_ASSET_TEMPLATE,
 )
@@ -126,7 +126,11 @@ class UpdateService:
         self._cache_ttl_seconds = 15 * 60
 
     def _platform_key(self) -> str:
-        return "windows" if sys.platform == "win32" else "linux-mac"
+        if sys.platform == "win32":
+            return "windows"
+        if sys.platform.startswith("linux"):
+            return "linux"
+        return "unsupported"
 
     def _clear_cache(self) -> None:
         with self._lock:
@@ -205,10 +209,8 @@ class UpdateService:
         if self._is_default_github_channel():
             return (
                 f"Failed to reach the default GitHub update channel: {detail}. "
-                "Mainland China users may not be able to access GitHub directly. "
-                "Please enable VPN and try again. Advanced users can still configure "
-                "SD_IMAGE_SORTER_UPDATE_API_URL, SD_IMAGE_SORTER_UPDATE_WEB_URL, or "
-                "SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX in the package-local .env."
+                "Your network may not be able to access GitHub directly. "
+                "Please check your connection or enable VPN and try again."
             )
         return f"Failed to reach the configured update channel: {detail}"
 
@@ -270,8 +272,8 @@ class UpdateService:
         ]
         if platform_key == "windows":
             preferred_names.append(("full", WINDOWS_FULL_ASSET_TEMPLATE.format(version=latest_version)))
-        else:
-            preferred_names.append(("full", LINUX_MAC_FULL_ASSET_TEMPLATE.format(version=latest_version)))
+        elif platform_key == "linux":
+            preferred_names.append(("full", LINUX_FULL_ASSET_TEMPLATE.format(version=latest_version)))
         manifest_name = f"sd-image-sorter-v{latest_version}-release-manifest.json"
         manifest_download_url = ""
         for asset in assets:

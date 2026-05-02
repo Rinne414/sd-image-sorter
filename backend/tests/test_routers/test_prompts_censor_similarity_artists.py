@@ -207,6 +207,28 @@ class TestCensorRouterValidation:
 
         assert response.status_code == expected_status
 
+    @pytest.mark.parametrize("style", ["black_bar", "white_bar", "solid"])
+    def test_legacy_preview_accepts_current_bar_styles(self, test_client, test_db, tmp_path, style):
+        image_path = tmp_path / f"censor-{style}.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/preview",
+            json={
+                "image_id": image_id,
+                "regions": [[0, 0, 16, 16]],
+                "style": style,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["preview"].startswith("data:image/jpeg;base64,")
+
     def test_save_data_validation_rejects_invalid_metadata(self, test_client):
         response = test_client.post(
             "/api/censor/save-data",
@@ -1347,6 +1369,8 @@ class TestSimilarityRouterValidation:
         assert captured["path"] == str(resolved_path)
 
     def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
+        import time
+        from routers import models as models_router
         from services import model_service
 
         def raise_auth_wall(self):
@@ -1355,18 +1379,24 @@ class TestSimilarityRouterValidation:
             )
 
         monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_auth_wall)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "downloading"
 
-        assert response.status_code == 409
-        data = response.json()
-        assert data["type"] == "CivitaiLoginRequired"
-        assert "Civitai" in data["message"]
-        assert isinstance(data["manual_steps"], list)
-        assert data["manual_steps"]
-        assert data["external_url"] == model_service.PRIVACY_YOLO_PAGE_URL
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+        assert pr["status"] == "error"
+        assert "Civitai" in pr["message"]
 
     def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
+        import time
+        from routers import models as models_router
         from services import model_service
 
         def raise_prepare_failure(self):
@@ -1378,16 +1408,20 @@ class TestSimilarityRouterValidation:
             )
 
         monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_prepare_failure)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "downloading"
 
-        assert response.status_code == 502
-        data = response.json()
-        assert data["type"] == "ModelPreparationFailed"
-        assert data["reason"] == "Downloaded file was not a valid zip archive."
-        assert data["model_id"] == "censor-legacy"
-        assert isinstance(data["manual_steps"], list)
-        assert data["manual_steps"]
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+        assert pr["status"] == "error"
+        assert "Privacy YOLO" in pr["message"] or "preparation failed" in pr["message"].lower()
 
     def test_similarity_search_upload_and_duplicates_ignore_unreadable_embedded_rows(self, test_db, tmp_path, monkeypatch):
         import similarity as similarity_module
@@ -1463,6 +1497,14 @@ class TestArtistsRouterValidation:
         response = test_client.post("/api/artists/identify-batch", json={"image_ids": []})
 
         assert response.status_code in [400, 422]
+
+    def test_identify_batch_rejects_unbounded_image_id_lists(self, test_client):
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={"image_ids": list(range(1, 10002))},
+        )
+
+        assert response.status_code == 400
 
     def test_identify_batch_rejects_local_model_without_path(self, test_client):
         response = test_client.post(

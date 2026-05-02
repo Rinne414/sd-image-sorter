@@ -1,15 +1,24 @@
 """Service layer for model inventory and first-run model preparation."""
 from __future__ import annotations
 
+import importlib
 import json
+import logging
+import os
+import platform
+import shutil
 import tempfile
+import subprocess
+import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
-from config import TAGGER_MODELS, get_sam3_model_dir, get_wd14_model_dir, get_yolo_model_dir
+from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_wd14_model_dir, get_yolo_model_dir
 from model_health import get_model_health, get_sam3_checkpoint_path
 
 
@@ -20,6 +29,10 @@ PRIVACY_YOLO_DIRECT_URL = (
     "https://civitai.red/api/download/models/1965032?type=Archive&format=Other"
 )
 SAM3_MODELSCOPE_URL = "https://modelscope.cn/models/facebook/sam3/files"
+ARTIST_LSNET_RUNTIME_REVISION = "416d945e65b81ced93f1e762349d790ca92106b1"
+ARTIST_LSNET_RUNTIME_ZIP_URL = (
+    f"https://github.com/spawner1145/comfyui-lsnet/archive/{ARTIST_LSNET_RUNTIME_REVISION}.zip"
+)
 
 _DOWNLOAD_HEADERS = {
     "User-Agent": (
@@ -31,6 +44,11 @@ _DOWNLOAD_HEADERS = {
 }
 _MAX_PRIVACY_YOLO_ZIP_ENTRIES = 512
 _MAX_PRIVACY_YOLO_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
+_MAX_ARTIST_RUNTIME_ZIP_ENTRIES = 1024
+_MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
+_model_logger = logging.getLogger(__name__)
+_download_progress = {"active": False, "url": "", "downloaded": 0, "total": 0, "filename": ""}
+_download_progress_lock = threading.Lock()
 
 
 class ExternalAuthRequiredError(RuntimeError):
@@ -51,10 +69,236 @@ class ModelPreparationFailedError(RuntimeError):
         self.status_code = status_code
 
 
+_ALLOWED_DOWNLOAD_SCHEMES = ("https", "http")
+
+
 def urlopen_with_ua(url: str, timeout: int = 30):
-    """Open a URL with a browser-style User-Agent for CDNs that reject urllib."""
+    """Open a URL with a browser-style User-Agent for CDNs that reject urllib.
+
+    Hardened against env-var-supplied ``file://`` / ``ftp://`` URLs that could
+    coerce ``urlopen`` into reading local files or talking to unintended
+    services. Scheme is restricted to ``https`` (preferred) or ``http``.
+    """
+    from urllib.parse import urlparse
+
+    scheme = (urlparse(url).scheme or "").lower()
+    if scheme not in _ALLOWED_DOWNLOAD_SCHEMES:
+        raise ValueError(
+            f"Refusing to download from scheme {scheme!r}; "
+            f"only {_ALLOWED_DOWNLOAD_SCHEMES} are allowed."
+        )
     req = urllib.request.Request(url, headers=_DOWNLOAD_HEADERS)
     return urllib.request.urlopen(req, timeout=timeout)
+
+
+def get_download_progress() -> dict:
+    with _download_progress_lock:
+        return dict(_download_progress)
+
+
+def _set_download_progress(**updates: Any) -> None:
+    with _download_progress_lock:
+        _download_progress.update(updates)
+
+
+def _direct_download_file(url: str, dest: Path, *, timeout: int = 300) -> Path:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _model_logger.info("Downloading %s → %s", url, dest)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    delay_ms = max(0, int(os.environ.get("SD_IMAGE_SORTER_DOWNLOAD_CHUNK_DELAY_MS", "0") or "0"))
+    _set_download_progress(active=True, url=url, downloaded=0, total=0, filename=dest.name)
+    try:
+        with urlopen_with_ua(url, timeout=timeout) as src, open(tmp, "wb") as dst:
+            total = int(src.headers.get("Content-Length") or 0)
+            _set_download_progress(total=total)
+            downloaded = 0
+            while True:
+                chunk = src.read(1 << 20)
+                if not chunk:
+                    break
+                dst.write(chunk)
+                downloaded += len(chunk)
+                _set_download_progress(downloaded=downloaded)
+                if delay_ms:
+                    time.sleep(delay_ms / 1000)
+        tmp.replace(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    finally:
+        _set_download_progress(active=False, downloaded=0, total=0)
+    return dest
+
+
+def _safe_extract_single_root_zip(zip_path: Path, target_dir: Path, *, max_entries: int, max_bytes: int) -> Path:
+    with tempfile.TemporaryDirectory(prefix=f"{target_dir.name}-extract-") as tmp_dir:
+        extract_dir = Path(tmp_dir) / "extract"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        extract_root = extract_dir.resolve()
+        total_uncompressed_bytes = 0
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            members = archive.infolist()
+            if len(members) > max_entries:
+                raise ValueError("Zip contains too many entries to extract safely")
+            for member in members:
+                normalized_name = str(member.filename or "").replace("\\", "/").strip()
+                relative_name = PurePosixPath(normalized_name)
+                if (
+                    not normalized_name
+                    or relative_name.is_absolute()
+                    or normalized_name[:2].endswith(":")
+                    or ".." in relative_name.parts
+                ):
+                    raise ValueError(f"Zip contains an unsafe path: {member.filename}")
+                member_path = (extract_root / relative_name).resolve()
+                try:
+                    member_path.relative_to(extract_root)
+                except ValueError as exc:
+                    raise ValueError(f"Zip contains an unsafe path: {member.filename}") from exc
+                if not member.is_dir():
+                    total_uncompressed_bytes += member.file_size
+                    if total_uncompressed_bytes > max_bytes:
+                        raise ValueError("Zip uncompressed size exceeds the safe extraction limit")
+            archive.extractall(extract_root)
+
+        extracted_roots = [path for path in extract_dir.iterdir() if path.is_dir()]
+        if len(extracted_roots) != 1:
+            raise ValueError("Zip must contain exactly one root directory")
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        shutil.move(str(extracted_roots[0]), str(target_dir))
+    return target_dir
+
+
+def _artist_runtime_url() -> str:
+    return os.environ.get("SD_IMAGE_SORTER_ARTIST_RUNTIME_ZIP_URL") or ARTIST_LSNET_RUNTIME_ZIP_URL
+
+
+def _artist_resolve_url(repo_id: str, filename: str, *, hf_base: str) -> str:
+    return f"{hf_base.rstrip('/')}/{repo_id}/resolve/main/{filename}"
+
+
+def _artist_checkpoint_url(repo_id: str, filename: str, *, hf_base: str) -> str:
+    if filename == "class_mapping.csv":
+        configured = os.environ.get("SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL")
+    else:
+        configured = os.environ.get("SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL")
+    return configured or _artist_resolve_url(repo_id, filename, hf_base=hf_base)
+
+
+def _sam3_download_urls() -> List[str]:
+    configured = os.environ.get("SD_IMAGE_SORTER_SAM3_URLS")
+    if configured:
+        return [url.strip() for url in configured.split(",") if url.strip()]
+    return [
+        "https://modelscope.cn/models/facebook/sam3/resolve/master/model.safetensors",
+    ]
+
+
+def _repair_sam3_runtime_if_possible() -> Dict[str, Any]:
+    if platform.system() != "Windows":
+        return {"attempted": False, "reason": "non_windows"}
+    if os.environ.get("SD_IMAGE_SORTER_SKIP_TORCH_REPAIR", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return {"attempted": False, "reason": "disabled"}
+
+    repair_script = Path(__file__).resolve().parents[1] / "repair_torch_runtime.py"
+    if not repair_script.exists():
+        return {"attempted": False, "reason": "repair_script_missing"}
+
+    _model_logger.info("Checking and repairing SAM3/PyTorch runtime before reporting SAM3 readiness")
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(repair_script), "--auto"],
+            cwd=str(repair_script.parent),
+            text=True,
+            timeout=int(os.environ.get("SD_IMAGE_SORTER_TORCH_REPAIR_TIMEOUT", "3600") or "3600"),
+            check=False,
+        )
+    except Exception as exc:
+        _model_logger.warning("SAM3 runtime repair could not be started: %s", exc)
+        return {"attempted": True, "ok": False, "error": str(exc)}
+
+    importlib.invalidate_caches()
+    # Reset SAM3 module-level singletons so a fresh import picks up the newly
+    # installed runtime. We hold ``exclusive_ai_runtime("sam3-load")`` so
+    # in-flight SAM3 work elsewhere does not observe a half-reset state.
+    try:
+        from ai_runtime_guard import exclusive_ai_runtime
+    except Exception as exc:  # noqa: BLE001 — only fires if the guard module is unavailable
+        _model_logger.warning(
+            "ai_runtime_guard unavailable; resetting SAM3 singletons without a lock: %s", exc
+        )
+        exclusive_ai_runtime = None  # type: ignore[assignment]
+
+    def _reset_sam3_singletons() -> None:
+        try:
+            import sam3_refiner
+
+            sam3_refiner._sam3_available = None
+            sam3_refiner._sam3_model = None
+            sam3_refiner._sam3_processor = None
+            sam3_refiner._sam3_device = None
+        except ImportError as exc:
+            _model_logger.warning("Could not import sam3_refiner to reset singletons: %s", exc)
+        except AttributeError as exc:
+            _model_logger.warning("sam3_refiner singleton attribute layout changed: %s", exc)
+
+    if exclusive_ai_runtime is None:
+        _reset_sam3_singletons()
+    else:
+        with exclusive_ai_runtime("sam3-load"):
+            _reset_sam3_singletons()
+
+    if completed.returncode != 0:
+        _model_logger.warning("SAM3 runtime repair exited with code %s", completed.returncode)
+        return {"attempted": True, "ok": False, "returncode": completed.returncode}
+    return {"attempted": True, "ok": True}
+
+
+def _materialize_existing_file(source: Path, dest: Path) -> bool:
+    if not source.exists() or dest.exists():
+        return dest.exists()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, dest)
+    except OSError:
+        shutil.copy2(source, dest)
+    return True
+
+
+def _copy_existing_tree(source: Path, dest: Path, marker_name: str) -> bool:
+    if not (source / marker_name).exists():
+        return False
+    if (dest / marker_name).exists():
+        return True
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(source, dest)
+    return True
+
+
+def _ensure_artist_runtime_direct() -> str:
+    target_dir = Path(get_artist_model_dir()) / "comfyui-lsnet-runtime"
+    if (target_dir / "lsnet_model").exists():
+        return str(target_dir.resolve())
+
+    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+        legacy_dir = PROJECT_ROOT / "models" / "artist" / "comfyui-lsnet-runtime"
+        if _copy_existing_tree(legacy_dir, target_dir, "lsnet_model"):
+            return str(target_dir.resolve())
+
+    with tempfile.TemporaryDirectory(prefix="kaloscope-runtime-") as tmp_dir:
+        zip_path = Path(tmp_dir) / "comfyui-lsnet-runtime.zip"
+        _direct_download_file(_artist_runtime_url(), zip_path, timeout=300)
+        _safe_extract_single_root_zip(
+            zip_path,
+            target_dir,
+            max_entries=_MAX_ARTIST_RUNTIME_ZIP_ENTRIES,
+            max_bytes=_MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES,
+        )
+    if not (target_dir / "lsnet_model").exists():
+        raise RuntimeError("Downloaded LSNet runtime did not contain lsnet_model.")
+    return str(target_dir.resolve())
 
 
 def build_civitai_auth_error(target_dir: Path) -> Dict[str, Any]:
@@ -140,8 +384,6 @@ class ModelService:
         def with_status(*, is_ready: bool, is_downloaded: bool) -> Dict[str, str]:
             if is_ready:
                 return {"status": "ready", "status_label": "Ready"}
-            if is_downloaded:
-                return {"status": "downloaded", "status_label": "Downloaded"}
             return {"status": "missing", "status_label": "Missing"}
 
         # -- WD14 --
@@ -182,6 +424,8 @@ class ModelService:
         # -- Artist --
         if artist["available"]:
             artist_message_key = "models.artist.ready"
+        elif not artist.get("checkpoint_path") and not artist.get("has_download_source"):
+            artist_message_key = "models.artist.noSource"
         else:
             artist_message_key = "models.artist.missing"
 
@@ -210,13 +454,21 @@ class ModelService:
 
         # -- SAM3 --
         sam3 = censor["sam3"]
+        sam3_missing_packages = sam3.get("missing_dependency_packages") or sam3.get("missing_dependencies") or []
+        sam3_message_params = {"deps": ", ".join(sam3_missing_packages)}
         if sam3["available"]:
             sam3_key = "models.sam3.ready"
-        elif sam3["checkpoint_path"] and not sam3.get("missing_dependencies"):
+        elif sam3["checkpoint_path"] and sam3_missing_packages and sam3.get("torch_version") and sam3.get("torch_cuda_build") is None:
+            sam3_key = "models.sam3.missingDepsCpuTorch"
+        elif sam3["checkpoint_path"] and sam3_missing_packages:
+            sam3_key = "models.sam3.missingDeps"
+        elif sam3["checkpoint_path"]:
             if sam3.get("torch_cuda_build") is None:
                 sam3_key = "models.sam3.cpuTorch"
-            else:
+            elif not sam3.get("cuda_available"):
                 sam3_key = "models.sam3.noCuda"
+            else:
+                sam3_key = "models.sam3.missing"
         else:
             sam3_key = "models.sam3.missing"
 
@@ -277,8 +529,13 @@ class ModelService:
                 "message": artist["message"],
                 "message_key": artist_message_key,
                 "path": artist["checkpoint_path"],
-                "download_supported": True,
-                "sources": ["auto", "huggingface", "modelscope"],
+                "download_supported": bool(artist.get("has_download_source", True)),
+                "sources": [
+                    s for s in ["auto", "huggingface", "modelscope"]
+                    if s == "auto"
+                    or (s == "huggingface" and artist.get("huggingface_available"))
+                    or (s == "modelscope" and artist.get("modelscope_available"))
+                ],
                 "runtime_path": artist["runtime_path"],
             },
             {
@@ -329,8 +586,14 @@ class ModelService:
                 ),
                 "message": sam3["message"],
                 "message_key": sam3_key,
+                "message_params": sam3_message_params,
                 "path": sam3["checkpoint_path"],
                 "download_supported": True,
+                "setup_steps": [
+                    "First launch installs SAM3 Python runtime packages before the server starts; no manual pip step should be needed.",
+                    "Click Prepare / Download to fetch model.safetensors, or place sam3.pt / model.safetensors manually only if the download fails: " + str(Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"),
+                    "On Windows with NVIDIA, the launcher installs CUDA Torch before the app opens so SAM3 can run immediately after the checkpoint is ready.",
+                ],
                 "external_links": [
                     {
                         "label": "ModelScope",
@@ -502,14 +765,78 @@ class ModelService:
             }
 
         if normalized_model_id == "artist":
-            from artist_identifier import prepare_artist_assets
+            from config import (
+                ARTIST_HF_MODEL_ID,
+                ARTIST_KALOSCOPE_CHECKPOINT,
+                ARTIST_KALOSCOPE_CLASS_MAPPING,
+                get_download_mirror,
+            )
 
-            prepared = prepare_artist_assets(source or "auto")
+            runtime_path = _ensure_artist_runtime_direct()
+            mirror = get_download_mirror()
+            # Map mirror selection to a base URL for HuggingFace-style resolves.
+            # Note: Kaloscope is hosted on HuggingFace, not ModelScope. When the
+            # user picks "modelscope" they're typically signalling "I can't
+            # reach huggingface.co"; respect that by routing through hf-mirror
+            # unless an explicit env override is set. The previous code
+            # silently fell through to huggingface.co, defeating the choice.
+            if mirror == "hf-mirror":
+                hf_base = "https://hf-mirror.com"
+            elif mirror == "modelscope":
+                if (
+                    os.environ.get("SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL")
+                    or os.environ.get("SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL")
+                ):
+                    # User configured explicit URLs; honor them via the override
+                    # path inside _artist_checkpoint_url. hf_base is unused.
+                    hf_base = "https://hf-mirror.com"
+                else:
+                    _model_logger.warning(
+                        "Mirror 'modelscope' is selected but Kaloscope is not on ModelScope; "
+                        "falling back to hf-mirror.com. Set SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL "
+                        "and SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL to override."
+                    )
+                    hf_base = "https://hf-mirror.com"
+            else:  # "auto" and any unknown value (defensive — VALID_MIRRORS gates this).
+                hf_base = "https://huggingface.co"
+            local_dir = Path(get_artist_model_dir()) / "kaloscope2.0"
+            checkpoint_dest = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
+            mapping_dest = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
+
+            if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+                legacy_dir = PROJECT_ROOT / "models" / "artist" / "kaloscope2.0"
+                _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CHECKPOINT, checkpoint_dest)
+                _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CLASS_MAPPING, mapping_dest)
+
+            if not checkpoint_dest.exists():
+                ckpt_url = _artist_checkpoint_url(ARTIST_HF_MODEL_ID, ARTIST_KALOSCOPE_CHECKPOINT, hf_base=hf_base)
+                _direct_download_file(ckpt_url, checkpoint_dest, timeout=600)
+            if not mapping_dest.exists():
+                map_url = _artist_checkpoint_url(ARTIST_HF_MODEL_ID, ARTIST_KALOSCOPE_CLASS_MAPPING, hf_base=hf_base)
+                _direct_download_file(map_url, mapping_dest, timeout=60)
+
+            missing_parts = []
+            if not runtime_path:
+                missing_parts.append("LSNet runtime")
+            if not checkpoint_dest.exists():
+                missing_parts.append("Kaloscope checkpoint")
+            if not mapping_dest.exists():
+                missing_parts.append("class mapping")
+            if missing_parts:
+                raise RuntimeError(
+                    f"Artist files partially downloaded but still missing: {', '.join(missing_parts)}. "
+                    f"Check server logs for download errors."
+                )
+
             return {
                 "status": "ok",
                 "model_id": normalized_model_id,
-                "message": f"Artist assets are ready via {prepared['source']}.",
-                "paths": prepared,
+                "message": f"Artist checkpoint downloaded via direct HTTP from {hf_base}.",
+                "paths": {
+                    "runtime_path": str(Path(runtime_path).resolve()),
+                    "checkpoint_path": str(checkpoint_dest.resolve()),
+                    "class_mapping_path": str(mapping_dest.resolve()),
+                },
             }
 
         if normalized_model_id == "censor-nudenet":
@@ -535,32 +862,55 @@ class ModelService:
             }
 
         if normalized_model_id == "sam3":
-            checkpoint_before = get_sam3_checkpoint_path()
-            if checkpoint_before:
+            def sam3_prepare_result(checkpoint_path: Optional[str]) -> Dict[str, Any]:
+                health = get_model_health()["censor"]["sam3"]
+                is_ready = bool(health.get("available"))
                 return {
-                    "status": "ok",
+                    "status": "ok" if is_ready else "needs_runtime",
                     "model_id": normalized_model_id,
-                    "message": "SAM3 checkpoint files are already present.",
-                    "paths": {"checkpoint_path": checkpoint_before},
+                    "ready": is_ready,
+                    "message": health.get("message") or (
+                        "SAM3 is ready." if is_ready else "SAM3 checkpoint is installed, but runtime setup is incomplete."
+                    ),
+                    "paths": {"checkpoint_path": checkpoint_path},
+                    "missing_dependencies": health.get("missing_dependencies") or [],
+                    "missing_dependency_packages": health.get("missing_dependency_packages") or [],
+                    "cuda_available": health.get("cuda_available"),
+                    "torch_cuda_build": health.get("torch_cuda_build"),
                 }
 
-            try:
-                from modelscope import snapshot_download  # type: ignore
-            except ImportError as exc:
-                raise RuntimeError(
-                    "ModelScope SDK is not installed in this build yet. Use the ModelScope link below or install `modelscope` first."
-                ) from exc
+            checkpoint_before = get_sam3_checkpoint_path()
+            if checkpoint_before:
+                result = sam3_prepare_result(checkpoint_before)
+                if not result.get("ready"):
+                    result["runtime_repair"] = _repair_sam3_runtime_if_possible()
+                    result = {**sam3_prepare_result(checkpoint_before), "runtime_repair": result["runtime_repair"]}
+                return result
 
-            cache_dir = Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            snapshot_download("facebook/sam3", cache_dir=str(cache_dir))
+            sam3_dir = Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"
+            sam3_dest = sam3_dir / "model.safetensors"
+            sam3_urls = _sam3_download_urls()
+            downloaded = False
+            last_error = None
+            for url in sam3_urls:
+                try:
+                    _direct_download_file(url, sam3_dest, timeout=600)
+                    downloaded = True
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    _model_logger.warning("SAM3 download failed from %s: %s", url, exc)
+            if not downloaded:
+                raise RuntimeError(
+                    f"Could not download SAM3 checkpoint. Last error: {last_error}. "
+                    f"You can manually download from {SAM3_MODELSCOPE_URL} and place the file in {sam3_dir}"
+                )
             refreshed_path = get_sam3_checkpoint_path()
-            return {
-                "status": "ok",
-                "model_id": normalized_model_id,
-                "message": "SAM3 files were downloaded from ModelScope.",
-                "paths": {"checkpoint_path": refreshed_path},
-            }
+            result = sam3_prepare_result(refreshed_path)
+            if not result.get("ready"):
+                result["runtime_repair"] = _repair_sam3_runtime_if_possible()
+                result = {**sam3_prepare_result(refreshed_path), "runtime_repair": result["runtime_repair"]}
+            return result
 
         if normalized_model_id == "aesthetic":
             from aesthetic import _ensure_loaded, _get_models_dir, is_available

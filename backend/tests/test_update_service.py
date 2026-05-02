@@ -45,7 +45,7 @@ def test_get_status_reports_available_patch_update(monkeypatch):
 
 def test_get_status_prefers_patch_over_full_package(monkeypatch):
     service = UpdateService()
-    monkeypatch.setattr(service, "_platform_key", lambda: "linux-mac")
+    monkeypatch.setattr(service, "_platform_key", lambda: "linux")
     monkeypatch.setattr(
         service,
         "_read_release_json",
@@ -55,7 +55,7 @@ def test_get_status_prefers_patch_over_full_package(monkeypatch):
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux-mac.tar.gz",
+                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
                     "size": 999,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
@@ -101,7 +101,7 @@ def test_get_status_flags_missing_patch_asset(monkeypatch):
 
 def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
     service = UpdateService()
-    monkeypatch.setattr(service, "_platform_key", lambda: "linux-mac")
+    monkeypatch.setattr(service, "_platform_key", lambda: "linux")
     monkeypatch.setattr(
         service,
         "_read_release_json",
@@ -111,7 +111,7 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux-mac.tar.gz",
+                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
                     "size": 456,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
@@ -126,7 +126,7 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
     assert status["has_update"] is True
     assert status["latest_version"] == "9.9.9"
     assert status["asset"]["kind"] == "full"
-    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-linux-mac.tar.gz"
+    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-linux.tar.gz"
 
 
 def test_read_release_json_uses_configured_update_api_url(monkeypatch):
@@ -240,9 +240,8 @@ def test_get_status_default_github_failure_explains_mirror_option(monkeypatch):
 
     assert status["has_update"] is False
     assert "GitHub" in status["error"]
-    assert "Mainland China" in status["error"]
+    assert "network" in status["error"].lower()
     assert "VPN" in status["error"]
-    assert ".env" in status["error"]
 
 
 def test_save_proxy_channel_creates_package_local_override(monkeypatch, tmp_path: Path):

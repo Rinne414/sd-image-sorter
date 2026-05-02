@@ -16,10 +16,12 @@ from typing import Optional, List, Dict, Any
 from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
 from config import MANUAL_SORT_SESSION_FILE
 import database as db
 from constants import VALID_ASPECT_RATIOS
-from image_manager import scan_folder, move_image, copy_image
+from image_manager import scan_folder, move_image, copy_image, parse_metadata_job
+from database import add_images_batch
 from metadata_parser import verify_image_readable
 from services.state_compat import MutableStateProxy
 from services.tag_export_service import export_tags_batch_request
@@ -461,26 +463,11 @@ class SortingService:
             if worker_alive:
                 return {"status": self._scan_progress["status"], "message": "Cannot reset while scan worker is still running"}
             if self._scan_progress["status"] in {"running", "cancelling", "error", "done", "cancelled"}:
-                self._scan_progress = {
-                    "status": "idle",
-                    "step": "idle",
-                    "current": 0,
-                    "processed": 0,
-                    "total": 0,
-                    "total_final": False,
-                    "errors": 0,
-                    "new": 0,
-                    "updated": 0,
-                    "removed": 0,
-                    "library_ready": False,
-                    "quick_import": True,
-                    "metadata_processed": 0,
-                    "metadata_total": 0,
+                self._scan_progress = self._build_default_scan_progress_state()
+                self._scan_progress.update({
                     "message": "Reset by user",
-                    "current_item": None,
-                    "started_at": None,
                     "updated_at": time.time(),
-                }
+                })
                 self._scan_cancel_event = None
                 self._scan_worker_thread = None
                 return {"status": "reset", "message": "Scan progress reset to idle"}
@@ -1210,6 +1197,7 @@ class SortingService:
                         ):
                             return
 
+                completed_verb = "Copied" if operation == "copy" else "Moved"
                 self._set_batch_move_progress_if_current(
                     run_id,
                     {
@@ -1219,7 +1207,7 @@ class SortingService:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "message": f"Completed! {completed_verb} {moved} images." + (f" {len(errors)} errors." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -1797,7 +1785,175 @@ class SortingService:
             "scan_status": scan_progress.get("status"),
             "scan_step": scan_progress.get("step"),
             "scan_library_ready": bool(scan_progress.get("library_ready", False)),
+            "app_version": APP_VERSION,
+            "github_url": GITHUB_REPOSITORY_URL,
         }
+
+    def resolve_drop(self, folder_name: str, filenames: List[str], dropped_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Resolve browser-dropped folder name or filenames to a real filesystem path."""
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        files_info = dropped_files or []
+        names = [f["name"] for f in files_info if f.get("name")] if files_info else filenames[:5]
+        names = [n for n in names if n and isinstance(n, str)]
+
+        if names:
+            placeholders = ",".join("?" for _ in names)
+            cursor.execute(
+                f"SELECT path, filename, file_size FROM images WHERE filename IN ({placeholders})",
+                names,
+            )
+            rows = cursor.fetchall()
+            if rows:
+                size_by_name = {}
+                for f in files_info:
+                    if f.get("name") and f.get("size"):
+                        size_by_name[f["name"]] = int(f["size"])
+
+                folder_scores: Dict[str, int] = {}
+                for row in rows:
+                    rpath = row[0] if isinstance(row, (tuple, list)) else row["path"]
+                    rname = row[1] if isinstance(row, (tuple, list)) else row["filename"]
+                    rsize = row[2] if isinstance(row, (tuple, list)) else row["file_size"]
+                    parent = str(Path(rpath).parent)
+                    expected_size = size_by_name.get(rname)
+                    if expected_size and rsize and abs(int(rsize) - expected_size) < 2:
+                        folder_scores[parent] = folder_scores.get(parent, 0) + 10
+                    else:
+                        folder_scores[parent] = folder_scores.get(parent, 0) + 1
+
+                if folder_scores:
+                    best = max(folder_scores, key=folder_scores.get)
+                    return {"folder_path": best}
+
+        if folder_name and self._is_safe_folder_segment(folder_name):
+            like_segment = self._escape_like(folder_name)
+            cursor.execute(
+                "SELECT path FROM images WHERE path LIKE ? ESCAPE '\\' LIMIT 1",
+                [f"%{os.sep}{like_segment}{os.sep}%"],
+            )
+            row = cursor.fetchone()
+            if row:
+                raw = row[0] if isinstance(row, (tuple, list)) else row["path"]
+                raw = str(raw)
+                sep = os.sep
+                idx = raw.lower().find(sep + folder_name.lower() + sep)
+                if idx >= 0:
+                    return {"folder_path": raw[: idx + len(sep) + len(folder_name)]}
+
+            for base in self._common_image_roots():
+                candidate = (Path(base) / folder_name).resolve()
+                # Defense in depth: candidate must stay under the root we picked.
+                try:
+                    candidate.relative_to(Path(base).resolve())
+                except ValueError:
+                    continue
+                if candidate.is_dir():
+                    return {"folder_path": str(candidate)}
+
+        return {"folder_path": ""}
+
+    @staticmethod
+    def _is_safe_folder_segment(name: str) -> bool:
+        """Reject browser-supplied folder names that could escape a base dir."""
+        if not name or not isinstance(name, str):
+            return False
+        if name in {".", ".."}:
+            return False
+        # Path separators or drive markers indicate the caller is trying to
+        # supply a multi-segment path, not a single folder name.
+        if "/" in name or "\\" in name or ":" in name:
+            return False
+        # Any control char or NUL byte → reject.
+        if any(ord(ch) < 32 for ch in name):
+            return False
+        return True
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape SQL LIKE wildcards so user input matches literally."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    async def import_uploaded_files(self, files) -> Dict[str, Any]:
+        """Save uploaded files to imports dir and add them to the gallery.
+
+        Path-traversal hardening: the browser-supplied filename is reduced to
+        its basename via ``Path(name).name`` so values like ``../../etc/x.png``
+        cannot escape ``import_dir``. After constructing ``dest`` we also
+        verify it resolves underneath ``import_dir.resolve()`` as a defense in
+        depth against weird Windows path semantics.
+        """
+        from config import DATA_DIR
+        import_dir = (Path(DATA_DIR) / "imports").resolve()
+        import_dir.mkdir(parents=True, exist_ok=True)
+
+        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+        saved_paths: List[Path] = []
+        for upload in files:
+            raw_name = upload.filename or ""
+            ext = Path(raw_name).suffix.lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            # Basename only — strips any "../" or absolute paths the browser sent.
+            safe_stem_name = Path(raw_name).name
+            if not safe_stem_name or safe_stem_name in {".", ".."} or safe_stem_name.startswith("."):
+                safe_stem_name = f"upload_{len(saved_paths)}{ext}"
+            dest = (import_dir / safe_stem_name).resolve()
+            counter = 1
+            stem = Path(safe_stem_name).stem or "upload"
+            while dest.exists():
+                dest = (import_dir / f"{stem}_{counter}{ext}").resolve()
+                counter += 1
+            # Defense in depth: refuse anything that resolves outside import_dir.
+            try:
+                dest.relative_to(import_dir)
+            except ValueError:
+                logger.warning("Refusing upload with unsafe filename: %r", raw_name)
+                continue
+            content = await upload.read()
+            dest.write_bytes(content)
+            saved_paths.append(dest)
+
+        records = []
+        errors = 0
+        image_ids = []
+        for path in saved_paths:
+            result = parse_metadata_job({
+                "path": str(path),
+                "filename": path.name,
+                "compute_content_fingerprint": True,
+                "validate_image_data": True,
+            })
+            if result.get("error"):
+                errors += 1
+            records.append(result["record"])
+
+        if records:
+            batch_result = add_images_batch(records, return_statuses=True)
+            for path_str, status in (batch_result.get("statuses") or {}).items():
+                image_ids.append(batch_result.get("ids", {}).get(path_str))
+
+        return {
+            "imported": len(records) - errors,
+            "errors": errors,
+            "total": len(records),
+            "image_ids": [i for i in image_ids if i],
+        }
+
+    @staticmethod
+    def _common_image_roots() -> List[str]:
+        home = Path.home()
+        roots = [
+            home / "Pictures",
+            home / "Desktop",
+            home / "Downloads",
+            home / "Documents",
+        ]
+        if platform.system() == "Windows":
+            for drive in "CDEFGH":
+                roots.append(Path(f"{drive}:\\"))
+        return [str(r) for r in roots if r.exists()]
 
     def export_tags_batch(self, request) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""

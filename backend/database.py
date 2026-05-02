@@ -21,6 +21,7 @@ See backend/db_repos/repositories/ for the repository implementations.
 import sqlite3
 import os
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +49,9 @@ from utils.model_names import (
     normalize_checkpoint_name as _normalize_checkpoint_name,
 )
 from utils.pagination_cursor import encode_image_cursor_from_image
+
+
+logger = logging.getLogger(__name__)
 
 
 def _adapt_datetime_for_sqlite(value: datetime) -> str:
@@ -202,7 +206,15 @@ def _ensure_content_fingerprint_value(
         if not resolved_path:
             return None
         return compute_image_content_fingerprint(resolved_path)
-    except Exception:
+    except Exception as exc:
+        # Log so a recurring fingerprint failure (e.g., corrupt image, missing PIL backend)
+        # is visible to operators. Returning None keeps callers' contract intact, but the
+        # warning ensures stale derived-state caches do not get masked silently.
+        logger.warning(
+            "Could not compute content fingerprint for image_id=%s: %s",
+            image_id,
+            exc,
+        )
         return None
 
 
@@ -2450,7 +2462,8 @@ def get_images_paginated(
             total_count = _get_filtered_count(
                 conn, generators, tags, ratings, checkpoints, loras,
                 search_query, prompt_terms, artist, min_width, max_width,
-                min_height, max_height, aspect_ratio, include_unreadable
+                min_height, max_height, aspect_ratio, include_unreadable,
+                min_aesthetic, max_aesthetic
             )
 
         # Determine next cursor from the last row returned in this page
@@ -2483,6 +2496,8 @@ def _get_filtered_count(
     max_height: Optional[int] = None,
     aspect_ratio: Optional[str] = None,
     include_unreadable: bool = False,
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
 ) -> int:
     """Get total count for filtered images.
 
@@ -2522,6 +2537,11 @@ def _get_filtered_count(
     conditions, params = _apply_dimension_filters(
         conditions, params,
         min_width, max_width, min_height, max_height, aspect_ratio
+    )
+
+    # Apply aesthetic score filters
+    conditions, params = _apply_aesthetic_filter(
+        conditions, params, min_aesthetic, max_aesthetic
     )
 
     # Apply artist filter (JOIN)
@@ -2801,6 +2821,19 @@ def _query_indexed_facet(
     output_key: str,
     limit: Optional[int] = None,
 ) -> Dict[str, Any]:
+    # Whitelist guard: this helper composes table/column names into raw SQL via f-strings,
+    # which is safe today because all callers pass hardcoded constants. The assertion
+    # makes that contract explicit so a future caller cannot accidentally route
+    # user-supplied identifiers into the query.
+    _ALLOWED_FACET_QUERIES = {
+        ("image_prompt_tokens", "token"),
+        ("image_loras", "lora_name"),
+    }
+    if (table, value_column) not in _ALLOWED_FACET_QUERIES:
+        raise ValueError(
+            f"_query_indexed_facet refusing unknown table/column pair: ({table!r}, {value_column!r})"
+        )
+
     normalized_limit = max(0, int(limit or 0))
 
     with get_db() as conn:

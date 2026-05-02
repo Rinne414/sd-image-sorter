@@ -68,6 +68,31 @@ Use this structure for future entries:
 
 ## Current Records
 
+### ADR-AI-20260501-01: Sidebar action panels should not create nested scrollbars when the sidebar can own scrolling
+- Status: active
+- Area: frontend UX / layout
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  Keep sidebar action panels in one obvious scroll flow. In Gallery, the filter sidebar owns overflow and the selection action panel must not add its own scrollbar. In Censor/Edit, the left queue sidebar should keep the fixed queue controls visible and let the queue grid own the only internal list scrollbar.
+- Why:
+  Nested scrollbars inside small sidebar action panels look broken, waste space, and make users fight the UI even when there is enough room in the parent panel. The queue grid is the exception because it is a real unbounded item list under fixed controls.
+- Do not "improve" this by:
+  Adding `max-height` plus `overflow-y: auto` to Gallery selection panels, or making both a Censor sidebar and its queue grid scroll at the same time.
+- Allowed evolution:
+  Redesign sidebars into drawers, accordions, or virtualized lists if the scroll owner remains explicit and the UI avoids competing scrollbars.
+- Evidence:
+  Current CSS keeps `.selection-panel` visible in the Gallery sidebar flow and keeps `#view-censor .censor-sidebar-v2.left` from scrolling while `.censor-queue-grid` remains the queue list scroller.
+- Last verified:
+  2026-05-01 against current workspace CSS and user report about unnecessary left-bar scrollbars after opening selection controls.
+- Related files:
+  `frontend/css/ui-refresh.css`
+  `frontend/css/censor-v2.css`
+  `frontend/index.html`
+- Supersedes:
+  None
+- Validation:
+  CSS diff inspection and `git diff --check`.
+
 ### ADR-AI-20260501-02: Heavy local AI work must be resource-gated without blanket slowdowns
 - Status: active
 - Area: backend runtime / stability / performance
@@ -2007,3 +2032,109 @@ Use this structure for future entries:
   Extends ADR-AI-20260430-77. Debt-14 remains open for the larger ambiguous/conflict review UI.
 - Validation:
   `python3 -m py_compile backend/services/image_service.py`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_reconnect_missing_files.py` (`6 passed`); `npm --prefix tests/e2e test -- reconnect-missing.spec.ts` (`1 passed`).
+
+### ADR-AI-20260502-82: Model setup is asynchronous and stores prepared assets under package data
+
+- Status: accepted
+- Area: model manager / first-run downloads / local runtime state / setup UX
+- Context:
+  Model Manager preparation could freeze the whole frontend because `/api/models/prepare` ran blocking model downloads inside an async FastAPI handler. Kaloscope also downloaded assets into legacy `models/artist/` while health checks looked under `data/models/artist/`, so the UI stayed `Missing` after a successful download. The visible `Downloaded` status was also confusing because it meant files existed but runtime dependencies were still missing.
+- Decision:
+  `/api/models/prepare` now starts preparation in a background executor and returns immediately with `downloading`; `/api/models/download-progress` is the progress/result source. Artist/Kaloscope setup uses direct HTTP downloads and writes runtime/checkpoint/mapping assets under `get_artist_model_dir()` (`data/models/artist` by default), matching `model_health.py`. Legacy `models/artist` files may be copied only as a local compatibility source, not as the canonical prepared location. The model manager presents only `Ready` or `Missing`; if files exist but runtime dependencies are missing, the card remains `Missing` and the message names the dependency/runtime problem.
+- Why:
+  A local app must keep the UI responsive while multi-GB model files download. Health checks and setup must share the same canonical data directory, or users cannot trust a completed download. `Downloaded` is an implementation detail, not a user-ready state; users need to know whether the feature works now or what concrete setup is still missing.
+- Do not regress:
+  Do not call blocking model downloads directly from async request handlers. Do not make `models/artist` the canonical prepared asset location. Do not reintroduce a user-visible `Downloaded` badge/status for model cards. Do not make Kaloscope setup depend on `huggingface_hub` or ModelScope SDK when direct HTTP URLs are sufficient.
+- Evidence:
+  `backend/routers/models.py`, `backend/services/model_service.py`, `backend/artist_identifier.py`, `backend/model_health.py`, `frontend/js/app.js`, `tests/e2e/playwright.config.ts`, `tests/e2e/specs/model-manager.spec.ts`.
+- Validation:
+  `python3 -m py_compile backend/model_health.py backend/services/model_service.py backend/artist_identifier.py backend/routers/models.py`; `npm --prefix tests/e2e run test -- specs/model-manager.spec.ts` (`4 passed`); `PYTHONPATH=backend python3 -m pytest -s backend/tests/test_model_service.py -q` (`9 passed`).
+
+### ADR-AI-20260502-83: Portable launcher repairs PyTorch CUDA separately from base requirements
+
+- Status: accepted
+- Area: Windows portable packaging / GPU runtime selection / SAM3 readiness
+- Context:
+  The Windows portable launcher already repaired ONNX Runtime after hardware detection, but `backend/requirements.txt` installed the normal PyPI `torch==2.11.0` package. On Windows that resolved to `torch 2.11.0+cpu`, so SAM3 could have a 3.4 GB checkpoint under `data/models/sam3` while still staying `Missing` because the app's embedded Python had no CUDA Torch and no SAM3 runtime packages. The Model Manager also previously made this worse by reporting the checkpoint as already present without explaining the runtime gap.
+- Decision:
+  Keep the base requirements portable and cross-machine, then repair machine-specific GPU runtimes in launcher scripts. `repair_onnxruntime.py` remains responsible for ONNX Runtime vendor selection. `repair_torch_runtime.py` now reuses Windows GPU detection, keeps AMD/Intel on standard CPU Torch, and switches NVIDIA systems to a compatible PyTorch CUDA wheel index based on detected driver CUDA capability. It also installs SAM3 runtime packages (`sam3`, `einops`, `hydra-core`, `omegaconf`, `pycocotools`) for NVIDIA systems unless explicitly skipped. Model readiness must continue to distinguish file presence from runtime usability.
+- Why:
+  CUDA Torch wheels are NVIDIA-specific, large, and served from PyTorch CUDA indexes rather than normal PyPI defaults. Putting a CUDA wheel directly into `requirements.txt` would either break or overburden non-NVIDIA users. The launcher has the hardware context, so it is the correct place to choose CUDA Torch versus standard Torch, just as it already chooses ONNX Runtime GPU versus DirectML.
+- Do not regress:
+  Do not assume `torch==...` from normal PyPI means CUDA is available on Windows. Do not mark SAM3 `Ready` unless the checkpoint exists, required Python packages import, and `torch.cuda.is_available()` is true. Do not install CUDA Torch for AMD/Intel machines unless the app adds a real supported non-NVIDIA Torch backend. Do not use ModelScope SDK as the required SAM3 checkpoint download path when direct HTTP preparation exists.
+- Escape hatches:
+  Set `SD_IMAGE_SORTER_SKIP_TORCH_REPAIR=1` to skip Torch repair, `SD_IMAGE_SORTER_SKIP_SAM3_RUNTIME_REPAIR=1` to skip SAM3 package repair, or `SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL` to force a custom PyTorch wheel index.
+- Evidence:
+  `backend/repair_torch_runtime.py`, `backend/repair_onnxruntime.py`, `run-portable.bat`, `scripts/build_release_packages.py`, `backend/model_health.py`, `backend/services/model_service.py`, `frontend/js/app.js`, `backend/tests/test_repair_torch_runtime.py`, `backend/tests/test_model_service.py`.
+- Validation:
+  `TMPDIR=$PWD/.tmp/pytest-tmp PYTHONPATH=backend python3 -m pytest -s backend/tests/test_repair_torch_runtime.py backend/tests/test_model_service.py backend/tests/test_model_health.py backend/tests/test_release_build.py -q` (`41 passed`); `python3 -m py_compile backend/repair_torch_runtime.py backend/repair_onnxruntime.py backend/model_health.py backend/services/model_service.py backend/routers/models.py scripts/build_release_packages.py`; `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`.
+
+### ADR-AI-20260502-84: First launch prepares feature runtime packages before the app opens
+
+- Status: accepted
+- Area: first-run setup / customer onboarding / SAM3 readiness / launcher contracts
+- Context:
+  Treating SAM3 runtime packages as a repair only after a user clicks `Prepare / Download` creates a bad first-run product experience: a customer can install the checkpoint, still see `Missing`, and be told to restart or manually install packages. That is unacceptable for a trial user because the first launch may be the only chance to show the feature working. The previous runtime repair also did not cover `run.bat`, and the portable launcher consistency check did not verify SAM3's transitive runtime imports such as `decord` and `iopath`.
+- Decision:
+  SAM3 Python runtime packages are now part of the launcher-installed runtime requirements: `sam3`, `einops`, `hydra-core`, `omegaconf`, `pycocotools`, plus locked transitive runtime packages such as `decord` and `iopath`. Windows launchers run PyTorch/SAM3 runtime repair before the backend process starts, so NVIDIA users get CUDA Torch selected before the app opens instead of after a model card click. `run.bat`, `run.sh`, `run-portable.bat`, and generated portable launchers check the full AI runtime import set and reinstall dependencies when it is incomplete. Model health probes Torch through a subprocess when Torch is not already loaded, so status checks do not pollute the long-lived backend process with a CPU Torch import before repair.
+- Why:
+  Runtime packages are product prerequisites, not optional user chores. Large model checkpoints can remain explicit user downloads, but once a checkpoint is present the feature should be usable immediately on supported hardware. Installing or swapping Torch after the backend has already imported Torch is not reliable, so hardware-specific runtime selection must happen before backend startup.
+- Do not regress:
+  Do not move SAM3 runtime package installation back to the model-card click path as the normal customer flow. Do not require customers to manually run `pip install` for built-in features. Do not run Torch CUDA repair after the backend starts as the primary path. Do not let `/api/models/status` import Torch into the backend process unless Torch is already loaded by a real feature.
+- Allowed evolution:
+  Future launchers may add a clearer setup progress UI or cached/offline wheel bundle, but the invariant remains: supported runtime packages are prepared before the browser opens, while multi-GB model checkpoints stay explicit downloads.
+- Evidence:
+  `backend/requirements.in`, `backend/requirements.txt`, `backend/model_health.py`, `backend/repair_torch_runtime.py`, `run.bat`, `run.sh`, `run-portable.bat`, `scripts/build_release_packages.py`, `backend/services/model_service.py`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `tests/e2e/playwright.config.ts`, `backend/tests/test_release_build.py`, `backend/tests/test_model_health.py`, `backend/tests/test_model_service.py`.
+- Validation:
+  `bash -n run.sh`; `python3 -m py_compile backend/model_health.py backend/services/model_service.py backend/repair_torch_runtime.py scripts/build_release_packages.py`; `node --check frontend/js/app.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`; `TMPDIR=$PWD/.tmp/pytest-tmp PYTHONPATH=backend python3 -m pytest -s -q backend/tests/test_model_service.py backend/tests/test_model_health.py backend/tests/test_repair_torch_runtime.py backend/tests/test_release_build.py` (`43 passed`); `npm --prefix tests/e2e run test -- specs/model-manager.spec.ts` (`4 passed`).
+
+### ADR-AI-20260502-85: Launchers prepare build tools before runtime requirements
+
+- Status: accepted
+- Area: first-run dependency install / Windows portable packaging / embedded Python
+- Context:
+  A real Windows hand test of `sd-image-sorter-v3.1.0-windows-portable.zip` failed on first launch while installing `antlr4-python3-runtime==4.9.3`, a source-only dependency pulled by Hydra/OmegaConf. Python's embeddable Windows distribution uses a `python3XX._pth` isolated path model, and pip's PEP 517 build-isolation subprocess could not import `setuptools.build_meta` even after reporting build dependency installation complete.
+- Decision:
+  All launchers bootstrap `setuptools` and `wheel` before installing the runtime lock. The generated Windows portable launcher additionally installs `backend/requirements.txt` with `--no-build-isolation` because embedded Python build isolation is the failing path. The launchers still use `backend/launcher_pip.py` so marker noise stays filtered and users see normal pip progress.
+- Why:
+  The portable package must work on a clean Windows machine without asking users to install Visual Studio, system Python, or manual build tools. Disabling build isolation for this embedded interpreter is safer than relying on pip's temporary build environments, because the isolated `._pth` behavior can hide build backend packages from source-build subprocesses.
+- Do not regress:
+  Do not remove the `setuptools wheel` bootstrap from `run.bat`, `run.sh`, or generated `run-portable.bat`. Do not remove `--no-build-isolation` from the generated `run-portable.bat` unless the runtime lock is proven wheel-only on Windows or the project replaces embeddable Python with a distribution that supports pip build isolation reliably. Do not change launchers back to direct `python -m pip install -r backend\requirements.txt`.
+- Evidence:
+  Windows first-launch failure log from `C:\temp\SDIS 手测\sd-image-sorter-v3.1.0-windows-portable`, `run.bat`, `run.sh`, `scripts/build_release_packages.py`, `backend/tests/test_release_build.py`.
+- Validation:
+  `python3 -m py_compile scripts/build_release_packages.py backend/launcher_pip.py`; `cd backend && env TMPDIR="$(dirname "$PWD")/.tmp/pytest-tmp" PYTHONPATH=. python3 -m pytest -q -s tests/test_release_build.py` (`21 passed`); rebuilt `sd-image-sorter-v3.1.0-pipfix1-windows-portable.zip` and verified `run-portable.bat` contains the build-tool bootstrap plus `--no-build-isolation`, zip integrity passes, and required portable files are present. `run.bat` and `run.sh` were also hardened to install build tools before runtime requirements while keeping normal pip build isolation enabled for standard venv installs.
+
+
+### ADR-AI-20260502-86: macOS packages skip SAM3 runtime dependencies
+
+- Status: accepted
+- Area: macOS packaging / SAM3 readiness / Python 3.12 dependency support
+- Context:
+  The Linux/Mac release package originally installed the same full AI runtime dependency lock everywhere. A PyPI wheel audit found `decord==0.6.0`, pulled by `sam3==0.1.3`, has no Python 3.12 macOS wheel and no sdist, so a clean macOS setup would fail before the app starts. This is not just an optional feature failure: one unavailable SAM3 dependency blocks the whole application install.
+- Decision:
+  The runtime lock marks `sam3`, `decord`, `iopath`, `einops`, `hydra-core`, `omegaconf`, and `pycocotools` as non-macOS dependencies. `run.sh` skips SAM3 runtime imports in its dependency completeness check on Darwin, and model health reports SAM3 as disabled on macOS instead of telling users to repair missing packages.
+- Why:
+  SAM3 is treated by this app as a CUDA-only feature. Forcing its runtime packages onto macOS gives users a broken first-run experience for a feature that is not ready there anyway. The Mac package should start cleanly and clearly say SAM3 is unavailable, not fail while installing unrelated runtime dependencies.
+- Do not regress:
+  Do not make `sam3` or `decord` unconditional in `backend/requirements.txt` until the project has verified Python 3.12 macOS wheels or a different supported SAM3 runtime path. Do not put SAM3 imports back into the Darwin branch of `run.sh` startup checks. Do not show macOS users a generic "missing packages" SAM3 message when the intended state is unsupported.
+- Evidence:
+  PyPI metadata for `sam3==0.1.3` requires `decord>=0.6.0,<0.7.0`; PyPI files for `decord==0.6.0` include Windows/Linux wheels and old macOS cp36-cp38 wheels only, not Python 3.12 macOS wheels. Code evidence: `backend/requirements.in`, `backend/requirements.txt`, `run.sh`, `backend/model_health.py`, `backend/tests/test_release_build.py`, `backend/tests/test_model_health.py`.
+- Validation:
+  `bash -n run.sh`; `python3 -m py_compile backend/model_health.py scripts/build_release_packages.py backend/launcher_pip.py`; `cd backend && env TMPDIR="$(dirname "$PWD")/.tmp/pytest-tmp" PYTHONPATH=. python3 -m pytest -q -s tests/test_release_build.py tests/test_model_health.py`; rebuilt release packages and verified the Linux/Mac package's `run.sh` has the Darwin SAM3 skip while Windows portable still has the SAM3 bootstrap.
+
+
+### ADR-AI-20260502-87: Release target is Windows and Linux only
+
+- Status: accepted
+- Area: release platform support / packaging / first-run reliability
+- Context:
+  During first-run package testing, Windows embedded Python exposed a build-isolation failure, and macOS exposed a separate unsupported SAM3 dependency chain (`decord==0.6.0` has no Python 3.12 macOS wheel). The release goal is now to make Windows and Linux reliably start first instead of spending release time on macOS-specific dependency exceptions.
+- Decision:
+  This release line supports Windows and Linux only. The generated full tar package is named `sd-image-sorter-vX.X.X-linux.tar.gz`; `run.sh` exits early on Darwin with a clear unsupported-platform message. Linux first-run installs CPU PyTorch from the PyTorch CPU wheel index before installing a filtered runtime requirements file that omits direct CUDA/NVIDIA/Triton package pins. Windows portable keeps the embedded-Python `setuptools/wheel` bootstrap plus `--no-build-isolation` path.
+- Why:
+  A release package that starts reliably on the supported platforms is better than a cross-platform label that fails during dependency installation. Linux CPU-first is the safest baseline: the app can start, WD14/CLIP/censor workflows can run on CPU, and CUDA/SAM3 can remain explicit follow-up work instead of blocking first launch.
+- Do not regress:
+  Do not publish a `linux-mac` full package name or advertise macOS support until a clean macOS first-run is tested. Do not make Linux first-run install direct `nvidia-*`, `cuda-*`, `triton`, `torch`, or `torchvision` pins from the shared lock before the CPU Torch baseline is installed. Do not remove the Windows portable build-tool bootstrap.
+- Evidence:
+  `run.sh`, `run.bat`, `scripts/build_release_packages.py`, `backend/app_info.py`, `backend/services/update_service.py`, `backend/tests/test_release_build.py`, `backend/tests/test_update_service.py`, `docs/RELEASE_PACKS.md`, `README.md`.

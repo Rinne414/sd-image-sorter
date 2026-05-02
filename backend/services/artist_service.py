@@ -3,6 +3,7 @@ Artist identification service for DB-backed artist routes.
 """
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import threading
@@ -24,6 +25,7 @@ from utils.source_paths import resolve_existing_indexed_image_path
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[Dict[str, Any]], None]
+ARTIST_IMAGE_LOOKUP_CHUNK_SIZE = 500
 
 
 class ArtistService:
@@ -32,6 +34,7 @@ class ArtistService:
     def __init__(self, identifier_getter: Optional[Callable[..., Any]] = None) -> None:
         self._identifier_getter = identifier_getter or default_get_artist_identifier
         self._batch_lock = threading.Lock()
+        self._cancel_requested = False
         self._batch_progress: Dict[str, Any] = self._new_batch_progress_state()
 
     @staticmethod
@@ -59,7 +62,18 @@ class ArtistService:
         with self._batch_lock:
             return bool(self._batch_progress["running"])
 
+    def request_cancel(self) -> bool:
+        with self._batch_lock:
+            if not self._batch_progress["running"]:
+                return False
+            self._cancel_requested = True
+            return True
+
+    def cancel_requested(self) -> bool:
+        return self._cancel_requested
+
     def start_batch_progress(self, *, total: int) -> None:
+        self._cancel_requested = False
         now = time.time()
         with self._batch_lock:
             self._batch_progress = {
@@ -252,12 +266,17 @@ class ArtistService:
 
         with db.get_db() as conn:
             cursor = conn.cursor()
-            placeholders = ",".join("?" * len(image_ids))
-            cursor.execute(
-                f"SELECT id, path FROM images WHERE id IN ({placeholders})",
-                image_ids,
-            )
-            image_map = {int(row[0]): str(row[1] or "") for row in cursor.fetchall()}
+            image_map: Dict[int, str] = {}
+            for start in range(0, len(image_ids), ARTIST_IMAGE_LOOKUP_CHUNK_SIZE):
+                chunk_ids = image_ids[start:start + ARTIST_IMAGE_LOOKUP_CHUNK_SIZE]
+                if not chunk_ids:
+                    continue
+                placeholders = ",".join("?" * len(chunk_ids))
+                cursor.execute(
+                    f"SELECT id, path FROM images WHERE id IN ({placeholders})",
+                    chunk_ids,
+                )
+                image_map.update({int(row[0]): str(row[1] or "") for row in cursor.fetchall()})
 
         emit({
             "step": "identifying",
@@ -270,6 +289,9 @@ class ArtistService:
         errors = 0
 
         for image_id in image_ids:
+            if self._cancel_requested:
+                logger.info("Artist batch cancelled at %d/%d", processed, len(image_ids))
+                break
             try:
                 if image_id not in image_map:
                     raise FileNotFoundError(f"Image {image_id} not found in database")
@@ -316,6 +338,14 @@ class ArtistService:
             finally:
                 processed += 1
                 emit({"processed_delta": 1})
+                if processed % 8 == 0:
+                    gc.collect()
+                    try:
+                        import torch
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                    except Exception:
+                        pass
 
         if predictions_to_insert:
             with db.get_db() as conn:

@@ -50,10 +50,11 @@ class CensorDetectRequest(BaseModel):
     """Request model for detection."""
     image_id: int = Field(..., ge=1)
     model_path: str = ""
-    model_type: str = Field("legacy", pattern="^(legacy|nudenet|both)$")
+    model_type: str = Field("legacy", pattern="^(legacy|nudenet|sam3|both)$")
     confidence_threshold: float = Field(0.5, ge=0.0, le=1.0)
     exposed_only: bool = True
     target_classes: Optional[List[str]] = None
+    text_prompts: Optional[List[str]] = None
 
 
 class MaskRefineRequest(BaseModel):
@@ -79,7 +80,7 @@ class CensorApplyRequest(BaseModel):
     """Request model for censor apply/preview."""
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
-    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
     block_size: int = Field(16, ge=1)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
@@ -97,7 +98,7 @@ class CensorSaveRequest(BaseModel):
     """Request model for censor save."""
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
-    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
     block_size: int = Field(16, ge=1)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
@@ -398,6 +399,33 @@ class CensorService:
         drew_any = False
 
         for detection in detections:
+            raw_mask = detection.get("mask")
+            if raw_mask is not None:
+                try:
+                    import numpy as np
+                    arr = np.asarray(raw_mask)
+                    if arr.ndim == 2 and arr.shape[0] > 0 and arr.shape[1] > 0:
+                        mask_pil = Image.fromarray((arr > 0).astype(np.uint8) * 255, mode="L")
+                        if mask_pil.size == image_size:
+                            mask_image = Image.composite(
+                                Image.new("L", image_size, 255),
+                                mask_image,
+                                mask_pil,
+                            )
+                            drew_any = True
+                            continue
+                        else:
+                            mask_pil = mask_pil.resize(image_size, Image.NEAREST)
+                            mask_image = Image.composite(
+                                Image.new("L", image_size, 255),
+                                mask_image,
+                                mask_pil,
+                            )
+                            drew_any = True
+                            continue
+                except Exception:
+                    pass
+
             polygon = detection.get("polygon")
             if isinstance(polygon, list):
                 points = [
@@ -471,6 +499,8 @@ class CensorService:
 
     @staticmethod
     def _has_polygon_geometry(detection: Dict[str, Any]) -> bool:
+        if detection.get("mask") is not None:
+            return True
         polygon = detection.get("polygon")
         if not isinstance(polygon, list):
             return False
@@ -608,7 +638,26 @@ class CensorService:
         try:
             model_type = request.model_type
 
-            if model_type == "nudenet":
+            if model_type == "sam3":
+                from sam3_refiner import get_sam3_refiner, SAM3_PRIVACY_PROMPTS
+                sam3_health = get_model_health()["censor"]["sam3"]
+                if not sam3_health["available"]:
+                    raise HTTPException(status_code=503, detail=sam3_health.get("message", "SAM3 is not available"))
+                refiner = get_sam3_refiner()
+                custom_prompts = None
+                if request.text_prompts:
+                    custom_prompts = [
+                        {"prompt": p.strip(), "class": p.strip()}
+                        for p in request.text_prompts if p.strip()
+                    ]
+                with Image.open(image_path) as img:
+                    detections = refiner.detect_privacy_regions(
+                        img,
+                        conf_threshold=request.confidence_threshold,
+                        prompts=custom_prompts,
+                    )
+
+            elif model_type == "nudenet":
                 from nudenet_detector import get_nudenet_detector
                 detector = get_nudenet_detector()
                 try:
@@ -1732,6 +1781,16 @@ class CensorService:
             except Exception as exc:
                 logger.warning("Batch SAM3 refinement failed for item %d (image %d): %s", idx, item.image_id, exc)
                 errors.append({"index": idx, "image_id": item.image_id, "error": str(exc)})
+            finally:
+                if (idx + 1) % 4 == 0:
+                    import gc as _gc
+                    _gc.collect()
+                    try:
+                        import torch as _torch
+                        if _torch.cuda.is_available():
+                            _torch.cuda.empty_cache()
+                    except Exception:
+                        pass
 
         return {
             "status": "ok",

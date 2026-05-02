@@ -246,8 +246,18 @@ def _extract_best_mask(state: Dict) -> Optional[np.ndarray]:
     return mask.astype(np.uint8)
 
 
+SAM3_PRIVACY_PROMPTS = [
+    {"prompt": "exposed female breast", "class": "breasts"},
+    {"prompt": "exposed female nipple", "class": "breasts"},
+    {"prompt": "exposed female genitalia", "class": "pussy"},
+    {"prompt": "exposed male genitalia", "class": "dick"},
+    {"prompt": "exposed anus", "class": "anus"},
+    {"prompt": "exposed buttocks", "class": "buttocks"},
+]
+
+
 class SAM3Refiner:
-    """Refine detection boxes into SAM3 masks."""
+    """SAM3-based segmentation: standalone text-prompt detection and box refinement."""
 
     def __init__(self, checkpoint_path: Optional[str] = None, source: str = "huggingface"):
         self.checkpoint_path = checkpoint_path
@@ -313,6 +323,54 @@ class SAM3Refiner:
             refined_det["mask_refined"] = mask is not None
             refined.append(refined_det)
         return refined
+
+    def detect_privacy_regions(
+        self,
+        image: Image.Image,
+        conf_threshold: float = 0.3,
+        prompts: Optional[List[Dict[str, str]]] = None,
+    ) -> List[Dict]:
+        prompts = prompts or SAM3_PRIVACY_PROMPTS
+        rgb = image.convert("RGB")
+        detections = []
+        import gc
+
+        for entry in prompts:
+            text = entry["prompt"]
+            cls_name = entry["class"]
+            mask = self.segment_by_text(rgb, text)
+            if mask is None:
+                continue
+
+            ys, xs = np.where(mask > 0)
+            if len(xs) == 0:
+                continue
+
+            area = int(np.sum(mask > 0))
+            image_area = rgb.width * rgb.height
+            if area < 100 or area / image_area < 0.001:
+                continue
+
+            x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+            detections.append({
+                "class": cls_name,
+                "confidence": round(min(1.0, area / max(1, (x2 - x1) * (y2 - y1))), 4),
+                "box": [x1, y1, x2, y2],
+                "mask": mask,
+                "source": "sam3",
+            })
+
+            gc.collect()
+
+        seen = set()
+        unique = []
+        for det in detections:
+            key = (det["class"], tuple(det["box"]))
+            if key not in seen:
+                seen.add(key)
+                unique.append(det)
+        return unique
 
     def segment_by_text(self, image: Image.Image, text_prompt: str) -> Optional[np.ndarray]:
         try:

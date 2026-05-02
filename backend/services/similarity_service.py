@@ -58,6 +58,10 @@ class SimilarityService:
         index = get_similarity_index(db)
         return index.get_progress()
 
+    def cancel_embedding(self) -> bool:
+        index = get_similarity_index(db)
+        return index.request_cancel()
+
     def search_similar(
         self,
         image_id: int,

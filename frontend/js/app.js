@@ -763,10 +763,6 @@ const API = {
         return this.get(`/api/images?${params}`, options);
     },
 
-    async getAnalytics() {
-        return this.get('/api/analytics');
-    },
-
     async clearGallery() {
         return this.delete('/api/clear-gallery');
     },
@@ -804,10 +800,6 @@ const API = {
             offset,
             limit,
         });
-    },
-
-    async getExportSelectionData(imageIds) {
-        return this.getSelectionData(imageIds);
     },
 
     async reparseImage(id) {
@@ -882,12 +874,28 @@ const API = {
         return this.get('/api/aesthetic/progress');
     },
 
-    async scoreAestheticForImage(imageId) {
-        return this.post(`/api/aesthetic/score/${imageId}`);
+    async cancelAesthetic() {
+        return this.post('/api/aesthetic/cancel');
+    },
+
+    async cancelSimilarityEmbed() {
+        return this.post('/api/similarity/cancel');
+    },
+
+    async cancelArtistBatch() {
+        return this.post('/api/artists/batch-cancel');
     },
 
     async getModelStatus() {
         return this.get('/api/models/status');
+    },
+
+    async getMirror() {
+        return this.get('/api/models/mirror');
+    },
+
+    async setMirror(mirror) {
+        return this.post('/api/models/mirror', { mirror });
     },
 
     async prepareModel(modelId, options = {}) {
@@ -907,6 +915,27 @@ const API = {
             force_check: options.forceCheck ?? true,
             relaunch: options.relaunch ?? true,
         });
+    },
+
+    // Drop resolution
+    async resolveDrop(folderName, droppedFiles) {
+        return this.post('/api/resolve-drop', { folder_name: folderName, files: droppedFiles });
+    },
+
+    async importFiles(fileList) {
+        const form = new FormData();
+        for (let i = 0; i < fileList.length; i++) {
+            form.append('files', fileList[i]);
+        }
+        const response = await fetch(`${API_BASE}/api/import-files`, {
+            method: 'POST',
+            body: form,
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || 'Import failed');
+        }
+        return response.json();
     },
 
     // Scan
@@ -1623,24 +1652,134 @@ async function applyAppUpdate(status = AppState.update.status) {
 }
 
 async function handleAppUpdateButtonClick() {
-    try {
-        let status = AppState.update.status;
-        if (!status?.has_update) {
-            status = await refreshUpdateStatus({ force: true, silent: false });
-        }
+    const btn = document.getElementById('btn-app-update');
+    if (!btn) return;
+    const existing = document.getElementById('update-popup');
+    if (existing?.classList.contains('visible')) {
+        _hideUpdatePopup();
+        return;
+    }
+    _showUpdatePopup(btn);
+}
 
-        if (status?.has_update) {
+let _updatePopupEl = null;
+
+function _createUpdatePopup() {
+    if (_updatePopupEl) return _updatePopupEl;
+    const el = document.createElement('div');
+    el.id = 'update-popup';
+    el.className = 'update-popup';
+    document.body.appendChild(el);
+    _updatePopupEl = el;
+
+    document.addEventListener('click', (e) => {
+        if (_updatePopupEl?.classList.contains('visible') && !_updatePopupEl.contains(e.target)) {
+            const btn = document.getElementById('btn-app-update');
+            if (btn && !btn.contains(e.target)) _hideUpdatePopup();
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && _updatePopupEl?.classList.contains('visible')) _hideUpdatePopup();
+    });
+
+    return el;
+}
+
+async function _showUpdatePopup(anchorBtn) {
+    const popup = _createUpdatePopup();
+    const currentVersion = AppState.appVersion || appT('update.versionUnknown', '?');
+    const githubUrl = AppState.githubUrl || '';
+    const status = AppState.update.status;
+    const hasUpdate = status?.has_update;
+    const latestVersion = status?.latest_version || currentVersion;
+    const releaseUrl = status?.release_url || (githubUrl ? githubUrl + '/releases/latest' : '');
+    const releaseNotes = status?.release_notes || '';
+
+    let notesHtml = '';
+    if (releaseNotes) {
+        const truncated = releaseNotes.length > 200 ? releaseNotes.slice(0, 200) + '...' : releaseNotes;
+        notesHtml = `<div class="update-popup-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+            <span class="update-popup-label">${escapeHtml(appT('update.releaseNotes', 'Release Notes'))}</span>
+            <span style="font-size:12px;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;">${escapeHtml(truncated)}</span>
+        </div>`;
+    }
+
+    let actionsHtml = '';
+    if (hasUpdate) {
+        actionsHtml = `<div class="update-popup-actions">
+            <button class="btn btn-primary" data-update-action="install">${escapeHtml(appT('update.installNow', 'Install Update'))}</button>
+        </div>`;
+    } else {
+        actionsHtml = `<div class="update-popup-actions">
+            <button class="btn btn-secondary" data-update-action="check">${escapeHtml(appT('update.checkNow', 'Check for Updates'))}</button>
+        </div>`;
+    }
+
+    popup.innerHTML = `<div class="update-popup-card">
+        <div class="update-popup-header">
+            <span class="update-popup-title">${escapeHtml(appT('update.popupTitle', 'Version Info'))}</span>
+            <button class="update-popup-close" data-update-action="close" aria-label="Close">&times;</button>
+        </div>
+        <div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.currentLabel', 'Current Version'))}</span>
+            <span class="update-popup-value">v${escapeHtml(currentVersion)}</span>
+        </div>
+        <div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.latestLabel', 'Latest Version'))}</span>
+            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">v${escapeHtml(latestVersion)}${hasUpdate ? ' ✦' : ''}</span>
+        </div>
+        ${releaseUrl ? `<div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.releasePageLabel', 'Release Page'))}</span>
+            <a href="${escapeHtml(releaseUrl)}" target="_blank" rel="noopener" class="update-popup-link">GitHub ↗</a>
+        </div>` : ''}
+        ${notesHtml ? '<div class="update-popup-divider"></div>' + notesHtml : ''}
+        <div class="update-popup-divider"></div>
+        ${actionsHtml}
+    </div>`;
+
+    const rect = anchorBtn.getBoundingClientRect();
+    popup.style.top = (rect.bottom + 8) + 'px';
+    popup.style.right = (window.innerWidth - rect.right) + 'px';
+    popup.classList.add('visible');
+    // Single delegated handler — re-renders no longer accumulate listeners on
+    // detached DOM nodes. We replace popup.onclick wholesale on each show so
+    // closures captured by the previous render are eligible for GC.
+    popup.onclick = async (event) => {
+        const target = event.target.closest('[data-update-action]');
+        if (!target) return;
+        const action = target.dataset.updateAction;
+        if (action === 'close') {
+            _hideUpdatePopup();
+        } else if (action === 'install') {
+            _hideUpdatePopup();
             showConfirm(
                 appT('update.confirmTitle', 'Install Update'),
-                buildUpdateConfirmMessage(status),
-                () => {
-                    void applyAppUpdate(status);
-                }
+                buildUpdateConfirmMessage(AppState.update.status),
+                () => { void applyAppUpdate(AppState.update.status); }
             );
+        } else if (action === 'check') {
+            target.disabled = true;
+            target.textContent = appT('update.checking', 'Checking...');
+            try {
+                await refreshUpdateStatus({ force: true, silent: false });
+                _hideUpdatePopup();
+                const btn2 = document.getElementById('btn-app-update');
+                if (btn2 && AppState.update.status) _showUpdatePopup(btn2);
+            } catch (err) {
+                _hideUpdatePopup();
+            }
         }
-    } catch (error) {
-        // refreshUpdateStatus already surfaced a user-facing toast
-    }
+    };
+}
+
+function _hideUpdatePopup() {
+    if (!_updatePopupEl) return;
+    _updatePopupEl.classList.remove('visible');
+    // Drop child DOM + delegated handler so closures from the previous render
+    // can be garbage-collected. The two document-level listeners installed
+    // by _createUpdatePopup remain (idempotent setup).
+    _updatePopupEl.onclick = null;
+    _updatePopupEl.innerHTML = '';
 }
 
 function createProgressTracker(maxSamples = 12) {
@@ -3430,6 +3569,14 @@ function initEventListeners() {
         await refreshAestheticStatus();
         await startAestheticScoring(false);
     });
+    $('#btn-cancel-aesthetic')?.addEventListener('click', async () => {
+        try {
+            await API.cancelAesthetic();
+            showToast(appT('gallery.aestheticCancelled', 'Aesthetic scoring is being stopped...'), 'info');
+        } catch (error) {
+            showToast(formatUserError(error, 'Failed to cancel'), 'error');
+        }
+    });
     $('#btn-app-update')?.addEventListener('click', () => {
         void handleAppUpdateButtonClick();
     });
@@ -3613,6 +3760,11 @@ function initEventListeners() {
 
     // Clear DB button
     $('#btn-clear-db').addEventListener('click', () => {
+        const busy = _aestheticProgressTimer || _scanProgressTimer || _tagProgressTimer;
+        if (busy) {
+            showToast(appT('gallery.clearBlocked', 'Cannot clear gallery while scanning, tagging, or scoring is running. Stop the operation first.'), 'warning');
+            return;
+        }
         showConfirm(
             appT('gallery.clearTitle', 'Clear Gallery'),
             appT('gallery.clearMessage', 'Are you sure you want to clear all images from the database? This will NOT delete your physical files.'),
@@ -5735,6 +5887,14 @@ async function loadStats() {
             }
         }
 
+        // Populate version badge
+        if (stats.app_version) {
+            const vBadge = document.getElementById('brand-version');
+            if (vBadge) vBadge.textContent = 'v' + stats.app_version;
+            AppState.appVersion = stats.app_version;
+            AppState.githubUrl = stats.github_url || '';
+        }
+
         // Store analytics for later use
         AppState.analytics = {
             checkpoints: stats.checkpoints || [],
@@ -5769,6 +5929,7 @@ function clearAestheticProgressTimer() {
 
 function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     const button = $('#btn-score-aesthetic');
+    const cancelBtn = $('#btn-cancel-aesthetic');
     const chip = $('#aesthetic-status-chip');
     if (!button || !chip) return;
 
@@ -5777,12 +5938,15 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
         return translated && translated !== key ? translated : (fallback || key);
     };
 
+    if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+
     if (!_aestheticStatus.available) {
         button.disabled = true;
         button.title = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
         chip.style.display = 'inline-flex';
         chip.className = 'header-status-chip is-warning';
         chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
+        if (cancelBtn) cancelBtn.style.display = 'none';
         return;
     }
 
@@ -5799,7 +5963,6 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
             total: Math.max(total, completed),
         });
     } else {
-        // Idle state — hide chip to reduce visual noise
         chip.style.display = 'none';
     }
 }
@@ -7616,17 +7779,12 @@ function renderModelManager(models = []) {
     if (!summaryEl || !gridEl) return;
 
     const readyCount = models.filter(model => model.status === 'ready').length;
-    const downloadedCount = models.filter(model => model.status === 'downloaded').length;
     const missingCount = models.filter(model => model.status === 'missing').length;
 
     summaryEl.innerHTML = `
         <div class="model-manager-stat">
             <strong>${readyCount}</strong>
             <span>${escapeHtml(appT('models.ready', 'Ready now'))}</span>
-        </div>
-        <div class="model-manager-stat">
-            <strong>${downloadedCount}</strong>
-            <span>${escapeHtml(appT('models.downloaded', 'Downloaded only'))}</span>
         </div>
         <div class="model-manager-stat">
             <strong>${missingCount}</strong>
@@ -7638,13 +7796,40 @@ function renderModelManager(models = []) {
         </div>
     `;
 
+    API.getMirror().then((mirrorData) => {
+        const current = mirrorData?.mirror || 'auto';
+        const labels = { auto: 'Auto (HuggingFace → hf-mirror fallback)', 'hf-mirror': 'hf-mirror.com (HF mirror)', modelscope: 'ModelScope' };
+        let mirrorRow = document.getElementById('model-mirror-row');
+        if (!mirrorRow) {
+            mirrorRow = document.createElement('div');
+            mirrorRow.id = 'model-mirror-row';
+            mirrorRow.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(191,219,254,0.08);border-radius:12px;';
+            gridEl.parentElement.insertBefore(mirrorRow, gridEl);
+        }
+        const opts = (mirrorData?.options || ['auto', 'hf-mirror', 'modelscope']).map(
+            o => `<option value="${escapeHtml(o)}"${o === current ? ' selected' : ''}>${escapeHtml(labels[o] || o)}</option>`
+        ).join('');
+        mirrorRow.innerHTML = `
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">${escapeHtml(appT('models.mirrorLabel', 'Download Source'))}</label>
+            <select class="input-field" id="model-mirror-select" style="flex:1;font-size:12px;padding:6px 8px;">${opts}</select>
+        `;
+        document.getElementById('model-mirror-select')?.addEventListener('change', async (e) => {
+            try {
+                await API.setMirror(e.target.value);
+                showToast(appT('models.mirrorSaved', 'Download source saved: {mirror}').replace('{mirror}', labels[e.target.value] || e.target.value), 'success');
+            } catch (err) {
+                showToast(formatUserError(err, 'Failed to save'), 'error');
+            }
+        });
+    }).catch(() => {});
+
     gridEl.innerHTML = models.map((model) => {
         const safeId = escapeHtml(model.id);
         const status = model.status || (model.available ? 'ready' : 'missing');
-        const statusClass = status === 'ready' ? 'is-ready' : (status === 'downloaded' ? 'is-downloaded' : 'is-missing');
+        const statusClass = status === 'ready' ? 'is-ready' : 'is-missing';
         const statusLabel = status === 'ready'
             ? appT('models.readyBadge', 'Ready')
-            : (status === 'downloaded' ? appT('models.downloadedBadge', 'Downloaded') : appT('models.missingBadge', 'Missing'));
+            : appT('models.missingBadge', 'Missing');
         const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
             <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
         `).join('') : '';
@@ -7654,9 +7839,15 @@ function renderModelManager(models = []) {
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
             : '';
-        const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => `
-            <a class="btn btn-ghost btn-small" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || appT('models.openSource', 'Open source'))}</a>
-        `).join('') : '';
+        const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => {
+            // Defense in depth: only allow http(s) URLs in the model registry. Block javascript:, data:,
+            // file:, vbscript: and other surprising schemes even though the registry is backend-controlled.
+            const rawUrl = String(link.url || '');
+            const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : '#';
+            return `
+            <a class="btn btn-ghost btn-small" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || appT('models.openSource', 'Open source'))}</a>
+        `;
+        }).join('') : '';
 
         return `
             <article class="model-card ${statusClass}" data-model-id="${safeId}">
@@ -7683,8 +7874,15 @@ function renderModelManager(models = []) {
                         <select class="input-field model-variant-select" data-model-id="${safeId}">${variantOptions}</select>
                     </label>
                 ` : ''}
+                ${Array.isArray(model.setup_steps) && model.setup_steps.length && status !== 'ready' ? `
+                    <details class="model-card-setup-steps">
+                        <summary>${escapeHtml(appT('models.setupSteps', 'Manual setup steps'))}</summary>
+                        <div class="model-card-hint">${model.setup_steps.map((s, i) => `<div>${i + 1}. <code>${escapeHtml(s)}</code></div>`).join('')}</div>
+                    </details>
+                ` : ''}
                 <div class="model-card-actions">
                     ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
+                    ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Automatic download not available — follow manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>
             </article>
@@ -7700,39 +7898,62 @@ function renderModelManager(models = []) {
             button.disabled = true;
             button.textContent = appT('models.working', 'Working...');
             try {
-                const result = await API.prepareModel(modelId, { source, variant });
-                showToast(result.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
-                const refreshed = await API.getModelStatus();
-                renderModelManager(refreshed.models || []);
-                // Notify other tabs (e.g. Similar Images) that a model changed
-                document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                await API.prepareModel(modelId, { source, variant });
             } catch (error) {
-                const apiData = error?.apiData || {};
-                const userMessage = apiData.message || formatUserError(error, appT('models.prepareFailed', 'Model setup failed'));
-                const manualSteps = Array.isArray(apiData.manual_steps) ? apiData.manual_steps : [];
-                if (apiData.type === 'CivitaiLoginRequired' && manualSteps.length > 0) {
-                    const card = button.closest('.model-card');
-                    if (card) {
-                        const messageEl = card.querySelector('.model-card-message');
-                        if (messageEl) {
-                            messageEl.textContent = userMessage;
-                        }
-                        let stepsEl = card.querySelector('.model-card-manual-steps');
-                        if (!stepsEl) {
-                            stepsEl = document.createElement('div');
-                            stepsEl.className = 'model-card-hint model-card-manual-steps';
-                            const actionsEl = card.querySelector('.model-card-actions');
-                            card.insertBefore(stepsEl, actionsEl || null);
-                        }
-                        stepsEl.innerHTML = manualSteps
-                            .map((step, index) => `<div>${index + 1}. ${escapeHtml(step)}</div>`)
-                            .join('');
-                    }
-                }
-                showToast(userMessage, error?.apiStatus === 409 ? 'warning' : 'error');
+                showToast(formatUserError(error, appT('models.prepareFailed', 'Model setup failed')), 'error');
                 button.disabled = false;
                 button.textContent = originalLabel;
+                return;
             }
+
+            let finished = false;
+            const pollProgress = async () => {
+                try {
+                    const p = await API.get('/api/models/download-progress');
+                    if (p?.active && p.total > 0) {
+                        const pct = Math.round((p.downloaded / p.total) * 100);
+                        const mb = (p.downloaded / 1048576).toFixed(0);
+                        const totalMb = (p.total / 1048576).toFixed(0);
+                        button.textContent = `${p.filename || 'Downloading'}: ${mb}/${totalMb} MB (${pct}%)`;
+                    } else if (p?.active) {
+                        const mb = (p.downloaded / 1048576).toFixed(0);
+                        button.textContent = `${p.filename || 'Downloading'}: ${mb} MB...`;
+                    }
+                    const pr = p?.prepare_result;
+                    if (pr && !pr.active && pr.model_id === modelId && pr.status) {
+                        finished = true;
+                        if (pr.status === 'done') {
+                            showToast(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
+                            const refreshed = await API.getModelStatus();
+                            renderModelManager(refreshed.models || []);
+                            document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                            return;
+                        }
+                        if (pr.status === 'warning') {
+                            showToast(pr.message || appT('models.needsRuntimeToast', 'Model files are present, but runtime setup is incomplete.'), 'warning');
+                            const refreshed = await API.getModelStatus();
+                            renderModelManager(refreshed.models || []);
+                            document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                            return;
+                        }
+                        if (pr.status === 'error') {
+                            showToast(pr.message || appT('models.prepareFailed', 'Model setup failed'), 'error');
+                            try {
+                                const refreshed = await API.getModelStatus();
+                                renderModelManager(refreshed.models || []);
+                            } catch (_refreshErr) {
+                                button.disabled = false;
+                                button.textContent = originalLabel;
+                            }
+                            return;
+                        }
+                    }
+                } catch (_pollErr) {}
+                if (!finished) {
+                    setTimeout(pollProgress, 800);
+                }
+            };
+            pollProgress();
         });
     });
 }
@@ -8482,6 +8703,173 @@ function refreshLocalizedDynamicUi() {
 // ============== Initialization ==============
 
 // Global keyboard shortcuts for gallery navigation
+// ============== Gallery Drag-and-Drop Import ==============
+
+function initGalleryDropZone() {
+    const galleryView = document.getElementById('view-gallery');
+    if (!galleryView) return;
+
+    let overlay = document.getElementById('gallery-drop-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'gallery-drop-overlay';
+        overlay.className = 'gallery-drop-overlay';
+        overlay.innerHTML = `
+            <div class="gallery-drop-overlay-content">
+                <span class="gallery-drop-overlay-icon" aria-hidden="true">📂</span>
+                <span class="gallery-drop-overlay-text">${escapeHtml(appT('gallery.dropToImport', 'Drop folder or images to import'))}</span>
+                <span class="gallery-drop-overlay-hint">${escapeHtml(appT('gallery.dropHint', 'Images will be imported from the dropped folder'))}</span>
+            </div>`;
+        galleryView.appendChild(overlay);
+    }
+
+    let dragCounter = 0;
+
+    galleryView.addEventListener('dragenter', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        if (!_hasFolderOrImageFiles(e)) return;
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) overlay.classList.add('visible');
+    });
+
+    galleryView.addEventListener('dragover', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        if (!_hasFolderOrImageFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    galleryView.addEventListener('dragleave', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.classList.remove('visible');
+        }
+    });
+
+    galleryView.addEventListener('drop', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('visible');
+        _handleGalleryDrop(e);
+    });
+}
+
+function _hasFolderOrImageFiles(e) {
+    if (!e.dataTransfer) return false;
+    const types = e.dataTransfer.types;
+    return types && (types.includes('Files') || types.indexOf('Files') >= 0);
+}
+
+async function _handleGalleryDrop(e) {
+    const items = e.dataTransfer.items;
+    const files = e.dataTransfer.files;
+    const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif']);
+
+    let isFolder = false;
+    let folderName = '';
+
+    if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+            const entry = items[i].webkitGetAsEntry?.() || items[i].getAsEntry?.();
+            if (entry && entry.isDirectory) {
+                isFolder = true;
+                folderName = entry.name || '';
+                break;
+            }
+        }
+    }
+
+    if (isFolder) {
+        _handleFolderDrop(folderName, files);
+        return;
+    }
+
+    if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter(f =>
+            IMAGE_TYPES.has(f.type) || /\.(png|jpe?g|webp|bmp|gif)$/i.test(f.name)
+        );
+        if (imageFiles.length > 0) {
+            _handleImageFilesDrop(imageFiles);
+            return;
+        }
+    }
+
+    showModal('scan-modal');
+}
+
+async function _handleFolderDrop(folderName, files) {
+    const droppedFiles = [];
+    if (files && files.length > 0) {
+        for (let i = 0; i < Math.min(files.length, 5); i++) {
+            if (files[i].name) {
+                droppedFiles.push({ name: files[i].name, size: files[i].size || 0 });
+            }
+        }
+    }
+
+    try {
+        const result = await API.resolveDrop(folderName, droppedFiles);
+        if (result?.folder_path) {
+            _openScanWithPath(result.folder_path);
+            return;
+        }
+    } catch (_) { /* fallback below */ }
+
+    showModal('scan-modal');
+    const input = document.getElementById('scan-folder-path');
+    if (input && folderName) {
+        input.value = folderName;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    showToast(
+        appT('gallery.dropHintBrowse', 'Could not locate the full path for "{name}". Please browse or complete the path.')
+            .replace('{name}', folderName || (droppedFiles[0]?.name) || ''),
+        'warning'
+    );
+}
+
+async function _handleImageFilesDrop(imageFiles) {
+    showToast(
+        appT('gallery.importingDropped', 'Importing {count} images...')
+            .replace('{count}', String(imageFiles.length)),
+        'info'
+    );
+    try {
+        const result = await API.importFiles(imageFiles);
+        const imported = result?.imported || 0;
+        const errors = result?.errors || 0;
+        if (imported > 0) {
+            showToast(
+                appT('gallery.importedDropped', 'Imported {count} images into gallery')
+                    .replace('{count}', String(imported))
+                    + (errors > 0 ? ` (${errors} failed)` : ''),
+                'success'
+            );
+            await loadStats();
+            await loadImages();
+        } else {
+            showToast(appT('gallery.importDroppedFailed', 'No images could be imported'), 'warning');
+        }
+    } catch (error) {
+        showToast(formatUserError(error, appT('gallery.importDroppedError', 'Failed to import dropped images')), 'error');
+    }
+}
+
+function _openScanWithPath(folderPath) {
+    showModal('scan-modal');
+    const input = document.getElementById('scan-folder-path');
+    if (input) {
+        input.value = folderPath;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    showToast(appT('gallery.dropFolderDetected', 'Folder detected: {path}').replace('{path}', folderPath), 'info');
+}
+
 function initGlobalKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         // Only handle when not in input/textarea
@@ -8561,6 +8949,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initInputModal();
     initGlobalKeyboardShortcuts();
+    initGalleryDropZone();
     loadTaggerModels();
     setTaggingUiState(false);
     setGalleryViewMode(AppState.viewMode);

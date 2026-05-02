@@ -352,3 +352,14 @@ def test_scan_progress_eta_uses_real_counted_totals_and_separate_metadata_totals
     assert "checking the final detail count" in en_source
     assert "正在统计图片... 已找到 {count} 张" in zh_source
     assert "正在确认详细信息总数" in zh_source
+
+
+def test_queue_solitaire_escapes_file_and_section_values_before_inner_html():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "queue-solitaire.js").read_text(encoding="utf-8")
+
+    assert "function escapeQueueHtml" in source
+    assert 'value="${escapeQueueHtml(section.name)}"' in source
+    assert '<option value="${escapeQueueHtml(s.id)}">${escapeQueueHtml(s.name)}' in source
+    assert "escapeQueueHtml(item?.outputFilename || item?.originalFilename || state.previewId)" in source
+    assert "${item?.outputFilename || item?.originalFilename || state.previewId}" not in source

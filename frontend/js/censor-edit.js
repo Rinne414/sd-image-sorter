@@ -595,6 +595,11 @@ function bindEvents() {
         runDetectionForAll();
     });
 
+    // SAM3 common words popup
+    $('#btn-sam3-common-words')?.addEventListener('click', () => {
+        _showSam3CommonWordsPopup();
+    });
+
     // SAM3 Batch Refine button
     $('#btn-sam3-batch-refine')?.addEventListener('click', async () => {
         $('#detect-modal')?.classList.remove('visible');
@@ -2909,7 +2914,9 @@ function updateDetectionModelInputs() {
     if (modelFileGroup) modelFileGroup.style.display = needsLegacyPath ? '' : 'none';
     if (modelPathGroup) modelPathGroup.style.display = needsLegacyPath && showAdvancedInputs ? '' : 'none';
 
-    // Show/hide SAM3 confidence slider in sidebar based on SAM3 availability
+    const sam3PromptRow = document.getElementById('sam3-prompt-row');
+    if (sam3PromptRow) sam3PromptRow.style.display = modelType === 'sam3' ? '' : 'none';
+
     const sam3Group = document.getElementById('sam3-confidence-group');
     if (sam3Group) {
         const sam3Model = (CensorState.backendModelStatus?.models || []).find(m => m.id === 'sam3');
@@ -2917,6 +2924,71 @@ function updateDetectionModelInputs() {
     }
 
     renderCensorCapabilityPanel();
+}
+
+const SAM3_COMMON_PROMPTS = {
+    'Privacy / NSFW': [
+        'exposed female breast', 'exposed nipple', 'exposed female genitalia',
+        'exposed male genitalia', 'exposed anus', 'exposed buttocks',
+    ],
+    'Body Parts': [
+        'face', 'eyes', 'mouth', 'hands', 'feet', 'navel', 'armpit',
+    ],
+    'Clothing / Objects': [
+        'underwear', 'bra', 'bikini', 'tattoo', 'piercing', 'watermark', 'text', 'logo',
+    ],
+};
+
+function _showSam3CommonWordsPopup() {
+    let popup = document.getElementById('sam3-common-popup');
+    if (popup) {
+        popup.classList.toggle('visible');
+        return;
+    }
+
+    popup = document.createElement('div');
+    popup.id = 'sam3-common-popup';
+    popup.className = 'sam3-common-popup visible';
+    popup.style.cssText = 'position:absolute;z-index:600;background:var(--bg-card-solid,#0e1a2d);border:1px solid var(--glass-border,rgba(191,219,254,0.12));border-radius:12px;padding:12px;max-width:320px;box-shadow:0 12px 32px rgba(0,0,0,0.4);';
+
+    let html = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Click to add. Separate multiple with commas.</div>';
+    for (const [group, words] of Object.entries(SAM3_COMMON_PROMPTS)) {
+        html += `<div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin:8px 0 4px;">${group}</div>`;
+        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
+        for (const word of words) {
+            html += `<button class="btn btn-ghost btn-small sam3-word-chip" data-word="${word}" style="font-size:11px;padding:3px 8px;border-radius:6px;">${word}</button>`;
+        }
+        html += '</div>';
+    }
+    popup.innerHTML = html;
+
+    const btn = document.getElementById('btn-sam3-common-words');
+    const row = document.getElementById('sam3-prompt-row');
+    (row || btn?.parentElement || document.body).appendChild(popup);
+
+    popup.addEventListener('click', (e) => {
+        const chip = e.target.closest('.sam3-word-chip');
+        if (!chip) return;
+        const word = chip.dataset.word;
+        const input = document.getElementById('sam3-custom-prompt');
+        if (!input) return;
+        const current = input.value.trim();
+        if (current) {
+            const existing = current.split(',').map(s => s.trim());
+            if (!existing.includes(word)) {
+                input.value = current + ', ' + word;
+            }
+        } else {
+            input.value = word;
+        }
+    });
+
+    document.addEventListener('click', function closePopup(e) {
+        if (!popup.contains(e.target) && e.target.id !== 'btn-sam3-common-words') {
+            popup.classList.remove('visible');
+            document.removeEventListener('click', closePopup);
+        }
+    }, { once: false });
 }
 
 function getLegacyBackendStatus() {
@@ -3533,13 +3605,20 @@ async function runDetectionForImage(item, silent = false, executionPlan = null) 
             return;
         }
 
-        const data = await window.App.API.post('/api/censor/detect', {
+        const detectBody = {
             image_id: item.id,
             model_path: plan.modelPath,
             model_type: plan.modelType,
             confidence_threshold: CensorState.confidence,
             target_classes: plan.targetClasses,
-        });
+        };
+        if (plan.modelType === 'sam3') {
+            const customInput = document.getElementById('sam3-custom-prompt')?.value?.trim();
+            if (customInput) {
+                detectBody.text_prompts = customInput.split(',').map(s => s.trim()).filter(Boolean);
+            }
+        }
+        const data = await window.App.API.post('/api/censor/detect', detectBody);
 
         const regions = [...(data.detections || [])].sort((a, b) => b.confidence - a.confidence);
         item.regions = regions;

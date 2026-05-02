@@ -102,6 +102,7 @@
             <div class="nav-brand">
                 <span class="brand-icon" aria-hidden="true">🎨</span>
                 <span class="brand-text" data-i18n="brand.name">SD Image Sorter</span>
+                <span class="brand-version" id="brand-version" aria-label="Application version"></span>
             </div>
             <!-- Mobile Menu Toggle Button -->
             <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
@@ -416,6 +417,10 @@
                             <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
                                 <span aria-hidden="true">✨</span>
                                 <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
+                            </button>
+                            <button id="btn-cancel-aesthetic" class="btn btn-ghost btn-small danger" style="display:none" title="Stop aesthetic scoring" aria-label="Stop aesthetic scoring">
+                                <span aria-hidden="true">■</span>
+                                <span data-i18n="gallery.cancelAesthetic">Stop</span>
                             </button>
                             <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
                             <span class="header-status-chip is-info metadata-status-chip" id="metadata-status-chip" aria-live="polite" style="display:none"></span>
@@ -1616,6 +1621,7 @@
                                 <select id="censor-model-type" class="toolbar-select censor-detect-select">
                                     <option value="legacy" data-i18n="censor.legacyYolo">YOLO</option>
                                     <option value="nudenet" data-i18n="censor.nudenet">NudeNet</option>
+                                    <option value="sam3" data-i18n="censor.sam3">SAM3</option>
                                     <option value="both" data-i18n="censor.both">Both</option>
                                 </select>
                                 <div class="censor-detect-actions-inline">
@@ -1623,6 +1629,10 @@
                                     <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll">⚡</button>
                                     <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings" data-i18n-title="censor.autoDetectSettings">⚙️</button>
                                 </div>
+                            </div>
+                            <div class="censor-side-row sam3-prompt-row" id="sam3-prompt-row" style="display:none">
+                                <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" style="flex:1;font-size:12px;padding:6px 8px;">
+                                <button class="btn btn-ghost btn-small" id="btn-sam3-common-words" title="Common prompts" style="white-space:nowrap;">📋</button>
                             </div>
                             <div class="censor-side-row">
                                 <label class="censor-side-inline-label"><span data-i18n="censor.confidenceThreshold">Conf</span>: <span class="censor-side-value" id="censor-confidence-value-sidebar">0.50</span></label>
@@ -2237,7 +2247,6 @@
                             <button class="btn btn-ghost btn-small" id="artist-start-dismiss" type="button" data-i18n="guide.closeLabel">Got it</button>
                         </div>
                     </div>
-                    <div class="artist-results-header-note" data-i18n="artist.experimental">Experimental feature — model availability and result quality may vary.</div>
                     <div class="model-health-banner" id="artist-model-health"></div>
                     <!-- Stats Header -->
                     <div class="artist-stats" id="artist-stats">

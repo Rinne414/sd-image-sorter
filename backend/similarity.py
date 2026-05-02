@@ -4,6 +4,7 @@ Image similarity search using FastEmbed CLIP embeddings.
 Generates 512-dim CLIP embeddings per image and stores them in SQLite.
 Supports finding similar images by ID, by upload, and finding duplicates.
 """
+import gc
 import io
 import heapq
 import logging
@@ -240,6 +241,7 @@ class SimilarityIndex:
 
     def __init__(self, db_module=None):
         self.db = db_module
+        self._cancel_requested = False
         self._progress_lock = threading.Lock()
         self._progress = {
             "running": False,
@@ -280,6 +282,12 @@ class SimilarityIndex:
             issues.append(entry)
             self._progress["recent_issues"] = issues[-10:]
 
+    def request_cancel(self) -> bool:
+        if not self._progress.get("running"):
+            return False
+        self._cancel_requested = True
+        return True
+
     def embed_batch(self, image_ids: Optional[List[int]] = None):
         """
         Embed images in batch.
@@ -290,6 +298,7 @@ class SimilarityIndex:
             if self._progress["running"]:
                 return {"error": "Embedding already in progress"}
             self._progress["running"] = True
+            self._cancel_requested = False
 
         self._progress = {
             "running": True,
@@ -363,6 +372,9 @@ class SimilarityIndex:
             total_batches = max(1, int(np.ceil(len(rows) / batch_size)))
             self._progress["total_batches"] = total_batches
             for i in range(0, len(rows), batch_size):
+                if self._cancel_requested:
+                    logger.info("Similarity embedding cancelled at %d/%d", self._progress["processed"], len(rows))
+                    break
                 batch = rows[i:i + batch_size]
                 batch_index = (i // batch_size) + 1
                 self._progress["message"] = f"Embedding batch {batch_index}/{total_batches}..."
@@ -418,6 +430,8 @@ class SimilarityIndex:
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
                         write_image_embeddings(cursor, updates)
+
+                gc.collect()
 
             self._progress["message"] = (
                 f"Completed embeddings: {self._progress['embedded']} embedded"

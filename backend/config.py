@@ -150,6 +150,59 @@ THUMBNAIL_DIR: Path = Path(
     )
 ).expanduser()
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
+DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
+
+
+VALID_MIRRORS = ("auto", "hf-mirror", "modelscope")
+
+
+def get_download_mirror() -> str:
+    """Return the persisted download mirror, defaulting to "auto".
+
+    Reads CONFIG_DIR/download-mirror.json. Logs (rather than swallows) any
+    read error so config corruption is surfaced and not silently masked.
+    """
+    if not DOWNLOAD_MIRROR_CONFIG_PATH.exists():
+        return "auto"
+    import json as _json
+    try:
+        raw = DOWNLOAD_MIRROR_CONFIG_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Could not read download mirror config %s: %s; defaulting to 'auto'",
+            DOWNLOAD_MIRROR_CONFIG_PATH,
+            exc,
+        )
+        return "auto"
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError as exc:
+        logger.warning(
+            "Download mirror config %s is corrupt (%s); defaulting to 'auto'",
+            DOWNLOAD_MIRROR_CONFIG_PATH,
+            exc,
+        )
+        return "auto"
+    mirror = str(data.get("mirror", "auto")).strip().lower()
+    if mirror not in VALID_MIRRORS:
+        logger.warning(
+            "Download mirror config has unknown value %r; defaulting to 'auto'",
+            mirror,
+        )
+        return "auto"
+    return mirror
+
+
+def save_download_mirror(mirror: str) -> None:
+    import json as _json
+    mirror = str(mirror).strip().lower()
+    if mirror not in VALID_MIRRORS:
+        mirror = "auto"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    DOWNLOAD_MIRROR_CONFIG_PATH.write_text(
+        _json.dumps({"mirror": mirror}, indent=2),
+        encoding="utf-8",
+    )
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",
     str(STATE_DIR / "sort-session.json"),
@@ -238,7 +291,7 @@ UPDATE_DOWNLOAD_URL_PREFIX: str = str(
 # Model Download Mirror
 # =============================================================================
 
-# HuggingFace endpoint override for users behind the GFW (mainland China).
+# HuggingFace endpoint override for users who cannot access huggingface.co.
 # Set to "https://hf-mirror.com" to use the hf-mirror proxy.
 # When set, the huggingface_hub library will download from this endpoint
 # instead of the default https://huggingface.co.

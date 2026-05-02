@@ -1302,6 +1302,30 @@ class TestImageFiltering:
         assert second_page["has_more"] is False
         assert second_page["next_cursor"] is None
 
+    def test_get_images_paginated_total_applies_aesthetic_filters(self, test_db):
+        """Paginated totals must match the visible page when aesthetic filters are active."""
+        ids = []
+        for index, score in enumerate([4.0, 6.5, 8.0, None]):
+            image_id = db.add_image(
+                path=f"/test/aesthetic_page_total_{index}.png",
+                filename=f"aesthetic_page_total_{index}.png",
+                prompt="aesthetic page total",
+            )
+            ids.append(image_id)
+            if score is not None:
+                with db.get_db() as conn:
+                    conn.execute("UPDATE images SET aesthetic_score = ? WHERE id = ?", (score, image_id))
+
+        result = db.get_images_paginated(
+            min_aesthetic=6.0,
+            max_aesthetic=8.5,
+            sort_by="newest",
+            limit=10,
+        )
+
+        assert result["total"] == 2
+        assert [image["id"] for image in result["images"]] == [ids[2], ids[1]]
+
     def test_get_images_paginated_cursor_missing_row_falls_back_without_empty_page(self, test_db):
         """Deleting the cursor row should not turn the next page into an empty result when ID fallback is applicable."""
         ids = []

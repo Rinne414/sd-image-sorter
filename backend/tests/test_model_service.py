@@ -141,3 +141,123 @@ def test_download_privacy_yolo_bundle_returns_auth_payload_for_html_login(monkey
 def test_prepare_model_unknown_id_is_domain_error():
     with pytest.raises(ValueError, match="cannot be prepared"):
         model_service.ModelService().prepare_model("not-a-model")
+
+
+def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
+    checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    health = _fake_health()
+    health["censor"]["sam3"] = {
+        "available": False,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": ["sam3", "einops"],
+        "missing_dependency_packages": ["sam3", "einops"],
+        "cuda_available": False,
+        "torch_cuda_build": None,
+        "message": "SAM3 checkpoint is installed, but SAM3 is not ready: missing Python packages: sam3, einops; this app's Python has CPU-only PyTorch; SAM3 needs a CUDA-enabled Torch build.",
+    }
+    monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
+    monkeypatch.setattr(model_service, "get_model_health", lambda: health)
+
+    result = model_service.ModelService().prepare_model("sam3")
+
+    assert result["status"] == "needs_runtime"
+    assert result["ready"] is False
+    assert result["paths"]["checkpoint_path"] == checkpoint
+    assert result["missing_dependency_packages"] == ["sam3", "einops"]
+    assert "checkpoint is installed" in result["message"]
+    assert "CPU-only PyTorch" in result["message"]
+
+
+def test_sam3_default_download_urls_do_not_fallback_to_sam2_checkpoint(monkeypatch):
+    """SAM3 fallback URLs must not silently save a SAM2 .pt checkpoint as SAM3 safetensors."""
+    monkeypatch.delenv("SD_IMAGE_SORTER_SAM3_URLS", raising=False)
+
+    urls = model_service._sam3_download_urls()
+
+    assert urls
+    assert all("sam2" not in url.lower() for url in urls)
+    assert all(url.lower().endswith(".safetensors") for url in urls)
+
+
+def test_prepare_sam3_existing_checkpoint_repairs_runtime_before_final_status(monkeypatch):
+    checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    before = _fake_health()
+    before["censor"]["sam3"] = {
+        "available": False,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": ["sam3"],
+        "missing_dependency_packages": ["sam3"],
+        "cuda_available": False,
+        "torch_cuda_build": None,
+        "message": "SAM3 checkpoint is installed, but runtime is incomplete.",
+    }
+    after = _fake_health()
+    after["censor"]["sam3"] = {
+        "available": True,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": [],
+        "missing_dependency_packages": [],
+        "cuda_available": True,
+        "torch_cuda_build": "12.8",
+        "message": "SAM3 checkpoint and runtime dependencies are ready.",
+    }
+    health_results = iter([before, after])
+    repair_calls = []
+
+    monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
+    monkeypatch.setattr(model_service, "get_model_health", lambda: next(health_results))
+    monkeypatch.setattr(
+        model_service,
+        "_repair_sam3_runtime_if_possible",
+        lambda: repair_calls.append(True) or {"attempted": True, "ok": True},
+    )
+
+    result = model_service.ModelService().prepare_model("sam3")
+
+    assert repair_calls == [True]
+    assert result["status"] == "ok"
+    assert result["ready"] is True
+    assert result["runtime_repair"] == {"attempted": True, "ok": True}
+
+
+def test_model_inventory_explains_sam3_checkpoint_with_missing_runtime(monkeypatch):
+    checkpoint = "/models/sam3/facebook-sam3-modelscope/model.safetensors"
+    health = _fake_health()
+    health["censor"]["sam3"] = {
+        "available": False,
+        "checkpoint_path": checkpoint,
+        "missing_dependencies": ["sam3", "einops"],
+        "missing_dependency_packages": ["sam3", "einops"],
+        "cuda_available": False,
+        "torch_version": "2.11.0+cpu",
+        "torch_cuda_build": None,
+        "message": "SAM3 checkpoint is installed, but runtime is incomplete.",
+    }
+    monkeypatch.setattr(model_service, "get_model_health", lambda: health)
+    monkeypatch.setitem(sys.modules, "aesthetic", SimpleNamespace(is_available=lambda: False))
+
+    inventory = model_service.ModelService().build_model_inventory()
+    sam3 = next(model for model in inventory if model["id"] == "sam3")
+
+    assert sam3["status"] == "missing"
+    assert sam3["message_key"] == "models.sam3.missingDepsCpuTorch"
+    assert sam3["message_params"] == {"deps": "sam3, einops"}
+    assert sam3["path"] == checkpoint
+
+
+def test_prepare_router_marks_runtime_gap_as_warning(monkeypatch):
+    from routers import models as models_router
+
+    class FakeService:
+        def prepare_model(self, model_id, source=None, variant=None):
+            return {"status": "needs_runtime", "message": "runtime missing"}
+
+    with models_router._prepare_lock:
+        models_router._prepare_result.update(active=True, model_id="sam3", status="downloading", message="", error="")
+
+    models_router._run_prepare_blocking(FakeService(), "sam3", None, None)
+
+    with models_router._prepare_lock:
+        assert models_router._prepare_result["active"] is False
+        assert models_router._prepare_result["status"] == "warning"
+        assert models_router._prepare_result["message"] == "runtime missing"

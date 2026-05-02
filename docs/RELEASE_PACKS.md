@@ -31,7 +31,7 @@ That package is meant to cover the common workflows:
 | Package | Python Included | Models Included | Best For |
 |:--------|:---------------:|:---------------:|:---------|
 | `sd-image-sorter-vX.X.X-windows-portable.zip` | Yes | None (auto-download) | **Most Windows users** — no system Python install |
-| `sd-image-sorter-vX.X.X-linux-mac.tar.gz` | No | None (auto-download) | Advanced Linux/Mac users with Python 3.12+ |
+| `sd-image-sorter-vX.X.X-linux.tar.gz` | No | None (auto-download) | Advanced Linux users with Python 3.12+ |
 | `sd-image-sorter-vX.X.X-app-patch.zip` | No | None | In-app updater payload; not the recommended manual first install |
 | `sd-image-sorter-vX.X.X-release-manifest.json` | No | No | SHA256/size manifest used by the updater and release checks |
 
@@ -40,8 +40,8 @@ That package is meant to cover the common workflows:
 Models not bundled in the package will be downloaded automatically on first use.
 
 - **Default**: Downloaded from [HuggingFace](https://huggingface.co)
-- **Mainland China / GFW**: Set `HF_ENDPOINT=https://hf-mirror.com` in your environment or package-root `.env` file to use [hf-mirror](https://hf-mirror.com)
-- **ModelScope**: Available for Artist ID and SAM3 features via the UI model source selector
+- **Can't access HuggingFace?**: Open **Setup Now** and switch **Download Source** to hf-mirror or ModelScope
+- **ModelScope**: Available for Artist ID and SAM3 features
 
 ## Package Manifest Model Policy
 
@@ -57,7 +57,7 @@ Every app package writes `update/package-manifest.json` with a `model_artifact_p
 The app only checks for updates when the user clicks the update button.
 
 - Default channel: GitHub Releases
-- Mainland China friendly option: set `SD_IMAGE_SORTER_UPDATE_API_URL`, `SD_IMAGE_SORTER_UPDATE_WEB_URL`, and `SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX` in the package-root `.env`
+- If GitHub is unreachable, the app will suggest setting up an update proxy
 - Default user guidance: if GitHub is unreachable, enable VPN and retry the manual update check
 - Asset selection rule: prefer `app-patch`, but automatically fall back to the platform full package when no patch asset exists
 - Safety rule: the updater only replaces release-managed app files and never touches protected runtime paths
@@ -96,7 +96,7 @@ Put all Kaloscope split files in one folder and extract the `.zip.001` file with
 - `sd-image-sorter-vX.X.X-sam3-modelscope-sam3pt.zip.002`
 
 This is included for advanced GPU users only.
-In the current verified setup, SAM3 should be treated as CUDA-only.
+In the current verified setup, SAM3 should be treated as CUDA-only. Windows and Linux launchers prepare the SAM3 Python runtime. macOS is not supported by this release line.
 
 ## Why The Large Models Are Split
 

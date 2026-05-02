@@ -34,8 +34,11 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"set \"TEMP=!TMP_DIR!\"" in launcher_bytes
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL" in launcher_bytes
-    assert b"Installing dependencies - first run may take a few minutes" in launcher_bytes
-    assert b"backend\\launcher_pip.py install -r backend\\requirements.txt" in launcher_bytes
+    assert b"sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2" in launcher_bytes
+    assert b"Preparing Python build tools for source-only packages" in launcher_bytes
+    assert b"backend\\launcher_pip.py install setuptools wheel" in launcher_bytes
+    assert b"Installing full AI runtime dependencies" in launcher_bytes
+    assert b"backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt" in launcher_bytes
     assert b"-m pip install -r backend\\requirements.txt" not in launcher_bytes
     assert launcher_bytes.endswith(b"pause\r\n")
 
@@ -333,13 +336,6 @@ def _assert_platform_specific_wheels_guarded(requirements_path: Path):
 
     assert any('; sys_platform != "win32"' in line for line in requirement_lines["uvloop"])
     assert any('onnxruntime==1.25.0 ; sys_platform == "linux"' in line for line in requirement_lines["onnxruntime"])
-    assert any('onnxruntime==1.19.2 ; sys_platform == "darwin"' in line for line in requirement_lines["onnxruntime"])
-    assert any('opencv-python==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"' in line for line in requirement_lines["opencv-python"])
-    assert any('opencv-python==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["opencv-python"])
-    assert any('opencv-python-headless==4.10.0.84 ; sys_platform == "darwin" and platform_machine == "arm64"' in line for line in requirement_lines["opencv-python-headless"])
-    assert any('opencv-python-headless==4.9.0.80 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["opencv-python-headless"])
-    assert any('torch==2.2.2 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["torch"])
-    assert any('torchvision==0.17.2 ; sys_platform == "darwin" and platform_machine == "x86_64"' in line for line in requirement_lines["torchvision"])
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
     assert any(line.startswith("triton-windows==3.6.0.post") for line in requirement_lines["triton-windows"])
     assert any('; sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])
@@ -361,13 +357,36 @@ def _assert_platform_specific_wheels_guarded(requirements_path: Path):
 
 
 def test_runtime_requirements_keep_platform_specific_wheels_guarded():
-    """The shared launcher requirements file must remain installable on Windows/macOS."""
-    _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements.txt")
+    """The shared launcher requirements file must remain installable on Windows/Linux."""
+    requirements_path = ROOT / "backend" / "requirements.txt"
+    _assert_platform_specific_wheels_guarded(requirements_path)
+    requirements_text = requirements_path.read_text(encoding="utf-8")
+    for package_name in ("sam3==0.1.3", "einops==0.8.2", "hydra-core==1.3.2", "omegaconf==2.3.0", "pycocotools==2.0.11", "decord==0.6.0", "iopath==0.1.10"):
+        assert package_name in requirements_text
+    for locked_line in (
+        'sam3==0.1.3 ; sys_platform != "darwin"',
+        'decord==0.6.0 ; sys_platform != "darwin"',
+        'iopath==0.1.10 ; sys_platform != "darwin"',
+    ):
+        assert locked_line in requirements_text
 
 
 def test_dev_requirements_keep_platform_specific_wheels_guarded():
     """The dev lock must not regress to a Linux-only runtime closure."""
     _assert_platform_specific_wheels_guarded(ROOT / "backend" / "requirements-dev.txt")
+
+
+def test_linux_release_package_uses_linux_only_name():
+    release_builder = load_release_builder()
+
+    assert release_builder.build_release_assets.__name__ == "build_release_assets"
+    app_info = (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8")
+    build_script = (ROOT / "scripts" / "build_release_packages.py").read_text(encoding="utf-8")
+
+    assert "linux.tar.gz" in app_info
+    assert "linux.tar.gz" in build_script
+    assert "linux-mac.tar.gz" not in app_info
+    assert "linux-mac.tar.gz" not in build_script
 
 
 def test_portable_python_version_matches_runtime_lock_header():
@@ -390,6 +409,16 @@ def test_launchers_reject_python_older_than_runtime_lock():
     assert "Python 3.12" in run_bat
     assert "LSS 12" in run_bat
     assert "Python 3.9" not in run_bat
+    assert "backend/launcher_pip.py install setuptools wheel" in run_sh
+    assert 'INSTALL_REQUIREMENTS="backend/requirements.txt"' in run_sh
+    assert 'backend/launcher_pip.py install --no-build-isolation -r "${INSTALL_REQUIREMENTS}"' in run_sh
+    assert "macOS is not supported by this release package" in run_sh
+    assert "--index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0" in run_sh
+    assert "requirements-linux-runtime.txt" in run_sh
+    assert '"nvidia-"' in run_sh
+    assert '"cuda-"' in run_sh
+    assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install setuptools wheel" in run_bat
+    assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt" in run_bat
 
 
 def test_current_install_docs_match_python_312_floor():
@@ -405,7 +434,7 @@ def test_current_install_docs_match_python_312_floor():
     assert "Python 3.11" not in current_docs
 
 
-def test_release_ci_keeps_security_audit_and_macos_guardrails():
+def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     run_ci = (ROOT / "scripts" / "run_ci.py").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
@@ -418,8 +447,11 @@ def test_release_ci_keeps_security_audit_and_macos_guardrails():
     assert "FRONTEND_JS_FILES" in run_ci
     assert "--no-deps" in security_check
     assert "--disable-pip" in security_check
-    assert "macos-latest" in workflow
-    assert "macOS dependency import and release guard tests" in workflow
+    assert "ubuntu-latest" in workflow
+    assert "windows-latest" in workflow
+    assert "Release and updater tests" in workflow
+    assert "macos-latest" not in workflow
+    assert "macOS dependency import and release guard tests" not in workflow
     assert "cache: \"pip\"" in workflow
 
 

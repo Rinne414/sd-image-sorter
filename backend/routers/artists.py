@@ -23,6 +23,7 @@ from services.service_provider import ServiceProvider
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
+ARTIST_BATCH_IMAGE_LIMIT = 10000
 
 
 # ============== Request/Response Models ==============
@@ -59,7 +60,7 @@ class IdentifyRequest(ArtistModelConfig):
 
 
 class IdentifyBatchRequest(ArtistModelConfig):
-    image_ids: List[int] = Field(..., min_length=1)
+    image_ids: List[int] = Field(..., min_length=1, max_length=ARTIST_BATCH_IMAGE_LIMIT)
     threshold: float = Field(ARTIST_THRESHOLD_DEFAULT, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
 
@@ -313,6 +314,13 @@ def _run_batch_identification(
     except Exception as exc:
         logger.error("Artist batch job failed: %s", exc)
         service.finish_batch_progress_error(exc)
+
+
+@router.post("/batch-cancel")
+async def cancel_batch(service: ArtistService = Depends(get_artist_service)):
+    """Cancel the running artist batch identification."""
+    cancelled = service.request_cancel()
+    return {"status": "cancelled" if cancelled else "not_running"}
 
 
 @router.get("/batch-progress", response_model=BatchProgress)

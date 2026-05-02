@@ -40,6 +40,23 @@
     // ── Helpers ────────────────────────────────────────────────────────
     function getCensorState() { return window.__CENSOR_STATE__ || window.CensorState; }
 
+    function escapeQueueHtml(value) {
+        if (typeof window.escapeHtml === 'function') {
+            return window.escapeHtml(value);
+        }
+        if (value == null) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function safeSectionColor(value) {
+        return SECTION_COLORS.includes(value) ? value : 'gray';
+    }
+
     function getQueueItem(id) {
         const cs = getCensorState();
         return cs?.queue?.find(item => item.id === id);
@@ -611,13 +628,13 @@
         if (!container) return;
 
         if (!state.autoSortProfiles.length) {
-            container.innerHTML = `<div class="qs-auto-sort-section-label">${t('queueSolitaire.noProfilesYet', 'No saved profiles yet')}</div>`;
+            container.innerHTML = `<div class="qs-auto-sort-section-label">${escapeQueueHtml(t('queueSolitaire.noProfilesYet', 'No saved profiles yet'))}</div>`;
             return;
         }
 
         container.innerHTML = state.autoSortProfiles.map((profile) => `
-            <button type="button" class="qs-auto-sort-profile-btn" data-profile-id="${profile.id}">
-                ${escapeHtml(profile.name)}
+            <button type="button" class="qs-auto-sort-profile-btn" data-profile-id="${escapeQueueHtml(profile.id)}">
+                ${escapeQueueHtml(profile.name)}
             </button>
         `).join('');
 
@@ -667,23 +684,23 @@
         }
 
         select.innerHTML = state.autoSortProfiles.map((profile) => `
-            <option value="${profile.id}">${escapeHtml(profile.name)}</option>
+            <option value="${escapeQueueHtml(profile.id)}">${escapeQueueHtml(profile.name)}</option>
         `).join('');
         if (state.editingProfileId) {
             select.value = state.editingProfileId;
         }
 
         list.innerHTML = state.profileDraftSections.map((section, index) => `
-            <div class="qs-profile-card" data-section-id="${section.id}">
+            <div class="qs-profile-card" data-section-id="${escapeQueueHtml(section.id)}">
                 <div class="qs-profile-card-top">
-                    <input class="input-field qs-profile-name" value="${escapeHtml(section.name)}" data-section-id="${section.id}" aria-label="${t('queueSolitaire.sectionName', 'Section name')}">
-                    <select class="input-field qs-profile-color" data-section-id="${section.id}" aria-label="${t('queueSolitaire.sectionColor', 'Section color')}">
-                        ${SECTION_COLORS.map((color) => `<option value="${color}" ${section.color === color ? 'selected' : ''}>${color}</option>`).join('')}
+                    <input class="input-field qs-profile-name" value="${escapeQueueHtml(section.name)}" data-section-id="${escapeQueueHtml(section.id)}" aria-label="${escapeQueueHtml(t('queueSolitaire.sectionName', 'Section name'))}">
+                    <select class="input-field qs-profile-color" data-section-id="${escapeQueueHtml(section.id)}" aria-label="${escapeQueueHtml(t('queueSolitaire.sectionColor', 'Section color'))}">
+                        ${SECTION_COLORS.map((color) => `<option value="${escapeQueueHtml(color)}" ${section.color === color ? 'selected' : ''}>${escapeQueueHtml(color)}</option>`).join('')}
                     </select>
-                    <button type="button" class="btn btn-secondary btn-small qs-profile-edit-filter" data-section-id="${section.id}">${t('queueSolitaire.editSectionFilter', 'Edit Filter')}</button>
-                    <button type="button" class="btn btn-ghost btn-small qs-profile-remove-section" data-section-id="${section.id}">✕</button>
+                    <button type="button" class="btn btn-secondary btn-small qs-profile-edit-filter" data-section-id="${escapeQueueHtml(section.id)}">${escapeQueueHtml(t('queueSolitaire.editSectionFilter', 'Edit Filter'))}</button>
+                    <button type="button" class="btn btn-ghost btn-small qs-profile-remove-section" data-section-id="${escapeQueueHtml(section.id)}">✕</button>
                 </div>
-                <div class="qs-profile-card-summary">${escapeHtml(buildProfileSummary(section.filters))}</div>
+                <div class="qs-profile-card-summary">${escapeQueueHtml(buildProfileSummary(section.filters))}</div>
             </div>
         `).join('');
 
@@ -1151,7 +1168,7 @@
         if (filterTarget) {
             const currentVal = filterTarget.value;
             filterTarget.innerHTML = state.sections.map(s =>
-                `<option value="${s.id}">${s.name} (${s.items.length})</option>`
+                `<option value="${escapeQueueHtml(s.id)}">${escapeQueueHtml(s.name)} (${s.items.length})</option>`
             ).join('');
             if (currentVal) filterTarget.value = currentVal;
         }
@@ -1159,42 +1176,52 @@
         // Render sections
         container.innerHTML = state.sections.map(section => {
             const isCollapsed = section.collapsed ? 'collapsed' : '';
+            const sectionId = escapeQueueHtml(section.id);
+            const sectionName = escapeQueueHtml(section.name);
+            const sectionColor = escapeQueueHtml(safeSectionColor(section.color));
+            const selectAllLabel = escapeQueueHtml(t('queueSolitaire.selectAll', 'Select all'));
+            const batchRenameLabel = escapeQueueHtml(t('queueSolitaire.batchRename', 'Batch rename'));
+            const removeSectionLabel = escapeQueueHtml(t('queueSolitaire.removeSection', 'Remove section'));
+            const dropHereLabel = escapeQueueHtml(t('queueSolitaire.dropHere', 'Drop images here'));
             const gridItems = section.items.map(id => {
-                const item = getQueueItem(id);
-                const meta = getImageMeta(id);
-                const isSelected = state.selected.has(id) ? 'selected' : '';
-                const isActive = state.previewId === id ? 'active' : '';
+                const numericId = Number.parseInt(id, 10);
+                if (!Number.isFinite(numericId)) return '';
+                const safeId = String(numericId);
+                const item = getQueueItem(numericId) || getQueueItem(id);
+                const meta = getImageMeta(numericId) || getImageMeta(id);
+                const isSelected = state.selected.has(numericId) || state.selected.has(id) ? 'selected' : '';
+                const isActive = Number.parseInt(state.previewId, 10) === numericId ? 'active' : '';
                 const isProcessed = item?.isProcessed ? 'processed' : '';
                 const dotClass = item?.isProcessed ? 'processed' : (item?.regions?.length ? 'detected' : '');
                 const aesthetic = meta?.aesthetic_score != null ? meta.aesthetic_score.toFixed(1) : '';
-                const isFilterMatch = state.filterMatches.has(id);
+                const isFilterMatch = state.filterMatches.has(numericId) || state.filterMatches.has(id);
                 const dimStyle = state.filterMatches.size > 0 && !isFilterMatch ? 'opacity:0.3;' : '';
 
-                return `<div class="qs-thumb-wrap" data-id="${id}" style="${dimStyle}">
+                return `<div class="qs-thumb-wrap" data-id="${safeId}" style="${dimStyle}">
                     <img class="qs-thumb ${isSelected} ${isActive} ${isProcessed}"
-                         src="${getThumbUrl(id)}" alt="" loading="lazy"
-                         data-id="${id}" data-section="${section.id}" draggable="true">
+                         src="${escapeQueueHtml(getThumbUrl(numericId))}" alt="" loading="lazy"
+                         data-id="${safeId}" data-section="${sectionId}" draggable="true">
                     ${dotClass ? `<span class="qs-thumb-dot ${dotClass}"></span>` : ''}
-                    ${aesthetic ? `<span class="qs-thumb-badge aesthetic">${aesthetic}</span>` : ''}
+                    ${aesthetic ? `<span class="qs-thumb-badge aesthetic">${escapeQueueHtml(aesthetic)}</span>` : ''}
                 </div>`;
             }).join('');
 
             const emptyClass = section.items.length === 0 ? 'empty-drop-zone' : '';
 
-            return `<div class="qs-section ${isCollapsed}" data-section="${section.id}" data-color="${section.color}">
-                <div class="qs-section-header" data-section="${section.id}">
+            return `<div class="qs-section ${isCollapsed}" data-section="${sectionId}" data-color="${sectionColor}">
+                <div class="qs-section-header" data-section="${sectionId}">
                     <span class="qs-section-color"></span>
                     <span class="qs-section-collapse">▼</span>
-                    <input type="text" class="qs-section-name" value="${section.name}" data-section="${section.id}">
+                    <input type="text" class="qs-section-name" value="${sectionName}" data-section="${sectionId}">
                     <span class="qs-section-count">(${section.items.length})</span>
                     <div class="qs-section-actions">
-                        <button class="qs-section-btn qs-btn-select-all" data-section="${section.id}" title="${t('queueSolitaire.selectAll', 'Select all')}" aria-label="${t('queueSolitaire.selectAll', 'Select all')}">✓</button>
-                        <button class="qs-section-btn qs-btn-rename" data-section="${section.id}" title="${t('queueSolitaire.batchRename', 'Batch rename')}" aria-label="${t('queueSolitaire.batchRename', 'Batch rename')}">📝</button>
-                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${section.id}" title="${t('queueSolitaire.removeSection', 'Remove section')}" aria-label="${t('queueSolitaire.removeSection', 'Remove section')}" style="color:#ef4444;">✕</button>` : ''}
+                        <button class="qs-section-btn qs-btn-select-all" data-section="${sectionId}" title="${selectAllLabel}" aria-label="${selectAllLabel}">✓</button>
+                        <button class="qs-section-btn qs-btn-rename" data-section="${sectionId}" title="${batchRenameLabel}" aria-label="${batchRenameLabel}">📝</button>
+                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${sectionId}" title="${removeSectionLabel}" aria-label="${removeSectionLabel}" style="color:#ef4444;">✕</button>` : ''}
                     </div>
                 </div>
-                <div class="qs-section-grid ${emptyClass}" data-section="${section.id}">
-                    ${gridItems || `<span style="color:var(--text-muted);font-size:11px;padding:8px;">${t('queueSolitaire.dropHere', 'Drop images here')}</span>`}
+                <div class="qs-section-grid ${emptyClass}" data-section="${sectionId}">
+                    ${gridItems || `<span style="color:var(--text-muted);font-size:11px;padding:8px;">${dropHereLabel}</span>`}
                 </div>
             </div>`;
         }).join('');
@@ -1214,7 +1241,7 @@
         if (!state.previewId) {
             imgEl.src = '';
             imgEl.style.display = 'none';
-            infoEl.innerHTML = `<span style="color:var(--text-muted)">${t('queueSolitaire.clickPreview', 'Click an image to preview')}</span>`;
+            infoEl.innerHTML = `<span style="color:var(--text-muted)">${escapeQueueHtml(t('queueSolitaire.clickPreview', 'Click an image to preview'))}</span>`;
             return;
         }
 
@@ -1225,12 +1252,13 @@
         const dims = meta ? `${meta.width || '?'}×${meta.height || '?'}` : '';
         const aesthetic = meta?.aesthetic_score != null ? `★ ${meta.aesthetic_score.toFixed(1)}` : '';
         const checkpoint = getNormalizedCheckpoint(meta);
+        const filename = escapeQueueHtml(item?.outputFilename || item?.originalFilename || state.previewId);
 
         infoEl.innerHTML = `
-            <span class="qs-preview-filename">${item?.outputFilename || item?.originalFilename || state.previewId}</span>
-            ${dims ? `<span>${dims}</span>` : ''}
-            ${aesthetic ? `<span>${aesthetic}</span>` : ''}
-            ${checkpoint ? `<span>🧠 ${checkpoint}</span>` : ''}
+            <span class="qs-preview-filename">${filename}</span>
+            ${dims ? `<span>${escapeQueueHtml(dims)}</span>` : ''}
+            ${aesthetic ? `<span>${escapeQueueHtml(aesthetic)}</span>` : ''}
+            ${checkpoint ? `<span>🧠 ${escapeQueueHtml(checkpoint)}</span>` : ''}
         `;
     }
 

@@ -74,33 +74,3 @@ jobs:
         working-directory: backend
         run: |
           python -m pytest tests/test_release_build.py tests/test_update_service.py tests/test_update_worker.py -q
-
-  macos-risk-areas:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: backend/requirements-dev.txt
-
-      - name: Install backend dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r backend/requirements-dev.txt
-
-      - name: macOS dependency import and release guard tests
-        working-directory: backend
-        run: |
-          python - <<'PY'
-          import cv2
-          import fastapi
-          import onnxruntime
-          import PIL
-          import torch
-
-          print("macOS dependency imports OK", cv2.__version__, onnxruntime.__version__, torch.__version__)
-          PY
-          python -m pytest tests/test_release_build.py -q

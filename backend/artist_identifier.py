@@ -43,6 +43,7 @@ from config import (
     ARTIST_LSNET_CODE_PATH,
     ARTIST_KALOSCOPE_CHECKPOINT,
     ARTIST_KALOSCOPE_CLASS_MAPPING,
+    get_artist_model_dir,
 )
 
 logger = logging.getLogger("sd-image-sorter.artist")
@@ -80,10 +81,15 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
     if ARTIST_LSNET_CODE_PATH:
         candidates.append(ARTIST_LSNET_CODE_PATH)
 
+    artist_root = Path(get_artist_model_dir())
     project_root = Path(__file__).resolve().parent.parent
     candidates.extend([
+        artist_root / "comfyui-lsnet-runtime",
+        artist_root / "comfyui-lsnet",
+        artist_root / "lsnet-test",
         project_root / "models" / "artist" / "comfyui-lsnet",
         project_root / "models" / "artist" / "lsnet-test",
+        project_root / "models" / "artist" / "comfyui-lsnet-runtime",
         project_root / "third_party" / "comfyui-lsnet",
         project_root / "third_party" / "lsnet-test",
     ])
@@ -96,8 +102,7 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
 
 
 def _get_artist_model_root() -> Path:
-    project_root = Path(__file__).resolve().parent.parent
-    target = project_root / "models" / "artist"
+    target = Path(get_artist_model_dir())
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -122,25 +127,30 @@ def _candidate_hf_endpoints() -> List[str]:
 
 
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
-    from huggingface_hub import hf_hub_download
-
     last_error: Optional[Exception] = None
     for endpoint in _candidate_hf_endpoints():
         try:
-            kwargs = {
-                "repo_id": repo_id,
-                "filename": filename,
-                "local_dir": local_dir,
-            }
+            base_url = endpoint or "https://huggingface.co"
+            url = f"{base_url.rstrip('/')}/{repo_id}/resolve/main/{filename}"
+            destination = Path(local_dir) / filename
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = destination.with_suffix(destination.suffix + ".tmp")
             if endpoint:
-                kwargs["endpoint"] = endpoint
                 logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
             else:
                 logger.info("Downloading %s from %s via HuggingFace", filename, repo_id)
-            return hf_hub_download(**kwargs)
+            request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.0"})
+            with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            tmp_path.replace(destination)
+            return str(destination.resolve())
         except Exception as exc:
             last_error = exc
             logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     if last_error is None:
         raise RuntimeError(f"Failed to download {filename} from {repo_id}")
@@ -280,11 +290,8 @@ def prepare_artist_assets(preferred_source: str = "auto") -> Dict[str, str]:
     source_order: List[str]
     preferred = str(preferred_source or "auto").strip().lower()
     if preferred == "modelscope":
-        source_order = ["modelscope", "huggingface"]
-    elif preferred == "huggingface":
-        source_order = ["huggingface", "modelscope"]
-    else:
-        source_order = ["huggingface", "modelscope"]
+        logger.warning("ModelScope artist preparation is disabled; using direct HuggingFace HTTP instead.")
+    source_order = ["huggingface"]
 
     for source in source_order:
         try:

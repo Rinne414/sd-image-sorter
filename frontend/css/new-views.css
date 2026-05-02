@@ -671,16 +671,6 @@
 }
 
 
-.artist-results-header-note {
-    margin: 0 0 16px;
-    padding: 10px 14px;
-    border: 1px solid rgba(255, 138, 61, 0.28);
-    border-radius: var(--radius-lg);
-    background: rgba(255, 138, 61, 0.08);
-    color: #ffd4b0;
-    font-size: 13px;
-}
-
 .model-health-banner {
     display: none;
     width: 100%;

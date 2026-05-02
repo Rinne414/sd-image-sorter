@@ -216,7 +216,7 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
         raise LazyQaError(f"Manifest has too few assets: {manifest_path}")
 
     seen_names = {entry.get("name", "") for entry in entries}
-    required_suffixes = ("windows-portable.zip", "app-patch.zip", "linux-mac.tar.gz")
+    required_suffixes = ("windows-portable.zip", "app-patch.zip", "linux.tar.gz")
     for suffix in required_suffixes:
         if not any(name.endswith(suffix) for name in seen_names):
             raise LazyQaError(f"Manifest missing asset ending with {suffix}")
@@ -244,7 +244,7 @@ def check_release_packages(artifact_root: Path, version: str | None) -> None:
                     assert_archive_contents(archive.namelist(), package_kind="app-patch")
         elif name.endswith(".tar.gz"):
             with tarfile.open(asset, "r:gz") as archive:
-                assert_archive_contents(archive.getnames(), package_kind="linux-mac")
+                assert_archive_contents(archive.getnames(), package_kind="linux")
 
 
 def find_free_port() -> int:

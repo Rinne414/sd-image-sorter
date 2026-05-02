@@ -6,7 +6,7 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, BackgroundTasks, Query, UploadFile, File
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
@@ -175,6 +175,27 @@ async def browse_folder(
 ):
     """Browse a folder and list its subdirectories."""
     return service.browse_folder(request.path)
+
+
+@router.post("/resolve-drop")
+async def resolve_drop(
+    data: Dict[str, Any],
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Resolve dropped filenames or folder name to a filesystem path."""
+    folder_name = str(data.get("folder_name") or "").strip()
+    filenames = list(data.get("filenames") or [])
+    dropped_files = data.get("files") or []
+    return service.resolve_drop(folder_name, filenames, dropped_files=dropped_files)
+
+
+@router.post("/import-files")
+async def import_files(
+    files: List[UploadFile] = File(...),
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Import uploaded image files directly into the gallery."""
+    return await service.import_uploaded_files(files)
 
 
 @router.post(

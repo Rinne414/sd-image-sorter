@@ -573,7 +573,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             ")\n"
             "\n"
             "if !NEED_INSTALL! EQU 0 (\n"
-            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm\" >nul 2>&1\n"
+            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm, sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2\" >nul 2>&1\n"
             "    if errorlevel 1 (\n"
             "        echo [INFO] Embedded packages look incomplete or inconsistent. Reinstalling dependencies...\n"
             "        set NEED_INSTALL=1\n"
@@ -581,8 +581,15 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             ")\n"
             "\n"
             "if !NEED_INSTALL! EQU 1 (\n"
-            "    echo [INFO] Installing dependencies - first run may take a few minutes...\n"
-            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install -r backend\\requirements.txt --no-warn-script-location\n"
+            "    echo [INFO] Preparing Python build tools for source-only packages...\n"
+            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install setuptools wheel --no-warn-script-location\n"
+            "    if errorlevel 1 (\n"
+            "        echo [ERROR] Failed to install Python build tools.\n"
+            "        pause\n"
+            "        exit /b 1\n"
+            "    )\n"
+            "    echo [INFO] Installing full AI runtime dependencies - first run may take a while...\n"
+            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt --no-warn-script-location\n"
             "    if errorlevel 1 (\n"
             "        echo [ERROR] Failed to install dependencies.\n"
             "        pause\n"
@@ -610,6 +617,14 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "if errorlevel 1 (\n"
             "    echo [WARN] Could not auto-repair ONNX Runtime package state.\n"
             "    echo        The app can still start, but WD14 tagging may stay on CPU.\n"
+            ")\n"
+            "echo.\n"
+            "\n"
+            "echo [Info] Checking Windows PyTorch / SAM3 runtime package state...\n"
+            "\"!PYTHON_CMD!\" backend\\repair_torch_runtime.py --auto\n"
+            "if errorlevel 1 (\n"
+            "    echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.\n"
+            "    echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.\n"
             ")\n"
             "echo.\n"
             "\n"
@@ -710,8 +725,8 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
     assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 
-    # === Linux/Mac: app only, no models, no Python (uses system Python) ===
-    def populate_linux_mac(stage_dir: Path) -> None:
+    # === Linux: app only, no models, no Python (uses system Python) ===
+    def populate_linux(stage_dir: Path) -> None:
         copy_project(stage_dir)
         write_package_manifest(stage_dir, version)
 
@@ -723,15 +738,15 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
     assets.append(stage_archive("app-patch", version, seven_zip, populate=populate_app_patch))
 
-    # Build as tar.gz for Linux/Mac
-    linux_stage = STAGING_ROOT / "linux-mac"
+    # Build as tar.gz for Linux
+    linux_stage = STAGING_ROOT / "linux"
     if linux_stage.exists():
         shutil.rmtree(linux_stage)
     linux_stage.mkdir(parents=True, exist_ok=True)
-    populate_linux_mac(linux_stage)
+    populate_linux(linux_stage)
 
     import tarfile
-    tar_name = f"sd-image-sorter-v{version}-linux-mac.tar.gz"
+    tar_name = f"sd-image-sorter-v{version}-linux.tar.gz"
     tar_path = ARTIFACT_ROOT / tar_name
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(linux_stage, arcname="sd-image-sorter")

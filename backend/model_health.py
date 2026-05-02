@@ -7,9 +7,11 @@ scripts, and frontend diagnostics can all report the same truth.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import os
 import platform
+import subprocess
 import sys
 import warnings
 from pathlib import Path
@@ -58,6 +60,165 @@ def _module_available(module_name: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def _module_installed(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except Exception:
+        return False
+
+
+def _probe_loaded_torch_runtime() -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "torch_version": None,
+        "torch_cuda_build": None,
+        "torch_cuda_available": False,
+        "torch_probe_error": None,
+        "torch_probe_source": "current-process",
+    }
+    try:
+        torch = sys.modules.get("torch")
+        if torch is None:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                torch = importlib.import_module("torch")
+        result["torch_version"] = getattr(torch, "__version__", None)
+        result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
+        result["torch_cuda_available"] = bool(torch.cuda.is_available())
+    except Exception as exc:
+        result["torch_probe_error"] = str(exc)
+    return result
+
+
+def _probe_torch_runtime() -> Dict[str, Any]:
+    if "torch" in sys.modules:
+        return _probe_loaded_torch_runtime()
+
+    code = r'''
+import json
+from importlib import metadata
+result = {
+    "torch_version": None,
+    "torch_cuda_build": None,
+    "torch_cuda_available": False,
+    "torch_probe_error": None,
+    "torch_probe_source": "subprocess",
+}
+try:
+    result["torch_version"] = metadata.version("torch")
+except Exception:
+    pass
+try:
+    import torch
+    result["torch_version"] = getattr(torch, "__version__", result["torch_version"])
+    result["torch_cuda_build"] = getattr(getattr(torch, "version", None), "cuda", None)
+    result["torch_cuda_available"] = bool(torch.cuda.is_available())
+except Exception as exc:
+    result["torch_probe_error"] = str(exc)
+print(json.dumps(result))
+'''.strip()
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+    except Exception as exc:
+        return {
+            "torch_version": None,
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": str(exc),
+            "torch_probe_source": "subprocess",
+        }
+
+    if completed.returncode != 0:
+        return {
+            "torch_version": None,
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": (completed.stderr or completed.stdout or f"exit {completed.returncode}").strip(),
+            "torch_probe_source": "subprocess",
+        }
+
+    try:
+        parsed = json.loads((completed.stdout or "{}").strip().splitlines()[-1])
+    except Exception as exc:
+        return {
+            "torch_version": None,
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": f"Could not parse torch probe output: {exc}",
+            "torch_probe_source": "subprocess",
+        }
+
+    return {
+        "torch_version": parsed.get("torch_version"),
+        "torch_cuda_build": parsed.get("torch_cuda_build"),
+        "torch_cuda_available": bool(parsed.get("torch_cuda_available")),
+        "torch_probe_error": parsed.get("torch_probe_error"),
+        "torch_probe_source": parsed.get("torch_probe_source") or "subprocess",
+    }
+
+
+SAM3_REQUIRED_MODULES = (
+    ("torch", "torch"),
+    ("sam3", "sam3"),
+    ("einops", "einops"),
+    ("hydra", "hydra-core"),
+    ("omegaconf", "omegaconf"),
+    ("pycocotools", "pycocotools"),
+    ("decord", "decord"),
+    ("iopath", "iopath"),
+    ("cv2", "opencv-python"),
+)
+
+SAM3_IMPORT_TO_PACKAGE = dict(SAM3_REQUIRED_MODULES)
+
+
+def _sam3_missing_dependency_packages(missing_imports: Iterable[str]) -> List[str]:
+    packages: List[str] = []
+    for module_name in missing_imports:
+        package_name = SAM3_IMPORT_TO_PACKAGE.get(module_name, module_name)
+        if package_name not in packages:
+            packages.append(package_name)
+    return packages
+
+
+def _sam3_supported_on_platform() -> bool:
+    return sys.platform != "darwin"
+
+
+def _format_sam3_readiness_message(
+    *,
+    checkpoint_path: Optional[str],
+    missing_packages: List[str],
+    cuda_available: bool,
+    uses_cpu_only_torch: bool,
+    supported_on_platform: bool = True,
+) -> str:
+    if not supported_on_platform:
+        return "SAM3 Pro masks are currently disabled on macOS because this app treats SAM3 as a CUDA-only feature."
+
+    if not checkpoint_path:
+        if missing_packages:
+            return "SAM3 checkpoint is missing, and runtime packages are not installed: " + ", ".join(missing_packages) + "."
+        return "SAM3 checkpoint is missing. Download it or place sam3.pt / model.safetensors under the SAM3 model folder."
+
+    problems: List[str] = []
+    if missing_packages:
+        problems.append("missing Python packages: " + ", ".join(missing_packages))
+    if uses_cpu_only_torch:
+        problems.append("this app's Python has CPU-only PyTorch; SAM3 needs a CUDA-enabled Torch build")
+    elif not cuda_available:
+        problems.append("CUDA is not available to this app's Python right now")
+
+    if problems:
+        return "SAM3 checkpoint is installed, but SAM3 is not ready: " + "; ".join(problems) + "."
+    return "SAM3 checkpoint and runtime dependencies are ready."
 
 
 def _list_model_files(directory: Path, extensions: Iterable[str]) -> List[Dict[str, Any]]:
@@ -390,32 +551,33 @@ def get_model_health() -> Dict[str, Any]:
     artist_checkpoint = get_artist_checkpoint_path()
     artist_class_mapping = get_artist_class_mapping_path()
 
-    sam3_missing = [
-        module_name
-        for module_name in ("sam3", "einops", "hydra", "omegaconf", "pycocotools", "cv2")
-        if not _module_available(module_name)
-    ]
-    cuda_available = False
-    torch_version = None
-    torch_cuda_build = None
-    uses_cpu_only_torch = False
-    try:
-        import torch
+    torch_state = _probe_torch_runtime()
+    torch_version = torch_state.get("torch_version")
+    torch_cuda_build = torch_state.get("torch_cuda_build")
+    cuda_available = bool(torch_state.get("torch_cuda_available"))
+    uses_cpu_only_torch = bool(torch_version) and torch_cuda_build is None
 
-        torch_version = getattr(torch, "__version__", None)
-        torch_cuda_build = getattr(getattr(torch, "version", None), "cuda", None)
-        uses_cpu_only_torch = torch_cuda_build is None
-        cuda_available = bool(torch.cuda.is_available())
-    except Exception:
-        cuda_available = False
+    sam3_supported = _sam3_supported_on_platform()
+    sam3_missing = []
+    if sam3_supported:
+        for module_name, _package_name in SAM3_REQUIRED_MODULES:
+            if module_name == "torch":
+                if not torch_version and not _module_installed("torch"):
+                    sam3_missing.append(module_name)
+            elif not _module_installed(module_name):
+                sam3_missing.append(module_name)
+    sam3_missing_packages = _sam3_missing_dependency_packages(sam3_missing)
 
-    artist_missing = [
-        module_name
-        for module_name in ("torch", "timm")
-        if not _module_available(module_name)
-    ]
-    if platform.system() == "Windows" and not _module_available("triton"):
+    artist_missing = []
+    if not torch_version and not _module_installed("torch"):
+        artist_missing.append("torch")
+    if not _module_installed("timm"):
+        artist_missing.append("timm")
+    if platform.system() == "Windows" and not _module_installed("triton"):
         artist_missing.append("triton")
+    artist_hf_available = _module_installed("huggingface_hub")
+    artist_ms_available = _module_installed("modelscope")
+    artist_has_any_source = True
 
     yolo_files = _list_yolo_model_files(Path(get_yolo_model_dir()))
     yolo_names = {file_info["name"].lower() for file_info in yolo_files}
@@ -452,8 +614,8 @@ def get_model_health() -> Dict[str, Any]:
             "available": (
                 (toriigate_dir / "config.json").exists()
                 and (toriigate_dir / "model.safetensors").exists()
-                and _module_available("transformers")
-                and _module_available("torch")
+                and _module_installed("transformers")
+                and (bool(torch_version) or _module_installed("torch"))
             ),
             "model_name": "toriigate-0.5",
             "model_dir": str(toriigate_dir.resolve()),
@@ -526,29 +688,30 @@ def get_model_health() -> Dict[str, Any]:
                 },
             },
             "sam3": {
-                "available": bool(sam3_checkpoint) and not sam3_missing and cuda_available,
+                "available": sam3_supported and bool(sam3_checkpoint) and not sam3_missing and cuda_available,
                 "checkpoint_path": sam3_checkpoint,
                 "missing_dependencies": sam3_missing,
+                "missing_dependency_packages": sam3_missing_packages,
                 "cuda_available": cuda_available,
                 "torch_version": torch_version,
                 "torch_cuda_build": torch_cuda_build,
-                "message": (
-                    "SAM3 checkpoint and runtime dependencies are ready."
-                    if sam3_checkpoint and not sam3_missing and cuda_available
-                    else (
-                        "SAM3 files are installed, but this Python environment is using CPU-only PyTorch. Install a CUDA-enabled Torch build for this app."
-                        if sam3_checkpoint and not sam3_missing and not cuda_available and uses_cpu_only_torch
-                        else (
-                            "SAM3 files are installed, but this Python environment cannot access CUDA right now."
-                            if sam3_checkpoint and not sam3_missing and not cuda_available
-                            else "SAM3 still needs a checkpoint or runtime dependencies."
-                        )
-                    )
+                "torch_probe_error": torch_state.get("torch_probe_error"),
+                "torch_probe_source": torch_state.get("torch_probe_source"),
+                "message": _format_sam3_readiness_message(
+                    checkpoint_path=sam3_checkpoint,
+                    missing_packages=sam3_missing_packages,
+                    cuda_available=cuda_available,
+                    uses_cpu_only_torch=uses_cpu_only_torch,
+                    supported_on_platform=sam3_supported,
                 ),
                 "runtime_note": (
-                    "SAM3 runs inside this app's own Python environment, so its GPU readiness depends on the Torch build installed here."
-                    if sam3_checkpoint
-                    else None
+                    "SAM3 is currently only prepared on Windows/Linux CUDA environments."
+                    if not sam3_supported
+                    else (
+                        "SAM3 runs inside this app's own Python environment, so its GPU readiness depends on the Torch build installed here."
+                        if sam3_checkpoint or sam3_missing_packages
+                        else None
+                    )
                 ),
                 "capabilities": {
                     "class_scope": "open-text",
@@ -570,6 +733,9 @@ def get_model_health() -> Dict[str, Any]:
             "checkpoint_path": artist_checkpoint,
             "class_mapping_path": artist_class_mapping,
             "missing_dependencies": artist_missing,
+            "huggingface_available": artist_hf_available,
+            "modelscope_available": artist_ms_available,
+            "has_download_source": artist_has_any_source,
             "runtime_note": (
                 "On Windows, comfyui-lsnet may log 'SkaFn failed; falling back to PyTorchSkaFn'. That fallback is usually okay if artist predictions still appear."
                 if platform.system() == "Windows"
@@ -578,7 +744,14 @@ def get_model_health() -> Dict[str, Any]:
             "message": (
                 "Kaloscope runtime is ready."
                 if artist_runtime_path and artist_checkpoint and artist_class_mapping and not artist_missing
-                else "Artist identification still needs the LSNet runtime, Kaloscope files, or Python dependencies."
+                else (
+                    "Kaloscope checkpoint files are missing. "
+                    + (
+                        "Use Prepare / Download to fetch them."
+                    )
+                    if not artist_checkpoint
+                    else "Artist identification still needs the LSNet runtime or Python dependencies."
+                )
             ),
         },
     }

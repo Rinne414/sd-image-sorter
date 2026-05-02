@@ -261,7 +261,6 @@
         },
 
         _translateArtist: function () {
-            this._setText('#view-artist .artist-results-header-note', 'artist.experimental');
             this._setTextAll('#artist-stats .stat-label', ['artist.totalImages', 'artist.identified', 'artist.undefined', 'artist.artistsFound']);
             this._setTextAll('#view-artist .control-section h3', ['artist.modelSettings', 'artist.identification', 'artist.actions']);
             this._setTextAll('#view-artist .control-section label:not(.artist-threshold-label)', ['artist.modelSource', 'artist.localModelPath']);

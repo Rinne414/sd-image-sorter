@@ -56,6 +56,15 @@ async def embed_images(
     return await run_in_threadpool(service.embed_images, background_tasks, image_ids)
 
 
+@router.post("/cancel")
+async def cancel_embedding(
+    service: SimilarityService = Depends(get_similarity_service),
+):
+    """Cancel the running embedding batch."""
+    cancelled = service.cancel_embedding()
+    return {"status": "cancelled" if cancelled else "not_running"}
+
+
 @router.get("/progress")
 async def get_embed_progress(
     service: SimilarityService = Depends(get_similarity_service),

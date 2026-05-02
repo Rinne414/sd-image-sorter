@@ -276,6 +276,16 @@ def _build_metadata_error_record(
     }
 
 
+def parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Public wrapper for the metadata-parsing worker.
+
+    Use this from cross-module callers (e.g. SortingService.import_uploaded_files)
+    instead of importing the underscored helper. The underscored function is kept
+    as the implementation so existing internal call sites and tests stay intact.
+    """
+    return _parse_metadata_job(job)
+
+
 def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
     """Parse one file for the background metadata backfill stage."""
     image_path = job["path"]
