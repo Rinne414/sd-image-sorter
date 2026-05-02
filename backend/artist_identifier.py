@@ -945,6 +945,14 @@ class ArtistIdentifier:
                     "On Windows, install `triton-windows`.\n"
                     "On Linux, install a compatible Triton package for your PyTorch/CUDA stack."
                 ) from exc
+            # Any other missing module (timm, lsnet runtime peer deps, etc.) must also
+            # surface as a clear RuntimeError so callers see a real failure instead of
+            # an UnboundLocalError on `runtime_kind` further down.
+            raise RuntimeError(
+                f"Kaloscope2.0 runtime is missing module {exc.name!r}. "
+                "Verify the LSNet runtime checkout and that timm and its peer "
+                "dependencies are installed."
+            ) from exc
         except ImportError as exc:
             raise RuntimeError(
                 "Kaloscope2.0 requires `timm` plus a compatible LSNet runtime repository.\n"
