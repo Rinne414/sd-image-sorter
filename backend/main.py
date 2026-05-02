@@ -62,6 +62,7 @@ import database as db
 from exceptions import (
     SDImageSorterError,
     ImageNotFoundError,
+    ImageFileNotFoundError,
     TaggingError,
     ScanError,
     ConfigurationError,
@@ -423,6 +424,7 @@ async def sd_image_sorter_exception_handler(request: Request, exc: SDImageSorter
     # Map exception types to HTTP status codes
     status_code_map = {
         ImageNotFoundError: 404,
+        ImageFileNotFoundError: 404,
         ValidationError: 400,
         PathSecurityError: 400,
         ConfigurationError: 500,

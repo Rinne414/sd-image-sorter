@@ -89,9 +89,12 @@ def _score_batch(force: bool = False):
             predict_score=predict_score,
             progress_callback=service.apply_scoring_progress_update,
         )
+        service.finish_scoring_progress()
     except Exception as exc:
         logger.error("Aesthetic batch job failed: %s", exc)
-        service.finish_scoring_progress()
+        # Surface the error via the progress endpoint so the UI can show a
+        # toast instead of treating it as a clean completion.
+        service.finish_scoring_progress(error=str(exc))
 
 
 @router.post("/aesthetic/cancel")

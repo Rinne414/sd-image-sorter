@@ -32,6 +32,7 @@ class AestheticService:
             "completed": 0,
             "current": "",
             "errors": 0,
+            "error": None,
         }
 
     def get_scoring_progress(self) -> Dict[str, Any]:
@@ -61,16 +62,23 @@ class AestheticService:
                 "completed": 0,
                 "current": "",
                 "errors": 0,
+                "error": None,
             }
 
     def apply_scoring_progress_update(self, update: Dict[str, Any]) -> None:
         with self._scoring_lock:
             self._scoring_state.update(update)
 
-    def finish_scoring_progress(self) -> None:
+    def finish_scoring_progress(self, *, error: Optional[str] = None) -> None:
+        # Surface bg-task crashes to the progress endpoint so the UI can show a
+        # toast instead of silently flipping to "completed". Caller passes
+        # error=str(exc) when the background task raised; default None means a
+        # clean stop (cancellation or natural completion).
         with self._scoring_lock:
             self._scoring_state["running"] = False
             self._scoring_state["current"] = ""
+            if error is not None:
+                self._scoring_state["error"] = str(error)
 
     def set_scoring_progress_state(self, state: Dict[str, Any]) -> None:
         with self._scoring_lock:
@@ -80,6 +88,7 @@ class AestheticService:
                 "completed": int(state.get("completed", 0) or 0),
                 "current": str(state.get("current", "") or ""),
                 "errors": int(state.get("errors", 0) or 0),
+                "error": state.get("error"),
             }
 
     def _resolve_image_path(self, *, image_id: int, indexed_path: str) -> Optional[str]:
