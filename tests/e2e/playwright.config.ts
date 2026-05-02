@@ -189,6 +189,10 @@ export default defineConfig({
       SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL: pathToFileURL(artistCheckpoint).href,
       SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL: pathToFileURL(artistMapping).href,
       SD_IMAGE_SORTER_SAM3_URLS: pathToFileURL(sam3Checkpoint).href,
+      // Opt-in so model_service.urlopen_with_ua accepts file:// URLs from
+      // the fixtures above. The flag is namespaced _TEST_ so production
+      // never picks it up.
+      SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS: '1',
       SD_IMAGE_SORTER_DOWNLOAD_CHUNK_DELAY_MS: process.env.SD_IMAGE_SORTER_DOWNLOAD_CHUNK_DELAY_MS || '80',
     },
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',

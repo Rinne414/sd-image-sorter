@@ -72,20 +72,38 @@ class ModelPreparationFailedError(RuntimeError):
 _ALLOWED_DOWNLOAD_SCHEMES = ("https", "http")
 
 
+def _resolve_allowed_download_schemes() -> tuple[str, ...]:
+    """Return the schemes urlopen_with_ua should accept on this run.
+
+    Production stays restricted to ``https``/``http``. The Playwright
+    end-to-end suite stages model fixtures as local files and points the
+    backend at them via ``file://`` URLs in environment variables. Setting
+    ``SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS=1`` opts into accepting
+    ``file://`` so those fixture-driven flows can run without a real CDN.
+    The flag is intentionally namespaced as ``_TEST_`` so operators do not
+    enable it in production by accident.
+    """
+    if os.environ.get("SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return _ALLOWED_DOWNLOAD_SCHEMES + ("file",)
+    return _ALLOWED_DOWNLOAD_SCHEMES
+
+
 def urlopen_with_ua(url: str, timeout: int = 30):
     """Open a URL with a browser-style User-Agent for CDNs that reject urllib.
 
     Hardened against env-var-supplied ``file://`` / ``ftp://`` URLs that could
     coerce ``urlopen`` into reading local files or talking to unintended
-    services. Scheme is restricted to ``https`` (preferred) or ``http``.
+    services. Scheme is restricted to ``https`` (preferred) or ``http``,
+    plus ``file`` only when the explicit test flag opts in.
     """
     from urllib.parse import urlparse
 
     scheme = (urlparse(url).scheme or "").lower()
-    if scheme not in _ALLOWED_DOWNLOAD_SCHEMES:
+    allowed_schemes = _resolve_allowed_download_schemes()
+    if scheme not in allowed_schemes:
         raise ValueError(
             f"Refusing to download from scheme {scheme!r}; "
-            f"only {_ALLOWED_DOWNLOAD_SCHEMES} are allowed."
+            f"only {allowed_schemes} are allowed."
         )
     req = urllib.request.Request(url, headers=_DOWNLOAD_HEADERS)
     return urllib.request.urlopen(req, timeout=timeout)
