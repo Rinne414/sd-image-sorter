@@ -75,7 +75,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates, disk
 
 # Import services
 from services import (
@@ -387,6 +387,7 @@ app.include_router(models.router)
 app.include_router(obfuscation.router)
 app.include_router(aesthetic.router)
 app.include_router(updates.router)
+app.include_router(disk.router)
 
 
 # ============================================================

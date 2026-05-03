@@ -760,6 +760,14 @@ Apply a downloaded update package.
 
 When an update is scheduled, response includes `pending_manifest` and `restart_required`. The updater validates archive entries and the package manifest before copying files, and rejects protected runtime paths such as `data/`, `update/downloads/`, `update/logs/`, `update/state/`, `update/worker/`, and `update/backups/`.
 
+### Disk
+
+#### GET /api/disk/cache-status
+Report sizes of cache directories the user can safely clean and informational sizes for preserved directories (models, settings, user data). Response shape: `{safe_to_clean: [{key, label_key, path, size_bytes, exists}], preserved: [{key, label_key, size_bytes}]}`.
+
+#### POST /api/disk/cleanup
+Wipe the contents of whitelisted cache directories. Body: `{keys: ["tmp" | "pip_cache" | "thumbnails" | "cache"]}`. Strict whitelist enforced server-side; unknown keys are rejected. Returns `{cleaned: [{key, freed_bytes}], errors: [{key, error}]}` with partial-failure reporting.
+
 ---
 
 Use `/docs` for interactive exploration. Contract drift is checked by `backend/tests/test_api_docs_contract.py`, and `scripts/export_openapi.py` exports a stable sorted OpenAPI JSON schema without starting the server.

@@ -890,6 +890,14 @@ const API = {
         return this.get('/api/models/status');
     },
 
+    async getCacheStatus() {
+        return this.get('/api/disk/cache-status');
+    },
+
+    async cleanCaches(keys) {
+        return this.post('/api/disk/cleanup', { keys });
+    },
+
     async getMirror() {
         return this.get('/api/models/mirror');
     },
@@ -7797,6 +7805,9 @@ async function openModelManager() {
     if (gridEl) gridEl.innerHTML = '';
     showModal('model-manager-modal');
 
+    // Disk usage loads independently so a slow model probe doesn't block it.
+    loadDiskUsage();
+
     try {
         const result = await API.getModelStatus();
         renderModelManager(result.models || []);
@@ -7989,6 +8000,110 @@ function renderModelManager(models = []) {
             };
             pollProgress();
         });
+    });
+}
+
+function _formatBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+async function loadDiskUsage() {
+    const bodyEl = $('#disk-usage-body');
+    if (!bodyEl) return;
+    bodyEl.innerHTML = `<div class="disk-usage-loading">${escapeHtml(appT('disk.loading', 'Reading disk usage…'))}</div>`;
+    try {
+        const data = await API.getCacheStatus();
+        renderDiskUsage(data);
+    } catch (error) {
+        bodyEl.innerHTML = `<div class="disk-usage-error">${escapeHtml(formatUserError(error, appT('disk.loadFailed', 'Failed to read disk usage')))}</div>`;
+    }
+}
+
+function renderDiskUsage(data) {
+    const bodyEl = $('#disk-usage-body');
+    if (!bodyEl) return;
+    const safe = Array.isArray(data?.safe_to_clean) ? data.safe_to_clean : [];
+    const preserved = Array.isArray(data?.preserved) ? data.preserved : [];
+
+    const safeRows = safe.map((entry) => {
+        const checked = entry.size_bytes > 0 ? 'checked' : '';
+        const sizeText = _formatBytes(entry.size_bytes);
+        return `
+            <label class="disk-cache-row" data-key="${escapeHtml(entry.key)}">
+                <input type="checkbox" class="disk-cache-checkbox" data-key="${escapeHtml(entry.key)}" ${checked}>
+                <span class="disk-cache-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
+                <span class="disk-cache-size">${escapeHtml(sizeText)}</span>
+                <span class="disk-cache-path" title="${escapeHtml(entry.path)}">${escapeHtml(entry.path)}</span>
+            </label>
+        `;
+    }).join('');
+
+    const preservedRows = preserved.map((entry) => `
+        <div class="disk-preserved-row">
+            <span class="disk-preserved-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
+            <span class="disk-preserved-size">${escapeHtml(_formatBytes(entry.size_bytes))}</span>
+        </div>
+    `).join('');
+
+    const totalSafe = safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+    const totalPreserved = preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+
+    bodyEl.innerHTML = `
+        <div class="disk-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.safeToClean', 'Safe to clean'))}</strong>
+                <span class="disk-section-total">${escapeHtml(_formatBytes(totalSafe))}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.safeHint', 'These caches will be regenerated as needed if you delete them.'))}</p>
+            <div class="disk-cache-list">${safeRows || `<div class="disk-empty">${escapeHtml(appT('disk.nothingToClean', 'Nothing to clean.'))}</div>`}</div>
+            <div class="disk-actions">
+                <button class="btn btn-primary btn-small" id="btn-clean-caches" ${totalSafe === 0 ? 'disabled' : ''}>${escapeHtml(appT('disk.cleanSelected', 'Clean Selected'))}</button>
+                <button class="btn btn-ghost btn-small" id="btn-refresh-disk-usage">${escapeHtml(appT('disk.refresh', 'Refresh'))}</button>
+            </div>
+        </div>
+        <div class="disk-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.preserved', 'Preserved (do not delete)'))}</strong>
+                <span class="disk-section-total">${escapeHtml(_formatBytes(totalPreserved))}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.preservedHint', 'These contain models, settings, or your personal data. The app will not delete them from this screen.'))}</p>
+            <div class="disk-preserved-list">${preservedRows}</div>
+        </div>
+    `;
+
+    $('#btn-refresh-disk-usage')?.addEventListener('click', () => {
+        loadDiskUsage();
+    });
+    $('#btn-clean-caches')?.addEventListener('click', async () => {
+        const checked = Array.from(bodyEl.querySelectorAll('.disk-cache-checkbox:checked')).map((el) => el.dataset.key);
+        if (checked.length === 0) {
+            showToast(appT('disk.selectAtLeastOne', 'Select at least one cache to clean.'), 'warning');
+            return;
+        }
+        const btn = $('#btn-clean-caches');
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = appT('disk.cleaning', 'Cleaning…');
+        try {
+            const result = await API.cleanCaches(checked);
+            const cleaned = Array.isArray(result?.cleaned) ? result.cleaned : [];
+            const errors = Array.isArray(result?.errors) ? result.errors : [];
+            const totalFreed = cleaned.reduce((sum, e) => sum + Number(e.freed_bytes || 0), 0);
+            if (errors.length > 0) {
+                showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} item(s) had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
+            } else {
+                showToast(appT('disk.cleanedSuccess', 'Freed {freed} of disk space.', { freed: _formatBytes(totalFreed) }), 'success');
+            }
+            loadDiskUsage();
+        } catch (error) {
+            showToast(formatUserError(error, appT('disk.cleanFailed', 'Failed to clean caches')), 'error');
+            btn.disabled = false;
+            btn.textContent = original;
+        }
     });
 }
 
