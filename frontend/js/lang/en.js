@@ -70,6 +70,7 @@ window.I18nLang_en = {
     'gallery.aestheticRunning': 'Scoring aesthetics...',
     'gallery.aestheticNothingToScore': 'All current images already have aesthetic scores.',
     'gallery.aestheticNeedScoring': 'No images have been scored yet. Click the star button in the toolbar to score your images first.',
+    'gallery.aestheticViewExistingOnly': 'Showing your {count} existing aesthetic scores. New scoring is unavailable until the predictor is reinstalled.',
     'gallery.aestheticStatusFailed': 'Could not check aesthetic scoring status',
     'gallery.aestheticProgressFailed': 'Failed to read aesthetic progress',
     'gallery.aestheticStartFailed': 'Failed to start aesthetic scoring',

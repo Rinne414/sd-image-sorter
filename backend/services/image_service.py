@@ -111,7 +111,17 @@ def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]
 
 
 def move_file_to_trash(path: str) -> None:
-    """Move a file to the OS trash/recycle bin without falling back to permanent delete."""
+    """Move a file to the OS trash/recycle bin without falling back to permanent delete.
+
+    On Windows, ``send2trash`` uses ``IFileOperation`` which normally moves the
+    file to the per-volume Recycle Bin (e.g. ``I:\\$RECYCLE.BIN``). When the
+    target volume has Recycle Bin disabled, is over quota, or is a network /
+    removable drive without trash support, the call may silently succeed
+    without actually moving the file (older Windows versions) or move it
+    cross-volume in a way that surprises the user. We verify the source is
+    gone after the call and raise a clear error otherwise so the caller can
+    surface "Trash unavailable on this drive" instead of pretending success.
+    """
     try:
         from send2trash import send2trash
     except ImportError as exc:
@@ -119,7 +129,35 @@ def move_file_to_trash(path: str) -> None:
             "Trash support is not installed. Reinstall dependencies and try again."
         ) from exc
 
+    if not path:
+        raise RuntimeError("Cannot move to trash: empty path")
+
+    target = Path(path)
+    if not target.exists():
+        raise RuntimeError(f"Cannot move to trash: file does not exist at {path}")
+    if target.is_dir():
+        # Defensive: the indexed path should always point to a file. If a
+        # directory ever sneaks in (data corruption, manual edit) we refuse
+        # to trash it because that would surprise the user with a folder
+        # appearing in the Recycle Bin alongside their images.
+        raise RuntimeError(
+            f"Refusing to move directory to trash (expected a file): {path}"
+        )
+
+    logger.info("Moving file to trash: %s", path)
     send2trash(path)
+
+    if target.exists():
+        # send2trash returned without raising but the file is still there.
+        # This is the symptom users have reported on drives where Windows
+        # silently disables Recycle Bin support. Surface it as a real error
+        # so the caller adds the image to the failed[] array instead of
+        # claiming success.
+        raise RuntimeError(
+            f"send2trash reported success but the file still exists on disk: {path}. "
+            "The drive may have Recycle Bin disabled or be a network/removable volume "
+            "without trash support."
+        )
 
 
 # Valid sort options and aspect ratios

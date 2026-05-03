@@ -3572,6 +3572,12 @@ function initEventListeners() {
     $('#btn-cancel-aesthetic')?.addEventListener('click', async () => {
         try {
             await API.cancelAesthetic();
+            // Don't wait ~1.2s for the next poll tick to clear local state.
+            // Without this, the busy guard on #btn-clear-db (and related
+            // "is something running" checks elsewhere) will keep blocking
+            // user input for the full polling interval after cancel returns.
+            clearAestheticProgressTimer();
+            updateAestheticUi({ running: false, completed: 0, total: 0 });
             showToast(appT('gallery.aestheticCancelled', 'Aesthetic scoring is being stopped...'), 'info');
         } catch (error) {
             showToast(formatUserError(error, 'Failed to cancel'), 'error');
@@ -3725,12 +3731,21 @@ function initEventListeners() {
             filters.sortBy = e.target.value;
         });
         if (AppState.filters.sortBy === 'aesthetic') {
-            if (!_aestheticStatus.available) {
+            const hasExistingScores = Number(_aestheticStatus.scored_count || 0) > 0;
+            if (!_aestheticStatus.available && !hasExistingScores) {
+                // Predictor missing AND no scores in DB — there is literally
+                // nothing to sort by, so push the user back to newest and
+                // explain why.
                 showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable — required dependencies not installed'), 'warning');
                 e.target.value = 'newest';
                 updateAppFilters((filters) => {
                     filters.sortBy = 'newest';
                 });
+            } else if (!_aestheticStatus.available && hasExistingScores) {
+                // Predictor missing but scores exist from a previous run —
+                // sorting still works, just no NEW scoring. Inform the user
+                // so they don't think the data is gone.
+                showToast(appT('gallery.aestheticViewExistingOnly', 'Showing your {count} existing aesthetic scores. New scoring is unavailable until the predictor is reinstalled.', { count: _aestheticStatus.scored_count }), 'info');
             } else if (_aestheticStatus.scored_count === 0) {
                 showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Click the ⭐ button in the toolbar to score your images first.'), 'info');
             }
@@ -3759,9 +3774,28 @@ function initEventListeners() {
 
 
     // Clear DB button
-    $('#btn-clear-db').addEventListener('click', () => {
-        const busy = _aestheticProgressTimer || _scanProgressTimer || _tagProgressTimer;
+    $('#btn-clear-db').addEventListener('click', async () => {
+        // Belt-and-braces: check both the local poll-timer state AND the
+        // backend's actual progress endpoints. Local state can lag (e.g. if
+        // a poll callback never runs after cancel), so the server is the
+        // source of truth. We also Logger.warn so the failure mode shows
+        // up in any captured console log without requiring the user to
+        // open DevTools live.
+        let busy = Boolean(_aestheticProgressTimer || _scanProgressTimer || _tagProgressTimer);
+        if (!busy) {
+            try {
+                const aestheticProgress = await API.getAestheticProgress();
+                if (aestheticProgress?.running) busy = true;
+            } catch (probeErr) {
+                Logger.warn('Clear gallery: aesthetic progress probe failed, assuming idle:', probeErr);
+            }
+        }
         if (busy) {
+            Logger.warn('Clear gallery blocked: a background job is still active', {
+                aestheticTimer: !!_aestheticProgressTimer,
+                scanTimer: !!_scanProgressTimer,
+                tagTimer: !!_tagProgressTimer,
+            });
             showToast(appT('gallery.clearBlocked', 'Cannot clear gallery while scanning, tagging, or scoring is running. Stop the operation first.'), 'warning');
             return;
         }

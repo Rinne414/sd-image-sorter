@@ -112,7 +112,11 @@ class SingleProcessRequest(BaseModel):
 
 
 class BatchProcessRequest(BaseModel):
-    image_paths: List[str] = Field(..., min_length=1, max_length=10000, description="List of image file paths")
+    # Background-task pipeline: each path is processed sequentially so the
+    # only risk from a large list is the request payload itself. 50,000
+    # matches the artist identify-batch ceiling and covers every personal
+    # SD library size we have observed.
+    image_paths: List[str] = Field(..., min_length=1, max_length=50000, description="List of image file paths")
     output_folder: str = Field(..., description="Destination folder")
     password: str = Field(default="", description="Password for scrambling")
     mode: str = Field(default="encode", description="'encode' or 'decode'")

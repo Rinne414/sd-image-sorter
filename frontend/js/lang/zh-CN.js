@@ -72,6 +72,7 @@ window.I18nLang_zhCN = {
     'gallery.aestheticRunning': '正在进行美学评分...',
     'gallery.aestheticNothingToScore': '当前图片都已经有美学评分了。',
     'gallery.aestheticNeedScoring': '当前还没有图片完成美学评分。请先点击工具栏里的星标按钮进行评分。',
+    'gallery.aestheticViewExistingOnly': '正在显示已有的 {count} 个美学评分。重新安装评分模组前无法对新图片评分。',
     'gallery.aestheticStatusFailed': '暂时无法检查美学评分状态',
     'gallery.aestheticProgressFailed': '读取美学评分进度失败',
     'gallery.aestheticStartFailed': '启动美学评分失败',

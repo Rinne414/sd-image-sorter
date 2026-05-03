@@ -23,7 +23,12 @@ from services.service_provider import ServiceProvider
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
-ARTIST_BATCH_IMAGE_LIMIT = 10000
+# Hard ceiling for one /identify-batch request. Background-task model: each
+# image is processed sequentially by the worker, so the server-side memory
+# footprint of ``image_ids`` itself is the only thing we cap. 50,000 covers
+# essentially every personal SD library (the previous 10,000 ceiling rejected
+# real users with larger collections without offering a path forward).
+ARTIST_BATCH_IMAGE_LIMIT = 50000
 
 
 # ============== Request/Response Models ==============
