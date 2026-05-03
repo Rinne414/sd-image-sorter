@@ -243,6 +243,12 @@ class SortingService:
         }
         self._batch_move_lock = threading.Lock()
         self._batch_move_run_id = 0
+        # Cooperative cancellation for the active batch-move worker.
+        # Mirrors ``self._scan_cancel_event`` / ``cancel_scan``: the worker
+        # checks ``is_set()`` between chunks and between images so a cancel
+        # request lands within a few image iterations rather than waiting
+        # for the entire batch to finish.
+        self._batch_move_cancel_event: Optional[threading.Event] = None
 
     @staticmethod
     def _resolve_image_path(path: str) -> Optional[str]:
@@ -571,6 +577,42 @@ class SortingService:
             if self._batch_move_progress["status"] == "running":
                 raise HTTPException(status_code=409, detail="Cannot reset batch move while it is still running")
             return {"status": self._batch_move_progress["status"], "message": "Nothing to reset"}
+
+    def cancel_batch_move(self) -> Dict[str, Any]:
+        """Request cooperative cancellation of the active batch-move task.
+
+        Mirrors :meth:`cancel_scan`: flips the worker's cancel event and
+        publishes a ``cancelling`` progress state so the UI can show a
+        "Cancelling..." indicator while the worker walks to its next
+        chunk/image boundary. The worker writes the terminal
+        ``cancelled`` state itself once it observes the flag, so this
+        method never overwrites a finished run's outcome.
+        """
+        with self._batch_move_lock:
+            current_status = self._batch_move_progress.get("status")
+            if current_status not in {"running", "cancelling"}:
+                return {
+                    "status": current_status,
+                    "message": "No batch move task is running",
+                }
+
+            current = int(self._batch_move_progress.get("current", 0) or 0)
+            total = int(self._batch_move_progress.get("total", 0) or 0)
+            operation = self._batch_move_progress.get("operation", "move")
+
+            if self._batch_move_cancel_event is not None:
+                self._batch_move_cancel_event.set()
+
+            verb = "copy" if operation == "copy" else "move"
+            self._batch_move_progress["status"] = "cancelling"
+            self._batch_move_progress["step"] = "cancelling"
+            self._batch_move_progress["message"] = (
+                f"Cancelling batch {verb}... ({current}/{total})"
+                if total > 0
+                else f"Cancelling batch {verb}..."
+            )
+            self._batch_move_progress["updated_at"] = time.time()
+            return {"status": "cancelling", "message": "Batch move cancellation requested"}
 
     def _set_batch_move_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
         """Only allow the active batch-move task to replace shared progress state."""
@@ -1091,10 +1133,17 @@ class SortingService:
         if total_count == 0:
             return {"message": "No images match the filters", "count": 0}
 
-        # Run actual move in background with progress tracking
+        # Run actual move in background with progress tracking. The
+        # cancel event is allocated under the same lock as run_id so
+        # cancel_batch_move() always sees a consistent (run_id, event)
+        # pair; the worker checks event.is_set() between chunks and
+        # between images so a cancel request lands within a few image
+        # iterations rather than after the whole batch completes.
+        cancel_event = threading.Event()
         with self._batch_move_lock:
             self._batch_move_run_id += 1
             run_id = self._batch_move_run_id
+            self._batch_move_cancel_event = cancel_event
             self._batch_move_progress = {
                 "status": "running",
                 "step": "starting",
@@ -1109,7 +1158,7 @@ class SortingService:
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
-        
+
         def run_batch_move():
             try:
                 image_ids = db.get_filtered_image_ids(
@@ -1165,11 +1214,44 @@ class SortingService:
                 moved = 0
                 processed = 0
                 errors: List[Dict[str, Any]] = []
+
+                def _write_cancelled_state() -> None:
+                    """Publish the cancelled summary for this batch-move run."""
+                    completed_verb_local = "Copied" if operation == "copy" else "Moved"
+                    self._set_batch_move_progress_if_current(
+                        run_id,
+                        {
+                            "status": "cancelled",
+                            "step": "cancelled",
+                            "current": processed,
+                            "total": total_count,
+                            "errors": len(errors),
+                            "moved": moved,
+                            "message": (
+                                f"Cancelled at {processed}/{total_count}. "
+                                f"{completed_verb_local} {moved} images so far."
+                            ),
+                            "current_item": None,
+                            "recent_errors": errors[-3:],
+                            "operation": operation,
+                            "started_at": self._batch_move_progress.get("started_at"),
+                            "updated_at": time.time(),
+                        }
+                    )
+
                 for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
+                    if cancel_event.is_set():
+                        _write_cancelled_state()
+                        return
+
                     batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
                     image_map = db.get_images_by_ids(batch_ids)
 
                     for image_id in batch_ids:
+                        if cancel_event.is_set():
+                            _write_cancelled_state()
+                            return
+
                         image = image_map.get(image_id)
                         if not image:
                             processed += 1
@@ -1270,6 +1352,17 @@ class SortingService:
                         "updated_at": time.time(),
                     }
                 )
+            finally:
+                # Release this run's cancel-event reference so cancel_batch_move
+                # can't operate on a stale event after the worker has exited.
+                # Only clear when we're still the active run — a newer run
+                # would have published its own event under the same lock.
+                with self._batch_move_lock:
+                    if (
+                        self._batch_move_run_id == run_id
+                        and self._batch_move_cancel_event is cancel_event
+                    ):
+                        self._batch_move_cancel_event = None
 
         background_tasks.add_task(run_batch_move)
         progress_verb = "Copying" if operation == "copy" else "Moving"

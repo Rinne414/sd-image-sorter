@@ -292,6 +292,14 @@ async def reset_batch_move_progress(
     return service.reset_batch_move_progress()
 
 
+@router.post("/batch-move/cancel")
+async def cancel_batch_move(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Request cooperative cancellation of the active batch-move task."""
+    return service.cancel_batch_move()
+
+
 @router.post("/sort/start")
 async def start_sort_session(
     generators: Optional[str] = Query(default=None, max_length=1000),

@@ -1264,13 +1264,21 @@ function showAutosepMoveProgress(total) {
     const container = document.querySelector('.preview-section');
     if (!container) return;
     const operationMode = getAutoSepOperationMode();
-    
+
+    const cancelLabel = tKey('autosep.cancel', 'Cancel', '取消');
+    const hideLabel = tKey('autosep.hide', 'Hide', '隐藏');
+
     // Check if progress element already exists
     let progressEl = document.getElementById('autosep-move-progress');
     if (!progressEl) {
         progressEl = document.createElement('div');
         progressEl.id = 'autosep-move-progress';
         progressEl.className = 'autosep-move-progress';
+        // Two-button layout: Cancel actually stops the backend worker via
+        // /api/batch-move/cancel; Hide only dismisses this UI block. The
+        // previous single-button layout was labelled "Hide" but had id
+        // `btn-cancel-autosep-move`, which misled users into thinking
+        // dismissing the panel cancelled the underlying batch.
         progressEl.innerHTML = `
             <div class="progress-bar">
                 <div class="progress-fill" id="autosep-move-fill" style="width: 0%"></div>
@@ -1278,12 +1286,19 @@ function showAutosepMoveProgress(total) {
             <div class="progress-text" id="autosep-move-text">Moving images...</div>
             <div class="autosep-move-errors" id="autosep-move-errors" style="display: none;"></div>
             <div class="operation-controls">
-                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">Hide</button>
+                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">${window.escapeHtml(cancelLabel)}</button>
+                <button class="btn-cancel-operation" id="btn-hide-autosep-move">${window.escapeHtml(hideLabel)}</button>
             </div>
         `;
         container.appendChild(progressEl);
+    } else {
+        // Re-localize labels in case language changed since last time.
+        const existingCancelBtn = document.getElementById('btn-cancel-autosep-move');
+        const existingHideBtn = document.getElementById('btn-hide-autosep-move');
+        if (existingCancelBtn) existingCancelBtn.textContent = cancelLabel;
+        if (existingHideBtn) existingHideBtn.textContent = hideLabel;
     }
-    
+
     progressEl.classList.add('visible');
     autosepMoveTracker = window.App?.createProgressTracker?.() || null;
     if (autosepMoveTracker && typeof window.App?.resetProgressTracker === 'function') {
@@ -1294,11 +1309,32 @@ function showAutosepMoveProgress(total) {
         ? tKey('autosep.preparingCopy', `Preparing to copy ${total} images in the background...`, `准备在后台复制 ${total} 张图片...`)
         : tKey('autosep.preparingMove', `Preparing to move ${total} images in the background...`, `准备在后台移动 ${total} 张图片...`);
     renderAutosepMoveErrors([]);
-    
-    // The backend move runs in the background; the UI can only dismiss progress.
+
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
     if (cancelBtn) {
-        cancelBtn.onclick = () => {
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = cancelLabel;
+        cancelBtn.onclick = async () => {
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = tKey('autosep.cancelling', 'Cancelling...', '正在取消…');
+            try {
+                await window.App.API.post('/api/batch-move/cancel', {});
+            } catch (error) {
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = cancelLabel;
+                window.App.showToast(
+                    tKey('autosep.cancelFailed', 'Failed to request cancellation', '取消请求失败'),
+                    'error'
+                );
+            }
+        };
+    }
+    const hideBtn = document.getElementById('btn-hide-autosep-move');
+    if (hideBtn) {
+        hideBtn.onclick = () => {
+            // Hide only dismisses the panel. The backend worker keeps
+            // running; resumeAutosepMoveProgress() will re-attach if the
+            // user navigates back while the worker is still active.
             hideAutosepMoveProgress();
         };
     }
@@ -1473,6 +1509,30 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
                         }
                     }
                 }, 300);
+                break;
+            }
+
+            if (progress.status === 'cancelled') {
+                hideAutosepMoveProgress();
+                const movedCount = Number(progress.moved || 0);
+                const errorCount = Number(progress.errors || 0);
+                const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
+                window.App.showToast(
+                    progress.message || _formatAutoSepI18n(
+                        operationMode === 'copy' ? 'autosep.copyCancelled' : 'autosep.moveCancelled',
+                        operationMode === 'copy'
+                            ? 'Copy cancelled. {count} images copied so far.'
+                            : 'Move cancelled. {count} images moved so far.',
+                        { count: movedCount }
+                    ),
+                    errorCount > 0 ? 'warning' : 'info'
+                );
+                // Refresh the gallery so the partially-moved files reflect
+                // their new on-disk locations. Skip the refresh when nothing
+                // was committed — there's nothing to update.
+                if (movedCount > 0 && window.App && window.App.loadImages) {
+                    window.App.loadImages();
+                }
                 break;
             }
 
