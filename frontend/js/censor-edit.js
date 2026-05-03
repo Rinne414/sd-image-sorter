@@ -2940,32 +2940,80 @@ const SAM3_COMMON_PROMPTS = {
 };
 
 function _showSam3CommonWordsPopup() {
-    let popup = document.getElementById('sam3-common-popup');
-    if (popup) {
-        popup.classList.toggle('visible');
+    // Toggle: re-clicking the trigger while the popup is open closes it.
+    // The previous design left users stranded — the popup had no close
+    // button and was absolutely-positioned with no offsets, so it landed
+    // at the parent's (0,0) and silently covered the censor sidebar
+    // controls beneath it. Now: viewport-anchored, explicit close (✕),
+    // Escape closes, click-outside closes.
+    const existing = document.getElementById('sam3-common-popup');
+    if (existing) {
+        _closeSam3CommonWordsPopup(existing);
         return;
     }
 
-    popup = document.createElement('div');
+    const btn = document.getElementById('btn-sam3-common-words');
+    if (!btn) return;
+
+    const popup = document.createElement('div');
     popup.id = 'sam3-common-popup';
     popup.className = 'sam3-common-popup visible';
-    popup.style.cssText = 'position:absolute;z-index:600;background:var(--bg-card-solid,#0e1a2d);border:1px solid var(--glass-border,rgba(191,219,254,0.12));border-radius:12px;padding:12px;max-width:320px;box-shadow:0 12px 32px rgba(0,0,0,0.4);';
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-label', 'SAM3 common prompts');
+    popup.style.cssText = [
+        'position:fixed',
+        'z-index:9100',
+        'background:var(--bg-card-solid,#0e1a2d)',
+        'border:1px solid var(--glass-border,rgba(191,219,254,0.18))',
+        'border-radius:12px',
+        'padding:10px 12px 12px',
+        'width:min(320px, calc(100vw - 24px))',
+        'max-height:min(420px, calc(100vh - 96px))',
+        'overflow-y:auto',
+        'box-shadow:0 16px 40px rgba(0,0,0,0.5)',
+        'color:var(--text-primary,#eef2ff)',
+    ].join(';') + ';';
 
-    let html = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">Click to add. Separate multiple with commas.</div>';
+    const closeLabel = (window.tKey?.('censor.sam3CloseHint', 'Close', '关闭')) || 'Close';
+    const headerHelp = (window.tKey?.('censor.sam3CommonHelp', 'Click to add. Separate multiple with commas.', '点击添加；多个词用逗号分隔。')) || 'Click to add. Separate multiple with commas.';
+
+    let html = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="flex:1;font-size:11px;color:var(--text-muted,#94a3b8);line-height:1.4;">${window.escapeHtml(headerHelp)}</div>
+            <button id="sam3-common-popup-close" type="button" aria-label="${window.escapeHtml(closeLabel)}" title="${window.escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#94a3b8);font-size:18px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:6px;flex-shrink:0;">×</button>
+        </div>
+    `;
     for (const [group, words] of Object.entries(SAM3_COMMON_PROMPTS)) {
-        html += `<div style="font-size:11px;font-weight:700;color:var(--text-secondary);margin:8px 0 4px;">${group}</div>`;
+        html += `<div style="font-size:11px;font-weight:700;color:var(--text-secondary,#cbd5e1);margin:8px 0 4px;">${window.escapeHtml(group)}</div>`;
         html += '<div style="display:flex;flex-wrap:wrap;gap:4px;">';
         for (const word of words) {
-            html += `<button class="btn btn-ghost btn-small sam3-word-chip" data-word="${word}" style="font-size:11px;padding:3px 8px;border-radius:6px;">${word}</button>`;
+            html += `<button type="button" class="btn btn-ghost btn-small sam3-word-chip" data-word="${window.escapeHtml(word)}" style="font-size:11px;padding:3px 8px;border-radius:6px;">${window.escapeHtml(word)}</button>`;
         }
         html += '</div>';
     }
     popup.innerHTML = html;
+    document.body.appendChild(popup);
 
-    const btn = document.getElementById('btn-sam3-common-words');
-    const row = document.getElementById('sam3-prompt-row');
-    (row || btn?.parentElement || document.body).appendChild(popup);
+    // Anchor the popup to the trigger button. Prefer dropping below; if
+    // there isn't enough room, drop above. Constrain horizontally so it
+    // never overflows the viewport.
+    const padding = 8;
+    const reposition = () => {
+        const r = btn.getBoundingClientRect();
+        const pr = popup.getBoundingClientRect();
+        let top = r.bottom + padding;
+        if (top + pr.height > window.innerHeight - padding) {
+            const above = r.top - padding - pr.height;
+            top = above >= padding ? above : Math.max(padding, window.innerHeight - pr.height - padding);
+        }
+        let left = Math.min(r.right - pr.width, window.innerWidth - pr.width - padding);
+        left = Math.max(padding, left);
+        popup.style.top = `${top}px`;
+        popup.style.left = `${left}px`;
+    };
+    reposition();
 
+    // Chip click → add word into the prompt input.
     popup.addEventListener('click', (e) => {
         const chip = e.target.closest('.sam3-word-chip');
         if (!chip) return;
@@ -2974,7 +3022,7 @@ function _showSam3CommonWordsPopup() {
         if (!input) return;
         const current = input.value.trim();
         if (current) {
-            const existing = current.split(',').map(s => s.trim());
+            const existing = current.split(',').map((s) => s.trim());
             if (!existing.includes(word)) {
                 input.value = current + ', ' + word;
             }
@@ -2983,12 +3031,43 @@ function _showSam3CommonWordsPopup() {
         }
     });
 
-    document.addEventListener('click', function closePopup(e) {
-        if (!popup.contains(e.target) && e.target.id !== 'btn-sam3-common-words') {
-            popup.classList.remove('visible');
-            document.removeEventListener('click', closePopup);
-        }
-    }, { once: false });
+    document.getElementById('sam3-common-popup-close')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _closeSam3CommonWordsPopup(popup);
+    });
+
+    // Defer the click-outside handler so the click that opened the popup
+    // doesn't immediately close it on its trailing event.
+    setTimeout(() => {
+        const outside = (e) => {
+            if (popup.contains(e.target)) return;
+            if (e.target.id === 'btn-sam3-common-words' || e.target.closest?.('#btn-sam3-common-words')) return;
+            _closeSam3CommonWordsPopup(popup);
+        };
+        const onKeydown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                _closeSam3CommonWordsPopup(popup);
+            }
+        };
+        document.addEventListener('click', outside, true);
+        document.addEventListener('keydown', onKeydown);
+        window.addEventListener('resize', reposition);
+        window.addEventListener('scroll', reposition, true);
+        popup._sam3Cleanup = () => {
+            document.removeEventListener('click', outside, true);
+            document.removeEventListener('keydown', onKeydown);
+            window.removeEventListener('resize', reposition);
+            window.removeEventListener('scroll', reposition, true);
+        };
+    }, 0);
+}
+
+function _closeSam3CommonWordsPopup(popup) {
+    const target = popup || document.getElementById('sam3-common-popup');
+    if (!target) return;
+    try { target._sam3Cleanup?.(); } catch (_err) {}
+    target.remove();
 }
 
 function getLegacyBackendStatus() {

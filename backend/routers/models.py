@@ -28,7 +28,25 @@ _logger = logging.getLogger(__name__)
 # uvicorn worker (see CLAUDE.md). Running multiple workers will fragment this
 # dict across processes and the UI will see inconsistent results.
 def _empty_prepare_result() -> Dict[str, Any]:
-    return {"active": False, "model_id": "", "status": "", "message": "", "error": ""}
+    # Rich-error fields (manual_steps, external_url, target_dir, provider,
+    # error_type) are populated when ExternalAuthRequiredError /
+    # ModelPreparationFailedError fire. The frontend prepare-progress poll
+    # treats them as the trigger to render an actionable guidance dialog
+    # instead of a generic toast — without these, users hitting the Civitai
+    # login wall on Privacy YOLO see "Model setup failed" with no recovery
+    # path.
+    return {
+        "active": False,
+        "model_id": "",
+        "status": "",
+        "message": "",
+        "error": "",
+        "error_type": "",
+        "provider": "",
+        "manual_steps": [],
+        "target_dir": "",
+        "external_url": "",
+    }
 
 
 _prepare_result: Dict[str, Any] = _empty_prepare_result()
@@ -83,8 +101,20 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
         with _prepare_lock:
             _prepare_result.update(status=prepare_status, message=result.get("message", "Ready."), error="")
     except (ExternalAuthRequiredError, ModelPreparationFailedError) as exc:
+        # Forward the rich payload (manual_steps, external_url, target_dir,
+        # provider, error type) so the frontend can render a guidance
+        # dialog instead of swallowing the recovery path into a toast.
         with _prepare_lock:
-            _prepare_result.update(status="error", error=str(exc), message=exc.payload.get("message", str(exc)))
+            _prepare_result.update(
+                status="error",
+                error=str(exc),
+                message=exc.payload.get("message", str(exc)),
+                error_type=str(exc.payload.get("type") or ""),
+                provider=str(exc.payload.get("provider") or ""),
+                manual_steps=list(exc.payload.get("manual_steps") or []),
+                target_dir=str(exc.payload.get("target_dir") or ""),
+                external_url=str(exc.payload.get("external_url") or ""),
+            )
     except ValueError as exc:
         with _prepare_lock:
             _prepare_result.update(status="error", error=str(exc), message=str(exc))
