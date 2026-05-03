@@ -1045,11 +1045,19 @@ class ArtistIdentifier:
                 if os.path.exists(class_mapping_path):
                     self._initialize_kaloscope(path, class_mapping_path)
                 else:
-                    # Try generic PyTorch model as legacy fallback
+                    # Try generic PyTorch model as legacy fallback. Pass
+                    # ``weights_only=False`` because PyTorch 2.6 flipped the
+                    # default to ``True`` and most user-supplied artist .pth
+                    # files contain pickled config classes outside the safe
+                    # globals allowlist; without this override they would
+                    # silently fall through to the ONNX path (which fails on
+                    # .pth) and end up in placeholder mode. The file is
+                    # user-placed inside the artist model directory, so we
+                    # treat it as a trusted source.
                     try:
                         import torch
                         with exclusive_ai_runtime("artist-torch-load"):
-                            self._model = torch.load(path, map_location='cpu')
+                            self._model = torch.load(path, map_location='cpu', weights_only=False)
                         self._model.eval()
                         self._backend = "torch-generic"
                     except Exception:

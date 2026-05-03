@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.1.0
+**Version:** 3.1.0-test10
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -404,6 +404,9 @@ Move all images matching filters.
 
 #### GET /api/batch-move/progress
 Get batch move progress.
+
+#### POST /api/batch-move/cancel
+Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel flag at chunk and per-image boundaries, finishes any image already mid-write, and reports `status: "cancelled"` with the partial counts so the UI can show "Cancelled at X/N" instead of pinning the progress bar at the last running message.
 
 #### POST /api/batch-move/reset
 Reset stuck batch move progress.
