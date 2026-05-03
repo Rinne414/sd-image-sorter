@@ -791,7 +791,8 @@ class CensorService:
                 raise HTTPException(status_code=400, detail=error or "Invalid sticker path")
 
         try:
-            image = Image.open(image_path).convert('RGB')
+            with Image.open(image_path) as src:
+                image = src.convert('RGB')
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -845,7 +846,8 @@ class CensorService:
         try:
             os.makedirs(output_folder, exist_ok=True)
 
-            image = Image.open(image_path).convert('RGB')
+            with Image.open(image_path) as src:
+                image = src.convert('RGB')
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -976,7 +978,8 @@ class CensorService:
         try:
             os.makedirs(output_folder, exist_ok=True)
 
-            original_image = Image.open(source_path).convert("RGBA")
+            with Image.open(source_path) as src:
+                original_image = src.convert("RGBA")
             width, height = original_image.size
             if width <= 0 or height <= 0:
                 raise HTTPException(status_code=400, detail="Invalid source image")
@@ -1429,7 +1432,8 @@ class CensorService:
                 raise HTTPException(status_code=400, detail="Invalid cached mask bounds")
 
             crop_path = Path(entry["path"])
-            crop_mask = Image.open(crop_path).convert("L")
+            with Image.open(crop_path) as cached_mask_src:
+                crop_mask = cached_mask_src.convert("L")
             expected_size = (bounds[2] - bounds[0], bounds[3] - bounds[1])
             if crop_mask.size != expected_size:
                 crop_mask = crop_mask.resize(expected_size, Image.Resampling.LANCZOS)
@@ -1642,7 +1646,8 @@ class CensorService:
         )
 
         try:
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as src:
+                image = src.convert("RGB")
             refiner = get_sam3_refiner()
             mask = refiner.refine_box(
                 image,
@@ -1696,7 +1701,8 @@ class CensorService:
         )
 
         try:
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as src:
+                image = src.convert("RGB")
             refiner = get_sam3_refiner()
             mask = refiner.segment_by_text(image, request.text_prompt)
 
@@ -1750,7 +1756,8 @@ class CensorService:
                     image_id=item.image_id,
                     action_label="SAM3 batch refinement",
                 )
-                image = Image.open(image_path).convert("RGB")
+                with Image.open(image_path) as src:
+                    image = src.convert("RGB")
 
                 if refiner is None:
                     refiner = get_sam3_refiner()
@@ -2035,29 +2042,34 @@ class CensorService:
                 image_id=original_image_id,
                 action_label="Metadata copy",
             )
-            original_img = Image.open(original_source_path)
+            # `.info` is read multiple times below, and `_png_text_to_exif`
+            # / `_copy_png_text_metadata` both walk PNG text chunks on the
+            # still-open file object. Wrap the whole reader block so the
+            # OS handle is released deterministically afterwards (matters
+            # on Windows: a leaked handle blocks subsequent move/delete of
+            # the source file).
+            with Image.open(original_source_path) as original_img:
+                if 'icc_profile' in original_img.info:
+                    save_kwargs['icc_profile'] = original_img.info['icc_profile']
 
-            if 'icc_profile' in original_img.info:
-                save_kwargs['icc_profile'] = original_img.info['icc_profile']
+                if 'dpi' in original_img.info:
+                    save_kwargs['dpi'] = original_img.info['dpi']
 
-            if 'dpi' in original_img.info:
-                save_kwargs['dpi'] = original_img.info['dpi']
+                if metadata_option == "keep" and 'exif' in original_img.info:
+                    save_kwargs['exif'] = original_img.info['exif']
 
-            if metadata_option == "keep" and 'exif' in original_img.info:
-                save_kwargs['exif'] = original_img.info['exif']
+                if metadata_option == "keep" and output_format == 'png':
+                    pnginfo = self._copy_png_text_metadata(original_img)
+                    if pnginfo:
+                        save_kwargs['pnginfo'] = pnginfo
 
-            if metadata_option == "keep" and output_format == 'png':
-                pnginfo = self._copy_png_text_metadata(original_img)
-                if pnginfo:
-                    save_kwargs['pnginfo'] = pnginfo
-
-            # For non-PNG outputs, convert PNG text chunks to EXIF so SD
-            # metadata survives the format change.  Many SD tools read
-            # the "parameters" key from EXIF UserComment.
-            if metadata_option == "keep" and output_format != 'png' and 'exif' not in save_kwargs:
-                exif_bytes = self._png_text_to_exif(original_img)
-                if exif_bytes:
-                    save_kwargs['exif'] = exif_bytes
+                # For non-PNG outputs, convert PNG text chunks to EXIF so SD
+                # metadata survives the format change.  Many SD tools read
+                # the "parameters" key from EXIF UserComment.
+                if metadata_option == "keep" and output_format != 'png' and 'exif' not in save_kwargs:
+                    exif_bytes = self._png_text_to_exif(original_img)
+                    if exif_bytes:
+                        save_kwargs['exif'] = exif_bytes
 
         except Exception as e:
             logger.warning("Could not copy metadata from original: %s", e)

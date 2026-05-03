@@ -253,15 +253,23 @@ def export_tags_batch_request(request: Any) -> Dict[str, Any]:
     used_output_paths = set()
     output_folder_ready = os.path.isdir(output_folder)
 
-    for image_id in request.image_ids:
+    # Pre-batch DB reads to avoid N+1 — with the 5M ceiling, a per-id
+    # round-trip in this loop would block the request for many minutes
+    # before the first sidecar is written. `get_images_by_ids` and
+    # `get_image_tags_map` already chunk IN(...) at 500 ids internally.
+    image_id_list = list(request.image_ids)
+    images_map = db.get_images_by_ids(image_id_list)
+    tags_map = db.get_image_tags_map(image_id_list)
+
+    for image_id in image_id_list:
         try:
-            image = db.get_image_by_id(image_id)
+            image = images_map.get(image_id)
             if not image:
                 error_count += 1
                 error_messages.append(f"Image {image_id} not found")
                 continue
 
-            tags = db.get_image_tags(image_id)
+            tags = tags_map.get(image_id, [])
             file_content = build_sidecar_content(
                 image,
                 tags,

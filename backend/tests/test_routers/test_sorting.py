@@ -924,6 +924,11 @@ class TestBatchMove:
             "get_images_by_ids",
             lambda _ids: {1: {"id": 1, "filename": "source.png", "path": str(source_path)}},
         )
+        # Per-image readability now happens inside the worker loop (it
+        # used to be batched up front in ``_filter_readable_image_ids``).
+        # The fixture writes a placeholder byte string instead of a real
+        # PNG, so stub the verifier to accept the file.
+        monkeypatch.setattr(sorting_service_module, "verify_image_readable", lambda _path: (True, None))
         monkeypatch.setattr(isolated_sorting_service, "_filter_readable_image_ids", lambda ids: (ids, []))
         monkeypatch.setattr(isolated_sorting_service, "_resolve_image_path", lambda _path: str(source_path))
         monkeypatch.setattr(isolated_sorting_service, "_apply_file_operation", lambda **_kwargs: None)

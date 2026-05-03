@@ -3783,25 +3783,51 @@ function initEventListeners() {
 
     // Clear DB button
     $('#btn-clear-db').addEventListener('click', async () => {
-        // Belt-and-braces: check both the local poll-timer state AND the
-        // backend's actual progress endpoints. Local state can lag (e.g. if
-        // a poll callback never runs after cancel), so the server is the
-        // source of truth. We also Logger.warn so the failure mode shows
-        // up in any captured console log without requiring the user to
-        // open DevTools live.
-        let busy = Boolean(_aestheticProgressTimer || _scanProgressTimer || _tagProgressTimer);
+        // Belt-and-braces: check local poll-state first, then verify
+        // against ALL THREE backend progress endpoints. Local state can
+        // lag (e.g. if a poll callback never runs after cancel), so the
+        // server is the source of truth.
+        //
+        // Note: scan polling does NOT use a stored timer handle — it uses
+        // a `_scanProgressTracker` object plus bare `setTimeout` calls.
+        // Earlier revisions of this guard referenced a `_scanProgressTimer`
+        // that was never declared, so any path through this branch threw
+        // `ReferenceError: _scanProgressTimer is not defined` and broke
+        // the Clear DB button entirely. The local check now uses the
+        // tracker's `startedAt` instead.
+        const BUSY_STATUSES = new Set(['running', 'cancelling', 'starting']);
+        const isProgressBusy = (value) => {
+            if (!value) return false;
+            if (BUSY_STATUSES.has(value.status)) return true;
+            if (value.running) return true;
+            return false;
+        };
+        let busy = Boolean(_aestheticProgressTimer || _tagProgressTimer || _scanProgressTracker?.startedAt);
         if (!busy) {
-            try {
-                const aestheticProgress = await API.getAestheticProgress();
-                if (aestheticProgress?.running) busy = true;
-            } catch (probeErr) {
-                Logger.warn('Clear gallery: aesthetic progress probe failed, assuming idle:', probeErr);
+            const [scanResult, tagResult, aestheticResult] = await Promise.allSettled([
+                API.getScanProgress(),
+                API.getTagProgress(),
+                API.getAestheticProgress(),
+            ]);
+            const probes = [
+                ['scan', scanResult],
+                ['tag', tagResult],
+                ['aesthetic', aestheticResult],
+            ];
+            for (const [label, result] of probes) {
+                if (result.status === 'fulfilled') {
+                    if (isProgressBusy(result.value)) {
+                        busy = true;
+                    }
+                } else {
+                    Logger.warn(`Clear gallery: ${label} progress probe failed, assuming idle:`, result.reason);
+                }
             }
         }
         if (busy) {
             Logger.warn('Clear gallery blocked: a background job is still active', {
                 aestheticTimer: !!_aestheticProgressTimer,
-                scanTimer: !!_scanProgressTimer,
+                scanTracker: Boolean(_scanProgressTracker?.startedAt),
                 tagTimer: !!_tagProgressTimer,
             });
             showToast(appT('gallery.clearBlocked', 'Cannot clear gallery while scanning, tagging, or scoring is running. Stop the operation first.'), 'warning');

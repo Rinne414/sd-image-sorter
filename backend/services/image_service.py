@@ -954,15 +954,33 @@ class ImageService:
         """
         deleted = 0
         failed: List[Dict[str, Any]] = []
-        seen_ids = set()
 
+        # Two-pass: normalize + dedup first so we can batch the DB read.
+        # Per-id `get_image_by_id` would otherwise scale linearly with the
+        # selection size and starve the request for many minutes under the
+        # raised 5M ceiling. `get_images_by_ids` chunks IN(...) at 500 ids
+        # internally so the access pattern stays bounded.
+        normalized_ids: List[int] = []
+        seen_ids: set[int] = set()
         for raw_image_id in image_ids or []:
             image_id = int(raw_image_id)
             if image_id in seen_ids:
                 continue
             seen_ids.add(image_id)
+            normalized_ids.append(image_id)
 
-            image = db.get_image_by_id(image_id)
+        if not normalized_ids:
+            return {
+                "deleted": 0,
+                "failed": [],
+                "permanent_delete": False,
+                "trash_used": True,
+            }
+
+        images_map = db.get_images_by_ids(normalized_ids)
+
+        for image_id in normalized_ids:
+            image = images_map.get(image_id)
             if not image:
                 failed.append({
                     "image_id": image_id,

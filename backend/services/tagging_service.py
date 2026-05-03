@@ -387,7 +387,12 @@ def _tagging_worker_main(
 
         send("running", "Collecting image list...")
         if request.image_ids:
-            all_ids = [img_id for img_id in request.image_ids if worker_db.get_image_by_id(img_id) is not None]
+            # Avoid N+1: per-id `get_image_by_id` becomes one round-trip per
+            # image and would block "Collecting image list..." for minutes
+            # on a 5M-id request before the first image is even tagged.
+            # `get_images_by_ids` already chunks IN(...) at 500.
+            existing_ids = set(worker_db.get_images_by_ids(list(request.image_ids)).keys())
+            all_ids = [img_id for img_id in request.image_ids if img_id in existing_ids]
         elif request.retag_all:
             all_ids = worker_db.get_all_image_ids()
         else:

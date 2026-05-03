@@ -980,59 +980,64 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
-        # Batch fetch all images in a single query (N+1 fix)
+        # Batch fetch all images in a single query (N+1 fix). The
+        # readability check is done *inside* the loop instead of up front:
+        # the previous call to ``_filter_readable_image_ids`` ran a full
+        # pixel decode (``verify_image_readable``) on every image before
+        # the loop started. For large selections that produced minutes of
+        # silent up-front blocking with no per-image feedback, but a
+        # byte-level move would otherwise cheerfully copy truncated/corrupt
+        # PNGs to the destination — so we still need the decode, just
+        # spread across the iteration so each result lands as it happens.
         images_map = db.get_images_by_ids(request.image_ids)
-        readable_ids, unreadable_skips = self._filter_readable_image_ids(request.image_ids)
-        readable_id_set = set(readable_ids)
-        unreadable_map = {
-            entry["image_id"]: entry
-            for entry in unreadable_skips
-        }
         destination_ready = os.path.isdir(destination_folder)
 
         results = []
         for image_id in request.image_ids:
-            if image_id in unreadable_map:
-                results.append(
-                    {
-                        "id": image_id,
-                        "error": unreadable_map[image_id]["error"],
-                        "success": False,
-                    }
-                )
-                continue
-
             image = images_map.get(image_id)
             source_path = self._resolve_image_path(image.get("path") or "") if image else None
-            if image_id in readable_id_set and image and source_path:
-                try:
-                    if not destination_ready:
-                        os.makedirs(destination_folder, exist_ok=True)
-                        destination_ready = True
-                    operation_result = self._apply_file_operation(
-                        operation=operation,
-                        image_id=image_id,
-                        destination_folder=destination_folder,
-                        source_path=source_path,
-                        source_row=image,
-                    )
-                    results.append({
-                        "id": image_id,
-                        "new_path": operation_result["new_path"],
-                        "new_image_id": operation_result.get("new_image_id"),
-                        "operation": operation,
-                        "success": True,
-                    })
-                except Exception as e:
-                    logger.error("Failed to %s image %d: %s", operation, image_id, e)
-                    results.append({
-                        "id": image_id,
-                        "error": f"Failed to {operation} image",
-                        "operation": operation,
-                        "success": False,
-                    })
-            else:
+            if not image or not source_path:
                 results.append({"id": image_id, "error": "Image not found", "operation": operation, "success": False})
+                continue
+
+            readable, read_error = verify_image_readable(source_path)
+            if not readable:
+                error_message = read_error or "Unreadable image"
+                db.mark_image_unreadable(image_id, error_message)
+                results.append({
+                    "id": image_id,
+                    "error": error_message,
+                    "operation": operation,
+                    "success": False,
+                })
+                continue
+
+            try:
+                if not destination_ready:
+                    os.makedirs(destination_folder, exist_ok=True)
+                    destination_ready = True
+                operation_result = self._apply_file_operation(
+                    operation=operation,
+                    image_id=image_id,
+                    destination_folder=destination_folder,
+                    source_path=source_path,
+                    source_row=image,
+                )
+                results.append({
+                    "id": image_id,
+                    "new_path": operation_result["new_path"],
+                    "new_image_id": operation_result.get("new_image_id"),
+                    "operation": operation,
+                    "success": True,
+                })
+            except Exception as e:
+                logger.error("Failed to %s image %d: %s", operation, image_id, e)
+                results.append({
+                    "id": image_id,
+                    "error": f"Failed to {operation} image",
+                    "operation": operation,
+                    "success": False,
+                })
 
         return {"results": results}
 
@@ -1121,7 +1126,15 @@ class SortingService:
                     max_aesthetic=request.max_aesthetic,
                 )
 
-                image_ids, unreadable_skips = self._filter_readable_image_ids(image_ids)
+                # Note: previously this called ``_filter_readable_image_ids``
+                # before the loop, which did a full pixel decode of every
+                # image up front via ``verify_image_readable``. For large
+                # batches that blocked the worker for many minutes with no
+                # progress emitted, making the operation indistinguishable
+                # from a hang. The decode is now done per-image inside the
+                # inner loop so progress advances as the worker walks the
+                # list (a byte-level move would otherwise silently copy
+                # truncated/corrupt PNGs to the destination).
 
                 if not image_ids:
                     self._set_batch_move_progress_if_current(
@@ -1131,11 +1144,11 @@ class SortingService:
                             "step": "done",
                             "current": 0,
                             "total": 0,
-                            "message": "No readable images match the filters",
-                            "errors": len(unreadable_skips),
+                            "message": "No images match the filters",
+                            "errors": 0,
                             "moved": 0,
                             "current_item": None,
-                            "recent_errors": unreadable_skips[-3:],
+                            "recent_errors": [],
                             "operation": operation,
                             "started_at": time.time(),
                             "updated_at": time.time(),
@@ -1147,7 +1160,7 @@ class SortingService:
 
                 moved = 0
                 processed = 0
-                errors = list(unreadable_skips)
+                errors: List[Dict[str, Any]] = []
                 for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
                     batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
                     image_map = db.get_images_by_ids(batch_ids)
@@ -1163,20 +1176,33 @@ class SortingService:
                         error_message = None
 
                         source_path = self._resolve_image_path(image.get("path") or "")
-                        if source_path:
-                            try:
-                                self._apply_file_operation(
-                                    operation=operation,
-                                    image_id=image["id"],
-                                    destination_folder=destination_folder,
-                                    source_path=source_path,
-                                    source_row=image,
-                                )
-                                moved += 1
-                            except Exception as e:
-                                error_message = str(e)
-                        else:
+                        if not source_path:
                             error_message = "Image file not found"
+                        else:
+                            # Per-image readability check (was previously done
+                            # up front in ``_filter_readable_image_ids`` which
+                            # blocked the worker for minutes before any
+                            # progress was emitted). A byte-level move would
+                            # otherwise silently copy truncated/corrupt PNGs
+                            # to the destination, so we still need the decode
+                            # — we just amortise it per-image so progress
+                            # advances as the worker walks the list.
+                            readable, read_error = verify_image_readable(source_path)
+                            if not readable:
+                                error_message = read_error or "Unreadable image"
+                                db.mark_image_unreadable(image["id"], error_message)
+                            else:
+                                try:
+                                    self._apply_file_operation(
+                                        operation=operation,
+                                        image_id=image["id"],
+                                        destination_folder=destination_folder,
+                                        source_path=source_path,
+                                        source_row=image,
+                                    )
+                                    moved += 1
+                                except Exception as e:
+                                    error_message = str(e)
 
                         if error_message:
                             errors.append({"image_id": image_id, "filename": filename, "error": error_message})
@@ -1447,7 +1473,22 @@ class SortingService:
                             try:
                                 self._undo_file_operation(last)
                             except Exception as e:
-                                logger.warning("Error undoing %s during undo: %s", last.get("operation") or "move", e)
+                                # Roll the session state back so the user can
+                                # retry undo on the same entry. Previously this
+                                # silently swallowed the failure and reported
+                                # ``status: "undone"`` while the file was
+                                # actually still in the destination folder.
+                                logger.error(
+                                    "Error undoing %s during undo: %s",
+                                    last.get("operation") or "move",
+                                    e,
+                                )
+                                self._sort_session["redo_stack"].pop()
+                                self._sort_session["history"].append(last)
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Could not undo last action: {e}",
+                                )
                     self._sort_session["current_index"] = max(0, self._sort_session["current_index"] - 1)
                 else:
                     return {

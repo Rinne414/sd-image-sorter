@@ -433,17 +433,37 @@ class SimilarityIndex:
 
                 gc.collect()
 
-            self._progress["message"] = (
-                f"Completed embeddings: {self._progress['embedded']} embedded"
-                + (
-                    f", {self._progress['skipped']} skipped, "
-                    f"{self._progress['unreadable']} unreadable, "
-                    f"{self._progress['failed']} failed."
-                    if self._progress["errors"]
-                    else "."
+            if self._cancel_requested:
+                # Cancel happy-path: distinguish "user cancelled mid-run" from
+                # "completed normally" so the UI can show the right toast and
+                # the progress endpoint isn't stuck on the success message.
+                self._progress["message"] = (
+                    f"Cancelled at {self._progress['processed']}/{len(rows)}."
                 )
-            )
-            self._progress["step"] = "done"
+                self._progress["step"] = "cancelled"
+            else:
+                self._progress["message"] = (
+                    f"Completed embeddings: {self._progress['embedded']} embedded"
+                    + (
+                        f", {self._progress['skipped']} skipped, "
+                        f"{self._progress['unreadable']} unreadable, "
+                        f"{self._progress['failed']} failed."
+                        if self._progress["errors"]
+                        else "."
+                    )
+                )
+                self._progress["step"] = "done"
+            self._progress["current_item"] = None
+            self._progress["updated_at"] = time.time()
+
+        except Exception as exc:
+            # Without this branch a crash in the embed loop just propagates
+            # into FastAPI's BackgroundTasks logger, leaving the progress
+            # endpoint pinned at running=False + step="embedding" — visually
+            # indistinguishable from "still in progress". Surface it instead.
+            logger.exception("Similarity embedding failed: %s", exc)
+            self._progress["step"] = "error"
+            self._progress["message"] = f"Embedding failed: {exc}"
             self._progress["current_item"] = None
             self._progress["updated_at"] = time.time()
 
