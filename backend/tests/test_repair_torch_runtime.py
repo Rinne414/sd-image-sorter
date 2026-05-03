@@ -56,7 +56,6 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
         [
             {"torch_version": "2.11.0+cpu", "torchvision_version": "0.26.0", "torch_cuda_build": None, "torch_cuda_available": False},
             {"torch_version": "2.11.0+cu128", "torchvision_version": "0.26.0", "torch_cuda_build": "12.8", "torch_cuda_available": True},
-            {"torch_version": "2.11.0+cu128", "torchvision_version": "0.26.0", "torch_cuda_build": "12.8", "torch_cuda_available": True},
         ]
     )
 
@@ -68,6 +67,11 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
     monkeypatch.setattr(repair_torch_runtime, "_detect_gpu_vendor", lambda: {"primary": "nvidia", "vendors": ["nvidia"], "devices": []})
     monkeypatch.setattr(repair_torch_runtime, "_detect_nvidia_cuda_version", lambda: (12, 8))
     monkeypatch.setattr(repair_torch_runtime, "_torch_probe", lambda: next(probe_results))
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: {"torch_version": "2.11.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
+    )
     monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["sam3==0.1.3", "einops"])
     monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
 
@@ -77,8 +81,90 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
     assert any("torch==2.11.0" in call for call in pip_calls[0])
     assert "--index-url" in pip_calls[0]
     assert "https://download.pytorch.org/whl/cu128" in pip_calls[0]
+    # Regression guard: without ``--no-deps``, torch's force-reinstall
+    # cascades through sympy, jinja2, markupsafe, setuptools, pillow, etc.
+    # — uninstalling and reinstalling each in place. That's pure noise on
+    # first launch and confuses users into thinking the install is broken.
+    assert "--no-deps" in pip_calls[0], (
+        "CUDA torch reinstall must use --no-deps so torch's transitive "
+        "dependencies are not uninstalled and reinstalled needlessly."
+    )
+    # Tripwire: if ``--no-deps`` is ever dropped, this constraint still
+    # keeps pip from upgrading numpy across the 2.0 ABI break. ``numpy<2.4``
+    # is too loose because pip resolves it to 2.3.x.
+    assert "numpy<2.0" in pip_calls[0], (
+        "CUDA torch install must pin numpy below the 2.0 ABI break to "
+        "preserve the numpy 1.x wheels the rest of the install set was "
+        "built against."
+    )
     assert "sam3==0.1.3" in pip_calls[1]
     assert "einops" in pip_calls[1]
+
+
+def test_cuda_install_uses_fresh_subprocess_probe_after_pip_reinstall(monkeypatch):
+    pip_calls = []
+    actions = []
+
+    def fake_run_pip(args, stream=False):
+        pip_calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+
+    def stale_current_process_probe():
+        raise AssertionError(
+            "CUDA repair must not verify a pip-reinstalled torch wheel by reusing "
+            "the current process's already-imported torch module."
+        )
+
+    monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(repair_torch_runtime, "_torch_probe", stale_current_process_probe)
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: {"torch_version": "2.11.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
+    )
+
+    installed = repair_torch_runtime._install_cuda_torch(
+        actions,
+        {
+            "torch_version": "2.11.0+cpu",
+            "torchvision_version": "0.26.0",
+            "nvidia_cuda_version": "12.8",
+        },
+        stream_pip=False,
+    )
+
+    assert installed is True
+    assert len(pip_calls) == 1, "A valid CUDA wheel should stop the fallback loop after one download."
+    assert "https://download.pytorch.org/whl/cu128" in pip_calls[0]
+
+
+def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
+    pip_calls = []
+    probe_results = iter(
+        [
+            {"torch_version": "2.11.0+cpu", "torchvision_version": "0.26.0", "torch_cuda_build": None, "torch_cuda_available": False},
+            {"torch_version": "2.11.0+cpu", "torchvision_version": "0.26.0", "torch_cuda_build": None, "torch_cuda_available": False},
+        ]
+    )
+
+    monkeypatch.setattr(repair_torch_runtime.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(repair_torch_runtime, "_detect_gpu_vendor", lambda: {"primary": "nvidia", "vendors": ["nvidia"], "devices": []})
+    monkeypatch.setattr(repair_torch_runtime, "_detect_nvidia_cuda_version", lambda: (12, 8))
+    monkeypatch.setattr(repair_torch_runtime, "_torch_probe", lambda: next(probe_results))
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: {"torch_version": "2.11.0+cu128", "torchvision_version": "0.26.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
+    )
+    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: [])
+    monkeypatch.setattr(repair_torch_runtime, "_run_pip", lambda args, stream=False: pip_calls.append(args) or subprocess.CompletedProcess(args, 0))
+
+    result = repair_torch_runtime.repair_windows_torch_runtime()
+
+    assert result["torch_version"] == "2.11.0+cu128"
+    assert result["torch_cuda_build"] == "12.8"
+    assert result["torch_cuda_available"] is True
+    assert len(pip_calls) == 1
 
 
 def test_sys_path_bootstrap_handles_embedded_python_layout(tmp_path):

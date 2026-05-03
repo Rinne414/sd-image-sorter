@@ -50,6 +50,17 @@ except ImportError as _exc:  # pragma: no cover - defensive fallback for direct 
 # bump this too. We keep it as a single named constant so it is easy to grep.
 _FALLBACK_TORCH_VERSION = "2.11.0"
 
+# requirements.txt locks numpy to 1.26.4, and most of the SD/ONNX wheels in
+# the install set (scipy, opencv, pillow, onnxruntime, sam3 …) ship binaries
+# built against the numpy 1.x C ABI. The CUDA torch reinstall uses
+# ``--no-deps`` to stop torch's resolver from cascading transitive deps
+# (sympy, jinja2, markupsafe, setuptools, …), which would otherwise be
+# uninstalled-and-reinstalled in place — pure noise during first launch.
+# ``numpy<2.0`` stays in the explicit install list as a tripwire so that if
+# ``--no-deps`` is ever dropped, pip still cannot upgrade numpy across the
+# 2.0 ABI break and silently break every numpy-1-ABI consumer.
+_NUMPY_SAM3_CONSTRAINT = "numpy<2.0"
+
 
 TORCH_CUDA_INDEXES: Sequence[Tuple[str, str, Tuple[int, int]]] = (
     ("cu128", "https://download.pytorch.org/whl/cu128", (12, 8)),
@@ -115,6 +126,66 @@ def _torch_probe() -> Dict[str, Any]:
         logger.warning("torch probe failed: %s", exc)
         result["torch_probe_error"] = str(exc)
     return result
+
+
+def _torch_probe_subprocess() -> Dict[str, Any]:
+    """Probe Torch in a fresh interpreter after pip may have replaced it.
+
+    The launcher process imports ``torch`` while checking the current install
+    state. If we then use pip to replace CPU Torch with a CUDA wheel, the old
+    already-imported module remains in ``sys.modules`` for this process. A fresh
+    interpreter is the only reliable way to verify the newly installed wheel
+    without making users download every CUDA wheel in sequence.
+    """
+
+    code = (
+        "import json\n"
+        "result = {"
+        "'torch_version': None, "
+        "'torchvision_version': None, "
+        "'torch_cuda_build': None, "
+        "'torch_cuda_available': False, "
+        "'torch_probe_error': None"
+        "}\n"
+        "try:\n"
+        "    import torch\n"
+        "    result['torch_version'] = getattr(torch, '__version__', None)\n"
+        "    result['torch_cuda_build'] = getattr(getattr(torch, 'version', None), 'cuda', None)\n"
+        "    result['torch_cuda_available'] = bool(torch.cuda.is_available())\n"
+        "    try:\n"
+        "        import torchvision\n"
+        "        result['torchvision_version'] = getattr(torchvision, '__version__', None)\n"
+        "    except Exception:\n"
+        "        pass\n"
+        "except Exception as exc:\n"
+        "    result['torch_probe_error'] = str(exc)\n"
+        "print(json.dumps(result))\n"
+    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        parsed = json.loads(completed.stdout.strip().splitlines()[-1])
+    except Exception as exc:  # noqa: BLE001 — keep launcher repair best-effort
+        logger.warning("fresh torch probe failed: %s", exc)
+        return {
+            "torch_version": None,
+            "torchvision_version": None,
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": str(exc),
+        }
+    return {
+        "torch_version": parsed.get("torch_version"),
+        "torchvision_version": parsed.get("torchvision_version"),
+        "torch_cuda_build": parsed.get("torch_cuda_build"),
+        "torch_cuda_available": bool(parsed.get("torch_cuda_available")),
+        "torch_probe_error": parsed.get("torch_probe_error"),
+    }
 
 
 def _missing_sam3_runtime_packages() -> List[str]:
@@ -195,6 +266,29 @@ def _cuda_index_candidates(max_cuda: Optional[Tuple[int, int]]) -> List[Tuple[st
     return compatible or [TORCH_CUDA_INDEXES[-1]]
 
 
+def _resolve_pypi_fallback_index() -> str:
+    """Pick the ``--extra-index-url`` value for the CUDA torch reinstall.
+
+    The CUDA torch wheel itself comes from ``download.pytorch.org``, but
+    the install cascades to deps (numpy, sympy, networkx, …) which live
+    on PyPI. Honouring the same mirror selection as ``launcher_pip.py``
+    means a Chinese user does not have to wait on Fastly for those deps
+    just because torch's own wheel host is fast.
+
+    Falls back to the existing constant on any selector failure so a
+    broken or offline mirror cannot block the repair.
+    """
+
+    try:
+        import mirror_selector  # local import — only reached on the NVIDIA repair path
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        selection = mirror_selector.select_pypi_index(data_dir=data_dir)
+        return selection.index_url or PYTORCH_FALLBACK_INDEX
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        logger.debug("mirror selection skipped for torch repair: %s", exc)
+        return PYTORCH_FALLBACK_INDEX
+
+
 def _run_pip(args: List[str], *, stream: bool = False) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, "-m", "pip", "--disable-pip-version-check", *args]
     if stream:
@@ -244,8 +338,11 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
     packages = [f"torch=={torch_version}"]
     if torchvision_version:
         packages.append(f"torchvision=={torchvision_version}")
+    # Keep numpy below sam3's upper bound during the force-reinstall cascade.
+    packages.append(_NUMPY_SAM3_CONSTRAINT)
 
     cuda_version = _parse_cuda_version(str(state.get("nvidia_cuda_version") or ""))
+    fallback_index = _resolve_pypi_fallback_index()
     last_error: Optional[BaseException] = None
     for label, index_url, _runtime_version in _cuda_index_candidates(cuda_version):
         _record_action(
@@ -259,16 +356,17 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
                     "install",
                     "--upgrade",
                     "--force-reinstall",
+                    "--no-deps",
                     "--no-warn-script-location",
                     "--index-url",
                     index_url,
                     "--extra-index-url",
-                    PYTORCH_FALLBACK_INDEX,
+                    fallback_index,
                     *packages,
                 ],
                 stream=stream_pip,
             )
-            if _torch_probe().get("torch_cuda_build"):
+            if _torch_probe_subprocess().get("torch_cuda_build"):
                 return True
             last_error = RuntimeError(f"{label} install completed, but torch.version.cuda is still empty")
         except Exception as exc:
@@ -321,8 +419,10 @@ def repair_windows_torch_runtime(*, stream_pip: bool = False) -> Dict[str, Any]:
         state["repaired"] = False
         return state
 
+    installed_cuda_torch = False
     if not state.get("torch_cuda_build"):
         _install_cuda_torch(actions, state, stream_pip=stream_pip)
+        installed_cuda_torch = True
     else:
         actions.append(f"CUDA PyTorch already installed ({state.get('torch_cuda_build')})")
 
@@ -330,6 +430,8 @@ def repair_windows_torch_runtime(*, stream_pip: bool = False) -> Dict[str, Any]:
         _install_sam3_runtime(actions, stream_pip=stream_pip)
 
     final_state = get_install_state()
+    if installed_cuda_torch:
+        final_state.update(_torch_probe_subprocess())
     final_state["actions"] = actions or ["No repair needed"]
     final_state["repaired"] = any(action != "No repair needed" and not action.startswith("CUDA PyTorch already") for action in final_state["actions"])
     return final_state
