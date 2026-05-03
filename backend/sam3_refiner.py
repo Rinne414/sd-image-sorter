@@ -121,6 +121,38 @@ def _check_sam3_available() -> bool:
     return bool(_sam3_available)
 
 
+@contextlib.contextmanager
+def _force_torch_load_weights_only_false():
+    """Override ``torch.load`` ``weights_only=True`` during the SAM3 build.
+
+    SAM3 0.1.3's ``model_builder.py`` calls
+    ``torch.load(..., weights_only=True)`` on the checkpoint. PyTorch 2.6
+    flipped the default of ``weights_only`` from ``False`` to ``True`` and
+    started rejecting pickled objects (config classes, ``argparse.Namespace``,
+    etc.) that aren't on its safe-globals allowlist — and the published
+    facebook/sam3 checkpoint hits exactly that case. Without this override,
+    ``build_sam3_image_model`` crashes with "Weights only load failed" the
+    moment a SAM3 inference is attempted.
+
+    Forcing ``weights_only=False`` is acceptable here: the checkpoint comes
+    from facebook/sam3 on HuggingFace or ModelScope (both treated as trusted
+    upstream sources for this app), and the override is scoped strictly to
+    the SAM3 build call — restored in ``finally`` even if the build raises.
+    """
+    import torch
+    original = torch.load
+
+    def _torch_load_trusted(*args, **kwargs):
+        kwargs["weights_only"] = False
+        return original(*args, **kwargs)
+
+    torch.load = _torch_load_trusted
+    try:
+        yield
+    finally:
+        torch.load = original
+
+
 def _resolve_checkpoint_path(checkpoint_path: Optional[str] = None) -> Optional[str]:
     if checkpoint_path and os.path.exists(checkpoint_path):
         return checkpoint_path
@@ -197,7 +229,7 @@ def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface
                 resolved_checkpoint = _resolve_checkpoint_path(checkpoint_path)
 
                 logger.info("Loading SAM3 on %s", device)
-                with exclusive_ai_runtime("sam3-load"):
+                with exclusive_ai_runtime("sam3-load"), _force_torch_load_weights_only_false():
                     if resolved_checkpoint:
                         logger.info("Using local SAM3 checkpoint: %s", resolved_checkpoint)
                         model = build_sam3_image_model(
