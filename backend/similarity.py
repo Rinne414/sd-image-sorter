@@ -792,31 +792,6 @@ class SimilarityIndex:
         has_more = total > (page_offset + len(page))
         return page, total, has_more
 
-    def _rank_candidates(
-        self,
-        query_emb: np.ndarray,
-        candidates: list,
-        threshold: float,
-    ) -> List[Dict[str, Any]]:
-        """Rank candidate images by similarity to query embedding."""
-        ranked = self._rank_candidate_rows(query_emb, candidates, threshold)
-        ranked.sort(key=lambda item: item["similarity"], reverse=True)
-        return ranked
-
-    def _paginate_ranked_results(
-        self,
-        ranked_results: List[Dict[str, Any]],
-        limit: int,
-        offset: int,
-    ) -> Tuple[List[Dict[str, Any]], int, bool]:
-        """Slice an already-ranked result list and report pagination metadata."""
-        page_limit = max(1, limit)
-        page_offset = max(0, offset)
-        total = len(ranked_results)
-        page = ranked_results[page_offset:page_offset + page_limit]
-        has_more = total > (page_offset + len(page))
-        return page, total, has_more
-
 
 # Singleton
 _index = None

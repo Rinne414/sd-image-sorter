@@ -32,7 +32,6 @@ _sam3_processor = None
 _sam3_device = None
 _sam3_lock = threading.Lock()
 _sam3_available = None
-_sam3_runtime_patch_applied = False
 _sam3_text_assets_provisioned = False
 
 
@@ -122,43 +121,6 @@ def _check_sam3_available() -> bool:
     return bool(_sam3_available)
 
 
-def _patch_sam3_runtime_for_stable_inference() -> None:
-    """Patch SAM3 fused MLP inference to avoid bf16/float32 mismatches."""
-    global _sam3_runtime_patch_applied
-    if _sam3_runtime_patch_applied:
-        return
-
-    try:
-        import torch
-        import torch.nn.functional as F
-        import sam3.model.vitdet as sam3_vitdet  # type: ignore
-        import sam3.perflib.fused as sam3_fused  # type: ignore
-    except Exception as exc:
-        logger.warning("SAM3 runtime patch skipped: %s", exc)
-        return
-
-    def _safe_addmm_act(activation, linear, mat1):
-        if torch.is_grad_enabled():
-            raise ValueError("Expected grad to be disabled.")
-
-        weight = linear.weight.detach()
-        bias = linear.bias.detach() if linear.bias is not None else None
-        target_dtype = weight.dtype
-        mat1 = mat1.to(dtype=target_dtype)
-        output = F.linear(mat1, weight, bias)
-
-        if activation in [torch.nn.functional.relu, torch.nn.ReLU]:
-            return F.relu(output)
-        if activation in [torch.nn.functional.gelu, torch.nn.GELU]:
-            return F.gelu(output)
-        raise ValueError(f"Unexpected activation {activation}")
-
-    sam3_fused.addmm_act = _safe_addmm_act
-    sam3_vitdet.addmm_act = _safe_addmm_act
-    _sam3_runtime_patch_applied = True
-    logger.info("Applied SAM3 stable inference patch to avoid bf16/float32 mismatches.")
-
-
 def _resolve_checkpoint_path(checkpoint_path: Optional[str] = None) -> Optional[str]:
     if checkpoint_path and os.path.exists(checkpoint_path):
         return checkpoint_path
@@ -227,7 +189,6 @@ def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface
                 from sam3.model.sam3_image_processor import Sam3Processor  # type: ignore
                 import torch
 
-                _patch_sam3_runtime_for_stable_inference()
                 # SAM3 0.1.3's wheel doesn't ship its tokenizer vocab; copy
                 # it from open_clip (already a dep) so segment-by-text
                 # doesn't crash with FileNotFoundError on first use.
