@@ -5,6 +5,15 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- SAM3 Pro censor no longer paints a giant box over the whole image when a prompt isn't actually present (e.g. asking for "exposed genitalia" on a clothed image). A presence-probability gate plus a max-mask-area cap rejects the whole-body false-positive collapse the model used to fall back to. Previously selectable concepts that genuinely *are* present (breasts, nipples, buttocks) keep working and recover small detections that the old score-only threshold accidentally filtered out.
+- Windows first launch no longer misreads a freshly installed CUDA PyTorch wheel through the old already-imported CPU `torch` module, which previously could trigger repeated multi-GB CUDA wheel downloads before falling back with a misleading warning.
+
+### Documentation
+- README now states realistic first-launch disk-space and network-traffic budgets, including CUDA runtimes, pip cache, and on-demand AI model sizes.
+
 ## [3.1.0] - 2026-04-26
 
 ### Added

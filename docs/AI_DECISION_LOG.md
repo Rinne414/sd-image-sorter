@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-05-01
+**Updated:** 2026-05-04
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -2138,3 +2138,48 @@ Use this structure for future entries:
   Do not publish a `linux-mac` full package name or advertise macOS support until a clean macOS first-run is tested. Do not make Linux first-run install direct `nvidia-*`, `cuda-*`, `triton`, `torch`, or `torchvision` pins from the shared lock before the CPU Torch baseline is installed. Do not remove the Windows portable build-tool bootstrap.
 - Evidence:
   `run.sh`, `run.bat`, `scripts/build_release_packages.py`, `backend/app_info.py`, `backend/services/update_service.py`, `backend/tests/test_release_build.py`, `backend/tests/test_update_service.py`, `docs/RELEASE_PACKS.md`, `README.md`.
+
+### ADR-AI-20260503-88: PyTorch CUDA repair verifies reinstalled wheels in a fresh interpreter
+
+- Status: accepted
+- Area: Windows first launch / portable runtime repair / network and disk usage truthfulness
+- Context:
+  A first-start Windows portable log from `C:\temp\SDIS 手测\sd-image-sorter-v3.1.0-windows-portable\log.txt` showed the app ultimately started, but the launcher downloaded ONNX CUDA runtime wheels plus multiple PyTorch CUDA wheels (`cu128`, `cu126`, then fallbacks) before warning that CUDA Torch repair failed. The root issue was not that every wheel was needed: `repair_torch_runtime.py` imported CPU `torch` while probing the existing state, then used pip to replace it with a CUDA wheel in the same Python process. Re-probing through the already-imported module kept reporting `torch.version.cuda` as empty, so the repair loop treated a successful install as failure and downloaded more wheels.
+- Decision:
+  After pip replaces Torch, CUDA repair must verify the installed wheel from a fresh Python interpreter via `_torch_probe_subprocess()`. The same fresh probe result is used to report final repair state when a CUDA Torch reinstall occurred. README first-start documentation must distinguish required feature runtime downloads from caches and optional model downloads, and must tell users that repeated PyTorch CUDA wheel downloads in one launch indicate an old package or repair failure rather than normal behavior.
+- Why:
+  Python cannot reliably unload and reload binary Torch modules in the same process after pip replaces them on disk. A subprocess probe is cheaper than another multi-GB wheel download and avoids lying to users with a failed repair warning after a valid install. Disk and traffic warnings also need to be explicit because the app intentionally ships a full local AI workflow rather than deleting features to look small.
+- Do not regress:
+  Do not verify a post-pip Torch replacement by calling the current process's already-imported `torch` module. Do not add broad CUDA Torch pins to base requirements just to avoid launcher logic; non-NVIDIA machines must not pay that cost. Do not present `data/pip-cache` as required app data: it is safe-to-clean package-download cache, separate from models, database, favorites, and settings.
+- Evidence:
+  `backend/repair_torch_runtime.py`, `backend/tests/test_repair_torch_runtime.py`, `README.md`, `CHANGELOG.md`, the provided first-start `log.txt` showing repeated CUDA wheel downloads and final app startup.
+- Validation:
+  `cd backend && TMPDIR=/tmp PYTHONPATH=. python3 -m pytest -q tests/test_repair_torch_runtime.py` (`9 passed`).
+
+
+### ADR-AI-20260504-89: SAM3 text segmentation must gate on presence_logits, not just per-query score
+
+- Status: accepted
+- Area: backend AI inference / privacy-censor accuracy
+- Context:
+  After switching the SAM3 backend from the unmaintained `sam3==0.1.3` PyPI package to HuggingFace `transformers.Sam3Model`, real anime/SD image testing exposed a serious failure mode the old `argmax(scores)` selection silently inherited. SAM3 emits a per-text-query `presence_logits` "is this concept here at all" signal alongside `pred_masks` and `pred_logits`. Empirically, on the user's `C:\temp\SDIS 手测\OutPut Keep` images, real detections produced `sigmoid(presence_logits)` in `[0.52, 0.74]` while absent prompts ("exposed female genitalia" on a clothed image, "exposed male genitalia" on a female image, etc.) clustered in `[0.001, 0.030]`. The old code ignored `presence_logits`, picked the highest-scoring mask among 200 queries regardless, and consistently returned a whole-body silhouette covering 50–85 % of the canvas — which the censor pipeline then rasterised as a giant box over the entire person. Users described this as "why is it a box and worse than YOLO/NudeNet".
+- Decision:
+  `backend/sam3_refiner.py::_run_segmentation` gates text prompts on `sigmoid(presence_logits) >= presence_threshold` (default 0.5) BEFORE running `post_process_instance_segmentation`. `detect_privacy_regions(conf_threshold=...)` reuses its existing `conf_threshold` argument as the presence-probability threshold (parallel semantics to NudeNet's score threshold: higher = stricter, lower = more recall). A belt-and-suspenders area cap (`_DEFAULT_MAX_AREA_RATIO = 0.30`) rejects any mask covering more than 30 % of the image even if presence somehow squeaks past. A small score floor (`_DEFAULT_SCORE_FLOOR = 0.05`) drops total noise. The previous `area / image_area < 0.001` floor inside `detect_privacy_regions` is replaced with an absolute `area < 64 px` floor so legitimate small detections (nipples, anus on high-resolution canvases) survive. Box-only prompts (`refine_box`) skip the presence gate because `presence_logits` is text-conditioned.
+- Why:
+  Score alone does not separate present-vs-absent on this model: real detections range `[0.034, 0.553]` for top-1 score while false positives reach `0.044`, leaving no clean threshold. `presence_logits` cleanly separates the two clusters. The whole-body collapse pattern is a known SAM3 behaviour for absent prompts — the model still has to assign 200 query slots, and on absent text they default to a generic high-coverage query (consistently query #144 in the diagnostic dump). Without this gate the "Pro" SAM3 censor mode actively makes images worse than NudeNet by drawing huge boxes over clothed people. Lowering `score_threshold` to 0.05 instead of 0.3 also matters: real anime detections (`top1 = 0.13–0.34`) were being filtered out, which the user perceived as "most things it cannot detect ever with low confidence threshold".
+- Do not regress:
+  Do not delete the `presence_threshold` check from `_run_segmentation`. Do not raise `score_threshold` back to 0.3 to "be stricter" — strictness now lives in `presence_threshold`. Do not put the `area / image_area < 0.001` floor back in `detect_privacy_regions`; nipple-size masks on 1024×1536 canvases legitimately measure ~110 px and were being silently dropped. Do not reintroduce a fallback that picks `argmax(scores)` when presence is below threshold — that is the failure mode that produced the giant-box bug.
+- Allowed evolution:
+  Replace the constant `_DEFAULT_PRESENCE_THRESHOLD = 0.5` with a per-class threshold table if the model's presence calibration differs by anatomy class. Add a small NMS / cross-prompt dedup if SAM3 returns near-identical bboxes for different prompts (observed in the diagnostic dump on one image where breast and buttocks prompts produced overlapping masks). Replace the area cap with a learned size prior. None of those should weaken the absent-prompt false-positive guarantee.
+- Evidence:
+  Diagnostic run (`C:\temp\SDIS 手测\sam3_diag\diag.py`) against 5 images at `C:\temp\SDIS 手测\OutPut Keep\` and post-fix verification run (`C:\temp\SDIS 手测\sam3_diag\verify.py`). Pre-fix masks at `C:\temp\SDIS 手测\sam3_debug\` showed whole-body silhouettes for absent prompts; post-fix masks at `C:\temp\SDIS 手测\sam3_verify\` show only localised anatomy-shaped masks (max 5.84 % of canvas). Empirical thresholds documented inline in `backend/sam3_refiner.py` near `_DEFAULT_PRESENCE_THRESHOLD`.
+- Last verified:
+  2026-05-04 against the 5-image real-data sample and full backend pytest suite.
+- Related files:
+  `backend/sam3_refiner.py`
+  `backend/tests/test_sam3_refiner.py`
+  `backend/services/censor_service.py`
+- Supersedes:
+  None
+- Validation:
+  `cd backend && python -m pytest tests/test_sam3_refiner.py` (12 passed) and full suite `cd backend && python -m pytest tests/` (892 passed, 5 skipped).

@@ -233,6 +233,19 @@ SAM3_PRIVACY_PROMPTS = [
 ]
 
 
+# Empirically chosen on real anime/SD images (see docs/AI_DECISION_LOG.md):
+# absent prompts produce sigmoid(presence_logits) in [0.001, 0.030]; real
+# detections sit at >= 0.5. 0.5 cleanly separates the two clusters.
+_DEFAULT_PRESENCE_THRESHOLD = 0.5
+# Floor on the per-query score for the chosen mask. Presence is the primary
+# gate; this just rejects total noise (top-1 < 0.05 is never a real detection).
+_DEFAULT_SCORE_FLOOR = 0.05
+# Cap mask area as a sanity check: when SAM3 collapses to a whole-body
+# silhouette for an absent concept it covers > 30 % of the image. Real
+# privacy regions are tiny relative to the canvas.
+_DEFAULT_MAX_AREA_RATIO = 0.30
+
+
 def _best_mask(processed_results, score_threshold: float = 0.0) -> Optional[np.ndarray]:
     """Pick the highest-scoring mask above ``score_threshold`` from
     ``Sam3Processor.post_process_instance_segmentation`` output."""
@@ -250,6 +263,27 @@ def _best_mask(processed_results, score_threshold: float = 0.0) -> Optional[np.n
     if mask_t.dtype.is_floating_point:
         mask_t = mask_t > 0.5
     return mask_t.detach().cpu().numpy().astype(np.uint8)
+
+
+def _presence_prob(outputs) -> Optional[float]:
+    """Return max sigmoid(presence_logits) from a Sam3 output, or None.
+
+    SAM3 emits a per-text-query "is this concept present in the image at all"
+    logit alongside the per-query masks. For absent concepts the model still
+    produces non-zero query scores (often a whole-body collapse on the same
+    'junk' query index), so gating by score alone yields oversized false
+    positives. Presence reliably separates present (>0.5) from absent (<0.05).
+    """
+    pres = getattr(outputs, "presence_logits", None)
+    if pres is None:
+        return None
+    try:
+        import torch
+    except Exception:
+        return None
+    if pres.numel() == 0:
+        return None
+    return float(torch.sigmoid(pres.detach().cpu().float()).max().item())
 
 
 class SAM3Refiner:
@@ -297,7 +331,9 @@ class SAM3Refiner:
         image: Image.Image,
         text: Optional[str] = None,
         box: Optional[List[float]] = None,
-        score_threshold: float = 0.0,
+        score_threshold: float = _DEFAULT_SCORE_FLOOR,
+        presence_threshold: float = _DEFAULT_PRESENCE_THRESHOLD,
+        max_area_ratio: float = _DEFAULT_MAX_AREA_RATIO,
     ) -> Optional[np.ndarray]:
         if not text and not box:
             return None
@@ -314,10 +350,29 @@ class SAM3Refiner:
             inputs = self.processor(**kwargs).to(self._device())
             with torch.no_grad():
                 out = self.model(**inputs)
+
+            # Presence gate: refuse text prompts the model says aren't in the image.
+            # Skipped for box-only prompting (presence_logits are text-conditioned).
+            if text and presence_threshold > 0:
+                pres = _presence_prob(out)
+                if pres is not None and pres < presence_threshold:
+                    return None
+
             results = self.processor.post_process_instance_segmentation(
                 out, target_sizes=[(rgb.height, rgb.width)], threshold=0.0
             )
-        return _best_mask(results, score_threshold=score_threshold)
+        mask = _best_mask(results, score_threshold=score_threshold)
+        if mask is None:
+            return None
+
+        # Sanity cap: a privacy region covering > max_area_ratio of the image
+        # is the whole-body collapse pattern even when presence happens to
+        # squeak past — refuse it.
+        if max_area_ratio and max_area_ratio < 1.0:
+            h, w = mask.shape[:2]
+            if float(mask.sum()) / float(max(1, h * w)) > max_area_ratio:
+                return None
+        return mask
 
     def refine_box(
         self,
@@ -353,9 +408,16 @@ class SAM3Refiner:
     def detect_privacy_regions(
         self,
         image: Image.Image,
-        conf_threshold: float = 0.3,
+        conf_threshold: float = _DEFAULT_PRESENCE_THRESHOLD,
         prompts: Optional[List[Dict[str, str]]] = None,
     ) -> List[Dict]:
+        """Run every privacy prompt and collect mask detections.
+
+        ``conf_threshold`` is the presence-probability gate (sigmoid of
+        SAM3's per-text presence logit), parallel to NudeNet's score gate:
+        higher = stricter, lower = more recall. Empirically, real
+        detections sit at >= 0.5 and absent-prompt false positives are <0.03.
+        """
         prompts = prompts or SAM3_PRIVACY_PROMPTS
         rgb = image.convert("RGB")
         detections: List[Dict] = []
@@ -364,7 +426,12 @@ class SAM3Refiner:
         for entry in prompts:
             text = entry["prompt"]
             cls_name = entry["class"]
-            mask = self._run_segmentation(rgb, text=text, score_threshold=conf_threshold)
+            mask = self._run_segmentation(
+                rgb,
+                text=text,
+                score_threshold=_DEFAULT_SCORE_FLOOR,
+                presence_threshold=conf_threshold,
+            )
             if mask is None:
                 continue
 
@@ -372,9 +439,11 @@ class SAM3Refiner:
             if len(xs) == 0:
                 continue
 
+            # Floor on absolute pixel area (to drop single-pixel artefacts) but
+            # not on relative area: real nipple/genitalia masks can be < 0.1%
+            # of a high-resolution canvas and were previously dropped here.
             area = int(np.sum(mask > 0))
-            image_area = rgb.width * rgb.height
-            if area < 100 or area / image_area < 0.001:
+            if area < 64:
                 continue
 
             x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
