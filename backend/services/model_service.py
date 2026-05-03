@@ -204,13 +204,32 @@ def _artist_checkpoint_url(repo_id: str, filename: str, *, hf_base: str) -> str:
     return configured or _artist_resolve_url(repo_id, filename, hf_base=hf_base)
 
 
-def _sam3_download_urls() -> List[str]:
-    configured = os.environ.get("SD_IMAGE_SORTER_SAM3_URLS")
-    if configured:
-        return [url.strip() for url in configured.split(",") if url.strip()]
-    return [
-        "https://modelscope.cn/models/facebook/sam3/resolve/master/model.safetensors",
-    ]
+# Files the transformers SAM3 loader needs in the checkpoint directory.
+# ``sam3.pt`` is intentionally NOT in this list — it's the legacy 3.45 GB
+# pickle from the unmaintained sam3 0.1.3 package; the transformers backend
+# loads ``model.safetensors`` directly from this same directory.
+_SAM3_DOWNLOAD_FILES = (
+    "config.json",
+    "model.safetensors",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "merges.txt",
+    "special_tokens_map.json",
+)
+
+
+def _sam3_download_urls() -> List[Tuple[str, str]]:
+    """Return ``(filename, url)`` pairs for the full transformers SAM3 checkpoint.
+
+    Honours ``SD_IMAGE_SORTER_SAM3_BASE_URL`` for users who want to point the
+    downloader at an alternate ModelScope/HF mirror. Defaults to ModelScope's
+    facebook/sam3 so China users do not need HF access.
+    """
+    configured_base = os.environ.get("SD_IMAGE_SORTER_SAM3_BASE_URL", "").strip().rstrip("/")
+    base = configured_base or "https://modelscope.cn/models/facebook/sam3/resolve/master"
+    return [(name, f"{base}/{name}") for name in _SAM3_DOWNLOAD_FILES]
 
 
 def _repair_sam3_runtime_if_possible() -> Dict[str, Any]:
@@ -906,24 +925,30 @@ class ModelService:
                 return result
 
             sam3_dir = Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"
-            sam3_dest = sam3_dir / "model.safetensors"
-            sam3_urls = _sam3_download_urls()
-            downloaded = False
-            last_error = None
-            for url in sam3_urls:
+            sam3_dir.mkdir(parents=True, exist_ok=True)
+            # Idempotent file-by-file fetch: skip files already on disk so users
+            # who already have the giant model.safetensors don't redownload it
+            # just to backfill the small config / tokenizer files.
+            errors: List[str] = []
+            for filename, url in _sam3_download_urls():
+                dest = sam3_dir / filename
+                if dest.exists() and dest.stat().st_size > 0:
+                    continue
                 try:
-                    _direct_download_file(url, sam3_dest, timeout=600)
-                    downloaded = True
-                    break
+                    _direct_download_file(url, dest, timeout=900)
                 except Exception as exc:
-                    last_error = exc
-                    _model_logger.warning("SAM3 download failed from %s: %s", url, exc)
-            if not downloaded:
-                raise RuntimeError(
-                    f"Could not download SAM3 checkpoint. Last error: {last_error}. "
-                    f"You can manually download from {SAM3_MODELSCOPE_URL} and place the file in {sam3_dir}"
-                )
+                    errors.append(f"{filename}: {exc}")
+                    _model_logger.warning(
+                        "SAM3 file download failed: %s -> %s: %s", url, dest, exc
+                    )
+
             refreshed_path = get_sam3_checkpoint_path()
+            if not refreshed_path:
+                detail = "; ".join(errors) if errors else "no completed downloads"
+                raise RuntimeError(
+                    f"Could not assemble SAM3 checkpoint ({detail}). "
+                    f"You can manually download files from {SAM3_MODELSCOPE_URL} and place them in {sam3_dir}"
+                )
             result = sam3_prepare_result(refreshed_path)
             if not result.get("ready"):
                 result["runtime_repair"] = _repair_sam3_runtime_if_possible()

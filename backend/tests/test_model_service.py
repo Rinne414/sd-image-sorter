@@ -169,14 +169,23 @@ def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
 
 
 def test_sam3_default_download_urls_do_not_fallback_to_sam2_checkpoint(monkeypatch):
-    """SAM3 fallback URLs must not silently save a SAM2 .pt checkpoint as SAM3 safetensors."""
+    """SAM3 download URLs must (a) cover the full transformers checkpoint
+    (weights + config + tokenizer files) and (b) never silently fall back
+    to a SAM2 mirror — pulling SAM2 .pt and saving it as SAM3 safetensors
+    has historically corrupted user installs."""
+    monkeypatch.delenv("SD_IMAGE_SORTER_SAM3_BASE_URL", raising=False)
     monkeypatch.delenv("SD_IMAGE_SORTER_SAM3_URLS", raising=False)
 
-    urls = model_service._sam3_download_urls()
+    pairs = model_service._sam3_download_urls()
 
-    assert urls
+    assert pairs
+    assert all(isinstance(p, tuple) and len(p) == 2 for p in pairs)
+    filenames = {name for name, _ in pairs}
+    urls = [url for _, url in pairs]
     assert all("sam2" not in url.lower() for url in urls)
-    assert all(url.lower().endswith(".safetensors") for url in urls)
+    assert "model.safetensors" in filenames
+    assert "config.json" in filenames
+    assert "tokenizer.json" in filenames
 
 
 def test_prepare_sam3_existing_checkpoint_repairs_runtime_before_final_status(monkeypatch):

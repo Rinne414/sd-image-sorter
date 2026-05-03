@@ -166,13 +166,8 @@ print(json.dumps(result))
 
 SAM3_REQUIRED_MODULES = (
     ("torch", "torch"),
-    ("sam3", "sam3"),
-    ("einops", "einops"),
-    ("hydra", "hydra-core"),
-    ("omegaconf", "omegaconf"),
-    ("pycocotools", "pycocotools"),
-    ("decord", "decord"),
-    ("iopath", "iopath"),
+    ("transformers", "transformers"),
+    ("safetensors", "safetensors"),
     ("cv2", "opencv-python"),
 )
 
@@ -206,7 +201,10 @@ def _format_sam3_readiness_message(
     if not checkpoint_path:
         if missing_packages:
             return "SAM3 checkpoint is missing, and runtime packages are not installed: " + ", ".join(missing_packages) + "."
-        return "SAM3 checkpoint is missing. Download it or place sam3.pt / model.safetensors under the SAM3 model folder."
+        return (
+            "SAM3 checkpoint is missing. Download it via Prepare or drop a transformers SAM3 directory "
+            "(config.json + model.safetensors + tokenizer files) under models/sam3/facebook-sam3-modelscope."
+        )
 
     problems: List[str] = []
     if missing_packages:
@@ -480,17 +478,20 @@ def get_default_legacy_model_path() -> Optional[str]:
 
 
 def get_sam3_checkpoint_path() -> Optional[str]:
+    """Return the directory containing a complete transformers SAM3 checkpoint.
+
+    The transformers ``Sam3Model.from_pretrained`` loader needs a directory
+    holding ``config.json`` + ``model.safetensors`` + tokenizer files, so
+    this returns the directory path (not a single weight file path).
+    """
     sam3_root = Path(get_sam3_model_dir())
-    candidates = [
-        sam3_root / "facebook-sam3-modelscope" / "sam3.pt",
-        sam3_root / "facebook-sam3-modelscope" / "model.safetensors",
-        sam3_root / "facebook-sam3" / "sam3.pt",
-        sam3_root / "facebook-sam3" / "model.safetensors",
-        sam3_root / "sam3.pt",
-        sam3_root / "model.safetensors",
+    candidate_dirs = [
+        sam3_root / "facebook-sam3-modelscope",
+        sam3_root / "facebook-sam3",
+        sam3_root,
     ]
-    for candidate in candidates:
-        if candidate.exists():
+    for candidate in candidate_dirs:
+        if (candidate / "config.json").exists() and (candidate / "model.safetensors").exists():
             return str(candidate.resolve())
     return None
 

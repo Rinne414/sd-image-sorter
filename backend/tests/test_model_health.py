@@ -35,7 +35,7 @@ def test_model_health_sam3_probe_does_not_import_torch_in_parent(monkeypatch):
         assert module_name != "torch"
         return False
 
-    installed = {"torch", "sam3", "einops", "hydra", "omegaconf", "pycocotools", "decord", "iopath", "cv2", "timm"}
+    installed = {"torch", "transformers", "safetensors", "cv2", "timm"}
     monkeypatch.setattr(model_health, "_module_available", fake_available)
     monkeypatch.setattr(model_health, "_module_installed", lambda module_name: module_name in installed)
     monkeypatch.setattr(
