@@ -16,7 +16,20 @@ import re
 import subprocess
 import sys
 from importlib import metadata
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+# Embedded Python (used by the portable Windows launcher) ships a
+# ``python312._pth`` file that fully controls ``sys.path``. Unlike a normal
+# Python install, the embedded distribution does NOT auto-prepend the running
+# script's directory, so sibling imports such as ``from repair_onnxruntime
+# import ...`` fail with ``ModuleNotFoundError`` even though the file lives
+# right next to this script. We re-add the script directory ourselves so the
+# module resolution behaves the same as a developer venv. Tests for this
+# bootstrap live in ``tests/test_repair_torch_runtime.py``.
+_THIS_DIR = str(Path(__file__).resolve().parent)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 logger = logging.getLogger(__name__)
 
@@ -122,21 +135,53 @@ def _parse_cuda_version(text: str) -> Optional[Tuple[int, int]]:
 def _detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
     if platform.system() != "Windows":
         return None
-    commands = [
-        ["nvidia-smi", "--query-gpu=cuda_version", "--format=csv,noheader"],
-        ["nvidia-smi"],
-    ]
-    for command in commands:
-        try:
-            raw = subprocess.check_output(command, text=True, timeout=10, stderr=subprocess.DEVNULL)
-        except (subprocess.SubprocessError, OSError, FileNotFoundError) as exc:
-            # Log at DEBUG so an empty/missing nvidia-smi (legitimate on AMD machines) is
-            # not noisy, but the trail is still discoverable when debugging detection.
-            logger.debug("nvidia-smi probe %r failed: %s", command, exc)
-            continue
-        versions = [parsed for line in raw.splitlines() if (parsed := _parse_cuda_version(line))]
-        if versions:
-            return max(versions)
+
+    # Path 1: explicit per-GPU query. Newer ``nvidia-smi`` builds support
+    # ``--query-gpu=cuda_version`` and return just the version (e.g. "13.1\n")
+    # which is safe to feed to the plain numeric parser. Older builds reject
+    # the field with ``Field "cuda_version" is not a valid field to query.``
+    # so we filter that error string out before parsing.
+    try:
+        raw = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=cuda_version", "--format=csv,noheader"],
+            text=True,
+            timeout=10,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.SubprocessError, OSError, FileNotFoundError) as exc:
+        logger.debug("nvidia-smi --query-gpu=cuda_version probe failed: %s", exc)
+    else:
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if "not a valid field" in stripped.lower():
+                break
+            parsed = _parse_cuda_version(stripped)
+            if parsed:
+                return parsed
+
+    # Path 2: full ``nvidia-smi`` header. The header line looks like:
+    #   ``NVIDIA-SMI 591.86   Driver Version: 591.86   CUDA Version: 13.1``
+    # The plain ``\d+\.\d+`` regex used by ``_parse_cuda_version`` would
+    # match the driver version (591.86) before the CUDA version (13.1), so
+    # we must anchor the match on the explicit ``CUDA Version:`` marker.
+    try:
+        raw = subprocess.check_output(
+            ["nvidia-smi"],
+            text=True,
+            timeout=10,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.SubprocessError, OSError, FileNotFoundError) as exc:
+        logger.debug("nvidia-smi header probe failed: %s", exc)
+        return None
+
+    for line in raw.splitlines():
+        match = re.search(r"CUDA[\s:]*Version[\s:]*(\d+)\.(\d+)", line, re.IGNORECASE)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+
     return None
 
 

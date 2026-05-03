@@ -31,7 +31,19 @@ import platform
 import subprocess
 import sys
 from importlib import metadata
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Embedded Python (used by the portable Windows launcher) ships a
+# ``python312._pth`` file that fully controls ``sys.path`` and does NOT
+# auto-prepend the running script's directory. We add it ourselves so
+# any future sibling imports (e.g. ``from repair_torch_runtime import``)
+# behave the same way they do in a developer venv. This script currently
+# has no sibling imports, but keeping the bootstrap in place is cheap
+# insurance against future regressions.
+_THIS_DIR = str(Path(__file__).resolve().parent)
+if _THIS_DIR not in sys.path:
+    sys.path.insert(0, _THIS_DIR)
 
 
 def _version(dist_name: str) -> Optional[str]:
