@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shutil
 import threading
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -32,6 +33,73 @@ _sam3_device = None
 _sam3_lock = threading.Lock()
 _sam3_available = None
 _sam3_runtime_patch_applied = False
+_sam3_text_assets_provisioned = False
+
+
+def _ensure_sam3_text_assets() -> None:
+    """Provision the BPE vocab asset SAM3's tokenizer expects.
+
+    SAM3 0.1.3's ``model_builder.py`` hard-codes its tokenizer to load
+    ``<sam3>/../assets/bpe_simple_vocab_16e6.txt.gz`` (i.e. a top-level
+    ``assets/`` directory in site-packages), but the published wheel
+    doesn't ship that file. Without it, ``segment-by-text`` crashes with
+    ``[Errno 2] No such file or directory: ...assets/bpe_simple_vocab_16e6.txt.gz``.
+
+    ``open-clip-torch`` is already a dependency and bundles the identical
+    file at ``open_clip/bpe_simple_vocab_16e6.txt.gz``. Copy it once so
+    text segmentation works. Idempotent — skips when target already
+    exists; tolerant of missing source / permission errors (logs a
+    warning and lets the original SAM3 failure surface).
+    """
+    global _sam3_text_assets_provisioned
+    if _sam3_text_assets_provisioned:
+        return
+
+    try:
+        import sam3 as _sam3_pkg  # type: ignore
+    except ImportError:
+        # SAM3 not installed; the import error from _check_sam3_available
+        # is the right surface for that case.
+        return
+
+    try:
+        sam3_dir = Path(_sam3_pkg.__file__).resolve().parent
+    except Exception as exc:
+        logger.warning("Could not resolve sam3 package directory: %s", exc)
+        return
+
+    target = sam3_dir.parent / "assets" / "bpe_simple_vocab_16e6.txt.gz"
+    if target.exists():
+        _sam3_text_assets_provisioned = True
+        return
+
+    try:
+        import open_clip as _open_clip  # type: ignore
+        source = Path(_open_clip.__file__).resolve().parent / "bpe_simple_vocab_16e6.txt.gz"
+    except ImportError:
+        logger.warning(
+            "SAM3 vocab asset is missing and open_clip is not available to "
+            "provide a fallback. SAM3 text segmentation will fail until "
+            "%s exists.",
+            target,
+        )
+        return
+
+    if not source.exists():
+        logger.warning(
+            "open_clip is installed but does not ship %s; cannot provision "
+            "SAM3 vocab asset.",
+            source.name,
+        )
+        return
+
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        logger.info("Provisioned SAM3 tokenizer vocab from open_clip → %s", target)
+        _sam3_text_assets_provisioned = True
+    except Exception as exc:
+        logger.warning("Failed to provision SAM3 vocab asset at %s: %s", target, exc)
 
 
 def _check_sam3_available() -> bool:
@@ -160,6 +228,10 @@ def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface
                 import torch
 
                 _patch_sam3_runtime_for_stable_inference()
+                # SAM3 0.1.3's wheel doesn't ship its tokenizer vocab; copy
+                # it from open_clip (already a dep) so segment-by-text
+                # doesn't crash with FileNotFoundError on first use.
+                _ensure_sam3_text_assets()
                 device = "cuda" if torch.cuda.is_available() else "cpu"
                 resolved_checkpoint = _resolve_checkpoint_path(checkpoint_path)
 
