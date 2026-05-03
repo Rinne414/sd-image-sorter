@@ -113,10 +113,12 @@ class SingleProcessRequest(BaseModel):
 
 class BatchProcessRequest(BaseModel):
     # Background-task pipeline: each path is processed sequentially so the
-    # only risk from a large list is the request payload itself. 50,000
-    # matches the artist identify-batch ceiling and covers every personal
-    # SD library size we have observed.
-    image_paths: List[str] = Field(..., min_length=1, max_length=50000, description="List of image file paths")
+    # only risk from a large list is the request payload itself. Internal
+    # operations don't fan out into bulk SQL, so the ceiling only caps
+    # payload memory. 5,000,000 matches the rest of the batch endpoints and
+    # covers any realistic personal library; 50k was still rejecting real
+    # users with larger collections.
+    image_paths: List[str] = Field(..., min_length=1, max_length=5_000_000, description="List of image file paths")
     output_folder: str = Field(..., description="Destination folder")
     password: str = Field(default="", description="Password for scrambling")
     mode: str = Field(default="encode", description="'encode' or 'decode'")

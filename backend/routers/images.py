@@ -40,7 +40,11 @@ class DeleteSelectedImagesRequest(BaseModel):
 
 
 class RemoveSelectedImagesRequest(BaseModel):
-    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+    # Per-image work is sequential; only the request payload memory matters.
+    # Internal SQLite IN(...) lookups already chunk at 500. 5M covers any
+    # realistic personal library; the previous 50k ceiling was rejecting
+    # real users with larger collections.
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
 
 
 class ReconnectMissingFilesRequest(BaseModel):
@@ -50,7 +54,9 @@ class ReconnectMissingFilesRequest(BaseModel):
 
 
 class ExportSelectionRequest(BaseModel):
-    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=50000)
+    # Same rationale as RemoveSelectedImagesRequest: sequential per-image
+    # work + chunked SQL means the ceiling only caps payload memory.
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
     selection_token: Optional[str] = Field(default=None, min_length=1)
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=2000, ge=1, le=10000)

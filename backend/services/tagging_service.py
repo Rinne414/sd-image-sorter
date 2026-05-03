@@ -30,7 +30,13 @@ logger = logging.getLogger(__name__)
 THRESHOLD_MIN = 0.0
 THRESHOLD_MAX = 1.0
 PATH_MAX_LENGTH = 4096
-BATCH_EXPORT_LIMIT = 10000
+# Background-task / sequential pipeline: per-image work runs one at a time,
+# so the only thing this ceiling caps is the request payload memory. The
+# internal SQLite IN(...) reads are already chunked at 500 ids inside
+# `database.get_images_by_ids` / `get_image_tags_map`, so a 5M ceiling does
+# not change the database access pattern. The previous 10k ceiling was
+# rejecting realistic personal SD libraries.
+BATCH_EXPORT_LIMIT = 5_000_000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
 TRUE_BATCH_MODEL_MAX = 32
 CPU_CHUNK_MAX = 64

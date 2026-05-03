@@ -76,7 +76,11 @@ class ValidatePathRequest(BaseModel):
 
 class MoveRequest(BaseModel):
     """Request model for image move operations."""
-    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+    # Per-image work is sequential and the inner DB read uses
+    # ``db.get_images_by_ids`` which already chunks IN(...) at 500. The
+    # ceiling only caps request payload memory; 5M covers any realistic
+    # personal library (the previous 50k ceiling rejected real users).
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     operation: str = Field(default="move")
 

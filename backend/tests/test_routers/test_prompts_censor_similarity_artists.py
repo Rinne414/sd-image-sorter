@@ -1499,12 +1499,16 @@ class TestArtistsRouterValidation:
         assert response.status_code in [400, 422]
 
     def test_identify_batch_rejects_unbounded_image_id_lists(self, test_client):
-        # ARTIST_BATCH_IMAGE_LIMIT == 50000; sending one more must trip the
+        # Sending one more than ARTIST_BATCH_IMAGE_LIMIT must trip the
         # Pydantic max_length validator. The cap exists so a misbehaving
         # frontend cannot OOM the worker by spamming arbitrary id payloads.
+        # Importing the constant keeps this test self-correcting if the
+        # ceiling is tuned again.
+        from routers.artists import ARTIST_BATCH_IMAGE_LIMIT
+
         response = test_client.post(
             "/api/artists/identify-batch",
-            json={"image_ids": list(range(1, 50002))},
+            json={"image_ids": list(range(1, ARTIST_BATCH_IMAGE_LIMIT + 2))},
         )
 
         assert response.status_code == 400
