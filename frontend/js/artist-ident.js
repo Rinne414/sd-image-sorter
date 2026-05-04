@@ -636,7 +636,9 @@ const ArtistIdent = {
     filterGalleryByArtist(artist) {
         if (!window.App?.AppState?.filters) return;
 
-        window.App.AppState.filters.artist = artist;
+        window.App.updateFilters?.((filters) => {
+            filters.artist = artist;
+        });
         if (typeof window.App.updateFilterSummary === 'function') {
             window.App.updateFilterSummary();
         }
@@ -656,7 +658,9 @@ const ArtistIdent = {
     clearArtistFilter() {
         if (!window.App?.AppState?.filters) return;
 
-        window.App.AppState.filters.artist = null;
+        window.App.updateFilters?.((filters) => {
+            filters.artist = null;
+        });
         if (typeof window.App.updateFilterSummary === 'function') {
             window.App.updateFilterSummary();
         }

@@ -24,7 +24,8 @@ INSTALLED_MANIFEST_RELATIVE_PATH = Path("update") / "installed-manifest.json"
 # The in-app updater is only allowed to touch release-managed application files.
 # User and runtime state must survive every update attempt, even if a future
 # release manifest is built incorrectly. `data/` holds the database, favorites,
-# downloaded models, caches, thumbnails, and other package-local state.
+# downloaded models, caches, thumbnails, manual-sort session persistence, and
+# other package-local state.
 # The update subfolders below are runtime workspaces used by the updater itself
 # and must never be replaced by release assets.
 PROTECTED_RUNTIME_PREFIXES = (
@@ -56,13 +57,39 @@ def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _windows_pid_exists(pid: int) -> bool:
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+
+    try:
+        exit_code = ctypes.c_ulong()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        return _windows_pid_exists(pid)
+
     try:
         os.kill(pid, 0)
-    except OSError:
-        return False
     except PermissionError:
         return True
+    except OSError:
+        return False
     return True
 
 
@@ -141,6 +168,12 @@ def _is_protected_runtime_path(relative: Path) -> bool:
     return any(_is_relative_to(relative, prefix) for prefix in PROTECTED_RUNTIME_PREFIXES)
 
 
+def is_protected_runtime_path(relative_path: str | Path) -> bool:
+    """Return whether a package-relative path is protected runtime state."""
+    relative_text = relative_path.as_posix() if isinstance(relative_path, Path) else str(relative_path)
+    return _is_protected_runtime_path(_safe_relative_path(relative_text))
+
+
 def _extract_managed_paths(
     manifest: dict,
     *,
@@ -187,6 +220,17 @@ def _extract_managed_paths(
         _log(f"Ignored {len(protected_entries)} protected runtime path(s) from {manifest_label}", log_path=log_path)
 
     return normalized_paths
+
+
+def validate_update_manifest_managed_paths(manifest: dict, *, manifest_label: str = "update manifest") -> set[str]:
+    """Strictly validate managed paths from a newly downloaded update manifest."""
+    return _extract_managed_paths(
+        manifest,
+        manifest_label=manifest_label,
+        reject_protected=True,
+        reject_invalid=True,
+        log_path=None,
+    )
 
 
 def _resolve_payload_root(extracted_root: Path) -> Path:

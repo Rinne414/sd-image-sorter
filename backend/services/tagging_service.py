@@ -5,10 +5,8 @@ Handles business logic for AI tagging, tag management, and import/export.
 """
 import logging
 import os
-import re
 import gc
 import time
-import json
 import threading
 import queue as queue_module
 import multiprocessing
@@ -22,6 +20,8 @@ import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
+from services.state_compat import MutableStateProxy
+from services.tag_export_service import export_tags_batch_request
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -30,12 +30,125 @@ logger = logging.getLogger(__name__)
 THRESHOLD_MIN = 0.0
 THRESHOLD_MAX = 1.0
 PATH_MAX_LENGTH = 4096
-BATCH_EXPORT_LIMIT = 10000
+# Background-task / sequential pipeline: per-image work runs one at a time,
+# so the only thing this ceiling caps is the request payload memory. The
+# internal SQLite IN(...) reads are already chunked at 500 ids inside
+# `database.get_images_by_ids` / `get_image_tags_map`, so a 5M ceiling does
+# not change the database access pattern. The previous 10k ceiling was
+# rejecting realistic personal SD libraries.
+BATCH_EXPORT_LIMIT = 5_000_000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
 TRUE_BATCH_MODEL_MAX = 32
 CPU_CHUNK_MAX = 64
 TORIIGATE_GPU_CHUNK_MAX = 1
 TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
+
+TAGGER_MODEL_HINTS = {
+    "wd-eva02-large-tagger-v3": {
+        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of a fixed conservative lock.",
+        "speed": "Slow",
+        "memory": "High",
+        "best_for": "Max Quality / final library cleanup",
+        "safe_mode_note": "Adaptive runtime keeps GPU throughput high first, while automatic hardware clamps still cap the true batch size for long runs.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive max-throughput runtime. Highest quality without a fixed CPU lock.",
+        "quality_score": 5,
+        "speed_score": 3,
+        "stability_score": 3,
+    },
+    "wd-swinv2-tagger-v3": {
+        "summary": "Balanced quality and speed. Good default if you are not sure.",
+        "speed": "Medium",
+        "memory": "Medium",
+        "best_for": "Recommended general use",
+        "recommended": True,
+        "safe_mode_note": "Usually fine on average PCs. Safe Mode is optional.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-convnext-tagger-v3": {
+        "summary": "Faster than the larger models while keeping decent tagging quality.",
+        "speed": "Medium-fast",
+        "memory": "Medium",
+        "best_for": "Daily tagging on average PCs",
+        "safe_mode_note": "A good fallback when EVA02 feels too heavy.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 3,
+        "speed_score": 4,
+        "stability_score": 4,
+    },
+    "wd-vit-tagger-v3": {
+        "summary": "Lightweight and quick, but less accurate than the larger models.",
+        "speed": "Fast",
+        "memory": "Low",
+        "best_for": "Weak machines / fastest pass",
+        "safe_mode_note": "Best pick for weak machines. CPU Safe Mode works well here.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 2,
+        "speed_score": 5,
+        "stability_score": 5,
+    },
+    "wd-vit-large-tagger-v3": {
+        "summary": "A middle ground between ViT speed and EVA02 accuracy.",
+        "speed": "Medium",
+        "memory": "Medium-high",
+        "best_for": "Better accuracy without going full EVA02",
+        "safe_mode_note": "Use Safe Mode if you notice freezes during model load.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "quality_score": 4,
+        "speed_score": 3,
+        "stability_score": 3,
+    },
+    "camie-tagger-v2": {
+        "summary": "Much newer danbooru-era tag space. Strong artist / character / copyright coverage, but it can emit many more tags if the threshold is set too low.",
+        "speed": "Medium-slow",
+        "memory": "High",
+        "best_for": "Modern tag coverage / deeper library enrichment",
+        "safe_mode_note": "Camie uses ImageNet normalization and a much larger tag space. Keep the higher default threshold unless you intentionally want denser tags.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive runtime with denser modern tags. Better coverage than older WD models, but heavier and noisier if you lower the threshold too much.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 3,
+    },
+    "pixai-tagger-v0.9": {
+        "summary": "PixAI v0.9 ONNX export with a newer tag space than classic WD models. Strong for modern danbooru-style tagging, and the app now fills rating from a local fallback so library workflows stay complete.",
+        "speed": "Medium-slow",
+        "memory": "High",
+        "best_for": "Modern general + character tags with lower default threshold",
+        "safe_mode_note": "Uses direct 448 resize and [-1, 1] normalization. This ONNX export has no native rating head, so the app derives a practical rating fallback from the returned tags.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Adaptive runtime with newer PixAI tags. Heavier than the small WD models and should still be watched on long GPU runs.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 3,
+    },
+    "toriigate-0.5": {
+        "summary": "Large anime-art multimodal caption tagger with strong NSFW, character, and copyright knowledge.",
+        "speed": "Slow",
+        "memory": "Very high",
+        "best_for": "Rich VLM tagging / difficult anime image understanding",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Runs through the dedicated Transformers VLM backend instead of the WD14 ONNX runtime. GPU is strongly recommended, and the app still clamps chunk size to the safe range.",
+        "quality_score": 5,
+        "speed_score": 1,
+        "stability_score": 2,
+    },
+}
 
 
 def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
@@ -248,7 +361,10 @@ def _tagging_worker_main(
 
         # Eagerly load the model so progress transitions from "loading" to "tagging"
         if hasattr(tagger, "load"):
-            tagger.load()
+            from ai_runtime_guard import exclusive_ai_runtime
+
+            with exclusive_ai_runtime(f"tagger-load:{effective_model_name}"):
+                tagger.load()
 
         if hasattr(tagger, "set_session_refresh_interval"):
             tagger.set_session_refresh_interval(session_refresh_interval)
@@ -277,7 +393,12 @@ def _tagging_worker_main(
 
         send("running", "Collecting image list...")
         if request.image_ids:
-            all_ids = [img_id for img_id in request.image_ids if worker_db.get_image_by_id(img_id) is not None]
+            # Avoid N+1: per-id `get_image_by_id` becomes one round-trip per
+            # image and would block "Collecting image list..." for minutes
+            # on a 5M-id request before the first image is even tagged.
+            # `get_images_by_ids` already chunks IN(...) at 500.
+            existing_ids = set(worker_db.get_images_by_ids(list(request.image_ids)).keys())
+            all_ids = [img_id for img_id in request.image_ids if img_id in existing_ids]
         elif request.retag_all:
             all_ids = worker_db.get_all_image_ids()
         else:
@@ -510,11 +631,13 @@ class TagImportRequest(BaseModel):
 
 
 class BatchTagExportRequest(BaseModel):
-    """Request model for batch tag export."""
+    """Request model for batch sidecar export."""
     image_ids: List[int] = Field(..., min_length=1, max_length=BATCH_EXPORT_LIMIT)
     output_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     blacklist: Optional[List[str]] = Field(default=[], max_length=500)
     prefix: Optional[str] = Field(default="", max_length=256)
+    content_mode: str = Field(default="tags", max_length=32)
+    overwrite_policy: str = Field(default="unique", max_length=16)
 
 
 class TaggingService:
@@ -524,11 +647,33 @@ class TaggingService:
         """Initialize the tagging service."""
         self._progress: Dict[str, Any] = _build_tag_progress_state("idle")
         self._lock = threading.Lock()
+        self._progress_proxy = MutableStateProxy(self.get_progress, self.set_progress)
         self._get_tagger: Optional[Callable] = None
         self._cancel_requested = False
         self._worker_process: Optional[Any] = None
         self._worker_cancel_event: Optional[Any] = None
         self._active_run_id = 0
+
+    @staticmethod
+    def _coerce_progress_state(state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected progress state onto the canonical shape."""
+        state = state or {}
+        coerced = _build_tag_progress_state(
+            str(state.get("status", "idle")),
+            current=int(state.get("current", 0) or 0),
+            total=int(state.get("total", 0) or 0),
+            tagged=int(state.get("tagged", 0) or 0),
+            errors=int(state.get("errors", 0) or 0),
+            message=str(state.get("message", "") or ""),
+            runtime_backend_target=str(state.get("runtime_backend_target", "") or ""),
+            runtime_backend_actual=str(state.get("runtime_backend_actual", "") or ""),
+            runtime_backend_reason=str(state.get("runtime_backend_reason", "") or ""),
+            memory_pressure_warning=str(state.get("memory_pressure_warning", "") or ""),
+            run_id=int(state.get("run_id", 0) or 0),
+        )
+        if "processed" in state:
+            coerced["processed"] = int(state.get("processed", coerced["current"]) or 0)
+        return coerced
 
     def set_tagger_getter(self, tagger_getter: Callable) -> None:
         """Set the tagger getter function from main module."""
@@ -539,10 +684,14 @@ class TaggingService:
         with self._lock:
             return self._progress.copy()
 
+    def get_progress_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style progress handle without moving ownership out of the service."""
+        return self._progress_proxy
+
     def set_progress(self, state: Dict[str, Any]) -> None:
         """Set the tag progress state."""
         with self._lock:
-            self._progress = state
+            self._progress = self._coerce_progress_state(state)
 
     def reset_progress(self) -> Dict[str, Any]:
         """Reset a stuck tagging task back to idle."""
@@ -621,6 +770,44 @@ class TaggingService:
         generators = db.get_all_generators()
         return {"generators": generators}
 
+    def get_tagger_models(self) -> Dict[str, Any]:
+        """Return tagger model catalog with UI/runtime guidance."""
+        models = [
+            {
+                "name": name,
+                "path": config["repo_id"],
+                "description": TAGGER_MODEL_HINTS.get(name, {}).get("summary", f"{name} model"),
+                "disabled": bool(config.get("disabled") or TAGGER_MODEL_HINTS.get(name, {}).get("disabled", False)),
+                "disabled_reason": config.get("disabled_reason", ""),
+                "default_threshold": config.get("default_threshold"),
+                "default_character_threshold": config.get("default_character_threshold"),
+                "speed": TAGGER_MODEL_HINTS.get(name, {}).get("speed", "Unknown"),
+                "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
+                "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
+                "recommended": TAGGER_MODEL_HINTS.get(name, {}).get("recommended", False),
+                "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Use Safe Mode if your PC becomes unstable."),
+                "gpu_default": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_default", True),
+                "gpu_confirmation_required": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_confirmation_required", False),
+                "gpu_locked": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_locked", False),
+                "runtime_note": TAGGER_MODEL_HINTS.get(name, {}).get("runtime_note", ""),
+                "quality_score": TAGGER_MODEL_HINTS.get(name, {}).get("quality_score", 3),
+                "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
+                "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
+                "runtime_safety_tier": config.get("runtime_safety_tier", "balanced"),
+                "minimum_total_ram_gb": config.get("minimum_total_ram_gb"),
+                "minimum_available_ram_gb": config.get("minimum_available_ram_gb"),
+                "minimum_gpu_vram_mb": config.get("minimum_gpu_vram_mb"),
+                "minimum_gpu_available_vram_mb": config.get("minimum_gpu_available_vram_mb"),
+                "minimum_cpu_total_ram_gb": config.get("minimum_cpu_total_ram_gb"),
+                "minimum_cpu_available_ram_gb": config.get("minimum_cpu_available_ram_gb"),
+            }
+            for name, config in TAGGER_MODELS.items()
+        ]
+        return {
+            "models": models,
+            "default": DEFAULT_TAGGER_MODEL,
+        }
+
     def get_tags_library(self, sort_by: str = "frequency", limit: int = 1000) -> Dict[str, Any]:
         """Get tags library with frequency and sorting options."""
         if sort_by not in VALID_SORT_OPTIONS:
@@ -638,97 +825,12 @@ class TaggingService:
         }
 
     def get_prompts_library(self, limit: int = 500) -> Dict[str, Any]:
-        """Get unique prompt tokens from images with frequency counts."""
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, prompt
-                FROM images
-                WHERE prompt IS NOT NULL AND prompt != ''
-            """)
-
-            token_counts: dict[str, int] = {}
-
-            for row in cursor.fetchall():
-                prompt = row["prompt"]
-
-                clean_prompt = re.sub(r'<[^>]+>[^<]*</[^>]+>', '', prompt)
-                clean_prompt = re.sub(r'<lora:[^>]+>', '', clean_prompt)
-                clean_prompt = re.sub(r'<[^>]+>', '', clean_prompt)
-
-                image_tokens = set()
-
-                tokens = [t.strip() for t in clean_prompt.split(',') if t.strip()]
-                for token in tokens:
-                    clean_token = re.sub(r'^\(+|\)+$', '', token)
-                    clean_token = re.sub(r':\d+\.?\d*\)?$', '', clean_token)
-                    clean_token = clean_token.strip()
-
-                    if clean_token and len(clean_token) > 1:
-                        normalized = self._normalize_prompt_token(clean_token)
-                        if normalized and len(normalized) > 1:
-                            image_tokens.add(normalized)
-
-                for normalized in image_tokens:
-                    token_counts[normalized] = token_counts.get(normalized, 0) + 1
-
-            sorted_tokens = sorted(token_counts.items(), key=lambda x: x[1], reverse=True)
-            prompts = [{"prompt": normalized, "count": count} for normalized, count in sorted_tokens]
-
-        return {
-            "prompts": prompts[:limit],
-            "total": len(prompts)
-        }
+        """Get unique prompt tokens from the normalized prompt-token index."""
+        return db.get_all_prompt_tokens(limit=limit)
 
     def get_loras_library(self, limit: int = 500) -> Dict[str, Any]:
-        """Get unique LoRAs from images with frequency counts."""
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT id, loras, prompt
-                FROM images
-                WHERE (loras IS NOT NULL AND loras != '[]' AND loras != '')
-                   OR (prompt IS NOT NULL AND prompt LIKE '%<lora:%')
-            """)
-
-            lora_counts: dict[str, int] = {}
-
-            for row in cursor.fetchall():
-                loras_str = row["loras"] or ""
-                prompt_str = row["prompt"] or ""
-
-                image_loras = set()
-
-                if loras_str:
-                    try:
-                        loras_list = json.loads(loras_str)
-                        for lora_name in loras_list:
-                            if lora_name and len(lora_name) > 2:
-                                normalized = self._normalize_lora_name(lora_name)
-                                if normalized and len(normalized) > 2:
-                                    image_loras.add(normalized)
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-
-                if prompt_str:
-                    lora_matches = re.findall(r'<lora:([^:>]+)(?:[^>]*)?>', prompt_str, re.IGNORECASE)
-                    for lora_name in lora_matches:
-                        if lora_name and len(lora_name) > 2:
-                            normalized = self._normalize_lora_name(lora_name)
-                            if normalized and len(normalized) > 2:
-                                image_loras.add(normalized)
-
-                for normalized in image_loras:
-                    lora_counts[normalized] = lora_counts.get(normalized, 0) + 1
-
-            sorted_loras = sorted(lora_counts.items(), key=lambda x: x[1], reverse=True)
-            loras = [{"lora": normalized, "count": count} for normalized, count in sorted_loras[:limit]]
-
-        return {
-            "loras": loras,
-            "total": len(lora_counts)
-        }
+        """Get unique LoRAs from the normalized indexed LoRA table."""
+        return db.get_all_loras(limit=limit)
 
     def export_tags(self) -> Dict[str, Any]:
         """Export all image tags as JSON for backup/transfer."""
@@ -775,6 +877,8 @@ class TaggingService:
         """Import tags from exported JSON data."""
         imported = 0
         skipped = 0
+        batched_updates: List[Dict[str, Any]] = []
+        scheduled_image_ids: set[int] = set()
 
         with db.get_db() as conn:
             cursor = conn.cursor()
@@ -782,16 +886,24 @@ class TaggingService:
             for img_data in request.images:
                 path = img_data.get("path", "")
                 filename = img_data.get("filename", "")
-                tags = img_data.get("tags", [])
-
+                tags = self._normalize_import_tags(img_data.get("tags", []))
                 if not tags:
                     continue
 
-                cursor.execute(
-                    "SELECT id, tagged_at FROM images WHERE path = ? OR filename = ?",
-                    (path, filename)
-                )
-                row = cursor.fetchone()
+                image_row = db.get_image_by_path(path) if path else None
+                row = None
+                if image_row:
+                    cursor.execute(
+                        "SELECT id, tagged_at FROM images WHERE id = ?",
+                        (image_row["id"],),
+                    )
+                    row = cursor.fetchone()
+                elif filename:
+                    cursor.execute(
+                        "SELECT id, tagged_at FROM images WHERE filename = ?",
+                        (filename,),
+                    )
+                    row = cursor.fetchone()
 
                 if not row:
                     skipped += 1
@@ -804,27 +916,51 @@ class TaggingService:
                     skipped += 1
                     continue
 
-                if request.overwrite:
-                    cursor.execute("DELETE FROM tags WHERE image_id = ?", (image_id,))
+                # Keep import semantics stable for overwrite=False:
+                # duplicate rows targeting the same previously-untagged image
+                # should only import once in a single request.
+                if not request.overwrite and image_id in scheduled_image_ids:
+                    skipped += 1
+                    continue
 
-                for tag_info in tags:
-                    tag = tag_info.get("tag", "")
-                    conf = tag_info.get("confidence", 0.5)
-                    if tag:
-                        cursor.execute(
-                            "INSERT OR REPLACE INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
-                            (image_id, tag, conf)
-                        )
-
-                cursor.execute(
-                    "UPDATE images SET tagged_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (image_id,)
-                )
+                batched_updates.append({
+                    "image_id": image_id,
+                    "tags": tags,
+                })
+                scheduled_image_ids.add(image_id)
                 imported += 1
 
-            conn.commit()
+        if batched_updates:
+            db.add_tags_batch(batched_updates)
 
         return {"imported": imported, "skipped": skipped}
+
+    @staticmethod
+    def _normalize_import_tags(raw_tags: Any) -> List[Dict[str, Any]]:
+        """
+        Normalize imported tag payloads into a deduplicated list.
+
+        We keep last-write-wins confidence semantics for duplicate tags to
+        match prior INSERT OR REPLACE behavior.
+        """
+        deduped: Dict[str, Dict[str, Any]] = {}
+        for tag_info in raw_tags or []:
+            if not isinstance(tag_info, dict):
+                continue
+
+            tag = str(tag_info.get("tag", "")).strip()
+            if not tag:
+                continue
+
+            confidence_raw = tag_info.get("confidence", 0.5)
+            try:
+                confidence = float(confidence_raw)
+            except (TypeError, ValueError):
+                confidence = 0.5
+
+            deduped[tag] = {"tag": tag, "confidence": confidence}
+
+        return list(deduped.values())
 
     def _resolve_model_name(self, request: TagRequest) -> str:
         """Resolve the effective built-in model name for a request."""
@@ -1280,73 +1416,27 @@ class TaggingService:
 
     def export_tags_batch(self, request: BatchTagExportRequest) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        from utils.path_validation import validate_folder_path
-
-        is_valid, error = validate_folder_path(request.output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error)
-
-        exported = 0
-        errors = 0
-        used_output_paths = set()
-        output_folder_ready = os.path.isdir(request.output_folder)
-
-        for image_id in request.image_ids:
-            try:
-                image = db.get_image_by_id(image_id)
-                if not image:
-                    errors += 1
-                    continue
-
-                tags = db.get_image_tags(image_id)
-                if not tags:
-                    continue
-
-                blacklist = request.blacklist or []
-                filtered_tags = [t["tag"] for t in tags if t["tag"] not in blacklist]
-                file_content = ", ".join(filtered_tags)
-                if request.prefix:
-                    file_content = f"{request.prefix}{file_content}" if file_content else request.prefix
-
-                basename = os.path.splitext(image["filename"])[0]
-                candidate_names = [f"{basename}.txt", f"{image['filename']}.txt"]
-                txt_path = None
-
-                for candidate_name in candidate_names:
-                    candidate_path = os.path.join(request.output_folder, candidate_name)
-                    if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-                        txt_path = candidate_path
-                        break
-
-                if txt_path is None:
-                    stem = image["filename"]
-                    counter = 1
-                    while True:
-                        candidate_path = os.path.join(request.output_folder, f"{stem}_{counter}.txt")
-                        if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-                            txt_path = candidate_path
-                            break
-                        counter += 1
-
-                if not output_folder_ready:
-                    try:
-                        os.makedirs(request.output_folder, exist_ok=True)
-                    except OSError as exc:
-                        raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
-                    output_folder_ready = True
-
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(file_content)
-
-                used_output_paths.add(txt_path)
-                exported += 1
-            except HTTPException:
-                raise
-            except Exception as e:
-                logger.error("Error exporting tags for image %d: %s", image_id, e)
-                errors += 1
-
-        return {"exported": exported, "errors": errors}
+        result = export_tags_batch_request(request)
+        error_count = int(result.get("error_count", 0) or 0)
+        exported = int(result.get("exported", 0) or 0)
+        skipped = int(result.get("skipped", 0) or 0)
+        if error_count > 0:
+            status = "partial" if exported > 0 or skipped > 0 else "error"
+        elif skipped > 0:
+            status = "partial"
+        else:
+            status = "ok"
+        return {
+            "status": status,
+            "exported": exported,
+            "errors": error_count,
+            "error_count": error_count,
+            "error_messages": result.get("error_messages", []),
+            "skipped": skipped,
+            "total": result.get("total", len(request.image_ids)),
+            "content_mode": result.get("content_mode", request.content_mode),
+            "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
+        }
 
     def fix_rating_tags(self) -> Dict[str, Any]:
         """Clean up duplicate rating tags in existing database."""

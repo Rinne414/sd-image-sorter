@@ -15,6 +15,8 @@ from similarity import (
     SimilarityImageNotFoundError,
     SimilarityInsufficientEmbeddingsError,
     SimilarityInvalidImageError,
+    SimilarityDuplicateSearchTooLargeError,
+    SimilaritySearchWindowTooLargeError,
     ensure_clip_model_ready,
     get_similarity_index,
 )
@@ -56,6 +58,10 @@ class SimilarityService:
         index = get_similarity_index(db)
         return index.get_progress()
 
+    def cancel_embedding(self) -> bool:
+        index = get_similarity_index(db)
+        return index.request_cancel()
+
     def search_similar(
         self,
         image_id: int,
@@ -76,6 +82,8 @@ class SimilarityService:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SimilarityEmbeddingMissingError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SimilaritySearchWindowTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         return {
             "query_image_id": image_id,
             "results": result["results"],
@@ -122,6 +130,8 @@ class SimilarityService:
             )
         except SimilarityInvalidImageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SimilaritySearchWindowTooLargeError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         finally:
             await file.close()
         return {
@@ -160,6 +170,19 @@ class SimilarityService:
                 "reason": "insufficient_embeddings",
                 "embedded_count": exc.embedded_count,
                 "minimum_required": exc.minimum_required,
+            }
+        except SimilarityDuplicateSearchTooLargeError as exc:
+            return {
+                "duplicates": [],
+                "count": 0,
+                "total": 0,
+                "has_more": False,
+                "offset": offset,
+                "limit": limit,
+                "threshold": threshold,
+                "reason": "too_many_embeddings",
+                "embedded_count": exc.embedded_count,
+                "max_embeddings": exc.max_embeddings,
             }
         return {
             "duplicates": result["duplicates"],

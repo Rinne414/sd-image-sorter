@@ -4,6 +4,7 @@ Image manager for file operations (scanning, moving, copying).
 import logging
 import os
 import shutil
+import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import List, Dict, Any, Optional, Callable, Iterator
 from datetime import datetime
@@ -13,26 +14,28 @@ import json
 from config import ALLOWED_IMAGE_EXTENSIONS as IMAGE_EXTENSIONS
 from database import (
     add_images_batch,
-    add_image,
-    add_tags,
-    copy_image_derived_state,
-    get_image_tags,
+    add_copied_image_with_state,
+    get_image_by_id,
     update_image_path,
     update_image_metadata,
     get_image_scan_state_by_paths,
     get_images_in_folder_scope,
     delete_images_by_ids,
     delete_images_by_paths,
+    mark_pending_images_metadata_error,
+    STALE_PENDING_METADATA_READ_ERROR,
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
-from utils.source_paths import resolve_existing_indexed_image_path
+from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
 SCAN_DB_BATCH_SIZE = 200
+SCAN_PROGRESS_MIN_INTERVAL_SECONDS = 0.25
+SCAN_PROGRESS_EVERY_N_ITEMS = 50
 DEFAULT_METADATA_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
 
 
@@ -137,7 +140,12 @@ def _build_placeholder_record(
     preserve_existing_metadata = bool(existing) and bool(existing.get("is_readable", 1))
     if preserve_existing_metadata and _has_source_fingerprint(existing):
         preserve_existing_metadata = _source_fingerprint_matches(existing, stat_result)
-    created_at = datetime.fromtimestamp(stat_result.st_mtime)
+    current_file_time = datetime.fromtimestamp(stat_result.st_mtime)
+    library_order_time = (
+        existing.get("library_order_time")
+        or existing.get("created_at")
+        or current_file_time
+    ) if existing else current_file_time
 
     if preserve_existing_metadata:
         return {
@@ -152,7 +160,9 @@ def _build_placeholder_record(
             "file_size": int(stat_result.st_size),
             "checkpoint": existing.get("checkpoint"),
             "loras": _deserialize_loras(existing.get("loras")),
-            "created_at": created_at,
+            "library_order_time": library_order_time,
+            "source_file_mtime": current_file_time,
+            "created_at": library_order_time,
             "model_hash": existing.get("model_hash"),
             "is_readable": bool(existing.get("is_readable", 1)),
             "read_error": existing.get("read_error"),
@@ -174,7 +184,9 @@ def _build_placeholder_record(
         "file_size": int(stat_result.st_size),
         "checkpoint": None,
         "loras": [],
-        "created_at": created_at,
+        "library_order_time": library_order_time,
+        "source_file_mtime": current_file_time,
+        "created_at": library_order_time,
         "model_hash": None,
         "is_readable": True,
         "read_error": None,
@@ -215,6 +227,8 @@ def _build_metadata_success_record(
         "file_size": int(stat_result.st_size),
         "checkpoint": metadata["checkpoint"],
         "loras": metadata["loras"],
+        "library_order_time": datetime.fromtimestamp(stat_result.st_mtime),
+        "source_file_mtime": datetime.fromtimestamp(stat_result.st_mtime),
         "created_at": datetime.fromtimestamp(stat_result.st_mtime),
         "model_hash": model_hash,
         "is_readable": True,
@@ -233,7 +247,7 @@ def _build_metadata_error_record(
     error_message: str,
 ) -> Dict[str, Any]:
     """Build a DB record for files that failed metadata parsing."""
-    created_at = datetime.fromtimestamp(stat_result.st_mtime) if stat_result else None
+    current_file_time = datetime.fromtimestamp(stat_result.st_mtime) if stat_result else None
     source_mtime_ns = int(stat_result.st_mtime_ns) if stat_result else None
     source_size = int(stat_result.st_size) if stat_result else None
 
@@ -249,7 +263,9 @@ def _build_metadata_error_record(
         "file_size": source_size,
         "checkpoint": None,
         "loras": [],
-        "created_at": created_at,
+        "library_order_time": current_file_time,
+        "source_file_mtime": current_file_time,
+        "created_at": current_file_time,
         "model_hash": None,
         "is_readable": False,
         "read_error": error_message,
@@ -260,6 +276,16 @@ def _build_metadata_error_record(
     }
 
 
+def parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Public wrapper for the metadata-parsing worker.
+
+    Use this from cross-module callers (e.g. SortingService.import_uploaded_files)
+    instead of importing the underscored helper. The underscored function is kept
+    as the implementation so existing internal call sites and tests stay intact.
+    """
+    return _parse_metadata_job(job)
+
+
 def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
     """Parse one file for the background metadata backfill stage."""
     image_path = job["path"]
@@ -268,7 +294,7 @@ def _parse_metadata_job(job: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         stat_result = os.stat(image_path)
-        metadata = parse_image(image_path, validate_image_data=True)
+        metadata = parse_image(image_path, validate_image_data=bool(job.get("validate_image_data", True)))
         parse_error = metadata.get("parse_error")
         if parse_error:
             return {
@@ -381,22 +407,26 @@ def scan_folder(
     """
     result: Dict[str, Any] = {
         "total": 0,
+        "counted": 0,
         "total_final": False,
+        "import_complete": False,
         "new": 0,
         "updated": 0,
+        "unchanged": 0,
+        "metadata_updated": 0,
         "removed": 0,
         "errors": 0,
         "by_generator": {},
         "recent_errors": [],
         "metadata_total": 0,
         "metadata_processed": 0,
+        "metadata_total_final": False,
         "library_ready": False,
     }
     
-    # C5: Keep scans streaming even for large libraries.
-    # Do not pre-count the full tree. We start importing on the first
-    # discovered file and let the UI treat totals as "still growing"
-    # until directory traversal finishes.
+    # Count image files first. Users need a real denominator before an ETA can be useful.
+    # The count pass only walks filenames/stats; metadata parsing still happens in the
+    # import pipeline below.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
@@ -467,6 +497,11 @@ def scan_folder(
                         "last_error": None,
                         "phase": "cleanup",
                         "removed": result["removed"],
+                        "counted": 0,
+                        "import_processed": 0,
+                        "import_total": 0,
+                        "import_complete": False,
+                        "metadata_total_final": False,
                         "total_final": False,
                     },
                 )
@@ -490,7 +525,14 @@ def scan_folder(
         counts = add_images_batch(pending_records, return_statuses=True)
         result["new"] += counts["new"]
         result["updated"] += counts["updated"]
+        result["metadata_updated"] += counts["updated"]
         placeholder_status_by_path.update(counts.get("statuses") or {})
+        for path, status in (counts.get("statuses") or {}).items():
+            normalized = normalize_indexed_image_path(path)
+            if status == "new":
+                run_new_placeholder_paths.add(normalized)
+            elif status == "updated":
+                run_updated_placeholder_paths.add(normalized)
         pending_records.clear()
 
     def _flush_metadata_records(pending_records: List[Dict[str, Any]]) -> None:
@@ -505,32 +547,119 @@ def scan_folder(
         delete_images_by_paths(paths)
         paths.clear()
 
-    def _emit_library_ready() -> None:
-        if result["library_ready"] or not quick_import or not progress_callback:
+    progress_emit_state = {"phase": None, "current": 0, "emitted_at": 0.0}
+
+    def _emit_progress(
+        current: int,
+        total: int,
+        filename: str,
+        details: Dict[str, Any],
+        *,
+        force: bool = False,
+    ) -> None:
+        if not progress_callback:
             return
-        result["library_ready"] = True
+
+        phase = details.get("phase")
+        now = time.monotonic()
+        should_emit = (
+            force
+            or progress_emit_state["phase"] != phase
+            or current <= 1
+            or current - int(progress_emit_state["current"] or 0) >= SCAN_PROGRESS_EVERY_N_ITEMS
+            or now - float(progress_emit_state["emitted_at"] or 0.0) >= SCAN_PROGRESS_MIN_INTERVAL_SECONDS
+            or bool(details.get("last_error"))
+        )
+        if not should_emit:
+            return
+
+        progress_emit_state["phase"] = phase
+        progress_emit_state["current"] = current
+        progress_emit_state["emitted_at"] = now
         try:
-            progress_callback(
-                processed_count,
-                result["total"],
+            progress_callback(current, total, filename, details)
+        except TypeError:
+            progress_callback(current, total, filename)
+
+    def _count_images_for_total() -> int:
+        counted = 0
+        for _entry in _iter_images():
+            counted += 1
+            _emit_progress(
+                counted,
+                0,
                 "",
                 {
                     "errors": result["errors"],
                     "last_error": None,
-                    "phase": "library_ready",
-                    "library_ready": True,
+                    "phase": "counting",
+                    "counted": counted,
+                    "library_ready": result["library_ready"],
+                    "import_processed": 0,
+                    "import_total": 0,
+                    "import_complete": False,
                     "metadata_processed": result["metadata_processed"],
                     "metadata_total": result["metadata_total"],
-                    "total_final": result["total_final"],
+                    "metadata_total_final": False,
+                    "total_final": False,
                 },
+                force=counted == 1,
             )
-        except TypeError:
-            progress_callback(processed_count, result["total"], "")
+
+        _emit_progress(
+            0,
+            counted,
+            "",
+            {
+                "errors": result["errors"],
+                "last_error": None,
+                "phase": "counted",
+                "counted": counted,
+                "library_ready": result["library_ready"],
+                "import_processed": 0,
+                "import_total": counted,
+                "import_complete": False,
+                "metadata_processed": result["metadata_processed"],
+                "metadata_total": result["metadata_total"],
+                "metadata_total_final": False,
+                "total_final": True,
+            },
+            force=True,
+        )
+        return counted
+
+    def _emit_library_ready() -> None:
+        if result["library_ready"] or not quick_import or not progress_callback:
+            return
+        result["library_ready"] = True
+        _emit_progress(
+            processed_count,
+            result["counted"] or result["total"],
+            "",
+            {
+                "errors": result["errors"],
+                "last_error": None,
+                "phase": "library_ready",
+                "library_ready": True,
+                "counted": result["counted"],
+                "import_processed": processed_count,
+                "import_total": result["counted"] or result["total"],
+                "import_complete": result["import_complete"],
+                "metadata_processed": result["metadata_processed"],
+                "metadata_total": result["metadata_total"],
+                "metadata_total_final": result["metadata_total_final"],
+                "total_final": result["total_final"],
+            },
+            force=True,
+        )
 
     pending_placeholder_records: List[Dict[str, Any]] = []
     pending_metadata_records: List[Dict[str, Any]] = []
     pending_deleted_new_paths: List[str] = []
     placeholder_status_by_path: Dict[str, str] = {}
+    run_new_placeholder_paths: set[str] = set()
+    run_updated_placeholder_paths: set[str] = set()
+    metadata_completed_paths: set[str] = set()
     processed_count = 0
     worker_count = max(1, int(metadata_workers or DEFAULT_METADATA_WORKERS))
     in_flight = {}
@@ -542,11 +671,18 @@ def scan_folder(
 
     def _handle_metadata_job_result(job_result: Dict[str, Any]) -> None:
         filename = job_result["filename"]
+        normalized_path = normalize_indexed_image_path(job_result["record"]["path"])
+        metadata_completed_paths.add(normalized_path)
         progress_details = {
             "phase": "metadata",
             "library_ready": result["library_ready"],
             "metadata_total": result["metadata_total"],
+            "metadata_total_final": result["metadata_total_final"],
             "last_error": None,
+            "counted": result["counted"],
+            "import_processed": processed_count,
+            "import_total": result["counted"] or result["total"],
+            "import_complete": result["import_complete"],
             "total_final": result["total_final"],
         }
 
@@ -556,13 +692,16 @@ def scan_folder(
             result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
 
         if job_result.get("error"):
-            job_status = placeholder_status_by_path.get(os.path.abspath(job_result["record"]["path"]))
+            job_status = placeholder_status_by_path.get(
+                normalize_indexed_image_path(job_result["record"]["path"])
+            )
             if job_status == "new":
                 result["new"] = max(0, result["new"] - 1)
                 pending_metadata_records.pop()
                 pending_deleted_new_paths.append(job_result["record"]["path"])
             elif job_status == "updated":
                 result["updated"] = max(0, result["updated"] - 1)
+                result["metadata_updated"] = max(0, result["metadata_updated"] - 1)
             progress_details["last_error"] = _record_scan_error(
                 filename,
                 job_result["error"]["error"],
@@ -578,16 +717,13 @@ def scan_folder(
         if len(pending_deleted_new_paths) >= SCAN_DB_BATCH_SIZE:
             _flush_deleted_new_paths(pending_deleted_new_paths)
 
-        if progress_callback:
-            try:
-                progress_callback(
-                    result["metadata_processed"],
-                    result["metadata_total"],
-                    filename,
-                    progress_details,
-                )
-            except TypeError:
-                progress_callback(result["metadata_processed"], result["metadata_total"], filename)
+        _emit_progress(
+            result["metadata_processed"],
+            result["metadata_total"],
+            filename,
+            progress_details,
+            force=bool(progress_details.get("last_error")),
+        )
 
     def _drain_metadata_futures(wait_for_all: bool = False) -> None:
         while in_flight:
@@ -601,85 +737,158 @@ def scan_folder(
                 in_flight.pop(future, None)
                 _handle_metadata_job_result(future.result())
 
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        # Pipeline: placeholder import and metadata backfill overlap.
-        for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
-            _check_cancel()
-            image_paths = [entry["path"] for entry in image_batch]
-            existing_rows = get_image_scan_state_by_paths(image_paths)
-            batch_metadata_jobs: List[Dict[str, Any]] = []
+    def _reconcile_interrupted_scan_placeholders() -> None:
+        _flush_metadata_records(pending_metadata_records)
+        _flush_deleted_new_paths(pending_deleted_new_paths)
 
-            for image_entry in image_batch:
-                _check_cancel()
-                image_path = image_entry["path"]
-                cached_stat = image_entry.get("stat")
-                result["total"] += 1
-                processed_count += 1
-                filename = os.path.basename(image_path)
-                progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
-                try:
-                    stat = cached_stat if cached_stat is not None else os.stat(image_path)
-                    existing = existing_rows.get(os.path.abspath(image_path))
-                    if not force_reparse and _is_unchanged_scan_hit(existing, stat):
-                        result["updated"] += 1
-                        generator = existing.get("generator") or "unknown"
-                        result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
-                        continue
+        in_flight_paths = {
+            normalize_indexed_image_path(job.get("path", ""))
+            for job in in_flight.values()
+            if job.get("path")
+        }
 
-                    pending_placeholder_records.append(
-                        _build_placeholder_record(image_path, filename, stat, existing)
-                    )
-                    batch_metadata_jobs.append(
-                        {
-                            "path": image_path,
-                            "filename": filename,
-                            "compute_content_fingerprint": _should_compute_content_fingerprint(existing),
-                        }
-                    )
-                except PermissionError as e:
-                    logger.warning("Permission denied processing %s: %s", image_path, e)
-                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="permission")
-                    progress_details["errors"] = result["errors"]
-                except OSError as e:
-                    logger.warning("OS error processing %s: %s", image_path, e)
-                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="os_error")
-                    progress_details["errors"] = result["errors"]
-                except Exception as e:
-                    logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
-                    progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
-                    progress_details["errors"] = result["errors"]
-                finally:
-                    if progress_callback:
-                        try:
-                            progress_callback(
-                                processed_count,
-                                result["total"],
-                                filename,
-                                {
-                                    **progress_details,
-                                    "phase": "importing",
-                                    "library_ready": result["library_ready"],
-                                    "metadata_processed": result["metadata_processed"],
-                                    "metadata_total": result["metadata_total"],
-                                    "total_final": result["total_final"],
-                                },
-                            )
-                        except TypeError:
-                            progress_callback(processed_count, result["total"], filename)
+        unresolved_new_paths = {
+            path for path in run_new_placeholder_paths
+            if path in in_flight_paths or path not in metadata_completed_paths
+        }
+        unresolved_updated_paths = {
+            path for path in run_updated_placeholder_paths
+            if path in in_flight_paths or path not in metadata_completed_paths
+        }
 
-            _flush_placeholder_records(pending_placeholder_records)
-            for job in batch_metadata_jobs:
-                _submit_metadata_job(executor, job)
+        if unresolved_new_paths:
+            removed = delete_images_by_paths(sorted(unresolved_new_paths))
+            result["new"] = max(0, result["new"] - int(removed or 0))
 
-            if batch_metadata_jobs or processed_count > 0:
-                _emit_library_ready()
-            _drain_metadata_futures(wait_for_all=False)
+        if unresolved_updated_paths:
+            rows = get_image_scan_state_by_paths(sorted(unresolved_updated_paths))
+            image_ids = [
+                int(row.get("id"))
+                for row in rows.values()
+                if row.get("id") and str(row.get("metadata_status") or "").lower() == "pending"
+            ]
+            if image_ids:
+                marked = mark_pending_images_metadata_error(image_ids, STALE_PENDING_METADATA_READ_ERROR)
+                result["updated"] = max(0, result["updated"] - marked)
+                result["metadata_updated"] = max(0, result["metadata_updated"] - marked)
 
+    try:
+        result["counted"] = _count_images_for_total()
         result["total_final"] = True
-        _flush_placeholder_records(pending_placeholder_records)
-        if result["total"] > 0:
-            _emit_library_ready()
-        _drain_metadata_futures(wait_for_all=True)
+
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            # Pipeline: placeholder import and metadata backfill overlap.
+            for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
+                _check_cancel()
+                image_paths = [entry["path"] for entry in image_batch]
+                existing_rows = get_image_scan_state_by_paths(image_paths)
+                batch_metadata_jobs: List[Dict[str, Any]] = []
+
+                for image_entry in image_batch:
+                    _check_cancel()
+                    image_path = image_entry["path"]
+                    cached_stat = image_entry.get("stat")
+                    result["total"] += 1
+                    processed_count += 1
+                    filename = os.path.basename(image_path)
+                    progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
+                    try:
+                        stat = cached_stat if cached_stat is not None else os.stat(image_path)
+                        existing = existing_rows.get(normalize_indexed_image_path(image_path))
+                        if not force_reparse and _is_unchanged_scan_hit(existing, stat):
+                            result["updated"] += 1
+                            result["unchanged"] += 1
+                            generator = existing.get("generator") or "unknown"
+                            result["by_generator"][generator] = result["by_generator"].get(generator, 0) + 1
+                            continue
+
+                        pending_placeholder_records.append(
+                            _build_placeholder_record(image_path, filename, stat, existing)
+                        )
+                        batch_metadata_jobs.append(
+                            {
+                                "path": image_path,
+                                "filename": filename,
+                                "compute_content_fingerprint": _should_compute_content_fingerprint(existing),
+                                "validate_image_data": not quick_import,
+                            }
+                        )
+                    except PermissionError as e:
+                        logger.warning("Permission denied processing %s: %s", image_path, e)
+                        progress_details["last_error"] = _record_scan_error(filename, str(e), kind="permission")
+                        progress_details["errors"] = result["errors"]
+                    except OSError as e:
+                        logger.warning("OS error processing %s: %s", image_path, e)
+                        progress_details["last_error"] = _record_scan_error(filename, str(e), kind="os_error")
+                        progress_details["errors"] = result["errors"]
+                    except Exception as e:
+                        logger.error("Unexpected error processing %s: %s", image_path, e, exc_info=True)
+                        progress_details["last_error"] = _record_scan_error(filename, str(e), kind="unexpected")
+                        progress_details["errors"] = result["errors"]
+                    finally:
+                        import_details = {
+                            **progress_details,
+                            "phase": "importing",
+                            "library_ready": result["library_ready"],
+                            "counted": result["counted"],
+                            "import_processed": processed_count,
+                            "import_total": result["counted"] or result["total"],
+                            "import_complete": result["import_complete"],
+                            "metadata_processed": result["metadata_processed"],
+                            "metadata_total": result["metadata_total"],
+                            "metadata_total_final": result["metadata_total_final"],
+                            "total_final": result["total_final"],
+                        }
+                        _emit_progress(
+                            processed_count,
+                            result["counted"] or result["total"],
+                            filename,
+                            import_details,
+                            force=bool(progress_details.get("last_error")),
+                        )
+
+                _flush_placeholder_records(pending_placeholder_records)
+                for job in batch_metadata_jobs:
+                    _submit_metadata_job(executor, job)
+
+                if batch_metadata_jobs or processed_count > 0:
+                    _emit_library_ready()
+                _drain_metadata_futures(wait_for_all=False)
+
+            result["import_complete"] = True
+            result["total_final"] = True
+            result["metadata_total_final"] = True
+            _flush_placeholder_records(pending_placeholder_records)
+            if result["total"] > 0:
+                _emit_library_ready()
+            _drain_metadata_futures(wait_for_all=True)
+            if result["metadata_total"] > 0:
+                _emit_progress(
+                    result["metadata_processed"],
+                    result["metadata_total"],
+                    "",
+                    {
+                        "errors": result["errors"],
+                        "last_error": None,
+                        "phase": "metadata",
+                        "library_ready": result["library_ready"],
+                        "counted": result["counted"],
+                        "import_processed": result["total"],
+                        "import_total": result["total"],
+                        "import_complete": result["import_complete"],
+                        "metadata_processed": result["metadata_processed"],
+                        "metadata_total": result["metadata_total"],
+                        "metadata_total_final": result["metadata_total_final"],
+                        "total_final": result["total_final"],
+                    },
+                    force=True,
+                )
+    except ScanCancelledError:
+        _reconcile_interrupted_scan_placeholders()
+        raise
+    except Exception:
+        _reconcile_interrupted_scan_placeholders()
+        raise
 
     _flush_metadata_records(pending_metadata_records)
     _flush_deleted_new_paths(pending_deleted_new_paths)
@@ -744,7 +953,17 @@ def _build_copied_image_record(
         "loras": _deserialize_loras(source_row.get("loras")) or [],
         # Preserve the original gallery sort date so copy workflows do not
         # scramble chronology when users need a reversible export.
-        "created_at": source_row.get("created_at") or datetime.fromtimestamp(stat_result.st_mtime),
+        "library_order_time": (
+            source_row.get("library_order_time")
+            or source_row.get("created_at")
+            or datetime.fromtimestamp(stat_result.st_mtime)
+        ),
+        "source_file_mtime": datetime.fromtimestamp(stat_result.st_mtime),
+        "created_at": (
+            source_row.get("library_order_time")
+            or source_row.get("created_at")
+            or datetime.fromtimestamp(stat_result.st_mtime)
+        ),
         "model_hash": source_row.get("model_hash"),
         "is_readable": bool(source_row.get("is_readable", 1)),
         "read_error": source_row.get("read_error"),
@@ -773,13 +992,28 @@ def move_image(image_id: int, destination_folder: str, image_path: str) -> str:
     try:
         image_path, new_path = _prepare_destination_path(image_path, destination_folder, "move")
 
-        # Move file
         shutil.move(image_path, new_path)
-
-        # Update database
-        update_image_path(image_id, new_path)
+        try:
+            update_image_path(image_id, new_path)
+        except Exception as db_error:
+            try:
+                if os.path.exists(new_path):
+                    shutil.move(new_path, image_path)
+            except Exception as rollback_error:
+                raise FileOperationError(
+                    f"Database update failed after moving file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                    path=image_path,
+                    operation="move",
+                ) from db_error
+            raise FileOperationError(
+                f"Database update failed after moving file; file was restored to original path: {db_error}",
+                path=image_path,
+                operation="move",
+            ) from db_error
 
         return new_path
+    except FileOperationError:
+        raise
     except PermissionError as e:
         raise FileOperationError(
             f"Permission denied: {e}",
@@ -826,25 +1060,32 @@ def copy_image(
 
         shutil.copy2(image_path, new_path)
         stat_result = os.stat(new_path)
-        source = source_row or {}
-        copied_image_id = add_image(return_status=False, **_build_copied_image_record(source, new_path, stat_result))
-
-        source_tags = get_image_tags(image_id)
-        if source_tags:
-            add_tags(
-                copied_image_id,
-                [
-                    {"tag": tag.get("tag"), "confidence": tag.get("confidence", 1.0)}
-                    for tag in source_tags
-                    if tag.get("tag")
-                ],
-            )
-        copy_image_derived_state(image_id, copied_image_id)
+        source = source_row or get_image_by_id(image_id) or {}
+        copied_record = _build_copied_image_record(source, new_path, stat_result)
+        try:
+            copied_image_id = add_copied_image_with_state(image_id, copied_record)
+        except Exception as db_error:
+            try:
+                if os.path.exists(new_path):
+                    os.remove(new_path)
+            except Exception as rollback_error:
+                raise FileOperationError(
+                    f"Database update failed after copying file, and rollback failed: {db_error}; rollback error: {rollback_error}",
+                    path=image_path,
+                    operation="copy",
+                ) from db_error
+            raise FileOperationError(
+                f"Database update failed after copying file; copied file was removed: {db_error}",
+                path=image_path,
+                operation="copy",
+            ) from db_error
 
         return {
             "new_path": new_path,
             "new_image_id": copied_image_id,
         }
+    except FileOperationError:
+        raise
     except PermissionError as e:
         raise FileOperationError(
             f"Permission denied: {e}",
@@ -986,6 +1227,8 @@ def get_folder_stats(folder_path: str) -> Dict[str, Any]:
     }
     
     for file_path in folder.rglob("*"):
+        if file_path.is_symlink():
+            continue
         if file_path.is_file():
             ext = file_path.suffix.lower()
             if ext in IMAGE_EXTENSIONS:

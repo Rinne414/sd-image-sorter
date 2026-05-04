@@ -35,7 +35,7 @@
 .qs-toolbar-title {
     font-size: 15px;
     font-weight: 700;
-    color: #e9d5ff;
+    color: var(--accent-contrast);
     margin-right: auto;
 }
 
@@ -79,7 +79,7 @@
 }
 
 .qs-auto-sort-menu button:hover {
-    background: rgba(168, 85, 247, 0.15);
+    background: rgba(var(--accent-primary-rgb), 0.15);
 }
 
 .qs-auto-sort-divider {
@@ -183,8 +183,8 @@
 }
 
 .qs-section.drag-over {
-    border-color: rgba(168, 85, 247, 0.5);
-    background: rgba(168, 85, 247, 0.05);
+    border-color: rgba(var(--accent-primary-rgb), 0.5);
+    background: rgba(var(--accent-primary-rgb), 0.05);
 }
 
 .qs-section-header {
@@ -313,8 +313,8 @@
 }
 
 .qs-thumb.active {
-    border-color: #a855f7;
-    box-shadow: 0 0 8px rgba(168, 85, 247, 0.4);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.4);
 }
 
 .qs-thumb.processed {
@@ -486,8 +486,8 @@
 .qs-section[data-color="red"] .qs-section-color { background: #ef4444; }
 .qs-section[data-color="blue"] { border-color: rgba(59, 130, 246, 0.2); }
 .qs-section[data-color="blue"] .qs-section-color { background: #3b82f6; }
-.qs-section[data-color="purple"] { border-color: rgba(168, 85, 247, 0.2); }
-.qs-section[data-color="purple"] .qs-section-color { background: #a855f7; }
+.qs-section[data-color="purple"] { border-color: rgba(var(--accent-primary-rgb), 0.2); }
+.qs-section[data-color="purple"] .qs-section-color { background: var(--accent-primary); }
 .qs-section[data-color="teal"] { border-color: rgba(20, 184, 166, 0.2); }
 .qs-section[data-color="teal"] .qs-section-color { background: #14b8a6; }
 .qs-section[data-color="pink"] { border-color: rgba(236, 72, 153, 0.2); }

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 echo "=========================================="
 echo "   SD Image Sorter - Starting..."
@@ -8,6 +9,12 @@ echo
 # Change to script directory
 cd "$(dirname "$0")"
 ROOT_DIR="$(pwd)"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    echo "[ERROR] macOS is not supported by this release package."
+    echo "        Please use Windows or Linux."
+    exit 1
+fi
 
 # ── Package-local runtime paths ──────────────────────────────────
 DATA_DIR="${ROOT_DIR}/data"
@@ -54,17 +61,17 @@ elif command -v python &> /dev/null; then
     PYTHON_CMD="python"
 else
     echo "[ERROR] Python is not installed or not in PATH."
-    echo "        Please install Python 3.9+ from https://python.org"
+    echo "        Please install Python 3.12+ from https://python.org"
     exit 1
 fi
 
-# ── Check Python version (must be >= 3.9) ────────────────────────
+# ── Check Python version (must be >= 3.12) ───────────────────────
 PY_VER=$($PYTHON_CMD --version 2>&1 | awk '{print $2}')
 PY_MAJOR=$(echo "$PY_VER" | cut -d. -f1)
 PY_MINOR=$(echo "$PY_VER" | cut -d. -f2)
 
-if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 9 ]; }; then
-    echo "[ERROR] Python $PY_VER is too old. Python 3.9 or higher is required."
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 12 ]; }; then
+    echo "[ERROR] Python $PY_VER is too old. Python 3.12 or higher is required."
     echo "        Please upgrade from https://python.org"
     exit 1
 fi
@@ -101,8 +108,7 @@ fi
 # ── Create venv if needed ───────────────────────────────────────
 if [ "$FIRST_RUN" -eq 1 ]; then
     echo "[1/3] Creating Python virtual environment..."
-    $PYTHON_CMD -m venv backend/venv
-    if [ $? -ne 0 ]; then
+    if ! "$PYTHON_CMD" -m venv backend/venv; then
         echo "[ERROR] Failed to create virtual environment."
         echo "        On Debian/Ubuntu, you may need: sudo apt install python3-venv"
         exit 1
@@ -148,18 +154,60 @@ if [ "$NEED_INSTALL" -eq 0 ]; then
 fi
 
 # ── Install/update dependencies ─────────────────────────────────
+if [ "$NEED_INSTALL" -eq 0 ]; then
+    if ! backend/venv/bin/python -c "import platform; modules=['fastapi','PIL','numpy','onnxruntime','torch','transformers','ultralytics','fastembed','open_clip','timm','cv2']; modules += [] if platform.system() == 'Darwin' else ['sam3','einops','hydra','omegaconf','pycocotools','decord','iopath']; [__import__(module) for module in modules]" >/dev/null 2>&1; then
+        echo "[INFO] Python runtime packages look incomplete. Reinstalling dependencies..."
+        NEED_INSTALL=1
+    fi
+fi
+
 if [ "$NEED_INSTALL" -eq 1 ]; then
     if [ "$FIRST_RUN" -eq 1 ]; then
         echo "[2/3] Installing dependencies..."
     else
         echo "[INFO] Updating dependencies..."
     fi
-    echo "      This may take 5-10 minutes on first run."
-    echo "      Please be patient, large AI models are being downloaded."
+    echo "      This may take 10-20 minutes on first run if GPU runtimes are needed."
+    echo "      Please be patient, large AI runtime packages are being installed."
     echo
 
-    pip install -r backend/requirements.txt
-    if [ $? -ne 0 ]; then
+    echo "[INFO] Preparing Python build tools for source-only packages..."
+    if ! backend/venv/bin/python backend/launcher_pip.py install setuptools wheel; then
+        echo
+        echo "[ERROR] Failed to install Python build tools."
+        echo "        Check your internet connection and try again."
+        exit 1
+    fi
+
+    INSTALL_REQUIREMENTS="backend/requirements.txt"
+    if [ "$(uname -s)" = "Linux" ]; then
+        echo "[INFO] Installing CPU PyTorch baseline for reliable Linux first run..."
+        if ! backend/venv/bin/python backend/launcher_pip.py install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0; then
+            echo
+            echo "[ERROR] Failed to install CPU PyTorch runtime."
+            echo "        Check your internet connection and try again."
+            exit 1
+        fi
+
+        INSTALL_REQUIREMENTS="${TMP_DIR}/requirements-linux-runtime.txt"
+        backend/venv/bin/python - <<'PYFILTER' > "${INSTALL_REQUIREMENTS}"
+from pathlib import Path
+skip_prefixes = (
+    "torch==",
+    "torchvision==",
+    "triton==",
+    "nvidia-",
+    "cuda-",
+)
+for raw_line in Path("backend/requirements.txt").read_text(encoding="utf-8").splitlines():
+    stripped = raw_line.strip()
+    if stripped and not stripped.startswith("#") and stripped.startswith(skip_prefixes):
+        continue
+    print(raw_line)
+PYFILTER
+    fi
+
+    if ! backend/venv/bin/python backend/launcher_pip.py install --no-build-isolation -r "${INSTALL_REQUIREMENTS}"; then
         echo
         echo "[ERROR] Failed to install dependencies."
         echo "        Check your internet connection and try again."
@@ -185,6 +233,13 @@ echo "[Info] Checking ONNX Runtime package state..."
 backend/venv/bin/python backend/repair_onnxruntime.py --auto || {
     echo "[WARN] Could not auto-repair ONNX Runtime package state."
     echo "       The app can still start, but WD14 tagging may stay on CPU."
+}
+echo
+
+echo "[Info] Checking PyTorch / SAM3 runtime package state..."
+backend/venv/bin/python backend/repair_torch_runtime.py --auto || {
+    echo "[WARN] Could not auto-repair PyTorch / SAM3 runtime package state."
+    echo "       The app can still start, but SAM3 and CUDA Torch features may stay unavailable."
 }
 echo
 

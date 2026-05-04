@@ -3,9 +3,25 @@ import { test, expect } from '@playwright/test'
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII='
 
+async function openMainPage(page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      const isVisible = (element: Element | null) => {
+        if (!(element instanceof HTMLElement)) return false
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      return isVisible(document.querySelector('.nav-tabs [data-view="reader"]'))
+        || isVisible(document.getElementById('mobile-menu-toggle'))
+    })
+  }).toBe(true)
+}
+
 async function showReader(page) {
-  await page.goto('/')
-  await page.waitForLoadState('domcontentloaded')
+  await openMainPage(page)
   await page.evaluate(() => {
     const view = document.getElementById('view-reader')
     if (view) {
@@ -78,8 +94,7 @@ test.describe('Model Asset Details UI', () => {
   })
 
   test('Gallery image modal shows model asset details when parsed metadata includes candidates', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('domcontentloaded')
+    await openMainPage(page)
 
     await page.evaluate(() => {
       const closeModal = (window as any).showModal

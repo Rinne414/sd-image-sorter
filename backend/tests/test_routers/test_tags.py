@@ -27,6 +27,18 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 
+@pytest.fixture
+def isolated_tagging_service():
+    """Use a fresh tagging service instance so router compatibility shims hit service-owned state."""
+    from routers.tags import set_tagging_service
+    from services.tagging_service import TaggingService
+
+    service = TaggingService()
+    set_tagging_service(service)
+    yield service
+    set_tagging_service(TaggingService())
+
+
 class TestGetTags:
     """Tests for GET /api/tags endpoint."""
 
@@ -247,6 +259,27 @@ class TestLorasLibrary:
         # Weight notation should not affect the name
         assert "detail" in lora_names
 
+    def test_loras_library_uses_indexed_lora_rows_not_prompt_rescan(self, test_client, test_db):
+        """LoRA library must read the normalized image_loras index, not rescan prompt text."""
+        import database as db
+
+        image_id = db.add_image(
+            path="/test/lora_indexed.png",
+            filename="lora_indexed.png",
+            loras=["indexed_style"],
+            prompt="<lora:prompt_style:0.8>",
+        )
+
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET loras = '', prompt = '' WHERE id = ?", (image_id,))
+
+        response = test_client.get("/api/loras/library")
+
+        assert response.status_code == 200
+        lora_names = [l["lora"] for l in response.json()["loras"]]
+        assert "indexed_style" in lora_names
+        assert "prompt_style" in lora_names
+
 
 class TestTagImportExport:
     """Tests for tag import/export endpoints."""
@@ -335,6 +368,35 @@ class TestTagImportExport:
         tags = db.get_image_tags(image_id)
         assert any(t["tag"] == "imported_tag" for t in tags)
 
+    def test_import_tags_matches_existing_image_by_equivalent_windows_wsl_path(self, test_client, test_db):
+        """Tag import should reuse the same DB row across equivalent Windows/WSL path forms."""
+        import database as db
+
+        windows_path = r"L:\datasets\imports\path-variant.png"
+        image_id = db.add_image(path=windows_path, filename="path-variant.png")
+
+        response = test_client.post(
+            "/api/tags/import",
+            json={
+                "images": [
+                    {
+                        "path": "/mnt/l/datasets/imports/path-variant.png",
+                        "filename": "path-variant.png",
+                        "tags": [{"tag": "variant_tag", "confidence": 0.91}],
+                    }
+                ],
+                "overwrite": False,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["imported"] == 1
+        assert data["skipped"] == 0
+
+        tags = db.get_image_tags(image_id)
+        assert any(tag["tag"] == "variant_tag" for tag in tags)
+
     def test_import_tags_overwrite(self, test_client, test_db, tmp_path: Path):
         """Importing tags with overwrite should replace existing."""
         import database as db
@@ -374,6 +436,25 @@ class TestTagImportExport:
 
 class TestTaggingPipeline:
     """Tests for tagging pipeline endpoints."""
+
+    def test_router_tag_progress_compat_helpers_delegate_to_service(self, isolated_tagging_service):
+        """Legacy router shims should only forward to service-owned progress state."""
+        from routers import tags as tags_router
+
+        tags_router.set_tag_progress_state({
+            "status": "running",
+            "current": 2,
+            "total": 10,
+            "message": "Tagging...",
+        })
+
+        assert isolated_tagging_service.get_progress()["status"] == "running"
+        assert tags_router.tag_progress.copy()["current"] == 2
+
+        tags_router.tag_progress["message"] = "Compat update"
+
+        assert isolated_tagging_service.get_progress()["message"] == "Compat update"
+        assert tags_router.get_tag_progress_state()["message"] == "Compat update"
 
     def test_start_tagging_already_running(self, test_client):
         """Starting tagging when already running should fail."""
@@ -711,7 +792,7 @@ class TestExportTagsBatch:
 
         output_dir = tmp_path / "tags_out"
         output_dir.mkdir()
-        prefix = "masterpiece, best quality, "
+        prefix = "sks person"
 
         response = test_client.post(
             "/api/tags/export-batch",
@@ -726,7 +807,42 @@ class TestExportTagsBatch:
 
         txt_file = output_dir / "prefix_test.txt"
         content = txt_file.read_text()
-        assert content == f"{prefix}test_tag, second_tag"
+        assert content == "sks person, test_tag, second_tag"
+
+
+    def test_export_batch_returns_normalized_frontend_contract_fields(self, test_client, test_db, tmp_path: Path):
+        """Batch tag export should return status/error_count/error_messages, not an ambiguous errors list."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "contract_test.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+
+        image_id = db.add_image(path=str(img_path), filename="contract_test.png")
+        db.add_tags(image_id, [
+            {"tag": "contract_tag", "confidence": 0.9},
+        ])
+
+        output_dir = tmp_path / "contract_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id, 999999],
+                "output_folder": str(output_dir),
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "partial"
+        assert data["exported"] == 1
+        assert data["errors"] == 1
+        assert data["error_count"] == 1
+        assert data["total"] == 2
+        assert data["error_messages"] == ["Image 999999 not found"]
+        assert (output_dir / "contract_test.txt").read_text() == "contract_tag"
 
     def test_export_batch_keeps_same_basename_files_distinct(self, test_client, test_db, tmp_path: Path):
         """Files that only differ by extension should not overwrite each other on export."""
@@ -759,6 +875,150 @@ class TestExportTagsBatch:
         assert data["exported"] == 2
         assert (output_dir / "sample.txt").exists()
         assert len(list(output_dir.glob("sample*.txt"))) == 2
+
+
+    def test_export_batch_skip_policy_keeps_existing_sidecars(self, test_client, test_db, tmp_path: Path):
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "skip_policy.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename=img_path.name)
+        db.add_tags(image_id, [{"tag": "new_tag", "confidence": 0.9}])
+
+        output_dir = tmp_path / "skip_policy_out"
+        output_dir.mkdir()
+        sidecar = output_dir / "skip_policy.txt"
+        sidecar.write_text("existing content", encoding="utf-8")
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "overwrite_policy": "skip",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "partial"
+        assert data["exported"] == 0
+        assert data["skipped"] == 1
+        assert sidecar.read_text(encoding="utf-8") == "existing content"
+
+    def test_export_batch_overwrite_policy_replaces_existing_sidecars(self, test_client, test_db, tmp_path: Path):
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "overwrite_policy.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename=img_path.name)
+        db.add_tags(image_id, [{"tag": "replacement_tag", "confidence": 0.9}])
+
+        output_dir = tmp_path / "overwrite_policy_out"
+        output_dir.mkdir()
+        sidecar = output_dir / "overwrite_policy.txt"
+        sidecar.write_text("old content", encoding="utf-8")
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "overwrite_policy": "overwrite",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["exported"] == 1
+        assert data["skipped"] == 0
+        assert sidecar.read_text(encoding="utf-8") == "replacement_tag"
+
+    def test_export_batch_can_write_sd_prompt_sidecars(self, test_client, test_db, tmp_path: Path):
+        """Batch sidecar export should support SD prompt files, not only raw tag lists."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "sd_sidecar.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="masterpiece, cinematic lighting",
+            negative_prompt="lowres, bad anatomy",
+            checkpoint="modelA.safetensors",
+            width=1024,
+            height=768,
+            metadata_json=json.dumps({"_parsed": {"generation_params": {"steps": 30, "sampler": "Euler a", "cfg_scale": 7}}}),
+        )
+        db.add_tags(image_id, [{"tag": "solo", "confidence": 0.9}])
+
+        output_dir = tmp_path / "sd_sidecars"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "a1111",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert data["exported"] == 1
+        content = (output_dir / "sd_sidecar.txt").read_text(encoding="utf-8")
+        assert "masterpiece, cinematic lighting" in content
+        assert "Negative prompt: lowres, bad anatomy" in content
+        assert "Steps: 30" in content
+        assert "Sampler: Euler a" in content
+        assert "CFG scale: 7" in content
+        assert "Model: modelA.safetensors" in content
+
+    def test_export_batch_can_write_prompt_tag_caption_sidecars(self, test_client, test_db, tmp_path: Path):
+        """Merged caption sidecars should match training/dataset workflows."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "caption_sidecar.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="soft light portrait",
+            metadata_json="{}",
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("a woman in soft light", image_id))
+        db.add_tags(image_id, [
+            {"tag": "portrait", "confidence": 0.9},
+            {"tag": "solo", "confidence": 0.8},
+        ])
+
+        output_dir = tmp_path / "caption_sidecars"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "caption_merged",
+                "blacklist": ["solo"],
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "caption_sidecar.txt").read_text(encoding="utf-8")
+        assert content == "a woman in soft light, soft light portrait, portrait"
+        assert "solo" not in content
 
 
 class TestEdgeCases:

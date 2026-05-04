@@ -10,6 +10,7 @@ Tests:
 
 Priority: CRITICAL (file operations)
 """
+import asyncio
 import os
 import sys
 import json
@@ -45,6 +46,64 @@ def isolated_sorting_service():
     set_sorting_service(service)
     yield service
     set_sorting_service(SortingService())
+
+
+class TestRouterCompatibilityState:
+    """Tests for legacy router compatibility shims delegating to service-owned state."""
+
+    def test_lazy_compat_state_does_not_create_service_until_used(self):
+        from routers import sorting as sorting_router
+        from services.sorting_service import SortingService
+
+        original_service = sorting_router._sorting_service_provider._instance
+        try:
+            sorting_router.set_sorting_service(None)
+            sorting_router._bind_lazy_sorting_compat_state()
+
+            assert sorting_router._sorting_service_provider._instance is None
+            assert sorting_router.scan_progress.copy()["status"] == "idle"
+            assert isinstance(sorting_router._sorting_service_provider._instance, SortingService)
+        finally:
+            sorting_router.set_sorting_service(original_service)
+
+    def test_scan_progress_compat_helpers_delegate_to_service(self, isolated_sorting_service):
+        from routers import sorting as sorting_router
+
+        sorting_router.set_scan_progress_state({
+            "status": "running",
+            "current": 3,
+            "total": 9,
+            "message": "Scanning...",
+        })
+
+        assert isolated_sorting_service.get_scan_progress()["status"] == "running"
+        assert sorting_router.scan_progress.copy()["current"] == 3
+
+        sorting_router.scan_progress["message"] = "Compat update"
+
+        assert isolated_sorting_service.get_scan_progress()["message"] == "Compat update"
+        assert sorting_router.get_scan_progress_state()["message"] == "Compat update"
+
+    def test_sort_session_compat_helpers_delegate_to_service(self, isolated_sorting_service):
+        from routers import sorting as sorting_router
+
+        sorting_router.set_sort_session({
+            "active": True,
+            "image_ids": [11, 22],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        })
+
+        assert isolated_sorting_service.get_sort_session()["image_ids"] == [11, 22]
+        assert sorting_router.sort_session.copy()["current_index"] == 0
+
+        sorting_router.sort_session["current_index"] = 1
+
+        assert isolated_sorting_service.get_sort_session()["current_index"] == 1
+        assert sorting_router.get_sort_session()["current_index"] == 1
 
 
 class TestValidatePath:
@@ -95,6 +154,39 @@ class TestValidatePath:
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
+
+
+class TestSystemInfo:
+    """Tests for GET /api/system-info endpoint."""
+
+    def test_get_system_info_returns_recommendations_by_model(self, test_client):
+        with patch("hardware_monitor.get_system_info", return_value={
+            "total_ram_gb": 32,
+            "available_ram_gb": 24,
+            "gpu_name": "Test GPU",
+            "gpu_vram_total_mb": 16384,
+            "gpu_vram_available_mb": 12000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        }), patch("hardware_monitor.recommend_tagger_config", side_effect=lambda system_info, model_name, use_gpu: {
+            "model_name": model_name,
+            "use_gpu": use_gpu,
+            "recommended_batch_size": 4 if use_gpu else 2,
+            "recommended_use_gpu": use_gpu,
+            "recommended_session_refresh_interval": 180 if use_gpu else 0,
+            "risk_level": "low" if use_gpu else "medium",
+        }):
+            response = test_client.get("/api/system-info")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["system_info"]["gpu_name"] == "Test GPU"
+        assert "recommendation" in data
+        assert "recommendations_by_model" in data
+        assert "wd-swinv2-tagger-v3" in data["recommendations_by_model"]
+        assert "custom" in data["recommendations_by_model"]
+        assert data["recommendations_by_model"]["custom"]["gpu"]["use_gpu"] is True
+        assert data["recommendations_by_model"]["custom"]["cpu"]["use_gpu"] is False
 
 
 class TestScan:
@@ -149,6 +241,54 @@ class TestScan:
         assert "status" in data
         assert "current" in data
         assert "total" in data
+
+    def test_scan_progress_counts_total_before_import_and_keeps_metadata_separate(self, test_client, tmp_path: Path):
+        """Scan progress should count files first and not let metadata progress overwrite import totals."""
+        from PIL import Image
+        from image_manager import scan_folder
+
+        for i in range(3):
+            Image.new("RGB", (32, 32), color="blue").save(tmp_path / f"counted_{i}.png")
+
+        events = []
+
+        def progress_callback(current, total, filename, details=None):
+            events.append({
+                "current": current,
+                "total": total,
+                "filename": filename,
+                "details": details or {},
+            })
+
+        result = scan_folder(
+            str(tmp_path),
+            recursive=False,
+            progress_callback=progress_callback,
+            quick_import=True,
+        )
+
+        phases = [event["details"].get("phase") for event in events]
+        assert "counting" in phases
+        assert "counted" in phases
+        assert phases.index("counted") < phases.index("importing")
+
+        counted_event = next(event for event in events if event["details"].get("phase") == "counted")
+        assert counted_event["total"] == 3
+        assert counted_event["details"]["import_total"] == 3
+        assert counted_event["details"]["total_final"] is True
+
+        import_events = [event for event in events if event["details"].get("phase") == "importing"]
+        assert import_events
+        assert all(event["total"] == 3 for event in import_events)
+        assert all(event["details"]["import_total"] == 3 for event in import_events)
+
+        metadata_events = [event for event in events if event["details"].get("phase") == "metadata"]
+        assert metadata_events
+        assert all(event["details"]["import_total"] == 3 for event in metadata_events)
+        assert metadata_events[-1]["details"]["metadata_total_final"] is True
+        assert result["counted"] == 3
+        assert result["total"] == 3
+        assert result["metadata_total_final"] is True
 
     def test_scan_skips_unreadable_images(self, test_client, tmp_path: Path):
         """Unreadable image files should count as errors and not be inserted."""
@@ -258,6 +398,27 @@ class TestScan:
         assert response.status_code == 200
         data = response.json()
         assert "status" in data
+
+    def test_scan_reset_restores_canonical_progress_fields(self, isolated_sorting_service):
+        """Reset should not return a partial idle state that breaks frontend progress reads."""
+        isolated_sorting_service._scan_progress = {
+            "status": "error",
+            "step": "error",
+            "current": 4,
+            "processed": 4,
+            "total": 10,
+            "message": "stuck",
+        }
+        isolated_sorting_service._scan_worker_thread = None
+
+        result = isolated_sorting_service.reset_scan_progress()
+        progress = isolated_sorting_service.get_scan_progress()
+
+        assert result["status"] == "reset"
+        assert progress["status"] == "idle"
+        assert progress["message"] == "Reset by user"
+        for key in ["counted", "import_complete", "metadata_total_final", "total_final", "quick_import"]:
+            assert key in progress
 
     def test_scan_cleanup_missing_removes_stale_entries_in_scope(self, test_client, tmp_path: Path):
         """Folder sync should remove indexed rows whose files no longer exist under the scanned scope."""
@@ -656,6 +817,21 @@ class TestBatchMove:
         kwargs = mock_count.call_args.kwargs
         assert kwargs["search_query"] == "manual_test_autosep_token_20260405"
 
+    def test_batch_move_forwards_artist_filter(self, test_client, tmp_path: Path):
+        """Batch move should pass the normalized artist filter into the counting query."""
+        with patch("services.sorting_service.db.get_filtered_image_count", return_value=0) as mock_count:
+            response = test_client.post(
+                "/api/batch-move",
+                json={
+                    "artist": "  artist_batch_move_20260428  ",
+                    "destination_folder": str(tmp_path)
+                }
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_count.call_args.kwargs
+        assert kwargs["artist"] == "artist_batch_move_20260428"
+
     def test_batch_move_invalid_destination(self, test_client):
         """Batch move to invalid destination - path validation allows creation."""
         response = test_client.post(
@@ -732,6 +908,42 @@ class TestBatchMove:
         assert isolated_sorting_service.get_batch_move_progress()["status"] == "running"
         assert isolated_sorting_service.get_batch_move_progress()["current"] == 2
 
+    def test_batch_copy_completion_message_uses_copy_word(self, tmp_path: Path, isolated_sorting_service, monkeypatch):
+        """Copy mode progress must not tell users files were moved."""
+        from services import sorting_service as sorting_service_module
+        from services.sorting_service import BatchMoveRequest
+
+        background_tasks = BackgroundTasks()
+        source_path = tmp_path / "source.png"
+        source_path.write_bytes(b"image")
+
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_count", lambda **_kwargs: 1)
+        monkeypatch.setattr(sorting_service_module.db, "get_filtered_image_ids", lambda **_kwargs: [1])
+        monkeypatch.setattr(
+            sorting_service_module.db,
+            "get_images_by_ids",
+            lambda _ids: {1: {"id": 1, "filename": "source.png", "path": str(source_path)}},
+        )
+        # Per-image readability now happens inside the worker loop (it
+        # used to be batched up front in ``_filter_readable_image_ids``).
+        # The fixture writes a placeholder byte string instead of a real
+        # PNG, so stub the verifier to accept the file.
+        monkeypatch.setattr(sorting_service_module, "verify_image_readable", lambda _path: (True, None))
+        monkeypatch.setattr(isolated_sorting_service, "_filter_readable_image_ids", lambda ids: (ids, []))
+        monkeypatch.setattr(isolated_sorting_service, "_resolve_image_path", lambda _path: str(source_path))
+        monkeypatch.setattr(isolated_sorting_service, "_apply_file_operation", lambda **_kwargs: None)
+
+        isolated_sorting_service.batch_move_images(
+            BatchMoveRequest(destination_folder=str(tmp_path / "dest"), operation="copy"),
+            background_tasks,
+        )
+        background_tasks.tasks[0].func()
+
+        progress = isolated_sorting_service.get_batch_move_progress()
+        assert progress["status"] == "done"
+        assert "Copied 1 images" in progress["message"]
+        assert "Moved" not in progress["message"]
+
 
 class TestSortSession:
     """Tests for manual sort session endpoints."""
@@ -746,6 +958,34 @@ class TestSortSession:
         data = response.json()
         assert data["status"] == "started"
         assert "total_images" in data
+
+
+    def test_start_sort_session_requires_explicit_replace_when_unfinished(self, test_client, test_db, tmp_path: Path):
+        """Starting Manual Sort should not silently discard a resumable session."""
+        db = test_client.test_db
+        first_path = _create_sort_image(tmp_path, "replace_guard_1.png")
+        second_path = _create_sort_image(tmp_path, "replace_guard_2.png")
+        db.add_image(path=str(first_path), filename=first_path.name, generator="unknown", metadata_json="{}")
+        db.add_image(path=str(second_path), filename=second_path.name, generator="unknown", metadata_json="{}")
+
+        test_client.delete("/api/sort/session")
+        start_response = test_client.post("/api/sort/start?generators=unknown")
+        assert start_response.status_code == 200
+
+        skip_response = test_client.post("/api/sort/action?action=skip")
+        assert skip_response.status_code == 200
+        assert test_client.get("/api/sort/current").json()["index"] == 1
+
+        blocked_response = test_client.post("/api/sort/start?generators=unknown")
+        assert blocked_response.status_code == 409
+        blocked_payload = blocked_response.json()
+        blocked_error = blocked_payload.get("detail") or blocked_payload.get("error") or ""
+        assert "unfinished manual sort session" in blocked_error.lower()
+        assert test_client.get("/api/sort/current").json()["index"] == 1
+
+        replace_response = test_client.post("/api/sort/start?generators=unknown&replace_existing=true")
+        assert replace_response.status_code == 200
+        assert test_client.get("/api/sort/current").json()["index"] == 0
 
     def test_start_sort_empty_results(self, test_client, test_db):
         """Starting sort session with no matches should work."""
@@ -767,6 +1007,17 @@ class TestSortSession:
         assert response.status_code == 200
         kwargs = mock_ids.call_args.kwargs
         assert kwargs["search_query"] == "manual_test_autosep_token_20260405"
+
+    def test_start_sort_session_forwards_artist_filter(self, test_client):
+        """Manual sort should pass the normalized artist filter into the ID query."""
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start?artist=%20artist_sort_session_20260428%20"
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["artist"] == "artist_sort_session_20260428"
 
     def test_start_sort_session_rejects_invalid_folders_payload(self, test_client):
         """Bad folders JSON should fail instead of silently becoming an empty config."""
@@ -1131,7 +1382,7 @@ class TestSortSession:
     def test_load_session_from_disk_rebases_current_index_and_keeps_valid_redo(self, test_client, tmp_path: Path, monkeypatch):
         """Restore should drop missing image ids but keep current_index/history/redo aligned with the surviving order."""
         from services import sorting_service as sorting_module
-        from services.sorting_service import SortingService
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
 
         db = test_client.test_db
         first_id = db.add_image(
@@ -1180,6 +1431,7 @@ class TestSortSession:
 
         session_path = tmp_path / "sort_session.json"
         session_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
             "active": True,
             "image_ids": [first_id, second_id, third_id],
             "current_index": 2,
@@ -1205,13 +1457,14 @@ class TestSortSession:
         assert [entry["image_id"] for entry in restored["redo_stack"]] == [third_id]
 
         persisted = json.loads(session_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
         assert persisted["current_index"] == 1
         assert persisted["image_ids"] == [second_id, third_id]
 
     def test_load_session_from_disk_discards_history_past_restored_cursor(self, test_client, tmp_path: Path, monkeypatch):
         """Corrupt persisted history should not be allowed to push the restored cursor past the saved current index."""
         from services import sorting_service as sorting_module
-        from services.sorting_service import SortingService
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
 
         db = test_client.test_db
         first_id = db.add_image(
@@ -1259,9 +1512,174 @@ class TestSortSession:
 
         service.load_session_from_disk()
         restored = service.get_sort_session()
+        persisted = json.loads(session_path.read_text(encoding="utf-8"))
 
         assert restored["current_index"] == 1
         assert [entry["image_id"] for entry in restored["history"]] == [first_id]
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+
+    def test_load_session_from_disk_discards_unknown_newer_schema_version(self, test_client, tmp_path: Path, monkeypatch):
+        """A persisted session from a newer schema version should be discarded instead of half-restored."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_future_version.png",
+            filename="restore_future_version.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        session_path = tmp_path / "sort_session_future.json"
+        session_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION + 1,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(session_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is False
+        assert restored["image_ids"] == []
+        assert session_path.exists() is False
+
+    def test_load_session_from_disk_migrates_legacy_file_to_preferred_state_dir(self, test_client, tmp_path: Path, monkeypatch):
+        """Loading from the legacy backend-local file should rewrite the session into the preferred state path."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_legacy_file.png",
+            filename="restore_legacy_file.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is True
+        assert restored["image_ids"] == [image_id]
+        assert preferred_path.exists() is True
+        assert legacy_path.exists() is False
+
+        persisted = json.loads(preferred_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+        assert persisted["image_ids"] == [image_id]
+
+    def test_load_session_from_disk_falls_back_to_valid_legacy_when_preferred_is_invalid(self, test_client, tmp_path: Path, monkeypatch):
+        """A corrupt preferred session file should not block restore from a valid legacy payload."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SORT_SESSION_SCHEMA_VERSION, SortingService
+
+        image_id = test_client.test_db.add_image(
+            path="/tmp/restore_legacy_fallback.png",
+            filename="restore_legacy_fallback.png",
+            generator="unknown",
+            prompt=None,
+            negative_prompt=None,
+            checkpoint=None,
+            loras=[],
+            width=64,
+            height=64,
+            file_size=1,
+            metadata_json="{}",
+        )
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        preferred_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        preferred_path.write_text("{not-json", encoding="utf-8")
+        legacy_path.write_text(json.dumps({
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": True,
+            "image_ids": [image_id],
+            "current_index": 0,
+            "folders": {"a": "/tmp/sorted"},
+            "operation_mode": "move",
+            "history": [],
+            "redo_stack": [],
+        }), encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        service.load_session_from_disk()
+        restored = service.get_sort_session()
+
+        assert restored["active"] is True
+        assert restored["image_ids"] == [image_id]
+        assert preferred_path.exists() is True
+        assert legacy_path.exists() is False
+
+        persisted = json.loads(preferred_path.read_text(encoding="utf-8"))
+        assert persisted["session_schema_version"] == SORT_SESSION_SCHEMA_VERSION
+        assert persisted["image_ids"] == [image_id]
+
+    def test_clear_sort_session_removes_preferred_and_legacy_session_files(self, tmp_path: Path, monkeypatch):
+        """Clearing a session should remove both the preferred state file and any leftover legacy file."""
+        from services import sorting_service as sorting_module
+        from services.sorting_service import SortingService
+
+        preferred_path = tmp_path / "data" / "state" / "sort-session.json"
+        legacy_path = tmp_path / "backend" / "sort_session.json"
+        preferred_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        preferred_path.write_text("{}", encoding="utf-8")
+        legacy_path.write_text("{}", encoding="utf-8")
+
+        monkeypatch.setattr(sorting_module, "SESSION_FILE", str(preferred_path))
+        monkeypatch.setattr(sorting_module, "LEGACY_SESSION_FILE", str(legacy_path))
+        service = SortingService()
+
+        result = service.clear_sort_session()
+
+        assert result["status"] == "ok"
+        assert preferred_path.exists() is False
+        assert legacy_path.exists() is False
 
     def test_set_sort_folders(self, test_client, tmp_path: Path):
         """Setting sort folders should work."""
@@ -1331,14 +1749,76 @@ class TestAnalytics:
         assert "loras" in data
         assert "top_tags" in data
 
+    def test_get_analytics_groups_checkpoint_variants_by_normalized_name(self, test_client):
+        test_client.test_db.add_image(
+            path="/tmp/analytics_cp_a.png",
+            filename="analytics_cp_a.png",
+            checkpoint="ponyXLV6.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+        test_client.test_db.add_image(
+            path="/tmp/analytics_cp_b.png",
+            filename="analytics_cp_b.png",
+            checkpoint="ponyXLV6.safetensors",
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/analytics")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["checkpoints"][0]["checkpoint"] == "ponyXLV6"
+        assert data["checkpoints"][0]["checkpoint_normalized"] == "ponyXLV6"
+        assert data["checkpoints"][0]["count"] == 2
+
     def test_get_stats(self, test_client, test_db_with_images):
         """Getting stats should return summary."""
+        test_client.test_db.add_image(
+            path="/tmp/stats_pending_metadata.png",
+            filename="stats_pending_metadata.png",
+            generator="unknown",
+            metadata_status="pending",
+        )
+
         response = test_client.get("/api/stats")
 
         assert response.status_code == 200
         data = response.json()
         assert "total_images" in data
         assert "generators" in data
+        assert data["metadata_status"]["pending"] >= 1
+        assert data["metadata_pending"] >= 1
+        assert data["metadata_resolving"] is True
+        assert "metadata_status" in data
+        assert "metadata_pending" in data
+
+    def test_get_stats_reports_pending_metadata_counts(self, test_client):
+        """Stats should tell the frontend when generator counts are still resolving."""
+        db = test_client.test_db
+        db.add_image(
+            path="/tmp/stats_pending_metadata.png",
+            filename="stats_pending_metadata.png",
+            generator="unknown",
+            metadata_json="{}",
+            metadata_status="pending",
+        )
+        db.add_image(
+            path="/tmp/stats_complete_metadata.png",
+            filename="stats_complete_metadata.png",
+            generator="forge",
+            metadata_json="{}",
+            metadata_status="complete",
+        )
+
+        response = test_client.get("/api/stats")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["metadata_status"]["pending"] == 1
+        assert data["metadata_status"]["complete"] >= 1
+        assert data["metadata_pending"] == 1
+        assert data["metadata_resolving"] is True
+        assert data["total_images"] >= 2
 
 
 class TestExportTagsBatch:
@@ -1466,3 +1946,110 @@ class TestSecurity:
 
         # Should not crash, either succeeds with no matches or rejects
         assert response.status_code in [200, 400]
+
+
+class TestImportUploadedFilesSecurity:
+    """Regression tests for the path-traversal hardening in import_uploaded_files.
+
+    Background: a previous version of the endpoint passed the browser-supplied
+    ``UploadFile.filename`` directly into ``import_dir / filename``. A malicious
+    or buggy client could submit ``"../../etc/passwd.png"`` and write outside
+    ``import_dir``. The fix reduces the filename to its basename and rejects
+    anything that resolves outside the import directory.
+    """
+
+    @pytest.fixture
+    def fake_upload(self):
+        """Build a minimal stand-in for FastAPI's UploadFile."""
+        class _FakeUpload:
+            def __init__(self, filename: str, content: bytes = b"\x89PNG\r\n\x1a\n"):
+                self.filename = filename
+                self._content = content
+
+            async def read(self) -> bytes:
+                return self._content
+
+        return _FakeUpload
+
+    def test_rejects_parent_directory_traversal(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        uploads = [
+            fake_upload("../../escape.png"),
+            fake_upload("..\\..\\windows-escape.png"),
+            fake_upload("/abs/path/escape.png"),
+        ]
+        asyncio.run(service.import_uploaded_files(uploads))
+
+        # All saved files must land inside import_dir as plain basenames.
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        for child in import_dir.iterdir():
+            child.resolve().relative_to(import_dir)  # raises if it escaped
+
+    def test_rejects_dotfile_only_filename(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        # ".png" on its own (suffix matches) but the basename is empty/dotfile —
+        # the service should fall back to a numbered "upload_N.png" name.
+        uploads = [fake_upload(".png")]
+        asyncio.run(service.import_uploaded_files(uploads))
+
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        names = [p.name for p in import_dir.iterdir()]
+        assert all(not n.startswith(".") for n in names), names
+
+    def test_skips_files_with_disallowed_extension(self, tmp_path, fake_upload, monkeypatch):
+        from services.sorting_service import SortingService
+
+        monkeypatch.setattr("services.sorting_service.parse_metadata_job", lambda job: {
+            "record": {"path": job["path"], "filename": job["filename"]},
+            "error": None,
+        })
+        monkeypatch.setattr("services.sorting_service.add_images_batch", lambda records, return_statuses=False: {"statuses": {}, "ids": {}})
+        monkeypatch.setattr("config.DATA_DIR", str(tmp_path / "data"))
+
+        service = SortingService()
+        uploads = [fake_upload("evil.exe"), fake_upload("safe.png")]
+        result = asyncio.run(service.import_uploaded_files(uploads))
+
+        import_dir = (tmp_path / "data" / "imports").resolve()
+        saved = list(import_dir.iterdir()) if import_dir.exists() else []
+        assert len(saved) == 1
+        assert saved[0].suffix.lower() == ".png"
+        assert result["total"] == 1
+
+
+class TestResolveDropSecurity:
+    """Folder names from the browser must not escape common image roots."""
+
+    def test_rejects_traversal_in_folder_name(self, isolated_sorting_service):
+        # ``../../Windows`` etc. must not match any of the common roots even if
+        # such a path coincidentally exists on disk.
+        assert isolated_sorting_service.resolve_drop("../etc", [], None) == {"folder_path": ""}
+        assert isolated_sorting_service.resolve_drop("..\\Windows", [], None) == {"folder_path": ""}
+
+    def test_rejects_separator_in_folder_name(self, isolated_sorting_service):
+        assert isolated_sorting_service.resolve_drop("foo/bar", [], None) == {"folder_path": ""}
+        assert isolated_sorting_service.resolve_drop("C:\\Windows", [], None) == {"folder_path": ""}
+
+    def test_like_wildcards_are_escaped(self, isolated_sorting_service):
+        # ``%`` is a SQL LIKE wildcard. The fix must escape it before binding,
+        # so submitting ``%`` does not match every row.
+        result = isolated_sorting_service.resolve_drop("%", [], None)
+        assert result["folder_path"] == ""

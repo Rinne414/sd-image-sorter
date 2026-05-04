@@ -18,15 +18,15 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-from config import TAGGER_MODELS, get_toriigate_model_dir
+from config import TAGGER_MODELS, get_toriigate_model_dir, read_float_env
+from ai_runtime_guard import exclusive_ai_runtime
 
 logger = logging.getLogger(__name__)
 
 # SECURITY: Pin HuggingFace model revision to prevent supply-chain attacks.
 # snapshot_download() fetches from a remote repo; without a pinned commit, a
 # compromised or hijacked repo could serve malicious model files.
-# TODO: pin to specific commit hash after verification (e.g. "abc1234...")
-TORIIGATE_COMMIT_HASH = "main"  # TODO: pin to specific commit after verification
+TORIIGATE_COMMIT_HASH = "667e771497abcfa38637e1d308cb495beb68d803"
 
 torch = None
 hf_hub = None
@@ -59,7 +59,7 @@ TORIIGATE_SHORT_QUERY = (
 TORIIGATE_MAX_IMAGE_PIXELS = 1024 * 1024
 TORIIGATE_CUDA_MEMORY_FRACTION = max(
     0.30,
-    min(0.95, float(os.environ.get("SD_TORIIGATE_CUDA_MEMORY_FRACTION", "0.80"))),
+    min(0.95, read_float_env("SD_TORIIGATE_CUDA_MEMORY_FRACTION", 0.80)),
 )
 CAPTION_COUNT_PATTERNS = (
     (re.compile(r"\b(?:a|an|one|single)\s+(?:young\s+)?(?:girl|woman)\b"), "1girl"),
@@ -250,26 +250,27 @@ class ToriiGateTagger:
             # arbitrary Python.  This is required by the Qwen architecture but
             # means a compromised repo could run code on load.  Mitigate by
             # pinning TORIIGATE_COMMIT_HASH and only downloading safetensors.
-            self.processor = AutoProcessor.from_pretrained(
-                local_dir,
-                trust_remote_code=True,
-                padding_side="right",
-                use_safetensors=True,
-            )
-            self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
-                local_dir,
-                torch_dtype=dtype,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                use_safetensors=True,
-            )
-            if self.use_gpu and torch.cuda.is_available():
-                self.model.to("cuda")
-                self.device = "cuda"
-            else:
-                self.model.to("cpu")
-                self.device = "cpu"
-                self.use_gpu = False
+            with exclusive_ai_runtime("toriigate-load"):
+                self.processor = AutoProcessor.from_pretrained(
+                    local_dir,
+                    trust_remote_code=True,
+                    padding_side="right",
+                    use_safetensors=True,
+                )
+                self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
+                    local_dir,
+                    torch_dtype=dtype,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                    use_safetensors=True,
+                )
+                if self.use_gpu and torch.cuda.is_available():
+                    self.model.to("cuda")
+                    self.device = "cuda"
+                else:
+                    self.model.to("cpu")
+                    self.device = "cpu"
+                    self.use_gpu = False
 
             self.model.eval()
             self._loaded = True
@@ -280,20 +281,21 @@ class ToriiGateTagger:
                 self.use_gpu = False
                 self.device = "cpu"
                 self._teardown_model()
-                self.processor = AutoProcessor.from_pretrained(
-                    local_dir,
-                    trust_remote_code=True,  # required by Qwen architecture
-                    padding_side="right",
-                    use_safetensors=True,
-                )
-                self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
-                    local_dir,
-                    torch_dtype=torch.float32,
-                    low_cpu_mem_usage=True,
-                    trust_remote_code=True,  # required by Qwen architecture
-                    use_safetensors=True,
-                )
-                self.model.to("cpu")
+                with exclusive_ai_runtime("toriigate-load-cpu-retry"):
+                    self.processor = AutoProcessor.from_pretrained(
+                        local_dir,
+                        trust_remote_code=True,  # required by Qwen architecture
+                        padding_side="right",
+                        use_safetensors=True,
+                    )
+                    self.model = Qwen3_5ForConditionalGeneration.from_pretrained(
+                        local_dir,
+                        torch_dtype=torch.float32,
+                        low_cpu_mem_usage=True,
+                        trust_remote_code=True,  # required by Qwen architecture
+                        use_safetensors=True,
+                    )
+                    self.model.to("cpu")
                 self.model.eval()
                 self._loaded = True
             else:
@@ -554,7 +556,7 @@ class ToriiGateTagger:
             for key, value in inputs.items()
         }
 
-        with torch.inference_mode():
+        with torch.inference_mode(), exclusive_ai_runtime("toriigate-inference"):
             generated = self.model.generate(
                 **inputs,
                 do_sample=False,

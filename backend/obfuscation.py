@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from PIL import Image
+import database as db
+from services.indexed_file_mutation_service import save_and_reconcile_checked
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -44,6 +46,10 @@ COMPAT_MODE_ALIASES = {
 
 class ImageTooLargeError(ValueError):
     """Raised when obfuscation input exceeds safe memory limits."""
+
+
+class ObfuscationOverwriteConflictError(RuntimeError):
+    """Raised when an output file exists but overwrite was not explicitly allowed."""
 
 
 def _obfuscate_max_bytes_message() -> str:
@@ -523,6 +529,7 @@ def encode_image(
     preserve_metadata: bool = True,
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
+    allow_overwrite: bool = False,
 ) -> dict:
     _validate_obfuscation_source_file(input_path)
     source_bytes = Path(input_path).read_bytes()
@@ -536,7 +543,18 @@ def encode_image(
         legacy_pnginfo=legacy_pnginfo,
         compat_mode=normalized_mode,
     )
-    Path(output_path).write_bytes(output_bytes)
+    def _write_encoded_image(final_output_path: str, _overwrite_requested: bool) -> None:
+        Path(final_output_path).write_bytes(output_bytes)
+
+    write_result = save_and_reconcile_checked(
+        output_path,
+        _write_encoded_image,
+        allow_overwrite=allow_overwrite,
+        backend_file=__file__,
+        validation_error_factory=ValueError,
+        conflict_error_factory=ObfuscationOverwriteConflictError,
+    )
+    indexed_output = db.get_image_by_path(output_path)
 
     with Image.open(io.BytesIO(output_bytes)) as image:
         width, height = image.size
@@ -549,6 +567,10 @@ def encode_image(
         "metadata_preserved": preserve_metadata and _supports_metadata(normalized_mode),
         "legacy_pnginfo": legacy_pnginfo and _supports_metadata(normalized_mode),
         "compat_mode": normalized_mode,
+        "warnings": write_result.warnings or [],
+        "overwrote_existing": bool(write_result.target_existed),
+        "overwrote_indexed_path": bool(indexed_output),
+        "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
     }
 
 
@@ -559,6 +581,7 @@ def decode_image(
     preserve_metadata: bool = True,
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
+    allow_overwrite: bool = False,
 ) -> dict:
     _validate_obfuscation_source_file(input_path)
     source_bytes = Path(input_path).read_bytes()
@@ -572,7 +595,18 @@ def decode_image(
         legacy_pnginfo=legacy_pnginfo,
         compat_mode=normalized_mode,
     )
-    Path(output_path).write_bytes(output_bytes)
+    def _write_decoded_image(final_output_path: str, _overwrite_requested: bool) -> None:
+        Path(final_output_path).write_bytes(output_bytes)
+
+    write_result = save_and_reconcile_checked(
+        output_path,
+        _write_decoded_image,
+        allow_overwrite=allow_overwrite,
+        backend_file=__file__,
+        validation_error_factory=ValueError,
+        conflict_error_factory=ObfuscationOverwriteConflictError,
+    )
+    indexed_output = db.get_image_by_path(output_path)
 
     with Image.open(io.BytesIO(output_bytes)) as image:
         width, height = image.size
@@ -585,6 +619,10 @@ def decode_image(
         "metadata_preserved": preserve_metadata and _supports_metadata(normalized_mode),
         "legacy_pnginfo": legacy_pnginfo and _supports_metadata(normalized_mode),
         "compat_mode": normalized_mode,
+        "warnings": write_result.warnings or [],
+        "overwrote_existing": bool(write_result.target_existed),
+        "overwrote_indexed_path": bool(indexed_output),
+        "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
     }
 
 
@@ -598,6 +636,7 @@ def batch_process(
     progress_callback=None,
     legacy_pnginfo: bool = False,
     compat_mode: str = BIG_TOMATO_MODE,
+    allow_overwrite: bool = False,
 ) -> dict:
     Path(output_folder).mkdir(parents=True, exist_ok=True)
 
@@ -618,6 +657,7 @@ def batch_process(
                 preserve_metadata=preserve_metadata,
                 legacy_pnginfo=legacy_pnginfo,
                 compat_mode=normalized_mode,
+                allow_overwrite=allow_overwrite,
             )
             results.append(result)
         except Exception as exc:
@@ -632,6 +672,7 @@ def batch_process(
         "success": len(results),
         "failed": len(errors),
         "errors": errors,
+        "results": results,
         "output_folder": output_folder,
         "legacy_pnginfo": legacy_pnginfo and _supports_metadata(normalized_mode),
         "compat_mode": normalized_mode,

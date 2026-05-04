@@ -7,10 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import BackgroundTasks, HTTPException
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from services.tagging_service import TagRequest, TaggingService  # noqa: E402
+import database as db  # noqa: E402
+from services.tagging_service import TagImportRequest, TagRequest, TaggingService  # noqa: E402
 from services.tagging_service import _build_tag_progress_state  # noqa: E402
 from services.tagging_service import _format_runtime_adjustment_message  # noqa: E402
 from services.tagging_service import _iter_rescaling_batches  # noqa: E402
@@ -25,7 +27,15 @@ def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
         batch_size=32,
     )
 
-    runtime_plan = service._build_runtime_plan(request)
+    with patch("hardware_monitor.get_system_info", return_value={}), patch(
+        "hardware_monitor.recommend_tagger_config",
+        return_value={
+            "recommended_batch_size": 32,
+            "recommended_cpu_chunk_size": 12,
+            "recommended_session_refresh_interval": 180,
+        },
+    ):
+        runtime_plan = service._build_runtime_plan(request)
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
@@ -42,7 +52,15 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
         batch_size=32,
     )
 
-    runtime_plan = service._build_runtime_plan(request)
+    with patch("hardware_monitor.get_system_info", return_value={}), patch(
+        "hardware_monitor.recommend_tagger_config",
+        return_value={
+            "recommended_batch_size": 12,
+            "recommended_cpu_chunk_size": 12,
+            "recommended_session_refresh_interval": 180,
+        },
+    ):
+        runtime_plan = service._build_runtime_plan(request)
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
@@ -242,6 +260,78 @@ def test_runtime_plan_uses_custom_profile_for_custom_model_paths():
     assert plan["model_name"] == "custom"
     assert plan["fetch_batch_size"] == 8
     assert "Custom ONNX model on GPU" in plan["startup_notice"]
+
+
+def test_import_tags_overwrite_uses_shared_batch_writer_and_refreshes_tag_cache(test_db, tmp_path: Path):
+    image_path = tmp_path / "import-overwrite.png"
+    Image.new("RGB", (32, 32), color="white").save(image_path)
+    image_id = db.add_image(path=str(image_path), filename=image_path.name, metadata_json="{}")
+    db.add_tags(image_id, [{"tag": "old_tag", "confidence": 0.1}])
+
+    # Prime cache so the test verifies invalidation, not just first-read behavior.
+    cached_before = db.get_all_tags()
+    assert any(item["tag"] == "old_tag" for item in cached_before)
+
+    service = TaggingService()
+    result = service.import_tags(
+        TagImportRequest(
+            images=[
+                {
+                    "path": str(image_path),
+                    "filename": image_path.name,
+                    "tags": [
+                        {"tag": "new_tag", "confidence": 0.8},
+                        {"tag": "new_tag", "confidence": 0.9},
+                    ],
+                }
+            ],
+            overwrite=True,
+        )
+    )
+
+    assert result == {"imported": 1, "skipped": 0}
+
+    tags_after = db.get_image_tags(image_id)
+    assert tags_after == [{"tag": "new_tag", "confidence": 0.9}]
+
+    with db.get_db() as conn:
+        row = conn.execute(
+            "SELECT content_fingerprint FROM images WHERE id = ?",
+            (image_id,),
+        ).fetchone()
+    assert row["content_fingerprint"]
+
+    cached_after = db.get_all_tags()
+    assert any(item["tag"] == "new_tag" for item in cached_after)
+    assert not any(item["tag"] == "old_tag" for item in cached_after)
+
+
+def test_import_tags_skips_duplicate_rows_for_same_image_when_not_overwriting(test_db, tmp_path: Path):
+    image_path = tmp_path / "import-duplicate-skip.png"
+    Image.new("RGB", (32, 32), color="white").save(image_path)
+    image_id = db.add_image(path=str(image_path), filename=image_path.name, metadata_json="{}")
+
+    service = TaggingService()
+    result = service.import_tags(
+        TagImportRequest(
+            images=[
+                {
+                    "path": str(image_path),
+                    "filename": image_path.name,
+                    "tags": [{"tag": "first_tag", "confidence": 0.6}],
+                },
+                {
+                    "path": str(image_path),
+                    "filename": image_path.name,
+                    "tags": [{"tag": "second_tag", "confidence": 0.7}],
+                },
+            ],
+            overwrite=False,
+        )
+    )
+
+    assert result == {"imported": 1, "skipped": 1}
+    assert db.get_image_tags(image_id) == [{"tag": "first_tag", "confidence": 0.6}]
 
 
 class _DeadWorker:

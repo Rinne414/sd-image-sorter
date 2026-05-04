@@ -10,7 +10,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.source_paths import (  # noqa: E402
+    build_indexed_folder_scope_query_patterns,
+    build_indexed_image_lookup_candidates,
     build_indexed_image_path_candidates,
+    is_indexed_image_path_in_folder_scope,
     normalize_indexed_image_path,
     resolve_existing_indexed_image_path,
     translate_posix_mnt_path_to_windows_drive,
@@ -35,6 +38,39 @@ def test_normalize_indexed_image_path_preserves_posix_roots_without_host_abspath
     assert normalized == "/test/retrieve.png"
 
 
+def test_normalize_indexed_image_path_normalizes_windows_drive_case_and_separators():
+    normalized = normalize_indexed_image_path(r"l:/Tencent Files\foo/bar.png")
+
+    assert normalized == r"L:\Tencent Files\foo\bar.png"
+
+
+def test_build_indexed_image_lookup_candidates_include_windows_path_variants():
+    candidates = build_indexed_image_lookup_candidates(r"l:/Tencent Files\foo/bar.png")
+
+    assert r"L:\Tencent Files\foo\bar.png" in candidates
+    if os.name != "nt":
+        assert "/mnt/l/Tencent Files/foo/bar.png" in candidates
+
+
+def test_build_indexed_folder_scope_query_patterns_include_cross_runtime_prefixes():
+    patterns = build_indexed_folder_scope_query_patterns(r"l:/Tencent Files\foo")
+
+    assert (r"L:\Tencent Files\foo", "L:\\Tencent Files\\foo\\") in patterns
+    if os.name != "nt":
+        assert ("/mnt/l/Tencent Files/foo", "/mnt/l/Tencent Files/foo/") in patterns
+
+
+def test_is_indexed_image_path_in_folder_scope_distinguishes_recursive_and_direct_children():
+    image_path = r"L:\Tencent Files\foo\nested\image.png"
+    folder_path = "/mnt/l/Tencent Files/foo"
+
+    assert is_indexed_image_path_in_folder_scope(image_path, folder_path, recursive=True) is True
+    assert is_indexed_image_path_in_folder_scope(image_path, folder_path, recursive=False) is False
+
+    direct_child_path = r"L:\Tencent Files\foo\image.png"
+    assert is_indexed_image_path_in_folder_scope(direct_child_path, folder_path, recursive=False) is True
+
+
 def test_translate_posix_mnt_path_to_windows_drive():
     translated = translate_posix_mnt_path_to_windows_drive("/mnt/l/Tencent Files/foo/bar.png")
 
@@ -57,3 +93,39 @@ def test_resolve_existing_indexed_image_path_uses_translated_wsl_candidate(monke
     )
 
     assert resolved == translated
+
+
+def test_resolve_existing_indexed_image_path_rejects_symlink_by_default(tmp_path):
+    target = tmp_path / "target.png"
+    target.write_text("ok", encoding="utf-8")
+    symlink = tmp_path / "linked.png"
+    try:
+        symlink.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation not available")
+
+    resolved = resolve_existing_indexed_image_path(
+        str(symlink),
+        backend_file="/repo/backend/services/image_service.py",
+    )
+
+    assert resolved is None
+
+
+def test_resolve_existing_indexed_image_path_allows_symlink_when_explicitly_enabled(tmp_path: Path):
+    target = tmp_path / "target.png"
+    target.write_bytes(b"png")
+    link = tmp_path / "linked.png"
+
+    try:
+        link.symlink_to(target)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation not available")
+
+    resolved = resolve_existing_indexed_image_path(
+        str(link),
+        backend_file="/repo/backend/services/image_service.py",
+        allow_symlink=True,
+    )
+
+    assert resolved == str(link)

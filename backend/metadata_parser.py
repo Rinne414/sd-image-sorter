@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 PARSED_METADATA_VERSION = 5
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_PNG_CHUNK_BYTES = 64 * 1024 * 1024       # 64 MB – generous cap for any single PNG chunk
+_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MB – cap for zlib-decompressed text data
 
 
 class MetadataParser:
@@ -214,10 +216,7 @@ class MetadataParser:
     def _load_image_metadata(self, image_path: str) -> Dict[str, Any]:
         """Load dimensions and raw metadata with format-specific fast paths."""
         if os.path.splitext(image_path)[1].lower() == ".png":
-            try:
-                return self._load_png_metadata_fast(image_path)
-            except Exception as exc:
-                logger.debug("PNG fast-path fell back to Pillow for %s: %s", image_path, exc)
+            return self._load_png_metadata_fast(image_path)
 
         return self._load_image_metadata_via_pillow(image_path)
 
@@ -248,13 +247,21 @@ class MetadataParser:
         metadata: Dict[str, Any] = {}
         width = 0
         height = 0
+        seen_iend = False
+
+        file_size = os.path.getsize(image_path)
 
         with open(image_path, "rb") as png_file:
-            if png_file.read(len(PNG_SIGNATURE)) != PNG_SIGNATURE:
+            offset = 0
+
+            signature = png_file.read(len(PNG_SIGNATURE))
+            offset += len(signature)
+            if signature != PNG_SIGNATURE:
                 raise ValueError("Invalid PNG signature")
 
             while True:
                 chunk_length_raw = png_file.read(4)
+                offset += len(chunk_length_raw)
                 if not chunk_length_raw:
                     break
                 if len(chunk_length_raw) != 4:
@@ -262,14 +269,38 @@ class MetadataParser:
 
                 chunk_length = struct.unpack(">I", chunk_length_raw)[0]
                 chunk_type = png_file.read(4)
+                offset += len(chunk_type)
                 if len(chunk_type) != 4:
                     raise ValueError("Truncated PNG chunk type")
 
+                chunk_end = offset + chunk_length + 4
+                if chunk_end > file_size:
+                    raise ValueError("Truncated PNG chunk data")
+
+                if chunk_type == b"IEND":
+                    if chunk_length != 0:
+                        raise ValueError("Invalid PNG IEND chunk")
+                    png_file.seek(4, os.SEEK_CUR)
+                    offset += 4
+                    seen_iend = True
+                    break
+
+                should_read_chunk = chunk_type in {b"IHDR", b"tEXt", b"zTXt", b"iTXt", b"eXIf"}
+                if not should_read_chunk:
+                    png_file.seek(chunk_length + 4, os.SEEK_CUR)
+                    offset += chunk_length + 4
+                    continue
+
+                if chunk_length > _MAX_PNG_CHUNK_BYTES:
+                    break  # abort: metadata chunk too large, likely malformed
+
                 chunk_data = png_file.read(chunk_length)
+                offset += len(chunk_data)
                 if len(chunk_data) != chunk_length:
                     raise ValueError("Truncated PNG chunk data")
 
                 chunk_crc = png_file.read(4)
+                offset += len(chunk_crc)
                 if len(chunk_crc) != 4:
                     raise ValueError("Truncated PNG chunk CRC")
 
@@ -293,11 +324,11 @@ class MetadataParser:
                     metadata.update(self._extract_exif_from_bytes(chunk_data))
                     metadata.update(self._extract_exif_ifd_from_bytes(chunk_data))
                     metadata.update(self._extract_sd_metadata_from_exif_bytes(chunk_data))
-                elif chunk_type == b"IEND":
-                    break
 
         if width <= 0 or height <= 0:
             raise ValueError("PNG dimensions missing")
+        if not seen_iend:
+            raise ValueError("Truncated PNG missing IEND chunk")
 
         return {
             "width": width,
@@ -315,6 +346,38 @@ class MetadataParser:
             text.decode("utf-8", errors="replace"),
         )
 
+    def _safe_zlib_decompress_limited(self, compressed_data: bytes, max_output_bytes: int) -> Optional[bytes]:
+        """
+        Safely decompress zlib data with a hard output cap.
+
+        Returns None on malformed streams or when decompressed bytes exceed
+        the configured limit.
+        """
+        try:
+            decompressor = zlib.decompressobj()
+            max_probe = max_output_bytes + 1
+            decompressed = decompressor.decompress(compressed_data, max_probe)
+
+            if len(decompressed) > max_output_bytes:
+                return None
+
+            if decompressor.unconsumed_tail:
+                return None
+
+            remaining_budget = max_probe - len(decompressed)
+            if remaining_budget > 0:
+                decompressed += decompressor.flush(remaining_budget)
+
+            if len(decompressed) > max_output_bytes:
+                return None
+
+            if not decompressor.eof:
+                return None
+
+            return decompressed
+        except zlib.error:
+            return None
+
     def _decode_png_ztxt_chunk(self, chunk_data: bytes) -> Optional[Tuple[str, str]]:
         """Decode a PNG zTXt chunk into a key/value pair."""
         if b"\x00" not in chunk_data:
@@ -325,7 +388,9 @@ class MetadataParser:
         compression_method = remainder[0]
         if compression_method != 0:
             return None
-        text = zlib.decompress(remainder[1:])
+        text = self._safe_zlib_decompress_limited(remainder[1:], _MAX_DECOMPRESSED_BYTES)
+        if text is None:
+            return None
         return (
             keyword.decode("latin-1", errors="replace"),
             text.decode("utf-8", errors="replace"),
@@ -353,7 +418,9 @@ class MetadataParser:
         if compression_flag == 1:
             if compression_method != 0:
                 return None
-            text_bytes = zlib.decompress(text_bytes)
+            text_bytes = self._safe_zlib_decompress_limited(text_bytes, _MAX_DECOMPRESSED_BYTES)
+            if text_bytes is None:
+                return None
 
         return (
             keyword.decode("latin-1", errors="replace"),
@@ -769,6 +836,41 @@ class MetadataParser:
 
         return None
 
+    def _detect_webui_family_generator(
+        self,
+        params: str,
+        metadata: dict,
+        gen_params: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Distinguish Forge from vanilla A1111/WebUI before returning parsed parameters."""
+        def has_forge_signature(value: Any) -> bool:
+            text = str(value or "").strip().lower()
+            if not text:
+                return False
+            if re.search(r"\bsd[-_\s]?webui[-_\s]?forge\b", text):
+                return True
+            if re.search(r"\bstable[-_\s]?diffusion[-_\s]?(?:webui[-_\s]?)?forge\b", text):
+                return True
+            if re.search(r"\bwebui[-_\s]+forge\b|\bforge[-_\s]+webui\b", text):
+                return True
+            if re.search(r"\bf\d+(?:\.\d+)*v\d+(?:\.\d+)*(?:[-+][a-z0-9_.-]+)?\b", text, flags=re.IGNORECASE):
+                return True
+            return False
+
+        for key in ("Software", "software", "Source", "source", "Generator", "generator"):
+            if has_forge_signature(metadata.get(key)):
+                return "forge"
+
+        if gen_params:
+            for key, value in gen_params.items():
+                key_normalized = str(key or "").strip().lower().replace(" ", "_")
+                if key_normalized in {"forge_version", "sd_webui_forge_version"}:
+                    return "forge"
+                if key_normalized in {"version", "software", "source", "generator"} and has_forge_signature(value):
+                    return "forge"
+
+        return "webui"
+
     def _detect_and_parse(self, metadata: dict) -> Dict[str, Any]:
         """
         Detect generator type and extract prompts, checkpoint, loras, and extended info.
@@ -794,9 +896,7 @@ class MetadataParser:
             params = metadata["parameters"]
             if isinstance(params, str) and ("Steps:" in params and "Sampler:" in params):
                 prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
-                generator = "webui"
-                if "forge" in params.lower() or "Forge" in params:
-                    generator = "forge"
+                generator = self._detect_webui_family_generator(params, metadata, gen_params)
                 base.update({
                     "generator": generator, "prompt": prompt, "negative_prompt": neg,
                     "checkpoint": cp, "loras": lr, "generation_params": gen_params,
@@ -996,7 +1096,7 @@ class MetadataParser:
 
                 if "Steps:" in params and "Sampler:" in params:
                     prompt, neg, cp, lr, gen_params = self._parse_webui_parameters(params)
-                    generator = "forge" if "forge" in params.lower() else "webui"
+                    generator = self._detect_webui_family_generator(params, metadata, gen_params)
                     base.update({
                         "generator": generator, "prompt": prompt, "negative_prompt": neg,
                         "checkpoint": cp, "loras": lr, "generation_params": gen_params,

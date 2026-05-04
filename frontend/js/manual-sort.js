@@ -27,11 +27,13 @@ const ManualSortState = {
     hasSavedFilterState: false,
     inheritedCurrentGalleryFilters: false,
     scopeMeta: null,
+    resumeBannerSessionSnapshot: null,
 };
 
 const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
 const MANUAL_SORT_OPERATION_MODE_KEY = 'manual_sort_operation_mode_v1';
+const MAX_MINIMAP_IMAGES = 1000;
 
 // Key mappings
 const KEY_MAP = {
@@ -179,6 +181,20 @@ function createDefaultManualSortScopeMeta() {
     };
 }
 
+function buildManualSortFilterContract(filters) {
+    const source = serializeManualSortFilters(filters);
+    const normalizeCheckpoint = window.App?.normalizeCheckpointFilterValue;
+    const checkpoints = Array.isArray(source.checkpoints) ? source.checkpoints : [];
+    return {
+        ...source,
+        checkpoints: checkpoints
+            .map((value) => typeof normalizeCheckpoint === 'function' ? normalizeCheckpoint(value) : String(value || '').trim())
+            .filter(Boolean),
+        artist: source.artist ? String(source.artist).trim() : null,
+        search: source.search || '',
+    };
+}
+
 function loadManualSortScopeMeta() {
     try {
         const raw = localStorage.getItem(MANUAL_SORT_SCOPE_META_KEY);
@@ -251,21 +267,27 @@ function getManualSortToolLabel() {
 }
 
 function getManualSortScopeSignature(filters) {
+    const appSignature = window.App?.getAdvancedFilterContractSignature;
+    if (typeof appSignature === 'function') {
+        return appSignature(buildManualSortFilterContract(filters));
+    }
+    const contract = buildManualSortFilterContract(filters);
     return JSON.stringify({
-        generators: filters.generators || [],
-        tags: filters.tags || [],
-        ratings: filters.ratings || [],
-        checkpoints: filters.checkpoints || [],
-        loras: filters.loras || [],
-        prompts: filters.prompts || [],
-        search: filters.search || '',
-        minWidth: filters.minWidth || null,
-        maxWidth: filters.maxWidth || null,
-        minHeight: filters.minHeight || null,
-        maxHeight: filters.maxHeight || null,
-        aspectRatio: filters.aspectRatio || null,
-        minAesthetic: filters.minAesthetic ?? null,
-        maxAesthetic: filters.maxAesthetic ?? null,
+        generators: contract.generators || [],
+        tags: contract.tags || [],
+        ratings: contract.ratings || [],
+        checkpoints: contract.checkpoints || [],
+        loras: contract.loras || [],
+        prompts: contract.prompts || [],
+        artist: contract.artist || null,
+        search: contract.search || '',
+        minWidth: contract.minWidth || null,
+        maxWidth: contract.maxWidth || null,
+        minHeight: contract.minHeight || null,
+        maxHeight: contract.maxHeight || null,
+        aspectRatio: contract.aspectRatio || null,
+        minAesthetic: contract.minAesthetic ?? null,
+        maxAesthetic: contract.maxAesthetic ?? null,
     });
 }
 
@@ -302,11 +324,11 @@ function updateManualSortExecutionScopeSummary() {
     const status = getManualSortScopeStatus();
     const tool = getManualSortToolLabel();
     summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? formatManualSortI18n('scope.sessionSynced', 'Session will use the {tool} scope synced from Gallery at {time}.', {
+        ? formatManualSortI18n('scope.sessionSynced', 'This session uses {tool} filters copied from Gallery at {time}.', {
             tool,
             time: status.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.sessionSaved', 'Session will use the saved {tool} scope, not the live Gallery filters.', {
+        : formatManualSortI18n('scope.sessionSaved', 'This session uses the saved {tool} filters shown here, not the live Gallery filters.', {
             tool,
         });
 }
@@ -324,31 +346,31 @@ function updateManualSortScopeStatus() {
     const tool = getManualSortToolLabel();
     const status = getManualSortScopeStatus();
 
-    badge.textContent = formatManualSortI18n('scope.usingSaved', 'Using saved {tool} scope', { tool });
+    badge.textContent = formatManualSortI18n('scope.usingSaved', '{tool} will use these saved filters', { tool });
     meta.textContent = status.lastSyncedLabel
-        ? formatManualSortI18n('scope.syncedAt', 'Synced from current Gallery filters at {time}', {
+        ? formatManualSortI18n('scope.syncedAt', 'Copied from Gallery: {time}', {
             time: status.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.standalone', 'This saved scope will not change when Gallery filters change later.');
+        : formatManualSortI18n('scope.standalone', 'These filters will not change automatically when Gallery filters change later.');
 
     if (status.matchesGallery && status.lastSyncedLabel) {
         detail.textContent = formatManualSortI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
     } else if (status.matchesGallery) {
         detail.textContent = formatManualSortI18n(
             'scope.alignedUnsynced',
-            '{tool} currently matches the Gallery filters, but future Gallery changes will not update it automatically.',
+            '{tool} currently matches the Gallery filters. Later Gallery changes will not be copied automatically.',
             { tool }
         );
     } else if (status.isAcknowledged) {
         detail.textContent = formatManualSortI18n(
             'scope.kept',
-            'Continuing with the saved {tool} scope. Current Gallery filters were not copied.',
+            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
             { tool }
         );
     } else {
         detail.textContent = formatManualSortI18n(
             'scope.mismatch',
-            'Gallery filters changed. {tool} will keep using its saved scope until you resync.',
+            'Gallery filters changed. {tool} will still use the saved filters shown here.',
             { tool }
         );
     }
@@ -403,6 +425,66 @@ function maybeAdoptManualSortFiltersFromGallery() {
 
     syncManualSortFiltersFromGallery({ toastKey: null });
     return true;
+}
+
+function summarizeManualSortFolders(folders = {}) {
+    const entries = Object.entries(folders || {}).filter(([, value]) => typeof value === 'string' && value.trim());
+    if (entries.length === 0) {
+        return manualSortText('manual.resumeFoldersEmpty', 'No destination folders saved yet', '还没有保存目标文件夹');
+    }
+    return entries
+        .map(([key, value]) => `${String(key).toUpperCase()}: ${value}`)
+        .join(' · ');
+}
+
+function renderManualSortResumeBanner(session, { visible = true } = {}) {
+    const banner = document.querySelector('#sort-resume-banner');
+    if (!banner) return;
+
+    if (!visible) {
+        ManualSortState.resumeBannerSessionSnapshot = null;
+        banner.style.display = 'none';
+        return;
+    }
+
+    if (!session) {
+        ManualSortState.resumeBannerSessionSnapshot = null;
+        banner.style.display = 'none';
+        return;
+    }
+
+    banner.style.display = 'flex';
+    ManualSortState.resumeBannerSessionSnapshot = {
+        remaining: Number(session?.remaining || 0),
+        operation_mode: session?.operation_mode || 'move',
+        folders: { ...(session?.folders || {}) },
+    };
+
+    const countEl = banner.querySelector('.resume-count');
+    if (countEl) {
+        countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
+            count: Number(session?.remaining || 0),
+        });
+    }
+
+    const operationEl = banner.querySelector('.resume-operation');
+    if (operationEl) {
+        const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'move');
+        operationEl.textContent = formatManualSortI18n(
+            'manual.resumeOperationMode',
+            'Saved session action mode: {mode}',
+            { mode: modeLabel }
+        );
+    }
+
+    const foldersEl = banner.querySelector('.resume-folders');
+    if (foldersEl) {
+        foldersEl.textContent = formatManualSortI18n(
+            'manual.resumeFolderSummary',
+            'Saved session folders: {summary}',
+            { summary: summarizeManualSortFolders(session?.folders || {}) }
+        );
+    }
 }
 
 // ============== Initialization ==============
@@ -513,7 +595,7 @@ async function initManualSort() {
     // Resume session button
     const resumeBtn = $('#btn-resume-sorting');
     if (resumeBtn) {
-        resumeBtn.addEventListener('click', resumeSavedSession);
+        resumeBtn.addEventListener('click', () => resumeSavedSession());
     }
 
     // Discard saved session button
@@ -530,8 +612,7 @@ async function initManualSort() {
                 async () => {
                     try {
                         await window.App.API.delete('/api/sort/session');
-                        const banner = $('#sort-resume-banner');
-                        if (banner) banner.style.display = 'none';
+                        renderManualSortResumeBanner(null, { visible: false });
                         window.App.showToast(
                             manualSortText('manual.discardSessionSuccess', 'Saved session discarded', '已丢弃已保存会话'),
                             'success'
@@ -567,6 +648,9 @@ async function initManualSort() {
     document.addEventListener('languageChanged', () => {
         updateManualSortFilterSummary();
         setManualSortOperationMode(ManualSortState.operationMode, { persist: false, updateUi: true });
+        if (ManualSortState.resumeBannerSessionSnapshot) {
+            renderManualSortResumeBanner(ManualSortState.resumeBannerSessionSnapshot, { visible: true });
+        }
     });
 
     // Check for saved session on the server
@@ -576,16 +660,7 @@ async function initManualSort() {
             return null;
         });
         if (session && !session.done && session.image) {
-            const banner = document.querySelector('#sort-resume-banner');
-            if (banner) {
-                banner.style.display = 'flex';
-                const countEl = banner.querySelector('.resume-count');
-                if (countEl) {
-                    countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
-                        count: session.remaining,
-                    });
-                }
-            }
+            renderManualSortResumeBanner(session, { visible: true });
         }
     } catch(e) {
         if (window.Logger) Logger.warn('Failed to check sort session:', e);
@@ -594,10 +669,47 @@ async function initManualSort() {
 
 // ============== Start Sorting ==============
 
+async function confirmResumeSavedSessionFromStart(savedSession) {
+    const body = formatManualSortI18n(
+        'manual.resumeInsteadBody',
+        'An unfinished Manual Sort session is saved at image {index}/{total} with {remaining} remaining. Resume it instead of starting over. To start from the first matching image, discard the saved session first.',
+        {
+            index: Number(savedSession.index || 0) + 1,
+            total: Number(savedSession.total || 0),
+            remaining: Number(savedSession.remaining || 0),
+        }
+    );
+
+    return new Promise(resolve => {
+        window.App.showConfirm(
+            manualSortText('manual.resumeInsteadTitle', 'Resume saved Manual Sort session?', '恢复已保存的手动分类会话？'),
+            body,
+            async () => {
+                await resumeSavedSession(savedSession);
+                resolve(true);
+            },
+            () => {
+                renderManualSortResumeBanner(savedSession, { visible: true });
+                resolve(false);
+            }
+        );
+    });
+}
+
 async function startSorting() {
     const { $, $$, API, showToast } = window.App;
     const operationMode = getManualSortOperationMode();
     const operationLabel = getManualSortOperationLabel(operationMode);
+
+    try {
+        const savedSession = await API.getCurrentSortImage();
+        if (savedSession && !savedSession.done && savedSession.image) {
+            await confirmResumeSavedSessionFromStart(savedSession);
+            return;
+        }
+    } catch (error) {
+        if (window.Logger) Logger.warn('Failed to check existing sort session before start:', error);
+    }
 
     // Collect folder paths
     const folders = {};
@@ -613,14 +725,16 @@ async function startSorting() {
         return;
     }
 
+    const replaceExisting = false;
+
     // Confirmation dialog before starting (files will be moved/copied)
     const scopeStatus = getManualSortScopeStatus();
     const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
-        ? formatManualSortI18n('scope.executeSynced', 'Scope: saved {tool} filters (last synced from Gallery at {time})', {
+        ? formatManualSortI18n('scope.executeSynced', 'Using saved {tool} filters copied from Gallery at {time}', {
             tool: getManualSortToolLabel(),
             time: scopeStatus.lastSyncedLabel,
         })
-        : formatManualSortI18n('scope.executeSaved', 'Scope: saved {tool} filters', {
+        : formatManualSortI18n('scope.executeSaved', 'Using saved {tool} filters', {
             tool: getManualSortToolLabel(),
         });
     const confirmMessage = window.I18n?.getLang?.() === 'zh-CN'
@@ -661,7 +775,7 @@ async function startSorting() {
     });
 
     // Manual Sort keeps its own filter state so queue/sort work does not pollute Gallery.
-    const f = getManualSortFilters();
+    const f = buildManualSortFilterContract(getManualSortFilters());
     const generators = f.generators?.length > 0 ? f.generators : null;
     const ratings = f.ratings?.length > 0 ? f.ratings : null;
     const tags = f.tags?.length > 0 ? f.tags : null;
@@ -697,6 +811,8 @@ async function startSorting() {
                 max: f.maxAesthetic,
             },
             operationMode,
+            f.artist,
+            replaceExisting,
         );
 
         if (result.total_images === 0) {
@@ -711,7 +827,11 @@ async function startSorting() {
         const previewImages = [];
         let previewCursor = null;
 
-        while (previewImages.length < result.total_images) {
+        while (previewImages.length < result.total_images && previewImages.length < MAX_MINIMAP_IMAGES) {
+            const remainingPreviewSlots = Math.min(
+                result.total_images - previewImages.length,
+                MAX_MINIMAP_IMAGES - previewImages.length
+            );
             const imagesResult = await API.getImages({
                 generators: generators,
                 tags: tags,
@@ -719,6 +839,7 @@ async function startSorting() {
                 checkpoints: checkpoints,
                 loras: loras,
                 prompts: prompts,
+                artist: f.artist,
                 search: search,
                 minWidth: f.minWidth,
                 maxWidth: f.maxWidth,
@@ -727,7 +848,7 @@ async function startSorting() {
                 aspectRatio: f.aspectRatio,
                 minAesthetic: f.minAesthetic,
                 maxAesthetic: f.maxAesthetic,
-                limit: 1000,
+                limit: remainingPreviewSlots,
                 cursor: previewCursor
             });
 
@@ -735,7 +856,7 @@ async function startSorting() {
                 break;
             }
 
-            previewImages.push(...imagesResult.images);
+            previewImages.push(...imagesResult.images.slice(0, remainingPreviewSlots));
 
             if (!imagesResult.has_more || !imagesResult.next_cursor) {
                 break;
@@ -748,7 +869,6 @@ async function startSorting() {
         ManualSortState.index = 0;
         ManualSortState.combo = 0;
         ManualSortState.history = [];
-        RedoStack.clear();
         ManualSortState.images = previewImages;
         ManualSortState.sortedCount = 0;
         ManualSortState.skippedCount = 0;
@@ -924,15 +1044,21 @@ function applyCurrentSortPayload(result, options = {}) {
     return true;
 }
 
-async function resumeSavedSession() {
+async function resumeSavedSession(prefetchedSession = null) {
     const { $, API, showToast } = window.App;
+    const previousResumeSnapshot = ManualSortState.resumeBannerSessionSnapshot
+        ? {
+            remaining: ManualSortState.resumeBannerSessionSnapshot.remaining,
+            operation_mode: ManualSortState.resumeBannerSessionSnapshot.operation_mode,
+            folders: { ...(ManualSortState.resumeBannerSessionSnapshot.folders || {}) },
+        }
+        : null;
 
     try {
-        const session = await API.getCurrentSortImage();
+        const session = prefetchedSession || await API.getCurrentSortImage();
 
         if (!session || session.done || !session.image) {
-            const banner = $('#sort-resume-banner');
-            if (banner) banner.style.display = 'none';
+            renderManualSortResumeBanner(null, { visible: false });
             showToast(manualSortText('manual.noSavedSession', 'No saved sorting session to resume', '没有可恢复的已保存排序会话'), 'info');
             return;
         }
@@ -951,7 +1077,6 @@ async function resumeSavedSession() {
         ManualSortState.undoAvailable = false;
         ManualSortState.redoAvailable = false;
         setManualSortOperationMode(session.operation_mode || ManualSortState.operationMode, { persist: true, updateUi: true });
-        RedoStack.clear();
 
         if (!Object.keys(ManualSortState.folders).length) {
             const folderResult = await API.get('/api/sort/folders');
@@ -962,12 +1087,10 @@ async function resumeSavedSession() {
         activateSortingUi();
         applyCurrentSortPayload(session);
 
-        const banner = $('#sort-resume-banner');
-        if (banner) banner.style.display = 'none';
+        renderManualSortResumeBanner(null, { visible: false });
     } catch (error) {
         rollbackSortingUi();
-        const banner = $('#sort-resume-banner');
-        if (banner) banner.style.display = 'flex';
+        renderManualSortResumeBanner(previousResumeSnapshot, { visible: Boolean(previousResumeSnapshot) });
         Logger.error('Failed to resume saved session:', error);
         showToast(formatUserError(error, manualSortText('manual.resumeFailed', 'Failed to resume saved session', '恢复已保存会话失败')), 'error');
     }
@@ -1320,7 +1443,6 @@ function finishSorting() {
     ManualSortState.history = [];
     ManualSortState.undoAvailable = false;
     ManualSortState.redoAvailable = false;
-    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
@@ -1348,8 +1470,8 @@ function finishSorting() {
     $('#sort-interface').style.display = 'none';
     $('#sort-setup').style.display = 'block';
 
-    fetch('/api/sort/session', {method: 'DELETE'}).catch(e => {
-        console.warn('Operation failed:', e);
+    window.App.API.delete('/api/sort/session').catch(e => {
+        if (window.Logger) Logger.warn('Failed to clean up sort session:', e);
     });
 
     // Refresh gallery
@@ -1364,7 +1486,6 @@ function exitSorting() {
     ManualSortState.active = false;
     ManualSortState.undoAvailable = false;
     ManualSortState.redoAvailable = false;
-    RedoStack.clear();
     document.removeEventListener('keydown', handleSortKeypress);
     updateHistoryControlState({ undo_available: false, redo_available: false });
 
@@ -1372,15 +1493,15 @@ function exitSorting() {
     $('#sort-setup').style.display = 'block';
 
     const remaining = Math.max(0, ManualSortState.total - ManualSortState.index);
-    const banner = $('#sort-resume-banner');
-    if (banner && remaining > 0) {
-        banner.style.display = 'flex';
-        const countEl = banner.querySelector('.resume-count');
-        if (countEl) {
-            countEl.textContent = formatManualSortI18n('manual.imagesRemaining', '{count} images remaining', {
-                count: remaining,
-            });
-        }
+    if (remaining > 0) {
+        renderManualSortResumeBanner(
+            {
+                remaining,
+                operation_mode: getManualSortOperationMode(),
+                folders: ManualSortState.folders || {},
+            },
+            { visible: true }
+        );
     }
 
     showToast(manualSortText('manual.sortingPaused', 'Sorting paused. You can resume later.', '排序已暂停，稍后可以继续。'), 'info');
@@ -1455,27 +1576,6 @@ window.updateManualSortFilterSummary = updateManualSortFilterSummary;
 window.maybeAdoptManualSortFiltersFromGallery = maybeAdoptManualSortFiltersFromGallery;
 
 // ============== Touch Controls for Mobile ==============
-
-// Redo stack for manual sort
-const RedoStack = {
-    stack: [],
-    
-    push(action) {
-        this.stack.push(action);
-    },
-    
-    pop() {
-        return this.stack.pop();
-    },
-    
-    clear() {
-        this.stack = [];
-    },
-    
-    isEmpty() {
-        return this.stack.length === 0;
-    }
-};
 
 // Touch control button mapping
 const TOUCH_BUTTONS = [
@@ -1616,5 +1716,4 @@ async function redoLastAction() {
 
 // Export touch control functions
 window.createTouchControls = createTouchControls;
-window.RedoStack = RedoStack;
 window.redoLastAction = redoLastAction;

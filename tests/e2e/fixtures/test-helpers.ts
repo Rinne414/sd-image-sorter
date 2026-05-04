@@ -1,10 +1,45 @@
 import { test as base, expect, Page, APIRequestContext } from '@playwright/test'
+import fsSync from 'node:fs'
 import { promises as fs } from 'fs'
 import path from 'path'
-import { exec } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import { promisify } from 'util'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+const repoRoot = path.resolve(__dirname, '..', '..', '..')
+
+function commandExists(candidate: string): boolean {
+  if (candidate.includes(path.sep) || candidate.includes('/')) {
+    return fsSync.existsSync(candidate)
+  }
+
+  try {
+    const lookupCommand = process.platform === 'win32' ? 'where' : 'which'
+    return execFileSync(lookupCommand, [candidate], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().length > 0
+  } catch {
+    return false
+  }
+}
+
+const backendPythonCandidates = process.platform === 'win32'
+  ? [
+      path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+      path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+      'python',
+    ]
+  : [
+      path.join(repoRoot, 'backend', 'venv', 'bin', 'python'),
+      'python3',
+      'python',
+      path.join(repoRoot, 'backend', 'venv', 'Scripts', 'python.exe'),
+    ]
+
+const backendPython = process.env.PW_BACKEND_PYTHON
+  || backendPythonCandidates.find((candidate) => commandExists(candidate))
+  || backendPythonCandidates[0]
 
 /**
  * Test fixtures for SD Image Sorter E2E tests
@@ -169,7 +204,10 @@ print('Created:', r'${filePath.replace(/\\/g, '\\\\')}')
   await fs.writeFile(scriptPath, pythonScript)
 
   try {
-    await execAsync(`python "${scriptPath}"`, { timeout: 10000 })
+    await execFileAsync(backendPython, [scriptPath], {
+      cwd: repoRoot,
+      timeout: 10000,
+    })
   } catch (error) {
     console.error('Failed to create test image:', error)
     throw error

@@ -4,6 +4,8 @@
  */
 
 const API_BASE = '';  // Same origin
+const SCAN_PREVIEW_PAGE_SIZE = 80;
+const VALID_ASPECT_RATIO_FILTERS = new Set(['square', 'landscape', 'portrait']);
 
 // Utility: Debounce function
 function debounce(func, wait) {
@@ -41,6 +43,11 @@ function throttle(func, limit) {
 function appT(key, fallback, params) {
     const val = window.I18n?.t?.(key, params);
     return (val && val !== key) ? val : (fallback || key);
+}
+
+function normalizeAspectRatioFilter(value) {
+    const text = String(value || '').trim();
+    return VALID_ASPECT_RATIO_FILTERS.has(text) ? text : '';
 }
 
 function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
@@ -86,8 +93,10 @@ const RequestManager = {
         this.pendingRequests.clear();
     },
 
-    complete(key) {
-        this.pendingRequests.delete(key);
+    complete(key, controller = null) {
+        if (!controller || this.pendingRequests.get(key) === controller) {
+            this.pendingRequests.delete(key);
+        }
     },
 
     isAbortedError(error) {
@@ -99,6 +108,10 @@ const GALLERY_VIEW_MODE_KEY = 'gallery-view-mode';
 const FILTER_STATE_KEY = 'sd-image-sorter-filter-state';
 const SCAN_ADVANCED_OPEN_KEY = 'sd-image-sorter-scan-advanced-open';
 const TAG_ADVANCED_OPEN_KEY = 'sd-image-sorter-tag-advanced-open';
+const FILTERED_SELECTION_CONFIRM_THRESHOLD = 10000;
+const FILTERED_SELECTION_CHUNK_SIZE = 2000;
+const EXPORT_PREVIEW_MAX_IMAGES = 2000;
+const EXPORT_PREVIEW_MAX_CHARS = 200000;
 
 function readStoredBoolean(storageKey, fallback = false) {
     try {
@@ -140,6 +153,9 @@ function getDefaultGalleryPageSize(mode = null) {
 }
 
 function createDefaultFilterState() {
+    if (window.FilterStore?.createDefaultFilterState) {
+        return window.FilterStore.createDefaultFilterState();
+    }
     return {
         generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
@@ -162,6 +178,9 @@ function createDefaultFilterState() {
 }
 
 function cloneFilterState(filters) {
+    if (window.FilterStore?.cloneState) {
+        return window.FilterStore.cloneState(filters);
+    }
     const source = filters || createDefaultFilterState();
     return {
         generators: [...(source.generators || [])],
@@ -178,10 +197,97 @@ function cloneFilterState(filters) {
         maxWidth: source.maxWidth ?? null,
         minHeight: source.minHeight ?? null,
         maxHeight: source.maxHeight ?? null,
-        aspectRatio: source.aspectRatio || '',
+        aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null
     };
+}
+
+function createDefaultSelectionState() {
+    if (window.SelectionStore?.createDefaultState) {
+        return window.SelectionStore.createDefaultState();
+    }
+    return {
+        selectionMode: false,
+        selectedIds: new Set(),
+        scope: 'visible',
+        filterKey: null,
+        selectionToken: null,
+    };
+}
+
+function cloneSelectionState(selectionState) {
+    if (window.SelectionStore?.cloneState) {
+        return window.SelectionStore.cloneState(selectionState);
+    }
+    const source = selectionState || createDefaultSelectionState();
+    const scope = source.scope === 'filtered' || source.scope === 'loaded' ? source.scope : 'visible';
+    const filterKey = scope === 'filtered' && typeof source.filterKey === 'string' && source.filterKey
+        ? source.filterKey
+        : null;
+    const selectionToken = scope === 'filtered' && typeof source.selectionToken === 'string' && source.selectionToken
+        ? source.selectionToken
+        : null;
+    return {
+        selectionMode: Boolean(source.selectionMode),
+        selectedIds: new Set(Array.from(source.selectedIds || [])),
+        scope,
+        filterKey,
+        selectionToken,
+    };
+}
+
+function buildSelectionFilterRequest(filters = AppState?.filters || createDefaultFilterState()) {
+    const source = cloneFilterState(filters);
+    return {
+        generators: [...(source.generators || [])],
+        ratings: [...(source.ratings || [])],
+        tags: [...(source.tags || [])],
+        checkpoints: [...(source.checkpoints || [])]
+            .map(normalizeCheckpointFilterValue)
+            .filter(Boolean),
+        loras: [...(source.loras || [])],
+        prompts: [...(source.prompts || [])],
+        artist: source.artist ? String(source.artist).trim() : null,
+        search: source.search || '',
+        sortBy: source.sortBy || 'newest',
+        minWidth: source.minWidth ?? null,
+        maxWidth: source.maxWidth ?? null,
+        minHeight: source.minHeight ?? null,
+        maxHeight: source.maxHeight ?? null,
+        aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
+        minAesthetic: source.minAesthetic ?? null,
+        maxAesthetic: source.maxAesthetic ?? null,
+    };
+}
+
+function getSelectionFilterCacheKey(filters = AppState?.filters || createDefaultFilterState()) {
+    return JSON.stringify(buildSelectionFilterRequest(filters));
+}
+
+function buildAdvancedFilterContract(filters = AppState?.filters || createDefaultFilterState()) {
+    const request = buildSelectionFilterRequest(filters);
+    return {
+        generators: request.generators,
+        ratings: request.ratings,
+        tags: request.tags,
+        checkpoints: request.checkpoints,
+        loras: request.loras,
+        prompts: request.prompts,
+        artist: request.artist,
+        search: request.search || '',
+        minWidth: request.minWidth ?? null,
+        maxWidth: request.maxWidth ?? null,
+        minHeight: request.minHeight ?? null,
+        maxHeight: request.maxHeight ?? null,
+        aspectRatio: request.aspectRatio || '',
+        minAesthetic: request.minAesthetic ?? null,
+        maxAesthetic: request.maxAesthetic ?? null,
+    };
+}
+
+function getAdvancedFilterContractSignature(filters = AppState?.filters || createDefaultFilterState()) {
+    return JSON.stringify(buildAdvancedFilterContract(filters));
 }
 
 function copyFilterState(target, source) {
@@ -235,17 +341,20 @@ function loadSavedFilterState() {
     return null;
 }
 
-const savedFilters = loadSavedFilterState();
+const savedFilters = cloneFilterState(loadSavedFilterState());
+const AppFilterStore = window.FilterStore?.create(savedFilters || createDefaultFilterState()) || null;
+const AppSelectionStore = window.SelectionStore?.create(createDefaultSelectionState()) || null;
 
 // App State
 const AppState = {
     currentView: 'gallery',
     viewMode: localStorage.getItem(GALLERY_VIEW_MODE_KEY) || 'grid',
     images: [],
-    filters: savedFilters || createDefaultFilterState(),
+    filters: AppFilterStore ? AppFilterStore.getState() : (savedFilters || createDefaultFilterState()),
     selectedImage: null,
     isLoading: false,
     galleryNeedsRefresh: false,
+    gallerySuppressNextAutoLoadMore: false,
 
     // Pagination state
     pagination: {
@@ -257,8 +366,11 @@ const AppState = {
     },
 
     // Multi-select state
-    selectionMode: false,
-    selectedIds: new Set(),
+    selectionMode: AppSelectionStore ? AppSelectionStore.getState().selectionMode : false,
+    selectedIds: AppSelectionStore ? AppSelectionStore.getState().selectedIds : new Set(),
+    selectionScope: AppSelectionStore ? AppSelectionStore.getState().scope : 'visible',
+    selectionFilterKey: AppSelectionStore ? AppSelectionStore.getState().filterKey : null,
+    selectionToken: AppSelectionStore ? AppSelectionStore.getState().selectionToken : null,
     selectionDataCache: {
         key: null,
         data: null
@@ -283,6 +395,143 @@ const AppState = {
         search: ''
     }
 };
+
+if (AppFilterStore) {
+    AppFilterStore.subscribe((nextState) => {
+        AppState.filters = nextState;
+        clearFilteredSelectionIfFilterChanged(nextState);
+    });
+}
+
+if (AppSelectionStore) {
+    AppSelectionStore.subscribe((nextState) => {
+        AppState.selectionMode = nextState.selectionMode;
+        AppState.selectedIds = nextState.selectedIds;
+        AppState.selectionScope = nextState.scope;
+        AppState.selectionFilterKey = nextState.filterKey || null;
+        AppState.selectionToken = nextState.selectionToken || null;
+    });
+}
+
+function setAppFilters(nextFilters) {
+    if (AppFilterStore) {
+        return AppFilterStore.setState(nextFilters);
+    }
+    AppState.filters = cloneFilterState(nextFilters);
+    clearFilteredSelectionIfFilterChanged(AppState.filters);
+    return AppState.filters;
+}
+
+function updateAppFilters(updater) {
+    if (AppFilterStore) {
+        return AppFilterStore.update(updater);
+    }
+    const draft = cloneFilterState(AppState.filters);
+    const nextState = typeof updater === 'function'
+        ? (updater(draft) ?? draft)
+        : updater;
+    return setAppFilters(nextState);
+}
+
+function setSelectionState(nextSelection) {
+    if (AppSelectionStore) {
+        return AppSelectionStore.setState(nextSelection);
+    }
+    const nextState = cloneSelectionState(nextSelection);
+    AppState.selectionMode = nextState.selectionMode;
+    AppState.selectedIds = nextState.selectedIds;
+    AppState.selectionScope = nextState.scope;
+    AppState.selectionFilterKey = nextState.filterKey || null;
+    AppState.selectionToken = nextState.selectionToken || null;
+    return nextState;
+}
+
+function updateSelectionState(updater) {
+    if (AppSelectionStore) {
+        return AppSelectionStore.update(updater);
+    }
+    const draft = cloneSelectionState({
+        selectionMode: AppState.selectionMode,
+        selectedIds: AppState.selectedIds,
+        scope: AppState.selectionScope,
+        filterKey: AppState.selectionFilterKey,
+        selectionToken: AppState.selectionToken,
+    });
+    const nextState = typeof updater === 'function'
+        ? (updater(draft) ?? draft)
+        : updater;
+    return setSelectionState(nextState);
+}
+
+function mutateSelectedIds(mutator, { scope = null } = {}) {
+    return updateSelectionState((selection) => {
+        const nextIds = new Set(selection.selectedIds);
+        const result = typeof mutator === 'function' ? mutator(nextIds) : mutator;
+        selection.selectedIds = result instanceof Set ? result : nextIds;
+        if (scope) {
+            selection.scope = scope;
+            if (scope !== 'filtered') {
+                selection.filterKey = null;
+                selection.selectionToken = null;
+            }
+        }
+    });
+}
+
+function clearSelectedIds(options = {}) {
+    return mutateSelectedIds((selectedIds) => {
+        selectedIds.clear();
+    }, options);
+}
+
+function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
+    if (!AppState?.selectedIds || AppState.selectedIds.size === 0) return false;
+    if (AppState.selectionScope !== 'filtered') return false;
+
+    const currentFilterKey = getSelectionFilterCacheKey(filters);
+    if (!AppState.selectionFilterKey || AppState.selectionFilterKey === currentFilterKey) {
+        return false;
+    }
+
+    updateSelectionState((selection) => {
+        selection.selectedIds = new Set();
+        selection.scope = 'visible';
+        selection.filterKey = null;
+        selection.selectionToken = null;
+    });
+    resetSelectionDataCache();
+
+    if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+        Gallery.syncSelectionState();
+    }
+    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+    emitSelectionStateChanged();
+    return true;
+}
+
+function markGalleryNeedsRefresh({ resetSelectionCache = true } = {}) {
+    AppState.galleryNeedsRefresh = true;
+    if (resetSelectionCache) {
+        resetSelectionDataCache();
+    }
+}
+
+function commitFilterModalState(filterState) {
+    const nextFilters = cloneFilterState(filterState);
+    const hasExternalHandler = Boolean(FilterModalController.onApply || FilterModalController.onReset);
+
+    if (!hasExternalHandler) {
+        setAppFilters(nextFilters);
+        return cloneFilterState(AppState.filters);
+    }
+
+    if (FilterModalController.targetState) {
+        copyFilterState(FilterModalController.targetState, nextFilters);
+        return cloneFilterState(FilterModalController.targetState);
+    }
+
+    return nextFilters;
+}
 
 // Sort direction pairs: base sort value -> reversed sort value
 const SORT_PAIRS = {
@@ -506,15 +755,12 @@ const API = {
         if (filters.maxWidth) params.set('max_width', filters.maxWidth);
         if (filters.minHeight) params.set('min_height', filters.minHeight);
         if (filters.maxHeight) params.set('max_height', filters.maxHeight);
-        if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        const aspectRatio = normalizeAspectRatioFilter(filters.aspectRatio);
+        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
 
         return this.get(`/api/images?${params}`, options);
-    },
-
-    async getAnalytics() {
-        return this.get('/api/analytics');
     },
 
     async clearGallery() {
@@ -525,12 +771,35 @@ const API = {
         return this.get(`/api/images/${id}`);
     },
 
+    async getSelectionIds(filters = {}) {
+        return this.post('/api/images/selection-ids', buildSelectionFilterRequest(filters));
+    },
+
+    async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE) {
+        return this.post('/api/images/selection-token', {
+            ...buildSelectionFilterRequest(filters),
+            chunkSize,
+        });
+    },
+
+    async getSelectionChunk(selectionToken, { offset = 0, limit = FILTERED_SELECTION_CHUNK_SIZE } = {}) {
+        const params = new URLSearchParams();
+        params.set('selection_token', selectionToken);
+        params.set('offset', String(offset));
+        params.set('limit', String(limit));
+        return this.get(`/api/images/selection-chunk?${params.toString()}`);
+    },
+
     async getSelectionData(imageIds) {
         return this.post('/api/images/export-data', { image_ids: imageIds });
     },
 
-    async getExportSelectionData(imageIds) {
-        return this.getSelectionData(imageIds);
+    async getSelectionDataByToken(selectionToken, { offset = 0, limit = EXPORT_PREVIEW_MAX_IMAGES } = {}) {
+        return this.post('/api/images/export-data', {
+            selection_token: selectionToken,
+            offset,
+            limit,
+        });
     },
 
     async reparseImage(id) {
@@ -548,6 +817,12 @@ const API = {
         });
     },
 
+    async removeSelectedImages(imageIds) {
+        return this.post('/api/images/remove-selected', {
+            image_ids: imageIds,
+        });
+    },
+
     getImageUrl(id) {
         return `${API_BASE}/api/image-file/${id}`;
     },
@@ -562,7 +837,7 @@ const API = {
         return this.get('/api/tags');
     },
 
-    async getTagsLibrary(sortBy = 'frequency', limit = 100000) {
+    async getTagsLibrary(sortBy = 'frequency', limit = 1000) {
         return this.get(`/api/tags/library?sort_by=${sortBy}&limit=${limit}`);
     },
 
@@ -570,11 +845,11 @@ const API = {
         return this.post('/api/tags/import', { images, overwrite });
     },
 
-    async getPromptsLibrary(limit = 100000) {
+    async getPromptsLibrary(limit = 1000) {
         return this.get(`/api/prompts/library?limit=${limit}`);
     },
 
-    async getLorasLibrary(limit = 100000) {
+    async getLorasLibrary(limit = 1000) {
         return this.get(`/api/loras/library?limit=${limit}`);
     },
 
@@ -599,12 +874,36 @@ const API = {
         return this.get('/api/aesthetic/progress');
     },
 
-    async scoreAestheticForImage(imageId) {
-        return this.post(`/api/aesthetic/score/${imageId}`);
+    async cancelAesthetic() {
+        return this.post('/api/aesthetic/cancel');
+    },
+
+    async cancelSimilarityEmbed() {
+        return this.post('/api/similarity/cancel');
+    },
+
+    async cancelArtistBatch() {
+        return this.post('/api/artists/batch-cancel');
     },
 
     async getModelStatus() {
         return this.get('/api/models/status');
+    },
+
+    async getCacheStatus() {
+        return this.get('/api/disk/cache-status');
+    },
+
+    async cleanCaches(keys) {
+        return this.post('/api/disk/cleanup', { keys });
+    },
+
+    async getMirror() {
+        return this.get('/api/models/mirror');
+    },
+
+    async setMirror(mirror) {
+        return this.post('/api/models/mirror', { mirror });
     },
 
     async prepareModel(modelId, options = {}) {
@@ -626,6 +925,27 @@ const API = {
         });
     },
 
+    // Drop resolution
+    async resolveDrop(folderName, droppedFiles) {
+        return this.post('/api/resolve-drop', { folder_name: folderName, files: droppedFiles });
+    },
+
+    async importFiles(fileList) {
+        const form = new FormData();
+        for (let i = 0; i < fileList.length; i++) {
+            form.append('files', fileList[i]);
+        }
+        const response = await fetch(`${API_BASE}/api/import-files`, {
+            method: 'POST',
+            body: form,
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || 'Import failed');
+        }
+        return response.json();
+    },
+
     // Scan
     async startScan(folderPath, options = {}) {
         return this.post('/api/scan', {
@@ -643,6 +963,22 @@ const API = {
 
     async cancelScan() {
         return this.post('/api/scan/cancel');
+    },
+
+    async startReconnectMissing(folderPath, options = {}) {
+        return this.post('/api/images/reconnect-missing/start', {
+            search_folder: folderPath,
+            recursive: options.recursive ?? true,
+            verify_uncertain: options.verifyUncertain ?? true,
+        });
+    },
+
+    async getReconnectProgress() {
+        return this.get('/api/images/reconnect-missing/progress');
+    },
+
+    async cancelReconnectMissing() {
+        return this.post('/api/images/reconnect-missing/cancel');
     },
 
     // Tagging - with all new options
@@ -682,7 +1018,7 @@ const API = {
         return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder, operation });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move') {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null) {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -690,12 +1026,13 @@ const API = {
             checkpoints,
             loras,
             prompts,
+            artist: artist ? String(artist).trim() : null,
             search,
             min_width: dimensions?.minWidth || null,
             max_width: dimensions?.maxWidth || null,
             min_height: dimensions?.minHeight || null,
             max_height: dimensions?.maxHeight || null,
-            aspect_ratio: dimensions?.aspectRatio || null,
+            aspect_ratio: normalizeAspectRatioFilter(dimensions?.aspectRatio) || null,
             min_aesthetic: aesthetic?.min ?? null,
             max_aesthetic: aesthetic?.max ?? null,
             destination_folder: destinationFolder,
@@ -704,7 +1041,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move') {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null, replaceExisting = false) {
         const params = new URLSearchParams();
         if (generators?.length) params.set('generators', generators.join(','));
         if (tags?.length) params.set('tags', tags.join(','));
@@ -712,16 +1049,19 @@ const API = {
         if (checkpoints?.length) params.set('checkpoints', checkpoints.join(','));
         if (loras?.length) params.set('loras', loras.join(','));
         if (prompts?.length) params.set('prompts', prompts.join(','));
+        if (artist) params.set('artist', String(artist).trim());
         if (search) params.set('search', search);
         if (dimensions?.minWidth) params.set('min_width', dimensions.minWidth);
         if (dimensions?.maxWidth) params.set('max_width', dimensions.maxWidth);
         if (dimensions?.minHeight) params.set('min_height', dimensions.minHeight);
         if (dimensions?.maxHeight) params.set('max_height', dimensions.maxHeight);
-        if (dimensions?.aspectRatio) params.set('aspect_ratio', dimensions.aspectRatio);
+        const aspectRatio = normalizeAspectRatioFilter(dimensions?.aspectRatio);
+        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (aesthetic?.min != null) params.set('min_aesthetic', aesthetic.min);
         if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
         if (folders) params.set('folders', JSON.stringify(folders));
         if (operationMode) params.set('operation_mode', operationMode);
+        if (replaceExisting) params.set('replace_existing', 'true');
         return this.post(`/api/sort/start?${params}`);
     },
 
@@ -740,13 +1080,15 @@ const API = {
         return this.post('/api/sort/set-folders', { folders });
     },
 
-    // Batch Tag Export
-    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '') {
+    // Batch Sidecar Export
+    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique') {
         return this.post('/api/tags/export-batch', {
             image_ids: imageIds,
             output_folder: outputFolder,
             blacklist: blacklist,
-            prefix: prefix
+            prefix: prefix,
+            content_mode: contentMode,
+            overwrite_policy: overwritePolicy
         });
     },
 
@@ -1055,6 +1397,9 @@ function hideModal(modalId) {
         }
         // Remove visible immediately so Playwright/tests can detect closure
         modal.classList.remove('visible');
+        if (modalId === 'image-modal') {
+            window.Gallery?._cleanupZoomHandlers?.();
+        }
 
         // Clean up animation styles after transition
         if (content) {
@@ -1315,38 +1660,152 @@ async function applyAppUpdate(status = AppState.update.status) {
 }
 
 async function handleAppUpdateButtonClick() {
-    try {
-        let status = AppState.update.status;
-        if (!status?.has_update) {
-            status = await refreshUpdateStatus({ force: true, silent: false });
-        }
+    const btn = document.getElementById('btn-app-update');
+    if (!btn) return;
+    const existing = document.getElementById('update-popup');
+    if (existing?.classList.contains('visible')) {
+        _hideUpdatePopup();
+        return;
+    }
+    _showUpdatePopup(btn);
+}
 
-        if (status?.has_update) {
+let _updatePopupEl = null;
+
+function _createUpdatePopup() {
+    if (_updatePopupEl) return _updatePopupEl;
+    const el = document.createElement('div');
+    el.id = 'update-popup';
+    el.className = 'update-popup';
+    document.body.appendChild(el);
+    _updatePopupEl = el;
+
+    document.addEventListener('click', (e) => {
+        if (_updatePopupEl?.classList.contains('visible') && !_updatePopupEl.contains(e.target)) {
+            const btn = document.getElementById('btn-app-update');
+            if (btn && !btn.contains(e.target)) _hideUpdatePopup();
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && _updatePopupEl?.classList.contains('visible')) _hideUpdatePopup();
+    });
+
+    return el;
+}
+
+async function _showUpdatePopup(anchorBtn) {
+    const popup = _createUpdatePopup();
+    const currentVersion = AppState.appVersion || appT('update.versionUnknown', '?');
+    const githubUrl = AppState.githubUrl || '';
+    const status = AppState.update.status;
+    const hasUpdate = status?.has_update;
+    const latestVersion = status?.latest_version || currentVersion;
+    const releaseUrl = status?.release_url || (githubUrl ? githubUrl + '/releases/latest' : '');
+    const releaseNotes = status?.release_notes || '';
+
+    let notesHtml = '';
+    if (releaseNotes) {
+        const truncated = releaseNotes.length > 200 ? releaseNotes.slice(0, 200) + '...' : releaseNotes;
+        notesHtml = `<div class="update-popup-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+            <span class="update-popup-label">${escapeHtml(appT('update.releaseNotes', 'Release Notes'))}</span>
+            <span style="font-size:12px;color:var(--text-secondary);line-height:1.5;white-space:pre-wrap;">${escapeHtml(truncated)}</span>
+        </div>`;
+    }
+
+    let actionsHtml = '';
+    if (hasUpdate) {
+        actionsHtml = `<div class="update-popup-actions">
+            <button class="btn btn-primary" data-update-action="install">${escapeHtml(appT('update.installNow', 'Install Update'))}</button>
+        </div>`;
+    } else {
+        actionsHtml = `<div class="update-popup-actions">
+            <button class="btn btn-secondary" data-update-action="check">${escapeHtml(appT('update.checkNow', 'Check for Updates'))}</button>
+        </div>`;
+    }
+
+    popup.innerHTML = `<div class="update-popup-card">
+        <div class="update-popup-header">
+            <span class="update-popup-title">${escapeHtml(appT('update.popupTitle', 'Version Info'))}</span>
+            <button class="update-popup-close" data-update-action="close" aria-label="Close">&times;</button>
+        </div>
+        <div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.currentLabel', 'Current Version'))}</span>
+            <span class="update-popup-value">v${escapeHtml(currentVersion)}</span>
+        </div>
+        <div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.latestLabel', 'Latest Version'))}</span>
+            <span class="update-popup-value${hasUpdate ? ' has-update' : ''}">v${escapeHtml(latestVersion)}${hasUpdate ? ' ✦' : ''}</span>
+        </div>
+        ${releaseUrl ? `<div class="update-popup-row">
+            <span class="update-popup-label">${escapeHtml(appT('update.releasePageLabel', 'Release Page'))}</span>
+            <a href="${escapeHtml(releaseUrl)}" target="_blank" rel="noopener" class="update-popup-link">GitHub ↗</a>
+        </div>` : ''}
+        ${notesHtml ? '<div class="update-popup-divider"></div>' + notesHtml : ''}
+        <div class="update-popup-divider"></div>
+        ${actionsHtml}
+    </div>`;
+
+    const rect = anchorBtn.getBoundingClientRect();
+    popup.style.top = (rect.bottom + 8) + 'px';
+    popup.style.right = (window.innerWidth - rect.right) + 'px';
+    popup.classList.add('visible');
+    // Single delegated handler — re-renders no longer accumulate listeners on
+    // detached DOM nodes. We replace popup.onclick wholesale on each show so
+    // closures captured by the previous render are eligible for GC.
+    popup.onclick = async (event) => {
+        const target = event.target.closest('[data-update-action]');
+        if (!target) return;
+        const action = target.dataset.updateAction;
+        if (action === 'close') {
+            _hideUpdatePopup();
+        } else if (action === 'install') {
+            _hideUpdatePopup();
             showConfirm(
                 appT('update.confirmTitle', 'Install Update'),
-                buildUpdateConfirmMessage(status),
-                () => {
-                    void applyAppUpdate(status);
-                }
+                buildUpdateConfirmMessage(AppState.update.status),
+                () => { void applyAppUpdate(AppState.update.status); }
             );
+        } else if (action === 'check') {
+            target.disabled = true;
+            target.textContent = appT('update.checking', 'Checking...');
+            try {
+                await refreshUpdateStatus({ force: true, silent: false });
+                _hideUpdatePopup();
+                const btn2 = document.getElementById('btn-app-update');
+                if (btn2 && AppState.update.status) _showUpdatePopup(btn2);
+            } catch (err) {
+                _hideUpdatePopup();
+            }
         }
-    } catch (error) {
-        // refreshUpdateStatus already surfaced a user-facing toast
-    }
+    };
+}
+
+function _hideUpdatePopup() {
+    if (!_updatePopupEl) return;
+    _updatePopupEl.classList.remove('visible');
+    // Drop child DOM + delegated handler so closures from the previous render
+    // can be garbage-collected. The two document-level listeners installed
+    // by _createUpdatePopup remain (idempotent setup).
+    _updatePopupEl.onclick = null;
+    _updatePopupEl.innerHTML = '';
 }
 
 function createProgressTracker(maxSamples = 12) {
     return {
         maxSamples,
+        scopeKey: '',
         startedAt: null,
         samples: [],
+        lastEtaSeconds: null,
     };
 }
 
 function resetProgressTracker(tracker) {
     if (!tracker) return;
+    tracker.scopeKey = '';
     tracker.startedAt = null;
     tracker.samples = [];
+    tracker.lastEtaSeconds = null;
 }
 
 function formatDurationCompact(seconds) {
@@ -1360,12 +1819,20 @@ function formatDurationCompact(seconds) {
     return `${secs}s`;
 }
 
-function updateProgressTracker(tracker, completed, total) {
+function updateProgressTracker(tracker, completed, total, options = {}) {
     if (!tracker) return { elapsedText: '', etaText: '' };
 
     const safeCompleted = Math.max(0, Number(completed) || 0);
     const safeTotal = Math.max(0, Number(total) || 0);
+    const scopeKey = String(options.scopeKey || '');
     const now = Date.now();
+
+    if (tracker.scopeKey !== scopeKey) {
+        tracker.scopeKey = scopeKey;
+        tracker.startedAt = null;
+        tracker.samples = [];
+        tracker.lastEtaSeconds = null;
+    }
 
     if (!tracker.startedAt && safeCompleted > 0) {
         tracker.startedAt = now;
@@ -1380,7 +1847,7 @@ function updateProgressTracker(tracker, completed, total) {
 
     const elapsedSeconds = tracker.startedAt ? Math.max(0, (now - tracker.startedAt) / 1000) : 0;
     let etaSeconds = null;
-    if (safeTotal > 0 && tracker.samples.length >= 3) {
+    if (options.showEta !== false && safeTotal > 0 && tracker.samples.length >= 3) {
         const first = tracker.samples[0];
         const last = tracker.samples[tracker.samples.length - 1];
         const completedDelta = last.completed - first.completed;
@@ -1390,8 +1857,15 @@ function updateProgressTracker(tracker, completed, total) {
             const remaining = Math.max(0, safeTotal - safeCompleted);
             if (rate > 0 && remaining > 0) {
                 etaSeconds = remaining / rate;
+                if (tracker.lastEtaSeconds != null && Number.isFinite(tracker.lastEtaSeconds)) {
+                    etaSeconds = (tracker.lastEtaSeconds * 0.65) + (etaSeconds * 0.35);
+                }
+                tracker.lastEtaSeconds = etaSeconds;
             }
         }
+    }
+    if (etaSeconds == null && safeTotal > 0 && safeCompleted >= safeTotal) {
+        tracker.lastEtaSeconds = null;
     }
 
     return {
@@ -1415,8 +1889,8 @@ function buildProgressText({
 
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
-    if (meta.etaText) parts.push(`ETA ${meta.etaText}`);
-    else if (meta.elapsedText) parts.push(`Elapsed ${meta.elapsedText}`);
+    if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
+    else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
 
     const detail = progress.current_item || progress.message || defaultMessage;
     if (detail) parts.push(detail);
@@ -1432,14 +1906,16 @@ function buildOperationProgressText({
     extraParts = [],
     detail = '',
     defaultMessage = 'Processing...',
+    showEta = true,
+    progressKey = '',
 }) {
-    const meta = updateProgressTracker(tracker, completed, total);
+    const meta = updateProgressTracker(tracker, completed, total, { showEta, scopeKey: progressKey });
     const parts = [];
 
     if (primaryLabel) parts.push(primaryLabel);
     if (total > 0) parts.push(`${completed}/${total}`);
     extraParts.filter(Boolean).forEach((part) => parts.push(part));
-    if (meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
+    if (showEta && meta.etaText) parts.push(appT('progress.eta', 'ETA {time}').replace('{time}', meta.etaText));
     else if (meta.elapsedText) parts.push(appT('progress.elapsed', 'Elapsed {time}').replace('{time}', meta.elapsedText));
 
     parts.push(detail || defaultMessage);
@@ -2417,9 +2893,202 @@ function emitSelectionStateChanged() {
     const detail = {
         selectionMode: Boolean(AppState.selectionMode),
         selectedCount: AppState.selectedIds.size,
+        selectionScope: AppState.selectionScope || 'visible',
     };
     window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
     document.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
+}
+
+function getSelectionScopeSummaryText(scope = AppState.selectionScope || 'visible') {
+    if (scope === 'loaded') {
+        return appT('selection.scopeLoaded', 'Selected from loaded gallery items');
+    }
+    if (scope === 'filtered') {
+        return AppState.selectionToken
+            ? appT('selection.scopeFiltered', 'Selected all current filter matches')
+            : appT('selection.scopeFilteredExplicit', 'Selected current filter matches');
+    }
+    return appT('selection.scopeVisible', 'Selected manually from Gallery');
+}
+
+function collapseSelectionMoreActions() {
+    // Selection actions are now always visible in sections; kept as a no-op for older callers.
+}
+
+function normalizeSelectionImageIds(rawIds) {
+    return Array.isArray(rawIds)
+        ? rawIds
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+}
+
+function confirmLargeFilteredSelection(total) {
+    const normalizedTotal = Number(total || 0);
+    if (normalizedTotal <= FILTERED_SELECTION_CONFIRM_THRESHOLD) {
+        return true;
+    }
+
+    const confirmMessage = appT(
+        'selection.largeFilteredConfirm',
+        'This will select {count} filtered images and may use a lot of memory. Continue?',
+        { count: normalizedTotal }
+    );
+    return window.confirm(confirmMessage);
+}
+
+function shouldFallbackToSelectionIds(error) {
+    return [404, 405, 501].includes(Number(error?.apiStatus));
+}
+
+async function resolveFilteredSelectionIdsViaChunks(filterPayload) {
+    const tokenPayload = await API.createSelectionToken(filterPayload, FILTERED_SELECTION_CHUNK_SIZE);
+    const selectionToken = tokenPayload?.selection_token;
+    if (!selectionToken) {
+        throw new Error('Selection token response was missing a token');
+    }
+
+    const totalEstimate = Number(tokenPayload?.total_estimate || 0);
+    if (!confirmLargeFilteredSelection(totalEstimate)) {
+        return { cancelled: true, imageIds: [] };
+    }
+
+    const chunkSize = Math.max(1, Math.min(
+        Number(tokenPayload?.chunk_size || FILTERED_SELECTION_CHUNK_SIZE),
+        10000
+    ));
+    const imageIds = [];
+    let offset = 0;
+
+    while (true) {
+        const chunk = await API.getSelectionChunk(selectionToken, { offset, limit: chunkSize });
+        imageIds.push(...normalizeSelectionImageIds(chunk?.image_ids));
+
+        if (!chunk?.has_more) {
+            break;
+        }
+
+        const nextOffset = Number(chunk?.next_offset);
+        if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
+            throw new Error('Selection chunk response did not advance');
+        }
+        offset = nextOffset;
+    }
+
+    return { cancelled: false, imageIds, selectionToken };
+}
+
+async function resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload) {
+    const result = await API.getSelectionIds(filterPayload);
+    const imageIds = normalizeSelectionImageIds(result?.image_ids);
+    const total = Number(result?.total || imageIds.length || 0);
+    if (!confirmLargeFilteredSelection(total)) {
+        return { cancelled: true, imageIds: [] };
+    }
+    return { cancelled: false, imageIds, selectionToken: null };
+}
+
+async function resolveFilteredSelectionIds(filterPayload) {
+    if (filterPayload?.sortBy === 'random') {
+        return resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload);
+    }
+
+    try {
+        return await resolveFilteredSelectionIdsViaChunks(filterPayload);
+    } catch (error) {
+        if (!shouldFallbackToSelectionIds(error)) {
+            throw error;
+        }
+        return resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload);
+    }
+}
+
+async function selectAllFilteredResults() {
+    const selectFilteredBtn = $('#btn-select-all');
+    if (selectFilteredBtn) {
+        selectFilteredBtn.disabled = true;
+    }
+
+    try {
+        const filterPayload = buildSelectionFilterRequest();
+        const filterKey = JSON.stringify(filterPayload);
+        const result = await resolveFilteredSelectionIds(filterPayload);
+        if (result.cancelled) {
+            updateSelectionUI();
+            return;
+        }
+
+        if (getSelectionFilterCacheKey(AppState.filters) !== filterKey) {
+            updateSelectionUI();
+            return;
+        }
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = new Set(result.imageIds);
+            selection.scope = 'filtered';
+            selection.filterKey = filterKey;
+            selection.selectionToken = result.selectionToken || null;
+        });
+
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
+        updateSelectionUI();
+        emitSelectionStateChanged();
+    } catch (error) {
+        showToast(
+            formatUserError(error, appT('selection.selectFilteredFailed', 'Failed to select all current filter matches')),
+            'error'
+        );
+        updateSelectionUI();
+    }
+}
+
+async function invertAllFilteredResults() {
+    const invertFilteredBtn = $('#btn-invert-selection-filtered');
+    if (invertFilteredBtn) {
+        invertFilteredBtn.disabled = true;
+    }
+
+    try {
+        const filterPayload = buildSelectionFilterRequest();
+        const filterKey = JSON.stringify(filterPayload);
+        const result = await resolveFilteredSelectionIds(filterPayload);
+        if (result.cancelled) {
+            updateSelectionUI();
+            return;
+        }
+
+        if (getSelectionFilterCacheKey(AppState.filters) !== filterKey) {
+            updateSelectionUI();
+            return;
+        }
+
+        const currentSelected = new Set(AppState.selectedIds || []);
+        const nextSelected = new Set(
+            result.imageIds.filter((imageId) => !currentSelected.has(imageId))
+        );
+
+        updateSelectionState((selection) => {
+            selection.selectedIds = nextSelected;
+            selection.scope = 'filtered';
+            selection.filterKey = filterKey;
+            selection.selectionToken = null;
+        });
+
+        if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
+            Gallery.syncSelectionState();
+        }
+        resetSelectionDataCache();
+        updateSelectionUI();
+        emitSelectionStateChanged();
+    } catch (error) {
+        showToast(
+            formatUserError(error, appT('selection.invertFilteredFailed', 'Failed to invert current filter matches')),
+            'error'
+        );
+        updateSelectionUI();
+    }
 }
 
 function ensureSelectionPanelVisible(panel) {
@@ -2439,13 +3108,23 @@ function ensureSelectionPanelVisible(panel) {
 
 function setSelectionMode(enabled, options = {}) {
     const { clearSelectionWhenDisabled = true } = options;
-    AppState.selectionMode = Boolean(enabled);
-
-    if (!AppState.selectionMode && clearSelectionWhenDisabled) {
-        AppState.selectedIds.clear();
-        if (window.Gallery) {
-            window.Gallery.lastSelectedIndex = null;
+    const nextMode = Boolean(enabled);
+    updateSelectionState((selection) => {
+        selection.selectionMode = nextMode;
+        if (!nextMode && clearSelectionWhenDisabled) {
+            selection.selectedIds = new Set();
+            selection.scope = 'visible';
+            selection.filterKey = null;
+        selection.selectionToken = null;
         }
+    });
+
+    if (!nextMode) {
+        collapseSelectionMoreActions();
+    }
+
+    if (!nextMode && clearSelectionWhenDisabled && window.Gallery) {
+        window.Gallery.lastSelectedIndex = null;
     }
 
     updateSelectionUI();
@@ -2469,7 +3148,9 @@ function applyPromptFilter(prompt) {
     const value = String(prompt ?? '').trim();
     if (!value) return false;
 
-    AppState.filters.prompts = [value];
+    updateAppFilters((filters) => {
+        filters.prompts = [value];
+    });
 
     if (typeof renderModalActivePrompts === 'function') {
         renderModalActivePrompts();
@@ -2496,6 +3177,7 @@ function switchView(viewName) {
             window.VirtualGallery.destroy();
         }
         detachGalleryPaginationListener();
+        cancelGalleryImageLoad();
     }
 
     // Cleanup censor view listeners when leaving
@@ -2528,23 +3210,28 @@ function switchView(viewName) {
     if (viewName !== 'gallery') {
         const selActions = $('#selection-actions');
         if (selActions) selActions.style.display = 'none';
-    } else if (AppState.selectedIds && AppState.selectedIds.size > 0) {
+        collapseSelectionMoreActions();
+    } else if (AppState.selectionMode && AppState.selectedIds && AppState.selectedIds.size > 0) {
         // Show FAB if we have selections and are returning to gallery
         const selActions = $('#selection-actions');
-        if (selActions) selActions.style.display = 'flex';
+        if (selActions) selActions.style.display = 'grid';
     }
 
     // View-specific initialization
     if (viewName === 'gallery') {
+        let suppressInitialGalleryAutoLoadMore = false;
         setGalleryViewMode(AppState.viewMode);
         // Re-render existing images immediately, only reload from API if needed
         if (AppState.galleryNeedsRefresh) {
-            loadImages({
+            suppressInitialGalleryAutoLoadMore = AppState.gallerySuppressNextAutoLoadMore;
+            loadImages(false, {
                 silent: AppState.images.length > 0,
                 preserveExisting: AppState.images.length > 0,
                 coalesce: true,
+                suppressAutoLoadMore: suppressInitialGalleryAutoLoadMore,
             });
             AppState.galleryNeedsRefresh = false;
+            AppState.gallerySuppressNextAutoLoadMore = false;
         } else if (AppState.images.length > 0 && window.Gallery) {
             Gallery.setImages(AppState.images);
         } else {
@@ -2552,7 +3239,9 @@ function switchView(viewName) {
         }
         requestAnimationFrame(() => {
             attachGalleryPaginationListener();
-            _onGalleryScroll();
+            if (!suppressInitialGalleryAutoLoadMore) {
+                _onGalleryScroll();
+            }
         });
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
@@ -2570,6 +3259,8 @@ function switchView(viewName) {
             window._switchSortingSub(activeSortingSub);
         }
     }
+
+    updateSelectionUI();
 }
 
 function getSelectedGalleryExamples(ids, limit = 5) {
@@ -2579,21 +3270,25 @@ function getSelectedGalleryExamples(ids, limit = 5) {
         .join(', ');
 }
 
-function deleteSelectedGalleryImages() {
-    const ids = Array.from(AppState.selectedIds)
+function getSelectedGalleryIds() {
+    return Array.from(AppState.selectedIds)
         .map((id) => Number(id))
-        .filter((id) => Number.isFinite(id));
+        .filter((id) => Number.isFinite(id) && id > 0);
+}
+
+async function deleteGalleryImagesByIds(imageIds) {
+    const ids = normalizeSelectionImageIds(imageIds);
 
     if (ids.length === 0) {
-        showToast(appT('selection.emptyHint', 'Selection mode is on. Pick images or use Select Visible.'), 'info');
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
     const examples = getSelectedGalleryExamples(ids);
-    const title = appT('selection.deleteConfirmTitle', 'Delete selected image files?');
+    const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
     const message = appT(
         'selection.deleteConfirmBody',
-        'This will permanently delete {count} files from disk. Examples: {examples}'
+        'This moves {count} original file(s) to the operating system Trash / Recycle Bin and removes them from this gallery. Use Remove from Gallery if you only want to clean the index. Examples: {examples}'
     )
         .replace('{count}', ids.length)
         .replace('{examples}', examples || ids.slice(0, 5).join(', '));
@@ -2604,9 +3299,12 @@ function deleteSelectedGalleryImages() {
             const failed = Array.isArray(result.failed) ? result.failed : [];
             const failedIds = new Set(failed.map((item) => Number(item.image_id)));
 
-            ids
-                .filter((id) => !failedIds.has(id))
-                .forEach((id) => AppState.selectedIds.delete(id));
+            const deletedIds = ids.filter((id) => !failedIds.has(id));
+            if (deletedIds.length > 0) {
+                mutateSelectedIds((selectedIds) => {
+                    deletedIds.forEach((id) => selectedIds.delete(id));
+                });
+            }
 
             updateSelectionUI();
             emitSelectionStateChanged();
@@ -2619,7 +3317,7 @@ function deleteSelectedGalleryImages() {
 
             if (failed.length > 0) {
                 showToast(
-                    appT('selection.deletePartial', 'Deleted {deleted} file(s). {failed} failed.')
+                    appT('selection.deletePartial', 'Moved {deleted} file(s) to Trash. {failed} failed.')
                         .replace('{deleted}', result.deleted || 0)
                         .replace('{failed}', failed.length),
                     'warning'
@@ -2628,17 +3326,184 @@ function deleteSelectedGalleryImages() {
             }
 
             showToast(
-                appT('selection.deleteSuccess', 'Deleted {count} image file(s).')
+                appT('selection.deleteSuccess', 'Moved {count} image file(s) to Trash.')
                     .replace('{count}', result.deleted || 0),
                 'success'
             );
         } catch (error) {
             showToast(
-                formatUserError(error, appT('selection.deleteFailed', 'Failed to delete selected image files')),
+                formatUserError(error, appT('selection.deleteFailed', 'Failed to move selected image files to Trash')),
                 'error'
             );
         }
     });
+}
+
+function deleteSelectedGalleryImages() {
+    return deleteGalleryImagesByIds(getSelectedGalleryIds());
+}
+
+async function removeGalleryImagesByIds(imageIds) {
+    const ids = normalizeSelectionImageIds(imageIds);
+
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return;
+    }
+
+    const examples = getSelectedGalleryExamples(ids);
+    const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
+    const message = appT(
+        'selection.removeConfirmBody',
+        'This removes {count} image record(s) from this gallery only. Files stay on disk and can be re-imported by scanning again. Examples: {examples}'
+    )
+        .replace('{count}', ids.length)
+        .replace('{examples}', examples || ids.slice(0, 5).join(', '));
+
+    showConfirm(title, message, async () => {
+        try {
+            const result = await API.removeSelectedImages(ids);
+            mutateSelectedIds((selectedIds) => {
+                ids.forEach((id) => selectedIds.delete(id));
+            });
+            resetSelectionDataCache();
+            updateSelectionUI();
+            emitSelectionStateChanged();
+            if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
+                window.Gallery.syncSelectionState();
+            }
+
+            await loadImages();
+            await loadStats();
+
+            const missingCount = Array.isArray(result?.missing_ids) ? result.missing_ids.length : 0;
+            if (missingCount > 0) {
+                showToast(
+                    appT('selection.removePartial', 'Removed {removed} image record(s). {missing} were already missing from the gallery.')
+                        .replace('{removed}', result?.removed || 0)
+                        .replace('{missing}', missingCount),
+                    'warning'
+                );
+                return;
+            }
+
+            showToast(
+                appT('selection.removeSuccess', 'Removed {count} image record(s) from the gallery. Files were not deleted.')
+                    .replace('{count}', result?.removed || 0),
+                'success'
+            );
+        } catch (error) {
+            showToast(
+                formatUserError(error, appT('selection.removeFailed', 'Failed to remove selected images from gallery')),
+                'error'
+            );
+        }
+    });
+}
+
+function removeSelectedGalleryImages() {
+    return removeGalleryImagesByIds(getSelectedGalleryIds());
+}
+
+async function moveOrCopyGalleryImages(imageIds, operation = 'move', options = {}) {
+    const normalizedOperation = operation === 'copy' ? 'copy' : 'move';
+    const ids = normalizeSelectionImageIds(imageIds);
+    const isSingleContext = options.source === 'context' && ids.length === 1;
+    if (ids.length === 0) {
+        showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
+        return;
+    }
+
+    const operationLabel = normalizedOperation === 'copy'
+        ? appT('selection.copyVerb', 'Copy')
+        : appT('selection.moveVerb', 'Move');
+    const destination = await showInputModal(
+        isSingleContext
+            ? (normalizedOperation === 'copy'
+                ? appT('gallery.contextCopyPromptTitle', 'Copy image')
+                : appT('gallery.contextMovePromptTitle', 'Move image'))
+            : appT('selection.destinationPromptTitle', '{operation} selected images')
+                .replace('{operation}', operationLabel),
+        appT('selection.destinationPromptBody', 'Enter the destination folder path for {count} selected image(s).')
+            .replace('{count}', ids.length),
+        getRecentFolders()[0] || ''
+    );
+    if (!destination || !destination.trim()) return;
+
+    const trimmedDestination = destination.trim();
+    const confirmTitle = isSingleContext
+        ? (normalizedOperation === 'copy'
+            ? appT('gallery.contextCopyConfirmTitle', 'Copy this image file?')
+            : appT('gallery.contextMoveConfirmTitle', 'Move this image file?'))
+        : (normalizedOperation === 'copy'
+            ? appT('selection.copyConfirmTitle', 'Copy selected image files?')
+            : appT('selection.moveConfirmTitle', 'Move selected image files?'));
+    const confirmBody = (isSingleContext
+        ? (normalizedOperation === 'copy'
+            ? appT('gallery.contextCopyConfirmBody', 'This copies the file to: {destination}. Original stays in place.')
+            : appT('gallery.contextMoveConfirmBody', 'This moves the original file to: {destination}'))
+        : (normalizedOperation === 'copy'
+            ? appT('selection.copyConfirmBody', 'This copies {count} file(s) to: {destination}. Originals stay in place.')
+            : appT('selection.moveConfirmBody', 'This moves {count} original file(s) to: {destination}')))
+        .replace('{count}', ids.length)
+        .replace('{destination}', trimmedDestination);
+
+    showConfirm(confirmTitle, confirmBody, async () => {
+        try {
+            const result = await API.moveImages(ids, trimmedDestination, normalizedOperation);
+            const results = Array.isArray(result?.results) ? result.results : [];
+            const successes = results.filter((item) => item?.success);
+            const failed = results.length > 0
+                ? results.filter((item) => !item?.success)
+                : ids.length > 0 ? ids.map((id) => ({ id, error: 'No result returned' })) : [];
+
+            if (successes.length > 0 && normalizedOperation === 'move') {
+                const movedIds = new Set(successes.map((item) => Number(item.id)).filter((id) => Number.isFinite(id)));
+                mutateSelectedIds((selectedIds) => {
+                    movedIds.forEach((id) => selectedIds.delete(id));
+                });
+            }
+
+            addRecentFolder(trimmedDestination);
+            resetSelectionDataCache();
+            updateSelectionUI();
+            emitSelectionStateChanged();
+            if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
+                window.Gallery.syncSelectionState();
+            }
+
+            await loadImages();
+            await loadStats();
+
+            if (failed.length > 0) {
+                showToast(
+                    appT('selection.moveCopyPartial', '{operation} completed for {success} image(s). {failed} failed.')
+                        .replace('{operation}', operationLabel)
+                        .replace('{success}', successes.length)
+                        .replace('{failed}', failed.length),
+                    successes.length > 0 ? 'warning' : 'error'
+                );
+                return;
+            }
+
+            showToast(
+                appT('selection.moveCopySuccess', '{operation} completed for {count} image(s).')
+                    .replace('{operation}', operationLabel)
+                    .replace('{count}', successes.length),
+                'success'
+            );
+        } catch (error) {
+            showToast(
+                formatUserError(error, appT('selection.moveCopyFailed', 'Failed to {operation} selected images')
+                    .replace('{operation}', operationLabel.toLowerCase())),
+                'error'
+            );
+        }
+    });
+}
+
+async function moveOrCopySelectedGalleryImages(operation = 'move') {
+    return moveOrCopyGalleryImages(getSelectedGalleryIds(), operation, { source: 'selection' });
 }
 
 function updateNavigationOverflowState() {
@@ -2698,11 +3563,33 @@ function initEventListeners() {
         }
     });
 
+    $('#btn-reconnect-missing')?.addEventListener('click', () => showModal('reconnect-modal'));
+    $('#btn-browse-reconnect-folder')?.addEventListener('click', () => {
+        const input = $('#reconnect-folder-path');
+        if (input && typeof window.showFolderBrowser === 'function') {
+            window.showFolderBrowser(input);
+        }
+    });
+
     // Tag button
     $('#btn-tag').addEventListener('click', () => showModal('tag-modal'));
     $('#btn-score-aesthetic')?.addEventListener('click', async () => {
         await refreshAestheticStatus();
         await startAestheticScoring(false);
+    });
+    $('#btn-cancel-aesthetic')?.addEventListener('click', async () => {
+        try {
+            await API.cancelAesthetic();
+            // Don't wait ~1.2s for the next poll tick to clear local state.
+            // Without this, the busy guard on #btn-clear-db (and related
+            // "is something running" checks elsewhere) will keep blocking
+            // user input for the full polling interval after cancel returns.
+            clearAestheticProgressTimer();
+            updateAestheticUi({ running: false, completed: 0, total: 0 });
+            showToast(appT('gallery.aestheticCancelled', 'Aesthetic scoring is being stopped...'), 'info');
+        } catch (error) {
+            showToast(formatUserError(error, 'Failed to cancel'), 'error');
+        }
     });
     $('#btn-app-update')?.addEventListener('click', () => {
         void handleAppUpdateButtonClick();
@@ -2736,6 +3623,8 @@ function initEventListeners() {
     // Scan modal
     $('#btn-cancel-scan').addEventListener('click', requestStopScan);
     $('#btn-start-scan').addEventListener('click', startScan);
+    $('#btn-cancel-reconnect')?.addEventListener('click', requestStopReconnectMissing);
+    $('#btn-start-reconnect')?.addEventListener('click', startReconnectMissing);
 
     // Tag modal X close button — minimize to background if tagging
     $('#btn-close-tag-modal')?.addEventListener('click', () => minimizeTaggingToBackground());
@@ -2745,6 +3634,12 @@ function initEventListeners() {
         const debouncedValidation = debounce(validateScanFolderPath, 300);
         scanFolderPathInput.addEventListener('input', debouncedValidation);
         scanFolderPathInput.addEventListener('blur', validateScanFolderPath);
+    }
+    const reconnectFolderPathInput = $('#reconnect-folder-path');
+    if (reconnectFolderPathInput) {
+        const debouncedReconnectValidation = debounce(validateReconnectFolderPath, 300);
+        reconnectFolderPathInput.addEventListener('input', debouncedReconnectValidation);
+        reconnectFolderPathInput.addEventListener('blur', validateReconnectFolderPath);
     }
 
     // Tag modal
@@ -2818,10 +3713,14 @@ function initEventListeners() {
             const gen = tab.dataset.gen;
             if (gen === 'all') {
                 // Reset to show all generators
-                AppState.filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+                updateAppFilters((filters) => {
+                    filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+                });
             } else {
                 // Filter by single generator
-                AppState.filters.generators = [gen];
+                updateAppFilters((filters) => {
+                    filters.generators = [gen];
+                });
             }
 
             // Update filter modal checkboxes to stay in sync
@@ -2836,12 +3735,25 @@ function initEventListeners() {
 
     // Gallery sort dropdown
     $('#gallery-sort').addEventListener('change', (e) => {
-        AppState.filters.sortBy = e.target.value;
+        updateAppFilters((filters) => {
+            filters.sortBy = e.target.value;
+        });
         if (AppState.filters.sortBy === 'aesthetic') {
-            if (!_aestheticStatus.available) {
+            const hasExistingScores = Number(_aestheticStatus.scored_count || 0) > 0;
+            if (!_aestheticStatus.available && !hasExistingScores) {
+                // Predictor missing AND no scores in DB — there is literally
+                // nothing to sort by, so push the user back to newest and
+                // explain why.
                 showToast(_aestheticStatus.message || appT('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable — required dependencies not installed'), 'warning');
                 e.target.value = 'newest';
-                AppState.filters.sortBy = 'newest';
+                updateAppFilters((filters) => {
+                    filters.sortBy = 'newest';
+                });
+            } else if (!_aestheticStatus.available && hasExistingScores) {
+                // Predictor missing but scores exist from a previous run —
+                // sorting still works, just no NEW scoring. Inform the user
+                // so they don't think the data is gone.
+                showToast(appT('gallery.aestheticViewExistingOnly', 'Showing your {count} existing aesthetic scores. New scoring is unavailable until the predictor is reinstalled.', { count: _aestheticStatus.scored_count }), 'info');
             } else if (_aestheticStatus.scored_count === 0) {
                 showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Click the ⭐ button in the toolbar to score your images first.'), 'info');
             }
@@ -2858,7 +3770,9 @@ function initEventListeners() {
         const current = AppState.filters.sortBy;
         const reversed = SORT_REVERSE_MAP[current];
         if (reversed && reversed !== current) {
-            AppState.filters.sortBy = reversed;
+            updateAppFilters((filters) => {
+                filters.sortBy = reversed;
+            });
             updateSortReverseButton();
             loadImages();
         }
@@ -2868,7 +3782,57 @@ function initEventListeners() {
 
 
     // Clear DB button
-    $('#btn-clear-db').addEventListener('click', () => {
+    $('#btn-clear-db').addEventListener('click', async () => {
+        // Belt-and-braces: check local poll-state first, then verify
+        // against ALL THREE backend progress endpoints. Local state can
+        // lag (e.g. if a poll callback never runs after cancel), so the
+        // server is the source of truth.
+        //
+        // Note: scan polling does NOT use a stored timer handle — it uses
+        // a `_scanProgressTracker` object plus bare `setTimeout` calls.
+        // Earlier revisions of this guard referenced a `_scanProgressTimer`
+        // that was never declared, so any path through this branch threw
+        // `ReferenceError: _scanProgressTimer is not defined` and broke
+        // the Clear DB button entirely. The local check now uses the
+        // tracker's `startedAt` instead.
+        const BUSY_STATUSES = new Set(['running', 'cancelling', 'starting']);
+        const isProgressBusy = (value) => {
+            if (!value) return false;
+            if (BUSY_STATUSES.has(value.status)) return true;
+            if (value.running) return true;
+            return false;
+        };
+        let busy = Boolean(_aestheticProgressTimer || _tagProgressTimer || _scanProgressTracker?.startedAt);
+        if (!busy) {
+            const [scanResult, tagResult, aestheticResult] = await Promise.allSettled([
+                API.getScanProgress(),
+                API.getTagProgress(),
+                API.getAestheticProgress(),
+            ]);
+            const probes = [
+                ['scan', scanResult],
+                ['tag', tagResult],
+                ['aesthetic', aestheticResult],
+            ];
+            for (const [label, result] of probes) {
+                if (result.status === 'fulfilled') {
+                    if (isProgressBusy(result.value)) {
+                        busy = true;
+                    }
+                } else {
+                    Logger.warn(`Clear gallery: ${label} progress probe failed, assuming idle:`, result.reason);
+                }
+            }
+        }
+        if (busy) {
+            Logger.warn('Clear gallery blocked: a background job is still active', {
+                aestheticTimer: !!_aestheticProgressTimer,
+                scanTracker: Boolean(_scanProgressTracker?.startedAt),
+                tagTimer: !!_tagProgressTimer,
+            });
+            showToast(appT('gallery.clearBlocked', 'Cannot clear gallery while scanning, tagging, or scoring is running. Stop the operation first.'), 'warning');
+            return;
+        }
         showConfirm(
             appT('gallery.clearTitle', 'Clear Gallery'),
             appT('gallery.clearMessage', 'Are you sure you want to clear all images from the database? This will NOT delete your physical files.'),
@@ -2904,25 +3868,24 @@ function initEventListeners() {
         if (window.Gallery && typeof Gallery.clearSelection === 'function') {
             Gallery.clearSelection();
         } else {
-            AppState.selectedIds.clear();
+            clearSelectedIds({ scope: 'visible' });
             updateSelectionUI();
             emitSelectionStateChanged();
         }
     });
 
-    // Select visible gallery items
-    $('#btn-select-all').addEventListener('click', () => {
-        if (window.Gallery && typeof Gallery.selectAllVisible === 'function') {
-            Gallery.selectAllVisible();
-        }
+    // Selection scope actions
+    $('#btn-select-all')?.addEventListener('click', () => {
+        selectAllFilteredResults();
     });
 
-    $('#btn-invert-selection-visible')?.addEventListener('click', () => {
-        if (window.Gallery && typeof Gallery.invertVisibleSelection === 'function') {
-            Gallery.invertVisibleSelection();
-        }
+    $('#btn-invert-selection-filtered')?.addEventListener('click', () => {
+        invertAllFilteredResults();
     });
 
+    $('#btn-move-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('move'));
+    $('#btn-copy-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('copy'));
+    $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
 
 
@@ -2947,8 +3910,12 @@ function initEventListeners() {
             showToast(appT('export.copyFailed', 'Failed to copy'), 'error');
         });
     });
-    // --- Export Tags from FAB ---
-    $('#btn-export-tags-selected').addEventListener('click', () => {
+    $('#export-format')?.addEventListener('change', (event) => {
+        renderExportModalText(event.target.value);
+    });
+    $('#btn-download-export')?.addEventListener('click', downloadCurrentExportText);
+    // --- Export Tags from legacy direct button, if present ---
+    $('#btn-export-tags-selected')?.addEventListener('click', () => {
         resetSelectionDataCache();
         showExportTagsModal();
     });
@@ -3106,10 +4073,13 @@ function initEventListeners() {
     });
 
     // --- Batch Tag Export Modal ---
-    $('#btn-batch-export-tags').addEventListener('click', showBatchExportModal);
-    $('#btn-close-batch-export').addEventListener('click', () => hideModal('batch-export-modal'));
-    $('#btn-cancel-batch-export').addEventListener('click', () => hideModal('batch-export-modal'));
-    $('#btn-start-batch-export').addEventListener('click', executeBatchExport);
+    $('#btn-batch-export-tags')?.addEventListener('click', showBatchExportModal);
+    $('#btn-close-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
+    $('#btn-cancel-batch-export')?.addEventListener('click', () => hideModal('batch-export-modal'));
+    $('#btn-start-batch-export')?.addEventListener('click', executeBatchExport);
+    $('#batch-export-content-mode')?.addEventListener('change', (event) => {
+        updateBatchExportContentDescription(event.target.value);
+    });
 
     // --- Import Tags (from Tag Modal) ---
     $('#btn-import-tags')?.addEventListener('click', () => {
@@ -3251,11 +4221,7 @@ function initMobileNavigation() {
             if (mobileNavOverlay?.classList.contains('visible')) {
                 closeMobileMenu();
             }
-            // Also close mobile filter sidebar
-            const filterSidebar = $('.filter-sidebar');
-            if (filterSidebar?.classList.contains('mobile-visible')) {
-                filterSidebar.classList.remove('mobile-visible');
-            }
+            closeMobileFilterSidebar();
         }
     });
 
@@ -3266,10 +4232,8 @@ function initMobileNavigation() {
         resizeTimeout = setTimeout(() => {
             const collapsed = updateNavigationOverflowState();
             if (!collapsed) {
-                const filterSidebar = $('.filter-sidebar');
-                if (filterSidebar) {
-                    filterSidebar.classList.remove('mobile-visible');
-                }
+                closeMobileMenu();
+                closeMobileFilterSidebar();
             }
         }, 150);
     });
@@ -3290,6 +4254,38 @@ function toggleMobileMenu() {
     }
 }
 
+function syncBodyScrollLocks() {
+    const mobileNavOverlay = $('#mobile-nav-overlay');
+    const filterSidebar = $('.filter-sidebar');
+    const shouldLock = mobileNavOverlay?.classList.contains('visible')
+        || filterSidebar?.classList.contains('mobile-visible');
+    document.body.style.overflow = shouldLock ? 'hidden' : '';
+}
+
+function setMobileFilterSidebarExpanded(expanded) {
+    ['#mobile-filter-toggle', '#mobile-filter-header-btn'].forEach((selector) => {
+        const button = $(selector);
+        if (button) {
+            button.setAttribute('aria-expanded', String(expanded));
+        }
+    });
+}
+
+function closeMobileFilterSidebar() {
+    const filterSidebar = $('.filter-sidebar');
+    if (filterSidebar) {
+        filterSidebar.classList.remove('mobile-visible');
+    }
+
+    const overlay = $('.filter-sidebar-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+
+    setMobileFilterSidebarExpanded(false);
+    syncBodyScrollLocks();
+}
+
 function openMobileMenu() {
     const mobileMenuToggle = $('#mobile-menu-toggle');
     const mobileNavOverlay = $('#mobile-nav-overlay');
@@ -3298,8 +4294,7 @@ function openMobileMenu() {
     mobileMenuToggle?.setAttribute('aria-expanded', 'true');
     mobileNavOverlay?.classList.add('visible');
 
-    // Prevent body scroll when menu is open
-    document.body.style.overflow = 'hidden';
+    syncBodyScrollLocks();
 
     // Sync active state with current view
     const currentView = AppState.currentView;
@@ -3316,20 +4311,21 @@ function closeMobileMenu() {
     mobileMenuToggle?.setAttribute('aria-expanded', 'false');
     mobileNavOverlay?.classList.remove('visible');
 
-    // Restore body scroll
-    document.body.style.overflow = '';
+    syncBodyScrollLocks();
 }
 
 function toggleMobileFilterSidebar() {
     const filterSidebar = $('.filter-sidebar');
 
     if (filterSidebar) {
-        filterSidebar.classList.toggle('mobile-visible');
-
-        const mobileFilterToggle = $('#mobile-filter-toggle');
-        if (mobileFilterToggle) {
-            mobileFilterToggle.setAttribute('aria-expanded', String(filterSidebar.classList.contains('mobile-visible')));
+        const willOpen = !filterSidebar.classList.contains('mobile-visible');
+        if (!willOpen) {
+            closeMobileFilterSidebar();
+            return;
         }
+
+        filterSidebar.classList.add('mobile-visible');
+        setMobileFilterSidebarExpanded(true);
 
         // If showing, add a close button dynamically
         if (filterSidebar.classList.contains('mobile-visible')) {
@@ -3346,22 +4342,11 @@ function toggleMobileFilterSidebar() {
                     background: rgba(0, 0, 0, 0.7);
                     z-index: 999;
                 `;
-                overlay.addEventListener('click', () => {
-                    filterSidebar.classList.remove('mobile-visible');
-                    overlay.remove();
-                });
+                overlay.addEventListener('click', () => closeMobileFilterSidebar());
                 document.body.appendChild(overlay);
             }
 
-            // Prevent body scroll
-            document.body.style.overflow = 'hidden';
-        } else {
-            // Remove overlay if exists
-            const overlay = $('.filter-sidebar-overlay');
-            if (overlay) overlay.remove();
-
-            // Restore body scroll
-            document.body.style.overflow = '';
+            syncBodyScrollLocks();
         }
     }
 }
@@ -3447,6 +4432,416 @@ function filterModalList(listId, query) {
     });
 }
 
+
+// ============== Missing File Reconnect ==============
+
+function resetReconnectFolderValidation() {
+    const input = $('#reconnect-folder-path');
+    const feedback = $('#reconnect-folder-feedback');
+    if (input) {
+        input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    }
+    if (feedback) {
+        feedback.className = 'validation-feedback';
+        feedback.textContent = '';
+    }
+}
+
+function setReconnectFolderValidation(state, message = '') {
+    const input = $('#reconnect-folder-path');
+    const feedback = $('#reconnect-folder-feedback');
+    if (!input || !feedback) return;
+
+    input.classList.remove('input-valid', 'input-invalid', 'input-checking');
+    feedback.className = 'validation-feedback';
+    if (state === 'success') {
+        input.classList.add('input-valid');
+        feedback.classList.add('success');
+    } else if (state === 'error') {
+        input.classList.add('input-invalid');
+        feedback.classList.add('error');
+    } else if (state === 'checking') {
+        input.classList.add('input-checking');
+        feedback.classList.add('checking');
+    }
+    feedback.textContent = message;
+}
+
+function validateReconnectFolderPath() {
+    const input = $('#reconnect-folder-path');
+    if (!input) return true;
+    const value = input.value.trim();
+    resetReconnectFolderValidation();
+    if (!value) return true;
+
+    const invalidChars = /[<>"|?*]/;
+    if (invalidChars.test(value)) {
+        setReconnectFolderValidation('error', appT('scan.invalidPathChars', 'Path contains invalid characters'));
+        return false;
+    }
+
+    setReconnectFolderValidation('checking', appT('scan.pathChecking', 'Checking path...'));
+    const requestValue = value;
+    API.post('/api/validate-path', { path: value })
+        .then(result => {
+            if (input.value.trim() !== requestValue) return;
+            if (result.valid) {
+                setReconnectFolderValidation('success', appT('scan.folderFound', 'Folder found'));
+            } else {
+                setReconnectFolderValidation('error', mapScanPathError(result.error || appT('scan.invalidPath', 'Path format is invalid')));
+            }
+        })
+        .catch((error) => {
+            if (input.value.trim() !== requestValue) return;
+            setReconnectFolderValidation('', isScanPathError(error) ? mapScanPathError(error) : '');
+        });
+    return true;
+}
+
+function _setReconnectRunningUi(isRunning) {
+    const startBtn = $('#btn-start-reconnect');
+    const cancelBtn = $('#btn-cancel-reconnect');
+    if (startBtn) startBtn.disabled = Boolean(isRunning);
+    if (cancelBtn) {
+        if (isRunning) {
+            cancelBtn.removeAttribute('data-i18n');
+            cancelBtn.textContent = appT('reconnect.stopButton', 'Stop Search');
+        } else {
+            cancelBtn.setAttribute('data-i18n', 'modal.cancel');
+            cancelBtn.textContent = appT('modal.cancel', 'Cancel');
+        }
+    }
+}
+
+function _formatReconnectStatus(progress) {
+    const checked = Number(progress?.checked_files ?? progress?.processed ?? progress?.current ?? 0);
+    const matched = Number(progress?.matched || 0);
+    const missingTotal = Number(progress?.missing_total || 0);
+    const ambiguous = Number(progress?.ambiguous || 0);
+    const conflicts = Number(progress?.conflicts || 0);
+    const errors = Number(progress?.errors || 0);
+    const base = missingTotal > 0
+        ? appT('reconnect.progressText', 'Checked {checked} files · found {matched}/{missing} missing')
+            .replace('{checked}', String(checked))
+            .replace('{matched}', String(matched))
+            .replace('{missing}', String(missingTotal))
+        : appT('reconnect.progressNoMissing', 'Checking files... {checked} checked')
+            .replace('{checked}', String(checked));
+    const extras = [];
+    if (ambiguous) {
+        extras.push(appT('reconnect.ambiguousShort', '{count} need review').replace('{count}', String(ambiguous)));
+    }
+    if (conflicts) {
+        extras.push(appT('reconnect.conflictsShort', '{count} already in gallery').replace('{count}', String(conflicts)));
+    }
+    if (errors) {
+        extras.push(appT('reconnect.errorsShort', '{count} errors').replace('{count}', String(errors)));
+    }
+    return extras.length ? `${base} · ${extras.join(' · ')}` : base;
+}
+
+function _renderReconnectResultPanel(progress) {
+    const panel = $('#reconnect-result-panel');
+    if (!panel) return;
+
+    if (progress?.status !== 'done' || !progress?.result) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+
+    const result = progress.result || {};
+    const updated = Array.isArray(result.updated) ? result.updated : [];
+    const needsReview = Array.isArray(result.needs_review) ? result.needs_review : [];
+    const conflicts = Array.isArray(result.conflict_samples) ? result.conflict_samples : [];
+    const stillMissing = Array.isArray(result.still_missing_samples) ? result.still_missing_samples : [];
+    const errors = Array.isArray(result.recent_errors) ? result.recent_errors : [];
+    const matched = Number(result.matched || progress.matched || 0);
+    const missingTotal = Number(result.missing_total || progress.missing_total || 0);
+    const libraryMissingTotal = Number(result.library_missing_total || progress.library_missing_total || 0);
+    const missing = Number(result.still_missing || 0);
+    const resultSummaryKey = missingTotal === 0 && libraryMissingTotal > 0
+        ? 'reconnect.resultNoMatches'
+        : 'reconnect.resultSummary';
+
+    const pathLine = (label, value) => value
+        ? `<div class="reconnect-result-path"><span>${escapeHtml(label)}</span><code>${escapeHtml(value)}</code></div>`
+        : '';
+    const emptyText = appT('reconnect.resultEmpty', 'Nothing to show here.');
+    const renderItems = (items, renderItem) => items.length
+        ? items.slice(0, 5).map(renderItem).join('')
+        : `<div class="reconnect-result-empty">${escapeHtml(emptyText)}</div>`;
+
+    panel.innerHTML = `
+        <div class="reconnect-result-summary">
+            <strong>${escapeHtml(appT('reconnect.resultTitle', 'Search result'))}</strong>
+            <span>${escapeHtml(appT(resultSummaryKey, '{matched} reconnected · {missing} still missing')
+                .replace('{matched}', String(matched))
+                .replace('{missing}', String(missing))
+                .replace('{libraryMissing}', String(libraryMissingTotal)))}</span>
+        </div>
+        <details class="reconnect-result-group" open>
+            <summary>${escapeHtml(appT('reconnect.resultUpdated', 'Reconnected'))} <span>${updated.length}</span></summary>
+            ${renderItems(updated, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                    ${pathLine(appT('reconnect.newPathLabel', 'New'), item.new_path)}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${needsReview.length ? 'open' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultNeedsReview', 'Need your choice'))} <span>${needsReview.length}</span></summary>
+            ${renderItems(needsReview, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(appT('reconnect.needsReviewHelp', 'Several old records could match this file. Choose a smaller folder and run Find Moved Images again, or review the paths manually.'))}</p>
+                    ${pathLine(appT('reconnect.foundPathLabel', 'Found'), item.found_path)}
+                    ${(Array.isArray(item.old_paths) ? item.old_paths : []).map((path) => pathLine(appT('reconnect.possibleOldPathLabel', 'Possible old'), path)).join('')}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${conflicts.length ? 'open' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultConflicts', 'Already in gallery'))} <span>${conflicts.length}</span></summary>
+            ${renderItems(conflicts, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(appT('reconnect.conflictHelp', 'The new file path is already another gallery item. If the old missing record is only a duplicate, remove the old record from the gallery.'))}</p>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                    ${pathLine(appT('reconnect.existingPathLabel', 'Already indexed'), item.existing_path)}
+                    ${item.old_image_id ? `<button type="button" class="btn btn-ghost btn-small reconnect-remove-old" data-reconnect-remove-id="${escapeHtml(item.old_image_id)}">${escapeHtml(appT('reconnect.removeOldRecord', 'Remove old gallery record'))}</button>` : ''}
+                </div>
+            `)}
+        </details>
+        <details class="reconnect-result-group" ${stillMissing.length ? '' : ''}>
+            <summary>${escapeHtml(appT('reconnect.resultStillMissing', 'Still missing'))} <span>${stillMissing.length}</span></summary>
+            ${renderItems(stillMissing, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || `#${item.image_id}`)}</strong>
+                    <p>${escapeHtml(appT('reconnect.stillMissingHelp', 'The file was not found in the folder you chose. Try a wider folder or reconnect the drive.'))}</p>
+                    ${pathLine(appT('reconnect.oldPathLabel', 'Old'), item.old_path)}
+                </div>
+            `)}
+        </details>
+        ${errors.length ? `<details class="reconnect-result-group" open>
+            <summary>${escapeHtml(appT('reconnect.resultErrors', 'Errors'))} <span>${errors.length}</span></summary>
+            ${renderItems(errors, (item) => `
+                <div class="reconnect-result-item">
+                    <strong>${escapeHtml(item.filename || '')}</strong>
+                    <p>${escapeHtml(item.error || '')}</p>
+                </div>
+            `)}
+        </details>` : ''}
+    `;
+
+    panel.querySelectorAll('[data-reconnect-remove-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const imageId = Number(button.getAttribute('data-reconnect-remove-id'));
+            if (Number.isFinite(imageId) && imageId > 0) {
+                removeGalleryImagesByIds([imageId]);
+            }
+        });
+    });
+    panel.style.display = 'grid';
+}
+
+function _updateReconnectProgressUi(progress) {
+    const container = $('#reconnect-progress-container');
+    const fill = $('#reconnect-progress-fill');
+    const textEl = $('#reconnect-progress-text');
+    const running = ['running', 'cancelling'].includes(progress?.status);
+    if (container) container.style.display = running || ['done', 'error', 'cancelled'].includes(progress?.status) ? 'block' : 'none';
+    if (fill) {
+        fill.classList.toggle('is-indeterminate', running);
+        fill.style.width = running ? '' : (progress?.status === 'done' ? '100%' : '0%');
+    }
+    if (textEl) {
+        if (progress?.status === 'cancelling') {
+            textEl.textContent = appT('reconnect.cancelling', 'Stopping search...');
+        } else if (progress?.status === 'done') {
+            textEl.textContent = progress.message || appT('reconnect.done', 'Search complete.');
+        } else if (progress?.status === 'error') {
+            textEl.textContent = progress.message || appT('reconnect.failedStatus', 'Search failed');
+        } else if (progress?.status === 'cancelled') {
+            textEl.textContent = progress.message || appT('reconnect.cancelled', 'Search stopped');
+        } else {
+            textEl.textContent = _formatReconnectStatus(progress);
+        }
+    }
+    _setReconnectRunningUi(running);
+    _renderReconnectResultPanel(progress);
+}
+
+function _updateBgReconnectProgress(progress) {
+    const bar = $('#bg-reconnect-progress');
+    if (!bar) return;
+    if (!['running', 'cancelling'].includes(progress?.status)) {
+        bar.style.display = 'none';
+        return;
+    }
+    const modal = $('#reconnect-modal');
+    const modalOpen = modal && modal.classList.contains('visible');
+    bar.style.display = modalOpen ? 'none' : 'flex';
+    const fill = $('#bg-reconnect-progress-fill');
+    if (fill) {
+        fill.classList.add('is-indeterminate');
+        fill.style.width = '';
+    }
+    const textEl = $('#bg-reconnect-progress-text');
+    if (textEl) {
+        textEl.textContent = progress?.status === 'cancelling'
+            ? appT('reconnect.cancelling', 'Stopping search...')
+            : _formatReconnectStatus(progress);
+    }
+}
+
+function _hideBgReconnectProgress() {
+    const bar = $('#bg-reconnect-progress');
+    if (bar) bar.style.display = 'none';
+}
+
+function _clearReconnectPollTimer() {
+    if (_reconnectPollTimer) {
+        clearTimeout(_reconnectPollTimer);
+        _reconnectPollTimer = null;
+    }
+}
+
+function _initBgReconnectProgressButtons() {
+    $('#bg-reconnect-cancel')?.addEventListener('click', async () => {
+        await requestStopReconnectMissing();
+    });
+    $('#bg-reconnect-open')?.addEventListener('click', () => {
+        showModal('reconnect-modal');
+    });
+}
+
+async function startReconnectMissing() {
+    const folderPath = $('#reconnect-folder-path')?.value?.trim() || '';
+    if (!folderPath) {
+        showToast(appT('reconnect.enterFolder', 'Choose where the moved images may be now.'), 'error');
+        return;
+    }
+    const recursive = $('#reconnect-recursive')?.checked ?? true;
+    const verifyUncertain = $('#reconnect-verify-uncertain')?.checked ?? true;
+
+    try {
+        await API.startReconnectMissing(folderPath, { recursive, verifyUncertain });
+        const initialProgress = {
+            status: 'running',
+            checked_files: 0,
+            matched: 0,
+            missing_total: 0,
+            ambiguous: 0,
+            errors: 0,
+        };
+        _updateReconnectProgressUi(initialProgress);
+        hideModal('reconnect-modal');
+        _updateBgReconnectProgress(initialProgress);
+        showToast(appT('reconnect.startedToast', 'Search started in the background. You can keep using the gallery.'), 'info');
+        pollReconnectProgress();
+    } catch (error) {
+        const userMessage = mapScanPathError(error);
+        if (isScanPathError(error)) {
+            setReconnectFolderValidation('error', userMessage);
+        }
+        showToast(formatUserError(error, appT('reconnect.failedStart', 'Failed to start finding moved files')), 'error');
+    }
+}
+
+async function requestStopReconnectMissing() {
+    const progress = await API.getReconnectProgress().catch(() => null);
+    if (!progress || !['running', 'cancelling'].includes(progress.status)) {
+        hideModal('reconnect-modal');
+        _setReconnectRunningUi(false);
+        return;
+    }
+    try {
+        const result = await API.cancelReconnectMissing();
+        _updateReconnectProgressUi(result);
+        _updateBgReconnectProgress(result);
+        showToast(appT('reconnect.cancelling', 'Stopping search...'), 'info');
+        pollReconnectProgress();
+    } catch (error) {
+        showToast(formatUserError(error, appT('reconnect.failedCancel', 'Failed to stop finding moved files')), 'error');
+    }
+}
+
+async function pollReconnectProgress(retryCount = 0) {
+    _clearReconnectPollTimer();
+    try {
+        const progress = await API.getReconnectProgress();
+        _updateReconnectProgressUi(progress);
+        _updateBgReconnectProgress(progress);
+
+        if (progress.status === 'running' || progress.status === 'cancelling') {
+            _reconnectPollTimer = setTimeout(() => pollReconnectProgress(0), progress.status === 'cancelling' ? 250 : 700);
+            return;
+        }
+
+        if (progress.status === 'done') {
+            const result = progress.result || {};
+            const matched = Number(progress.matched || result.matched || 0);
+            const stillMissing = Number(result.still_missing || 0);
+            const missingTotal = Number(progress.missing_total || result.missing_total || 0);
+            const libraryMissingTotal = Number(progress.library_missing_total || result.library_missing_total || 0);
+            const ambiguous = Number(progress.ambiguous || result.ambiguous || 0);
+            const conflicts = Number(progress.conflicts || result.conflicts || 0);
+            const doneKey = missingTotal === 0 && libraryMissingTotal > 0
+                ? 'reconnect.doneNoMatchesToast'
+                : 'reconnect.doneToast';
+            showToast(
+                appT(doneKey, 'Found {matched} moved images. {missing} still missing. {ambiguous} need review. {conflicts} already in gallery.')
+                    .replace('{matched}', String(matched))
+                    .replace('{missing}', String(stillMissing))
+                    .replace('{libraryMissing}', String(libraryMissingTotal))
+                    .replace('{ambiguous}', String(ambiguous))
+                    .replace('{conflicts}', String(conflicts)),
+                ambiguous > 0 || stillMissing > 0 || conflicts > 0 || (missingTotal === 0 && libraryMissingTotal > 0) ? 'warning' : 'success'
+            );
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+            _refreshScanDrivenViews(true, { refreshGallery: true });
+            return;
+        }
+
+        if (progress.status === 'cancelled') {
+            showToast(progress.message || appT('reconnect.cancelled', 'Search stopped'), 'info');
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+            return;
+        }
+
+        if (progress.status === 'error') {
+            showToast(progress.message || appT('reconnect.failedStatus', 'Search failed'), 'error');
+            _hideBgReconnectProgress();
+            _setReconnectRunningUi(false);
+        }
+    } catch (error) {
+        if (retryCount < 3) {
+            _reconnectPollTimer = setTimeout(() => pollReconnectProgress(retryCount + 1), 1000);
+            return;
+        }
+        showToast(formatUserError(error, appT('reconnect.failedProgress', 'Could not update moved-file search progress')), 'error');
+        _hideBgReconnectProgress();
+        _setReconnectRunningUi(false);
+    }
+}
+
+async function resumeReconnectProgress() {
+    try {
+        const progress = await API.getReconnectProgress();
+        if (!['running', 'cancelling'].includes(progress?.status)) {
+            _hideBgReconnectProgress();
+            return;
+        }
+        _updateReconnectProgressUi(progress);
+        _updateBgReconnectProgress(progress);
+        pollReconnectProgress();
+    } catch (error) {
+        Logger.warn('Failed to resume moved-file search progress:', error);
+    }
+}
 
 // ============== Scanning ==============
 
@@ -3591,9 +4986,10 @@ async function startScan() {
         setScanCancelButtonState('running');
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
+        resetProgressTracker(_scanBackgroundProgressTracker);
         _scanLibraryReadyHandled = false;
         _scanLastAutoRefreshAt = 0;
-        $('#scan-progress-text').textContent = appT('scan.waitingForUpdate', 'Import · waiting for first update...');
+        $('#scan-progress-text').textContent = appT('progress.countingImages', 'Counting images... {count} found').replace('{count}', '0');
         showToast(
             appT('scan.startedToast', 'Import started. The first images will appear soon, and the rest of the details will keep filling in.'),
             'info'
@@ -3625,7 +5021,7 @@ async function requestStopScan() {
         const result = await API.cancelScan();
         const processed = Number(progress.processed ?? progress.current ?? 0);
         const total = Number(progress.total || 0);
-        const totalFinal = progress?.total_final !== false;
+        const totalFinal = progress?.total_final === true;
         setScanCancelButtonState(result?.status === 'cancelled' ? 'idle' : 'cancelling');
         $('#scan-progress-text').textContent = (result?.status === 'cancelled')
             ? appT('scan.cancelled', 'Scan cancelled')
@@ -3656,6 +5052,7 @@ async function requestStopScan() {
 function _refreshScanDrivenViews(force = false, options = {}) {
     const {
         refreshGallery = true,
+        pageSizeOverride = null,
     } = options;
     const now = Date.now();
     if (!force && now - _scanLastAutoRefreshAt < 2500) {
@@ -3665,17 +5062,67 @@ function _refreshScanDrivenViews(force = false, options = {}) {
     promptsLibraryCache = null;
     if (refreshGallery) {
         if (AppState.currentView === 'gallery') {
-            loadImages({
+            const loadOptions = {
                 silent: true,
                 preserveExisting: true,
                 coalesce: true,
-            });
+                suppressAutoLoadMore: true,
+            };
+            if (Number.isFinite(pageSizeOverride) && pageSizeOverride > 0) {
+                loadOptions.pageSizeOverride = pageSizeOverride;
+            }
+            loadImages(false, loadOptions);
             AppState.galleryNeedsRefresh = false;
         } else {
             AppState.galleryNeedsRefresh = true;
+            AppState.gallerySuppressNextAutoLoadMore = true;
         }
     }
     loadStats();
+}
+
+function getScanProgressMetrics(progress) {
+    const processed = Number(progress?.processed ?? progress?.current ?? 0);
+    const total = Number(progress?.total || 0);
+    const totalFinal = progress?.total_final === true;
+    const counted = Number(progress?.counted || total || 0);
+    const metadataProcessed = Number(progress?.metadata_processed || 0);
+    const metadataTotal = Number(progress?.metadata_total || 0);
+    const importComplete = progress?.import_complete === true || (totalFinal && total > 0 && processed >= total);
+    const metadataTotalFinal = progress?.metadata_total_final === true;
+    const isCounting = progress?.step === 'counting' || !totalFinal;
+    const showingMetadata = progress?.step === 'metadata' && importComplete;
+    const completed = showingMetadata ? metadataProcessed : processed;
+    const stableTotal = showingMetadata
+        ? (metadataTotalFinal ? metadataTotal : 0)
+        : (totalFinal ? total : 0);
+    const showEta = showingMetadata
+        ? (metadataTotalFinal && metadataTotal > 0 && metadataProcessed > 0)
+        : (totalFinal && total > 0 && processed > 0 && !isCounting);
+    const percent = showingMetadata
+        ? (metadataTotal > 0 ? Math.min(100, (metadataProcessed / metadataTotal) * 100) : 0)
+        : (totalFinal && total > 0 ? Math.min(100, (processed / total) * 100) : 0);
+    const progressKey = showingMetadata
+        ? `scan-metadata:${metadataTotalFinal ? metadataTotal : 'growing'}`
+        : `scan-import:${totalFinal ? total : 'counting'}`;
+
+    return {
+        processed,
+        total,
+        totalFinal,
+        counted,
+        metadataProcessed,
+        metadataTotal,
+        metadataTotalFinal,
+        importComplete,
+        isCounting,
+        showingMetadata,
+        completed,
+        stableTotal,
+        showEta,
+        percent,
+        progressKey,
+    };
 }
 
 function _updateBgScanProgress(progress) {
@@ -3691,44 +5138,66 @@ function _updateBgScanProgress(progress) {
     const modalOpen = scanModal && scanModal.classList.contains('visible');
     bar.style.display = modalOpen ? 'none' : 'flex';
 
-    const processed = Number(progress?.processed ?? progress?.current ?? 0);
-    const total = Number(progress?.total || 0);
-    const totalFinal = progress?.total_final !== false;
-    const metadataProcessed = Number(progress?.metadata_processed || 0);
-    const metadataTotal = Number(progress?.metadata_total || 0);
-    const percentBase = progress?.step === 'metadata' && metadataTotal > 0
-        ? (metadataProcessed / metadataTotal) * 100
-        : (totalFinal && total > 0 ? (processed / total) * 100 : 0);
-
+    const metrics = getScanProgressMetrics(progress);
     const fill = $('#bg-scan-progress-fill');
     const textEl = $('#bg-scan-progress-text');
     const isIndeterminate = ['running', 'cancelling'].includes(progress?.status) && (
-        progress?.step === 'metadata'
-            ? (!percentBase || percentBase === 0)
-            : (!totalFinal || !percentBase || percentBase === 0)
+        metrics.isCounting || !metrics.percent || metrics.percent <= 0
     );
     if (fill) {
         fill.classList.toggle('is-indeterminate', isIndeterminate);
-        fill.style.width = isIndeterminate ? '' : (Math.min(100, percentBase) + '%');
+        fill.style.width = isIndeterminate ? '' : (Math.min(100, metrics.percent) + '%');
     }
 
-    if (textEl) {
-        if (progress?.status === 'cancelling') {
-            textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
-        } else if (progress?.step === 'metadata') {
-            textEl.textContent = `${appT('scan.backgroundMetadata', 'Filling in image details...')} ${metadataProcessed}/${metadataTotal || '?'}`;
-        } else if (!totalFinal) {
-            textEl.textContent = appT('scan.backgroundDiscovering', '{count} scanned. Discovering more images...')
-                .replace('{count}', String(processed));
-        } else {
-            textEl.textContent = progress?.message || appT('scan.backgroundImporting', 'Bringing images into your library...');
-        }
+    if (!textEl) return;
+
+    if (progress?.status === 'cancelling') {
+        textEl.textContent = appT('scan.backgroundCancelling', 'Stopping scan...');
+        return;
     }
+
+    if (metrics.isCounting) {
+        textEl.textContent = appT('progress.countingImages', 'Counting images... {count} found')
+            .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        return;
+    }
+
+    const extraParts = [];
+    if (metrics.showingMetadata && metrics.metadataTotal > 0) {
+        extraParts.push(
+            appT('progress.metadataCount', '{current}/{total} details')
+                .replace('{current}', String(metrics.metadataProcessed))
+                .replace('{total}', String(metrics.metadataTotal))
+        );
+        if (!metrics.metadataTotalFinal) {
+            extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
+        }
+    } else if (metrics.totalFinal && metrics.total > 0) {
+        extraParts.push(
+            appT('progress.left', '{count} left')
+                .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+        );
+    }
+
+    textEl.textContent = buildOperationProgressText({
+        completed: metrics.completed,
+        total: metrics.stableTotal,
+        tracker: _scanBackgroundProgressTracker,
+        primaryLabel: appT('scan.progressLabel', 'Import'),
+        extraParts,
+        detail: progress?.message || (metrics.showingMetadata
+            ? appT('scan.backgroundMetadata', 'Filling in image details...')
+            : appT('scan.backgroundImporting', 'Bringing images into your library...')),
+        defaultMessage: appT('scan.backgroundImporting', 'Bringing images into your library...'),
+        showEta: metrics.showEta,
+        progressKey: metrics.progressKey,
+    });
 }
 
 function _hideBgScanProgress() {
     const bar = $('#bg-scan-progress');
     if (bar) bar.style.display = 'none';
+    resetProgressTracker(_scanBackgroundProgressTracker);
 }
 
 function _initBgScanProgressButtons() {
@@ -3752,37 +5221,41 @@ async function pollScanProgress(retryCount = 0) {
     try {
         const progress = await API.getScanProgress();
 
-        const processed = Number(progress.processed ?? progress.current ?? 0);
-        const total = Number(progress.total || 0);
-        const totalFinal = progress.total_final !== false;
-        const metadataProcessed = Number(progress.metadata_processed || 0);
-        const metadataTotal = Number(progress.metadata_total || 0);
-        const effectiveTotal = totalFinal ? total : 0;
-        const percent = effectiveTotal > 0 ? Math.min(100, (processed / effectiveTotal) * 100) : 0;
+        const metrics = getScanProgressMetrics(progress);
         const scanFillEl = $('#scan-progress-fill');
-        const scanIndeterminate = progress.status === 'running' && (!totalFinal || effectiveTotal === 0);
+        const scanIndeterminate = progress.status === 'running' && (
+            metrics.isCounting || !metrics.percent || metrics.percent <= 0
+        );
         if (scanFillEl) {
             scanFillEl.classList.toggle('is-indeterminate', scanIndeterminate);
-            scanFillEl.style.width = scanIndeterminate ? '' : (percent + '%');
+            scanFillEl.style.width = scanIndeterminate ? '' : (metrics.percent + '%');
         }
 
         const errorCount = Number(progress.errors || 0);
         const newCount = Number(progress.new || 0);
         const updatedCount = Number(progress.updated || 0);
         const removedCount = Number(progress.removed || 0);
-        const remaining = totalFinal && total > 0 ? Math.max(0, total - processed) : 0;
         const extraParts = [];
-        if (totalFinal && total > 0) {
-            extraParts.push(appT('progress.left', '{count} left').replace('{count}', remaining));
-        } else if (processed > 0) {
-            extraParts.push(appT('progress.discoveredCount', '{count} scanned').replace('{count}', processed));
+        if (metrics.isCounting) {
+            extraParts.push(
+                appT('progress.discoveredCount', '{count} found')
+                    .replace('{count}', String(metrics.counted || metrics.processed || 0))
+            );
+        } else if (metrics.totalFinal && metrics.total > 0 && !metrics.showingMetadata) {
+            extraParts.push(
+                appT('progress.left', '{count} left')
+                    .replace('{count}', String(Math.max(0, metrics.total - metrics.processed)))
+            );
         }
-        if (progress.step === 'metadata' && metadataTotal > 0) {
+        if (metrics.metadataTotal > 0) {
             extraParts.push(
                 appT('progress.metadataCount', '{current}/{total} metadata')
-                    .replace('{current}', metadataProcessed)
-                    .replace('{total}', metadataTotal)
+                    .replace('{current}', String(metrics.metadataProcessed))
+                    .replace('{total}', String(metrics.metadataTotal))
             );
+            if (!metrics.metadataTotalFinal && metrics.importComplete) {
+                extraParts.push(appT('progress.detailsStillCounting', 'details total still being checked'));
+            }
         }
         if (newCount > 0) extraParts.push(appT('progress.newCount', '{count} new').replace('{count}', newCount));
         if (updatedCount > 0) extraParts.push(appT('progress.updatedCount', '{count} updated').replace('{count}', updatedCount));
@@ -3790,19 +5263,26 @@ async function pollScanProgress(retryCount = 0) {
         if (errorCount > 0) extraParts.push(appT('progress.failedCount', '{count} failed').replace('{count}', errorCount));
 
         let scanDetail = progress.current_item || progress.message || 'Importing images...';
-        if (progress.step === 'importing' && !totalFinal) {
-            scanDetail = appT('progress.discoveringMore', '{count} scanned. Discovering more images...')
-                .replace('{count}', processed);
+        if (metrics.isCounting) {
+            scanDetail = appT('progress.countingImages', 'Counting images... {count} found')
+                .replace('{count}', String(metrics.counted || metrics.processed || 0));
+        } else if (metrics.totalFinal && metrics.processed === 0 && metrics.total > 0) {
+            scanDetail = appT('progress.foundStarting', 'Found {total} images. Starting scan...')
+                .replace('{total}', String(metrics.total));
+        } else if (metrics.showingMetadata && !metrics.metadataTotalFinal) {
+            scanDetail = appT('progress.detailsStillCounting', 'details total still being checked');
         }
 
         $('#scan-progress-text').textContent = buildOperationProgressText({
-            completed: processed,
-            total: effectiveTotal,
+            completed: metrics.completed,
+            total: metrics.stableTotal,
             tracker: _scanProgressTracker,
             primaryLabel: appT('scan.progressLabel', 'Import'),
             extraParts,
             detail: scanDetail,
             defaultMessage: 'Importing images...',
+            showEta: metrics.showEta,
+            progressKey: metrics.progressKey,
         });
 
         _updateBgScanProgress(progress);
@@ -3810,7 +5290,10 @@ async function pollScanProgress(retryCount = 0) {
         if (progress.library_ready && !_scanLibraryReadyHandled && progress.status === 'running') {
             _scanLibraryReadyHandled = true;
             hideModal('scan-modal');
-            _refreshScanDrivenViews(true, { refreshGallery: true });
+            _refreshScanDrivenViews(true, {
+                refreshGallery: true,
+                pageSizeOverride: SCAN_PREVIEW_PAGE_SIZE,
+            });
             showToast(
                 appT('scan.libraryReadyToast', 'Library is ready. Metadata is still loading in the background.'),
                 'info'
@@ -3823,12 +5306,14 @@ async function pollScanProgress(retryCount = 0) {
             // the gallery was stuck loading again.
             if (AppState.currentView !== 'gallery') {
                 AppState.galleryNeedsRefresh = true;
+                AppState.gallerySuppressNextAutoLoadMore = true;
             }
         }
 
         if (progress.status === 'done') {
+            const libraryReadyWasHandled = _scanLibraryReadyHandled;
             const errorCount = Number(progress.errors || progress.result?.errors || 0);
-            const completionMessage = _scanLibraryReadyHandled
+            const completionMessage = libraryReadyWasHandled
                 ? appT('scan.completedBackgroundToast', 'The remaining image details are ready now.')
                 : (progress.message || appT('scan.completedToast', 'Import complete. Everything is ready now.'));
             showToast(completionMessage, errorCount > 0 ? 'warning' : 'success');
@@ -3936,6 +5421,7 @@ async function resumeScanProgress() {
         setScanCancelButtonState(progress?.status === 'cancelling' ? 'cancelling' : 'running');
         lockLiveProgressText('#scan-progress-text');
         resetProgressTracker(_scanProgressTracker);
+        resetProgressTracker(_scanBackgroundProgressTracker);
         $('#scan-progress-text').textContent = progress.message || 'Resuming scan progress...';
         _updateBgScanProgress(progress);
         pollScanProgress();
@@ -3954,8 +5440,10 @@ let _tagLastProgressText = '';
 let _tagLastCurrent = 0;
 let _tagLastTotal = 0;
 let _scanProgressTracker = createProgressTracker();
+let _scanBackgroundProgressTracker = createProgressTracker();
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
+let _reconnectPollTimer = null;
 let _tagProgressTracker = createProgressTracker();
 
 function clearTagProgressTimer() {
@@ -4087,7 +5575,7 @@ async function loadTaggerModels() {
         options.push('<option value="custom">Custom Local Model...</option>');
 
         select.innerHTML = options.join('');
-        select.value = models.some((model) => model.name === currentValue)
+        select.value = currentValue === 'custom' || models.some((model) => model.name === currentValue)
             ? currentValue
             : defaultModel;
         select.dispatchEvent(new Event('change'));
@@ -4427,14 +5915,53 @@ async function loadStats() {
             }
         });
 
+        const metadataPending = Number(stats.metadata_pending || stats.metadata_status?.pending || stats.metadata_status_counts?.pending || 0);
+        const scanStatus = String(stats.scan_status || '').toLowerCase();
+        const scanRunning = scanStatus === 'running' || scanStatus === 'cancelling';
+        const scanLibraryReady = stats.scan_library_ready === true;
+        const countsResolving = metadataPending > 0 || (scanRunning && !scanLibraryReady);
+        const reportedTotal = Number.isFinite(Number(stats.total_images))
+            ? Number(stats.total_images)
+            : totalCount;
+
         // Update generator tab counts
         const countAll = $('#count-all');
-        if (countAll) countAll.textContent = totalCount;
+        if (countAll) countAll.textContent = reportedTotal;
 
         ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
             const countEl = $(`#count-${gen}`);
-            if (countEl) countEl.textContent = genCounts[gen] || 0;
+            if (countEl) {
+                const count = genCounts[gen] || 0;
+                countEl.textContent = countsResolving && count === 0 ? '…' : String(count);
+                countEl.title = countsResolving
+                    ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
+                    : '';
+            }
         });
+
+        const metadataChip = $('#metadata-status-chip');
+        if (metadataChip) {
+            if (countsResolving) {
+                metadataChip.textContent = metadataPending > 0
+                    ? appT('gallery.metadataResolving', 'Reading image info: {count} pending')
+                        .replace('{count}', String(metadataPending))
+                    : appT('gallery.scanResolving', 'Scanning library: generator counts are not final yet');
+                metadataChip.title = appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.');
+                metadataChip.style.display = 'inline-flex';
+            } else {
+                metadataChip.textContent = '';
+                metadataChip.title = '';
+                metadataChip.style.display = 'none';
+            }
+        }
+
+        // Populate version badge
+        if (stats.app_version) {
+            const vBadge = document.getElementById('brand-version');
+            if (vBadge) vBadge.textContent = 'v' + stats.app_version;
+            AppState.appVersion = stats.app_version;
+            AppState.githubUrl = stats.github_url || '';
+        }
 
         // Store analytics for later use
         AppState.analytics = {
@@ -4442,7 +5969,12 @@ async function loadStats() {
             loras: stats.loras || [],
             top_tags: stats.top_tags || [],
             generatorCounts: genCounts,
-            totalImages: totalCount
+            totalImages: reportedTotal,
+            metadataPending,
+            metadataStatus: stats.metadata_status || stats.metadata_status_counts || {},
+            countsResolving,
+            scanStatus,
+            scanLibraryReady
         };
 
         // Update model filters summary UI
@@ -4465,6 +5997,7 @@ function clearAestheticProgressTimer() {
 
 function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     const button = $('#btn-score-aesthetic');
+    const cancelBtn = $('#btn-cancel-aesthetic');
     const chip = $('#aesthetic-status-chip');
     if (!button || !chip) return;
 
@@ -4473,12 +6006,15 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
         return translated && translated !== key ? translated : (fallback || key);
     };
 
+    if (cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+
     if (!_aestheticStatus.available) {
         button.disabled = true;
         button.title = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
         chip.style.display = 'inline-flex';
         chip.className = 'header-status-chip is-warning';
         chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
+        if (cancelBtn) cancelBtn.style.display = 'none';
         return;
     }
 
@@ -4495,7 +6031,6 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
             total: Math.max(total, completed),
         });
     } else {
-        // Idle state — hide chip to reduce visual noise
         chip.style.display = 'none';
     }
 }
@@ -4601,6 +6136,24 @@ async function startAestheticScoring(force = false) {
 
 const IMAGE_LOAD_KEY = 'images-load';
 let _pendingImageReload = null;
+let _imageLoadSequence = 0;
+let _activeImageLoadSequence = 0;
+
+function cancelGalleryImageLoad() {
+    const hadPendingGalleryLoad = AppState.isLoading
+        || _pendingImageReload !== null
+        || RequestManager.pendingRequests.has(IMAGE_LOAD_KEY);
+    _imageLoadSequence += 1;
+    _activeImageLoadSequence = 0;
+    _pendingImageReload = null;
+    RequestManager.cancel(IMAGE_LOAD_KEY);
+    AppState.isLoading = false;
+    if (hadPendingGalleryLoad) {
+        AppState.galleryNeedsRefresh = true;
+    }
+    const galleryLoading = $('#gallery-loading');
+    if (galleryLoading) galleryLoading.style.display = 'none';
+}
 
 // Generate skeleton items for loading state
 function generateSkeletonItems(count = 20) {
@@ -4639,6 +6192,8 @@ async function loadImages(appendMode = false, options = {}) {
         silent = false,
         preserveExisting = false,
         coalesce = false,
+        pageSizeOverride = null,
+        suppressAutoLoadMore = false,
     } = options;
 
     if (AppState.isLoading && coalesce) {
@@ -4651,6 +6206,8 @@ async function loadImages(appendMode = false, options = {}) {
         RequestManager.cancel(IMAGE_LOAD_KEY);
     }
 
+    const loadSequence = ++_imageLoadSequence;
+    _activeImageLoadSequence = loadSequence;
     const galleryGrid = $('#gallery-grid');
 
     if (!appendMode && !preserveExisting) {
@@ -4670,20 +6227,29 @@ async function loadImages(appendMode = false, options = {}) {
     if (galleryLoading && !silent) galleryLoading.style.display = 'flex';
     const imageCount = $('#image-count');
     if (imageCount && !appendMode && !silent) imageCount.textContent = appT('gallery.loading', 'Loading images...');
+    let controller = null;
 
     try {
-        const controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
+        controller = RequestManager.createAbortController(IMAGE_LOAD_KEY);
         const useCursorPagination = supportsCursorPagination(AppState.filters.sortBy);
+        const overrideLimit = Number(pageSizeOverride);
+        const pageLimit = Number.isFinite(overrideLimit) && overrideLimit > 0
+            ? Math.floor(overrideLimit)
+            : AppState.pagination.pageSize;
         const filters = {
             ...AppState.filters,
-            limit: AppState.pagination.pageSize,
+            limit: pageLimit,
             cursor: appendMode && useCursorPagination ? AppState.pagination.cursor : null,
             offset: appendMode && !useCursorPagination ? AppState.pagination.offset : undefined
         };
         const result = await API.getImages(filters, { signal: controller.signal });
-        RequestManager.complete(IMAGE_LOAD_KEY);
+        RequestManager.complete(IMAGE_LOAD_KEY, controller);
 
         if (result === null) return;
+        if (loadSequence !== _imageLoadSequence || AppState.currentView !== 'gallery') {
+            AppState.galleryNeedsRefresh = true;
+            return;
+        }
 
         // Update pagination
         AppState.pagination.cursor = result.next_cursor;
@@ -4706,13 +6272,30 @@ async function loadImages(appendMode = false, options = {}) {
                 .replace('{count}', String(AppState.pagination.total || AppState.images.length));
         }
 
-        // Clean stale selections on fresh load
+        // Clean stale selections on fresh load, but do not corrupt true filtered-result selection.
         if (AppState.selectedIds && AppState.selectedIds.size > 0 && !appendMode) {
-            const validIds = new Set(AppState.images.map(img => img.id));
-            const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
-            if (staleIds.length > 0) {
-                staleIds.forEach(id => AppState.selectedIds.delete(id));
-                if (typeof updateSelectionUI === 'function') updateSelectionUI();
+            if (AppState.selectionScope === 'filtered') {
+                const currentFilterKey = getSelectionFilterCacheKey(AppState.filters);
+                if (AppState.selectionFilterKey && AppState.selectionFilterKey !== currentFilterKey) {
+                    updateSelectionState((selection) => {
+                        selection.selectedIds = new Set();
+                        selection.scope = 'visible';
+                        selection.filterKey = null;
+        selection.selectionToken = null;
+                    });
+                    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+                    emitSelectionStateChanged();
+                }
+            } else {
+                const validIds = new Set(AppState.images.map(img => img.id));
+                const staleIds = [...AppState.selectedIds].filter(id => !validIds.has(id));
+                if (staleIds.length > 0) {
+                    mutateSelectedIds((selectedIds) => {
+                        staleIds.forEach((id) => selectedIds.delete(id));
+                    });
+                    if (typeof updateSelectionUI === 'function') updateSelectionUI();
+                    emitSelectionStateChanged();
+                }
             }
         }
 
@@ -4736,9 +6319,22 @@ async function loadImages(appendMode = false, options = {}) {
         }
         showToast(formatUserError(error, appT('gallery.loadImagesFailed', 'Failed to load images')), 'error');
     } finally {
-        AppState.isLoading = false;
-        if (galleryLoading && !silent) {
-            galleryLoading.style.display = 'none';
+        if (controller) {
+            RequestManager.complete(IMAGE_LOAD_KEY, controller);
+        }
+        const isLatestLoad = loadSequence === _imageLoadSequence;
+        const isActiveLoad = _activeImageLoadSequence === loadSequence;
+
+        if (isActiveLoad) {
+            _activeImageLoadSequence = 0;
+            AppState.isLoading = false;
+            if (galleryLoading && !silent) {
+                galleryLoading.style.display = 'none';
+            }
+        }
+
+        if (!isLatestLoad) {
+            return;
         }
 
         // Show/hide "Load More" button based on pagination state
@@ -4749,7 +6345,9 @@ async function loadImages(appendMode = false, options = {}) {
 
         requestAnimationFrame(() => {
             attachGalleryPaginationListener();
-            _onGalleryScroll();
+            if (!suppressAutoLoadMore) {
+                _onGalleryScroll();
+            }
         });
 
         const pendingReload = _pendingImageReload;
@@ -4843,10 +6441,28 @@ function _onGalleryScroll() {
 
 // ============== UI Components ==============
 
+function normalizeCheckpointFilterValue(value) {
+    let text = String(value || '').trim();
+    if (!text) return '';
+    text = text.replace(/\\/g, '/').split('/').pop().trim();
+    text = text.replace(/\s+\[[0-9a-fA-F]{4,}\]\s*$/, '').trim();
+    text = text.replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+    return text;
+}
+
+function getCheckpointOptionValue(item) {
+    return normalizeCheckpointFilterValue(item?.checkpoint_normalized || item?.checkpoint || item);
+}
+
 function openModelSelect(type) {
     AppState.modalSelection.type = type;
     AppState.modalSelection.search = '';
-    AppState.modalSelection.tempSelected = new Set(AppState.filters[`${type}s`]);
+    const currentSelection = AppState.filters[`${type}s`] || [];
+    AppState.modalSelection.tempSelected = new Set(
+        type === 'checkpoint'
+            ? currentSelection.map(normalizeCheckpointFilterValue).filter(Boolean)
+            : currentSelection
+    );
 
     $('#model-select-title').textContent = type === 'checkpoint'
         ? appT('modelSelect.checkpointsTitle', 'Select Models')
@@ -4868,21 +6484,24 @@ function renderModelSelectList() {
     }
 
     const filtered = items.filter(item => {
-        const val = type === 'checkpoint' ? item.checkpoint : item.lora;
-        return val.toLowerCase().includes(search);
+        const value = type === 'checkpoint' ? getCheckpointOptionValue(item) : item.lora;
+        const label = type === 'checkpoint' ? (item.checkpoint || value) : item.lora;
+        return String(label || value || '').toLowerCase().includes(search);
     });
 
     list.innerHTML = filtered.map(item => {
-        const value = type === 'checkpoint' ? item.checkpoint : item.lora;
+        const value = type === 'checkpoint' ? getCheckpointOptionValue(item) : item.lora;
+        const label = type === 'checkpoint' ? (item.checkpoint || value) : item.lora;
         const isSelected = tempSelected.has(value);
         const safeValue = escapeHtml(value);
+        const safeLabel = escapeHtml(label);
 
         return `
             <div class="model-select-item ${isSelected ? 'selected' : ''}" data-value="${safeValue}">
                 <div class="checkbox-custom" style="background: ${isSelected ? 'var(--accent-primary)' : 'transparent'}; border-color: ${isSelected ? 'var(--accent-primary)' : 'var(--border-color)'}">
                     ${isSelected ? '✓' : ''}
                 </div>
-                <div class="item-text" title="${safeValue}">${safeValue}</div>
+                <div class="item-text" title="${safeLabel}">${safeLabel}</div>
                 <div class="item-count">${item.count}</div>
             </div>
         `;
@@ -4904,7 +6523,9 @@ function renderModelSelectList() {
 
 function confirmModelSelection() {
     const { type, tempSelected } = AppState.modalSelection;
-    AppState.filters[`${type}s`] = Array.from(tempSelected);
+    updateAppFilters((filters) => {
+        filters[`${type}s`] = Array.from(tempSelected);
+    });
 
     updateModelSelectionSummaries();
     hideModal('model-select-modal');
@@ -5224,15 +6845,18 @@ function filterLibraryContent() {
 function updateSelectionUI() {
     const panel = $('#selection-actions');
     const countEl = $('#selection-count');
+    const scopeEl = $('#selection-scope-summary');
     const grid = $('#gallery-grid');
     const hasSelection = AppState.selectedIds.size > 0;
     const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
     const canRunBatchActions = selectionPanelVisible && hasSelection;
     const buttonIds = [
+        'btn-move-selected',
+        'btn-copy-selected',
         'btn-export-selected',
-        'btn-export-tags-selected',
         'btn-batch-export-tags',
         'btn-send-to-censor',
+        'btn-remove-selected-gallery',
         'btn-delete-selected-files'
     ];
 
@@ -5244,12 +6868,12 @@ function updateSelectionUI() {
 
     const selectAllBtn = $('#btn-select-all');
     if (selectAllBtn) {
-        selectAllBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+        selectAllBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
     }
 
-    const invertVisibleBtn = $('#btn-invert-selection-visible');
-    if (invertVisibleBtn) {
-        invertVisibleBtn.disabled = !selectionPanelVisible || AppState.images.length === 0;
+    const invertFilteredBtn = $('#btn-invert-selection-filtered');
+    if (invertFilteredBtn) {
+        invertFilteredBtn.disabled = !selectionPanelVisible || (AppState.pagination.total || 0) === 0;
     }
 
     const clearSelectionBtn = $('#btn-clear-selection');
@@ -5269,11 +6893,18 @@ function updateSelectionUI() {
         if (countEl) {
             countEl.textContent = hasSelection
                 ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
-                : (window.I18n?.t?.('selection.emptyHint') || 'Selection mode is on. Pick images or use Select All.');
+                : (window.I18n?.t?.('selection.emptyHint') || 'Select images, or choose all current filter matches.');
+        }
+        if (scopeEl) {
+            scopeEl.textContent = getSelectionScopeSummaryText();
+        }
+        if (!hasSelection) {
+            collapseSelectionMoreActions();
         }
         requestAnimationFrame(() => ensureSelectionPanelVisible(panel));
     } else if (panel) {
         panel.style.display = 'none';
+        collapseSelectionMoreActions();
     }
 }
 
@@ -5331,8 +6962,8 @@ async function showAnalytics() {
 
         $('#analytics-checkpoints').innerHTML = data.checkpoints.length ?
             data.checkpoints.map(c => `
-                <div class="analytics-item clickable" data-type="checkpoint" data-value="${escapeHtml(c.checkpoint)}">
-                    <span class="item-name">${escapeHtml(c.checkpoint)}</span>
+                <div class="analytics-item clickable" data-type="checkpoint" data-value="${escapeHtml(getCheckpointOptionValue(c))}">
+                    <span class="item-name">${escapeHtml(c.checkpoint || getCheckpointOptionValue(c))}</span>
                     <span class="item-count">${c.count}</span>
                 </div>
             `).join('') : `<p>${escapeHtml(appT('analytics.noCheckpoints', 'No checkpoints found'))}</p>`;
@@ -5370,14 +7001,20 @@ async function showAnalytics() {
 
 function applyAnalyticsFilter(type, value) {
     if (type === 'checkpoint') {
-        AppState.filters.checkpoints = [value];
+        updateAppFilters((filters) => {
+            filters.checkpoints = [value];
+        });
         updateModelSelectionSummaries();
     } else if (type === 'lora') {
-        AppState.filters.loras = [value];
+        updateAppFilters((filters) => {
+            filters.loras = [value];
+        });
         updateModelSelectionSummaries();
     } else if (type === 'tag') {
         if (!AppState.filters.tags.includes(value)) {
-            AppState.filters.tags = [...AppState.filters.tags, value];
+            updateAppFilters((filters) => {
+                filters.tags = [...filters.tags, value];
+            });
             addTagToUI(value);
         }
     }
@@ -5401,66 +7038,320 @@ function addTagToUI(tag) {
 }
 
 
-async function showExportModal() {
+let _currentExportModalData = null;
+let _currentExportFormat = 'prompt';
+
+function getExportFormatLabel(format) {
+    const labels = {
+        prompt: appT('export.formatPrompt', 'Prompt text'),
+        prompt_numbered: appT('export.formatPromptNumbered', 'Prompt text + filenames'),
+        negative: appT('export.formatNegative', 'Negative prompt'),
+        prompt_negative: appT('export.formatPromptNegative', 'Prompt + Negative'),
+        a1111: appT('export.formatA1111', 'A1111 / Forge block'),
+        tags: appT('export.formatTags', 'Tags list'),
+        caption_tags: appT('export.formatCaptionTags', 'Caption + Tags lines'),
+        caption_merged: appT('export.formatCaptionMerged', 'Merged caption lines'),
+        jsonl: appT('export.formatJsonl', 'JSONL'),
+        csv: appT('export.formatCsv', 'CSV table'),
+    };
+    return labels[format] || labels.prompt;
+}
+
+function getExportFormatDescription(format) {
+    const descriptions = {
+        prompt: appT('export.descPrompt', 'One .txt: each image Prompt is separated by a blank line.'),
+        prompt_numbered: appT('export.descPromptNumbered', 'One .txt: filename title + Prompt for each image.'),
+        negative: appT('export.descNegative', 'One .txt: Negative prompt only, separated by blank lines.'),
+        prompt_negative: appT('export.descPromptNegative', 'One .txt: Prompt plus Negative prompt for each image.'),
+        a1111: appT('export.descA1111', 'One .txt: WebUI/A1111-style parameter blocks for regeneration.'),
+        tags: appT('export.descTags', 'One .txt: merged unique Tags from all selected images.'),
+        caption_tags: appT('export.descCaptionTags', 'One .txt: one AI caption + Tags line per image.'),
+        caption_merged: appT('export.descCaptionMerged', 'One .txt: one merged caption line per image, built from AI caption, Prompt, and Tags.'),
+        jsonl: appT('export.descJsonl', 'One .jsonl: one JSON object per image for scripts and dataset tools.'),
+        csv: appT('export.descCsv', 'One .csv table: filename, Prompt, Tags, model, and size columns.'),
+    };
+    return descriptions[format] || descriptions.prompt;
+}
+
+function getBatchExportContentDescription(mode) {
+    const descriptions = {
+        caption_merged: appT('batchExport.descCaptionMerged', 'Writes one same-name .txt per image for LoRA training: AI caption, Prompt, and Tags merged into one caption.'),
+        prompt: appT('batchExport.descPrompt', 'Writes one same-name .txt per image containing only Prompt text.'),
+        tags: appT('batchExport.descTags', 'Writes one same-name .txt per image containing only Tags.'),
+        negative: appT('batchExport.descNegative', 'Writes one same-name .txt per image containing only Negative prompt.'),
+        prompt_negative: appT('batchExport.descPromptNegative', 'Writes one same-name .txt per image with Prompt plus Negative prompt.'),
+        a1111: appT('batchExport.descA1111', 'Writes one same-name .txt per image in A1111 / Forge parameter-block format for regeneration.'),
+        caption_tags: appT('batchExport.descCaptionTags', 'Writes one same-name .txt per image with AI caption plus Tags, without the original Prompt.'),
+        json: appT('batchExport.descJson', 'Writes one same-name .json per image with Prompt, Tags, model, size, and generation parameters.'),
+    };
+    return descriptions[mode] || descriptions.caption_merged;
+}
+
+function updateExportFormatDescription(format) {
+    const description = $('#export-format-description');
+    if (description) {
+        description.textContent = getExportFormatDescription(format || $('#export-format')?.value || _currentExportFormat || 'prompt');
+    }
+}
+
+function updateBatchExportContentDescription(mode) {
+    const description = $('#batch-export-content-description');
+    if (description) {
+        description.textContent = getBatchExportContentDescription(mode || $('#batch-export-content-mode')?.value || 'caption_merged');
+    }
+}
+
+function normalizeExportTextPart(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function uniqueExportParts(parts) {
+    const seen = new Set();
+    const output = [];
+    parts.forEach((part) => {
+        const value = normalizeExportTextPart(part).replace(/^,+|,+$/g, '').trim();
+        if (!value) return;
+        const key = value.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        output.push(value);
+    });
+    return output;
+}
+
+function buildExportGenerationParams(image = {}) {
+    const params = image.generation_params && typeof image.generation_params === 'object'
+        ? { ...image.generation_params }
+        : {};
+    if (!params.model && image.checkpoint) params.model = image.checkpoint;
+    if (!params.size && image.width && image.height) params.size = `${image.width}x${image.height}`;
+    return params;
+}
+
+function buildA1111ExportBlock(image = {}) {
+    const prompt = String(image.prompt || '').trim();
+    const negative = String(image.negative_prompt || '').trim();
+    const params = buildExportGenerationParams(image);
+    const lines = [];
+    if (prompt) lines.push(prompt);
+    if (negative) lines.push(`Negative prompt: ${negative}`);
+
+    const order = [
+        ['steps', 'Steps'],
+        ['sampler', 'Sampler'],
+        ['schedule_type', 'Schedule type'],
+        ['cfg_scale', 'CFG scale'],
+        ['seed', 'Seed'],
+        ['size', 'Size'],
+        ['model', 'Model'],
+        ['model_hash', 'Model hash'],
+        ['clip_skip', 'Clip skip'],
+        ['denoising_strength', 'Denoising strength'],
+        ['loras', 'LoRAs'],
+    ];
+    const emitted = new Set();
+    const parts = [];
+    order.forEach(([key, label]) => {
+        const value = params[key];
+        if (value == null || value === '') return;
+        emitted.add(key);
+        parts.push(`${label}: ${value}`);
+    });
+    Object.keys(params).sort().forEach((key) => {
+        if (emitted.has(key)) return;
+        const value = params[key];
+        if (value == null || value === '') return;
+        const label = key.split('_').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
+        parts.push(`${label}: ${value}`);
+    });
+    if (parts.length) lines.push(parts.join(', '));
+    return lines.join('\n').trim();
+}
+
+function buildExportRecord(image = {}) {
+    return {
+        id: image.id,
+        filename: image.filename || '',
+        generator: image.generator || null,
+        prompt: image.prompt || '',
+        negative_prompt: image.negative_prompt || '',
+        ai_caption: image.ai_caption || '',
+        tags: Array.isArray(image.tags) ? image.tags : [],
+        checkpoint: image.checkpoint || null,
+        width: image.width || null,
+        height: image.height || null,
+        aesthetic_score: image.aesthetic_score ?? null,
+        generation_params: buildExportGenerationParams(image),
+    };
+}
+
+function escapeCsvField(value) {
+    const text = value == null ? '' : String(value);
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function buildExportText(exportData, format) {
+    const images = Array.isArray(exportData?.images) ? exportData.images : [];
+    let text = '';
+
+    if (format === 'prompt') {
+        text = images.map(image => String(image.prompt || '').trim()).filter(Boolean).join('\n\n');
+    } else if (format === 'prompt_numbered') {
+        text = images.map((image, index) => {
+            const prompt = String(image.prompt || '').trim();
+            if (!prompt) return '';
+            const filename = String(image.filename || `Image ${image.id || index + 1}`).trim();
+            return `${index + 1}. ${filename}\n${prompt}`;
+        }).filter(Boolean).join('\n\n');
+    } else if (format === 'negative') {
+        text = images.map(image => String(image.negative_prompt || '').trim()).filter(Boolean).join('\n\n');
+    } else if (format === 'prompt_negative') {
+        text = images.map((image) => {
+            const prompt = String(image.prompt || '').trim();
+            const negative = String(image.negative_prompt || '').trim();
+            return [prompt, negative ? `Negative prompt: ${negative}` : ''].filter(Boolean).join('\n');
+        }).filter(Boolean).join('\n\n');
+    } else if (format === 'a1111') {
+        text = images.map(buildA1111ExportBlock).filter(Boolean).join('\n\n');
+    } else if (format === 'tags') {
+        const allTags = new Set();
+        images.forEach((image) => (image.tags || []).forEach(tag => allTags.add(tag)));
+        text = Array.from(allTags).sort().join(', ');
+    } else if (format === 'caption_tags') {
+        text = images.map((image) => uniqueExportParts([image.ai_caption, ...(image.tags || [])]).join(', ')).filter(Boolean).join('\n');
+    } else if (format === 'caption_merged') {
+        text = images.map((image) => uniqueExportParts([image.ai_caption, image.prompt, ...(image.tags || [])]).join(', ')).filter(Boolean).join('\n');
+    } else if (format === 'jsonl') {
+        text = images.map(image => JSON.stringify(buildExportRecord(image))).join('\n');
+    } else if (format === 'csv') {
+        const header = ['id', 'filename', 'generator', 'prompt', 'negative_prompt', 'ai_caption', 'tags', 'checkpoint', 'width', 'height'];
+        const rows = images.map((image) => {
+            const record = buildExportRecord(image);
+            const values = [
+                record.id,
+                record.filename,
+                record.generator,
+                record.prompt,
+                record.negative_prompt,
+                record.ai_caption,
+                record.tags.join(', '),
+                record.checkpoint,
+                record.width,
+                record.height,
+            ];
+            return values.map(escapeCsvField).join(',');
+        });
+        text = [header.join(','), ...rows].join('\n');
+    }
+
+    if (!text) {
+        text = appT('export.noDataForFormat', 'No exportable data for this format in the selected preview.');
+    }
+
+    const totalSelected = Number(exportData?.total || images.length);
+    const previewWindowSize = Number(exportData?.preview_count ?? exportData?.count ?? images.length);
+    const previewCount = Math.min(totalSelected, previewWindowSize);
+    const previewOnly = Boolean(exportData?.has_more) || totalSelected > previewCount;
+
+    if (text.length > EXPORT_PREVIEW_MAX_CHARS) {
+        text = `${text.slice(0, EXPORT_PREVIEW_MAX_CHARS)}\n\n${appT('export.previewTextTruncated', '[Preview truncated to keep the app responsive]')}`;
+    }
+    if (previewOnly) {
+        text = `${text}\n\n${appT(
+            'export.previewLimited',
+            'Preview only shows the first {preview} of {total} selected images. Use "Same-name .txt" when you need one complete caption file per image.',
+            { preview: previewCount, total: totalSelected }
+        )}`;
+    }
+    return text;
+}
+
+function setExportModalMode(mode) {
+    const exportAltBtn = $('#btn-export-tags-alt');
+    if (!exportAltBtn) return;
+
+    const normalizedMode = mode === 'tags' ? 'tags' : 'prompts';
+    exportAltBtn.dataset.exportView = normalizedMode;
+    exportAltBtn.innerHTML = normalizedMode === 'prompts'
+        ? `🏷️ ${appT('export.tagsInstead', 'Show Tags')}`
+        : `📤 ${appT('export.promptsInstead', 'Show Prompt Text')}`;
+}
+
+function renderExportModalText(format = null) {
+    const selectedFormat = format || $('#export-format')?.value || _currentExportFormat || 'prompt';
+    _currentExportFormat = selectedFormat;
+    const select = $('#export-format');
+    if (select && select.value !== selectedFormat) select.value = selectedFormat;
+
+    $('#export-title').textContent = `${selectedFormat === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(selectedFormat)}`;
+    setExportModalMode(selectedFormat === 'tags' ? 'tags' : 'prompts');
+    updateExportFormatDescription(selectedFormat);
+
+    const textArea = $('#export-text');
+    if (!textArea || !_currentExportModalData) return;
+    textArea.value = buildExportText(_currentExportModalData, selectedFormat);
+}
+
+async function showExportModalWithFormat(format = 'prompt') {
     if (AppState.selectedIds.size === 0) return;
 
-    $('#export-title').textContent = `📤 ${appT('export.promptsTitle', 'Export Prompts')}`;
+    _currentExportModalData = null;
+    _currentExportFormat = format;
     $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
         count: AppState.selectedIds.size,
     });
-    setExportModalMode('prompts');
+    const select = $('#export-format');
+    if (select) select.value = format;
+    setExportModalMode(format === 'tags' ? 'tags' : 'prompts');
+    $('#export-title').textContent = `${format === 'tags' ? '🏷️' : '📤'} ${getExportFormatLabel(format)}`;
+    updateExportFormatDescription(format);
     const textArea = $('#export-text');
-    textArea.value = appT('export.loadingPrompts', 'Loading prompts...');
+    textArea.value = format === 'tags'
+        ? appT('export.loadingTags', 'Loading tags...')
+        : appT('export.loadingPrompts', 'Loading prompts...');
 
     showModal('export-modal');
 
     try {
         const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionData(ids);
-        const prompts = exportData.images
-            .map((image) => image.prompt?.trim())
-            .filter(Boolean);
-
-        textArea.value = prompts.join('\n\n');
+        _currentExportModalData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
+        renderExportModalText(format);
     } catch (e) {
-        textArea.value = appT('export.errorLoadingPrompts', 'Error loading prompts: {message}', {
+        textArea.value = appT('export.errorLoadingData', 'Error loading export data: {message}', {
             message: e.message,
         });
     }
+}
+
+async function showExportModal() {
+    return showExportModalWithFormat('prompt');
 }
 
 async function showExportTagsModal() {
-    if (AppState.selectedIds.size === 0) return;
-
-    $('#export-title').textContent = `🏷️ ${appT('export.tagsTitle', 'Export Tags')}`;
-    $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
-        count: AppState.selectedIds.size,
-    });
-    setExportModalMode('tags');
-    const textArea = $('#export-text');
-    textArea.value = appT('export.loadingTags', 'Loading tags...');
-
-    showModal('export-modal');
-    try {
-        const ids = Array.from(AppState.selectedIds);
-        const exportData = await loadSelectionData(ids);
-        const allTags = new Set();
-
-        exportData.images.forEach((image) => {
-            (image.tags || []).forEach((tag) => {
-                allTags.add(tag);
-            });
-        });
-
-        // Sort alphabetically and join
-        const sortedTags = Array.from(allTags).sort();
-        textArea.value = sortedTags.join(', ');
-    } catch (e) {
-        textArea.value = appT('export.errorLoadingTags', 'Error loading tags: {message}', {
-            message: e.message,
-        });
-    }
+    return showExportModalWithFormat('tags');
 }
+
+function getExportFileExtension(format) {
+    if (format === 'jsonl') return 'jsonl';
+    if (format === 'csv') return 'csv';
+    return 'txt';
+}
+
+function downloadCurrentExportText() {
+    const text = $('#export-text')?.value || '';
+    const format = $('#export-format')?.value || _currentExportFormat || 'prompt';
+    const extension = getExportFileExtension(format);
+    const filename = `sd-image-sorter-${format}-${new Date().toISOString().slice(0, 10)}.${extension}`;
+    const blob = new Blob([text], { type: extension === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
 
 function showBatchExportModal() {
     if (AppState.selectedIds.size === 0) {
@@ -5471,6 +7362,11 @@ function showBatchExportModal() {
     $('#batch-export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
         count: AppState.selectedIds.size,
     });
+    const contentModeSelect = $('#batch-export-content-mode');
+    if (contentModeSelect && !contentModeSelect.value) {
+        contentModeSelect.value = 'caption_merged';
+    }
+    updateBatchExportContentDescription(contentModeSelect?.value || 'caption_merged');
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
@@ -5478,6 +7374,20 @@ function showBatchExportModal() {
 
 function getExportDataCacheKey(imageIds) {
     return imageIds.map((id) => String(id)).join(',');
+}
+
+function getTokenExportDataCacheKey(selectionToken, offset, limit) {
+    return `token:${selectionToken}:${offset}:${limit}`;
+}
+
+function getActiveSelectionExportToken() {
+    if (AppState.selectionScope !== 'filtered' || !AppState.selectionToken) {
+        return null;
+    }
+    if (AppState.selectionFilterKey !== getSelectionFilterCacheKey(AppState.filters)) {
+        return null;
+    }
+    return AppState.selectionToken;
 }
 
 function resetSelectionDataCache() {
@@ -5550,15 +7460,61 @@ async function loadSelectionData(imageIds) {
     return data;
 }
 
-function setExportModalMode(mode) {
-    const exportAltBtn = $('#btn-export-tags-alt');
-    if (!exportAltBtn) return;
+async function loadSelectionDataByToken(selectionToken, { offset = 0, limit = EXPORT_PREVIEW_MAX_IMAGES } = {}) {
+    const normalizedOffset = Math.max(0, Number(offset) || 0);
+    const normalizedLimit = Math.max(1, Math.min(Number(limit) || EXPORT_PREVIEW_MAX_IMAGES, 10000));
+    const cacheKey = getTokenExportDataCacheKey(selectionToken, normalizedOffset, normalizedLimit);
+    if (AppState.selectionDataCache.key === cacheKey && AppState.selectionDataCache.data) {
+        return AppState.selectionDataCache.data;
+    }
 
-    exportAltBtn.dataset.exportView = mode;
-    exportAltBtn.innerHTML = mode === 'prompts'
-        ? `🏷️ ${appT('export.tagsInstead', 'Export Tags Instead')}`
-        : `📤 ${appT('export.promptsInstead', 'Export Prompts Instead')}`;
+    const response = await API.getSelectionDataByToken(selectionToken, {
+        offset: normalizedOffset,
+        limit: normalizedLimit,
+    });
+    const responseIds = Array.isArray(response?.images)
+        ? response.images.map((image) => Number(image?.id)).filter((id) => Number.isFinite(id) && id > 0)
+        : [];
+    const data = {
+        ...buildSelectionDataPayload(responseIds, response),
+        count: Number(response?.count ?? responseIds.length),
+        preview_count: Number(response?.count ?? responseIds.length),
+        total: Number(response?.total ?? responseIds.length),
+        offset: Number(response?.offset ?? normalizedOffset),
+        limit: Number(response?.limit ?? normalizedLimit),
+        next_offset: response?.next_offset ?? null,
+        has_more: Boolean(response?.has_more),
+        source: response?.source || 'selection_token',
+        exact_total: response?.exact_total !== false,
+    };
+    AppState.selectionDataCache = {
+        key: cacheKey,
+        data
+    };
+    return data;
 }
+
+async function loadSelectionPreviewData(ids, limit = EXPORT_PREVIEW_MAX_IMAGES) {
+    const selectionToken = getActiveSelectionExportToken();
+    if (selectionToken) {
+        return loadSelectionDataByToken(selectionToken, { offset: 0, limit });
+    }
+
+    const previewIds = ids.slice(0, limit);
+    const data = await loadSelectionData(previewIds);
+    return {
+        ...data,
+        count: data.images.length,
+        preview_count: previewIds.length,
+        total: ids.length,
+        offset: 0,
+        limit: previewIds.length,
+        has_more: ids.length > previewIds.length,
+        source: 'image_ids',
+        exact_total: true,
+    };
+}
+
 
 async function executeBatchExport() {
     const outputFolder = $('#batch-export-folder')?.value?.trim() || '';
@@ -5570,6 +7526,8 @@ async function executeBatchExport() {
     const prefix = $('#batch-export-prefix')?.value || '';
     const blacklistText = $('#batch-export-blacklist')?.value || '';
     const blacklist = blacklistText ? blacklistText.split(',').map(t => t.trim()).filter(t => t) : [];
+    const contentMode = $('#batch-export-content-mode')?.value || 'caption_merged';
+    const overwritePolicy = $('#batch-export-overwrite')?.value || 'unique';
 
     const imageIds = Array.from(AppState.selectedIds);
 
@@ -5584,18 +7542,34 @@ async function executeBatchExport() {
     if (startBtn) startBtn.disabled = true;
 
     try {
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix);
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy);
 
         $('#batch-export-progress-fill').style.width = '100%';
 
-        if (result.status === 'ok') {
+        const exported = Number(result?.exported || 0);
+        const skipped = Number(result?.skipped || 0);
+        const errorCount = Number(result?.error_count ?? result?.errors ?? 0);
+        const errorMessages = Array.isArray(result?.error_messages) ? result.error_messages : [];
+
+        if ((result.status === 'ok' || errorCount === 0) && exported > 0 && skipped === 0) {
             showToast(appT('export.success', 'Exported {count} tag files successfully.', {
-                count: result.exported,
+                count: exported,
             }), 'success');
+            hideModal('batch-export-modal');
+        } else if (result.status === 'partial' || exported > 0 || skipped > 0) {
+            const baseMessage = exported > 0
+                ? appT('batchExport.partialSuccess', 'Exported {count} file(s). {failed} failed.')
+                    .replace('{count}', exported)
+                    .replace('{failed}', errorCount)
+                : appT('batchExport.noFilesWritten', 'No .txt / .json files were written.');
+            const skippedMessage = skipped > 0
+                ? ` ${appT('batchExport.skippedExisting', 'Skipped {skipped} existing file(s).').replace('{skipped}', skipped)}`
+                : '';
+            showToast(`${baseMessage}${skippedMessage}`.trim(), errorCount > 0 || skipped > 0 ? 'warning' : 'success');
             hideModal('batch-export-modal');
         } else {
             showToast(appT('export.failedReason', 'Export failed: {reason}', {
-                reason: result.errors?.join(', ') || appT('common.unknownError', 'Unknown error'),
+                reason: errorMessages.join(', ') || appT('common.unknownError', 'Unknown error'),
             }), 'error');
         }
     } catch (e) {
@@ -5614,14 +7588,18 @@ function updateFiltersFromUI() {
     $$('#modal-generator-filters input[type="checkbox"]:checked').forEach(cb => {
         generators.push(cb.value);
     });
-    AppState.filters.generators = generators;
+    updateAppFilters((filters) => {
+        filters.generators = generators;
+    });
 
     // Get ratings
     const ratings = [];
     $$('#modal-rating-filters input[type="checkbox"]:checked').forEach(cb => {
         ratings.push(cb.value);
     });
-    AppState.filters.ratings = ratings;
+    updateAppFilters((filters) => {
+        filters.ratings = ratings;
+    });
 }
 
 function applyFilters() {
@@ -5636,10 +7614,12 @@ function clearFilters() {
     $$('#modal-rating-filters input[type="checkbox"]').forEach(cb => {
         cb.checked = true;
     });
-    AppState.filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
-    AppState.filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
-    AppState.filters.tags = [];
-    AppState.filters.search = '';
+    updateAppFilters((filters) => {
+        filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+        filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
+        filters.tags = [];
+        filters.search = '';
+    });
     const freeTextSearch = $('#modal-free-text-search');
     if (freeTextSearch) freeTextSearch.value = '';
     const activeTags = $('#active-tags');
@@ -5649,13 +7629,17 @@ function clearFilters() {
 
 function addTagFilter(tag) {
     if (!AppState.filters.tags.includes(tag)) {
-        AppState.filters.tags = [...AppState.filters.tags, tag];
+        updateAppFilters((filters) => {
+            filters.tags = [...filters.tags, tag];
+        });
         renderActiveTagFilters();
     }
 }
 
 function removeTagFilter(tag) {
-    AppState.filters.tags = AppState.filters.tags.filter(t => t !== tag);
+    updateAppFilters((filters) => {
+        filters.tags = filters.tags.filter(t => t !== tag);
+    });
     renderActiveTagFilters();
 }
 
@@ -5847,6 +7831,9 @@ async function openModelManager() {
     if (gridEl) gridEl.innerHTML = '';
     showModal('model-manager-modal');
 
+    // Disk usage loads independently so a slow model probe doesn't block it.
+    loadDiskUsage();
+
     try {
         const result = await API.getModelStatus();
         renderModelManager(result.models || []);
@@ -5863,17 +7850,12 @@ function renderModelManager(models = []) {
     if (!summaryEl || !gridEl) return;
 
     const readyCount = models.filter(model => model.status === 'ready').length;
-    const downloadedCount = models.filter(model => model.status === 'downloaded').length;
     const missingCount = models.filter(model => model.status === 'missing').length;
 
     summaryEl.innerHTML = `
         <div class="model-manager-stat">
             <strong>${readyCount}</strong>
             <span>${escapeHtml(appT('models.ready', 'Ready now'))}</span>
-        </div>
-        <div class="model-manager-stat">
-            <strong>${downloadedCount}</strong>
-            <span>${escapeHtml(appT('models.downloaded', 'Downloaded only'))}</span>
         </div>
         <div class="model-manager-stat">
             <strong>${missingCount}</strong>
@@ -5885,13 +7867,40 @@ function renderModelManager(models = []) {
         </div>
     `;
 
+    API.getMirror().then((mirrorData) => {
+        const current = mirrorData?.mirror || 'auto';
+        const labels = { auto: 'Auto (HuggingFace → hf-mirror fallback)', 'hf-mirror': 'hf-mirror.com (HF mirror)', modelscope: 'ModelScope' };
+        let mirrorRow = document.getElementById('model-mirror-row');
+        if (!mirrorRow) {
+            mirrorRow = document.createElement('div');
+            mirrorRow.id = 'model-mirror-row';
+            mirrorRow.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(191,219,254,0.08);border-radius:12px;';
+            gridEl.parentElement.insertBefore(mirrorRow, gridEl);
+        }
+        const opts = (mirrorData?.options || ['auto', 'hf-mirror', 'modelscope']).map(
+            o => `<option value="${escapeHtml(o)}"${o === current ? ' selected' : ''}>${escapeHtml(labels[o] || o)}</option>`
+        ).join('');
+        mirrorRow.innerHTML = `
+            <label style="font-size:13px;font-weight:600;color:var(--text-secondary);white-space:nowrap;">${escapeHtml(appT('models.mirrorLabel', 'Download Source'))}</label>
+            <select class="input-field" id="model-mirror-select" style="flex:1;font-size:12px;padding:6px 8px;">${opts}</select>
+        `;
+        document.getElementById('model-mirror-select')?.addEventListener('change', async (e) => {
+            try {
+                await API.setMirror(e.target.value);
+                showToast(appT('models.mirrorSaved', 'Download source saved: {mirror}').replace('{mirror}', labels[e.target.value] || e.target.value), 'success');
+            } catch (err) {
+                showToast(formatUserError(err, 'Failed to save'), 'error');
+            }
+        });
+    }).catch(() => {});
+
     gridEl.innerHTML = models.map((model) => {
         const safeId = escapeHtml(model.id);
         const status = model.status || (model.available ? 'ready' : 'missing');
-        const statusClass = status === 'ready' ? 'is-ready' : (status === 'downloaded' ? 'is-downloaded' : 'is-missing');
+        const statusClass = status === 'ready' ? 'is-ready' : 'is-missing';
         const statusLabel = status === 'ready'
             ? appT('models.readyBadge', 'Ready')
-            : (status === 'downloaded' ? appT('models.downloadedBadge', 'Downloaded') : appT('models.missingBadge', 'Missing'));
+            : appT('models.missingBadge', 'Missing');
         const sourceOptions = Array.isArray(model.sources) ? model.sources.map((source) => `
             <option value="${escapeHtml(source)}">${escapeHtml(source)}</option>
         `).join('') : '';
@@ -5901,20 +7910,26 @@ function renderModelManager(models = []) {
         const installedVariants = Array.isArray(model.installed_variants) && model.installed_variants.length
             ? `<div class="model-card-hint">${escapeHtml(appT('models.installedVariants', 'Installed variants'))}: ${escapeHtml(model.installed_variants.join(', '))}</div>`
             : '';
-        const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => `
-            <a class="btn btn-ghost btn-small" href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || appT('models.openSource', 'Open source'))}</a>
-        `).join('') : '';
+        const externalLinks = Array.isArray(model.external_links) ? model.external_links.map((link) => {
+            // Defense in depth: only allow http(s) URLs in the model registry. Block javascript:, data:,
+            // file:, vbscript: and other surprising schemes even though the registry is backend-controlled.
+            const rawUrl = String(link.url || '');
+            const safeUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : '#';
+            return `
+            <a class="btn btn-ghost btn-small" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || appT('models.openSource', 'Open source'))}</a>
+        `;
+        }).join('') : '';
 
         return `
             <article class="model-card ${statusClass}" data-model-id="${safeId}">
                 <div class="model-card-header">
                     <div>
-                        <div class="model-card-group">${escapeHtml(model.group || appT('models.groupFallback', 'Feature'))}</div>
+                        <div class="model-card-group">${escapeHtml(model.group_key ? appT(model.group_key, model.group || appT('models.groupFallback', 'Feature')) : (model.group || appT('models.groupFallback', 'Feature')))}</div>
                         <div class="model-card-title">${escapeHtml(model.name || model.id)}</div>
                     </div>
                     <span class="model-card-status ${statusClass}">${escapeHtml(statusLabel)}</span>
                 </div>
-                <div class="model-card-message">${escapeHtml(model.message || '')}</div>
+                <div class="model-card-message">${escapeHtml(model.message_key ? appT(model.message_key, model.message || '', model.message_params || {}) : (model.message || ''))}</div>
                 ${model.path ? `<div class="model-card-path">${escapeHtml(appT('models.path', 'Current path'))}:<code>${escapeHtml(model.path)}</code></div>` : ''}
                 ${model.runtime_path ? `<div class="model-card-path">${escapeHtml(appT('models.runtimePath', 'Runtime files'))}:<code>${escapeHtml(model.runtime_path)}</code></div>` : ''}
                 ${installedVariants}
@@ -5930,8 +7945,15 @@ function renderModelManager(models = []) {
                         <select class="input-field model-variant-select" data-model-id="${safeId}">${variantOptions}</select>
                     </label>
                 ` : ''}
+                ${Array.isArray(model.setup_steps) && model.setup_steps.length && status !== 'ready' ? `
+                    <details class="model-card-setup-steps">
+                        <summary>${escapeHtml(appT('models.setupSteps', 'Manual setup steps'))}</summary>
+                        <div class="model-card-hint">${model.setup_steps.map((s, i) => `<div>${i + 1}. <code>${escapeHtml(s)}</code></div>`).join('')}</div>
+                    </details>
+                ` : ''}
                 <div class="model-card-actions">
                     ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
+                    ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Automatic download not available — follow manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>
             </article>
@@ -5947,40 +7969,305 @@ function renderModelManager(models = []) {
             button.disabled = true;
             button.textContent = appT('models.working', 'Working...');
             try {
-                const result = await API.prepareModel(modelId, { source, variant });
-                showToast(result.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
-                const refreshed = await API.getModelStatus();
-                renderModelManager(refreshed.models || []);
-                // Notify other tabs (e.g. Similar Images) that a model changed
-                document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                await API.prepareModel(modelId, { source, variant });
             } catch (error) {
-                const apiData = error?.apiData || {};
-                const userMessage = apiData.message || formatUserError(error, appT('models.prepareFailed', 'Model setup failed'));
-                const manualSteps = Array.isArray(apiData.manual_steps) ? apiData.manual_steps : [];
-                if (apiData.type === 'CivitaiLoginRequired' && manualSteps.length > 0) {
-                    const card = button.closest('.model-card');
-                    if (card) {
-                        const messageEl = card.querySelector('.model-card-message');
-                        if (messageEl) {
-                            messageEl.textContent = userMessage;
-                        }
-                        let stepsEl = card.querySelector('.model-card-manual-steps');
-                        if (!stepsEl) {
-                            stepsEl = document.createElement('div');
-                            stepsEl.className = 'model-card-hint model-card-manual-steps';
-                            const actionsEl = card.querySelector('.model-card-actions');
-                            card.insertBefore(stepsEl, actionsEl || null);
-                        }
-                        stepsEl.innerHTML = manualSteps
-                            .map((step, index) => `<div>${index + 1}. ${escapeHtml(step)}</div>`)
-                            .join('');
-                    }
-                }
-                showToast(userMessage, error?.apiStatus === 409 ? 'warning' : 'error');
+                showToast(formatUserError(error, appT('models.prepareFailed', 'Model setup failed')), 'error');
                 button.disabled = false;
                 button.textContent = originalLabel;
+                return;
+            }
+
+            let finished = false;
+            const pollProgress = async () => {
+                try {
+                    const p = await API.get('/api/models/download-progress');
+                    if (p?.active && p.total > 0) {
+                        const pct = Math.round((p.downloaded / p.total) * 100);
+                        const mb = (p.downloaded / 1048576).toFixed(0);
+                        const totalMb = (p.total / 1048576).toFixed(0);
+                        button.textContent = `${p.filename || 'Downloading'}: ${mb}/${totalMb} MB (${pct}%)`;
+                    } else if (p?.active) {
+                        const mb = (p.downloaded / 1048576).toFixed(0);
+                        button.textContent = `${p.filename || 'Downloading'}: ${mb} MB...`;
+                    }
+                    const pr = p?.prepare_result;
+                    if (pr && !pr.active && pr.model_id === modelId && pr.status) {
+                        finished = true;
+                        if (pr.status === 'done') {
+                            showToast(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
+                            const refreshed = await API.getModelStatus();
+                            renderModelManager(refreshed.models || []);
+                            document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                            return;
+                        }
+                        if (pr.status === 'warning') {
+                            showToast(pr.message || appT('models.needsRuntimeToast', 'Model files are present, but runtime setup is incomplete.'), 'warning');
+                            const refreshed = await API.getModelStatus();
+                            renderModelManager(refreshed.models || []);
+                            document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
+                            return;
+                        }
+                        if (pr.status === 'error') {
+                            // If the backend returned structured guidance
+                            // (Civitai login wall on Privacy YOLO, archive
+                            // verification failure, etc.), surface it as
+                            // an actionable dialog instead of swallowing
+                            // the recovery path into a toast.
+                            const hasGuidance = Array.isArray(pr.manual_steps) && pr.manual_steps.length > 0;
+                            if (hasGuidance) {
+                                showModelSetupGuide(pr);
+                            } else {
+                                showToast(pr.message || appT('models.prepareFailed', 'Model setup failed'), 'error');
+                            }
+                            try {
+                                const refreshed = await API.getModelStatus();
+                                renderModelManager(refreshed.models || []);
+                            } catch (_refreshErr) {
+                                button.disabled = false;
+                                button.textContent = originalLabel;
+                            }
+                            return;
+                        }
+                    }
+                } catch (_pollErr) {}
+                if (!finished) {
+                    setTimeout(pollProgress, 800);
+                }
+            };
+            pollProgress();
+        });
+    });
+}
+
+function _formatBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function showModelSetupGuide(pr) {
+    // Build a one-off backdrop+dialog so the structured manual_steps from
+    // the backend (Civitai login wall, archive verification failure, ...)
+    // become an actionable recovery path instead of a stale toast.
+    const existing = document.getElementById('model-setup-guide-backdrop');
+    if (existing) existing.remove();
+
+    const provider = String(pr.provider || '').trim();
+    const message = String(pr.message || appT('models.prepareFailed', 'Model setup failed'));
+    const targetDir = String(pr.target_dir || '').trim();
+    const externalUrl = String(pr.external_url || '').trim();
+    const steps = Array.isArray(pr.manual_steps) ? pr.manual_steps : [];
+
+    const titleText = appT('models.manualSetupTitle', 'Manual setup required');
+    const providerLabel = provider
+        ? appT('models.providerLabel', 'Source: {provider}', { provider })
+        : '';
+    const dirLabel = appT('models.targetDirLabel', 'Save the files into this folder:');
+    const openLabel = appT('models.openDownloadPage', 'Open Download Page');
+    const copyLabel = appT('models.copyTargetDir', 'Copy folder path');
+    const closeLabel = appT('models.guideClose', 'Close');
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'model-setup-guide-backdrop';
+    backdrop.className = 'modal-backdrop visible';
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(8,12,24,0.72);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:24px;';
+
+    const dialog = document.createElement('div');
+    dialog.role = 'dialog';
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'model-setup-guide-title');
+    dialog.style.cssText = 'background:var(--bg-card-solid,#0e1a2d);color:var(--text-primary,#eef2ff);border:1px solid var(--glass-border,rgba(191,219,254,0.18));border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.5);';
+
+    const stepsHtml = steps
+        .map((step, i) => `<li style="margin:6px 0;line-height:1.5;">${escapeHtml(String(step))}</li>`)
+        .join('');
+
+    const targetDirHtml = targetDir
+        ? `
+            <div style="margin-top:14px;padding:12px;background:rgba(255,255,255,0.04);border-radius:10px;border:1px solid rgba(255,255,255,0.06);">
+                <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-bottom:6px;">${escapeHtml(dirLabel)}</div>
+                <code id="model-setup-guide-dir" style="display:block;word-break:break-all;font-size:12px;line-height:1.4;font-family:ui-monospace,Consolas,monospace;color:var(--text-primary,#eef2ff);">${escapeHtml(targetDir)}</code>
+                <button id="model-setup-guide-copy" type="button" class="btn btn-ghost btn-small" style="margin-top:8px;">${escapeHtml(copyLabel)}</button>
+            </div>
+        ` : '';
+
+    dialog.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">
+            <div style="flex:1;">
+                <h3 id="model-setup-guide-title" style="margin:0;font-size:18px;line-height:1.3;">${escapeHtml(titleText)}</h3>
+                ${providerLabel ? `<div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:4px;">${escapeHtml(providerLabel)}</div>` : ''}
+            </div>
+            <button id="model-setup-guide-close-x" type="button" aria-label="${escapeHtml(closeLabel)}" style="background:none;border:none;color:var(--text-muted,#94a3b8);font-size:22px;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px;">×</button>
+        </div>
+        <p style="margin:0 0 12px;line-height:1.5;">${escapeHtml(message)}</p>
+        ${steps.length ? `<ol style="margin:0;padding-left:22px;">${stepsHtml}</ol>` : ''}
+        ${targetDirHtml}
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap;">
+            ${externalUrl ? `<button id="model-setup-guide-open" type="button" class="btn btn-primary">${escapeHtml(openLabel)}</button>` : ''}
+            <button id="model-setup-guide-close" type="button" class="btn btn-secondary">${escapeHtml(closeLabel)}</button>
+        </div>
+    `;
+
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+
+    const close = () => {
+        document.removeEventListener('keydown', onKeydown);
+        backdrop.remove();
+    };
+    const onKeydown = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close();
+        }
+    };
+
+    // Backdrop click closes; dialog click does not bubble through.
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) close();
+    });
+    dialog.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('keydown', onKeydown);
+
+    document.getElementById('model-setup-guide-close-x')?.addEventListener('click', close);
+    document.getElementById('model-setup-guide-close')?.addEventListener('click', close);
+
+    if (externalUrl) {
+        document.getElementById('model-setup-guide-open')?.addEventListener('click', () => {
+            try {
+                window.open(externalUrl, '_blank', 'noopener,noreferrer');
+            } catch (_err) {
+                showToast(appT('models.openDownloadPageFailed', 'Could not open the download page automatically.'), 'error');
             }
         });
+    }
+
+    if (targetDir) {
+        document.getElementById('model-setup-guide-copy')?.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(targetDir);
+                showToast(appT('models.targetDirCopied', 'Folder path copied to clipboard'), 'success');
+            } catch (_err) {
+                // Fallback: select the code element so the user can Ctrl+C.
+                const codeEl = document.getElementById('model-setup-guide-dir');
+                if (codeEl) {
+                    const range = document.createRange();
+                    range.selectNodeContents(codeEl);
+                    const sel = window.getSelection();
+                    sel?.removeAllRanges();
+                    sel?.addRange(range);
+                }
+                showToast(appT('models.targetDirCopyFailed', 'Could not copy automatically — select and copy manually.'), 'warning');
+            }
+        });
+    }
+
+    // Focus management for accessibility.
+    setTimeout(() => {
+        document.getElementById('model-setup-guide-open')
+            ?? document.getElementById('model-setup-guide-close-x')
+            ?? null;
+        const focusTarget = document.getElementById('model-setup-guide-open')
+            || document.getElementById('model-setup-guide-close');
+        focusTarget?.focus();
+    }, 50);
+}
+
+async function loadDiskUsage() {
+    const bodyEl = $('#disk-usage-body');
+    if (!bodyEl) return;
+    bodyEl.innerHTML = `<div class="disk-usage-loading">${escapeHtml(appT('disk.loading', 'Reading disk usage…'))}</div>`;
+    try {
+        const data = await API.getCacheStatus();
+        renderDiskUsage(data);
+    } catch (error) {
+        bodyEl.innerHTML = `<div class="disk-usage-error">${escapeHtml(formatUserError(error, appT('disk.loadFailed', 'Failed to read disk usage')))}</div>`;
+    }
+}
+
+function renderDiskUsage(data) {
+    const bodyEl = $('#disk-usage-body');
+    if (!bodyEl) return;
+    const safe = Array.isArray(data?.safe_to_clean) ? data.safe_to_clean : [];
+    const preserved = Array.isArray(data?.preserved) ? data.preserved : [];
+
+    const safeRows = safe.map((entry) => {
+        const checked = entry.size_bytes > 0 ? 'checked' : '';
+        const sizeText = _formatBytes(entry.size_bytes);
+        return `
+            <label class="disk-cache-row" data-key="${escapeHtml(entry.key)}">
+                <input type="checkbox" class="disk-cache-checkbox" data-key="${escapeHtml(entry.key)}" ${checked}>
+                <span class="disk-cache-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
+                <span class="disk-cache-size">${escapeHtml(sizeText)}</span>
+                <span class="disk-cache-path" title="${escapeHtml(entry.path)}">${escapeHtml(entry.path)}</span>
+            </label>
+        `;
+    }).join('');
+
+    const preservedRows = preserved.map((entry) => `
+        <div class="disk-preserved-row">
+            <span class="disk-preserved-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
+            <span class="disk-preserved-size">${escapeHtml(_formatBytes(entry.size_bytes))}</span>
+        </div>
+    `).join('');
+
+    const totalSafe = safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+    const totalPreserved = preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+
+    bodyEl.innerHTML = `
+        <div class="disk-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.safeToClean', 'Safe to clean'))}</strong>
+                <span class="disk-section-total">${escapeHtml(_formatBytes(totalSafe))}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.safeHint', 'These caches will be regenerated as needed if you delete them.'))}</p>
+            <div class="disk-cache-list">${safeRows || `<div class="disk-empty">${escapeHtml(appT('disk.nothingToClean', 'Nothing to clean.'))}</div>`}</div>
+            <div class="disk-actions">
+                <button class="btn btn-primary btn-small" id="btn-clean-caches" ${totalSafe === 0 ? 'disabled' : ''}>${escapeHtml(appT('disk.cleanSelected', 'Clean Selected'))}</button>
+                <button class="btn btn-ghost btn-small" id="btn-refresh-disk-usage">${escapeHtml(appT('disk.refresh', 'Refresh'))}</button>
+            </div>
+        </div>
+        <div class="disk-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.preserved', 'Preserved (do not delete)'))}</strong>
+                <span class="disk-section-total">${escapeHtml(_formatBytes(totalPreserved))}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.preservedHint', 'These contain models, settings, or your personal data. The app will not delete them from this screen.'))}</p>
+            <div class="disk-preserved-list">${preservedRows}</div>
+        </div>
+    `;
+
+    $('#btn-refresh-disk-usage')?.addEventListener('click', () => {
+        loadDiskUsage();
+    });
+    $('#btn-clean-caches')?.addEventListener('click', async () => {
+        const checked = Array.from(bodyEl.querySelectorAll('.disk-cache-checkbox:checked')).map((el) => el.dataset.key);
+        if (checked.length === 0) {
+            showToast(appT('disk.selectAtLeastOne', 'Select at least one cache to clean.'), 'warning');
+            return;
+        }
+        const btn = $('#btn-clean-caches');
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = appT('disk.cleaning', 'Cleaning…');
+        try {
+            const result = await API.cleanCaches(checked);
+            const cleaned = Array.isArray(result?.cleaned) ? result.cleaned : [];
+            const errors = Array.isArray(result?.errors) ? result.errors : [];
+            const totalFreed = cleaned.reduce((sum, e) => sum + Number(e.freed_bytes || 0), 0);
+            if (errors.length > 0) {
+                showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} item(s) had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
+            } else {
+                showToast(appT('disk.cleanedSuccess', 'Freed {freed} of disk space.', { freed: _formatBytes(totalFreed) }), 'success');
+            }
+            loadDiskUsage();
+        } catch (error) {
+            showToast(formatUserError(error, appT('disk.cleanFailed', 'Failed to clean caches')), 'error');
+            btn.disabled = false;
+            btn.textContent = original;
+        }
     });
 }
 
@@ -6009,14 +8296,17 @@ async function loadModalFilterLists() {
 
     try {
         const data = optionData || AppState.analytics || await API.getStats();
+        const selectedCheckpointValues = new Set(
+            (filterState.checkpoints || []).map(normalizeCheckpointFilterValue).filter(Boolean)
+        );
 
         // Render checkpoints
         if (cpList) {
             cpList.innerHTML = (data.checkpoints || []).length > 0 ? (data.checkpoints || []).map(cp => `
                 <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(cp.checkpoint)}" ${filterState.checkpoints?.includes(cp.checkpoint) ? 'checked' : ''}>
+                    <input type="checkbox" value="${escapeHtml(getCheckpointOptionValue(cp))}" ${selectedCheckpointValues.has(getCheckpointOptionValue(cp)) ? 'checked' : ''}>
                     <span class="checkbox-custom"></span>
-                    <span class="checkbox-text">${escapeHtml(cp.checkpoint)}</span>
+                    <span class="checkbox-text">${escapeHtml(cp.checkpoint || getCheckpointOptionValue(cp))}</span>
                     <span class="checkbox-count">${cp.count}</span>
                 </label>
             `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noCheckpoints', null, 'No checkpoints found yet.'))}</div>`;
@@ -6348,14 +8638,12 @@ function applyModalFilters() {
     filterState.minAesthetic = minAesthetic;
     filterState.maxAesthetic = maxAesthetic;
 
-    if (FilterModalController.targetState) {
-        copyFilterState(FilterModalController.targetState, filterState);
-    }
+    const committedFilters = commitFilterModalState(filterState);
 
     hideModal('filter-modal');
 
     if (FilterModalController.onApply) {
-        FilterModalController.onApply(cloneFilterState(FilterModalController.targetState || filterState));
+        FilterModalController.onApply(cloneFilterState(committedFilters));
         showToast(appT('filter.appliedToast', 'Filters applied'), 'success');
         resetFilterModalController();
         return;
@@ -6425,21 +8713,17 @@ function resetAllFilters() {
     const artistRow = $('#artist-filter-row');
     if (artistRow) artistRow.style.display = 'none';
 
-    // Update all filter summaries
-    updateFilterSummary();
+    const committedFilters = commitFilterModalState(filterState);
     hideModal('filter-modal');
 
-    if (FilterModalController.targetState) {
-        copyFilterState(FilterModalController.targetState, filterState);
-    }
-
     if (FilterModalController.onReset) {
-        FilterModalController.onReset(cloneFilterState(FilterModalController.targetState || filterState));
+        FilterModalController.onReset(cloneFilterState(committedFilters));
         showToast(appT('filter.clearedToast', 'Filters cleared'), 'success');
         resetFilterModalController();
         return;
     }
 
+    updateFilterSummary();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.invalidateAutoSepPreview === 'function') window.invalidateAutoSepPreview();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
@@ -6505,11 +8789,11 @@ function loadFilterPreset(name) {
         return false;
     }
 
-    // Apply preset to filters
-    AppState.filters = {
+    // Apply preset via shared filter setter so FilterStore stays in sync.
+    setAppFilters({
         ...AppState.filters,
-        ...preset
-    };
+        ...preset,
+    });
 
     updateFilterSummary();
     syncGenTabsWithFilters();
@@ -6601,7 +8885,9 @@ function initMissingFilterMarkup() {
 
 // Clear only the artist filter
 function clearArtistFilter() {
-    AppState.filters.artist = null;
+    updateAppFilters((filters) => {
+        filters.artist = null;
+    });
     const artistRow = $('#artist-filter-row');
     if (artistRow) artistRow.style.display = 'none';
     updateFilterSummary();
@@ -6710,6 +8996,7 @@ function refreshLocalizedImageCount() {
 function refreshLocalizedDynamicUi() {
     refreshLocalizedImageCount();
     updateFilterSummary();
+    updateSelectionUI();
     if (typeof window.updateAutoSepSummary === 'function') window.updateAutoSepSummary();
     if (typeof window.updateManualSortFilterSummary === 'function') window.updateManualSortFilterSummary();
     if (AppState.modalSelection.type) {
@@ -6722,12 +9009,180 @@ function refreshLocalizedDynamicUi() {
         renderModelSelectList();
     }
     updateAestheticUi();
+    syncTaggerModelUi({ applyModelDefaults: false });
     window.Gallery?.refreshLocalizedContent?.();
 }
 
 // ============== Initialization ==============
 
 // Global keyboard shortcuts for gallery navigation
+// ============== Gallery Drag-and-Drop Import ==============
+
+function initGalleryDropZone() {
+    const galleryView = document.getElementById('view-gallery');
+    if (!galleryView) return;
+
+    let overlay = document.getElementById('gallery-drop-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'gallery-drop-overlay';
+        overlay.className = 'gallery-drop-overlay';
+        overlay.innerHTML = `
+            <div class="gallery-drop-overlay-content">
+                <span class="gallery-drop-overlay-icon" aria-hidden="true">📂</span>
+                <span class="gallery-drop-overlay-text">${escapeHtml(appT('gallery.dropToImport', 'Drop folder or images to import'))}</span>
+                <span class="gallery-drop-overlay-hint">${escapeHtml(appT('gallery.dropHint', 'Images will be imported from the dropped folder'))}</span>
+            </div>`;
+        galleryView.appendChild(overlay);
+    }
+
+    let dragCounter = 0;
+
+    galleryView.addEventListener('dragenter', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        if (!_hasFolderOrImageFiles(e)) return;
+        e.preventDefault();
+        dragCounter++;
+        if (dragCounter === 1) overlay.classList.add('visible');
+    });
+
+    galleryView.addEventListener('dragover', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        if (!_hasFolderOrImageFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+
+    galleryView.addEventListener('dragleave', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+            dragCounter = 0;
+            overlay.classList.remove('visible');
+        }
+    });
+
+    galleryView.addEventListener('drop', (e) => {
+        if (AppState.currentView !== 'gallery') return;
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('visible');
+        _handleGalleryDrop(e);
+    });
+}
+
+function _hasFolderOrImageFiles(e) {
+    if (!e.dataTransfer) return false;
+    const types = e.dataTransfer.types;
+    return types && (types.includes('Files') || types.indexOf('Files') >= 0);
+}
+
+async function _handleGalleryDrop(e) {
+    const items = e.dataTransfer.items;
+    const files = e.dataTransfer.files;
+    const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/bmp', 'image/gif']);
+
+    let isFolder = false;
+    let folderName = '';
+
+    if (items && items.length > 0) {
+        for (let i = 0; i < items.length; i++) {
+            const entry = items[i].webkitGetAsEntry?.() || items[i].getAsEntry?.();
+            if (entry && entry.isDirectory) {
+                isFolder = true;
+                folderName = entry.name || '';
+                break;
+            }
+        }
+    }
+
+    if (isFolder) {
+        _handleFolderDrop(folderName, files);
+        return;
+    }
+
+    if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter(f =>
+            IMAGE_TYPES.has(f.type) || /\.(png|jpe?g|webp|bmp|gif)$/i.test(f.name)
+        );
+        if (imageFiles.length > 0) {
+            _handleImageFilesDrop(imageFiles);
+            return;
+        }
+    }
+
+    showModal('scan-modal');
+}
+
+async function _handleFolderDrop(folderName, files) {
+    const droppedFiles = [];
+    if (files && files.length > 0) {
+        for (let i = 0; i < Math.min(files.length, 5); i++) {
+            if (files[i].name) {
+                droppedFiles.push({ name: files[i].name, size: files[i].size || 0 });
+            }
+        }
+    }
+
+    try {
+        const result = await API.resolveDrop(folderName, droppedFiles);
+        if (result?.folder_path) {
+            _openScanWithPath(result.folder_path);
+            return;
+        }
+    } catch (_) { /* fallback below */ }
+
+    showModal('scan-modal');
+    const input = document.getElementById('scan-folder-path');
+    if (input && folderName) {
+        input.value = folderName;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    showToast(
+        appT('gallery.dropHintBrowse', 'Could not locate the full path for "{name}". Please browse or complete the path.')
+            .replace('{name}', folderName || (droppedFiles[0]?.name) || ''),
+        'warning'
+    );
+}
+
+async function _handleImageFilesDrop(imageFiles) {
+    showToast(
+        appT('gallery.importingDropped', 'Importing {count} images...')
+            .replace('{count}', String(imageFiles.length)),
+        'info'
+    );
+    try {
+        const result = await API.importFiles(imageFiles);
+        const imported = result?.imported || 0;
+        const errors = result?.errors || 0;
+        if (imported > 0) {
+            showToast(
+                appT('gallery.importedDropped', 'Imported {count} images into gallery')
+                    .replace('{count}', String(imported))
+                    + (errors > 0 ? ` (${errors} failed)` : ''),
+                'success'
+            );
+            await loadStats();
+            await loadImages();
+        } else {
+            showToast(appT('gallery.importDroppedFailed', 'No images could be imported'), 'warning');
+        }
+    } catch (error) {
+        showToast(formatUserError(error, appT('gallery.importDroppedError', 'Failed to import dropped images')), 'error');
+    }
+}
+
+function _openScanWithPath(folderPath) {
+    showModal('scan-modal');
+    const input = document.getElementById('scan-folder-path');
+    if (input) {
+        input.value = folderPath;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    showToast(appT('gallery.dropFolderDetected', 'Folder detected: {path}').replace('{path}', folderPath), 'info');
+}
+
 function initGlobalKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         // Only handle when not in input/textarea
@@ -6783,7 +9238,7 @@ function initGlobalKeyboardShortcuts() {
         else if (e.key === 'Escape') {
             if (AppState.selectedIds.size > 0) {
                 e.preventDefault();
-                AppState.selectedIds.clear();
+                clearSelectedIds({ scope: 'visible' });
                 updateSelectionUI();
                 emitSelectionStateChanged();
                 if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
@@ -6792,11 +9247,11 @@ function initGlobalKeyboardShortcuts() {
                 showToast(appT('gallery.selectionCleared', 'Selection cleared'), 'info');
             }
         }
-        // Delete - Clear gallery (with confirmation)
+        // Delete - Remove from gallery only; permanent disk delete stays behind the explicit dangerous button.
         else if (e.key === 'Delete') {
             if (AppState.selectedIds.size > 0) {
                 e.preventDefault();
-                deleteSelectedGalleryImages();
+                removeSelectedGalleryImages();
             }
         }
     });
@@ -6807,6 +9262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     initInputModal();
     initGlobalKeyboardShortcuts();
+    initGalleryDropZone();
     loadTaggerModels();
     setTaggingUiState(false);
     setGalleryViewMode(AppState.viewMode);
@@ -6814,13 +9270,15 @@ document.addEventListener('DOMContentLoaded', () => {
     syncGallerySortLabels();
     switchView('gallery');
     loadStats();
-    refreshAestheticStatus();
+    const aestheticStatusReady = refreshAestheticStatus();
     updateFilterSummary();
     updateSelectionUI();
     resumeScanProgress();
+    resumeReconnectProgress();
     resumeTaggingProgress();
     _initBgTagProgressButtons();
     _initBgScanProgressButtons();
+    _initBgReconnectProgressButtons();
     document.addEventListener('languageChanged', refreshLocalizedDynamicUi);
     document.addEventListener('languageChanged', () => setUpdateButtonState(AppState.update.status, AppState.update.checking));
     setUpdateButtonState();
@@ -6851,6 +9309,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateNavigationOverflowState();
     window.addEventListener('load', updateNavigationOverflowState, { once: true });
     document.fonts?.ready?.then?.(() => updateNavigationOverflowState()).catch?.(() => {});
+    Promise.resolve(aestheticStatusReady).finally(() => {
+        document.documentElement.dataset.appReady = '1';
+        window.dispatchEvent(new Event('sd-image-sorter-ready'));
+    });
 });
 
 function addToCensorQueue(imageIds = []) {
@@ -6866,7 +9328,7 @@ function addToCensorQueue(imageIds = []) {
         window.initCensorEdit();
     }
 
-    const runtimeHandler = window.App?._addToCensorQueue;
+    const runtimeHandler = window.CensorEdit?.addToQueue;
     if (typeof runtimeHandler === 'function') {
         return runtimeHandler(normalizedIds);
     }
@@ -6912,6 +9374,26 @@ async function openReaderFromImage(imageId, filename = '') {
 }
 
 
+async function openSimilarFromImage(imageId) {
+    const normalizedId = Number(imageId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+        return false;
+    }
+
+    switchView('similar');
+    if (typeof window.initSimilar === 'function') {
+        window.initSimilar();
+    }
+    const input = $('#similar-search-id');
+    if (input) input.value = String(normalizedId);
+    if (window.SimilarImages?.searchByImage) {
+        window.SimilarImages.searchByImage(normalizedId);
+        return true;
+    }
+    return false;
+}
+
+
 function buildAppContext() {
     return {
         API,
@@ -6933,11 +9415,13 @@ function buildAppContext() {
         loadImages,
         loadStats,
         updateSelectionUI,
+        emitSelectionStateChanged,
         showConfirm,
         showRandomImage,
         showAnalytics,
         showExportModal,
         showExportTagsModal,
+        moveOrCopyGalleryImages,
         updateCollapsibleFilterUI,
         openModelSelect,
         renderModelSelectList,
@@ -6951,11 +9435,29 @@ function buildAppContext() {
         createDefaultFilterState,
         cloneFilterState,
         copyFilterState,
+        buildSelectionFilterRequest,
+        getSelectionFilterCacheKey,
+        buildAdvancedFilterContract,
+        getAdvancedFilterContractSignature,
+        normalizeCheckpointFilterValue,
+        FilterStore: AppFilterStore,
+        setFilters: setAppFilters,
+        updateFilters: updateAppFilters,
+        createDefaultSelectionState,
+        cloneSelectionState,
+        SelectionStore: AppSelectionStore,
+        setSelectionState,
+        updateSelectionState,
+        mutateSelectedIds,
+        clearSelectedIds,
+        setSelectionMode,
         updateSortReverseButton,
         syncGallerySortLabels,
         formatGeneratorLabel,
         loadSelectionData,
+        loadSelectionDataByToken,
         resetSelectionDataCache,
+        markGalleryNeedsRefresh,
         openTagsLibrary,
         switchLibraryTab,
         filterLibraryContent,
@@ -6964,9 +9466,11 @@ function buildAppContext() {
         applyPromptFilter,
         addToCensorQueue,
         sendToCensor: addToCensorQueue,
-        _addToCensorQueue: null,
         openPromptBuildFromImage,
         openReaderFromImage,
+        openSimilarFromImage,
+        deleteGalleryImagesByIds,
+        removeGalleryImagesByIds,
         addRecentFolder,
         getRecentFolders,
         clampTaggerChunkToAvailableOption,
@@ -6977,6 +9481,7 @@ function buildAppContext() {
 
 // Export for other modules
 window.App = buildAppContext();
+Object.seal(window.App);
 window.clampTaggerChunkToAvailableOption = clampTaggerChunkToAvailableOption;
 
 
@@ -6991,4 +9496,3 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-

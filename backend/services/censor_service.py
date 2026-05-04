@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw, PngImagePlugin, ImageEnhance, ImageFilter, Ima
 import database as db
 from config import get_temp_dir
 from model_health import get_default_legacy_model_path, get_model_health
+from services.indexed_file_mutation_service import save_and_reconcile_checked
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,13 @@ MAX_SAVE_DATA_PIXELS = 40_000_000
 MASK_INLINE_DATA_PIXEL_THRESHOLD = 8_000_000
 MASK_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 MASK_CACHE_DIR = Path(get_temp_dir()) / "censor_mask_cache"
+MAX_EDIT_OPERATION_COUNT = 5000
+MAX_EDIT_STROKE_POINTS = 250_000
+MAX_EDIT_GEOMETRY_POINTS = 250_000
+MAX_INLINE_OPERATION_MASK_BYTES = 12 * 1024 * 1024
+MAX_INLINE_OPERATION_MASK_PIXELS = 12_000_000
+MAX_FULL_IMAGE_FILTER_PIXELS = 45_000_000
+MAX_SERVER_EDIT_CANVAS_PIXELS = 80_000_000
 
 
 def _paths_match_runtime_case(candidate: Path, resolved: Path) -> bool:
@@ -42,10 +50,11 @@ class CensorDetectRequest(BaseModel):
     """Request model for detection."""
     image_id: int = Field(..., ge=1)
     model_path: str = ""
-    model_type: str = Field("legacy", pattern="^(legacy|nudenet|both)$")
+    model_type: str = Field("legacy", pattern="^(legacy|nudenet|sam3|both)$")
     confidence_threshold: float = Field(0.5, ge=0.0, le=1.0)
     exposed_only: bool = True
     target_classes: Optional[List[str]] = None
+    text_prompts: Optional[List[str]] = None
 
 
 class MaskRefineRequest(BaseModel):
@@ -71,7 +80,7 @@ class CensorApplyRequest(BaseModel):
     """Request model for censor apply/preview."""
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
-    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
     block_size: int = Field(16, ge=1)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
@@ -89,12 +98,13 @@ class CensorSaveRequest(BaseModel):
     """Request model for censor save."""
     image_id: int = Field(..., ge=1)
     regions: List[List[int]] = Field(..., min_length=1)
-    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|sticker)$")
+    style: str = Field("mosaic", pattern="^(mosaic|blur|solid|black_bar|white_bar|sticker)$")
     block_size: int = Field(16, ge=1)
     blur_radius: int = Field(20, ge=1)
     sticker_path: Optional[str] = None
     output_folder: str = Field(..., min_length=1)
     filename_suffix: str = "_censored"
+    allow_overwrite: bool = False
 
     @field_validator("regions")
     @classmethod
@@ -113,16 +123,18 @@ class CensorSaveDataRequest(BaseModel):
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
     original_image_id: Optional[int] = Field(None, ge=1)
+    allow_overwrite: bool = False
 
 
 class CensorSaveOperationsRequest(BaseModel):
     """Request to save non-destructive edit operations on top of the original image."""
     original_image_id: int = Field(..., ge=1)
-    operations: List[Dict[str, Any]] = Field(default_factory=list, max_length=5000)
+    operations: List[Dict[str, Any]] = Field(default_factory=list, max_length=MAX_EDIT_OPERATION_COUNT)
     filename: str = Field(..., min_length=1)
     output_folder: str = Field(..., min_length=1)
     metadata_option: str = Field("keep", pattern="^(keep|minimal|strip)$")
     output_format: str = Field("png", pattern="^(png|jpg|jpeg|webp)$")
+    allow_overwrite: bool = False
 
 
 class CensorService:
@@ -387,6 +399,33 @@ class CensorService:
         drew_any = False
 
         for detection in detections:
+            raw_mask = detection.get("mask")
+            if raw_mask is not None:
+                try:
+                    import numpy as np
+                    arr = np.asarray(raw_mask)
+                    if arr.ndim == 2 and arr.shape[0] > 0 and arr.shape[1] > 0:
+                        mask_pil = Image.fromarray((arr > 0).astype(np.uint8) * 255, mode="L")
+                        if mask_pil.size == image_size:
+                            mask_image = Image.composite(
+                                Image.new("L", image_size, 255),
+                                mask_image,
+                                mask_pil,
+                            )
+                            drew_any = True
+                            continue
+                        else:
+                            mask_pil = mask_pil.resize(image_size, Image.NEAREST)
+                            mask_image = Image.composite(
+                                Image.new("L", image_size, 255),
+                                mask_image,
+                                mask_pil,
+                            )
+                            drew_any = True
+                            continue
+                except Exception:
+                    pass
+
             polygon = detection.get("polygon")
             if isinstance(polygon, list):
                 points = [
@@ -460,6 +499,8 @@ class CensorService:
 
     @staticmethod
     def _has_polygon_geometry(detection: Dict[str, Any]) -> bool:
+        if detection.get("mask") is not None:
+            return True
         polygon = detection.get("polygon")
         if not isinstance(polygon, list):
             return False
@@ -555,20 +596,25 @@ class CensorService:
         return str(output_path)
 
     @staticmethod
-    def _refresh_indexed_output_entry(output_path: str) -> None:
-        """Refresh library metadata when a save overwrites an indexed path."""
-        resolved_output = str(Path(output_path).resolve())
-        indexed_output_row = db.get_image_by_path(resolved_output)
-        if not indexed_output_row:
-            return
+    def _output_validation_error(message: str) -> HTTPException:
+        return HTTPException(status_code=400, detail=message)
 
-        try:
-            from image_manager import reparse_image_metadata
+    @staticmethod
+    def _output_conflict_error(message: str) -> HTTPException:
+        return HTTPException(status_code=409, detail=message)
 
-            reparse_image_metadata(int(indexed_output_row["id"]), resolved_output)
-        except Exception:
-            logger.warning("Failed to refresh indexed metadata after saving %s", resolved_output, exc_info=True)
-
+    @staticmethod
+    def _save_response(output_path: str, filename: str, *, warnings: Optional[List[str]] = None, target_existed: bool = False) -> Dict[str, Any]:
+        indexed_output = db.get_image_by_path(output_path)
+        return {
+            "status": "ok",
+            "output_path": output_path,
+            "filename": filename,
+            "warnings": warnings or [],
+            "overwrote_existing": bool(target_existed),
+            "overwrote_indexed_path": bool(indexed_output),
+            "reconciled_image_id": int(indexed_output["id"]) if indexed_output else None,
+        }
 
     def detect(self, request: CensorDetectRequest) -> Dict[str, Any]:
         """
@@ -592,7 +638,26 @@ class CensorService:
         try:
             model_type = request.model_type
 
-            if model_type == "nudenet":
+            if model_type == "sam3":
+                from sam3_refiner import get_sam3_refiner, SAM3_PRIVACY_PROMPTS
+                sam3_health = get_model_health()["censor"]["sam3"]
+                if not sam3_health["available"]:
+                    raise HTTPException(status_code=503, detail=sam3_health.get("message", "SAM3 is not available"))
+                refiner = get_sam3_refiner()
+                custom_prompts = None
+                if request.text_prompts:
+                    custom_prompts = [
+                        {"prompt": p.strip(), "class": p.strip()}
+                        for p in request.text_prompts if p.strip()
+                    ]
+                with Image.open(image_path) as img:
+                    detections = refiner.detect_privacy_regions(
+                        img,
+                        conf_threshold=request.confidence_threshold,
+                        prompts=custom_prompts,
+                    )
+
+            elif model_type == "nudenet":
                 from nudenet_detector import get_nudenet_detector
                 detector = get_nudenet_detector()
                 try:
@@ -726,7 +791,8 @@ class CensorService:
                 raise HTTPException(status_code=400, detail=error or "Invalid sticker path")
 
         try:
-            image = Image.open(image_path).convert('RGB')
+            with Image.open(image_path) as src:
+                image = src.convert('RGB')
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -750,7 +816,7 @@ class CensorService:
         except Exception:
             raise HTTPException(status_code=500, detail="Preview failed")
 
-    def save(self, request: CensorSaveRequest) -> Dict[str, str]:
+    def save(self, request: CensorSaveRequest) -> Dict[str, Any]:
         """Apply censoring and save to output folder."""
         from censor import Censor
         from utils.path_validation import validate_folder_path, validate_file_path
@@ -780,7 +846,8 @@ class CensorService:
         try:
             os.makedirs(output_folder, exist_ok=True)
 
-            image = Image.open(image_path).convert('RGB')
+            with Image.open(image_path) as src:
+                image = src.convert('RGB')
             regions = [(int(r[0]), int(r[1]), int(r[2]), int(r[3])) for r in request.regions]
 
             censored = Censor.apply_censoring(
@@ -798,21 +865,33 @@ class CensorService:
             output_filename = f"{base_name}{safe_suffix}{ext}"
             output_path = self._ensure_output_path(output_folder, output_filename)
 
-            if ext.lower() in ['.jpg', '.jpeg']:
-                censored.save(output_path, format='JPEG', quality=95)
-            else:
-                censored.save(output_path, format='PNG')
-            self._refresh_indexed_output_entry(output_path)
+            def _write_censored_image(final_output_path: str, _overwrite_requested: bool) -> None:
+                if ext.lower() in ['.jpg', '.jpeg']:
+                    censored.save(final_output_path, format='JPEG', quality=95)
+                else:
+                    censored.save(final_output_path, format='PNG')
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename
-            }
+            write_result = save_and_reconcile_checked(
+                output_path,
+                _write_censored_image,
+                allow_overwrite=request.allow_overwrite,
+                backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
+            )
+
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
+        except HTTPException:
+            raise
         except Exception:
             raise HTTPException(status_code=500, detail="Save failed")
 
-    def save_data(self, request: CensorSaveDataRequest) -> Dict[str, str]:
+    def save_data(self, request: CensorSaveDataRequest) -> Dict[str, Any]:
         """Save base64 image data directly to disk."""
         from utils.path_validation import validate_folder_path, sanitize_filename
 
@@ -854,20 +933,30 @@ class CensorService:
                     output_format
                 )
 
-            self._save_image_with_format(image, output_path, output_format, save_kwargs)
-            self._refresh_indexed_output_entry(output_path)
+            def _write_canvas_save(final_output_path: str, _overwrite_requested: bool) -> None:
+                self._save_image_with_format(image, final_output_path, output_format, save_kwargs)
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename
-            }
+            write_result = save_and_reconcile_checked(
+                output_path,
+                _write_canvas_save,
+                allow_overwrite=request.allow_overwrite,
+                backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
+            )
+
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
         except HTTPException:
             raise
         except Exception:
             raise HTTPException(status_code=500, detail="Save data failed")
 
-    def save_operations(self, request: CensorSaveOperationsRequest) -> Dict[str, str]:
+    def save_operations(self, request: CensorSaveOperationsRequest) -> Dict[str, Any]:
         """Save original image with non-destructive censor operations applied server-side."""
         from utils.path_validation import validate_folder_path, sanitize_filename
 
@@ -889,10 +978,12 @@ class CensorService:
         try:
             os.makedirs(output_folder, exist_ok=True)
 
-            original_image = Image.open(source_path).convert("RGBA")
+            with Image.open(source_path) as src:
+                original_image = src.convert("RGBA")
             width, height = original_image.size
             if width <= 0 or height <= 0:
                 raise HTTPException(status_code=400, detail="Invalid source image")
+            self._validate_edit_operation_budget(request.operations, image_size=(width, height))
 
             working_image = original_image.copy()
             self._apply_edit_operations(working_image, original_image, request.operations)
@@ -916,14 +1007,24 @@ class CensorService:
                     output_format,
                 )
 
-            self._save_image_with_format(image_to_save, output_path, output_format, save_kwargs)
-            self._refresh_indexed_output_entry(output_path)
+            def _write_operations_save(final_output_path: str, _overwrite_requested: bool) -> None:
+                self._save_image_with_format(image_to_save, final_output_path, output_format, save_kwargs)
 
-            return {
-                "status": "ok",
-                "output_path": output_path,
-                "filename": output_filename,
-            }
+            write_result = save_and_reconcile_checked(
+                output_path,
+                _write_operations_save,
+                allow_overwrite=request.allow_overwrite,
+                backend_file=__file__,
+                validation_error_factory=self._output_validation_error,
+                conflict_error_factory=self._output_conflict_error,
+            )
+
+            return self._save_response(
+                output_path,
+                output_filename,
+                warnings=write_result.warnings,
+                target_existed=write_result.target_existed,
+            )
         except HTTPException:
             raise
         except Exception:
@@ -948,6 +1049,108 @@ class CensorService:
             except (TypeError, ValueError):
                 continue
         return normalized
+
+    @staticmethod
+    def _count_polygon_points(regions: Any) -> int:
+        if not isinstance(regions, list):
+            return 0
+        total = 0
+        for region in regions:
+            if not isinstance(region, dict):
+                continue
+            polygon = region.get("polygon")
+            if isinstance(polygon, list):
+                total += len(polygon)
+        return total
+
+    @classmethod
+    def _decode_operation_mask_header(cls, mask_data: str) -> tuple[bytes, str]:
+        mask_bytes, _ = cls._decode_base64_image(mask_data)
+        if len(mask_bytes) > MAX_INLINE_OPERATION_MASK_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Inline edit mask is too large. Use cached mask refs for large masks.",
+            )
+        return mask_bytes, mask_data
+
+    @classmethod
+    def _validate_edit_operation_budget(
+        cls,
+        operations: List[Dict[str, Any]],
+        *,
+        image_size: tuple[int, int],
+    ) -> None:
+        width, height = image_size
+        total_pixels = width * height
+        if total_pixels > MAX_SERVER_EDIT_CANVAS_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Source image is too large for server-side edit saving. Export a smaller version first.",
+            )
+
+        stroke_points = 0
+        geometry_points = 0
+        inline_mask_pixels = 0
+        has_full_image_filter = False
+
+        if len(operations or []) > MAX_EDIT_OPERATION_COUNT:
+            raise HTTPException(status_code=413, detail="Too many edit operations to save safely")
+
+        for operation in operations or []:
+            if not isinstance(operation, dict):
+                continue
+            kind = str(operation.get("kind") or "").strip().lower()
+            if kind == "stroke":
+                points = operation.get("points") or []
+                if isinstance(points, list):
+                    stroke_points += len(points)
+            elif kind == "geometry_effect":
+                geometry_points += cls._count_polygon_points(operation.get("regions"))
+            elif kind == "mask_effect":
+                mask_ref = str(operation.get("mask_ref") or "").strip()
+                mask_data = str(operation.get("mask_data") or "").strip()
+                if mask_ref:
+                    entry = cls._get_cached_mask_entry(mask_ref)
+                    bounds = cls._normalize_mask_bounds(
+                        operation.get("mask_bounds") or entry.get("bounds"),
+                        image_size=image_size,
+                    )
+                    if bounds is None:
+                        raise HTTPException(status_code=400, detail="Invalid cached mask bounds")
+                    inline_mask_pixels += max(0, bounds[2] - bounds[0]) * max(0, bounds[3] - bounds[1])
+                elif mask_data:
+                    mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
+                    try:
+                        with Image.open(BytesIO(mask_bytes)) as mask_image:
+                            mask_image.verify()
+                            inline_mask_pixels += mask_image.width * mask_image.height
+                    except HTTPException:
+                        raise
+                    except Exception as exc:
+                        raise HTTPException(status_code=400, detail="Invalid edit mask data") from exc
+            elif kind == "filter":
+                has_full_image_filter = True
+
+        if stroke_points > MAX_EDIT_STROKE_POINTS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Too many brush points to save safely ({stroke_points:,} > {MAX_EDIT_STROKE_POINTS:,})",
+            )
+        if geometry_points > MAX_EDIT_GEOMETRY_POINTS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Too many polygon points to save safely ({geometry_points:,} > {MAX_EDIT_GEOMETRY_POINTS:,})",
+            )
+        if inline_mask_pixels > MAX_INLINE_OPERATION_MASK_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Edit masks are too large to save inline. Re-run mask refinement so cached mask refs are used.",
+            )
+        if has_full_image_filter and total_pixels > MAX_FULL_IMAGE_FILTER_PIXELS:
+            raise HTTPException(
+                status_code=413,
+                detail="Full-image filters are too large for server-side saving on this image. Disable the filter or export a smaller version.",
+            )
 
     @staticmethod
     def _draw_stroke_mask(mask: Image.Image, points: List[tuple[float, float]], brush_size: float) -> None:
@@ -996,11 +1199,12 @@ class CensorService:
         image.paste(composited, bbox)
 
     @classmethod
-    def _apply_mask_style(
+    def _apply_mask_crop_style(
         cls,
         image: Image.Image,
         original_image: Image.Image,
-        mask: Image.Image,
+        mask_crop: Image.Image,
+        bbox: tuple[int, int, int, int],
         *,
         style: str,
         block_size: int,
@@ -1008,13 +1212,13 @@ class CensorService:
         pen_color: str = "#ff0000",
         pen_opacity: float = 1.0,
     ) -> None:
-        bbox = mask.getbbox()
-        if not bbox:
+        x1, y1, x2, y2 = [int(value) for value in bbox]
+        if x2 <= x1 or y2 <= y1 or mask_crop.getbbox() is None:
             return
 
-        x1, y1, x2, y2 = [int(value) for value in bbox]
         bbox = (x1, y1, x2, y2)
-        mask_crop = mask.crop(bbox)
+        if mask_crop.size != (x2 - x1, y2 - y1):
+            mask_crop = mask_crop.resize((x2 - x1, y2 - y1), Image.Resampling.LANCZOS)
         normalized_style = str(style or "").strip().lower()
 
         if normalized_style == "pen":
@@ -1045,6 +1249,38 @@ class CensorService:
 
         effect_crop = cls._pixelate_image_crop(image, bbox, max(1, int(round(block_size))))
         cls._composite_crop_with_mask(image, effect_crop.convert("RGBA"), mask_crop, bbox)
+
+    @classmethod
+    def _apply_mask_style(
+        cls,
+        image: Image.Image,
+        original_image: Image.Image,
+        mask: Image.Image,
+        *,
+        style: str,
+        block_size: int,
+        blur_radius: int,
+        pen_color: str = "#ff0000",
+        pen_opacity: float = 1.0,
+    ) -> None:
+        bbox = mask.getbbox()
+        if not bbox:
+            return
+
+        x1, y1, x2, y2 = [int(value) for value in bbox]
+        bbox = (x1, y1, x2, y2)
+        mask_crop = mask.crop(bbox)
+        cls._apply_mask_crop_style(
+            image,
+            original_image,
+            mask_crop,
+            bbox,
+            style=style,
+            block_size=block_size,
+            blur_radius=blur_radius,
+            pen_color=pen_color,
+            pen_opacity=pen_opacity,
+        )
 
     @classmethod
     def _apply_clone_operation(
@@ -1196,15 +1432,30 @@ class CensorService:
                 raise HTTPException(status_code=400, detail="Invalid cached mask bounds")
 
             crop_path = Path(entry["path"])
-            crop_mask = Image.open(crop_path).convert("L")
+            with Image.open(crop_path) as cached_mask_src:
+                crop_mask = cached_mask_src.convert("L")
             expected_size = (bounds[2] - bounds[0], bounds[3] - bounds[1])
             if crop_mask.size != expected_size:
                 crop_mask = crop_mask.resize(expected_size, Image.Resampling.LANCZOS)
-            alpha = Image.new("L", image.size, 0)
-            alpha.paste(crop_mask, (bounds[0], bounds[1]))
+            cls._apply_mask_crop_style(
+                image,
+                original_image,
+                crop_mask,
+                bounds,
+                style=str(operation.get("style") or "mosaic"),
+                block_size=int(operation.get("block_size", 16) or 16),
+                blur_radius=int(operation.get("blur_radius", 20) or 20),
+            )
+            return
         elif mask_data:
-            mask_bytes, _ = cls._decode_base64_image(mask_data)
+            mask_bytes, _ = cls._decode_operation_mask_header(mask_data)
             mask_image = Image.open(BytesIO(mask_bytes)).convert("RGBA")
+            mask_pixels = mask_image.width * mask_image.height
+            if mask_pixels > MAX_INLINE_OPERATION_MASK_PIXELS:
+                raise HTTPException(
+                    status_code=413,
+                    detail="Inline edit mask is too large. Use cached mask refs for large masks.",
+                )
             alpha = mask_image.getchannel("A") if "A" in mask_image.getbands() else mask_image.convert("L")
             if mask_image.size != image.size:
                 alpha = alpha.resize(image.size, Image.Resampling.LANCZOS)
@@ -1395,7 +1646,8 @@ class CensorService:
         )
 
         try:
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as src:
+                image = src.convert("RGB")
             refiner = get_sam3_refiner()
             mask = refiner.refine_box(
                 image,
@@ -1449,7 +1701,8 @@ class CensorService:
         )
 
         try:
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as src:
+                image = src.convert("RGB")
             refiner = get_sam3_refiner()
             mask = refiner.segment_by_text(image, request.text_prompt)
 
@@ -1503,7 +1756,8 @@ class CensorService:
                     image_id=item.image_id,
                     action_label="SAM3 batch refinement",
                 )
-                image = Image.open(image_path).convert("RGB")
+                with Image.open(image_path) as src:
+                    image = src.convert("RGB")
 
                 if refiner is None:
                     refiner = get_sam3_refiner()
@@ -1534,6 +1788,16 @@ class CensorService:
             except Exception as exc:
                 logger.warning("Batch SAM3 refinement failed for item %d (image %d): %s", idx, item.image_id, exc)
                 errors.append({"index": idx, "image_id": item.image_id, "error": str(exc)})
+            finally:
+                if (idx + 1) % 4 == 0:
+                    import gc as _gc
+                    _gc.collect()
+                    try:
+                        import torch as _torch
+                        if _torch.cuda.is_available():
+                            _torch.cuda.empty_cache()
+                    except Exception:
+                        pass
 
         return {
             "status": "ok",
@@ -1662,7 +1926,8 @@ class CensorService:
     def _strip_all_metadata(image: Image.Image) -> Image.Image:
         """Strip all metadata by creating a clean copy."""
         clean_image = Image.new(image.mode, image.size)
-        clean_image.putdata(list(image.getdata()))
+        pixel_data_getter = getattr(image, "get_flattened_data", image.getdata)
+        clean_image.putdata(list(pixel_data_getter()))
         return clean_image
 
     @staticmethod
@@ -1777,29 +2042,34 @@ class CensorService:
                 image_id=original_image_id,
                 action_label="Metadata copy",
             )
-            original_img = Image.open(original_source_path)
+            # `.info` is read multiple times below, and `_png_text_to_exif`
+            # / `_copy_png_text_metadata` both walk PNG text chunks on the
+            # still-open file object. Wrap the whole reader block so the
+            # OS handle is released deterministically afterwards (matters
+            # on Windows: a leaked handle blocks subsequent move/delete of
+            # the source file).
+            with Image.open(original_source_path) as original_img:
+                if 'icc_profile' in original_img.info:
+                    save_kwargs['icc_profile'] = original_img.info['icc_profile']
 
-            if 'icc_profile' in original_img.info:
-                save_kwargs['icc_profile'] = original_img.info['icc_profile']
+                if 'dpi' in original_img.info:
+                    save_kwargs['dpi'] = original_img.info['dpi']
 
-            if 'dpi' in original_img.info:
-                save_kwargs['dpi'] = original_img.info['dpi']
+                if metadata_option == "keep" and 'exif' in original_img.info:
+                    save_kwargs['exif'] = original_img.info['exif']
 
-            if metadata_option == "keep" and 'exif' in original_img.info:
-                save_kwargs['exif'] = original_img.info['exif']
+                if metadata_option == "keep" and output_format == 'png':
+                    pnginfo = self._copy_png_text_metadata(original_img)
+                    if pnginfo:
+                        save_kwargs['pnginfo'] = pnginfo
 
-            if metadata_option == "keep" and output_format == 'png':
-                pnginfo = self._copy_png_text_metadata(original_img)
-                if pnginfo:
-                    save_kwargs['pnginfo'] = pnginfo
-
-            # For non-PNG outputs, convert PNG text chunks to EXIF so SD
-            # metadata survives the format change.  Many SD tools read
-            # the "parameters" key from EXIF UserComment.
-            if metadata_option == "keep" and output_format != 'png' and 'exif' not in save_kwargs:
-                exif_bytes = self._png_text_to_exif(original_img)
-                if exif_bytes:
-                    save_kwargs['exif'] = exif_bytes
+                # For non-PNG outputs, convert PNG text chunks to EXIF so SD
+                # metadata survives the format change.  Many SD tools read
+                # the "parameters" key from EXIF UserComment.
+                if metadata_option == "keep" and output_format != 'png' and 'exif' not in save_kwargs:
+                    exif_bytes = self._png_text_to_exif(original_img)
+                    if exif_bytes:
+                        save_kwargs['exif'] = exif_bytes
 
         except Exception as e:
             logger.warning("Could not copy metadata from original: %s", e)

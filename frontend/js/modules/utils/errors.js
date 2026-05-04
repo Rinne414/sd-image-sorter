@@ -73,10 +73,14 @@ function getErrorPatterns() {
         { pattern: /CUDA.*memory|out of memory/i, message: localizeErrorText('Not enough memory. Try closing other applications.', '内存不足，建议先关闭其他程序再试。') },
         { pattern: /timeout/i, message: localizeErrorText('Operation timed out. Please try again.', '操作超时，请重试。') },
         { pattern: /abort|cancelled/i, message: localizeErrorText('Operation was cancelled.', '操作已取消。') },
-        { pattern: /source file is missing on disk/i, message: localizeErrorText('The original image file is no longer available. Reconnect that drive or folder, then rescan the library.', '原始图片文件已经不在磁盘上。请重新连接对应磁盘或文件夹后再重新扫描图库。') },
-        { pattern: /library entry does not contain a source image path/i, message: localizeErrorText('This library item no longer has a usable source path. Rescan the folder to rebuild it.', '这个图库项目已经没有可用的原图路径。请重新扫描文件夹来重建它。') },
-        { pattern: /invalid.*path/i, message: localizeErrorText('Invalid file path. Please check the path is correct.', '路径无效，请检查填写是否正确。') },
-        { pattern: /path.*not.*exist/i, message: localizeErrorText('The specified folder does not exist.', '指定的文件夹不存在。') },
+        { pattern: /source file is missing on disk/i, message: localizeErrorText('The original image file is no longer there. Use Find Moved Images if you moved it, or reconnect the drive/folder.', '原始图片文件已经不在原位置。如果你移动过图片，请用“找回图片”；如果在外置盘，请先重新连接磁盘。') },
+        { pattern: /library entry does not contain a source image path/i, message: localizeErrorText('This gallery item has no usable original-file path. Scan the folder again to rebuild it.', '这个图库项目没有可用的原图路径。请重新扫描文件夹来重建它。') },
+        { pattern: /invalid filename characters|invalid.*filename/i, message: localizeErrorText('The path contains characters Windows cannot use in a file or folder name. Remove characters like < > : " / \ | ? * and try again.', '路径里有 Windows 不允许用于文件名的字符。请删除 < > : " / \ | ? * 这类字符后再试。') },
+        { pattern: /invalid.*path/i, message: localizeErrorText('This path cannot be used. Check that the folder exists and the name does not contain invalid characters.', '这个路径不能用。请确认文件夹存在，并且名称里没有非法字符。') },
+        { pattern: /path.*not.*exist|folder.*not.*exist/i, message: localizeErrorText('That folder does not exist. Choose an existing folder, or create it first.', '这个文件夹不存在。请选择已有文件夹，或先创建它。') },
+        { pattern: /trash|recycle bin|send2trash/i, message: localizeErrorText('The file was not moved to Trash. It may be on a drive or system where Trash is unavailable, so the app did not permanently delete it.', '没有成功移到回收站。这个磁盘或系统可能不支持回收站，所以软件没有永久删除文件。') },
+        { pattern: /No module named ['"]torch|torch/i, message: localizeErrorText('The AI runtime is not ready. Open Model setup from the start page, then run the dependency/model check again.', 'AI 运行环境还没准备好。请从首页左下角打开模型管理，完成依赖/模型检查后再试。') },
+        { pattern: /WD14|onnxruntime|ONNX/i, message: localizeErrorText('WD14 tagging is not ready yet. Open Model setup and prepare the tagger model/runtime.', 'WD14 自动打标还没准备好。请打开模型管理，准备打标模型/运行库后再试。') },
         { pattern: /connection.*refused/i, message: localizeErrorText('Cannot connect to server. Please ensure the server is running.', '无法连接到服务器。请确认软件已经启动。') },
     ];
 }

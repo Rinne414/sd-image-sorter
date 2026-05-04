@@ -4,12 +4,16 @@ Configuration management for SD Image Sorter.
 All configurable values are centralized here with environment variable support.
 Copy .env.example to .env and customize as needed.
 """
+import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 
 from app_info import GITHUB_LATEST_RELEASE_API_URL, GITHUB_REPOSITORY_URL
+
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -84,6 +88,28 @@ def _bootstrap_package_env() -> None:
 _bootstrap_package_env()
 
 
+def read_int_env(name: str, default: int) -> int:
+    """Read an integer env var with a clear startup error for invalid values."""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {name}: expected integer, got {raw_value!r}") from exc
+
+
+def read_float_env(name: str, default: float) -> float:
+    """Read a float env var with a clear startup error for invalid values."""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {name}: expected number, got {raw_value!r}") from exc
+
+
 PROJECT_ROOT: Path = _get_project_root()
 BACKEND_DIR: Path = _get_backend_dir()
 PACKAGE_ROOT: Path = PROJECT_ROOT
@@ -105,6 +131,12 @@ TEMP_DIR: Path = Path(
         str(DATA_DIR / "tmp"),
     )
 ).expanduser()
+STATE_DIR: Path = Path(
+    os.environ.get(
+        "SD_IMAGE_SORTER_STATE_DIR",
+        str(DATA_DIR / "state"),
+    )
+).expanduser()
 UPDATE_DIR: Path = Path(
     os.environ.get(
         "SD_IMAGE_SORTER_UPDATE_DIR",
@@ -118,6 +150,63 @@ THUMBNAIL_DIR: Path = Path(
     )
 ).expanduser()
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
+DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
+
+
+VALID_MIRRORS = ("auto", "hf-mirror", "modelscope")
+
+
+def get_download_mirror() -> str:
+    """Return the persisted download mirror, defaulting to "auto".
+
+    Reads CONFIG_DIR/download-mirror.json. Logs (rather than swallows) any
+    read error so config corruption is surfaced and not silently masked.
+    """
+    if not DOWNLOAD_MIRROR_CONFIG_PATH.exists():
+        return "auto"
+    import json as _json
+    try:
+        raw = DOWNLOAD_MIRROR_CONFIG_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning(
+            "Could not read download mirror config %s: %s; defaulting to 'auto'",
+            DOWNLOAD_MIRROR_CONFIG_PATH,
+            exc,
+        )
+        return "auto"
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError as exc:
+        logger.warning(
+            "Download mirror config %s is corrupt (%s); defaulting to 'auto'",
+            DOWNLOAD_MIRROR_CONFIG_PATH,
+            exc,
+        )
+        return "auto"
+    mirror = str(data.get("mirror", "auto")).strip().lower()
+    if mirror not in VALID_MIRRORS:
+        logger.warning(
+            "Download mirror config has unknown value %r; defaulting to 'auto'",
+            mirror,
+        )
+        return "auto"
+    return mirror
+
+
+def save_download_mirror(mirror: str) -> None:
+    import json as _json
+    mirror = str(mirror).strip().lower()
+    if mirror not in VALID_MIRRORS:
+        mirror = "auto"
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    DOWNLOAD_MIRROR_CONFIG_PATH.write_text(
+        _json.dumps({"mirror": mirror}, indent=2),
+        encoding="utf-8",
+    )
+MANUAL_SORT_SESSION_FILE: str = os.environ.get(
+    "SD_IMAGE_SORTER_SORT_SESSION_FILE",
+    str(STATE_DIR / "sort-session.json"),
+)
 
 
 # =============================================================================
@@ -145,7 +234,7 @@ FAVORITES_FOLDER_PATH: str = os.environ.get(
 
 # Server host and port
 SERVER_HOST: str = os.environ.get("SD_IMAGE_SORTER_HOST", "127.0.0.1")
-SERVER_PORT: int = int(os.environ.get("SD_IMAGE_SORTER_PORT", "8487"))
+SERVER_PORT: int = read_int_env("SD_IMAGE_SORTER_PORT", 8487)
 
 # CORS allowed origins (regex pattern for localhost)
 CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
@@ -157,11 +246,11 @@ RATE_LIMIT_ENABLED: bool = os.environ.get(
 ).lower() in ("true", "1", "yes")
 RATE_LIMIT_WINDOW_SECONDS: int = max(
     1,
-    int(os.environ.get("SD_IMAGE_SORTER_RATE_LIMIT_WINDOW_SECONDS", "60")),
+    read_int_env("SD_IMAGE_SORTER_RATE_LIMIT_WINDOW_SECONDS", 60),
 )
 RATE_LIMIT_MAX_REQUESTS: int = max(
     1,
-    int(os.environ.get("SD_IMAGE_SORTER_RATE_LIMIT_MAX_REQUESTS", "1000")),
+    read_int_env("SD_IMAGE_SORTER_RATE_LIMIT_MAX_REQUESTS", 1000),
 )
 RATE_LIMIT_APPLY_TO_LOOPBACK: bool = os.environ.get(
     "SD_IMAGE_SORTER_RATE_LIMIT_LOOPBACK",
@@ -202,7 +291,7 @@ UPDATE_DOWNLOAD_URL_PREFIX: str = str(
 # Model Download Mirror
 # =============================================================================
 
-# HuggingFace endpoint override for users behind the GFW (mainland China).
+# HuggingFace endpoint override for users who cannot access huggingface.co.
 # Set to "https://hf-mirror.com" to use the hf-mirror proxy.
 # When set, the huggingface_hub library will download from this endpoint
 # instead of the default https://huggingface.co.
@@ -271,14 +360,8 @@ DEFAULT_TAGGER_MODEL: str = os.environ.get(
 )
 
 # Default thresholds
-TAGGER_GENERAL_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_TAGGER_GENERAL_THRESHOLD",
-    "0.35"
-))
-TAGGER_CHARACTER_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_TAGGER_CHARACTER_THRESHOLD",
-    "0.85"
-))
+TAGGER_GENERAL_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_TAGGER_GENERAL_THRESHOLD", 0.35)
+TAGGER_CHARACTER_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_TAGGER_CHARACTER_THRESHOLD", 0.85)
 
 # GPU usage
 TAGGER_USE_GPU: bool = os.environ.get(
@@ -371,16 +454,10 @@ RATING_CATEGORIES: list = ["general", "sensitive", "questionable", "explicit"]
 # =============================================================================
 
 # Default censor detection confidence threshold
-CENSOR_CONFIDENCE_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_CENSOR_CONFIDENCE",
-    "0.60"
-))
+CENSOR_CONFIDENCE_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_CENSOR_CONFIDENCE", 0.60)
 
 # Default censor IOU threshold for NMS
-CENSOR_IOU_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_CENSOR_IOU_THRESHOLD",
-    "0.45"
-))
+CENSOR_IOU_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_CENSOR_IOU_THRESHOLD", 0.45)
 
 # YOLO input size
 YOLO_INPUT_SIZE: tuple = (640, 640)
@@ -395,14 +472,8 @@ CENSOR_DEFAULT_CLASSES: list = [
 ]
 
 # Default censor style settings
-CENSOR_DEFAULT_BLOCK_SIZE: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_CENSOR_BLOCK_SIZE",
-    "16"
-))
-CENSOR_DEFAULT_BLUR_RADIUS: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_CENSOR_BLUR_RADIUS",
-    "20"
-))
+CENSOR_DEFAULT_BLOCK_SIZE: int = read_int_env("SD_IMAGE_SORTER_CENSOR_BLOCK_SIZE", 16)
+CENSOR_DEFAULT_BLUR_RADIUS: int = read_int_env("SD_IMAGE_SORTER_CENSOR_BLUR_RADIUS", 20)
 
 
 # =============================================================================
@@ -419,18 +490,9 @@ CLIP_MODEL_NAME: str = os.environ.get(
 EMBEDDING_DIMENSIONS: int = 512
 
 # Similarity search defaults
-SIMILARITY_DEFAULT_LIMIT: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_SIMILARITY_LIMIT",
-    "20"
-))
-SIMILARITY_DEFAULT_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_SIMILARITY_THRESHOLD",
-    "0.5"
-))
-DUPLICATE_THRESHOLD: float = float(os.environ.get(
-    "SD_IMAGE_SORTER_DUPLICATE_THRESHOLD",
-    "0.95"
-))
+SIMILARITY_DEFAULT_LIMIT: int = read_int_env("SD_IMAGE_SORTER_SIMILARITY_LIMIT", 20)
+SIMILARITY_DEFAULT_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_SIMILARITY_THRESHOLD", 0.5)
+DUPLICATE_THRESHOLD: float = read_float_env("SD_IMAGE_SORTER_DUPLICATE_THRESHOLD", 0.95)
 
 
 # =============================================================================
@@ -484,18 +546,10 @@ ALLOWED_IMAGE_EXTENSIONS: set = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp
 ALLOWED_MODEL_EXTENSIONS: set = {'.onnx', '.pt', '.pth', '.safetensors'}
 
 # Batch processing sizes
-TAGGER_BATCH_SIZE: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_TAGGER_BATCH_SIZE",
-    "10"
-))
-EMBEDDING_BATCH_SIZE: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_EMBEDDING_BATCH_SIZE",
-    "10"
-))
-DUPLICATE_CHUNK_SIZE: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_DUPLICATE_CHUNK_SIZE",
-    "500"
-))
+TAGGER_BATCH_SIZE: int = read_int_env("SD_IMAGE_SORTER_TAGGER_BATCH_SIZE", 10)
+EMBEDDING_BATCH_SIZE: int = read_int_env("SD_IMAGE_SORTER_EMBEDDING_BATCH_SIZE", 10)
+DUPLICATE_CHUNK_SIZE: int = read_int_env("SD_IMAGE_SORTER_DUPLICATE_CHUNK_SIZE", 500)
+DUPLICATE_SYNC_MAX_EMBEDDINGS: int = read_int_env("SD_IMAGE_SORTER_DUPLICATE_SYNC_MAX_EMBEDDINGS", 5000)
 
 
 # =============================================================================
@@ -503,10 +557,7 @@ DUPLICATE_CHUNK_SIZE: int = int(os.environ.get(
 # =============================================================================
 
 # Maximum path depth to prevent deep nesting attacks
-MAX_PATH_DEPTH: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_MAX_PATH_DEPTH",
-    "64"
-))
+MAX_PATH_DEPTH: int = read_int_env("SD_IMAGE_SORTER_MAX_PATH_DEPTH", 64)
 
 # Maximum path length
 # Use a modern default across platforms. Older Windows setups may still fail on
@@ -514,16 +565,10 @@ MAX_PATH_DEPTH: int = int(os.environ.get(
 # longer paths just because the legacy 260-character limit exists.
 _default_max_path = 4096
 
-MAX_PATH_LENGTH: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_MAX_PATH_LENGTH",
-    str(_default_max_path)
-))
+MAX_PATH_LENGTH: int = read_int_env("SD_IMAGE_SORTER_MAX_PATH_LENGTH", _default_max_path)
 
 # Maximum filename length for sanitization
-MAX_FILENAME_LENGTH: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_MAX_FILENAME_LENGTH",
-    "200"
-))
+MAX_FILENAME_LENGTH: int = read_int_env("SD_IMAGE_SORTER_MAX_FILENAME_LENGTH", 200)
 
 
 # =============================================================================
@@ -531,17 +576,7 @@ MAX_FILENAME_LENGTH: int = int(os.environ.get(
 # =============================================================================
 
 # Default gallery limit
-GALLERY_DEFAULT_LIMIT: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_GALLERY_LIMIT",
-    "100"
-))
-
-# Maximum gallery limit
-GALLERY_MAX_LIMIT: int = int(os.environ.get(
-    "SD_IMAGE_SORTER_GALLERY_MAX_LIMIT",
-    "999999"
-))
-
+GALLERY_DEFAULT_LIMIT: int = read_int_env("SD_IMAGE_SORTER_GALLERY_LIMIT", 100)
 
 # =============================================================================
 # Logging Configuration
@@ -587,6 +622,12 @@ def get_temp_dir() -> str:
     return str(TEMP_DIR)
 
 
+def get_state_dir() -> str:
+    """Get the package-local runtime state directory, creating it if necessary."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    return str(STATE_DIR)
+
+
 def get_update_dir() -> str:
     """Get the package-local update directory, creating it if necessary."""
     UPDATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -622,10 +663,10 @@ def get_wd14_model_dir() -> str:
     # Try to create package-local folder
     try:
         model_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created model directory: {model_dir}")
+        logger.info("Created model directory: %s", model_dir)
         return str(model_dir)
-    except Exception as e:
-        print(f"Could not create package-local model dir: {e}")
+    except Exception as exc:
+        logger.warning("Could not create package-local model dir: %s", exc)
 
     # Fallback to user cache
     cache_dir = Path(DEFAULT_CACHE_DIR) / "wd14-tagger"

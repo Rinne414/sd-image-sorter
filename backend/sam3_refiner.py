@@ -1,25 +1,40 @@
 """
-SAM3 mask refinement for precise censoring.
+SAM3 mask refinement using HuggingFace transformers' Sam3Model.
 
-This module wraps the real SAM3 API exposed by the `sam3` Python package.
-It supports:
-- refining existing bounding boxes into pixel masks
-- text-prompt segmentation
-- local checkpoint discovery under models/sam3
+The original ``sam3`` 0.1.3 PyPI package's loader is incompatible with the
+checkpoint shapes facebook publishes today: PyTorch 2.6+ rejects its pickle
+``weights_only=True`` path, and the ModelScope/HF mirrors only ship the
+transformers-format ``model.safetensors``. transformers ≥5.6 ships a
+faithful native port (``Sam3Model`` + ``Sam3Processor``) that loads the
+same trained weights from the standard safetensors distribution and
+supports text and box prompting natively.
+
+Public surface (preserved for callers):
+- ``SAM3Refiner.is_available()``
+- ``SAM3Refiner.load()``
+- ``SAM3Refiner.refine_box(image, box, text_prompt=None)``
+- ``SAM3Refiner.refine_boxes(image, detections)``
+- ``SAM3Refiner.segment_by_text(image, text)``
+- ``SAM3Refiner.detect_privacy_regions(image, conf_threshold, prompts)``
+- ``get_sam3_refiner(checkpoint_path, source)``
+- ``SAM3_PRIVACY_PROMPTS``
 """
 from __future__ import annotations
 
 import contextlib
+import copy
+import gc
+import json
 import logging
-import os
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from PIL import Image
 
 from config import get_sam3_model_dir
+from ai_runtime_guard import exclusive_ai_runtime
 
 
 logger = logging.getLogger(__name__)
@@ -27,225 +42,252 @@ logger = logging.getLogger(__name__)
 
 _sam3_model = None
 _sam3_processor = None
-_sam3_device = None
+_sam3_device: Optional[str] = None
 _sam3_lock = threading.Lock()
-_sam3_available = None
-_sam3_runtime_patch_applied = False
+_sam3_available: Optional[bool] = None
+
+
+# Files the transformers SAM3 loader needs in the checkpoint directory.
+_SAM3_REQUIRED_FILES = (
+    "config.json",
+    "model.safetensors",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "merges.txt",
+    "special_tokens_map.json",
+)
 
 
 def _check_sam3_available() -> bool:
-    """Check whether the SAM3 runtime package can be imported."""
+    """Check whether transformers' SAM3 image variant + CUDA are usable."""
     global _sam3_available
     if _sam3_available is None:
         try:
             import torch
-            from sam3 import build_sam3_image_model  # noqa: F401
-            from sam3.model.sam3_image_processor import Sam3Processor  # noqa: F401
+            from transformers.models.sam3.modeling_sam3 import Sam3Config, Sam3Model  # noqa: F401
+            from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor  # noqa: F401
+            from transformers.models.sam3.processing_sam3 import Sam3Processor  # noqa: F401
             _sam3_available = bool(torch.cuda.is_available())
             if not _sam3_available:
                 if getattr(getattr(torch, "version", None), "cuda", None) is None:
-                    logger.warning("SAM3 runtime is installed, but this Python environment is using CPU-only PyTorch.")
+                    logger.warning(
+                        "SAM3 runtime is installed, but this Python environment is using CPU-only PyTorch."
+                    )
                 else:
-                    logger.warning("SAM3 runtime is installed, but this Python environment cannot access CUDA right now.")
+                    logger.warning(
+                        "SAM3 runtime is installed, but this Python environment cannot access CUDA right now."
+                    )
         except ImportError as exc:
             _sam3_available = False
             logger.warning("SAM3 runtime is unavailable: %s", exc)
     return bool(_sam3_available)
 
 
-def _patch_sam3_runtime_for_stable_inference() -> None:
-    """Patch SAM3 fused MLP inference to avoid bf16/float32 mismatches."""
-    global _sam3_runtime_patch_applied
-    if _sam3_runtime_patch_applied:
-        return
+def _resolve_checkpoint_dir(checkpoint_path: Optional[str] = None) -> Optional[str]:
+    """Find the directory holding a complete transformers SAM3 checkpoint.
 
-    try:
-        import torch
-        import torch.nn.functional as F
-        import sam3.model.vitdet as sam3_vitdet  # type: ignore
-        import sam3.perflib.fused as sam3_fused  # type: ignore
-    except Exception as exc:
-        logger.warning("SAM3 runtime patch skipped: %s", exc)
-        return
-
-    def _safe_addmm_act(activation, linear, mat1):
-        if torch.is_grad_enabled():
-            raise ValueError("Expected grad to be disabled.")
-
-        weight = linear.weight.detach()
-        bias = linear.bias.detach() if linear.bias is not None else None
-        target_dtype = weight.dtype
-        mat1 = mat1.to(dtype=target_dtype)
-        output = F.linear(mat1, weight, bias)
-
-        if activation in [torch.nn.functional.relu, torch.nn.ReLU]:
-            return F.relu(output)
-        if activation in [torch.nn.functional.gelu, torch.nn.GELU]:
-            return F.gelu(output)
-        raise ValueError(f"Unexpected activation {activation}")
-
-    sam3_fused.addmm_act = _safe_addmm_act
-    sam3_vitdet.addmm_act = _safe_addmm_act
-    _sam3_runtime_patch_applied = True
-    logger.info("Applied SAM3 stable inference patch to avoid bf16/float32 mismatches.")
-
-
-def _resolve_checkpoint_path(checkpoint_path: Optional[str] = None) -> Optional[str]:
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        return checkpoint_path
+    Accepts either an explicit dir path, an explicit file path (its parent
+    is checked), or falls back to standard ``models/sam3`` subdirectories.
+    """
+    if checkpoint_path:
+        candidate = Path(checkpoint_path)
+        if candidate.is_dir() and (candidate / "config.json").exists():
+            return str(candidate.resolve())
+        if candidate.is_file() and (candidate.parent / "config.json").exists():
+            return str(candidate.parent.resolve())
 
     sam3_dir = Path(get_sam3_model_dir())
     candidates = [
-        sam3_dir / "facebook-sam3-modelscope" / "sam3.pt",
-        sam3_dir / "facebook-sam3-modelscope" / "model.safetensors",
-        sam3_dir / "facebook-sam3" / "sam3.pt",
-        sam3_dir / "facebook-sam3" / "model.safetensors",
-        sam3_dir / "sam3.pt",
-        sam3_dir / "model.safetensors",
+        sam3_dir / "facebook-sam3-modelscope",
+        sam3_dir / "facebook-sam3",
+        sam3_dir,
     ]
     for candidate in candidates:
-        if candidate.exists():
+        if (candidate / "config.json").exists() and (candidate / "model.safetensors").exists():
             return str(candidate.resolve())
     return None
 
 
-def _load_from_modelscope(device: str):
-    """Download a SAM3 checkpoint from ModelScope if needed."""
+def _missing_checkpoint_files(checkpoint_dir: str) -> List[str]:
+    return [name for name in _SAM3_REQUIRED_FILES if not (Path(checkpoint_dir) / name).exists()]
+
+
+def _load_from_modelscope() -> str:
+    """Download SAM3 from ModelScope, returning the snapshot directory.
+
+    Skips the legacy 3.45 GB ``sam3.pt`` (only the unmaintained sam3 0.1.3
+    package needs that); transformers reads ``model.safetensors`` directly.
+    """
     try:
         from modelscope import snapshot_download  # type: ignore
     except ImportError as exc:
         raise RuntimeError(
-            "ModelScope SDK is not installed. Install `modelscope` or place a local SAM3 checkpoint in models/sam3."
+            "ModelScope SDK is not installed. Install `modelscope` or place a transformers SAM3 "
+            "checkpoint directory (config.json + model.safetensors + tokenizer files) in models/sam3."
         ) from exc
 
-    from sam3 import build_sam3_image_model  # type: ignore
-
-    logger.info("Downloading SAM3 from ModelScope...")
+    logger.info("Downloading SAM3 from ModelScope (skipping legacy sam3.pt)...")
     cache_dir = Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    model_dir = snapshot_download("facebook/sam3", cache_dir=str(cache_dir))
-
-    checkpoint = None
-    for path in Path(model_dir).rglob("*"):
-        if path.suffix.lower() in {".pt", ".pth", ".bin", ".safetensors"}:
-            checkpoint = str(path.resolve())
-            break
-
-    if not checkpoint:
-        raise RuntimeError("ModelScope download finished, but no SAM3 checkpoint file was found.")
-
-    return build_sam3_image_model(
-        checkpoint_path=checkpoint,
-        load_from_HF=False,
-        device=device,
-        eval_mode=True,
+    model_dir = snapshot_download(
+        "facebook/sam3",
+        cache_dir=str(cache_dir),
+        ignore_file_pattern=[r".*\.pt$"],
     )
+    return str(Path(model_dir).resolve())
+
+
+def _build_sam3_model(checkpoint_dir: str, device: str):
+    """Construct ``Sam3Model`` + ``Sam3Processor`` from a checkpoint dir.
+
+    facebook/sam3 ships the SAM3 video config (detector + tracker) as the
+    top-level ``config.json``. For static-image segmentation we only need
+    the detector half; build ``Sam3Config`` from the ``detector_config``
+    sub-dict so transformers resolves to the image-only variant rather
+    than the video-only ``Sam3VideoModel``.
+    """
+    from transformers import AutoTokenizer
+    from transformers.models.sam3.modeling_sam3 import Sam3Config, Sam3Model
+    from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor
+    from transformers.models.sam3.processing_sam3 import Sam3Processor
+
+    with open(Path(checkpoint_dir) / "config.json", "r", encoding="utf-8") as fh:
+        full_config = json.load(fh)
+    detector_dict = dict(full_config.get("detector_config") or {})
+    detector_dict["model_type"] = "sam3"
+    sam3_cfg = Sam3Config(**detector_dict)
+
+    model = Sam3Model.from_pretrained(
+        checkpoint_dir,
+        config=sam3_cfg,
+        ignore_mismatched_sizes=True,
+    )
+    model.eval().to(device)
+
+    image_processor = Sam3ImageProcessor.from_pretrained(checkpoint_dir)
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+    processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
+    return model, processor
 
 
 def _load_sam3(checkpoint_path: Optional[str] = None, source: str = "huggingface"):
-    """Load the SAM3 model and processor once."""
+    """Load the SAM3 model + processor singleton."""
     global _sam3_model, _sam3_processor, _sam3_device
 
-    if _sam3_model is None:
-        with _sam3_lock:
-            if _sam3_model is None:
-                if not _check_sam3_available():
-                    raise RuntimeError(
-                        "SAM3 runtime is not installed correctly. Install the sam3 package and its runtime dependencies first."
-                    )
+    if _sam3_model is not None:
+        return _sam3_model, _sam3_processor
 
-                from sam3 import build_sam3_image_model  # type: ignore
-                from sam3.model.sam3_image_processor import Sam3Processor  # type: ignore
-                import torch
+    with _sam3_lock:
+        if _sam3_model is not None:
+            return _sam3_model, _sam3_processor
 
-                _patch_sam3_runtime_for_stable_inference()
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                resolved_checkpoint = _resolve_checkpoint_path(checkpoint_path)
+        if not _check_sam3_available():
+            raise RuntimeError(
+                "SAM3 runtime is not installed correctly. Install transformers (>=5.6) and ensure CUDA is available."
+            )
 
-                logger.info("Loading SAM3 on %s", device)
-                if resolved_checkpoint:
-                    logger.info("Using local SAM3 checkpoint: %s", resolved_checkpoint)
-                    model = build_sam3_image_model(
-                        checkpoint_path=resolved_checkpoint,
-                        load_from_HF=False,
-                        device=device,
-                        eval_mode=True,
-                    )
-                elif source == "modelscope":
-                    model = _load_from_modelscope(device=device)
-                else:
-                    try:
-                        model = build_sam3_image_model(
-                            device=device,
-                            eval_mode=True,
-                            load_from_HF=True,
-                        )
-                    except Exception as hf_error:
-                        message = str(hf_error).lower()
-                        if any(token in message for token in ("auth", "token", "403", "401")):
-                            logger.warning("SAM3 HuggingFace access failed, falling back to ModelScope.")
-                            model = _load_from_modelscope(device=device)
-                        else:
-                            raise
+        import torch
 
-                model = model.to(device)
-                model.eval()
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        checkpoint_dir = _resolve_checkpoint_dir(checkpoint_path)
 
-                _sam3_model = model
-                _sam3_processor = Sam3Processor(model, device=device)
-                _sam3_device = device
+        if not checkpoint_dir:
+            # ``source`` historically defaulted to "huggingface" but transformers
+            # auto-download from HF requires reachable hub access (often blocked
+            # for China users). Try ModelScope as a graceful fallback.
+            try:
+                checkpoint_dir = _load_from_modelscope()
+            except Exception as exc:
+                raise RuntimeError(
+                    "No SAM3 checkpoint found and ModelScope download failed: "
+                    f"{exc}. Place a transformers SAM3 checkpoint directory under models/sam3."
+                ) from exc
+
+        missing = _missing_checkpoint_files(checkpoint_dir)
+        if missing:
+            raise RuntimeError(
+                f"SAM3 checkpoint dir {checkpoint_dir} is missing required files: {missing}. "
+                "Re-run the SAM3 prepare step to fetch the full transformers checkpoint."
+            )
+
+        logger.info("Loading SAM3 (transformers) on %s from %s", device, checkpoint_dir)
+        with exclusive_ai_runtime("sam3-load"):
+            model, processor = _build_sam3_model(checkpoint_dir, device)
+
+        _sam3_model = model
+        _sam3_processor = processor
+        _sam3_device = device
 
     return _sam3_model, _sam3_processor
 
 
-def _normalize_prompt_box(box: List[int], width: int, height: int) -> Optional[List[float]]:
-    if len(box) != 4 or width <= 0 or height <= 0:
+SAM3_PRIVACY_PROMPTS = [
+    {"prompt": "exposed female breast", "class": "breasts"},
+    {"prompt": "exposed female nipple", "class": "breasts"},
+    {"prompt": "exposed female genitalia", "class": "pussy"},
+    {"prompt": "exposed male genitalia", "class": "dick"},
+    {"prompt": "exposed anus", "class": "anus"},
+    {"prompt": "exposed buttocks", "class": "buttocks"},
+]
+
+
+# Empirically chosen on real anime/SD images (see docs/AI_DECISION_LOG.md):
+# absent prompts produce sigmoid(presence_logits) in [0.001, 0.030]; real
+# detections sit at >= 0.5. 0.5 cleanly separates the two clusters.
+_DEFAULT_PRESENCE_THRESHOLD = 0.5
+# Floor on the per-query score for the chosen mask. Presence is the primary
+# gate; this just rejects total noise (top-1 < 0.05 is never a real detection).
+_DEFAULT_SCORE_FLOOR = 0.05
+# Cap mask area as a sanity check: when SAM3 collapses to a whole-body
+# silhouette for an absent concept it covers > 30 % of the image. Real
+# privacy regions are tiny relative to the canvas.
+_DEFAULT_MAX_AREA_RATIO = 0.30
+
+
+def _best_mask(processed_results, score_threshold: float = 0.0) -> Optional[np.ndarray]:
+    """Pick the highest-scoring mask above ``score_threshold`` from
+    ``Sam3Processor.post_process_instance_segmentation`` output."""
+    if not processed_results:
         return None
-
-    x1, y1, x2, y2 = [float(v) for v in box]
-    x1 = max(0.0, min(width, x1))
-    y1 = max(0.0, min(height, y1))
-    x2 = max(0.0, min(width, x2))
-    y2 = max(0.0, min(height, y2))
-    if x2 <= x1 or y2 <= y1:
+    result = processed_results[0]
+    scores = result.get("scores")
+    masks = result.get("masks")
+    if scores is None or masks is None or scores.numel() == 0:
         return None
-
-    center_x = ((x1 + x2) / 2.0) / width
-    center_y = ((y1 + y2) / 2.0) / height
-    box_width = (x2 - x1) / width
-    box_height = (y2 - y1) / height
-    return [center_x, center_y, box_width, box_height]
-
-
-def _tensor_to_numpy(value):
-    if value is None:
+    best_idx = int(scores.argmax().item())
+    if float(scores[best_idx].item()) < score_threshold:
         return None
-    if hasattr(value, "detach"):
-        value = value.detach().cpu().numpy()
-    return np.asarray(value)
+    mask_t = masks[best_idx]
+    if mask_t.dtype.is_floating_point:
+        mask_t = mask_t > 0.5
+    return mask_t.detach().cpu().numpy().astype(np.uint8)
 
 
-def _extract_best_mask(state: Dict) -> Optional[np.ndarray]:
-    masks = _tensor_to_numpy(state.get("masks"))
-    scores = _tensor_to_numpy(state.get("scores"))
-    if masks is None or masks.size == 0:
+def _presence_prob(outputs) -> Optional[float]:
+    """Return max sigmoid(presence_logits) from a Sam3 output, or None.
+
+    SAM3 emits a per-text-query "is this concept present in the image at all"
+    logit alongside the per-query masks. For absent concepts the model still
+    produces non-zero query scores (often a whole-body collapse on the same
+    'junk' query index), so gating by score alone yields oversized false
+    positives. Presence reliably separates present (>0.5) from absent (<0.05).
+    """
+    pres = getattr(outputs, "presence_logits", None)
+    if pres is None:
         return None
-
-    if masks.ndim == 4:
-        masks = masks[:, 0, :, :]
-    elif masks.ndim == 2:
-        masks = masks[np.newaxis, ...]
-
-    best_idx = 0
-    if scores is not None and scores.size > 0:
-        best_idx = int(np.argmax(scores))
-
-    mask = masks[best_idx]
-    return mask.astype(np.uint8)
+    try:
+        import torch
+    except Exception:
+        return None
+    if pres.numel() == 0:
+        return None
+    return float(torch.sigmoid(pres.detach().cpu().float()).max().item())
 
 
 class SAM3Refiner:
-    """Refine detection boxes into SAM3 masks."""
+    """transformers-backed SAM3 segmentation: text + box prompting → pixel masks."""
 
     def __init__(self, checkpoint_path: Optional[str] = None, source: str = "huggingface"):
         self.checkpoint_path = checkpoint_path
@@ -261,21 +303,76 @@ class SAM3Refiner:
         self._model, self._processor = _load_sam3(self.checkpoint_path, source=self.source)
 
     @property
+    def model(self):
+        if self._model is None:
+            self.load()
+        return self._model
+
+    @property
     def processor(self):
         if self._processor is None:
             self.load()
         return self._processor
+
+    def _device(self) -> str:
+        return _sam3_device or "cpu"
 
     def _inference_context(self):
         try:
             import torch
         except Exception:
             return contextlib.nullcontext()
-
-        device = str(getattr(self.processor, "device", _sam3_device or "cuda"))
-        if device.startswith("cuda"):
+        if self._device().startswith("cuda"):
             return torch.amp.autocast(device_type="cuda", enabled=False)
         return contextlib.nullcontext()
+
+    def _run_segmentation(
+        self,
+        image: Image.Image,
+        text: Optional[str] = None,
+        box: Optional[List[float]] = None,
+        score_threshold: float = _DEFAULT_SCORE_FLOOR,
+        presence_threshold: float = _DEFAULT_PRESENCE_THRESHOLD,
+        max_area_ratio: float = _DEFAULT_MAX_AREA_RATIO,
+    ) -> Optional[np.ndarray]:
+        if not text and not box:
+            return None
+        rgb = image.convert("RGB")
+        kwargs: Dict[str, Any] = {"images": rgb, "return_tensors": "pt"}
+        if text:
+            kwargs["text"] = text
+        if box and len(box) == 4:
+            kwargs["input_boxes"] = [[[float(v) for v in box]]]
+
+        import torch
+
+        with exclusive_ai_runtime("sam3-inference"), self._inference_context():
+            inputs = self.processor(**kwargs).to(self._device())
+            with torch.no_grad():
+                out = self.model(**inputs)
+
+            # Presence gate: refuse text prompts the model says aren't in the image.
+            # Skipped for box-only prompting (presence_logits are text-conditioned).
+            if text and presence_threshold > 0:
+                pres = _presence_prob(out)
+                if pres is not None and pres < presence_threshold:
+                    return None
+
+            results = self.processor.post_process_instance_segmentation(
+                out, target_sizes=[(rgb.height, rgb.width)], threshold=0.0
+            )
+        mask = _best_mask(results, score_threshold=score_threshold)
+        if mask is None:
+            return None
+
+        # Sanity cap: a privacy region covering > max_area_ratio of the image
+        # is the whole-body collapse pattern even when presence happens to
+        # squeak past — refuse it.
+        if max_area_ratio and max_area_ratio < 1.0:
+            h, w = mask.shape[:2]
+            if float(mask.sum()) / float(max(1, h * w)) > max_area_ratio:
+                return None
+        return mask
 
     def refine_box(
         self,
@@ -284,24 +381,13 @@ class SAM3Refiner:
         text_prompt: Optional[str] = None,
     ) -> Optional[np.ndarray]:
         try:
-            prompt_box = _normalize_prompt_box(box, image.width, image.height)
-            if prompt_box is None:
-                return None
-
-            with self._inference_context():
-                state = self.processor.set_image(image.convert("RGB"))
-                if text_prompt:
-                    state = self.processor.set_text_prompt(text_prompt, state)
-                state = self.processor.add_geometric_prompt(prompt_box, True, state)
-            return _extract_best_mask(state)
+            return self._run_segmentation(image, text=text_prompt, box=box)
         except Exception as exc:
             logger.error("SAM3 box refinement failed: %s", exc)
             return None
 
     def refine_boxes(self, image: Image.Image, detections: List[Dict]) -> List[Dict]:
-        import copy
-
-        refined = []
+        refined: List[Dict] = []
         for det in detections:
             refined_det = copy.deepcopy(det)
             box = det.get("box", [])
@@ -314,19 +400,77 @@ class SAM3Refiner:
 
     def segment_by_text(self, image: Image.Image, text_prompt: str) -> Optional[np.ndarray]:
         try:
-            with self._inference_context():
-                state = self.processor.set_image(image.convert("RGB"))
-                state = self.processor.set_text_prompt(text_prompt, state)
-            return _extract_best_mask(state)
+            return self._run_segmentation(image, text=text_prompt)
         except Exception as exc:
             logger.error("SAM3 text segmentation failed: %s", exc)
             return None
 
+    def detect_privacy_regions(
+        self,
+        image: Image.Image,
+        conf_threshold: float = _DEFAULT_PRESENCE_THRESHOLD,
+        prompts: Optional[List[Dict[str, str]]] = None,
+    ) -> List[Dict]:
+        """Run every privacy prompt and collect mask detections.
 
-_sam3_refiner = None
+        ``conf_threshold`` is the presence-probability gate (sigmoid of
+        SAM3's per-text presence logit), parallel to NudeNet's score gate:
+        higher = stricter, lower = more recall. Empirically, real
+        detections sit at >= 0.5 and absent-prompt false positives are <0.03.
+        """
+        prompts = prompts or SAM3_PRIVACY_PROMPTS
+        rgb = image.convert("RGB")
+        detections: List[Dict] = []
+        seen = set()
+
+        for entry in prompts:
+            text = entry["prompt"]
+            cls_name = entry["class"]
+            mask = self._run_segmentation(
+                rgb,
+                text=text,
+                score_threshold=_DEFAULT_SCORE_FLOOR,
+                presence_threshold=conf_threshold,
+            )
+            if mask is None:
+                continue
+
+            ys, xs = np.where(mask > 0)
+            if len(xs) == 0:
+                continue
+
+            # Floor on absolute pixel area (to drop single-pixel artefacts) but
+            # not on relative area: real nipple/genitalia masks can be < 0.1%
+            # of a high-resolution canvas and were previously dropped here.
+            area = int(np.sum(mask > 0))
+            if area < 64:
+                continue
+
+            x1, y1, x2, y2 = int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+            box_area = max(1, (x2 - x1) * (y2 - y1))
+            confidence = round(min(1.0, area / box_area), 4)
+            key = (cls_name, x1, y1, x2, y2)
+            if key in seen:
+                continue
+            seen.add(key)
+            detections.append({
+                "class": cls_name,
+                "confidence": confidence,
+                "box": [x1, y1, x2, y2],
+                "mask": mask,
+                "source": "sam3",
+            })
+            gc.collect()
+        return detections
 
 
-def get_sam3_refiner(checkpoint_path: Optional[str] = None, source: str = "huggingface") -> SAM3Refiner:
+_sam3_refiner: Optional[SAM3Refiner] = None
+
+
+def get_sam3_refiner(
+    checkpoint_path: Optional[str] = None,
+    source: str = "huggingface",
+) -> SAM3Refiner:
     global _sam3_refiner
     if _sam3_refiner is None:
         _sam3_refiner = SAM3Refiner(checkpoint_path=checkpoint_path, source=source)

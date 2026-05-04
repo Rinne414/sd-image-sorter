@@ -22,6 +22,7 @@ from config import (
     CENSOR_DEFAULT_BLOCK_SIZE,
     CENSOR_DEFAULT_BLUR_RADIUS,
 )
+from ai_runtime_guard import exclusive_ai_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,8 @@ class CensorDetector:
         from ultralytics import YOLO
 
         logger.info("Loading model with Ultralytics runtime: %s", model_path)
-        model = YOLO(model_path)
+        with exclusive_ai_runtime("censor-ultralytics-load"):
+            model = YOLO(model_path)
         self.runtime = model
         self.session = model
         self.runtime_backend = "ultralytics"
@@ -194,7 +196,8 @@ class CensorDetector:
             logger.debug("torch/CUDA not available for censor: %s", exc)
             device = "cpu"
 
-        results = self.runtime.predict(image_source, conf=conf_threshold, device=device, verbose=False)
+        with exclusive_ai_runtime("censor-ultralytics-inference"):
+            results = self.runtime.predict(image_source, conf=conf_threshold, device=device, verbose=False)
         if not results:
             return []
 
@@ -266,7 +269,16 @@ class CensorDetector:
             providers = [provider for provider in ['CUDAExecutionProvider', 'CPUExecutionProvider'] if provider in available_providers]
             if not providers:
                 providers = ['CPUExecutionProvider']
-            session = ort.InferenceSession(self.model_path, providers=providers)
+            sess_options = ort.SessionOptions()
+            sess_options.intra_op_num_threads = 2 if 'CUDAExecutionProvider' in providers else 4
+            sess_options.inter_op_num_threads = 1
+            sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+            sess_options.enable_cpu_mem_arena = 'CUDAExecutionProvider' not in providers
+            sess_options.enable_mem_pattern = 'CUDAExecutionProvider' not in providers
+            with exclusive_ai_runtime("censor-onnx-load"):
+                session = ort.InferenceSession(self.model_path, sess_options=sess_options, providers=providers)
             
             # Get input details
             input_info = session.get_inputs()[0]
@@ -490,13 +502,15 @@ class CensorDetector:
             return self._detect_with_ultralytics(image_path, conf_threshold)
 
         # Load and preprocess image
-        image = Image.open(image_path).convert('RGB')
+        with Image.open(image_path) as source_image:
+            image = source_image.convert('RGB')
         original_size = image.size
 
         img_array, scale_info, pad_info = self.preprocess(image)
 
         # Run inference
-        outputs = self.session.run(None, {self.input_name: img_array})
+        with exclusive_ai_runtime("censor-onnx-inference"):
+            outputs = self.session.run(None, {self.input_name: img_array})
 
         # Postprocess
         detections = self.postprocess(
@@ -520,7 +534,8 @@ class CensorDetector:
         original_size = image.size
         img_array, scale_info, pad_info = self.preprocess(image)
         
-        outputs = self.session.run(None, {self.input_name: img_array})
+        with exclusive_ai_runtime("censor-onnx-inference"):
+            outputs = self.session.run(None, {self.input_name: img_array})
         
         detections = self.postprocess(
             outputs[0],
@@ -651,17 +666,18 @@ class Censor:
         **kwargs
     ) -> Image.Image:
         """Apply censoring with specified style."""
-        if style == "mosaic":
+        normalized_style = str(style or "mosaic").lower()
+        if normalized_style == "mosaic":
             block_size = kwargs.get("block_size", 16)
             return Censor.apply_mosaic(image, regions, block_size)
-        elif style == "black_bar":
+        elif normalized_style in {"black_bar", "solid", "black"}:
             return Censor.apply_bar(image, regions, (0, 0, 0))
-        elif style == "white_bar":
+        elif normalized_style == "white_bar":
             return Censor.apply_bar(image, regions, (255, 255, 255))
-        elif style == "blur":
+        elif normalized_style == "blur":
             blur_radius = kwargs.get("blur_radius", 20)
             return Censor.apply_blur(image, regions, blur_radius)
-        elif style == "sticker":
+        elif normalized_style == "sticker":
             sticker_path = kwargs.get("sticker_path")
             return Censor.apply_sticker(image, regions, sticker_path)
         else:

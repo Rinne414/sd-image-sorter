@@ -205,7 +205,15 @@ def test_client(test_db):
     with patch.dict(os.environ, {"SD_SORTER_TESTING": "1", "TESTING": "1"}):
         # Patch database path before importing main
         original_path = db.DATABASE_PATH
-        db.DATABASE_PATH = str(Path(test_db.DATABASE_PATH).with_name("test_client_images.db"))
+        with tempfile.NamedTemporaryFile(
+            suffix=".db",
+            prefix="test_client_",
+            dir=str(Path(test_db.DATABASE_PATH).parent),
+            delete=False,
+        ) as temp_db_file:
+            client_db_path = Path(temp_db_file.name)
+
+        db.DATABASE_PATH = str(client_db_path)
         db._pragmas_initialized = set()
         db.init_db()
 
@@ -237,6 +245,10 @@ def test_client(test_db):
         # Cleanup
         db.DATABASE_PATH = original_path
         db._pragmas_initialized = set()
+        try:
+            client_db_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 # ============================================================================

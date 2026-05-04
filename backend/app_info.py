@@ -13,6 +13,6 @@ GITHUB_REPOSITORY_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
 PATCH_ASSET_TEMPLATE = "sd-image-sorter-v{version}-app-patch.zip"
 WINDOWS_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-windows-portable.zip"
-LINUX_MAC_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux-mac.tar.gz"
+LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux.tar.gz"
 PACKAGE_MANIFEST_RELATIVE_PATH = "update/package-manifest.json"
 INSTALLED_MANIFEST_RELATIVE_PATH = "update/installed-manifest.json"

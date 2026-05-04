@@ -4,7 +4,7 @@ Helpers for resolving indexed source image paths across Windows and POSIX runtim
 import os
 import re
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from utils.path_validation import normalize_user_path, translate_windows_drive_path_to_posix
 
@@ -122,6 +122,59 @@ def build_indexed_image_lookup_candidates(primary_path: str) -> List[str]:
         add(raw_path)
 
     return candidates
+
+
+def _indexed_path_separator(normalized_path: str) -> str:
+    """Return the canonical separator for a normalized indexed path."""
+    return "\\" if _looks_windows_style_path(normalized_path) else "/"
+
+
+def build_indexed_folder_scope_query_patterns(folder_path: str) -> List[Tuple[str, str]]:
+    """Build equivalent exact/prefix patterns for folder-scope DB lookups."""
+    normalized_folder = normalize_indexed_image_path(folder_path)
+    if not normalized_folder:
+        return []
+
+    patterns: List[Tuple[str, str]] = []
+    seen: set[Tuple[str, str]] = set()
+
+    for candidate in build_indexed_image_lookup_candidates(normalized_folder):
+        separator = _indexed_path_separator(candidate)
+        exact = candidate.rstrip("\\/") or separator
+        prefix = exact.rstrip("\\/") + separator
+        pattern = (exact, prefix)
+        if pattern in seen:
+            continue
+        seen.add(pattern)
+        patterns.append(pattern)
+
+    return patterns
+
+
+def is_indexed_image_path_in_folder_scope(
+    image_path: Optional[str],
+    folder_path: str,
+    *,
+    recursive: bool = True,
+) -> bool:
+    """Return True when an indexed image path falls under the given folder scope."""
+    normalized_image = normalize_indexed_image_path(image_path)
+    if not normalized_image:
+        return False
+
+    for exact_folder, folder_prefix in build_indexed_folder_scope_query_patterns(folder_path):
+        if normalized_image == exact_folder:
+            return True
+        if not normalized_image.startswith(folder_prefix):
+            continue
+        if recursive:
+            return True
+
+        remainder = normalized_image[len(folder_prefix):]
+        if remainder and "\\" not in remainder and "/" not in remainder:
+            return True
+
+    return False
 
 
 def build_indexed_image_path_candidates(primary_path: str, *, backend_file: str) -> List[str]:

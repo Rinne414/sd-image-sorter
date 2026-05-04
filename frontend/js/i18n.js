@@ -139,7 +139,7 @@
          * Apply translations to all DOM elements with data-i18n attributes.
          * Handles: data-i18n (textContent), data-i18n-placeholder,
          *          data-i18n-title, data-i18n-aria (aria-label),
-         *          data-i18n-html (innerHTML for trusted content).
+         *          data-i18n-html (legacy alias, rendered as textContent).
          */
         applyToDOM: function () {
             // data-i18n: set textContent
@@ -152,13 +152,13 @@
                 }
             }
 
-            // data-i18n-html: set innerHTML (use only for trusted, pre-defined content)
+            // data-i18n-html: legacy alias. Keep it text-only to avoid translation XSS.
             var htmlElements = document.querySelectorAll('[data-i18n-html]');
             for (var i = 0; i < htmlElements.length; i++) {
                 var el = htmlElements[i];
                 var key = el.getAttribute('data-i18n-html');
                 if (key) {
-                    el.innerHTML = this.t(key);
+                    el.textContent = this.t(key);
                 }
             }
 

@@ -93,6 +93,7 @@ backend/thumbnails/
 backend/sort_session.json
 
 # Temp test directories
+.tools/
 .tmp/
 .tmp_*/
 .playwright-tmp-results/
@@ -133,7 +134,7 @@ backend/test_metadata_parser_params.py
 backend/verify_sorting.py
 
 # Internal docs (generated, not for public repo)
-docs/API.md
+# docs/API.md is versioned because API contract tests validate it.
 docs/DELETION_LOG.md
 docs/IMPROVEMENT_PLAN.md
 docs/SECURITY_ARCHITECTURE.md

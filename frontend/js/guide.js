@@ -354,6 +354,87 @@
         },
     };
 
+    const TAB_SHORTCUTS = {
+        en: {
+            sectionTitle: 'Keyboard Shortcuts',
+            global: [
+                { key: '?', desc: 'Open keyboard shortcuts panel' },
+                { key: 'Esc', desc: 'Close modal or cancel action' },
+                { key: '1–7', desc: 'Switch tabs' },
+            ],
+            gallery: [
+                { key: 'G / L / W', desc: 'Switch to Grid / Large / Waterfall view' },
+                { key: 'F', desc: 'Open filter editor' },
+                { key: 'R', desc: 'Show a random image' },
+                { key: 'S', desc: 'Toggle selection mode' },
+                { key: '← →', desc: 'Navigate images in preview' },
+                { key: 'Esc', desc: 'Clear selection' },
+                { key: 'Del', desc: 'Remove selected from gallery' },
+            ],
+            autosep: [],
+            manual: [
+                { key: 'W / A / S / D', desc: 'Send image to one of four folders' },
+                { key: 'Space', desc: 'Skip current image' },
+                { key: 'Z', desc: 'Undo last move' },
+                { key: 'Y', desc: 'Redo' },
+                { key: '↑ ↓ ← →', desc: 'Same as W / S / A / D' },
+            ],
+            censor: [
+                { key: 'B', desc: 'Brush tool' },
+                { key: 'P', desc: 'Pen tool' },
+                { key: 'E', desc: 'Eraser tool' },
+                { key: 'G', desc: 'Clone mode' },
+                { key: '[ / ]', desc: 'Decrease / increase brush size' },
+                { key: 'H', desc: 'Toggle show changes' },
+                { key: 'D', desc: 'Run detection' },
+                { key: 'Ctrl+Z', desc: 'Undo' },
+                { key: 'Ctrl+Shift+Z', desc: 'Redo' },
+            ],
+            similar: [],
+            promptlab: [],
+            artist: [],
+        },
+        'zh-CN': {
+            sectionTitle: '键盘快捷键',
+            global: [
+                { key: '?', desc: '打开快捷键面板' },
+                { key: 'Esc', desc: '关闭弹窗或取消操作' },
+                { key: '1–7', desc: '切换标签页' },
+            ],
+            gallery: [
+                { key: 'G / L / W', desc: '切换 网格 / 大图 / 瀑布流 视图' },
+                { key: 'F', desc: '打开筛选编辑器' },
+                { key: 'R', desc: '随机显示一张图' },
+                { key: 'S', desc: '切换选择模式' },
+                { key: '← →', desc: '在预览中翻页' },
+                { key: 'Esc', desc: '清除选择' },
+                { key: 'Del', desc: '从图库移除已选图片' },
+            ],
+            autosep: [],
+            manual: [
+                { key: 'W / A / S / D', desc: '把图片送到四个文件夹之一' },
+                { key: 'Space', desc: '跳过当前图片' },
+                { key: 'Z', desc: '撤销上次移动' },
+                { key: 'Y', desc: '重做' },
+                { key: '↑ ↓ ← →', desc: '功能同 W / S / A / D' },
+            ],
+            censor: [
+                { key: 'B', desc: '画笔工具' },
+                { key: 'P', desc: '钢笔工具' },
+                { key: 'E', desc: '橡皮擦' },
+                { key: 'G', desc: '克隆模式' },
+                { key: '[ / ]', desc: '缩小 / 放大画笔' },
+                { key: 'H', desc: '切换显示修改' },
+                { key: 'D', desc: '运行检测' },
+                { key: 'Ctrl+Z', desc: '撤销' },
+                { key: 'Ctrl+Shift+Z', desc: '重做' },
+            ],
+            similar: [],
+            promptlab: [],
+            artist: [],
+        },
+    };
+
     const TAB_ANCHORS = {
         gallery: '#view-gallery .gallery-header',
         autosep: null,
@@ -582,6 +663,26 @@
             `;
         },
 
+        _renderShortcutsSection(tabName) {
+            const lang = this._lang();
+            const data = TAB_SHORTCUTS[lang] || TAB_SHORTCUTS.en;
+            const globalKeys = data.global || [];
+            const tabKeys = data[tabName] || [];
+            const allKeys = [...tabKeys, ...globalKeys];
+            if (allKeys.length === 0) return '';
+
+            const rows = allKeys.map((s) =>
+                `<span class="guide-shortcut-key">${this._escape(s.key)}</span><span class="guide-shortcut-desc">${this._escape(s.desc)}</span>`
+            ).join('');
+
+            return `
+                <section class="guide-section">
+                    <h4>⌨️ ${this._escape(data.sectionTitle)}</h4>
+                    <div class="guide-shortcuts-grid">${rows}</div>
+                </section>
+            `;
+        },
+
         _ensureModal() {
             if (this._modalEl) return;
 
@@ -634,6 +735,7 @@
                 this._renderSection(copy.sections.steps, tab.steps),
                 this._renderSection(copy.sections.features, tab.features),
                 this._renderSection(copy.sections.tips, tab.tips),
+                this._renderShortcutsSection(tabName),
             ].join('');
 
             modal.classList.add('visible');
