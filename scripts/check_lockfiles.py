@@ -23,7 +23,13 @@ def _compute_input_hash(input_names: tuple[str, ...]) -> str:
         path = BACKEND_DIR / name
         digest.update(name.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        # Normalize line endings before hashing so the stamp matches across
+        # platforms. Windows checkouts have CRLF in the working tree while
+        # Linux CI has LF; hashing raw bytes would otherwise produce a stamp
+        # that only validates on the platform where it was written.
+        text = path.read_text(encoding="utf-8")
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        digest.update(normalized.encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
 
