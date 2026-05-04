@@ -2048,8 +2048,12 @@ class TestResolveDropSecurity:
         assert isolated_sorting_service.resolve_drop("foo/bar", [], None) == {"folder_path": ""}
         assert isolated_sorting_service.resolve_drop("C:\\Windows", [], None) == {"folder_path": ""}
 
-    def test_like_wildcards_are_escaped(self, isolated_sorting_service):
+    def test_like_wildcards_are_escaped(self, isolated_sorting_service, test_db):
         # ``%`` is a SQL LIKE wildcard. The fix must escape it before binding,
         # so submitting ``%`` does not match every row.
+        # Depends on ``test_db`` so the SQL query has a real ``images`` table to
+        # run against — earlier traversal/separator tests short-circuit before
+        # the query, but ``%`` is a normal character that passes path
+        # validation and reaches the SQL layer.
         result = isolated_sorting_service.resolve_drop("%", [], None)
         assert result["folder_path"] == ""
