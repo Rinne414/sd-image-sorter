@@ -195,7 +195,7 @@ run.bat
 - `v3.0.4` 收口了 4 个发布阻塞：Reader 剪贴板图片会明确提示 metadata 可能丢失、`censor-legacy` prepare 改成结构化 `409` 登录墙错误、scan 会隔离 corrupt/truncated 图片、similarity 进度会点名跳过/坏图/失败项
 - `v3.0.5` 自动 GPU 安全策略、Censor 侧栏布局、流式扫描、版本同步
 - `v3.0.6` ComfyUI 高级工作流 prompt 提取、LoRA 权重显示、VAE/CLIP 提取、aesthetic 冻死修复、JPG/WebP metadata 保留、禁用 LoRA 过滤、Artist ID 进度修复
-- `v3.1.0` Reader 可直接改 metadata 并另存新图、同路径覆盖先确认、扫描更早可浏览且后台继续补图/补 metadata、WSL Windows 路径图库更稳
+- `v3.1.0` Reader 可直接编辑 metadata 并另存新图（png/webp/jpg）、同路径覆盖先确认；扫描更早可浏览且后台继续补图/补 metadata；新增「重连遗失文件」流程（图被改名/移动后不用重新导入）；Feature Setup 新增「磁盘占用」面板（tmp / pip 缓存 / 缩略图 / 通用缓存可勾选清理，模型与 HF/Torch runtime 只读保护）；自动分类批量移动/复制可中途取消；美学分数与画师筛选并入排序通道；identify-batch / obfuscation 单次上限提到 5 万、后端 image_ids 上限 500 万；新增 Camie / PixAI tagger；新增 SAM3 Pro 文字 prompt 分割（实验性，建议主打码继续用 NudeNet 或 Wenaka）；修了 Clear gallery ReferenceError、自动移动 0% 卡死、批量打标走批量 DB 查询、相似度死锁正确报错并支持取消、手动分类撤销失败回滚 session、aesthetic 停止后分数不再消失、Windows 第一次启动 CUDA wheel 不再被旧的 CPU torch 误导、WSL/Linux 下旧 Windows 路径（`L:\...`）图库不再丢缩略图；SAM3 后端从 `sam3==0.1.3` 换到 `transformers.Sam3Model`，Portable 内建 Python 升到 3.12.8；`file://` 协议模型下载默认拒绝（除非显式打开测试旗标）；跨平台 lockfile 哈希修好，CI 在 Linux + Windows 双平台全套通过
 
 ### 无法访问 HuggingFace？
 
