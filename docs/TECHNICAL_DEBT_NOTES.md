@@ -1,6 +1,6 @@
 # SD Image Sorter - Technical Debt Notes
 
-**Updated:** 2026-05-01
+**Updated:** 2026-05-04
 **Purpose:** Record confirmed structural debt found during recent stability fixes, and provide a reusable prompt for deeper whole-repo debt audits.
 
 ## Scope
@@ -805,3 +805,48 @@ Quality bar:
   Revisit before adding new censor tools, batch-edit features, or high-resolution export paths.
 - Deferred because:
   The immediate crash-risk fixes covered the known high-risk server paths and were validated by resource-safety tests; a full image-editor memory audit is larger than this stability slice.
+
+### Debt-19: SAM3 Model Manager E2E fixture stale after `transformers.Sam3Model` switch
+
+- Status: open
+- Type: test infrastructure / fixture
+- Impact: low
+- Risk if ignored:
+  Two Playwright tests (`SAM3 prepare shows byte progress and refreshes the card after completion` and the cascading `no model card shows Downloaded badge - only Ready or Missing`) stay red in CI. A persistent red wall masks future real regressions in the same area.
+- Related files:
+  `tests/e2e/specs/model-manager.spec.ts`
+  `tests/e2e/playwright.config.ts`
+  `backend/services/model_service.py`
+  `backend/model_health.py`
+- Observed problem:
+  The earlier SAM3 backend used the `sam3==0.1.3` package which expected a single weight file. After the `transformers.Sam3Model.from_pretrained(directory)` switch, `get_sam3_checkpoint_path()` only returns a path when the directory contains both `config.json` and `model.safetensors` (and tokenizer files at runtime). The Playwright fixture still creates a single 32 MB stub `sam3-model.safetensors` file and points `SD_IMAGE_SORTER_SAM3_URLS` at a `file://` URL of that file. After the prepare flow downloads the stub, `health.censor.sam3.checkpoint_path` stays `None` and the model card path never updates. The follow-up test then fails with a Windows `EBUSY` because the stub `.tmp` file from the previous test is still locked.
+- Why this is debt:
+  Tests should reflect production model layout. Stale fixtures hide real regressions and add noise that trains the team to ignore CI failures. Real users are unaffected because ModelScope delivers a complete checkpoint directory.
+- Better long-term shape:
+  The fixture should produce a full stub bundle — `config.json` + `model.safetensors` + minimum tokenizer files — packaged as a single archive that the prepare flow extracts into the canonical directory layout. Alternatively, refactor the prepare flow to accept either a single `.safetensors` file or a directory and synthesize missing config files from a built-in template.
+- Revisit trigger:
+  Next time the SAM3 prepare flow or `get_sam3_checkpoint_path()` is touched, OR before the v3.2 release pass.
+- Deferred because:
+  Confirmed zero real-user impact (real ModelScope download delivers a complete directory). v3.1.0 publish was the priority and the failure was reproducible only against the stub fixture.
+
+### Debt-20: Auto censor model dropdown labels do not reflect the actually-selected file
+
+- Status: open
+- Type: UX contract / user comprehension
+- Impact: low
+- Risk if ignored:
+  Users who download a recommended legacy YOLO file (Wenaka, or any custom `.pt` / `.onnx`) and place it in `data/models/yolo/` see only the generic "YOLO" option in the auto-censor model selector. They cannot tell which file the auto path will use without expanding the Advanced Model Picker, and have already filed at least one report ("why is Wenaka missing?") because of this. Real-user trust signal is weaker than it should be.
+- Related files:
+  `frontend/index.html` (`#censor-model-type` select around the auto-censor sidebar)
+  `frontend/js/censor-edit.js` (`populateCensorModelSelect`, `updateDetectionModelInputs`, `updateSelectedLegacyModelHelp`)
+  `frontend/js/lang/en.js` and `frontend/js/lang/zh-CN.js` (`censor.legacyYolo` strings)
+- Observed problem:
+  The auto censor model-type `<select>` exposes generic options `YOLO / NudeNet / SAM3 / Both`. The currently active legacy file is exposed only inside the collapsed Advanced Model Picker `<details>` section. New users who placed a Wenaka file at the expected path assume the dropdown should show "Wenaka" and conclude the model is missing.
+- Why this is debt:
+  Surface-level labels hide the actually-selected file. The auto path's job is to be opinionated and obvious — the UI fails the second job today.
+- Better long-term shape:
+  Append the active legacy file name in parentheses on the `YOLO` and `Both` options (and ideally also display it as a single-line status under the dropdown), e.g. `YOLO (wenaka_yolov8s-seg.onnx)` or `YOLO (custom: my_finetune.pt)`. The label must update dynamically when the user picks a different file in the Advanced Model Picker — i.e., the parenthesized name must always reflect the truly-selected legacy file, not be hard-coded to "Wenaka".
+- Revisit trigger:
+  Next user-facing release that touches the censor sidebar or detect modal layout.
+- Deferred because:
+  v3.1.0 publish window was prioritized; the underlying behaviour is correct (Wenaka is detected and recommended automatically), so this is a clarity-only follow-up rather than a regression.
