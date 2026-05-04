@@ -19,7 +19,19 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT_ROOT = ROOT / "artifacts" / "release"
 STAGING_ROOT = ARTIFACT_ROOT / "staging"
+BOOTSTRAP_DOWNLOAD_ROOT = STAGING_ROOT / "_downloads"
 DEFAULT_SPLIT_SIZE_MB = 1900
+
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from update_worker import (  # noqa: E402
+    INSTALLED_MANIFEST_RELATIVE_PATH,
+    PACKAGE_MANIFEST_RELATIVE_PATH,
+    PROTECTED_RUNTIME_PREFIXES,
+    is_protected_runtime_path,
+)
 
 
 def _read_default_version() -> str:
@@ -35,15 +47,24 @@ def _read_default_version() -> str:
 DEFAULT_VERSION = _read_default_version()
 
 # Python embeddable package URL template (Windows amd64)
-PYTHON_EMBED_VERSION = "3.11.9"
+PYTHON_EMBED_VERSION = "3.12.8"
 PYTHON_EMBED_URL = f"https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
-GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
+PYTHON_EMBED_SHA256 = "8d3f33be9eb810f23c102f08475af2854e50484b8e4e06275e937be61ce3d2fb"
+GET_PIP_COMMIT = "1c1d362758a70f85b9c9b12417c0c6f0ca3da4aa"
+GET_PIP_URL = f"https://raw.githubusercontent.com/pypa/get-pip/{GET_PIP_COMMIT}/public/get-pip.py"
+GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"
+DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+DOWNLOAD_TIMEOUT_SECONDS = 120
+DOWNLOAD_HEADERS = {
+    "User-Agent": f"sd-image-sorter-release-builder/{DEFAULT_VERSION}",
+}
 
 DOC_FILES = {
     "models/README.md",
     "models/yolo/README.md",
     "models/artist/README.md",
 }
+MODEL_ARTIFACT_POLICY_VERSION = 1
 
 EXCLUDED_PREFIXES = (
     ".git",
@@ -60,7 +81,6 @@ EXCLUDED_PREFIXES = (
     "backend/test_",
     "node_modules",
     "python",
-    "data",
     "update",
     "tests",
     "test-results",
@@ -75,6 +95,8 @@ EXCLUDED_PREFIXES = (
     "docs/SECURITY_ARCHITECTURE",
     "docs/architecture",
 )
+
+RUNTIME_EXCLUDED_PREFIXES = tuple(prefix.as_posix() for prefix in PROTECTED_RUNTIME_PREFIXES)
 
 EXCLUDED_NAMES = {
     "__pycache__",
@@ -184,13 +206,73 @@ def find_seven_zip() -> Path | None:
     return Path(found) if found else None
 
 
+def is_model_payload_path(relative_path: str | Path) -> bool:
+    """Return True for model binaries/config payloads that default app packages must not manage."""
+    rel = relative_path.as_posix() if isinstance(relative_path, Path) else str(relative_path).replace("\\", "/")
+    return rel.startswith("models/") and rel not in DOC_FILES
+
+
+def build_model_artifact_policy(managed_paths: Iterable[str], *, include_model_payloads: bool = False) -> dict:
+    """Describe release model delivery so packages do not pretend bundled models exist."""
+    managed_model_paths = sorted(path for path in managed_paths if is_model_payload_path(path))
+    return {
+        "version": MODEL_ARTIFACT_POLICY_VERSION,
+        "default_packages_include_model_payloads": bool(include_model_payloads),
+        "runtime_model_root": "data/models",
+        "managed_model_payload_paths": managed_model_paths,
+        "auto_download_model_paths": sorted(path for path in CORE_MODEL_FILES if is_model_payload_path(path)),
+        "optional_release_assets": [
+            {
+                "name": "wd14-eva02-model",
+                "paths": sorted(path for path in EVA_MODEL_FILES if is_model_payload_path(path)),
+            },
+            {
+                "name": "artist-runtime",
+                "paths": sorted(path for path in ARTIST_RUNTIME_FILES if is_model_payload_path(path)),
+            },
+            {
+                "name": "kaloscope-checkpoint",
+                "paths": [LARGE_MODEL_FILES["kaloscope"]],
+                "split": True,
+            },
+            {
+                "name": "sam3-modelscope-sam3pt",
+                "paths": [LARGE_MODEL_FILES["sam3"]],
+                "split": True,
+            },
+        ],
+    }
+
+
+def _matches_prefix(relative_path: Path, prefixes: Iterable[str]) -> bool:
+    rel = relative_path.as_posix()
+    return any(rel == prefix or rel.startswith(prefix + "/") for prefix in prefixes)
+
+
+def should_prune_directory(relative_path: Path) -> bool:
+    rel = relative_path.as_posix()
+    if any(part.startswith(".") for part in relative_path.parts):
+        return True
+    if _matches_prefix(relative_path, RUNTIME_EXCLUDED_PREFIXES):
+        return True
+    if _matches_prefix(relative_path, EXCLUDED_PREFIXES):
+        return True
+    if rel.startswith("backend/test_"):
+        return True
+    if any(part in EXCLUDED_NAMES for part in relative_path.parts):
+        return True
+    return False
+
+
 def should_skip_path(relative_path: Path) -> bool:
     rel = relative_path.as_posix()
     if any(part.startswith(".") for part in relative_path.parts) and rel not in ALLOWED_HIDDEN_FILES:
         return True
     if rel in EXCLUDED_FILES:
         return True
-    if any(rel == prefix or rel.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES):
+    if _matches_prefix(relative_path, RUNTIME_EXCLUDED_PREFIXES):
+        return True
+    if _matches_prefix(relative_path, EXCLUDED_PREFIXES):
         return True
     # Exclude loose test files in backend/
     if rel.startswith("backend/test_"):
@@ -202,6 +284,20 @@ def should_skip_path(relative_path: Path) -> bool:
     if relative_path.parts and relative_path.parts[0] == "models" and rel not in DOC_FILES:
         return True
     return False
+
+
+def iter_project_files() -> Iterable[tuple[Path, Path]]:
+    stack = [ROOT]
+    while stack:
+        current = stack.pop()
+        for item in sorted(current.iterdir(), key=lambda path: path.name):
+            relative = item.relative_to(ROOT)
+            if item.is_dir():
+                if not should_prune_directory(relative):
+                    stack.append(item)
+                continue
+            if not should_skip_path(relative):
+                yield item, relative
 
 
 def copy_file(relative_path: str | Path, destination_root: Path) -> None:
@@ -228,30 +324,30 @@ def copy_tree(source_root: Path, destination_root: Path, target_relative_root: s
 
 
 def copy_project(destination_root: Path) -> None:
-    for item in ROOT.rglob("*"):
-        if item.is_dir():
-            continue
-        relative = item.relative_to(ROOT)
-        if should_skip_path(relative):
-            continue
+    for item, relative in iter_project_files():
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(item, destination)
 
 
-def write_package_manifest(stage_dir: Path, version: str) -> Path:
+def write_package_manifest(stage_dir: Path, version: str, *, include_model_payloads: bool = False) -> Path:
     managed_paths: list[str] = []
+    installed_manifest_relative = INSTALLED_MANIFEST_RELATIVE_PATH.as_posix()
     for file_path in sorted(stage_dir.rglob("*")):
         if file_path.is_dir():
             continue
         relative = file_path.relative_to(stage_dir).as_posix()
         if relative.startswith("python/"):
             continue
-        if relative == "update/installed-manifest.json":
+        if relative == installed_manifest_relative:
+            continue
+        if is_protected_runtime_path(relative):
+            continue
+        if is_model_payload_path(relative) and not include_model_payloads:
             continue
         managed_paths.append(relative)
 
-    manifest_relative = "update/package-manifest.json"
+    manifest_relative = PACKAGE_MANIFEST_RELATIVE_PATH.as_posix()
     if manifest_relative not in managed_paths:
         managed_paths.append(manifest_relative)
 
@@ -262,6 +358,10 @@ def write_package_manifest(stage_dir: Path, version: str) -> Path:
             {
                 "version": version,
                 "managed_paths": managed_paths,
+                "model_artifact_policy": build_model_artifact_policy(
+                    managed_paths,
+                    include_model_payloads=include_model_payloads,
+                ),
             },
             indent=2,
         ),
@@ -319,16 +419,52 @@ def create_split_zip(source_file: Path, archive_path: Path, split_size_mb: int, 
 def sha256sum(file_path: Path) -> str:
     digest = hashlib.sha256()
     with file_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        for chunk in iter(lambda: handle.read(DOWNLOAD_CHUNK_SIZE), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def download_file(url: str, dest: Path) -> None:
-    """Download a file from a URL to a local path."""
+def download_file(url: str, dest: Path, *, expected_sha256: str | None = None) -> None:
+    """Download a file from a URL to a local path with optional hash verification."""
     print(f"[release] Downloading {url} ...")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, dest)
+    normalized_expected = str(expected_sha256 or "").strip().lower()
+
+    if dest.exists():
+        if normalized_expected:
+            existing_hash = sha256sum(dest)
+            if existing_hash == normalized_expected:
+                print(f"[release] Reusing verified download at {dest}")
+                return
+            print(f"[release] Existing file hash mismatch for {dest.name}; re-downloading.")
+        else:
+            print(f"[release] Reusing existing download at {dest}")
+            return
+
+    tmp_dest = dest.with_name(dest.name + ".tmp")
+    if tmp_dest.exists():
+        tmp_dest.unlink()
+
+    digest = hashlib.sha256()
+    request = urllib.request.Request(url, headers=DOWNLOAD_HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, tmp_dest.open("wb") as handle:
+            while True:
+                chunk = response.read(DOWNLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                digest.update(chunk)
+        actual_hash = digest.hexdigest()
+        if normalized_expected and actual_hash != normalized_expected:
+            raise RuntimeError(
+                f"Downloaded file checksum mismatch for {dest.name}: "
+                f"expected {normalized_expected}, got {actual_hash}"
+            )
+        tmp_dest.replace(dest)
+    finally:
+        if tmp_dest.exists():
+            tmp_dest.unlink()
     print(f"[release] Downloaded to {dest} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
@@ -437,7 +573,7 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             ")\n"
             "\n"
             "if !NEED_INSTALL! EQU 0 (\n"
-            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm\" >nul 2>&1\n"
+            "    \"!PYTHON_CMD!\" -c \"import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm, sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2\" >nul 2>&1\n"
             "    if errorlevel 1 (\n"
             "        echo [INFO] Embedded packages look incomplete or inconsistent. Reinstalling dependencies...\n"
             "        set NEED_INSTALL=1\n"
@@ -445,8 +581,15 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             ")\n"
             "\n"
             "if !NEED_INSTALL! EQU 1 (\n"
-            "    echo [INFO] Installing dependencies - first run may take a few minutes...\n"
-            "    \"!PYTHON_CMD!\" -m pip install -r backend\\requirements.txt --no-warn-script-location\n"
+            "    echo [INFO] Preparing Python build tools for source-only packages...\n"
+            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install setuptools wheel --no-warn-script-location\n"
+            "    if errorlevel 1 (\n"
+            "        echo [ERROR] Failed to install Python build tools.\n"
+            "        pause\n"
+            "        exit /b 1\n"
+            "    )\n"
+            "    echo [INFO] Installing full AI runtime dependencies - first run may take a while...\n"
+            "    \"!PYTHON_CMD!\" backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt --no-warn-script-location\n"
             "    if errorlevel 1 (\n"
             "        echo [ERROR] Failed to install dependencies.\n"
             "        pause\n"
@@ -474,6 +617,14 @@ def write_portable_launcher(stage_dir: Path) -> Path:
             "if errorlevel 1 (\n"
             "    echo [WARN] Could not auto-repair ONNX Runtime package state.\n"
             "    echo        The app can still start, but WD14 tagging may stay on CPU.\n"
+            ")\n"
+            "echo.\n"
+            "\n"
+            "echo [Info] Checking Windows PyTorch / SAM3 runtime package state...\n"
+            "\"!PYTHON_CMD!\" backend\\repair_torch_runtime.py --auto\n"
+            "if errorlevel 1 (\n"
+            "    echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.\n"
+            "    echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.\n"
             ")\n"
             "echo.\n"
             "\n"
@@ -517,9 +668,8 @@ def prepare_embedded_python(stage_dir: Path) -> None:
     python_dir.mkdir(parents=True, exist_ok=True)
 
     # Download embeddable Python
-    embed_zip = ARTIFACT_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
-    if not embed_zip.exists():
-        download_file(PYTHON_EMBED_URL, embed_zip)
+    embed_zip = BOOTSTRAP_DOWNLOAD_ROOT / f"python-{PYTHON_EMBED_VERSION}-embed-amd64.zip"
+    download_file(PYTHON_EMBED_URL, embed_zip, expected_sha256=PYTHON_EMBED_SHA256)
 
     # Extract
     import zipfile
@@ -540,8 +690,7 @@ def prepare_embedded_python(stage_dir: Path) -> None:
 
     # Download get-pip.py
     get_pip = python_dir / "get-pip.py"
-    if not get_pip.exists():
-        download_file(GET_PIP_URL, get_pip)
+    download_file(GET_PIP_URL, get_pip, expected_sha256=GET_PIP_SHA256)
 
     # Keep exact CRLF endings for cmd.exe; newline translation can corrupt batch files.
     write_portable_launcher(stage_dir)
@@ -576,8 +725,8 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
     assets.append(stage_archive("windows-portable", version, seven_zip, populate=populate_windows_portable))
 
-    # === Linux/Mac: app only, no models, no Python (uses system Python) ===
-    def populate_linux_mac(stage_dir: Path) -> None:
+    # === Linux: app only, no models, no Python (uses system Python) ===
+    def populate_linux(stage_dir: Path) -> None:
         copy_project(stage_dir)
         write_package_manifest(stage_dir, version)
 
@@ -589,15 +738,15 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
 
     assets.append(stage_archive("app-patch", version, seven_zip, populate=populate_app_patch))
 
-    # Build as tar.gz for Linux/Mac
-    linux_stage = STAGING_ROOT / "linux-mac"
+    # Build as tar.gz for Linux
+    linux_stage = STAGING_ROOT / "linux"
     if linux_stage.exists():
         shutil.rmtree(linux_stage)
     linux_stage.mkdir(parents=True, exist_ok=True)
-    populate_linux_mac(linux_stage)
+    populate_linux(linux_stage)
 
     import tarfile
-    tar_name = f"sd-image-sorter-v{version}-linux-mac.tar.gz"
+    tar_name = f"sd-image-sorter-v{version}-linux.tar.gz"
     tar_path = ARTIFACT_ROOT / tar_name
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(linux_stage, arcname="sd-image-sorter")
@@ -613,11 +762,9 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
             }
         )
 
-    # Manifest is a local-only record of SHA-256 + sizes for CI / verification.
-    # Do not append to `assets` so it is not uploaded as a public release asset —
-    # the same SHAs are already printed in the release notes.
     manifest_path = ARTIFACT_ROOT / f"sd-image-sorter-v{version}-release-manifest.json"
     manifest_path.write_text(json.dumps({"version": version, "assets": manifest_entries}, indent=2), encoding="utf-8")
+    assets.append(manifest_path)
     shutil.rmtree(STAGING_ROOT, ignore_errors=True)
     return assets
 

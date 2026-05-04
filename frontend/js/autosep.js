@@ -57,6 +57,51 @@ function getAutoSepOperationLabel(mode = getAutoSepOperationMode()) {
         : tKey('autosep.operationModeMove', 'Move originals', '移动原图');
 }
 
+function syncAutoSepOperationControls() {
+    const operationMode = getAutoSepOperationMode();
+    document.querySelectorAll('input[data-autosep-operation-mode]').forEach((input) => {
+        input.checked = normalizeAutoSepOperationMode(input.value) === operationMode;
+    });
+}
+
+function setAutoSepOperationMode(mode, { persist = false } = {}) {
+    AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(mode);
+    syncAutoSepOperationControls();
+    if (persist) saveAutoSepSettings();
+    updateAutoSepSettingsSummary();
+    updateAutoSepActionUi();
+}
+
+function syncAutoSepBooleanSetting(settingKey) {
+    const value = Boolean(AutoSepState.settings[settingKey]);
+    document.querySelectorAll(`input[data-autosep-setting="${settingKey}"]`).forEach((input) => {
+        input.checked = value;
+    });
+}
+
+function setAutoSepBooleanSetting(settingKey, value, { persist = false } = {}) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_AUTOSEP_SETTINGS, settingKey)) return;
+    AutoSepState.settings[settingKey] = Boolean(value);
+    syncAutoSepBooleanSetting(settingKey);
+
+    if (settingKey === 'rememberDestination') {
+        const destination = document.getElementById('autosep-destination')?.value?.trim() || '';
+        if (AutoSepState.settings.rememberDestination) {
+            persistAutoSepDestination(destination);
+        } else {
+            localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
+        }
+    }
+
+    if (persist) saveAutoSepSettings();
+    updateAutoSepSettingsSummary();
+}
+
+function getAutoSepBooleanSettingFromUi(settingKey) {
+    const input = document.querySelector(`input[data-autosep-setting="${settingKey}"]`);
+    return input ? Boolean(input.checked) : Boolean(AutoSepState.settings[settingKey]);
+}
+
 function getAutoSepCompletedLabel(mode = getAutoSepOperationMode(), count = '{count}') {
     return mode === 'copy'
         ? _formatAutoSepI18n('autosep.progressCopied', '{count} copied', { count })
@@ -65,12 +110,19 @@ function getAutoSepCompletedLabel(mode = getAutoSepOperationMode(), count = '{co
 
 function updateAutoSepActionUi() {
     const executeBtn = document.getElementById('btn-execute-autosep');
-    const labelSpan = executeBtn?.querySelector('[data-i18n]');
+    const labelSpan = executeBtn?.querySelector('[data-i18n], .ui-label, span:last-child');
     const operationMode = getAutoSepOperationMode();
+    const labelKey = operationMode === 'copy' ? 'autosep.copyBtn' : 'autosep.moveBtn';
+    const labelText = operationMode === 'copy'
+        ? tKey(labelKey, 'Copy Images', '复制图片')
+        : tKey(labelKey, 'Move Images', '移动图片');
     if (labelSpan) {
-        labelSpan.textContent = operationMode === 'copy'
-            ? tKey('autosep.copyBtn', 'Copy Images', '复制图片')
-            : tKey('autosep.moveBtn', 'Move Images', '移动图片');
+        labelSpan.setAttribute('data-i18n', labelKey);
+        labelSpan.textContent = labelText;
+    }
+    if (executeBtn) {
+        executeBtn.title = labelText;
+        executeBtn.setAttribute('aria-label', labelText);
     }
 }
 
@@ -213,11 +265,11 @@ function updateAutoSepPreviewScopeSummary() {
     const status = getAutoSepScopeStatus();
     const tool = getAutoSepToolLabel();
     summaryEl.textContent = status.lastSyncedLabel && status.matchesGallery
-        ? _formatAutoSepI18n('scope.previewSynced', 'Preview uses the {tool} scope synced from Gallery at {time}.', {
+        ? _formatAutoSepI18n('scope.previewSynced', 'Preview uses {tool} filters copied from Gallery at {time}.', {
             tool,
             time: status.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.previewSaved', 'Preview uses the saved {tool} scope, not the live Gallery filters.', {
+        : _formatAutoSepI18n('scope.previewSaved', 'Preview uses the saved {tool} filters shown here, not the live Gallery filters.', {
             tool,
         });
 }
@@ -235,31 +287,31 @@ function updateAutoSepScopeStatus() {
     const tool = getAutoSepToolLabel();
     const status = getAutoSepScopeStatus();
 
-    badge.textContent = _formatAutoSepI18n('scope.usingSaved', 'Using saved {tool} scope', { tool });
+    badge.textContent = _formatAutoSepI18n('scope.usingSaved', '{tool} will use these saved filters', { tool });
     meta.textContent = status.lastSyncedLabel
-        ? _formatAutoSepI18n('scope.syncedAt', 'Synced from current Gallery filters at {time}', {
+        ? _formatAutoSepI18n('scope.syncedAt', 'Copied from Gallery: {time}', {
             time: status.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.standalone', 'This saved scope will not change when Gallery filters change later.');
+        : _formatAutoSepI18n('scope.standalone', 'These filters will not change automatically when Gallery filters change later.');
 
     if (status.matchesGallery && status.lastSyncedLabel) {
         detail.textContent = _formatAutoSepI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
     } else if (status.matchesGallery) {
         detail.textContent = _formatAutoSepI18n(
             'scope.alignedUnsynced',
-            '{tool} currently matches the Gallery filters, but future Gallery changes will not update it automatically.',
+            '{tool} currently matches the Gallery filters. Later Gallery changes will not be copied automatically.',
             { tool }
         );
     } else if (status.isAcknowledged) {
         detail.textContent = _formatAutoSepI18n(
             'scope.kept',
-            'Continuing with the saved {tool} scope. Current Gallery filters were not copied.',
+            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
             { tool }
         );
     } else {
         detail.textContent = _formatAutoSepI18n(
             'scope.mismatch',
-            'Gallery filters changed. {tool} will keep using its saved scope until you resync.',
+            'Gallery filters changed. {tool} will still use the saved filters shown here.',
             { tool }
         );
     }
@@ -419,12 +471,17 @@ function initAutoSeparate() {
     $('#autosep-overflow-modal .modal-backdrop')?.addEventListener('click', () => window.App?.hideModal?.('autosep-overflow-modal'));
     $('#btn-save-autosep-settings')?.addEventListener('click', saveAutoSepSettingsFromUi);
     $('#btn-reset-autosep-settings')?.addEventListener('click', resetAutoSepSettings);
-    document.querySelectorAll('input[name="autosep-operation-mode"]').forEach((input) => {
-        input.addEventListener('change', () => {
+    document.querySelectorAll('input[data-autosep-operation-mode]').forEach((input) => {
+        const handleOperationModeInput = () => {
             if (!input.checked) return;
-            AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(input.value);
-            updateAutoSepSettingsSummary();
-            updateAutoSepActionUi();
+            setAutoSepOperationMode(input.value, { persist: true });
+        };
+        input.addEventListener('input', handleOperationModeInput);
+        input.addEventListener('change', handleOperationModeInput);
+    });
+    document.querySelectorAll('input[data-autosep-setting]').forEach((input) => {
+        input.addEventListener('change', () => {
+            setAutoSepBooleanSetting(input.dataset.autosepSetting, input.checked, { persist: true });
         });
     });
     $('#btn-autosep-new-config')?.addEventListener('click', createAutoSepConfig);
@@ -467,6 +524,20 @@ function serializeAutoSepFilters(filters) {
         aspectRatio: source.aspectRatio || '',
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+    };
+}
+
+function buildAutoSepFilterContract(filters) {
+    const source = serializeAutoSepFilters(filters);
+    const normalizeCheckpoint = window.App?.normalizeCheckpointFilterValue;
+    const checkpoints = Array.isArray(source.checkpoints) ? source.checkpoints : [];
+    return {
+        ...source,
+        checkpoints: checkpoints
+            .map((value) => typeof normalizeCheckpoint === 'function' ? normalizeCheckpoint(value) : String(value || '').trim())
+            .filter(Boolean),
+        artist: source.artist ? String(source.artist).trim() : null,
+        search: source.search || '',
     };
 }
 
@@ -692,16 +763,11 @@ function getSavedAutoSepDestination() {
 
 function applyAutoSepSettingsToUi() {
     const destinationInput = document.getElementById('autosep-destination');
-    const rememberDestination = document.getElementById('autosep-remember-destination');
-    const autoPreview = document.getElementById('autosep-auto-preview');
-    const confirmMove = document.getElementById('autosep-confirm-move');
 
-    if (rememberDestination) rememberDestination.checked = Boolean(AutoSepState.settings.rememberDestination);
-    if (autoPreview) autoPreview.checked = Boolean(AutoSepState.settings.autoPreview);
-    if (confirmMove) confirmMove.checked = Boolean(AutoSepState.settings.confirmBeforeMove);
-    document.querySelectorAll('input[name="autosep-operation-mode"]').forEach((input) => {
-        input.checked = input.value === getAutoSepOperationMode();
-    });
+    syncAutoSepBooleanSetting('rememberDestination');
+    syncAutoSepBooleanSetting('autoPreview');
+    syncAutoSepBooleanSetting('confirmBeforeMove');
+    syncAutoSepOperationControls();
 
     if (destinationInput && AutoSepState.settings.rememberDestination && !destinationInput.value.trim()) {
         destinationInput.value = getSavedAutoSepDestination();
@@ -729,8 +795,8 @@ function updateAutoSepSettingsSummary() {
     );
     parts.push(
         AutoSepState.settings.confirmBeforeMove
-            ? tKey('autosep.summaryConfirmOn', 'Confirm move: On', '移动确认：开启')
-            : tKey('autosep.summaryConfirmOff', 'Confirm move: Off', '移动确认：关闭')
+            ? tKey('autosep.summaryConfirmOn', 'Confirmation: On', '执行确认：开启')
+            : tKey('autosep.summaryConfirmOff', 'Confirmation: Off', '执行确认：关闭')
     );
     parts.push(
         _formatAutoSepI18n('autosep.summaryOperation', 'Action mode: {mode}', {
@@ -767,11 +833,11 @@ function closeAutoSepSettingsModal() {
 }
 
 function saveAutoSepSettingsFromUi() {
-    AutoSepState.settings.rememberDestination = Boolean(document.getElementById('autosep-remember-destination')?.checked);
-    AutoSepState.settings.autoPreview = Boolean(document.getElementById('autosep-auto-preview')?.checked);
-    AutoSepState.settings.confirmBeforeMove = Boolean(document.getElementById('autosep-confirm-move')?.checked);
+    AutoSepState.settings.rememberDestination = getAutoSepBooleanSettingFromUi('rememberDestination');
+    AutoSepState.settings.autoPreview = getAutoSepBooleanSettingFromUi('autoPreview');
+    AutoSepState.settings.confirmBeforeMove = getAutoSepBooleanSettingFromUi('confirmBeforeMove');
     AutoSepState.settings.operationMode = normalizeAutoSepOperationMode(
-        document.querySelector('input[name="autosep-operation-mode"]:checked')?.value || 'move'
+        document.querySelector('input[data-autosep-operation-mode]:checked')?.value || getAutoSepOperationMode()
     );
     saveAutoSepSettings();
 
@@ -782,6 +848,7 @@ function saveAutoSepSettingsFromUi() {
         localStorage.removeItem(AUTOSEP_DESTINATION_KEY);
     }
 
+    applyAutoSepSettingsToUi();
     updateAutoSepSettingsSummary();
     updateAutoSepActionUi();
     closeAutoSepSettingsModal();
@@ -853,21 +920,27 @@ function updateAutoSepSummary() {
 }
 
 function getAutoSepFilterSignature(filters) {
+    const appSignature = window.App?.getAdvancedFilterContractSignature;
+    if (typeof appSignature === 'function') {
+        return appSignature(buildAutoSepFilterContract(filters));
+    }
+    const contract = buildAutoSepFilterContract(filters);
     return JSON.stringify({
-        generators: filters.generators || [],
-        tags: filters.tags || [],
-        ratings: filters.ratings || [],
-        checkpoints: filters.checkpoints || [],
-        loras: filters.loras || [],
-        prompts: filters.prompts || [],
-        search: filters.search || '',
-        minWidth: filters.minWidth ?? null,
-        maxWidth: filters.maxWidth ?? null,
-        minHeight: filters.minHeight ?? null,
-        maxHeight: filters.maxHeight ?? null,
-        aspectRatio: filters.aspectRatio || null,
-        minAesthetic: filters.minAesthetic ?? null,
-        maxAesthetic: filters.maxAesthetic ?? null,
+        generators: contract.generators || [],
+        tags: contract.tags || [],
+        ratings: contract.ratings || [],
+        checkpoints: contract.checkpoints || [],
+        loras: contract.loras || [],
+        prompts: contract.prompts || [],
+        artist: contract.artist || null,
+        search: contract.search || '',
+        minWidth: contract.minWidth ?? null,
+        maxWidth: contract.maxWidth ?? null,
+        minHeight: contract.minHeight ?? null,
+        maxHeight: contract.maxHeight ?? null,
+        aspectRatio: contract.aspectRatio || null,
+        minAesthetic: contract.minAesthetic ?? null,
+        maxAesthetic: contract.maxAesthetic ?? null,
     });
 }
 
@@ -958,21 +1031,23 @@ function _renderAutoSepOverflowModal(images) {
 }
 
 function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
+    const contract = buildAutoSepFilterContract(filters);
     return {
-        generators: filters.generators?.length > 0 ? filters.generators : null,
-        tags: filters.tags?.length > 0 ? filters.tags : null,
-        ratings: filters.ratings?.length < 4 ? filters.ratings : null,
-        checkpoints: filters.checkpoints?.length > 0 ? filters.checkpoints : null,
-        loras: filters.loras?.length > 0 ? filters.loras : null,
-        prompts: filters.prompts?.length > 0 ? filters.prompts : null,
-        search: filters.search?.trim() || null,
-        minWidth: filters.minWidth,
-        maxWidth: filters.maxWidth,
-        minHeight: filters.minHeight,
-        maxHeight: filters.maxHeight,
-        aspectRatio: filters.aspectRatio,
-        minAesthetic: filters.minAesthetic,
-        maxAesthetic: filters.maxAesthetic,
+        generators: contract.generators?.length > 0 ? contract.generators : null,
+        tags: contract.tags?.length > 0 ? contract.tags : null,
+        ratings: contract.ratings?.length < 4 ? contract.ratings : null,
+        checkpoints: contract.checkpoints?.length > 0 ? contract.checkpoints : null,
+        loras: contract.loras?.length > 0 ? contract.loras : null,
+        prompts: contract.prompts?.length > 0 ? contract.prompts : null,
+        artist: contract.artist || null,
+        search: contract.search?.trim() || null,
+        minWidth: contract.minWidth,
+        maxWidth: contract.maxWidth,
+        minHeight: contract.minHeight,
+        maxHeight: contract.maxHeight,
+        aspectRatio: contract.aspectRatio,
+        minAesthetic: contract.minAesthetic,
+        maxAesthetic: contract.maxAesthetic,
         limit,
         cursor,
     };
@@ -1095,6 +1170,7 @@ async function updateAutoSepPreview() {
         (filters.checkpoints?.length > 0) ||
         (filters.loras?.length > 0) ||
         (filters.prompts?.length > 0) ||
+        Boolean(filters.artist?.trim?.()) ||
         Boolean(filters.search?.trim()) ||
         filters.minWidth || filters.maxWidth || filters.minHeight || filters.maxHeight ||
         filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null;
@@ -1188,13 +1264,21 @@ function showAutosepMoveProgress(total) {
     const container = document.querySelector('.preview-section');
     if (!container) return;
     const operationMode = getAutoSepOperationMode();
-    
+
+    const cancelLabel = tKey('autosep.cancel', 'Cancel', '取消');
+    const hideLabel = tKey('autosep.hide', 'Hide', '隐藏');
+
     // Check if progress element already exists
     let progressEl = document.getElementById('autosep-move-progress');
     if (!progressEl) {
         progressEl = document.createElement('div');
         progressEl.id = 'autosep-move-progress';
         progressEl.className = 'autosep-move-progress';
+        // Two-button layout: Cancel actually stops the backend worker via
+        // /api/batch-move/cancel; Hide only dismisses this UI block. The
+        // previous single-button layout was labelled "Hide" but had id
+        // `btn-cancel-autosep-move`, which misled users into thinking
+        // dismissing the panel cancelled the underlying batch.
         progressEl.innerHTML = `
             <div class="progress-bar">
                 <div class="progress-fill" id="autosep-move-fill" style="width: 0%"></div>
@@ -1202,12 +1286,19 @@ function showAutosepMoveProgress(total) {
             <div class="progress-text" id="autosep-move-text">Moving images...</div>
             <div class="autosep-move-errors" id="autosep-move-errors" style="display: none;"></div>
             <div class="operation-controls">
-                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">Hide</button>
+                <button class="btn-cancel-operation" id="btn-cancel-autosep-move">${window.escapeHtml(cancelLabel)}</button>
+                <button class="btn-cancel-operation" id="btn-hide-autosep-move">${window.escapeHtml(hideLabel)}</button>
             </div>
         `;
         container.appendChild(progressEl);
+    } else {
+        // Re-localize labels in case language changed since last time.
+        const existingCancelBtn = document.getElementById('btn-cancel-autosep-move');
+        const existingHideBtn = document.getElementById('btn-hide-autosep-move');
+        if (existingCancelBtn) existingCancelBtn.textContent = cancelLabel;
+        if (existingHideBtn) existingHideBtn.textContent = hideLabel;
     }
-    
+
     progressEl.classList.add('visible');
     autosepMoveTracker = window.App?.createProgressTracker?.() || null;
     if (autosepMoveTracker && typeof window.App?.resetProgressTracker === 'function') {
@@ -1218,11 +1309,32 @@ function showAutosepMoveProgress(total) {
         ? tKey('autosep.preparingCopy', `Preparing to copy ${total} images in the background...`, `准备在后台复制 ${total} 张图片...`)
         : tKey('autosep.preparingMove', `Preparing to move ${total} images in the background...`, `准备在后台移动 ${total} 张图片...`);
     renderAutosepMoveErrors([]);
-    
-    // The backend move runs in the background; the UI can only dismiss progress.
+
     const cancelBtn = document.getElementById('btn-cancel-autosep-move');
     if (cancelBtn) {
-        cancelBtn.onclick = () => {
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = cancelLabel;
+        cancelBtn.onclick = async () => {
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = tKey('autosep.cancelling', 'Cancelling...', '正在取消…');
+            try {
+                await window.App.API.post('/api/batch-move/cancel', {});
+            } catch (error) {
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = cancelLabel;
+                window.App.showToast(
+                    tKey('autosep.cancelFailed', 'Failed to request cancellation', '取消请求失败'),
+                    'error'
+                );
+            }
+        };
+    }
+    const hideBtn = document.getElementById('btn-hide-autosep-move');
+    if (hideBtn) {
+        hideBtn.onclick = () => {
+            // Hide only dismisses the panel. The backend worker keeps
+            // running; resumeAutosepMoveProgress() will re-attach if the
+            // user navigates back while the worker is still active.
             hideAutosepMoveProgress();
         };
     }
@@ -1400,6 +1512,30 @@ async function pollAutosepMoveProgress(expectedTotal, destination = '') {
                 break;
             }
 
+            if (progress.status === 'cancelled') {
+                hideAutosepMoveProgress();
+                const movedCount = Number(progress.moved || 0);
+                const errorCount = Number(progress.errors || 0);
+                const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
+                window.App.showToast(
+                    progress.message || _formatAutoSepI18n(
+                        operationMode === 'copy' ? 'autosep.copyCancelled' : 'autosep.moveCancelled',
+                        operationMode === 'copy'
+                            ? 'Copy cancelled. {count} images copied so far.'
+                            : 'Move cancelled. {count} images moved so far.',
+                        { count: movedCount }
+                    ),
+                    errorCount > 0 ? 'warning' : 'info'
+                );
+                // Refresh the gallery so the partially-moved files reflect
+                // their new on-disk locations. Skip the refresh when nothing
+                // was committed — there's nothing to update.
+                if (movedCount > 0 && window.App && window.App.loadImages) {
+                    window.App.loadImages();
+                }
+                break;
+            }
+
             if (progress.status === 'error') {
                 hideAutosepMoveProgress();
                 const operationMode = normalizeAutoSepOperationMode(progress.operation || getAutoSepOperationMode());
@@ -1479,11 +1615,11 @@ async function executeAutoSeparateWithProgress() {
     const total = AutoSepState.matchCount;
     const scopeStatus = getAutoSepScopeStatus();
     const scopeLine = scopeStatus.lastSyncedLabel && scopeStatus.matchesGallery
-        ? _formatAutoSepI18n('scope.executeSynced', 'Scope: saved {tool} filters (last synced from Gallery at {time})', {
+        ? _formatAutoSepI18n('scope.executeSynced', 'Using saved {tool} filters copied from Gallery at {time}', {
             tool: getAutoSepToolLabel(),
             time: scopeStatus.lastSyncedLabel,
         })
-        : _formatAutoSepI18n('scope.executeSaved', 'Scope: saved {tool} filters', {
+        : _formatAutoSepI18n('scope.executeSaved', 'Using saved {tool} filters', {
             tool: getAutoSepToolLabel(),
         });
 
@@ -1491,29 +1627,31 @@ async function executeAutoSeparateWithProgress() {
             showAutosepMoveProgress(total);
 
             try {
+                const contract = buildAutoSepFilterContract(filters);
                 const dimensions = {
-                    minWidth: filters.minWidth,
-                    maxWidth: filters.maxWidth,
-                    minHeight: filters.minHeight,
-                    maxHeight: filters.maxHeight,
-                    aspectRatio: filters.aspectRatio
+                    minWidth: contract.minWidth,
+                    maxWidth: contract.maxWidth,
+                    minHeight: contract.minHeight,
+                    maxHeight: contract.maxHeight,
+                    aspectRatio: contract.aspectRatio
                 };
 
                 const startResult = await API.batchMove(
-                    filters.generators?.length > 0 ? filters.generators : null,
-                    filters.tags?.length > 0 ? filters.tags : null,
-                    filters.ratings?.length < 4 ? filters.ratings : null,
+                    contract.generators?.length > 0 ? contract.generators : null,
+                    contract.tags?.length > 0 ? contract.tags : null,
+                    contract.ratings?.length < 4 ? contract.ratings : null,
                     destination,
-                    filters.checkpoints?.length > 0 ? filters.checkpoints : null,
-                    filters.loras?.length > 0 ? filters.loras : null,
-                    filters.prompts?.length > 0 ? filters.prompts : null,
+                    contract.checkpoints?.length > 0 ? contract.checkpoints : null,
+                    contract.loras?.length > 0 ? contract.loras : null,
+                    contract.prompts?.length > 0 ? contract.prompts : null,
                     dimensions,
-                    filters.search?.trim() || null,
+                    contract.search?.trim() || null,
                     {
-                        min: filters.minAesthetic,
-                        max: filters.maxAesthetic,
+                        min: contract.minAesthetic,
+                        max: contract.maxAesthetic,
                     },
                     operationMode,
+                    contract.artist,
                 );
 
                 if (startResult?.error) {

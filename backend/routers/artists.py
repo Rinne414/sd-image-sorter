@@ -4,26 +4,33 @@ Artist Identification API Router for SD Image Sorter.
 Endpoints for identifying artist/style in images using LSNet-style classification.
 """
 import os
-import threading
 import logging
-import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from typing import List, Optional, Dict
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import (
     get_artist_identifier,
-    ArtistIdentifier,
     ARTIST_THRESHOLD_DEFAULT,
 )
 from config import ARTIST_HF_MODEL_ID, ARTIST_MODELSCOPE_MODEL_ID
-from image_fingerprint import compute_image_content_fingerprint
+from exceptions import ImageNotFoundError, ServiceError, ValidationError
 from model_health import get_model_health
+from services.artist_service import ArtistService
+from services.service_provider import ServiceProvider
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/artists", tags=["artists"])
+# Hard ceiling for one /identify-batch request. Background-task model: each
+# image is processed sequentially by the worker, so the server-side memory
+# footprint of ``image_ids`` itself is the only thing we cap. Internal
+# SQLite IN(...) lookups are already chunked at 500 ids in
+# ``database.get_images_by_ids``, so larger ceilings do not change the
+# database access pattern. 5,000,000 covers any realistic personal library
+# (50k was still rejecting real users with bigger collections).
+ARTIST_BATCH_IMAGE_LIMIT = 5_000_000
 
 
 # ============== Request/Response Models ==============
@@ -60,7 +67,7 @@ class IdentifyRequest(ArtistModelConfig):
 
 
 class IdentifyBatchRequest(ArtistModelConfig):
-    image_ids: List[int] = Field(..., min_length=1)
+    image_ids: List[int] = Field(..., min_length=1, max_length=ARTIST_BATCH_IMAGE_LIMIT)
     threshold: float = Field(ARTIST_THRESHOLD_DEFAULT, ge=0.0, le=1.0)
     top_k: int = Field(5, ge=1, le=20)
 
@@ -122,23 +129,23 @@ class ArtistImageListResponse(BaseModel):
     images: List[ArtistImageResponse]
 
 
-# ============== Background Task State ==============
+def _configure_artist_service(service: ArtistService) -> None:
+    service.set_identifier_getter(get_artist_identifier)
 
-_batch_progress: Dict[str, Any] = {
-    "running": False,
-    "total": 0,
-    "processed": 0,
-    "errors": 0,
-    "results": [],
-    "step": "idle",
-    "message": "",
-    "current_item": None,
-    "started_at": None,
-    "updated_at": None,
-}
 
-# Lock for thread-safe batch progress dict access
-_batch_lock = threading.Lock()
+_artist_service_provider = ServiceProvider(
+    lambda: ArtistService(identifier_getter=get_artist_identifier),
+    on_set=_configure_artist_service,
+)
+
+
+def get_artist_service() -> ArtistService:
+    service = _artist_service_provider.get()
+    service.set_identifier_getter(get_artist_identifier)
+    return service
+
+
+set_artist_service = _artist_service_provider.set
 
 
 # ============== Endpoints ==============
@@ -178,7 +185,10 @@ uses a predefined label list and may not accurately identify all artists.
         404: {"description": "Image not found or file missing"}
     }
 )
-async def identify_artist(request: IdentifyRequest):
+async def identify_artist(
+    request: IdentifyRequest,
+    service: ArtistService = Depends(get_artist_service),
+):
     """
     Identify the artist/style of a single image.
 
@@ -203,64 +213,19 @@ async def identify_artist(request: IdentifyRequest):
     Raises:
         HTTPException 404: Image not found or file missing on disk
     """
-    import database as db
-
-    # Get image path
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT path FROM images WHERE id = ?", (request.image_id,))
-        row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Image not found")
-
-        image_path = row[0]
-
-    if not os.path.exists(image_path):
-        raise HTTPException(status_code=404, detail="Image file not found")
-
-    # Identify artist
-    identifier = get_artist_identifier(
-        model_path=request.model_path,
-        model_source=request.model_source,
-        threshold=request.threshold,
-    )
-    result = identifier.identify(image_path, top_k=request.top_k)
-    if result.get("error"):
-        raise HTTPException(status_code=503, detail=result["error"])
-
-    content_fingerprint = None
     try:
-        content_fingerprint = compute_image_content_fingerprint(image_path)
-    except Exception as exc:
-        logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
-
-    # Store result in database
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-            (content_fingerprint, request.image_id),
+        result = service.identify_image(
+            image_id=request.image_id,
+            threshold=request.threshold,
+            top_k=request.top_k,
+            model_source=request.model_source,
+            model_path=request.model_path,
         )
-        cursor.execute(
-            """INSERT OR REPLACE INTO artist_predictions
-               (image_id, artist, confidence, top_predictions)
-               VALUES (?, ?, ?, ?)""",
-            (
-                request.image_id,
-                result["artist"],
-                result["confidence"],
-                str(result["top_predictions"]),
-            ),
-        )
-
-    return IdentifyResponse(
-        image_id=request.image_id,
-        artist=result["artist"],
-        confidence=result["confidence"],
-        top_predictions=result["top_predictions"],
-        model_loaded=result["model_loaded"],
-        experimental=True,
-    )
+    except ImageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message)
+    except ServiceError as exc:
+        raise HTTPException(status_code=503, detail=exc.message)
+    return IdentifyResponse(**result)
 
 
 @router.post(
@@ -290,6 +255,7 @@ Results are stored in the artist_predictions table.
 async def identify_batch(
     request: IdentifyBatchRequest,
     background_tasks: BackgroundTasks,
+    service: ArtistService = Depends(get_artist_service),
 ):
     """
     Start batch artist identification for multiple images.
@@ -312,25 +278,10 @@ async def identify_batch(
     Note:
         Only one batch can run at a time.
     """
-    global _batch_progress
+    if service.is_batch_running():
+        raise HTTPException(status_code=409, detail="Batch identification already in progress")
 
-    with _batch_lock:
-        if _batch_progress["running"]:
-            raise HTTPException(status_code=409, detail="Batch identification already in progress")
-
-        # Reset progress
-        _batch_progress = {
-            "running": True,
-            "total": len(request.image_ids),
-            "processed": 0,
-            "errors": 0,
-            "results": [],
-            "step": "starting",
-            "message": "Preparing artist identification...",
-            "current_item": None,
-            "started_at": time.time(),
-            "updated_at": time.time(),
-        }
+    service.start_batch_progress(total=len(request.image_ids))
 
     # Start background task
     background_tasks.add_task(
@@ -356,131 +307,33 @@ def _run_batch_identification(
     model_path: Optional[str] = None,
 ):
     """Background task for batch identification with optimized batch operations."""
-    import database as db
-    global _batch_progress
-
+    service = get_artist_service()
     try:
-        with _batch_lock:
-            _batch_progress["step"] = "loading_runtime"
-            _batch_progress["message"] = "Loading artist runtime..."
-            _batch_progress["updated_at"] = time.time()
-
-        identifier = get_artist_identifier(
-            model_path=model_path,
-            model_source=model_source,
+        result = service.run_batch_identification(
+            image_ids=image_ids,
             threshold=threshold,
+            top_k=top_k,
+            model_source=model_source,
+            model_path=model_path,
+            progress_callback=service.apply_batch_progress_update,
         )
-
-        # Batch fetch all image paths in a single query (N+1 fix)
-        with db.get_db() as conn:
-            cursor = conn.cursor()
-            placeholders = ",".join("?" * len(image_ids))
-            cursor.execute(
-                f"SELECT id, path FROM images WHERE id IN ({placeholders})",
-                image_ids
-            )
-            image_map = {row[0]: row[1] for row in cursor.fetchall()}
-
-        with _batch_lock:
-            _batch_progress["step"] = "identifying"
-            _batch_progress["message"] = f"Identifying {len(image_ids)} image(s)..."
-            _batch_progress["updated_at"] = time.time()
-
-        # Collect all predictions to insert
-        predictions_to_insert = []
-
-        for image_id in image_ids:
-            try:
-                # Check if image exists in our map
-                if image_id not in image_map:
-                    raise FileNotFoundError(f"Image {image_id} not found in database")
-
-                image_path = image_map[image_id]
-                current_item = os.path.basename(image_path)
-                with _batch_lock:
-                    _batch_progress["current_item"] = current_item
-                    _batch_progress["message"] = f"Identifying {current_item}"
-                    _batch_progress["updated_at"] = time.time()
-
-                if not os.path.exists(image_path):
-                    raise FileNotFoundError(f"Image file not found for image {image_id}")
-
-                # Identify artist
-                result = identifier.identify(image_path, top_k=top_k)
-                if result.get("error"):
-                    raise RuntimeError(result["error"])
-
-                # Collect for batch insert
-                content_fingerprint = None
-                try:
-                    content_fingerprint = compute_image_content_fingerprint(image_path)
-                except Exception as exc:
-                    logger.warning("Could not compute content fingerprint for %s: %s", image_path, exc)
-                predictions_to_insert.append({
-                    "image_id": image_id,
-                    "artist": result["artist"],
-                    "confidence": result["confidence"],
-                    "top_predictions": str(result["top_predictions"]),
-                    "content_fingerprint": content_fingerprint,
-                })
-
-                with _batch_lock:
-                    _batch_progress["results"].append({
-                        "image_id": image_id,
-                        "artist": result["artist"],
-                        "confidence": result["confidence"],
-                    })
-
-            except Exception as e:
-                logger.error(f"Error processing image {image_id}: {e}")
-                with _batch_lock:
-                    _batch_progress["errors"] += 1
-                    _batch_progress["updated_at"] = time.time()
-            finally:
-                with _batch_lock:
-                    _batch_progress["processed"] += 1
-                    _batch_progress["updated_at"] = time.time()
-
-        # Batch insert all predictions (N+1 fix)
-        if predictions_to_insert:
-            with db.get_db() as conn:
-                cursor = conn.cursor()
-                cursor.executemany(
-                    "UPDATE images SET content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                    [(p["content_fingerprint"], p["image_id"]) for p in predictions_to_insert],
-                )
-                cursor.executemany(
-                    """INSERT OR REPLACE INTO artist_predictions
-                       (image_id, artist, confidence, top_predictions)
-                       VALUES (?, ?, ?, ?)""",
-                    [(p["image_id"], p["artist"], p["confidence"], p["top_predictions"])
-                     for p in predictions_to_insert]
-                )
-
-        with _batch_lock:
-            _batch_progress["running"] = False
-            _batch_progress["step"] = "done"
-            _batch_progress["message"] = (
-                f"Completed artist identification: {_batch_progress['processed']}/{_batch_progress['total']} processed"
-                + (f", {_batch_progress['errors']} failed." if _batch_progress["errors"] else ".")
-            )
-            _batch_progress["current_item"] = None
-            _batch_progress["updated_at"] = time.time()
+        service.finish_batch_progress_done(result)
     except Exception as exc:
         logger.error("Artist batch job failed: %s", exc)
-        with _batch_lock:
-            _batch_progress["running"] = False
-            _batch_progress["step"] = "error"
-            _batch_progress["message"] = f"Artist identification failed: {exc}"
-            _batch_progress["current_item"] = None
-            _batch_progress["updated_at"] = time.time()
+        service.finish_batch_progress_error(exc)
+
+
+@router.post("/batch-cancel")
+async def cancel_batch(service: ArtistService = Depends(get_artist_service)):
+    """Cancel the running artist batch identification."""
+    cancelled = service.request_cancel()
+    return {"status": "cancelled" if cancelled else "not_running"}
 
 
 @router.get("/batch-progress", response_model=BatchProgress)
-async def get_batch_progress():
+async def get_batch_progress(service: ArtistService = Depends(get_artist_service)):
     """Get the current batch identification progress."""
-    with _batch_lock:
-        return BatchProgress(**_batch_progress)
+    return BatchProgress(**service.get_batch_progress())
 
 
 @router.get("/models", response_model=List[ModelInfo])
@@ -563,50 +416,9 @@ async def get_artist_diagnostics():
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats():
     """Get artist identification statistics."""
-    import database as db
-
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-
-        # Total images
-        cursor.execute("SELECT COUNT(*) FROM images")
-        total_images = cursor.fetchone()[0]
-
-        # Identified images
-        cursor.execute("SELECT COUNT(*) FROM artist_predictions")
-        identified_images = cursor.fetchone()[0]
-
-        # Undefined count
-        cursor.execute(
-            "SELECT COUNT(*) FROM artist_predictions WHERE artist = 'undefined'"
-        )
-        undefined_count = cursor.fetchone()[0]
-
-        # Artist counts
-        cursor.execute("""
-            SELECT artist, COUNT(*) as count, AVG(confidence) as avg_confidence, MAX(confidence) as max_confidence
-            FROM artist_predictions
-            WHERE artist != 'undefined'
-            GROUP BY artist
-            ORDER BY count DESC
-        """)
-        artist_counts = {}
-        artist_stats: Dict[str, Dict[str, float]] = {}
-        for row in cursor.fetchall():
-            artist = row[0]
-            artist_counts[artist] = row[1]
-            artist_stats[artist] = {
-                "count": float(row[1]),
-                "avg_confidence": float(row[2] or 0.0),
-                "max_confidence": float(row[3] or 0.0),
-            }
-
+    service = get_artist_service()
     return StatsResponse(
-        total_images=total_images,
-        identified_images=identified_images,
-        undefined_count=undefined_count,
-        artist_counts=artist_counts,
-        artist_stats=artist_stats,
+        **service.get_stats(),
     )
 
 
@@ -615,76 +427,30 @@ async def get_artist_images(
     artist_name: str,
     limit: int = Query(default=120, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    service: ArtistService = Depends(get_artist_service),
 ):
     """Return images identified for a specific artist ordered by confidence."""
-    import database as db
-
-    safe_artist = str(artist_name or "").strip()
-    if not safe_artist:
-        raise HTTPException(status_code=400, detail="Artist name is required")
-
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM artist_predictions ap
-            WHERE ap.artist = ?
-            """,
-            (safe_artist,),
-        )
-        total = int(cursor.fetchone()[0] or 0)
-
-        cursor.execute(
-            """
-            SELECT i.id, i.filename, i.path, ap.artist, ap.confidence
-            FROM artist_predictions ap
-            INNER JOIN images i ON i.id = ap.image_id
-            WHERE ap.artist = ?
-            ORDER BY ap.confidence DESC, i.created_at DESC, i.id DESC
-            LIMIT ?
-            OFFSET ?
-            """,
-            (safe_artist, limit, offset),
-        )
-        rows = cursor.fetchall()
-
-    images = [
-        ArtistImageResponse(
-            image_id=int(row[0]),
-            filename=str(row[1] or ""),
-            path=str(row[2] or ""),
-            artist=str(row[3] or ""),
-            confidence=float(row[4] or 0.0),
-            confidence_percent=round(float(row[4] or 0.0) * 100, 1),
-        )
-        for row in rows
-    ]
-
-    return ArtistImageListResponse(
-        artist=safe_artist,
-        total=total,
-        limit=limit,
-        offset=offset,
-        has_more=(offset + len(images)) < total,
-        images=images,
-    )
+    try:
+        return ArtistImageListResponse(**service.get_artist_images(
+            artist_name=artist_name,
+            limit=limit,
+            offset=offset,
+        ))
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
 
 
 @router.get("/list")
-async def list_artists():
+async def list_artists(
+    service: ArtistService = Depends(get_artist_service),
+):
     """Get the list of known artists."""
-    identifier = get_artist_identifier()
-    return {"artists": identifier.get_artists_list()}
+    return service.list_artists()
 
 
 @router.delete("/clear")
-async def clear_predictions():
+async def clear_predictions(
+    service: ArtistService = Depends(get_artist_service),
+):
     """Clear all artist predictions."""
-    import database as db
-
-    with db.get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM artist_predictions")
-
-    return {"message": "All artist predictions cleared"}
+    return service.clear_predictions()

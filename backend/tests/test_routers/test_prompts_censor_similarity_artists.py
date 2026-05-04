@@ -152,6 +152,33 @@ class TestPromptsRouter:
         assert data["top_checkpoints_total"] == 3
         assert data["top_checkpoints_has_more"] is True
 
+    def test_prompt_stats_group_checkpoint_variants_by_normalized_name(self, test_client, test_db):
+        for index in range(3):
+            image_id = test_db.add_image(
+                path=f"/tmp/rv51_variant_{index}.png",
+                filename=f"rv51_variant_{index}.png",
+                metadata_json="{}",
+                checkpoint="RealisticVisionV51.safetensors [abc12345]" if index % 2 == 0 else "RealisticVisionV51.safetensors",
+                prompt="cinematic portrait, studio lighting",
+            )
+            with test_db.get_db() as conn:
+                conn.execute(
+                    "UPDATE images SET aesthetic_score = ? WHERE id = ?",
+                    (7.5 + index * 0.1, image_id),
+                )
+                conn.execute(
+                    "INSERT INTO tags (image_id, tag, confidence) VALUES (?, ?, ?)",
+                    (image_id, "studio_lighting", 0.9),
+                )
+
+        response = test_client.get("/api/prompts/stats?checkpoint_limit=10&leader_limit=10&recipe_limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert any(item["name"] == "RealisticVisionV51" and item["count"] == 3 for item in data["top_checkpoints"])
+        assert any(item["name"] == "RealisticVisionV51" and item["count"] == 3 for item in data["checkpoint_score_leaders"])
+        assert any(recipe["name"] == "RealisticVisionV51" and "studio_lighting" in recipe["tags"] for recipe in data["checkpoint_recipes"])
+
 
 class TestCensorRouterValidation:
     @pytest.mark.parametrize(
@@ -179,6 +206,28 @@ class TestCensorRouterValidation:
         response = test_client.post("/api/censor/preview", json=payload)
 
         assert response.status_code == expected_status
+
+    @pytest.mark.parametrize("style", ["black_bar", "white_bar", "solid"])
+    def test_legacy_preview_accepts_current_bar_styles(self, test_client, test_db, tmp_path, style):
+        image_path = tmp_path / f"censor-{style}.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/preview",
+            json={
+                "image_id": image_id,
+                "regions": [[0, 0, 16, 16]],
+                "style": style,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["preview"].startswith("data:image/jpeg;base64,")
 
     def test_save_data_validation_rejects_invalid_metadata(self, test_client):
         response = test_client.post(
@@ -271,6 +320,7 @@ class TestCensorRouterValidation:
                 "metadata_option": "strip",
                 "output_format": "png",
                 "original_image_id": image_id,
+                "allow_overwrite": True,
             },
         )
 
@@ -294,6 +344,37 @@ class TestCensorRouterValidation:
         assert row["embedding"] is None
         assert row["content_fingerprint"] == refreshed_fingerprint
         assert refreshed_fingerprint != original_fingerprint
+        response_payload = response.json()
+        assert response_payload["overwrote_existing"] is True
+        assert response_payload["overwrote_indexed_path"] is True
+        assert response_payload["reconciled_image_id"] == image_id
+
+    def test_save_data_requires_explicit_overwrite_for_existing_output(self, test_client, tmp_path):
+        source_path = tmp_path / "save-data-conflict.png"
+        Image.new("RGB", (32, 32), color="white").save(source_path)
+        image_id = test_client.test_db.add_image(
+            path=str(source_path),
+            filename=source_path.name,
+            metadata_json="{}",
+        )
+        payload_image = base64.b64encode(source_path.read_bytes()).decode("ascii")
+
+        response = test_client.post(
+            "/api/censor/save-data",
+            json={
+                "image_data": f"data:image/png;base64,{payload_image}",
+                "filename": source_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+                "original_image_id": image_id,
+            },
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "Confirm overwrite" in detail
 
     def test_save_data_rejects_oversized_decoded_payload(self, test_client, monkeypatch):
         from services import censor_service as censor_service_module
@@ -309,6 +390,7 @@ class TestCensorRouterValidation:
                 "output_folder": tempfile.gettempdir(),
                 "metadata_option": "strip",
                 "output_format": "png",
+                "allow_overwrite": True,
             },
         )
 
@@ -564,6 +646,7 @@ class TestCensorRouterValidation:
                 "output_folder": str(tmp_path),
                 "metadata_option": "strip",
                 "output_format": "png",
+                "allow_overwrite": True,
             },
         )
 
@@ -587,6 +670,36 @@ class TestCensorRouterValidation:
         assert row["embedding"] is None
         assert row["content_fingerprint"] == refreshed_fingerprint
         assert refreshed_fingerprint != original_fingerprint
+        response_payload = response.json()
+        assert response_payload["overwrote_existing"] is True
+        assert response_payload["overwrote_indexed_path"] is True
+        assert response_payload["reconciled_image_id"] == image_id
+
+    def test_save_operations_requires_explicit_overwrite_for_existing_output(self, test_client, tmp_path):
+        image_path = tmp_path / "save-operations-conflict.png"
+        Image.new("RGB", (32, 32), color="white").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        response = test_client.post(
+            "/api/censor/save-operations",
+            json={
+                "original_image_id": image_id,
+                "operations": [],
+                "filename": image_path.name,
+                "output_folder": str(tmp_path),
+                "metadata_option": "strip",
+                "output_format": "png",
+            },
+        )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail") or data.get("error") or data.get("message") or ""
+        assert "Confirm overwrite" in detail
 
     def test_detect_legacy_uses_local_default_model_when_path_is_blank(self, test_client, monkeypatch, tmp_path):
         from PIL import Image
@@ -1132,6 +1245,36 @@ class TestSimilarityRouterValidation:
         assert data["embedded_count"] == 0
         assert data["minimum_required"] == 2
 
+    def test_duplicates_refuse_sync_search_above_embedding_limit(self, test_client, monkeypatch):
+        import similarity as similarity_module
+
+        monkeypatch.setattr(similarity_module, "DUPLICATE_SYNC_MAX_EMBEDDINGS", 2)
+        monkeypatch.setattr(
+            similarity_module,
+            "_index",
+            similarity_module.SimilarityIndex(test_client.test_db),
+        )
+        embedding = similarity_module.embedding_to_bytes(np.array([1, 0, 0, 0], dtype=np.float32))
+
+        for index in range(3):
+            image_id = test_client.test_db.add_image(
+                path=f"/tmp/duplicate-limit-{index}.png",
+                filename=f"duplicate-limit-{index}.png",
+                metadata_json="{}",
+            )
+            with test_client.test_db.get_db() as conn:
+                conn.execute("UPDATE images SET embedding = ? WHERE id = ?", (embedding, image_id))
+
+        response = test_client.get("/api/similarity/duplicates?threshold=0.95")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["duplicates"] == []
+        assert data["count"] == 0
+        assert data["reason"] == "too_many_embeddings"
+        assert data["embedded_count"] == 3
+        assert data["max_embeddings"] == 2
+
     def test_model_status_reports_clip_readiness_payload(self, test_client):
         response = test_client.get("/api/similarity/model-status")
 
@@ -1188,48 +1331,97 @@ class TestSimilarityRouterValidation:
             "missing.png",
         }
 
-    def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
-        from routers import models as models_router
+    def test_embed_batch_resolves_windows_indexed_path_before_embedding(self, test_db, tmp_path, monkeypatch):
+        import similarity as similarity_module
+        from PIL import Image
 
-        def raise_auth_wall():
-            raise models_router.ExternalAuthRequiredError(
-                models_router._build_civitai_auth_error(Path("/tmp/privacy-yolo"))
+        resolved_path = tmp_path / "resolved-similarity.png"
+        Image.new("RGB", (64, 64), color="white").save(resolved_path)
+
+        indexed_windows_path = r"L:\datasets\resolved-similarity.png"
+        image_id = test_db.add_image(
+            path=indexed_windows_path,
+            filename="resolved-similarity.png",
+            metadata_json="{}",
+        )
+
+        monkeypatch.setattr(similarity_module, "_get_embed_model", lambda: object())
+        monkeypatch.setattr(
+            similarity_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: str(resolved_path) if primary_path == indexed_windows_path else None,
+        )
+        monkeypatch.setattr(similarity_module, "verify_image_readable", lambda _path: (True, None))
+        monkeypatch.setattr(similarity_module, "compute_image_content_fingerprint", lambda _path: "fp")
+
+        captured = {}
+
+        def fake_embed(path, model=None):
+            captured["path"] = path
+            return np.ones(4, dtype=np.float32)
+
+        monkeypatch.setattr(similarity_module, "embed_image_file", fake_embed)
+
+        result = similarity_module.SimilarityIndex(test_db).embed_batch([image_id])
+
+        assert result["embedded"] == 1
+        assert result["errors"] == 0
+        assert captured["path"] == str(resolved_path)
+
+    def test_prepare_censor_legacy_returns_structured_conflict_for_civitai_login_wall(self, test_client, monkeypatch):
+        import time
+        from routers import models as models_router
+        from services import model_service
+
+        def raise_auth_wall(self):
+            raise model_service.ExternalAuthRequiredError(
+                model_service.build_civitai_auth_error(Path("/tmp/privacy-yolo"))
             )
 
-        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_auth_wall)
+        monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_auth_wall)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "downloading"
 
-        assert response.status_code == 409
-        data = response.json()
-        assert data["type"] == "CivitaiLoginRequired"
-        assert "Civitai" in data["message"]
-        assert isinstance(data["manual_steps"], list)
-        assert data["manual_steps"]
-        assert data["external_url"] == models_router.PRIVACY_YOLO_PAGE_URL
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+        assert pr["status"] == "error"
+        assert "Civitai" in pr["message"]
 
     def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
+        import time
         from routers import models as models_router
+        from services import model_service
 
-        def raise_prepare_failure():
-            raise models_router.ModelPreparationFailedError(
-                models_router._build_privacy_yolo_prepare_error(
+        def raise_prepare_failure(self):
+            raise model_service.ModelPreparationFailedError(
+                model_service.build_privacy_yolo_prepare_error(
                     Path("/tmp/privacy-yolo"),
                     "Downloaded file was not a valid zip archive.",
                 )
             )
 
-        monkeypatch.setattr(models_router, "_download_privacy_yolo_bundle", raise_prepare_failure)
+        monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_prepare_failure)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 
         response = test_client.post("/api/models/prepare", json={"model_id": "censor-legacy"})
+        assert response.status_code == 200
+        assert response.json()["status"] == "downloading"
 
-        assert response.status_code == 502
-        data = response.json()
-        assert data["type"] == "ModelPreparationFailed"
-        assert data["reason"] == "Downloaded file was not a valid zip archive."
-        assert data["model_id"] == "censor-legacy"
-        assert isinstance(data["manual_steps"], list)
-        assert data["manual_steps"]
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+        assert pr["status"] == "error"
+        assert "Privacy YOLO" in pr["message"] or "preparation failed" in pr["message"].lower()
 
     def test_similarity_search_upload_and_duplicates_ignore_unreadable_embedded_rows(self, test_db, tmp_path, monkeypatch):
         import similarity as similarity_module
@@ -1305,6 +1497,21 @@ class TestArtistsRouterValidation:
         response = test_client.post("/api/artists/identify-batch", json={"image_ids": []})
 
         assert response.status_code in [400, 422]
+
+    def test_identify_batch_rejects_unbounded_image_id_lists(self, test_client):
+        # Sending one more than ARTIST_BATCH_IMAGE_LIMIT must trip the
+        # Pydantic max_length validator. The cap exists so a misbehaving
+        # frontend cannot OOM the worker by spamming arbitrary id payloads.
+        # Importing the constant keeps this test self-correcting if the
+        # ceiling is tuned again.
+        from routers.artists import ARTIST_BATCH_IMAGE_LIMIT
+
+        response = test_client.post(
+            "/api/artists/identify-batch",
+            json={"image_ids": list(range(1, ARTIST_BATCH_IMAGE_LIMIT + 2))},
+        )
+
+        assert response.status_code == 400
 
     def test_identify_batch_rejects_local_model_without_path(self, test_client):
         response = test_client.post(
@@ -1386,6 +1593,19 @@ class TestArtistsRouterValidation:
         captured = {}
         model_path = tmp_path / "artist.onnx"
         model_path.write_bytes(b"fake-model")
+        service = artists_router.get_artist_service()
+        service.set_batch_progress_state({
+            "running": False,
+            "total": 0,
+            "processed": 0,
+            "errors": 0,
+            "results": [],
+            "step": "idle",
+            "message": "",
+            "current_item": None,
+            "started_at": None,
+            "updated_at": None,
+        })
 
         def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
             captured["image_ids"] = image_ids
@@ -1393,6 +1613,18 @@ class TestArtistsRouterValidation:
             captured["top_k"] = top_k
             captured["model_source"] = model_source
             captured["model_path"] = model_path
+            service.set_batch_progress_state({
+                "running": False,
+                "total": len(image_ids),
+                "processed": len(image_ids),
+                "errors": 0,
+                "results": [],
+                "step": "done",
+                "message": "done",
+                "current_item": None,
+                "started_at": 0.0,
+                "updated_at": 0.0,
+            })
 
         monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
 
@@ -1421,7 +1653,8 @@ class TestArtistsRouterValidation:
         from routers import artists as artists_router
 
         captured = {}
-        artists_router._batch_progress = {
+        service = artists_router.get_artist_service()
+        service.set_batch_progress_state({
             "running": False,
             "total": 0,
             "processed": 0,
@@ -1432,7 +1665,7 @@ class TestArtistsRouterValidation:
             "current_item": None,
             "started_at": None,
             "updated_at": None,
-        }
+        })
 
         def fake_run_batch(image_ids, threshold, top_k, model_source, model_path):
             captured["image_ids"] = image_ids
@@ -1440,6 +1673,18 @@ class TestArtistsRouterValidation:
             captured["top_k"] = top_k
             captured["model_source"] = model_source
             captured["model_path"] = model_path
+            service.set_batch_progress_state({
+                "running": False,
+                "total": len(image_ids),
+                "processed": len(image_ids),
+                "errors": 0,
+                "results": [],
+                "step": "done",
+                "message": "done",
+                "current_item": None,
+                "started_at": 0.0,
+                "updated_at": 0.0,
+            })
 
         monkeypatch.setattr(artists_router, "_run_batch_identification", fake_run_batch)
 
@@ -1521,6 +1766,89 @@ class TestArtistsRouterValidation:
         data = response.json()
         model_ids = {item["id"] for item in data["models"]}
         assert {"wd14", "clip", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
+
+
+class TestDerivedWriterPathResolution:
+    def test_aesthetic_service_resolves_windows_indexed_path_before_scoring(self, test_db, tmp_path, monkeypatch):
+        from services import aesthetic_service as aesthetic_service_module
+        from PIL import Image
+
+        resolved_path = tmp_path / "resolved-aesthetic.png"
+        Image.new("RGB", (64, 64), color="white").save(resolved_path)
+
+        indexed_windows_path = r"L:\datasets\resolved-aesthetic.png"
+        image_id = test_db.add_image(
+            path=indexed_windows_path,
+            filename="resolved-aesthetic.png",
+            metadata_json="{}",
+        )
+
+        monkeypatch.setattr(
+            aesthetic_service_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: str(resolved_path) if primary_path == indexed_windows_path else None,
+        )
+
+        captured = {}
+
+        def fake_predict(path: str):
+            captured["path"] = path
+            return 7.25
+
+        service = aesthetic_service_module.AestheticService()
+        result = service.score_single_image(image_id=image_id, predict_score=fake_predict)
+
+        assert result["image_id"] == image_id
+        assert result["aesthetic_score"] == 7.25
+        assert captured["path"] == str(resolved_path)
+
+    def test_artist_service_batch_resolves_windows_indexed_path_before_identify(self, test_db, tmp_path, monkeypatch):
+        from services import artist_service as artist_service_module
+        from PIL import Image
+
+        resolved_a = tmp_path / "resolved-artist-a.png"
+        resolved_b = tmp_path / "resolved-artist-b.png"
+        Image.new("RGB", (64, 64), color="blue").save(resolved_a)
+        Image.new("RGB", (64, 64), color="green").save(resolved_b)
+
+        indexed_a = r"L:\datasets\resolved-artist-a.png"
+        indexed_b = r"L:\datasets\resolved-artist-b.png"
+        image_a = test_db.add_image(path=indexed_a, filename="resolved-artist-a.png", metadata_json="{}")
+        image_b = test_db.add_image(path=indexed_b, filename="resolved-artist-b.png", metadata_json="{}")
+
+        resolved_map = {
+            indexed_a: str(resolved_a),
+            indexed_b: str(resolved_b),
+        }
+
+        monkeypatch.setattr(
+            artist_service_module,
+            "resolve_existing_indexed_image_path",
+            lambda primary_path, *, backend_file: resolved_map.get(primary_path),
+        )
+
+        captured_paths = []
+
+        class FakeIdentifier:
+            def identify(self, image_path, top_k=5):
+                captured_paths.append(image_path)
+                return {
+                    "artist": "artist_x",
+                    "confidence": 0.77,
+                    "top_predictions": [{"artist": "artist_x", "confidence": 0.77}],
+                    "model_loaded": True,
+                }
+
+        service = artist_service_module.ArtistService(identifier_getter=lambda **kwargs: FakeIdentifier())
+        result = service.run_batch_identification(
+            image_ids=[image_a, image_b],
+            threshold=0.1,
+            top_k=3,
+        )
+
+        assert result["errors"] == 0
+        assert result["processed"] == 2
+        assert captured_paths == [str(resolved_a), str(resolved_b)]
 
 
 class TestPromptGenerator:

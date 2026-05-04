@@ -5,6 +5,7 @@ Update service for package-local self-updates.
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import re
@@ -21,7 +22,7 @@ from typing import Any, Optional
 from app_info import (
     APP_VERSION,
     GITHUB_LATEST_RELEASE_API_URL,
-    LINUX_MAC_FULL_ASSET_TEMPLATE,
+    LINUX_FULL_ASSET_TEMPLATE,
     PATCH_ASSET_TEMPLATE,
     WINDOWS_FULL_ASSET_TEMPLATE,
 )
@@ -35,6 +36,7 @@ from config import (
     UPDATE_WEB_URL,
     ensure_directories,
 )
+from update_worker import PACKAGE_MANIFEST_RELATIVE_PATH, validate_update_manifest_managed_paths
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,9 @@ _HTTP_HEADERS = {
     "Accept": "application/vnd.github+json",
     "User-Agent": f"sd-image-sorter/{APP_VERSION}",
 }
+_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
+_MAX_UPDATE_ARCHIVE_ENTRIES = 20000
+_MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _normalize_version(text: Optional[str]) -> str:
@@ -79,6 +84,38 @@ def _validate_archive_member_name(name: str) -> None:
         raise RuntimeError(f"Downloaded update contains unsafe archive entry: {name}")
 
 
+def _package_manifest_member_name(name: str) -> str | None:
+    """Return a validated package-manifest archive member name, if this is one."""
+    normalized = str(name or "").replace("\\", "/").strip()
+    parts = PurePosixPath(normalized).parts
+    manifest_parts = PACKAGE_MANIFEST_RELATIVE_PATH.parts
+
+    if parts == manifest_parts:
+        return normalized
+    if len(parts) == len(manifest_parts) + 1 and parts[1:] == manifest_parts:
+        return normalized
+    return None
+
+
+def _load_single_package_manifest(
+    *,
+    current_manifest: dict[str, Any] | None,
+    member_name: str,
+    payload: bytes,
+) -> dict[str, Any]:
+    if current_manifest is not None:
+        raise RuntimeError(f"Downloaded update contains multiple package manifests; duplicate near: {member_name}")
+    return json.loads(payload.decode("utf-8"))
+
+
+def _sha256sum(file_path: Path) -> str:
+    digest = hashlib.sha256()
+    with file_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_DOWNLOAD_CHUNK_SIZE), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 class UpdateService:
     """Check for, download, and stage package-local application updates."""
 
@@ -89,7 +126,11 @@ class UpdateService:
         self._cache_ttl_seconds = 15 * 60
 
     def _platform_key(self) -> str:
-        return "windows" if sys.platform == "win32" else "linux-mac"
+        if sys.platform == "win32":
+            return "windows"
+        if sys.platform.startswith("linux"):
+            return "linux"
+        return "unsupported"
 
     def _clear_cache(self) -> None:
         with self._lock:
@@ -168,10 +209,8 @@ class UpdateService:
         if self._is_default_github_channel():
             return (
                 f"Failed to reach the default GitHub update channel: {detail}. "
-                "Mainland China users may not be able to access GitHub directly. "
-                "Please enable VPN and try again. Advanced users can still configure "
-                "SD_IMAGE_SORTER_UPDATE_API_URL, SD_IMAGE_SORTER_UPDATE_WEB_URL, or "
-                "SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX in the package-local .env."
+                "Your network may not be able to access GitHub directly. "
+                "Please check your connection or enable VPN and try again."
             )
         return f"Failed to reach the configured update channel: {detail}"
 
@@ -185,6 +224,42 @@ class UpdateService:
             raise RuntimeError("Update API returned an unexpected payload")
         return payload
 
+    def _read_release_manifest(self, manifest_url: str) -> dict[str, Any]:
+        req = urllib.request.Request(manifest_url, headers=_HTTP_HEADERS)
+        with urllib.request.urlopen(req, timeout=20) as response:
+            raw = response.read()
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise RuntimeError("Release checksum manifest returned an unexpected payload")
+        return payload
+
+    def _resolve_asset_sha256(self, asset: dict[str, Any]) -> str:
+        direct_sha256 = str(asset.get("sha256") or "").strip().lower()
+        if direct_sha256:
+            return direct_sha256
+
+        manifest_url = str(asset.get("manifest_download_url") or "").strip()
+        if not manifest_url:
+            return ""
+
+        manifest_payload = self._read_release_manifest(manifest_url)
+        manifest_assets = manifest_payload.get("assets") or []
+        if not isinstance(manifest_assets, list):
+            raise RuntimeError("Release checksum manifest assets payload is invalid")
+
+        target_name = str(asset.get("name") or "").strip()
+        for entry in manifest_assets:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("name") or "").strip() != target_name:
+                continue
+            sha256_value = str(entry.get("sha256") or "").strip().lower()
+            if sha256_value:
+                return sha256_value
+            break
+
+        raise RuntimeError(f"Release checksum manifest is missing sha256 for asset: {target_name}")
+
     def _select_update_asset(self, release: dict[str, Any], latest_version: str) -> Optional[dict[str, Any]]:
         channel = self._channel_state()
         assets = release.get("assets") or []
@@ -197,8 +272,20 @@ class UpdateService:
         ]
         if platform_key == "windows":
             preferred_names.append(("full", WINDOWS_FULL_ASSET_TEMPLATE.format(version=latest_version)))
-        else:
-            preferred_names.append(("full", LINUX_MAC_FULL_ASSET_TEMPLATE.format(version=latest_version)))
+        elif platform_key == "linux":
+            preferred_names.append(("full", LINUX_FULL_ASSET_TEMPLATE.format(version=latest_version)))
+        manifest_name = f"sd-image-sorter-v{latest_version}-release-manifest.json"
+        manifest_download_url = ""
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            if str(asset.get("name") or "") != manifest_name:
+                continue
+            manifest_download_url = self._rewrite_download_url(
+                asset.get("browser_download_url") or "",
+                channel["download_url_prefix"],
+            )
+            break
 
         for asset_kind, preferred_name in preferred_names:
             for asset in assets:
@@ -215,6 +302,7 @@ class UpdateService:
                         asset.get("browser_download_url") or "",
                         channel["download_url_prefix"],
                     ),
+                    "manifest_download_url": manifest_download_url,
                     "content_type": asset.get("content_type") or "",
                     "updated_at": asset.get("updated_at"),
                 }
@@ -365,6 +453,7 @@ class UpdateService:
         name = str(asset.get("name") or "").strip()
         url = str(asset.get("download_url") or "").strip()
         size_bytes = int(asset.get("size_bytes") or 0)
+        expected_sha256 = self._resolve_asset_sha256(asset)
         if not name or not url:
             raise RuntimeError("Release does not include a downloadable update asset")
 
@@ -373,16 +462,34 @@ class UpdateService:
         archive_path = target_dir / name
 
         if archive_path.exists() and archive_path.stat().st_size > 0:
-            if size_bytes <= 0 or archive_path.stat().st_size == size_bytes:
+            size_matches = size_bytes <= 0 or archive_path.stat().st_size == size_bytes
+            hash_matches = not expected_sha256 or _sha256sum(archive_path) == expected_sha256
+            if size_matches and hash_matches:
+                self._validate_archive(archive_path)
                 return archive_path
 
+        temp_path = archive_path.with_name(archive_path.name + ".tmp")
+        if temp_path.exists():
+            temp_path.unlink()
         req = urllib.request.Request(url, headers=_HTTP_HEADERS)
-        with urllib.request.urlopen(req, timeout=60) as response, archive_path.open("wb") as handle:
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                handle.write(chunk)
+        digest = hashlib.sha256()
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response, temp_path.open("wb") as handle:
+                while True:
+                    chunk = response.read(_DOWNLOAD_CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    digest.update(chunk)
+            actual_sha256 = digest.hexdigest()
+            if expected_sha256 and actual_sha256 != expected_sha256:
+                raise RuntimeError(
+                    f"Downloaded update checksum mismatch: expected {expected_sha256}, got {actual_sha256}"
+                )
+            temp_path.replace(archive_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
         if size_bytes > 0 and archive_path.stat().st_size != size_bytes:
             raise RuntimeError(
@@ -395,22 +502,62 @@ class UpdateService:
         if archive_path.suffix.lower() == ".zip":
             if not zipfile.is_zipfile(archive_path):
                 raise RuntimeError(f"Downloaded patch is not a valid zip archive: {archive_path.name}")
+            package_manifest: dict[str, Any] | None = None
             with zipfile.ZipFile(archive_path, "r") as archive:
-                for member in archive.infolist():
+                total_uncompressed_bytes = 0
+                members = archive.infolist()
+                if len(members) > _MAX_UPDATE_ARCHIVE_ENTRIES:
+                    raise RuntimeError("Downloaded update archive contains too many entries")
+                for member in members:
                     _validate_archive_member_name(member.filename)
+                    if not member.is_dir():
+                        total_uncompressed_bytes += member.file_size
+                        if total_uncompressed_bytes > _MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES:
+                            raise RuntimeError("Downloaded update archive uncompressed size exceeds the safe limit")
+                    manifest_member_name = _package_manifest_member_name(member.filename)
+                    if manifest_member_name is not None:
+                        package_manifest = _load_single_package_manifest(
+                            current_manifest=package_manifest,
+                            member_name=manifest_member_name,
+                            payload=archive.read(member),
+                        )
                 bad_member = archive.testzip()
             if bad_member is not None:
                 raise RuntimeError(f"Downloaded patch is corrupted near: {bad_member}")
+            if package_manifest is None:
+                raise RuntimeError("Downloaded update is missing update/package-manifest.json")
+            validate_update_manifest_managed_paths(package_manifest)
             return
 
         if archive_path.name.lower().endswith((".tar.gz", ".tgz")):
             if not tarfile.is_tarfile(archive_path):
                 raise RuntimeError(f"Downloaded patch is not a valid tar archive: {archive_path.name}")
+            package_manifest = None
             with tarfile.open(archive_path, "r:gz") as archive:
-                for member in archive.getmembers():
+                total_uncompressed_bytes = 0
+                members = archive.getmembers()
+                if len(members) > _MAX_UPDATE_ARCHIVE_ENTRIES:
+                    raise RuntimeError("Downloaded update archive contains too many entries")
+                for member in members:
                     _validate_archive_member_name(member.name)
                     if not (member.isfile() or member.isdir()):
                         raise RuntimeError(f"Downloaded update contains unsupported archive entry: {member.name}")
+                    if member.isfile():
+                        total_uncompressed_bytes += member.size
+                        if total_uncompressed_bytes > _MAX_UPDATE_ARCHIVE_UNCOMPRESSED_BYTES:
+                            raise RuntimeError("Downloaded update archive uncompressed size exceeds the safe limit")
+                    manifest_member_name = _package_manifest_member_name(member.name)
+                    if member.isfile() and manifest_member_name is not None:
+                        manifest_file = archive.extractfile(member)
+                        if manifest_file is not None:
+                            package_manifest = _load_single_package_manifest(
+                                current_manifest=package_manifest,
+                                member_name=manifest_member_name,
+                                payload=manifest_file.read(),
+                            )
+            if package_manifest is None:
+                raise RuntimeError("Downloaded update is missing update/package-manifest.json")
+            validate_update_manifest_managed_paths(package_manifest)
             return
 
         raise RuntimeError(f"Unsupported update archive type: {archive_path.name}")

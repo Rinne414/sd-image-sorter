@@ -15,12 +15,20 @@
         _queue: [],
         _processing: false,
         _languageBound: false,
+        _eventsBound: false,
+        _pasteShortcutBound: false,
 
         init() {
             const dropZone = document.getElementById('obfuscate-drop-zone');
             const fileInput = document.getElementById('obfuscate-file-input');
             if (!dropZone || !fileInput) return;
 
+            if (this._eventsBound) {
+                this._syncCompatModeUI();
+                this._renderQueue();
+                return;
+            }
+            this._eventsBound = true;
             this._bindDropZone(dropZone, fileInput);
             this._bindPasteShortcut();
             document.getElementById('obfuscate-compat-mode')?.addEventListener('change', () => this._syncCompatModeUI());
@@ -99,6 +107,8 @@
         },
 
         _bindPasteShortcut() {
+            if (this._pasteShortcutBound) return;
+            this._pasteShortcutBound = true;
             document.addEventListener('paste', async (event) => {
                 const readerPanel = document.getElementById('reader-tool-panel-obfuscation');
                 const readerView = document.getElementById('view-reader');

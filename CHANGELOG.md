@@ -5,12 +5,18 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.1.0] - 2026-04-26
+## [3.1.0] - 2026-05-04
+
+### About This Release / 关于这一版
+v3.1.0 was driven by real user feedback and a focused tech-debt pass. Almost every fix below either resolves a concrete issue reported by users running the portable build on real hardware, or pays down accumulated complexity that was making the app harder to use and harder to ship safely. **A huge thank you to everyone who shared logs, screenshots, and step-by-step reproductions — this release exists because of you.**
+
+v3.1.0 完全由真实用户反馈和一轮聚焦的技术债务清理推动。下面几乎每一项修复，要么是来自用户在真机上跑 portable 包时报告的具体问题，要么是在偿还过去积累下来的复杂度——那些让 app 越来越难用、越来越难安全发版的东西。**衷心感谢每一位分享日志、截图、复现步骤的用户——这一版完全是因为你们才存在的。**
 
 ### Added
 - Reader is no longer just for viewing. Users can now edit prompt, negative prompt, seed, sampler, steps, CFG, size, model, and LoRA fields, then save the result as a new image directly from the app.
 - Reader save now lets users choose the output format (`png` / `webp` / `jpg`) and save location more directly, including images that were uploaded through the browser.
 - Folder scan now becomes usable earlier: the library can appear first, while the remaining images and metadata continue loading in the background.
+- SAM3 Pro Segmentation is available as an experimental option in the censor editor, alongside the existing Wenaka / NudeNet privacy detectors.
 
 ### Fixed
 - Reader overwrite is now safer and less annoying. If the user saves to the same path, the app asks first instead of failing once before asking.
@@ -19,10 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - WSL / Linux runs now handle old Windows drive paths (`L:\...`) properly, so affected libraries no longer lose thumbnails just because the backend is running in WSL.
 - Scan progress is clearer during large imports. Users now see that the app is still importing in the background instead of feeling like the scan froze.
 - JPG / WebP warnings now explain the metadata limitations honestly instead of implying they behave like PNG.
+- SAM3 Pro censor no longer paints a giant box over the whole image when a prompt isn't actually present (e.g. asking for "exposed genitalia" on a clothed image). A presence-probability gate plus a max-mask-area cap rejects the whole-body false-positive collapse the model used to fall back to. Previously selectable concepts that genuinely *are* present (breasts, nipples, buttocks) keep working and recover small detections that the old score-only threshold accidentally filtered out.
+- Windows first launch no longer misreads a freshly installed CUDA PyTorch wheel through the old already-imported CPU `torch` module, which previously could trigger repeated multi-GB CUDA wheel downloads before falling back with a misleading warning.
+
+### Documentation
+- README now states realistic first-launch disk-space and network-traffic budgets, including CUDA runtimes, pip cache, and on-demand AI model sizes.
+
+### Known Limitations
+- **SAM3 Pro Segmentation is experimental.** The text-prompted detection path is significantly weaker than its ComfyUI counterpart (which uses box-prompted refinement). Recall on anime/SD images is low and bounding boxes are often coarse. **Recommended workflow: keep NudeNet (default) or Wenaka YOLOv8 for primary censoring.** SAM3 is best treated as an opt-in experiment until a future release lands a hybrid NudeNet→SAM3 refine pipeline.
 
 ### Validation
 - Reader save / overwrite flow passed real browser validation end-to-end.
 - Scan and metadata regression tests passed after the v3.1.0 scan-experience updates.
+- SAM3 presence-gate regression verified on real anime/SD test images (no whole-body false positives on absent prompts; small-region recall preserved).
 
 ## [3.0.6] - 2026-04-20
 

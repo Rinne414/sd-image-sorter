@@ -8,7 +8,8 @@ from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 
-from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+from services.service_provider import ServiceProvider
+from services.state_compat import MutableStateProxy
 from services.tagging_service import (
     TaggingService,
     TagRequest,
@@ -19,129 +20,38 @@ from services.tagging_service import (
 
 router = APIRouter(prefix="/api", tags=["tags"])
 
-TAGGER_MODEL_HINTS = {
-    "wd-eva02-large-tagger-v3": {
-        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of a fixed conservative lock.",
-        "speed": "Slow",
-        "memory": "High",
-        "best_for": "Max Quality / final library cleanup",
-        "safe_mode_note": "Adaptive runtime keeps GPU throughput high first, while automatic hardware clamps still cap the true batch size for long runs.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "gpu_locked": False,
-        "runtime_note": "Adaptive max-throughput runtime. Highest quality without a fixed CPU lock.",
-        "quality_score": 5,
-        "speed_score": 3,
-        "stability_score": 3,
-    },
-    "wd-swinv2-tagger-v3": {
-        "summary": "Balanced quality and speed. Good default if you are not sure.",
-        "speed": "Medium",
-        "memory": "Medium",
-        "best_for": "Recommended general use",
-        "recommended": True,
-        "safe_mode_note": "Usually fine on average PCs. Safe Mode is optional.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "quality_score": 4,
-        "speed_score": 4,
-        "stability_score": 4,
-    },
-    "wd-convnext-tagger-v3": {
-        "summary": "Faster than the larger models while keeping decent tagging quality.",
-        "speed": "Medium-fast",
-        "memory": "Medium",
-        "best_for": "Daily tagging on average PCs",
-        "safe_mode_note": "A good fallback when EVA02 feels too heavy.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "quality_score": 3,
-        "speed_score": 4,
-        "stability_score": 4,
-    },
-    "wd-vit-tagger-v3": {
-        "summary": "Lightweight and quick, but less accurate than the larger models.",
-        "speed": "Fast",
-        "memory": "Low",
-        "best_for": "Weak machines / fastest pass",
-        "safe_mode_note": "Best pick for weak machines. CPU Safe Mode works well here.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "quality_score": 2,
-        "speed_score": 5,
-        "stability_score": 5,
-    },
-    "wd-vit-large-tagger-v3": {
-        "summary": "A middle ground between ViT speed and EVA02 accuracy.",
-        "speed": "Medium",
-        "memory": "Medium-high",
-        "best_for": "Better accuracy without going full EVA02",
-        "safe_mode_note": "Use Safe Mode if you notice freezes during model load.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "quality_score": 4,
-        "speed_score": 3,
-        "stability_score": 3,
-    },
-    "camie-tagger-v2": {
-        "summary": "Much newer danbooru-era tag space. Strong artist / character / copyright coverage, but it can emit many more tags if the threshold is set too low.",
-        "speed": "Medium-slow",
-        "memory": "High",
-        "best_for": "Modern tag coverage / deeper library enrichment",
-        "safe_mode_note": "Camie uses ImageNet normalization and a much larger tag space. Keep the higher default threshold unless you intentionally want denser tags.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "gpu_locked": False,
-        "runtime_note": "Adaptive runtime with denser modern tags. Better coverage than older WD models, but heavier and noisier if you lower the threshold too much.",
-        "quality_score": 5,
-        "speed_score": 2,
-        "stability_score": 3,
-    },
-    "pixai-tagger-v0.9": {
-        "summary": "PixAI v0.9 ONNX export with a newer tag space than classic WD models. Strong for modern danbooru-style tagging, and the app now fills rating from a local fallback so library workflows stay complete.",
-        "speed": "Medium-slow",
-        "memory": "High",
-        "best_for": "Modern general + character tags with lower default threshold",
-        "safe_mode_note": "Uses direct 448 resize and [-1, 1] normalization. This ONNX export has no native rating head, so the app derives a practical rating fallback from the returned tags.",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "gpu_locked": False,
-        "runtime_note": "Adaptive runtime with newer PixAI tags. Heavier than the small WD models and should still be watched on long GPU runs.",
-        "quality_score": 5,
-        "speed_score": 2,
-        "stability_score": 3,
-    },
-    "toriigate-0.5": {
-        "summary": "Large anime-art multimodal caption tagger with strong NSFW, character, and copyright knowledge.",
-        "speed": "Slow",
-        "memory": "Very high",
-        "best_for": "Rich VLM tagging / difficult anime image understanding",
-        "gpu_default": True,
-        "gpu_confirmation_required": False,
-        "gpu_locked": False,
-        "runtime_note": "Runs through the dedicated Transformers VLM backend instead of the WD14 ONNX runtime. GPU is strongly recommended, and the app still clamps chunk size to the safe range.",
-        "quality_score": 5,
-        "speed_score": 1,
-        "stability_score": 2,
-    },
-}
-
 # Service instance - will be set via dependency injection
-_tagging_service: Optional[TaggingService] = None
+tag_progress: Any = None
+
+
+def _bind_tagging_compat_state(service: TaggingService) -> None:
+    """Keep legacy router-level progress handles pointed at the service-owned state."""
+    global tag_progress
+    tag_progress = service.get_progress_proxy()
+
+
+def _bind_lazy_tagging_compat_state() -> None:
+    """Expose legacy router-level progress without creating TaggingService at import time."""
+    global tag_progress
+    tag_progress = MutableStateProxy(
+        lambda: get_tagging_service().get_progress(),
+        lambda state: get_tagging_service().set_progress(state),
+    )
+
+
+_tagging_service_provider = ServiceProvider(TaggingService, on_set=_bind_tagging_compat_state)
 
 
 def get_tagging_service() -> TaggingService:
     """Dependency injection for TaggingService."""
-    global _tagging_service
-    if _tagging_service is None:
-        _tagging_service = TaggingService()
-    return _tagging_service
+    return _tagging_service_provider.get()
 
 
-def set_tagging_service(service: TaggingService) -> None:
-    """Set the tagging service instance."""
-    global _tagging_service
-    _tagging_service = service
+def set_tagging_service(service: Optional[TaggingService]) -> None:
+    """Set or clear the tagging service instance."""
+    _tagging_service_provider.set(service)
+    if service is None:
+        _bind_lazy_tagging_compat_state()
 
 
 def set_tagger_getter(tagger_getter: "Callable[..., Any]") -> None:
@@ -160,23 +70,7 @@ def set_tag_progress_state(state: Dict[str, Any]) -> None:
     get_tagging_service().set_progress(state)
 
 
-# Property for backward compatibility with tests
-class _TagProgressProxy:
-    """Proxy object that provides attribute-style access to tag progress."""
-
-    def __getitem__(self, key):
-        return get_tagging_service().get_progress()[key]
-
-    def __setitem__(self, key, value):
-        progress = get_tagging_service().get_progress()
-        progress[key] = value
-        get_tagging_service().set_progress(progress)
-
-    def copy(self):
-        return get_tagging_service().get_progress().copy()
-
-
-tag_progress = _TagProgressProxy()
+_bind_lazy_tagging_compat_state()
 
 
 @router.get(
@@ -260,7 +154,7 @@ async def get_generators(
 )
 async def get_tags_library(
     sort_by: str = Query(default="frequency", description="Sort order: 'frequency' or 'alphabetical'"),
-    limit: int = Query(default=1000, ge=1, le=100000, description="Maximum tags to return"),
+    limit: int = Query(default=1000, ge=1, le=5000, description="Maximum tags to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get tags library with frequency and sorting options."""
@@ -269,7 +163,7 @@ async def get_tags_library(
 
 @router.get("/prompts/library")
 async def get_prompts_library(
-    limit: int = Query(default=500, ge=1, le=100000, description="Maximum prompt tokens to return"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Maximum prompt tokens to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique prompt tokens from images with frequency counts."""
@@ -280,13 +174,9 @@ async def get_prompts_library(
     "/loras/library",
     summary="Get LoRAs library",
     description="""
-Get unique LoRAs from images with frequency counts.
+Get unique LoRAs from the normalized `image_loras` index with frequency counts.
 
-LoRA names are extracted from both:
-- The `loras` JSON array in the database
-- `<lora:name:weight>` patterns in prompts
-
-Names are normalized by stripping weight notation and file extensions.
+The index is maintained from both the `loras` JSON array and `<lora:name:weight>` prompt patterns during scan/reparse. Names are normalized by stripping weight notation and file extensions.
     """,
     responses={
         200: {
@@ -306,7 +196,7 @@ Names are normalized by stripping weight notation and file extensions.
     }
 )
 async def get_loras_library(
-    limit: int = Query(default=500, ge=1, le=100000, description="Maximum LoRAs to return"),
+    limit: int = Query(default=500, ge=1, le=5000, description="Maximum LoRAs to return"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique LoRAs from images with frequency counts."""
@@ -342,43 +232,11 @@ async def start_tagging(
 
 
 @router.get("/tagger/models")
-async def get_tagger_models():
+async def get_tagger_models(
+    service: TaggingService = Depends(get_tagging_service),
+):
     """Get available WD14 tagger models."""
-    models = [
-        {
-            "name": name,
-            "path": config["repo_id"],
-            "description": TAGGER_MODEL_HINTS.get(name, {}).get("summary", f"{name} model"),
-            "disabled": bool(config.get("disabled") or TAGGER_MODEL_HINTS.get(name, {}).get("disabled", False)),
-            "disabled_reason": config.get("disabled_reason", ""),
-            "default_threshold": config.get("default_threshold"),
-            "default_character_threshold": config.get("default_character_threshold"),
-            "speed": TAGGER_MODEL_HINTS.get(name, {}).get("speed", "Unknown"),
-            "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
-            "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
-            "recommended": TAGGER_MODEL_HINTS.get(name, {}).get("recommended", False),
-            "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Use Safe Mode if your PC becomes unstable."),
-            "gpu_default": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_default", True),
-            "gpu_confirmation_required": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_confirmation_required", False),
-            "gpu_locked": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_locked", False),
-            "runtime_note": TAGGER_MODEL_HINTS.get(name, {}).get("runtime_note", ""),
-            "quality_score": TAGGER_MODEL_HINTS.get(name, {}).get("quality_score", 3),
-            "speed_score": TAGGER_MODEL_HINTS.get(name, {}).get("speed_score", 3),
-            "stability_score": TAGGER_MODEL_HINTS.get(name, {}).get("stability_score", 3),
-            "runtime_safety_tier": config.get("runtime_safety_tier", "balanced"),
-            "minimum_total_ram_gb": config.get("minimum_total_ram_gb"),
-            "minimum_available_ram_gb": config.get("minimum_available_ram_gb"),
-            "minimum_gpu_vram_mb": config.get("minimum_gpu_vram_mb"),
-            "minimum_gpu_available_vram_mb": config.get("minimum_gpu_available_vram_mb"),
-            "minimum_cpu_total_ram_gb": config.get("minimum_cpu_total_ram_gb"),
-            "minimum_cpu_available_ram_gb": config.get("minimum_cpu_available_ram_gb"),
-        }
-        for name, config in TAGGER_MODELS.items()
-    ]
-    return {
-        "models": models,
-        "default": DEFAULT_TAGGER_MODEL,
-    }
+    return service.get_tagger_models()
 
 
 @router.get("/tag/progress")

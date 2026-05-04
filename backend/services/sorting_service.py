@@ -10,22 +10,30 @@ import platform
 import string
 import threading
 import time
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
+from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
+from config import MANUAL_SORT_SESSION_FILE
 import database as db
 from constants import VALID_ASPECT_RATIOS
-from image_manager import scan_folder, move_image, copy_image
+from image_manager import scan_folder, move_image, copy_image, parse_metadata_job
+from database import add_images_batch
 from metadata_parser import verify_image_readable
+from services.state_compat import MutableStateProxy
+from services.tag_export_service import export_tags_batch_request
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 
 
-SESSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'sort_session.json')
+SESSION_FILE = MANUAL_SORT_SESSION_FILE
+LEGACY_SESSION_FILE = os.path.join(os.path.dirname(__file__), '..', 'sort_session.json')
+SORT_SESSION_SCHEMA_VERSION = 1
 
 # Validation constants
 DIMENSION_MIN = 1
@@ -68,7 +76,11 @@ class ValidatePathRequest(BaseModel):
 
 class MoveRequest(BaseModel):
     """Request model for image move operations."""
-    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+    # Per-image work is sequential and the inner DB read uses
+    # ``db.get_images_by_ids`` which already chunks IN(...) at 500. The
+    # ceiling only caps request payload memory; 5M covers any realistic
+    # personal library (the previous 50k ceiling rejected real users).
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     operation: str = Field(default="move")
 
@@ -88,6 +100,7 @@ class BatchMoveRequest(BaseModel):
     checkpoints: Optional[List[str]] = None
     loras: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
+    artist: Optional[str] = Field(default=None, max_length=500)
     search: Optional[str] = Field(default=None, max_length=SEARCH_MAX_LENGTH)
     min_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
     max_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
@@ -160,15 +173,18 @@ class BrowseFolderRequest(BaseModel):
 class SortingService:
     """Service for scanning, moving, and manual sorting operations."""
 
-    def __init__(self):
-        """Initialize the sorting service."""
-        self._scan_progress: Dict[str, Any] = {
+    @staticmethod
+    def _build_default_scan_progress_state() -> Dict[str, Any]:
+        """Return the canonical idle scan-progress payload."""
+        return {
             "status": "idle",
             "step": "idle",
             "current": 0,
             "processed": 0,
             "total": 0,
+            "counted": 0,
             "total_final": False,
+            "import_complete": False,
             "errors": 0,
             "new": 0,
             "updated": 0,
@@ -177,17 +193,17 @@ class SortingService:
             "quick_import": True,
             "metadata_processed": 0,
             "metadata_total": 0,
+            "metadata_total_final": False,
             "message": "",
             "current_item": None,
             "started_at": None,
             "updated_at": None,
         }
-        self._scan_lock = threading.Lock()
-        self._scan_cancel_event: Optional[threading.Event] = None
-        self._scan_worker_thread: Optional[threading.Thread] = None
-        self._scan_run_id = 0
 
-        self._sort_session: Dict[str, Any] = {
+    @staticmethod
+    def _build_default_sort_session_state() -> Dict[str, Any]:
+        """Return the canonical inactive manual-sort session payload."""
+        return {
             "active": False,
             "image_ids": [],
             "current_index": 0,
@@ -196,7 +212,19 @@ class SortingService:
             "history": [],
             "redo_stack": [],
         }
+
+    def __init__(self):
+        """Initialize the sorting service."""
+        self._scan_progress: Dict[str, Any] = self._build_default_scan_progress_state()
+        self._scan_lock = threading.Lock()
+        self._scan_cancel_event: Optional[threading.Event] = None
+        self._scan_worker_thread: Optional[threading.Thread] = None
+        self._scan_run_id = 0
+
+        self._sort_session: Dict[str, Any] = self._build_default_sort_session_state()
         self._sort_session_lock = threading.Lock()
+        self._scan_progress_proxy = MutableStateProxy(self.get_scan_progress, self.set_scan_progress)
+        self._sort_session_proxy = MutableStateProxy(self.get_sort_session, self.set_sort_session)
         
         # Batch move progress
         self._batch_move_progress: Dict[str, Any] = {
@@ -215,6 +243,12 @@ class SortingService:
         }
         self._batch_move_lock = threading.Lock()
         self._batch_move_run_id = 0
+        # Cooperative cancellation for the active batch-move worker.
+        # Mirrors ``self._scan_cancel_event`` / ``cancel_scan``: the worker
+        # checks ``is_set()`` between chunks and between images so a cancel
+        # request lands within a few image iterations rather than waiting
+        # for the entire batch to finish.
+        self._batch_move_cancel_event: Optional[threading.Event] = None
 
     @staticmethod
     def _resolve_image_path(path: str) -> Optional[str]:
@@ -299,15 +333,138 @@ class SortingService:
 
         return validated_folders
 
+    def _coerce_scan_progress_state(self, state: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected scan-progress state onto the canonical shape."""
+        coerced = self._build_default_scan_progress_state()
+        if state:
+            coerced.update(state)
+        return coerced
+
+    def _coerce_sort_session_state(self, session: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Normalize externally injected sort-session state onto the canonical shape."""
+        coerced = self._build_default_sort_session_state()
+        session = session or {}
+        coerced["active"] = bool(session.get("active", False))
+        coerced["image_ids"] = list(session.get("image_ids", []))
+        coerced["folders"] = dict(session.get("folders", {}))
+        coerced["history"] = list(session.get("history", []))
+        coerced["redo_stack"] = list(session.get("redo_stack", []))
+        coerced["operation_mode"] = self._validate_file_operation(session.get("operation_mode", "move"))
+
+        try:
+            current_index = int(session.get("current_index", 0) or 0)
+        except (TypeError, ValueError):
+            current_index = 0
+        coerced["current_index"] = max(0, min(current_index, len(coerced["image_ids"])))
+        return coerced
+
+    def _build_persisted_sort_session_payload(self) -> Dict[str, Any]:
+        """Return the on-disk manual-sort session payload."""
+        session = self._coerce_sort_session_state(self._sort_session)
+        return {
+            "session_schema_version": SORT_SESSION_SCHEMA_VERSION,
+            "active": session["active"],
+            "current_index": session["current_index"],
+            "folders": session["folders"],
+            "operation_mode": session["operation_mode"],
+            "history": session["history"],
+            "redo_stack": session["redo_stack"],
+            "image_ids": session["image_ids"],
+        }
+
+    @staticmethod
+    def _parse_persisted_session_version(data: Dict[str, Any]) -> int:
+        """Read the persisted schema version, treating missing versions as legacy v0."""
+        raw_version = data.get("session_schema_version")
+        if raw_version is None:
+            return 0
+        try:
+            version = int(raw_version)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid session_schema_version") from exc
+        if version < 0:
+            raise ValueError("Invalid session_schema_version")
+        return version
+
+    def _discard_persisted_session_file(self, reason: str, *, paths: Optional[List[Path]] = None) -> None:
+        """Delete unusable persisted session files so future boots do not half-restore them."""
+        logger.warning("Discarding persisted sort session: %s", reason)
+        for path in (paths or self._get_session_file_candidates()):
+            try:
+                if path.exists():
+                    path.unlink()
+            except OSError as exc:
+                logger.warning("Failed to remove unsupported session file %s: %s", path, exc)
+
+    @staticmethod
+    def _get_session_file_candidates() -> List[Path]:
+        """Return persisted-session paths in preferred load/save order."""
+        preferred = Path(SESSION_FILE).expanduser()
+        legacy = Path(LEGACY_SESSION_FILE).expanduser()
+        if preferred.resolve() == legacy.resolve():
+            return [preferred]
+        return [preferred, legacy]
+
+    def _find_existing_session_file(self) -> Optional[Path]:
+        """Find the first existing persisted sort-session file."""
+        for candidate in self._get_session_file_candidates():
+            if candidate.exists():
+                return candidate
+        return None
+
     def get_scan_progress(self) -> Dict[str, Any]:
         """Get the current scan progress."""
         with self._scan_lock:
             return self._scan_progress.copy()
 
+    def get_scan_progress_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style scan-progress handle from the service."""
+        return self._scan_progress_proxy
+
+    def get_system_info_payload(self) -> Dict[str, Any]:
+        """Return hardware info and tagger runtime recommendations for the UI."""
+        try:
+            from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
+            from hardware_monitor import get_system_info, recommend_tagger_config
+
+            system_info = get_system_info()
+            recommendation = recommend_tagger_config(
+                system_info,
+                model_name=DEFAULT_TAGGER_MODEL,
+                use_gpu=True,
+            )
+            recommendations_by_model = {}
+            for model_name in TAGGER_MODELS.keys():
+                recommendations_by_model[model_name] = {
+                    "gpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=True),
+                    "cpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=False),
+                }
+            recommendations_by_model["custom"] = {
+                "gpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=True),
+                "cpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=False),
+            }
+            return {
+                "system_info": system_info,
+                "recommendation": recommendation,
+                "recommendations_by_model": recommendations_by_model,
+            }
+        except Exception as exc:
+            return {
+                "system_info": {"error": str(exc)},
+                "recommendation": {
+                    "recommended_batch_size": 2,
+                    "recommended_use_gpu": False,
+                    "recommended_session_refresh_interval": 0,
+                    "risk_level": "medium",
+                    "message": f"Hardware detection failed: {exc}",
+                },
+                "recommendations_by_model": {},
+            }
+
     def set_scan_progress(self, state: Dict[str, Any]) -> None:
         """Set the scan progress state."""
         with self._scan_lock:
-            self._scan_progress = state
+            self._scan_progress = self._coerce_scan_progress_state(state)
 
     def reset_scan_progress(self) -> Dict[str, Any]:
         """Reset a stuck scan task back to idle."""
@@ -316,26 +473,11 @@ class SortingService:
             if worker_alive:
                 return {"status": self._scan_progress["status"], "message": "Cannot reset while scan worker is still running"}
             if self._scan_progress["status"] in {"running", "cancelling", "error", "done", "cancelled"}:
-                self._scan_progress = {
-                    "status": "idle",
-                    "step": "idle",
-                    "current": 0,
-                    "processed": 0,
-                    "total": 0,
-                    "total_final": False,
-                    "errors": 0,
-                    "new": 0,
-                    "updated": 0,
-                    "removed": 0,
-                    "library_ready": False,
-                    "quick_import": True,
-                    "metadata_processed": 0,
-                    "metadata_total": 0,
+                self._scan_progress = self._build_default_scan_progress_state()
+                self._scan_progress.update({
                     "message": "Reset by user",
-                    "current_item": None,
-                    "started_at": None,
                     "updated_at": time.time(),
-                }
+                })
                 self._scan_cancel_event = None
                 self._scan_worker_thread = None
                 return {"status": "reset", "message": "Scan progress reset to idle"}
@@ -419,6 +561,10 @@ class SortingService:
         with self._sort_session_lock:
             return self._sort_session.copy()
 
+    def get_sort_session_proxy(self) -> MutableStateProxy:
+        """Expose the legacy dict-style sort-session handle from the service."""
+        return self._sort_session_proxy
+
 
     def get_batch_move_progress(self) -> Dict[str, Any]:
         """Get the current batch move progress."""
@@ -431,6 +577,42 @@ class SortingService:
             if self._batch_move_progress["status"] == "running":
                 raise HTTPException(status_code=409, detail="Cannot reset batch move while it is still running")
             return {"status": self._batch_move_progress["status"], "message": "Nothing to reset"}
+
+    def cancel_batch_move(self) -> Dict[str, Any]:
+        """Request cooperative cancellation of the active batch-move task.
+
+        Mirrors :meth:`cancel_scan`: flips the worker's cancel event and
+        publishes a ``cancelling`` progress state so the UI can show a
+        "Cancelling..." indicator while the worker walks to its next
+        chunk/image boundary. The worker writes the terminal
+        ``cancelled`` state itself once it observes the flag, so this
+        method never overwrites a finished run's outcome.
+        """
+        with self._batch_move_lock:
+            current_status = self._batch_move_progress.get("status")
+            if current_status not in {"running", "cancelling"}:
+                return {
+                    "status": current_status,
+                    "message": "No batch move task is running",
+                }
+
+            current = int(self._batch_move_progress.get("current", 0) or 0)
+            total = int(self._batch_move_progress.get("total", 0) or 0)
+            operation = self._batch_move_progress.get("operation", "move")
+
+            if self._batch_move_cancel_event is not None:
+                self._batch_move_cancel_event.set()
+
+            verb = "copy" if operation == "copy" else "move"
+            self._batch_move_progress["status"] = "cancelling"
+            self._batch_move_progress["step"] = "cancelling"
+            self._batch_move_progress["message"] = (
+                f"Cancelling batch {verb}... ({current}/{total})"
+                if total > 0
+                else f"Cancelling batch {verb}..."
+            )
+            self._batch_move_progress["updated_at"] = time.time()
+            return {"status": "cancelling", "message": "Batch move cancellation requested"}
 
     def _set_batch_move_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
         """Only allow the active batch-move task to replace shared progress state."""
@@ -538,15 +720,7 @@ class SortingService:
     def set_sort_session(self, session: Dict[str, Any]) -> None:
         """Set the sort session."""
         with self._sort_session_lock:
-            self._sort_session = {
-                "active": bool(session.get("active", False)),
-                "image_ids": list(session.get("image_ids", [])),
-                "current_index": int(session.get("current_index", 0) or 0),
-                "folders": dict(session.get("folders", {})),
-                "operation_mode": self._validate_file_operation(session.get("operation_mode", "move")),
-                "history": list(session.get("history", [])),
-                "redo_stack": list(session.get("redo_stack", [])),
-            }
+            self._sort_session = self._coerce_sort_session_state(session)
 
     def validate_path(self, request: ValidatePathRequest) -> Dict[str, Any]:
         """Validate a folder path for inline UI feedback."""
@@ -586,7 +760,9 @@ class SortingService:
                 "current": 0,
                 "processed": 0,
                 "total": 0,
+                "counted": 0,
                 "total_final": False,
+                "import_complete": False,
                 "errors": 0,
                 "new": 0,
                 "updated": 0,
@@ -595,9 +771,8 @@ class SortingService:
                 "quick_import": request.quick_import,
                 "metadata_processed": 0,
                 "metadata_total": 0,
-                "message": "Syncing folder index..." if request.cleanup_missing else (
-                    "Starting fast library import..." if request.quick_import else "Preparing full scan..."
-                ),
+                "metadata_total_final": False,
+                "message": "Syncing folder index..." if request.cleanup_missing else "Counting images before import...",
                 "current_item": None,
                 "started_at": started_at,
                 "updated_at": started_at,
@@ -616,13 +791,33 @@ class SortingService:
                     library_ready = bool(details.get("library_ready", self._scan_progress.get("library_ready", False))) if isinstance(details, dict) else self._scan_progress.get("library_ready", False)
                     metadata_processed = int(details.get("metadata_processed", self._scan_progress.get("metadata_processed", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_processed", 0) or 0)
                     metadata_total = int(details.get("metadata_total", self._scan_progress.get("metadata_total", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_total", 0) or 0)
+                    metadata_total_final = bool(details.get("metadata_total_final", self._scan_progress.get("metadata_total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("metadata_total_final", False))
                     total_final = bool(details.get("total_final", self._scan_progress.get("total_final", False))) if isinstance(details, dict) else bool(self._scan_progress.get("total_final", False))
+                    counted = int(details.get("counted", self._scan_progress.get("counted", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("counted", 0) or 0)
+                    import_processed = int(details.get("import_processed", current) or 0) if isinstance(details, dict) else int(current or 0)
+                    import_total = int(details.get("import_total", total) or 0) if isinstance(details, dict) else int(total or 0)
+                    import_complete = bool(details.get("import_complete", self._scan_progress.get("import_complete", False))) if isinstance(details, dict) else bool(self._scan_progress.get("import_complete", False))
+                    state_current = import_processed
+                    state_total = import_total or total
                     message = f"Processing: {filename}" if filename else "Scanning files..."
                     current_item = filename or None
                     step = "importing"
                     status = "running"
                     removed_count = details.get("removed", self._scan_progress.get("removed", 0)) if isinstance(details, dict) else self._scan_progress.get("removed", 0)
-                    if phase == "cleanup":
+
+                    if phase == "counting":
+                        state_current = counted or current
+                        state_total = 0
+                        message = f"Counting images... ({state_current} found)"
+                        current_item = None
+                        step = "counting"
+                    elif phase == "counted":
+                        state_current = 0
+                        state_total = import_total or total
+                        message = f"Found {state_total} images. Starting import..."
+                        current_item = None
+                        step = "importing"
+                    elif phase == "cleanup":
                         message = (
                             f"Folder sync complete. Removed {removed_count} missing entr"
                             f"{'y' if removed_count == 1 else 'ies'}."
@@ -630,20 +825,33 @@ class SortingService:
                         current_item = None
                         step = "cleanup"
                     elif phase == "library_ready":
-                        step = "importing"
+                        step = "metadata" if import_complete and metadata_total > metadata_processed else "importing"
                         current_item = None
-                        if total_final and metadata_total > 0:
+                        if import_complete and metadata_total > 0:
                             message = f"Library ready. Finishing metadata in background ({metadata_processed}/{metadata_total})..."
                         else:
-                            message = f"Library is browseable. Importing continues in background ({current} scanned)..."
+                            message = f"Library is browseable. Importing continues in background ({state_current}/{state_total or '?'})..."
                     elif phase == "metadata":
-                        step = "metadata"
-                        message = f"Reading metadata: {filename}" if filename else "Reading metadata..."
-                        current_item = filename or None
+                        if import_complete:
+                            step = "metadata"
+                            message = f"Reading image details: {filename}" if filename else "Reading image details..."
+                            current_item = filename or None
+                        else:
+                            step = "importing"
+                            message = (
+                                f"Importing library and reading details... ({state_current}/{state_total})"
+                                if state_total > 0
+                                else "Importing library and reading details..."
+                            )
+                            current_item = None
                     elif not total_final:
-                        message = f"Fast importing library... ({current} scanned)"
+                        state_current = counted or current
+                        state_total = 0
+                        message = f"Counting images... ({state_current} found)"
                         current_item = None
-                    elif last_error:
+                        step = "counting"
+
+                    if last_error:
                         message = (
                             f"Skipped unreadable image: {last_error.get('filename', filename)}"
                             f" ({last_error.get('error', 'Unreadable image')})"
@@ -652,17 +860,19 @@ class SortingService:
                         status = "cancelling"
                         step = "cancelling"
                         message = (
-                            f"Cancelling scan... ({current}/{total})"
-                            if total_final and total > 0
-                            else f"Cancelling scan... ({current} scanned)"
+                            f"Cancelling scan... ({state_current}/{state_total})"
+                            if total_final and state_total > 0
+                            else f"Cancelling scan... ({state_current} scanned)"
                         )
                     self._update_scan_progress_if_current(
                         run_id,
                         status=status,
-                        current=current,
-                        processed=current,
-                        total=total,
+                        current=state_current,
+                        processed=state_current,
+                        total=state_total,
+                        counted=counted,
                         total_final=total_final,
+                        import_complete=import_complete,
                         step=step,
                         errors=details.get("errors", self._scan_progress.get("errors", 0)) if isinstance(details, dict) else self._scan_progress.get("errors", 0),
                         removed=removed_count,
@@ -670,6 +880,7 @@ class SortingService:
                         quick_import=request.quick_import,
                         metadata_processed=metadata_processed,
                         metadata_total=metadata_total,
+                        metadata_total_final=metadata_total_final,
                         message=message,
                         current_item=current_item,
                         updated_at=now,
@@ -708,7 +919,9 @@ class SortingService:
                         "current": result["total"],
                         "processed": result["total"],
                         "total": result["total"],
+                        "counted": result.get("counted", result["total"]),
                         "total_final": result.get("total_final", True),
+                        "import_complete": result.get("import_complete", True),
                         "errors": errors,
                         "new": new_count,
                         "updated": updated_count,
@@ -717,6 +930,7 @@ class SortingService:
                         "quick_import": request.quick_import,
                         "metadata_processed": result.get("metadata_processed", 0),
                         "metadata_total": result.get("metadata_total", 0),
+                        "metadata_total_final": result.get("metadata_total_final", True),
                         "message": summary,
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
@@ -739,7 +953,9 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "counted": current_state.get("counted", 0),
                             "total_final": current_state.get("total_final", False),
+                            "import_complete": current_state.get("import_complete", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
@@ -748,6 +964,7 @@ class SortingService:
                             "quick_import": current_state.get("quick_import", True),
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
+                            "metadata_total_final": current_state.get("metadata_total_final", False),
                             "message": (
                                 f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
                                 if current_state.get("total_final", False) and current_state.get("total", 0)
@@ -768,7 +985,9 @@ class SortingService:
                             "current": current_state.get("current", 0),
                             "processed": current_state.get("processed", current_state.get("current", 0)),
                             "total": current_state.get("total", 0),
+                            "counted": current_state.get("counted", 0),
                             "total_final": current_state.get("total_final", False),
+                            "import_complete": current_state.get("import_complete", False),
                             "errors": current_state.get("errors", 0),
                             "new": current_state.get("new", 0),
                             "updated": current_state.get("updated", 0),
@@ -777,6 +996,7 @@ class SortingService:
                             "quick_import": current_state.get("quick_import", True),
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
+                            "metadata_total_final": current_state.get("metadata_total_final", False),
                             "message": "Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
@@ -806,59 +1026,64 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
-        # Batch fetch all images in a single query (N+1 fix)
+        # Batch fetch all images in a single query (N+1 fix). The
+        # readability check is done *inside* the loop instead of up front:
+        # the previous call to ``_filter_readable_image_ids`` ran a full
+        # pixel decode (``verify_image_readable``) on every image before
+        # the loop started. For large selections that produced minutes of
+        # silent up-front blocking with no per-image feedback, but a
+        # byte-level move would otherwise cheerfully copy truncated/corrupt
+        # PNGs to the destination — so we still need the decode, just
+        # spread across the iteration so each result lands as it happens.
         images_map = db.get_images_by_ids(request.image_ids)
-        readable_ids, unreadable_skips = self._filter_readable_image_ids(request.image_ids)
-        readable_id_set = set(readable_ids)
-        unreadable_map = {
-            entry["image_id"]: entry
-            for entry in unreadable_skips
-        }
         destination_ready = os.path.isdir(destination_folder)
 
         results = []
         for image_id in request.image_ids:
-            if image_id in unreadable_map:
-                results.append(
-                    {
-                        "id": image_id,
-                        "error": unreadable_map[image_id]["error"],
-                        "success": False,
-                    }
-                )
-                continue
-
             image = images_map.get(image_id)
             source_path = self._resolve_image_path(image.get("path") or "") if image else None
-            if image_id in readable_id_set and image and source_path:
-                try:
-                    if not destination_ready:
-                        os.makedirs(destination_folder, exist_ok=True)
-                        destination_ready = True
-                    operation_result = self._apply_file_operation(
-                        operation=operation,
-                        image_id=image_id,
-                        destination_folder=destination_folder,
-                        source_path=source_path,
-                        source_row=image,
-                    )
-                    results.append({
-                        "id": image_id,
-                        "new_path": operation_result["new_path"],
-                        "new_image_id": operation_result.get("new_image_id"),
-                        "operation": operation,
-                        "success": True,
-                    })
-                except Exception as e:
-                    logger.error("Failed to %s image %d: %s", operation, image_id, e)
-                    results.append({
-                        "id": image_id,
-                        "error": f"Failed to {operation} image",
-                        "operation": operation,
-                        "success": False,
-                    })
-            else:
+            if not image or not source_path:
                 results.append({"id": image_id, "error": "Image not found", "operation": operation, "success": False})
+                continue
+
+            readable, read_error = verify_image_readable(source_path)
+            if not readable:
+                error_message = read_error or "Unreadable image"
+                db.mark_image_unreadable(image_id, error_message)
+                results.append({
+                    "id": image_id,
+                    "error": error_message,
+                    "operation": operation,
+                    "success": False,
+                })
+                continue
+
+            try:
+                if not destination_ready:
+                    os.makedirs(destination_folder, exist_ok=True)
+                    destination_ready = True
+                operation_result = self._apply_file_operation(
+                    operation=operation,
+                    image_id=image_id,
+                    destination_folder=destination_folder,
+                    source_path=source_path,
+                    source_row=image,
+                )
+                results.append({
+                    "id": image_id,
+                    "new_path": operation_result["new_path"],
+                    "new_image_id": operation_result.get("new_image_id"),
+                    "operation": operation,
+                    "success": True,
+                })
+            except Exception as e:
+                logger.error("Failed to %s image %d: %s", operation, image_id, e)
+                results.append({
+                    "id": image_id,
+                    "error": f"Failed to {operation} image",
+                    "operation": operation,
+                    "success": False,
+                })
 
         return {"results": results}
 
@@ -884,6 +1109,7 @@ class SortingService:
         checkpoints = request.checkpoints if request.checkpoints else None
         loras = request.loras if request.loras else None
         prompts = request.prompts if request.prompts else None
+        artist = request.artist.strip() if request.artist else None
         search_query = request.search.strip() if request.search else None
 
         total_count = db.get_filtered_image_count(
@@ -894,6 +1120,7 @@ class SortingService:
             loras=loras,
             search_query=search_query,
             prompt_terms=prompts,
+            artist=artist,
             min_width=request.min_width,
             max_width=request.max_width,
             min_height=request.min_height,
@@ -906,10 +1133,17 @@ class SortingService:
         if total_count == 0:
             return {"message": "No images match the filters", "count": 0}
 
-        # Run actual move in background with progress tracking
+        # Run actual move in background with progress tracking. The
+        # cancel event is allocated under the same lock as run_id so
+        # cancel_batch_move() always sees a consistent (run_id, event)
+        # pair; the worker checks event.is_set() between chunks and
+        # between images so a cancel request lands within a few image
+        # iterations rather than after the whole batch completes.
+        cancel_event = threading.Event()
         with self._batch_move_lock:
             self._batch_move_run_id += 1
             run_id = self._batch_move_run_id
+            self._batch_move_cancel_event = cancel_event
             self._batch_move_progress = {
                 "status": "running",
                 "step": "starting",
@@ -924,7 +1158,7 @@ class SortingService:
                 "started_at": time.time(),
                 "updated_at": time.time(),
             }
-        
+
         def run_batch_move():
             try:
                 image_ids = db.get_filtered_image_ids(
@@ -935,6 +1169,7 @@ class SortingService:
                     loras=loras,
                     search_query=search_query,
                     prompt_terms=prompts,
+                    artist=artist,
                     min_width=request.min_width,
                     max_width=request.max_width,
                     min_height=request.min_height,
@@ -944,7 +1179,15 @@ class SortingService:
                     max_aesthetic=request.max_aesthetic,
                 )
 
-                image_ids, unreadable_skips = self._filter_readable_image_ids(image_ids)
+                # Note: previously this called ``_filter_readable_image_ids``
+                # before the loop, which did a full pixel decode of every
+                # image up front via ``verify_image_readable``. For large
+                # batches that blocked the worker for many minutes with no
+                # progress emitted, making the operation indistinguishable
+                # from a hang. The decode is now done per-image inside the
+                # inner loop so progress advances as the worker walks the
+                # list (a byte-level move would otherwise silently copy
+                # truncated/corrupt PNGs to the destination).
 
                 if not image_ids:
                     self._set_batch_move_progress_if_current(
@@ -954,11 +1197,11 @@ class SortingService:
                             "step": "done",
                             "current": 0,
                             "total": 0,
-                            "message": "No readable images match the filters",
-                            "errors": len(unreadable_skips),
+                            "message": "No images match the filters",
+                            "errors": 0,
                             "moved": 0,
                             "current_item": None,
-                            "recent_errors": unreadable_skips[-3:],
+                            "recent_errors": [],
                             "operation": operation,
                             "started_at": time.time(),
                             "updated_at": time.time(),
@@ -970,12 +1213,45 @@ class SortingService:
 
                 moved = 0
                 processed = 0
-                errors = list(unreadable_skips)
+                errors: List[Dict[str, Any]] = []
+
+                def _write_cancelled_state() -> None:
+                    """Publish the cancelled summary for this batch-move run."""
+                    completed_verb_local = "Copied" if operation == "copy" else "Moved"
+                    self._set_batch_move_progress_if_current(
+                        run_id,
+                        {
+                            "status": "cancelled",
+                            "step": "cancelled",
+                            "current": processed,
+                            "total": total_count,
+                            "errors": len(errors),
+                            "moved": moved,
+                            "message": (
+                                f"Cancelled at {processed}/{total_count}. "
+                                f"{completed_verb_local} {moved} images so far."
+                            ),
+                            "current_item": None,
+                            "recent_errors": errors[-3:],
+                            "operation": operation,
+                            "started_at": self._batch_move_progress.get("started_at"),
+                            "updated_at": time.time(),
+                        }
+                    )
+
                 for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
+                    if cancel_event.is_set():
+                        _write_cancelled_state()
+                        return
+
                     batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
                     image_map = db.get_images_by_ids(batch_ids)
 
                     for image_id in batch_ids:
+                        if cancel_event.is_set():
+                            _write_cancelled_state()
+                            return
+
                         image = image_map.get(image_id)
                         if not image:
                             processed += 1
@@ -986,20 +1262,33 @@ class SortingService:
                         error_message = None
 
                         source_path = self._resolve_image_path(image.get("path") or "")
-                        if source_path:
-                            try:
-                                self._apply_file_operation(
-                                    operation=operation,
-                                    image_id=image["id"],
-                                    destination_folder=destination_folder,
-                                    source_path=source_path,
-                                    source_row=image,
-                                )
-                                moved += 1
-                            except Exception as e:
-                                error_message = str(e)
-                        else:
+                        if not source_path:
                             error_message = "Image file not found"
+                        else:
+                            # Per-image readability check (was previously done
+                            # up front in ``_filter_readable_image_ids`` which
+                            # blocked the worker for minutes before any
+                            # progress was emitted). A byte-level move would
+                            # otherwise silently copy truncated/corrupt PNGs
+                            # to the destination, so we still need the decode
+                            # — we just amortise it per-image so progress
+                            # advances as the worker walks the list.
+                            readable, read_error = verify_image_readable(source_path)
+                            if not readable:
+                                error_message = read_error or "Unreadable image"
+                                db.mark_image_unreadable(image["id"], error_message)
+                            else:
+                                try:
+                                    self._apply_file_operation(
+                                        operation=operation,
+                                        image_id=image["id"],
+                                        destination_folder=destination_folder,
+                                        source_path=source_path,
+                                        source_row=image,
+                                    )
+                                    moved += 1
+                                except Exception as e:
+                                    error_message = str(e)
 
                         if error_message:
                             errors.append({"image_id": image_id, "filename": filename, "error": error_message})
@@ -1020,6 +1309,7 @@ class SortingService:
                         ):
                             return
 
+                completed_verb = "Copied" if operation == "copy" else "Moved"
                 self._set_batch_move_progress_if_current(
                     run_id,
                     {
@@ -1029,7 +1319,7 @@ class SortingService:
                         "total": total_count,
                         "errors": len(errors),
                         "moved": moved,
-                        "message": f"Completed! Moved {moved} images." + (f" {len(errors)} errors." if errors else ""),
+                        "message": f"Completed! {completed_verb} {moved} images." + (f" {len(errors)} errors." if errors else ""),
                         "current_item": None,
                         "recent_errors": errors[-3:],
                         "operation": operation,
@@ -1062,6 +1352,17 @@ class SortingService:
                         "updated_at": time.time(),
                     }
                 )
+            finally:
+                # Release this run's cancel-event reference so cancel_batch_move
+                # can't operate on a stale event after the worker has exited.
+                # Only clear when we're still the active run — a newer run
+                # would have published its own event under the same lock.
+                with self._batch_move_lock:
+                    if (
+                        self._batch_move_run_id == run_id
+                        and self._batch_move_cancel_event is cancel_event
+                    ):
+                        self._batch_move_cancel_event = None
 
         background_tasks.add_task(run_batch_move)
         progress_verb = "Copying" if operation == "copy" else "Moving"
@@ -1081,6 +1382,7 @@ class SortingService:
         checkpoints: Optional[str] = None,
         loras: Optional[str] = None,
         prompts: Optional[str] = None,
+        artist: Optional[str] = None,
         search: Optional[str] = None,
         min_width: Optional[int] = None,
         max_width: Optional[int] = None,
@@ -1091,6 +1393,7 @@ class SortingService:
         max_aesthetic: Optional[float] = None,
         folders: Optional[str] = None,
         operation_mode: str = "move",
+        replace_existing: bool = False,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -1099,6 +1402,14 @@ class SortingService:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid aspect_ratio. Must be one of: {', '.join(VALID_ASPECT_RATIOS)}"
+            )
+
+        with self._sort_session_lock:
+            has_active_session = bool(self._sort_session.get("active")) and int(self._sort_session.get("current_index", 0) or 0) < len(self._sort_session.get("image_ids", []) or [])
+        if has_active_session and not replace_existing:
+            raise HTTPException(
+                status_code=409,
+                detail="An unfinished manual sort session already exists. Resume it or explicitly start a new session.",
             )
 
         # Validate dimension ranges
@@ -1115,6 +1426,7 @@ class SortingService:
         cp_list = checkpoints.split(",") if checkpoints else None
         lr_list = loras.split(",") if loras else None
         prompt_list = prompts.split(",") if prompts else None
+        artist_name = artist.strip() if artist else None
         search_query = search.strip() if search else None
 
         image_ids = db.get_filtered_image_ids(
@@ -1125,6 +1437,7 @@ class SortingService:
             loras=lr_list,
             search_query=search_query,
             prompt_terms=prompt_list,
+            artist=artist_name,
             min_width=min_width,
             max_width=max_width,
             min_height=min_height,
@@ -1140,7 +1453,7 @@ class SortingService:
         folder_config = self._parse_sort_folders(folders)
 
         with self._sort_session_lock:
-            self._sort_session = {
+            self._sort_session = self._coerce_sort_session_state({
                 "active": True,
                 "image_ids": image_ids,
                 "current_index": 0,
@@ -1148,7 +1461,7 @@ class SortingService:
                 "operation_mode": operation_mode,
                 "history": [],
                 "redo_stack": [],
-            }
+            })
             self._save_session_to_disk()
 
         first_image = db.get_image_by_id(image_ids[0]) if image_ids else None
@@ -1257,7 +1570,22 @@ class SortingService:
                             try:
                                 self._undo_file_operation(last)
                             except Exception as e:
-                                logger.warning("Error undoing %s during undo: %s", last.get("operation") or "move", e)
+                                # Roll the session state back so the user can
+                                # retry undo on the same entry. Previously this
+                                # silently swallowed the failure and reported
+                                # ``status: "undone"`` while the file was
+                                # actually still in the destination folder.
+                                logger.error(
+                                    "Error undoing %s during undo: %s",
+                                    last.get("operation") or "move",
+                                    e,
+                                )
+                                self._sort_session["redo_stack"].pop()
+                                self._sort_session["history"].append(last)
+                                raise HTTPException(
+                                    status_code=500,
+                                    detail=f"Could not undo last action: {e}",
+                                )
                     self._sort_session["current_index"] = max(0, self._sort_session["current_index"] - 1)
                 else:
                     return {
@@ -1535,20 +1863,13 @@ class SortingService:
     def clear_sort_session(self) -> Dict[str, str]:
         """Clear the current sort session."""
         with self._sort_session_lock:
-            self._sort_session = {
-                'active': False,
-                'image_ids': [],
-                'current_index': 0,
-                'folders': {},
-                'operation_mode': 'move',
-                'history': [],
-                'redo_stack': [],
-            }
-        try:
-            if os.path.exists(SESSION_FILE):
-                os.remove(SESSION_FILE)
-        except Exception as e:
-            logger.warning("Failed to remove session file: %s", e)
+            self._sort_session = self._build_default_sort_session_state()
+        for session_file in self._get_session_file_candidates():
+            try:
+                if session_file.exists():
+                    session_file.unlink()
+            except Exception as e:
+                logger.warning("Failed to remove session file %s: %s", session_file, e)
         return {'status': 'ok'}
 
     def clear_gallery(self) -> Dict[str, str]:
@@ -1566,16 +1887,6 @@ class SortingService:
         with db.get_db() as conn:
             cursor = conn.cursor()
 
-            # No artificial limit — return ALL checkpoints
-            cursor.execute("""
-                SELECT checkpoint, COUNT(*) as count
-                FROM images
-                WHERE checkpoint IS NOT NULL AND checkpoint != ''
-                GROUP BY checkpoint
-                ORDER BY count DESC
-            """)
-            checkpoints = [dict(row) for row in cursor.fetchall()]
-
             # Use the normalized image_loras table instead of full-table JSON scan
             cursor.execute("""
                 SELECT lora_name AS lora, COUNT(*) as count
@@ -1589,7 +1900,7 @@ class SortingService:
             tags = db.get_all_tags()
 
         return {
-            "checkpoints": checkpoints,
+            "checkpoints": db.get_all_checkpoints(),
             "loras": loras,
             "top_tags": tags
         }
@@ -1597,155 +1908,317 @@ class SortingService:
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics."""
         analytics_data = self.get_analytics()
+        metadata_status = db.get_metadata_status_counts()
+        metadata_pending = int(metadata_status.get("pending", 0) or 0)
+        scan_progress = self.get_scan_progress()
         return {
             "total_images": db.get_image_count(),
             "generators": db.get_all_generators(),
             "top_tags": analytics_data["top_tags"],
             "checkpoints": analytics_data["checkpoints"],
-            "loras": analytics_data["loras"]
+            "loras": analytics_data["loras"],
+            "metadata_status": metadata_status,
+            "metadata_pending": metadata_pending,
+            "metadata_resolving": metadata_pending > 0,
+            "scan_status": scan_progress.get("status"),
+            "scan_step": scan_progress.get("step"),
+            "scan_library_ready": bool(scan_progress.get("library_ready", False)),
+            "app_version": APP_VERSION,
+            "github_url": GITHUB_REPOSITORY_URL,
         }
+
+    def resolve_drop(self, folder_name: str, filenames: List[str], dropped_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Resolve browser-dropped folder name or filenames to a real filesystem path."""
+        conn = db.get_connection()
+        cursor = conn.cursor()
+
+        files_info = dropped_files or []
+        names = [f["name"] for f in files_info if f.get("name")] if files_info else filenames[:5]
+        names = [n for n in names if n and isinstance(n, str)]
+
+        if names:
+            placeholders = ",".join("?" for _ in names)
+            cursor.execute(
+                f"SELECT path, filename, file_size FROM images WHERE filename IN ({placeholders})",
+                names,
+            )
+            rows = cursor.fetchall()
+            if rows:
+                size_by_name = {}
+                for f in files_info:
+                    if f.get("name") and f.get("size"):
+                        size_by_name[f["name"]] = int(f["size"])
+
+                folder_scores: Dict[str, int] = {}
+                for row in rows:
+                    rpath = row[0] if isinstance(row, (tuple, list)) else row["path"]
+                    rname = row[1] if isinstance(row, (tuple, list)) else row["filename"]
+                    rsize = row[2] if isinstance(row, (tuple, list)) else row["file_size"]
+                    parent = str(Path(rpath).parent)
+                    expected_size = size_by_name.get(rname)
+                    if expected_size and rsize and abs(int(rsize) - expected_size) < 2:
+                        folder_scores[parent] = folder_scores.get(parent, 0) + 10
+                    else:
+                        folder_scores[parent] = folder_scores.get(parent, 0) + 1
+
+                if folder_scores:
+                    best = max(folder_scores, key=folder_scores.get)
+                    return {"folder_path": best}
+
+        if folder_name and self._is_safe_folder_segment(folder_name):
+            like_segment = self._escape_like(folder_name)
+            cursor.execute(
+                "SELECT path FROM images WHERE path LIKE ? ESCAPE '\\' LIMIT 1",
+                [f"%{os.sep}{like_segment}{os.sep}%"],
+            )
+            row = cursor.fetchone()
+            if row:
+                raw = row[0] if isinstance(row, (tuple, list)) else row["path"]
+                raw = str(raw)
+                sep = os.sep
+                idx = raw.lower().find(sep + folder_name.lower() + sep)
+                if idx >= 0:
+                    return {"folder_path": raw[: idx + len(sep) + len(folder_name)]}
+
+            for base in self._common_image_roots():
+                candidate = (Path(base) / folder_name).resolve()
+                # Defense in depth: candidate must stay under the root we picked.
+                try:
+                    candidate.relative_to(Path(base).resolve())
+                except ValueError:
+                    continue
+                if candidate.is_dir():
+                    return {"folder_path": str(candidate)}
+
+        return {"folder_path": ""}
+
+    @staticmethod
+    def _is_safe_folder_segment(name: str) -> bool:
+        """Reject browser-supplied folder names that could escape a base dir."""
+        if not name or not isinstance(name, str):
+            return False
+        if name in {".", ".."}:
+            return False
+        # Path separators or drive markers indicate the caller is trying to
+        # supply a multi-segment path, not a single folder name.
+        if "/" in name or "\\" in name or ":" in name:
+            return False
+        # Any control char or NUL byte → reject.
+        if any(ord(ch) < 32 for ch in name):
+            return False
+        return True
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        """Escape SQL LIKE wildcards so user input matches literally."""
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    async def import_uploaded_files(self, files) -> Dict[str, Any]:
+        """Save uploaded files to imports dir and add them to the gallery.
+
+        Path-traversal hardening: the browser-supplied filename is reduced to
+        its basename via ``Path(name).name`` so values like ``../../etc/x.png``
+        cannot escape ``import_dir``. After constructing ``dest`` we also
+        verify it resolves underneath ``import_dir.resolve()`` as a defense in
+        depth against weird Windows path semantics.
+        """
+        from config import DATA_DIR
+        import_dir = (Path(DATA_DIR) / "imports").resolve()
+        import_dir.mkdir(parents=True, exist_ok=True)
+
+        IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}
+        saved_paths: List[Path] = []
+        for upload in files:
+            raw_name = upload.filename or ""
+            ext = Path(raw_name).suffix.lower()
+            if ext not in IMAGE_EXTS:
+                continue
+            # Basename only — strips any "../" or absolute paths the browser sent.
+            safe_stem_name = Path(raw_name).name
+            if not safe_stem_name or safe_stem_name in {".", ".."} or safe_stem_name.startswith("."):
+                safe_stem_name = f"upload_{len(saved_paths)}{ext}"
+            dest = (import_dir / safe_stem_name).resolve()
+            counter = 1
+            stem = Path(safe_stem_name).stem or "upload"
+            while dest.exists():
+                dest = (import_dir / f"{stem}_{counter}{ext}").resolve()
+                counter += 1
+            # Defense in depth: refuse anything that resolves outside import_dir.
+            try:
+                dest.relative_to(import_dir)
+            except ValueError:
+                logger.warning("Refusing upload with unsafe filename: %r", raw_name)
+                continue
+            content = await upload.read()
+            dest.write_bytes(content)
+            saved_paths.append(dest)
+
+        records = []
+        errors = 0
+        image_ids = []
+        for path in saved_paths:
+            result = parse_metadata_job({
+                "path": str(path),
+                "filename": path.name,
+                "compute_content_fingerprint": True,
+                "validate_image_data": True,
+            })
+            if result.get("error"):
+                errors += 1
+            records.append(result["record"])
+
+        if records:
+            batch_result = add_images_batch(records, return_statuses=True)
+            for path_str, status in (batch_result.get("statuses") or {}).items():
+                image_ids.append(batch_result.get("ids", {}).get(path_str))
+
+        return {
+            "imported": len(records) - errors,
+            "errors": errors,
+            "total": len(records),
+            "image_ids": [i for i in image_ids if i],
+        }
+
+    @staticmethod
+    def _common_image_roots() -> List[str]:
+        home = Path.home()
+        roots = [
+            home / "Pictures",
+            home / "Desktop",
+            home / "Downloads",
+            home / "Documents",
+        ]
+        if platform.system() == "Windows":
+            for drive in "CDEFGH":
+                roots.append(Path(f"{drive}:\\"))
+        return [str(r) for r in roots if r.exists()]
 
     def export_tags_batch(self, request) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        output_folder = normalize_user_path(request.output_folder)
-        is_valid, error = validate_folder_path(output_folder, allow_create=True)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
-
-        blacklist = set(tag.strip().lower() for tag in (request.blacklist or []))
-        prefix = request.prefix or ""
-
-        exported = 0
-        errors = []
-        output_folder_ready = os.path.isdir(output_folder)
-
-        for image_id in request.image_ids:
-            image = db.get_image_by_id(image_id)
-            if not image:
-                errors.append(f"Image {image_id} not found")
-                continue
-
-            tags = db.get_image_tags(image_id)
-            filtered_tags = [t["tag"] for t in tags if t["tag"].lower() not in blacklist]
-            tag_string = prefix + ", ".join(filtered_tags) if filtered_tags else prefix.rstrip(", ")
-
-            image_basename = os.path.splitext(image["filename"])[0]
-            output_path = os.path.join(output_folder, f"{image_basename}.txt")
-
-            try:
-                if not output_folder_ready:
-                    os.makedirs(output_folder, exist_ok=True)
-                    output_folder_ready = True
-                with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(tag_string)
-                exported += 1
-            except Exception as e:
-                errors.append(f"Error writing {output_path}: {e}")
-
+        result = export_tags_batch_request(request)
         return {
             "status": "ok",
-            "exported": exported,
-            "total": len(request.image_ids),
-            "errors": errors if errors else None
+            "exported": result["exported"],
+            "total": result["total"],
+            "errors": result["error_messages"] if result["error_messages"] else None,
         }
 
     def load_session_from_disk(self) -> None:
         """Load persisted session from disk on startup."""
         try:
-            if not os.path.exists(SESSION_FILE):
-                return
-            with open(SESSION_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            if not data.get('active'):
-                return
-
-            # Batch validate image IDs in a single query (N+1 fix)
-            image_ids = data.get('image_ids', [])
-            if image_ids:
-                with db.get_db() as conn:
-                    cursor = conn.cursor()
-                    placeholders = ','.join(['?' for _ in image_ids])
-                    cursor.execute(f"SELECT id FROM images WHERE id IN ({placeholders})", image_ids)
-                    valid_set = {row[0] for row in cursor.fetchall()}
-                valid_ids = [iid for iid in image_ids if iid in valid_set]
-            else:
-                valid_ids = []
-
-            if not valid_ids:
+            for session_file in self._get_session_file_candidates():
+                if not session_file.exists():
+                    continue
                 try:
-                    os.remove(SESSION_FILE)
-                except OSError:
-                    pass
-                return
+                    with session_file.open('r', encoding='utf-8') as f:
+                        data = json.load(f)
 
-            original_index = data.get('current_index', 0)
-            try:
-                original_index = int(original_index)
-            except (TypeError, ValueError):
-                original_index = 0
-            original_index = max(0, min(original_index, len(image_ids)))
+                    try:
+                        session_version = self._parse_persisted_session_version(data)
+                    except ValueError as exc:
+                        self._discard_persisted_session_file(str(exc), paths=[session_file])
+                        continue
 
-            original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
-            restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
-            restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
-            history_image_ids = {entry.get('image_id') for entry in restored_history}
-            restored_redo_stack = [
-                entry for entry in restored_redo_stack
-                if entry.get('image_id') not in history_image_ids
-            ]
-            restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
-            restored_history = [
-                entry for entry in restored_history
-                if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
-            ]
-            restored_redo_stack = [
-                entry for entry in restored_redo_stack
-                if original_positions.get(entry.get('image_id'), -1) >= original_index
-            ]
-            restored_index = min(len(valid_ids), restored_index)
-            operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
+                    if session_version not in {0, SORT_SESSION_SCHEMA_VERSION}:
+                        self._discard_persisted_session_file(
+                            f"unsupported session_schema_version={session_version} (current={SORT_SESSION_SCHEMA_VERSION})",
+                            paths=[session_file],
+                        )
+                        continue
 
-            # Validate all folder paths loaded from JSON
-            validated_folders = {}
-            for key, path in data.get('folders', {}).items():
-                try:
-                    normalized_path = normalize_user_path(path)
-                    is_valid, _error = validate_folder_path(normalized_path, allow_create=True)
-                    if is_valid:
-                        validated_folders[key] = normalized_path
+                    if not data.get('active'):
+                        return
+
+                    # Batch validate image IDs in a single query (N+1 fix)
+                    image_ids = data.get('image_ids', [])
+                    if image_ids:
+                        with db.get_db() as conn:
+                            cursor = conn.cursor()
+                            placeholders = ','.join(['?' for _ in image_ids])
+                            cursor.execute(f"SELECT id FROM images WHERE id IN ({placeholders})", image_ids)
+                            valid_set = {row[0] for row in cursor.fetchall()}
+                        valid_ids = [iid for iid in image_ids if iid in valid_set]
                     else:
-                        logger.warning("Skipping invalid folder path for key %s", key)
-                except Exception:
-                    logger.warning("Skipping invalid folder path for key %s", key)
+                        valid_ids = []
 
-            with self._sort_session_lock:
-                self._sort_session = {
-                    'active': True,
-                    'image_ids': valid_ids,
-                    'current_index': restored_index,
-                    'folders': validated_folders,
-                    'operation_mode': operation_mode,
-                    'history': restored_history,
-                    'redo_stack': restored_redo_stack,
-                }
-                self._save_session_to_disk()
-            logger.info("Restored session: %d images", len(valid_ids))
+                    if not valid_ids:
+                        try:
+                            session_file.unlink()
+                        except OSError:
+                            pass
+                        return
+
+                    original_index = data.get('current_index', 0)
+                    try:
+                        original_index = int(original_index)
+                    except (TypeError, ValueError):
+                        original_index = 0
+                    original_index = max(0, min(original_index, len(image_ids)))
+
+                    original_positions = {image_id: index for index, image_id in enumerate(image_ids)}
+                    restored_history = self._filter_sort_actions(data.get('history', []), valid_set)
+                    restored_redo_stack = self._filter_sort_actions(data.get('redo_stack', []), valid_set)
+                    history_image_ids = {entry.get('image_id') for entry in restored_history}
+                    restored_redo_stack = [
+                        entry for entry in restored_redo_stack
+                        if entry.get('image_id') not in history_image_ids
+                    ]
+                    restored_index = sum(1 for iid in image_ids[:original_index] if iid in valid_set)
+                    restored_history = [
+                        entry for entry in restored_history
+                        if original_positions.get(entry.get('image_id'), len(image_ids)) < original_index
+                    ]
+                    restored_redo_stack = [
+                        entry for entry in restored_redo_stack
+                        if original_positions.get(entry.get('image_id'), -1) >= original_index
+                    ]
+                    restored_index = min(len(valid_ids), restored_index)
+                    operation_mode = self._validate_file_operation(data.get('operation_mode', 'move'))
+
+                    # Validate all folder paths loaded from JSON
+                    validated_folders = {}
+                    for key, path in data.get('folders', {}).items():
+                        try:
+                            normalized_path = normalize_user_path(path)
+                            is_valid, _error = validate_folder_path(normalized_path, allow_create=True)
+                            if is_valid:
+                                validated_folders[key] = normalized_path
+                            else:
+                                logger.warning("Skipping invalid folder path for key %s", key)
+                        except Exception:
+                            logger.warning("Skipping invalid folder path for key %s", key)
+
+                    with self._sort_session_lock:
+                        self._sort_session = self._coerce_sort_session_state({
+                            'active': True,
+                            'image_ids': valid_ids,
+                            'current_index': restored_index,
+                            'folders': validated_folders,
+                            'operation_mode': operation_mode,
+                            'history': restored_history,
+                            'redo_stack': restored_redo_stack,
+                        })
+                        self._save_session_to_disk()
+                        preferred_session_file = self._get_session_file_candidates()[0]
+                        if session_file != preferred_session_file and session_file.exists():
+                            try:
+                                session_file.unlink()
+                            except OSError as exc:
+                                logger.warning("Failed to remove legacy sort session file %s: %s", session_file, exc)
+                    logger.info("Restored session: %d images", len(valid_ids))
+                    return
+                except Exception as e:
+                    logger.warning("Failed to restore session from %s: %s", session_file, e)
         except Exception as e:
             logger.warning("Failed to restore session: %s", e)
 
     def _save_session_to_disk(self) -> None:
         """Persist session to disk."""
         try:
-            data = {
-                'active': self._sort_session['active'],
-                'current_index': self._sort_session['current_index'],
-                'folders': self._sort_session['folders'],
-                'operation_mode': self._sort_session.get('operation_mode', 'move'),
-                'history': self._sort_session['history'],
-                'redo_stack': self._sort_session.get('redo_stack', []),
-                'image_ids': self._sort_session['image_ids']
-            }
-            with open(SESSION_FILE, 'w', encoding='utf-8') as f:
+            data = self._build_persisted_sort_session_payload()
+            session_file = self._get_session_file_candidates()[0]
+            session_file.parent.mkdir(parents=True, exist_ok=True)
+            with session_file.open('w', encoding='utf-8') as f:
                 json.dump(data, f)
         except Exception as e:
             logger.warning("Failed to save session to disk: %s", e)

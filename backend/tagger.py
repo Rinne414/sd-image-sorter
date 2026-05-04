@@ -27,6 +27,7 @@ from config import (
     RATING_CATEGORIES as RATINGS,
     get_wd14_model_dir,
 )
+from ai_runtime_guard import exclusive_ai_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -914,24 +915,61 @@ class WD14Tagger:
                 "all_tags": [{"tag": str, "confidence": float}, ...]
             }
         """
-        if not self._loaded:
-            self.load()
+        with exclusive_ai_runtime("wd14-tagger"):
+            if not self._loaded:
+                self.load()
 
-        # Load and preprocess image
-        with Image.open(image_path) as image:
-            input_data = np.expand_dims(self._preprocess(image), axis=0)
+            # Load and preprocess image
+            with Image.open(image_path) as image:
+                input_data = np.expand_dims(self._preprocess(image), axis=0)
 
-        output = self._run_inference(input_data)
-        probs = output[0]
-        result = self._process_probs(probs)
+            output = self._run_inference(input_data)
+            probs = output[0]
+            result = self._process_probs(probs)
 
-        del input_data
-        del output
-        del probs
+            del input_data
+            del output
+            del probs
 
-        self._finalize_processed_images(1)
+            self._finalize_processed_images(1)
 
-        return result
+            return result
+
+    def _runtime_chunk_size(self, image_count: int, preferred_batch_size: Optional[int]) -> int:
+        """Return the maximum number of already-preprocessed inputs to hold at once."""
+        if image_count <= 0:
+            return 0
+        if not self._supports_true_batch:
+            return 1
+        learned_chunk_size = self._learned_stable_gpu_batch_size if self._session_uses_gpu() else None
+        candidates = [image_count]
+        if preferred_batch_size:
+            candidates.append(max(1, int(preferred_batch_size)))
+        if learned_chunk_size:
+            candidates.append(max(1, int(learned_chunk_size)))
+        return max(1, min(candidates))
+
+    @staticmethod
+    def _empty_runtime_info() -> Dict[str, Any]:
+        return {
+            "initial_chunk_size": 0,
+            "final_chunk_size": 0,
+            "backoff_steps": [],
+            "used_cpu_fallback": False,
+            "attempted_gpu_backoff": False,
+        }
+
+    @staticmethod
+    def _merge_runtime_info(total_info: Dict[str, Any], chunk_info: Dict[str, Any]) -> None:
+        chunk_initial = int(chunk_info.get("initial_chunk_size") or 0)
+        chunk_final = int(chunk_info.get("final_chunk_size") or 0)
+        if total_info["initial_chunk_size"] == 0 or chunk_initial > total_info["initial_chunk_size"]:
+            total_info["initial_chunk_size"] = chunk_initial
+        if total_info["final_chunk_size"] == 0 or chunk_final < total_info["final_chunk_size"]:
+            total_info["final_chunk_size"] = chunk_final
+        total_info["backoff_steps"].extend(chunk_info.get("backoff_steps") or [])
+        total_info["used_cpu_fallback"] = bool(total_info["used_cpu_fallback"] or chunk_info.get("used_cpu_fallback"))
+        total_info["attempted_gpu_backoff"] = bool(total_info["attempted_gpu_backoff"] or chunk_info.get("attempted_gpu_backoff"))
     
     @overload
     def tag_batch(
@@ -965,81 +1003,80 @@ class WD14Tagger:
         if not image_paths:
             empty: List[Dict[str, Any]] = []
             if return_runtime_info:
-                return empty, {
-                    "initial_chunk_size": 0,
-                    "final_chunk_size": 0,
-                    "backoff_steps": [],
-                    "used_cpu_fallback": False,
-                    "attempted_gpu_backoff": False,
-                }
+                return empty, self._empty_runtime_info()
             return empty
 
-        if not self._loaded:
-            self.load()
+        with exclusive_ai_runtime("wd14-tagger"):
+            if not self._loaded:
+                self.load()
 
-        prepared_inputs: List[np.ndarray] = []
-        prepared_indices: List[int] = []
-        results: List[Optional[Dict[str, Any]]] = [None] * len(image_paths)
+            results: List[Optional[Dict[str, Any]]] = [None] * len(image_paths)
+            runtime_info = self._empty_runtime_info()
+            runtime_chunk_size = self._runtime_chunk_size(len(image_paths), preferred_batch_size)
 
-        for index, path in enumerate(image_paths):
-            try:
-                with Image.open(path) as image:
-                    prepared_inputs.append(self._preprocess(image))
-                prepared_indices.append(index)
-            except Exception as error:
-                logger.error("Error preprocessing %s: %s", path, error)
-                results[index] = self._build_empty_result(str(error))
+            chunk_start = 0
+            while chunk_start < len(image_paths):
+                chunk_end = min(len(image_paths), chunk_start + runtime_chunk_size)
+                chunk_paths = image_paths[chunk_start:chunk_end]
+                prepared_inputs: List[np.ndarray] = []
+                prepared_indices: List[int] = []
 
-        if not prepared_inputs:
-            finalized_empty = [result or self._build_empty_result() for result in results]
+                for offset, path in enumerate(chunk_paths):
+                    source_index = chunk_start + offset
+                    try:
+                        with Image.open(path) as image:
+                            prepared_inputs.append(self._preprocess(image))
+                        prepared_indices.append(source_index)
+                    except Exception as error:
+                        logger.error("Error preprocessing %s: %s", path, error)
+                        results[source_index] = self._build_empty_result(str(error))
+
+                if prepared_inputs:
+                    if self._supports_true_batch and len(prepared_inputs) > 1:
+                        adaptive_results, chunk_info = self._run_true_batch_with_backoff(
+                            prepared_inputs,
+                            prepared_indices,
+                            image_paths,
+                            initial_chunk_size=len(prepared_inputs),
+                            min_chunk_size=min_batch_size,
+                        )
+                        self._merge_runtime_info(runtime_info, chunk_info)
+                        for index, result in enumerate(adaptive_results):
+                            if result is not None:
+                                results[index] = result
+                        runtime_chunk_size = self._runtime_chunk_size(
+                            len(image_paths) - chunk_end,
+                            preferred_batch_size,
+                        ) or runtime_chunk_size
+                    else:
+                        chunk_info = {
+                            "initial_chunk_size": 1,
+                            "final_chunk_size": 1,
+                            "backoff_steps": [],
+                            "used_cpu_fallback": False,
+                            "attempted_gpu_backoff": False,
+                        }
+                        for prepared_index, source_index in enumerate(prepared_indices):
+                            try:
+                                single_input = np.expand_dims(prepared_inputs[prepared_index], axis=0)
+                                output = self._run_inference(single_input)
+                                results[source_index] = self._process_probs(output[0])
+                                self._finalize_processed_images(1)
+                                del single_input
+                                del output
+                            except Exception as error:
+                                logger.error("Error tagging %s: %s", image_paths[source_index], error)
+                                results[source_index] = self._build_empty_result(str(error))
+                        self._merge_runtime_info(runtime_info, chunk_info)
+
+                del prepared_inputs
+                gc.collect()
+                chunk_start = chunk_end
+
+            finalized_results = [result or self._build_empty_result() for result in results]
             if return_runtime_info:
-                return finalized_empty, {
-                    "initial_chunk_size": 0,
-                    "final_chunk_size": 0,
-                    "backoff_steps": [],
-                    "used_cpu_fallback": False,
-                    "attempted_gpu_backoff": False,
-                }
-            return finalized_empty
-
-        runtime_info = {
-            "initial_chunk_size": len(prepared_indices),
-            "final_chunk_size": len(prepared_indices),
-            "backoff_steps": [],
-            "used_cpu_fallback": False,
-            "attempted_gpu_backoff": False,
-        }
-
-        if self._supports_true_batch and len(prepared_inputs) > 1:
-            adaptive_results, runtime_info = self._run_true_batch_with_backoff(
-                prepared_inputs,
-                prepared_indices,
-                image_paths,
-                initial_chunk_size=preferred_batch_size,
-                min_chunk_size=min_batch_size,
-            )
-            for index, result in enumerate(adaptive_results):
-                if result is not None:
-                    results[index] = result
-        else:
-            for prepared_index, source_index in enumerate(prepared_indices):
-                try:
-                    single_input = np.expand_dims(prepared_inputs[prepared_index], axis=0)
-                    output = self._run_inference(single_input)
-                    results[source_index] = self._process_probs(output[0])
-                    self._finalize_processed_images(1)
-                    del single_input
-                    del output
-                except Exception as error:
-                    logger.error("Error tagging %s: %s", image_paths[source_index], error)
-                    results[source_index] = self._build_empty_result(str(error))
-
-        del prepared_inputs
-        gc.collect()
-        finalized_results = [result or self._build_empty_result() for result in results]
-        if return_runtime_info:
-            return finalized_results, runtime_info
-        return finalized_results
+                return finalized_results, runtime_info
+            return finalized_results
 
 
 # Singleton instance

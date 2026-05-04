@@ -20,6 +20,7 @@ from obfuscation import (
     BIG_TOMATO_MODE,
     MAX_OBFUSCATE_SOURCE_BYTES,
     ImageTooLargeError,
+    ObfuscationOverwriteConflictError,
     batch_process,
     decode_image,
     decode_image_bytes,
@@ -107,10 +108,17 @@ class SingleProcessRequest(BaseModel):
     password: str = Field(default="", description="Password for scrambling")
     preserve_metadata: bool = Field(default=True, description="Preserve SD metadata")
     compat_mode: str = Field(default=BIG_TOMATO_MODE, description="Compatibility mode: big_tomato or small_tomato")
+    allow_overwrite: bool = Field(default=False, description="Allow replacing an existing output file")
 
 
 class BatchProcessRequest(BaseModel):
-    image_paths: List[str] = Field(..., min_length=1, max_length=10000, description="List of image file paths")
+    # Background-task pipeline: each path is processed sequentially so the
+    # only risk from a large list is the request payload itself. Internal
+    # operations don't fan out into bulk SQL, so the ceiling only caps
+    # payload memory. 5,000,000 matches the rest of the batch endpoints and
+    # covers any realistic personal library; 50k was still rejecting real
+    # users with larger collections.
+    image_paths: List[str] = Field(..., min_length=1, max_length=5_000_000, description="List of image file paths")
     output_folder: str = Field(..., description="Destination folder")
     password: str = Field(default="", description="Password for scrambling")
     mode: str = Field(default="encode", description="'encode' or 'decode'")
@@ -118,6 +126,7 @@ class BatchProcessRequest(BaseModel):
     suffix: str = Field(default="", description="Suffix for output filenames")
     legacy_pnginfo: bool = Field(default=False, description="Use legacy PNG Info text algorithm")
     compat_mode: str = Field(default=BIG_TOMATO_MODE, description="Compatibility mode: big_tomato or small_tomato")
+    allow_overwrite: bool = Field(default=False, description="Allow replacing existing output files")
 
 
 @router.post("/encode")
@@ -134,10 +143,13 @@ async def encode_single(request: SingleProcessRequest):
             request.password,
             request.preserve_metadata,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
+    except ObfuscationOverwriteConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -159,10 +171,13 @@ async def decode_single(request: SingleProcessRequest):
             request.password,
             request.preserve_metadata,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:
         raise HTTPException(status_code=413, detail=str(e))
+    except ObfuscationOverwriteConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -192,6 +207,7 @@ async def batch(request: BatchProcessRequest):
             request.suffix,
             legacy_pnginfo=request.legacy_pnginfo,
             compat_mode=compat_mode,
+            allow_overwrite=request.allow_overwrite,
         )
         return result
     except ImageTooLargeError as e:

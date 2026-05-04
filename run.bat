@@ -50,15 +50,13 @@ set "TMP=%TMP_DIR%"
 REM -- Find Python
 set "PYTHON_CMD="
 
-REM Try common Anaconda locations first
+REM Try common user-managed Python locations first
 for %%P in (
-    "D:\Anaconda\python.exe"
-    "C:\Users\%USERNAME%\Anaconda3\python.exe"
+    "%USERPROFILE%\Anaconda3\python.exe"
+    "%USERPROFILE%\miniconda3\python.exe"
     "C:\ProgramData\Anaconda3\python.exe"
+    "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
     "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
-    "%LOCALAPPDATA%\Programs\Python\Python39\python.exe"
 ) do (
     if exist %%P (
         set "PYTHON_CMD=%%~P"
@@ -77,7 +75,7 @@ for %%C in (python python3 py) do (
 
 echo.
 echo [ERROR] Python is not installed or not in PATH.
-echo         Please install Python 3.9+ from https://python.org
+echo         Please install Python 3.12+ from https://python.org
 echo.
 pause
 exit /b 1
@@ -85,7 +83,7 @@ exit /b 1
 :found_python
 echo [OK] Found Python: !PYTHON_CMD!
 
-REM -- Check Python version (>= 3.9)
+REM -- Check Python version (>= 3.12)
 set "PY_VER="
 set "PY_MAJOR=0"
 set "PY_MINOR=0"
@@ -104,12 +102,12 @@ for /f "tokens=1,2 delims=." %%a in ("!PY_VER!") do (
 )
 
 if !PY_MAJOR! LSS 3 (
-    echo [ERROR] Python !PY_VER! is too old. Python 3.9+ required.
+    echo [ERROR] Python !PY_VER! is too old. Python 3.12+ required.
     pause
     exit /b 1
 )
-if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 9 (
-    echo [ERROR] Python !PY_VER! is too old. Python 3.9+ required.
+if !PY_MAJOR! EQU 3 if !PY_MINOR! LSS 12 (
+    echo [ERROR] Python !PY_VER! is too old. Python 3.12+ required.
     pause
     exit /b 1
 )
@@ -127,7 +125,7 @@ set OLD_HASH=
 if !FIRST_RUN! EQU 1 (
     echo ==========================================
     echo   First run - setting up environment...
-    echo   This may take 5-10 minutes.
+    echo   This may take 10-20 minutes if GPU runtimes are needed.
     echo ==========================================
     echo.
 
@@ -163,9 +161,24 @@ if !FIRST_RUN! EQU 1 (
     )
 )
 
+if !NEED_INSTALL! EQU 0 (
+    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm, sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2" >nul 2>&1
+    if errorlevel 1 (
+        echo [INFO] Python runtime packages look incomplete. Reinstalling dependencies...
+        set NEED_INSTALL=1
+    )
+)
+
 if !NEED_INSTALL! EQU 1 (
-    echo [2/3] Installing dependencies...
-    backend\venv\Scripts\pip.exe install -r backend\requirements.txt
+    echo [INFO] Preparing Python build tools for source-only packages...
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install setuptools wheel
+    if errorlevel 1 (
+        echo [ERROR] Failed to install Python build tools.
+        pause
+        exit /b 1
+    )
+    echo [2/3] Installing full AI runtime dependencies...
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation -r backend\requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause
@@ -192,6 +205,14 @@ backend\venv\Scripts\python.exe backend\repair_onnxruntime.py --auto
 if errorlevel 1 (
     echo [WARN] Could not auto-repair ONNX Runtime package state.
     echo        The app can still start, but WD14 tagging may stay on CPU.
+)
+echo.
+
+echo [Info] Checking Windows PyTorch / SAM3 runtime package state...
+backend\venv\Scripts\python.exe backend\repair_torch_runtime.py --auto
+if errorlevel 1 (
+    echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.
+    echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.
 )
 echo.
 

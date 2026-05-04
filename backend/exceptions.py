@@ -123,3 +123,26 @@ class PathSecurityError(SDImageSorterError):
     def __init__(self, message: str = "Invalid or unsafe path", path: Optional[str] = None, details: Optional[Any] = None):
         super().__init__(message, details)
         self.path = path
+
+
+class ServiceError(SDImageSorterError):
+    """Raised when a service-layer operation fails (e.g. model prediction returns None)."""
+
+    def __init__(self, message: str = "Service operation failed", details: Optional[Any] = None):
+        super().__init__(message, details)
+
+
+class ImageFileNotFoundError(ImageNotFoundError):
+    """Raised when an image record exists but the file is missing on disk."""
+
+    def __init__(self, image_id: Optional[int] = None, path: Optional[str] = None, details: Optional[Any] = None):
+        if path:
+            message = f"Image file not found: {path}"
+        elif image_id is not None:
+            message = f"Image file not found for image {image_id}"
+        else:
+            message = "Image file not found"
+        # Skip ImageNotFoundError.__init__ to set our own message
+        SDImageSorterError.__init__(self, message, details)
+        self.image_id = image_id
+        self.path = path

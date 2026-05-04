@@ -8,11 +8,11 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from services.service_provider import ServiceProvider
 from services.update_service import UpdateService
 
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/updates", tags=["updates"])
 
-_update_service: Optional[UpdateService] = None
+_update_service_provider = ServiceProvider(UpdateService)
 
 
 class ApplyUpdateRequest(BaseModel):
@@ -33,16 +33,8 @@ class UpdateProxyConfigRequest(BaseModel):
     channel_name: str = "Custom Proxy"
 
 
-def get_update_service() -> UpdateService:
-    global _update_service
-    if _update_service is None:
-        _update_service = UpdateService()
-    return _update_service
-
-
-def set_update_service(service: UpdateService) -> None:
-    global _update_service
-    _update_service = service
+get_update_service = _update_service_provider.get
+set_update_service = _update_service_provider.set
 
 
 def _schedule_process_exit(delay_seconds: float = 1.0) -> None:

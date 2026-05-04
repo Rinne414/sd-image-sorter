@@ -34,10 +34,28 @@
 
     let _nextSectionId = 1;
     let _marqueeInitialized = false;
+    let _toolbarInitialized = false;
     function newSectionId() { return `qs-sec-${_nextSectionId++}`; }
 
     // ── Helpers ────────────────────────────────────────────────────────
     function getCensorState() { return window.__CENSOR_STATE__ || window.CensorState; }
+
+    function escapeQueueHtml(value) {
+        if (typeof window.escapeHtml === 'function') {
+            return window.escapeHtml(value);
+        }
+        if (value == null) return '';
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function safeSectionColor(value) {
+        return SECTION_COLORS.includes(value) ? value : 'gray';
+    }
 
     function getQueueItem(id) {
         const cs = getCensorState();
@@ -95,6 +113,27 @@
             minAesthetic: null,
             maxAesthetic: null
         };
+    }
+
+    function normalizeCheckpointValue(value) {
+        const normalize = window.App?.normalizeCheckpointFilterValue;
+        if (typeof normalize === 'function') {
+            return normalize(value);
+        }
+        let text = String(value || '').trim();
+        if (!text) return '';
+        text = text.replace(/\\/g, '/').split('/').pop().trim();
+        text = text.replace(/\.(safetensors|ckpt|pt|pth|bin|onnx)$/i, '').trim();
+        return text;
+    }
+
+    function getNormalizedCheckpoint(meta) {
+        return normalizeCheckpointValue(meta?.checkpoint_normalized || meta?.checkpoint || '');
+    }
+
+    function getNormalizedArtist(meta) {
+        const raw = meta?.artist ?? meta?.predicted_artist ?? meta?.artist_name ?? '';
+        return String(raw || '').trim().toLowerCase();
     }
 
     function t(key, fallback, params) {
@@ -442,6 +481,14 @@
     function updateQueueFilterSummary() {
         const summaryEl = document.getElementById('qs-filter-summary');
         if (!summaryEl) return;
+        const setSummaryText = (text, i18nKey = null) => {
+            if (i18nKey) {
+                summaryEl.setAttribute('data-i18n', i18nKey);
+            } else {
+                summaryEl.removeAttribute('data-i18n');
+            }
+            summaryEl.textContent = text;
+        };
 
         let modeLabel = '';
         let parts = [];
@@ -458,20 +505,34 @@
         }
 
         if (!modeLabel) {
-            summaryEl.textContent = t('queueSolitaire.filterSummaryIdle', 'No queue filters active yet.');
+            setSummaryText(
+                t('queueSolitaire.filterSummaryIdle', 'No queue filters active yet.'),
+                'queueSolitaire.filterSummaryIdle'
+            );
             return;
         }
 
         if (!parts.length) {
-            summaryEl.textContent = state.appliedFilterMode === 'gallery'
-                ? t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.')
-                : (state.appliedFilterMode === 'advanced'
-                    ? t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.')
-                    : t('queueSolitaire.filterSummaryQuickAll', 'Quick queue filters are clear, so the whole queue is currently in scope.'));
+            if (state.appliedFilterMode === 'gallery') {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryGalleryAll', 'Gallery filters were copied, but they currently leave the whole queue in scope.'),
+                    'queueSolitaire.filterSummaryGalleryAll'
+                );
+            } else if (state.appliedFilterMode === 'advanced') {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryAdvancedAll', 'Advanced queue filters are applied, but they currently leave the whole queue in scope.'),
+                    'queueSolitaire.filterSummaryAdvancedAll'
+                );
+            } else {
+                setSummaryText(
+                    t('queueSolitaire.filterSummaryQuickAll', 'Quick queue filters are clear, so the whole queue is currently in scope.'),
+                    'queueSolitaire.filterSummaryQuickAll'
+                );
+            }
             return;
         }
 
-        summaryEl.textContent = `${modeLabel}: ${parts.join(' • ')}`;
+        setSummaryText(`${modeLabel}: ${parts.join(' • ')}`);
     }
 
     function clearQuickFilterInputs() {
@@ -567,13 +628,13 @@
         if (!container) return;
 
         if (!state.autoSortProfiles.length) {
-            container.innerHTML = `<div class="qs-auto-sort-section-label">${t('queueSolitaire.noProfilesYet', 'No saved profiles yet')}</div>`;
+            container.innerHTML = `<div class="qs-auto-sort-section-label">${escapeQueueHtml(t('queueSolitaire.noProfilesYet', 'No saved profiles yet'))}</div>`;
             return;
         }
 
         container.innerHTML = state.autoSortProfiles.map((profile) => `
-            <button type="button" class="qs-auto-sort-profile-btn" data-profile-id="${profile.id}">
-                ${escapeHtml(profile.name)}
+            <button type="button" class="qs-auto-sort-profile-btn" data-profile-id="${escapeQueueHtml(profile.id)}">
+                ${escapeQueueHtml(profile.name)}
             </button>
         `).join('');
 
@@ -623,23 +684,23 @@
         }
 
         select.innerHTML = state.autoSortProfiles.map((profile) => `
-            <option value="${profile.id}">${escapeHtml(profile.name)}</option>
+            <option value="${escapeQueueHtml(profile.id)}">${escapeQueueHtml(profile.name)}</option>
         `).join('');
         if (state.editingProfileId) {
             select.value = state.editingProfileId;
         }
 
         list.innerHTML = state.profileDraftSections.map((section, index) => `
-            <div class="qs-profile-card" data-section-id="${section.id}">
+            <div class="qs-profile-card" data-section-id="${escapeQueueHtml(section.id)}">
                 <div class="qs-profile-card-top">
-                    <input class="input-field qs-profile-name" value="${escapeHtml(section.name)}" data-section-id="${section.id}" aria-label="${t('queueSolitaire.sectionName', 'Section name')}">
-                    <select class="input-field qs-profile-color" data-section-id="${section.id}" aria-label="${t('queueSolitaire.sectionColor', 'Section color')}">
-                        ${SECTION_COLORS.map((color) => `<option value="${color}" ${section.color === color ? 'selected' : ''}>${color}</option>`).join('')}
+                    <input class="input-field qs-profile-name" value="${escapeQueueHtml(section.name)}" data-section-id="${escapeQueueHtml(section.id)}" aria-label="${escapeQueueHtml(t('queueSolitaire.sectionName', 'Section name'))}">
+                    <select class="input-field qs-profile-color" data-section-id="${escapeQueueHtml(section.id)}" aria-label="${escapeQueueHtml(t('queueSolitaire.sectionColor', 'Section color'))}">
+                        ${SECTION_COLORS.map((color) => `<option value="${escapeQueueHtml(color)}" ${section.color === color ? 'selected' : ''}>${escapeQueueHtml(color)}</option>`).join('')}
                     </select>
-                    <button type="button" class="btn btn-secondary btn-small qs-profile-edit-filter" data-section-id="${section.id}">${t('queueSolitaire.editSectionFilter', 'Edit Filter')}</button>
-                    <button type="button" class="btn btn-ghost btn-small qs-profile-remove-section" data-section-id="${section.id}">✕</button>
+                    <button type="button" class="btn btn-secondary btn-small qs-profile-edit-filter" data-section-id="${escapeQueueHtml(section.id)}">${escapeQueueHtml(t('queueSolitaire.editSectionFilter', 'Edit Filter'))}</button>
+                    <button type="button" class="btn btn-ghost btn-small qs-profile-remove-section" data-section-id="${escapeQueueHtml(section.id)}">✕</button>
                 </div>
-                <div class="qs-profile-card-summary">${escapeHtml(buildProfileSummary(section.filters))}</div>
+                <div class="qs-profile-card-summary">${escapeQueueHtml(buildProfileSummary(section.filters))}</div>
             </div>
         `).join('');
 
@@ -821,7 +882,7 @@
                 promptCounts.set(token, (promptCounts.get(token) || 0) + 1);
             });
 
-            const checkpoint = String(detail.checkpoint || '').trim();
+            const checkpoint = getNormalizedCheckpoint(detail);
             if (checkpoint) {
                 checkpointCounts.set(checkpoint, (checkpointCounts.get(checkpoint) || 0) + 1);
             }
@@ -850,9 +911,12 @@
         const selectedGenerators = Array.isArray(filters.generators) ? filters.generators : [];
         const selectedRatings = Array.isArray(filters.ratings) ? filters.ratings : [];
         const selectedTags = Array.isArray(filters.tags) ? filters.tags.map(tag => String(tag).toLowerCase()) : [];
-        const selectedCheckpoints = Array.isArray(filters.checkpoints) ? filters.checkpoints.map(v => String(v).toLowerCase()) : [];
+        const selectedCheckpoints = Array.isArray(filters.checkpoints)
+            ? filters.checkpoints.map(v => normalizeCheckpointValue(v).toLowerCase()).filter(Boolean)
+            : [];
         const selectedLoras = Array.isArray(filters.loras) ? filters.loras.map(v => String(v).toLowerCase()) : [];
         const selectedPrompts = Array.isArray(filters.prompts) ? filters.prompts.map(v => String(v).toLowerCase()) : [];
+        const artistQuery = String(filters.artist || '').trim().toLowerCase();
         const searchQuery = String(filters.search || '').trim().toLowerCase();
 
         const generatorValue = String(meta.generator || '').toLowerCase();
@@ -860,12 +924,14 @@
         const tags = Array.isArray(meta.tags) ? meta.tags.map(tag => String(tag).toLowerCase()) : [];
         const prompt = String(meta.prompt || '').toLowerCase();
         const filename = String(meta.filename || '').toLowerCase();
-        const checkpoint = String(meta.checkpoint || '').toLowerCase();
+        const checkpoint = getNormalizedCheckpoint(meta).toLowerCase();
+        const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
         const loras = getLoraText(meta);
         const aspect = getAspectBucket(meta);
         const width = Number(meta.width || 0);
         const height = Number(meta.height || 0);
         const aesthetic = meta.aesthetic_score == null ? null : Number(meta.aesthetic_score);
+        const artist = getNormalizedArtist(meta);
 
         if (selectedGenerators.length && selectedGenerators.length < 5 && !selectedGenerators.includes(generatorValue)) return false;
         if (selectedRatings.length && selectedRatings.length < 4 && !selectedRatings.includes(ratingValue)) return false;
@@ -873,7 +939,8 @@
         if (selectedCheckpoints.length && !selectedCheckpoints.includes(checkpoint)) return false;
         if (selectedLoras.length && !selectedLoras.every(lora => loras.includes(lora))) return false;
         if (selectedPrompts.length && !selectedPrompts.every(term => prompt.includes(term))) return false;
-        if (searchQuery && ![prompt, filename, checkpoint, loras, tags.join(' ')].join(' ').includes(searchQuery)) return false;
+        if (artistQuery && artist !== artistQuery) return false;
+        if (searchQuery && ![prompt, filename, checkpoint, rawCheckpoint, loras, tags.join(' '), artist].join(' ').includes(searchQuery)) return false;
         if (filters.minWidth && width < filters.minWidth) return false;
         if (filters.maxWidth && width > filters.maxWidth) return false;
         if (filters.minHeight && height < filters.minHeight) return false;
@@ -917,16 +984,24 @@
                 const prompt = (meta.prompt || '').toLowerCase();
                 const tags = Array.isArray(meta.tags) ? meta.tags.join(' ').toLowerCase() : '';
                 const filename = (meta.filename || '').toLowerCase();
-                const checkpoint = (meta.checkpoint || '').toLowerCase();
+                const checkpoint = getNormalizedCheckpoint(meta).toLowerCase();
+                const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
                 const loras = getLoraText(meta);
                 const generatorText = (meta.generator || '').toLowerCase();
-                const haystack = [prompt, tags, filename, checkpoint, loras, generatorText].join(' ');
+                const artist = getNormalizedArtist(meta);
+                const haystack = [prompt, tags, filename, checkpoint, rawCheckpoint, loras, generatorText, artist].join(' ');
                 if (!haystack.includes(keyword)) match = false;
             }
 
             if (generator && String(meta.generator || '').toLowerCase() !== generator) match = false;
             if (rating && getRatingFromMeta(meta) !== rating) match = false;
-            if (checkpointQuery && !String(meta.checkpoint || '').toLowerCase().includes(checkpointQuery)) match = false;
+            if (checkpointQuery) {
+                const normalizedCheckpoint = getNormalizedCheckpoint(meta).toLowerCase();
+                const rawCheckpoint = String(meta.checkpoint || '').toLowerCase();
+                if (!normalizedCheckpoint.includes(checkpointQuery) && !rawCheckpoint.includes(checkpointQuery)) {
+                    match = false;
+                }
+            }
             if (loraQuery && !getLoraText(meta).includes(loraQuery)) match = false;
             if (minW > 0 && (meta.width || 0) < minW) match = false;
             if (maxW > 0 && (meta.width || 0) > maxW) match = false;
@@ -952,10 +1027,12 @@
 
     async function applyGalleryFilters() {
         const filters = window.App?.AppState?.filters || createFilterState();
-
-        state.advancedFilters = window.App?.cloneFilterState
-            ? window.App.cloneFilterState(filters)
-            : JSON.parse(JSON.stringify(filters));
+        const buildContract = window.App?.buildAdvancedFilterContract;
+        state.advancedFilters = typeof buildContract === 'function'
+            ? buildContract(filters)
+            : (window.App?.cloneFilterState
+                ? window.App.cloneFilterState(filters)
+                : JSON.parse(JSON.stringify(filters)));
         await applyFilterState(state.advancedFilters, true);
     }
 
@@ -966,14 +1043,6 @@
         state.filterMatches.clear();
         const allIds = getAllImageIds();
         await ensureImageDetails(allIds);
-
-        const selectedGenerators = Array.isArray(filters.generators) ? filters.generators : [];
-        const selectedRatings = Array.isArray(filters.ratings) ? filters.ratings : [];
-        const selectedTags = Array.isArray(filters.tags) ? filters.tags.map(tag => String(tag).toLowerCase()) : [];
-        const selectedCheckpoints = Array.isArray(filters.checkpoints) ? filters.checkpoints.map(v => String(v).toLowerCase()) : [];
-        const selectedLoras = Array.isArray(filters.loras) ? filters.loras.map(v => String(v).toLowerCase()) : [];
-        const selectedPrompts = Array.isArray(filters.prompts) ? filters.prompts.map(v => String(v).toLowerCase()) : [];
-        const searchQuery = String(filters.search || '').trim().toLowerCase();
 
         for (const id of allIds) {
             const meta = state.detailCache.get(id) || getImageMeta(id);
@@ -1099,7 +1168,7 @@
         if (filterTarget) {
             const currentVal = filterTarget.value;
             filterTarget.innerHTML = state.sections.map(s =>
-                `<option value="${s.id}">${s.name} (${s.items.length})</option>`
+                `<option value="${escapeQueueHtml(s.id)}">${escapeQueueHtml(s.name)} (${s.items.length})</option>`
             ).join('');
             if (currentVal) filterTarget.value = currentVal;
         }
@@ -1107,42 +1176,52 @@
         // Render sections
         container.innerHTML = state.sections.map(section => {
             const isCollapsed = section.collapsed ? 'collapsed' : '';
+            const sectionId = escapeQueueHtml(section.id);
+            const sectionName = escapeQueueHtml(section.name);
+            const sectionColor = escapeQueueHtml(safeSectionColor(section.color));
+            const selectAllLabel = escapeQueueHtml(t('queueSolitaire.selectAll', 'Select all'));
+            const batchRenameLabel = escapeQueueHtml(t('queueSolitaire.batchRename', 'Batch rename'));
+            const removeSectionLabel = escapeQueueHtml(t('queueSolitaire.removeSection', 'Remove section'));
+            const dropHereLabel = escapeQueueHtml(t('queueSolitaire.dropHere', 'Drop images here'));
             const gridItems = section.items.map(id => {
-                const item = getQueueItem(id);
-                const meta = getImageMeta(id);
-                const isSelected = state.selected.has(id) ? 'selected' : '';
-                const isActive = state.previewId === id ? 'active' : '';
+                const numericId = Number.parseInt(id, 10);
+                if (!Number.isFinite(numericId)) return '';
+                const safeId = String(numericId);
+                const item = getQueueItem(numericId) || getQueueItem(id);
+                const meta = getImageMeta(numericId) || getImageMeta(id);
+                const isSelected = state.selected.has(numericId) || state.selected.has(id) ? 'selected' : '';
+                const isActive = Number.parseInt(state.previewId, 10) === numericId ? 'active' : '';
                 const isProcessed = item?.isProcessed ? 'processed' : '';
                 const dotClass = item?.isProcessed ? 'processed' : (item?.regions?.length ? 'detected' : '');
                 const aesthetic = meta?.aesthetic_score != null ? meta.aesthetic_score.toFixed(1) : '';
-                const isFilterMatch = state.filterMatches.has(id);
+                const isFilterMatch = state.filterMatches.has(numericId) || state.filterMatches.has(id);
                 const dimStyle = state.filterMatches.size > 0 && !isFilterMatch ? 'opacity:0.3;' : '';
 
-                return `<div class="qs-thumb-wrap" data-id="${id}" style="${dimStyle}">
+                return `<div class="qs-thumb-wrap" data-id="${safeId}" style="${dimStyle}">
                     <img class="qs-thumb ${isSelected} ${isActive} ${isProcessed}"
-                         src="${getThumbUrl(id)}" alt="" loading="lazy"
-                         data-id="${id}" data-section="${section.id}" draggable="true">
+                         src="${escapeQueueHtml(getThumbUrl(numericId))}" alt="" loading="lazy"
+                         data-id="${safeId}" data-section="${sectionId}" draggable="true">
                     ${dotClass ? `<span class="qs-thumb-dot ${dotClass}"></span>` : ''}
-                    ${aesthetic ? `<span class="qs-thumb-badge aesthetic">${aesthetic}</span>` : ''}
+                    ${aesthetic ? `<span class="qs-thumb-badge aesthetic">${escapeQueueHtml(aesthetic)}</span>` : ''}
                 </div>`;
             }).join('');
 
             const emptyClass = section.items.length === 0 ? 'empty-drop-zone' : '';
 
-            return `<div class="qs-section ${isCollapsed}" data-section="${section.id}" data-color="${section.color}">
-                <div class="qs-section-header" data-section="${section.id}">
+            return `<div class="qs-section ${isCollapsed}" data-section="${sectionId}" data-color="${sectionColor}">
+                <div class="qs-section-header" data-section="${sectionId}">
                     <span class="qs-section-color"></span>
                     <span class="qs-section-collapse">▼</span>
-                    <input type="text" class="qs-section-name" value="${section.name}" data-section="${section.id}">
+                    <input type="text" class="qs-section-name" value="${sectionName}" data-section="${sectionId}">
                     <span class="qs-section-count">(${section.items.length})</span>
                     <div class="qs-section-actions">
-                        <button class="qs-section-btn qs-btn-select-all" data-section="${section.id}" title="${t('queueSolitaire.selectAll', 'Select all')}" aria-label="${t('queueSolitaire.selectAll', 'Select all')}">✓</button>
-                        <button class="qs-section-btn qs-btn-rename" data-section="${section.id}" title="${t('queueSolitaire.batchRename', 'Batch rename')}" aria-label="${t('queueSolitaire.batchRename', 'Batch rename')}">📝</button>
-                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${section.id}" title="${t('queueSolitaire.removeSection', 'Remove section')}" aria-label="${t('queueSolitaire.removeSection', 'Remove section')}" style="color:#ef4444;">✕</button>` : ''}
+                        <button class="qs-section-btn qs-btn-select-all" data-section="${sectionId}" title="${selectAllLabel}" aria-label="${selectAllLabel}">✓</button>
+                        <button class="qs-section-btn qs-btn-rename" data-section="${sectionId}" title="${batchRenameLabel}" aria-label="${batchRenameLabel}">📝</button>
+                        ${section.id !== 'unsorted' ? `<button class="qs-section-btn qs-btn-remove" data-section="${sectionId}" title="${removeSectionLabel}" aria-label="${removeSectionLabel}" style="color:#ef4444;">✕</button>` : ''}
                     </div>
                 </div>
-                <div class="qs-section-grid ${emptyClass}" data-section="${section.id}">
-                    ${gridItems || `<span style="color:var(--text-muted);font-size:11px;padding:8px;">${t('queueSolitaire.dropHere', 'Drop images here')}</span>`}
+                <div class="qs-section-grid ${emptyClass}" data-section="${sectionId}">
+                    ${gridItems || `<span style="color:var(--text-muted);font-size:11px;padding:8px;">${dropHereLabel}</span>`}
                 </div>
             </div>`;
         }).join('');
@@ -1162,7 +1241,7 @@
         if (!state.previewId) {
             imgEl.src = '';
             imgEl.style.display = 'none';
-            infoEl.innerHTML = `<span style="color:var(--text-muted)">${t('queueSolitaire.clickPreview', 'Click an image to preview')}</span>`;
+            infoEl.innerHTML = `<span style="color:var(--text-muted)">${escapeQueueHtml(t('queueSolitaire.clickPreview', 'Click an image to preview'))}</span>`;
             return;
         }
 
@@ -1172,13 +1251,14 @@
         const meta = getImageMeta(state.previewId);
         const dims = meta ? `${meta.width || '?'}×${meta.height || '?'}` : '';
         const aesthetic = meta?.aesthetic_score != null ? `★ ${meta.aesthetic_score.toFixed(1)}` : '';
-        const checkpoint = meta?.checkpoint ? meta.checkpoint.replace(/\\/g, '/').split('/').pop()?.replace(/\.(safetensors|ckpt)$/i, '') : '';
+        const checkpoint = getNormalizedCheckpoint(meta);
+        const filename = escapeQueueHtml(item?.outputFilename || item?.originalFilename || state.previewId);
 
         infoEl.innerHTML = `
-            <span class="qs-preview-filename">${item?.outputFilename || item?.originalFilename || state.previewId}</span>
-            ${dims ? `<span>${dims}</span>` : ''}
-            ${aesthetic ? `<span>${aesthetic}</span>` : ''}
-            ${checkpoint ? `<span>🧠 ${checkpoint}</span>` : ''}
+            <span class="qs-preview-filename">${filename}</span>
+            ${dims ? `<span>${escapeQueueHtml(dims)}</span>` : ''}
+            ${aesthetic ? `<span>${escapeQueueHtml(aesthetic)}</span>` : ''}
+            ${checkpoint ? `<span>🧠 ${escapeQueueHtml(checkpoint)}</span>` : ''}
         `;
     }
 
@@ -1428,11 +1508,55 @@
     // ── Marquee Selection ─────────────────────────────────────────────
     let marqueeState = null;
 
+    function handleMarqueeMouseMove(e) {
+        if (!marqueeState) return;
+        const x1 = Math.min(marqueeState.startX, e.clientX);
+        const y1 = Math.min(marqueeState.startY, e.clientY);
+        const x2 = Math.max(marqueeState.startX, e.clientX);
+        const y2 = Math.max(marqueeState.startY, e.clientY);
+        const el = marqueeState.el;
+        if (el) {
+            el.style.left = x1 + 'px';
+            el.style.top = y1 + 'px';
+            el.style.width = (x2 - x1) + 'px';
+            el.style.height = (y2 - y1) + 'px';
+        }
+        // Highlight intersecting thumbnails
+        document.querySelectorAll('.qs-thumb').forEach(thumb => {
+            const rect = thumb.getBoundingClientRect();
+            const intersects = !(rect.right < x1 || rect.left > x2 || rect.bottom < y1 || rect.top > y2);
+            const id = parseInt(thumb.dataset.id);
+            if (intersects) state.selected.add(id);
+        });
+    }
+
+    function handleMarqueeMouseUp() {
+        if (!marqueeState) return;
+        if (marqueeState.el) marqueeState.el.style.display = 'none';
+        marqueeState = null;
+        render();
+    }
+
+    function bindMarqueeDocumentListeners() {
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        document.addEventListener('mousemove', handleMarqueeMouseMove);
+        document.addEventListener('mouseup', handleMarqueeMouseUp);
+    }
+
+    function unbindMarqueeDocumentListeners() {
+        document.removeEventListener('mousemove', handleMarqueeMouseMove);
+        document.removeEventListener('mouseup', handleMarqueeMouseUp);
+        if (marqueeState?.el) marqueeState.el.style.display = 'none';
+        marqueeState = null;
+    }
+
     function initMarquee() {
+        bindMarqueeDocumentListeners();
         if (_marqueeInitialized) return;
-        _marqueeInitialized = true;
         const sections = document.getElementById('qs-sections');
         if (!sections) return;
+        _marqueeInitialized = true;
 
         sections.addEventListener('mousedown', (e) => {
             if (e.button !== 0 || e.target.closest('.qs-thumb, .qs-section-header, button, input')) return;
@@ -1442,35 +1566,6 @@
             };
             if (marqueeState.el) marqueeState.el.style.display = 'block';
             e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!marqueeState) return;
-            const x1 = Math.min(marqueeState.startX, e.clientX);
-            const y1 = Math.min(marqueeState.startY, e.clientY);
-            const x2 = Math.max(marqueeState.startX, e.clientX);
-            const y2 = Math.max(marqueeState.startY, e.clientY);
-            const el = marqueeState.el;
-            if (el) {
-                el.style.left = x1 + 'px';
-                el.style.top = y1 + 'px';
-                el.style.width = (x2 - x1) + 'px';
-                el.style.height = (y2 - y1) + 'px';
-            }
-            // Highlight intersecting thumbnails
-            document.querySelectorAll('.qs-thumb').forEach(thumb => {
-                const rect = thumb.getBoundingClientRect();
-                const intersects = !(rect.right < x1 || rect.left > x2 || rect.bottom < y1 || rect.top > y2);
-                const id = parseInt(thumb.dataset.id);
-                if (intersects) state.selected.add(id);
-            });
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (!marqueeState) return;
-            if (marqueeState.el) marqueeState.el.style.display = 'none';
-            marqueeState = null;
-            render();
         });
     }
 
@@ -1551,6 +1646,7 @@
         });
 
         document.removeEventListener('keydown', handleKeydown);
+        unbindMarqueeDocumentListeners();
 
         // Re-render the normal queue
         if (typeof window.renderQueue === 'function') window.renderQueue();
@@ -1559,6 +1655,8 @@
 
     // ── Toolbar Events (bound once) ───────────────────────────────────
     function initToolbar() {
+        if (_toolbarInitialized) return;
+        _toolbarInitialized = true;
         loadAutoSortProfiles();
         renderAutoSortProfileMenu();
         document.getElementById('qs-btn-add-section')?.addEventListener('click', addNewSection);

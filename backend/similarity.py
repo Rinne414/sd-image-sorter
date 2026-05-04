@@ -4,6 +4,7 @@ Image similarity search using FastEmbed CLIP embeddings.
 Generates 512-dim CLIP embeddings per image and stores them in SQLite.
 Supports finding similar images by ID, by upload, and finding duplicates.
 """
+import gc
 import io
 import heapq
 import logging
@@ -24,10 +25,13 @@ from config import (
     DUPLICATE_THRESHOLD,
     EMBEDDING_BATCH_SIZE,
     DUPLICATE_CHUNK_SIZE,
+    DUPLICATE_SYNC_MAX_EMBEDDINGS,
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
+from utils.source_paths import resolve_existing_indexed_image_path
+from ai_runtime_guard import exclusive_ai_runtime
 
 
 logger = logging.getLogger(__name__)
@@ -71,9 +75,40 @@ class SimilarityInsufficientEmbeddingsError(SimilarityError):
         self.minimum_required = minimum_required
 
 
+class SimilarityDuplicateSearchTooLargeError(SimilarityError):
+    """Raised when synchronous duplicate search would compare too many embeddings."""
+
+    def __init__(self, embedded_count: int, max_embeddings: int):
+        super().__init__(
+            f"Duplicate search is limited to {max_embeddings} embedded images for synchronous checks."
+        )
+        self.embedded_count = embedded_count
+        self.max_embeddings = max_embeddings
+
+
+class SimilaritySearchWindowTooLargeError(SimilarityError):
+    """Raised when offset + limit would require an unsafe ranking window."""
+
+    def __init__(self, requested_window: int, max_window: int):
+        super().__init__(
+            f"Similarity pagination window is limited to {max_window} ranked results per request."
+        )
+        self.requested_window = requested_window
+        self.max_window = max_window
+
+
 # Lazy-loaded FastEmbed model
 _embed_model = None
 _embed_lock = threading.Lock()
+
+SIMILARITY_SEARCH_CHUNK_SIZE = max(
+    64,
+    min(8192, int(os.environ.get("SD_SIMILARITY_SEARCH_CHUNK_SIZE", "2048") or 2048)),
+)
+SIMILARITY_SEARCH_MAX_WINDOW = max(
+    1000,
+    min(200000, int(os.environ.get("SD_SIMILARITY_SEARCH_MAX_WINDOW", "50000") or 50000)),
+)
 
 
 def _get_embed_model():
@@ -96,9 +131,10 @@ def _get_embed_model():
                                 "specific_model_path": local_model_path,
                             }
                         )
-                    _embed_model = ImageEmbedding(
-                        **model_kwargs,
-                    )
+                    with exclusive_ai_runtime("clip-similarity-load"):
+                        _embed_model = ImageEmbedding(
+                            **model_kwargs,
+                        )
                 except ImportError:
                     raise RuntimeError(
                         "fastembed not installed. Run: pip install fastembed"
@@ -159,7 +195,8 @@ def embed_image_file(image_path: str, model=None) -> Optional[np.ndarray]:
     try:
         model = model or _get_embed_model()
         # FastEmbed accepts file paths
-        embeddings = list(model.embed([image_path]))
+        with exclusive_ai_runtime("clip-similarity-inference"):
+            embeddings = list(model.embed([image_path]))
         if embeddings:
             return np.array(embeddings[0], dtype=np.float32)
     except Exception as e:
@@ -182,7 +219,8 @@ def embed_image_pil(pil_image: Image.Image) -> Optional[np.ndarray]:
             tmp.write(buf.getvalue())
             tmp_path = tmp.name
 
-        embeddings = list(model.embed([tmp_path]))
+        with exclusive_ai_runtime("clip-similarity-upload"):
+            embeddings = list(model.embed([tmp_path]))
         if embeddings:
             return np.array(embeddings[0], dtype=np.float32)
     except Exception as e:
@@ -203,6 +241,7 @@ class SimilarityIndex:
 
     def __init__(self, db_module=None):
         self.db = db_module
+        self._cancel_requested = False
         self._progress_lock = threading.Lock()
         self._progress = {
             "running": False,
@@ -243,6 +282,12 @@ class SimilarityIndex:
             issues.append(entry)
             self._progress["recent_issues"] = issues[-10:]
 
+    def request_cancel(self) -> bool:
+        if not self._progress.get("running"):
+            return False
+        self._cancel_requested = True
+        return True
+
     def embed_batch(self, image_ids: Optional[List[int]] = None):
         """
         Embed images in batch.
@@ -253,6 +298,7 @@ class SimilarityIndex:
             if self._progress["running"]:
                 return {"error": "Embedding already in progress"}
             self._progress["running"] = True
+            self._cancel_requested = False
 
         self._progress = {
             "running": True,
@@ -326,6 +372,9 @@ class SimilarityIndex:
             total_batches = max(1, int(np.ceil(len(rows) / batch_size)))
             self._progress["total_batches"] = total_batches
             for i in range(0, len(rows), batch_size):
+                if self._cancel_requested:
+                    logger.info("Similarity embedding cancelled at %d/%d", self._progress["processed"], len(rows))
+                    break
                 batch = rows[i:i + batch_size]
                 batch_index = (i // batch_size) + 1
                 self._progress["message"] = f"Embedding batch {batch_index}/{total_batches}..."
@@ -336,10 +385,11 @@ class SimilarityIndex:
                 # Batch update embeddings - collect all updates first
                 updates = []
                 for img_id, img_path in batch:
-                    self._progress["current_item"] = os.path.basename(img_path)
+                    resolved_path = resolve_existing_indexed_image_path(img_path, backend_file=__file__)
+                    self._progress["current_item"] = os.path.basename(resolved_path or img_path)
                     self._progress["updated_at"] = time.time()
 
-                    if not os.path.exists(img_path):
+                    if not resolved_path:
                         self._progress["processed"] += 1
                         self._progress["errors"] += 1
                         self._progress["skipped"] += 1
@@ -348,7 +398,7 @@ class SimilarityIndex:
                             self.db.mark_image_unreadable(img_id, "File not found")
                         continue
 
-                    readable, read_error = verify_image_readable(img_path)
+                    readable, read_error = verify_image_readable(resolved_path)
                     if not readable:
                         self._progress["processed"] += 1
                         self._progress["errors"] += 1
@@ -358,14 +408,14 @@ class SimilarityIndex:
                             self.db.mark_image_unreadable(img_id, read_error or "Unreadable image")
                         continue
 
-                    embedding = embed_image_file(img_path, model=model)
+                    embedding = embed_image_file(resolved_path, model=model)
                     self._progress["processed"] += 1
                     if embedding is not None:
                         content_fingerprint = None
                         try:
-                            content_fingerprint = compute_image_content_fingerprint(img_path)
+                            content_fingerprint = compute_image_content_fingerprint(resolved_path)
                         except Exception as exc:
-                            logger.warning("Could not compute content fingerprint for %s: %s", img_path, exc)
+                            logger.warning("Could not compute content fingerprint for %s: %s", resolved_path, exc)
                         updates.append((embedding_to_bytes(embedding), content_fingerprint, img_id))
                         self._progress["embedded"] += 1
                     else:
@@ -375,24 +425,45 @@ class SimilarityIndex:
 
                 # Single batch UPDATE for all embeddings in this chunk
                 if updates:
+                    from services.derived_state_service import write_image_embeddings
+
                     with self.db.get_db() as conn:
                         cursor = conn.cursor()
-                        cursor.executemany(
-                            "UPDATE images SET embedding = ?, content_fingerprint = COALESCE(?, content_fingerprint) WHERE id = ?",
-                            updates
-                        )
+                        write_image_embeddings(cursor, updates)
 
-            self._progress["message"] = (
-                f"Completed embeddings: {self._progress['embedded']} embedded"
-                + (
-                    f", {self._progress['skipped']} skipped, "
-                    f"{self._progress['unreadable']} unreadable, "
-                    f"{self._progress['failed']} failed."
-                    if self._progress["errors"]
-                    else "."
+                gc.collect()
+
+            if self._cancel_requested:
+                # Cancel happy-path: distinguish "user cancelled mid-run" from
+                # "completed normally" so the UI can show the right toast and
+                # the progress endpoint isn't stuck on the success message.
+                self._progress["message"] = (
+                    f"Cancelled at {self._progress['processed']}/{len(rows)}."
                 )
-            )
-            self._progress["step"] = "done"
+                self._progress["step"] = "cancelled"
+            else:
+                self._progress["message"] = (
+                    f"Completed embeddings: {self._progress['embedded']} embedded"
+                    + (
+                        f", {self._progress['skipped']} skipped, "
+                        f"{self._progress['unreadable']} unreadable, "
+                        f"{self._progress['failed']} failed."
+                        if self._progress["errors"]
+                        else "."
+                    )
+                )
+                self._progress["step"] = "done"
+            self._progress["current_item"] = None
+            self._progress["updated_at"] = time.time()
+
+        except Exception as exc:
+            # Without this branch a crash in the embed loop just propagates
+            # into FastAPI's BackgroundTasks logger, leaving the progress
+            # endpoint pinned at running=False + step="embedding" — visually
+            # indistinguishable from "still in progress". Surface it instead.
+            logger.exception("Similarity embedding failed: %s", exc)
+            self._progress["step"] = "error"
+            self._progress["message"] = f"Embedding failed: {exc}"
             self._progress["current_item"] = None
             self._progress["updated_at"] = time.time()
 
@@ -422,7 +493,6 @@ class SimilarityIndex:
         with self.db.get_db() as conn:
             cursor = conn.cursor()
 
-            # Get query embedding
             cursor.execute("SELECT id, embedding FROM images WHERE id = ?", (image_id,))
             row = cursor.fetchone()
             if not row:
@@ -432,27 +502,21 @@ class SimilarityIndex:
 
             query_emb = bytes_to_embedding(row[1])
 
-            # Get all embeddings
-            cursor.execute(
-                """
-                SELECT id, path, filename, embedding
-                FROM images
-                WHERE embedding IS NOT NULL
-                  AND COALESCE(is_readable, 1) = 1
-                  AND id != ?
-                """,
-                (image_id,),
-            )
-            candidates = cursor.fetchall()
-
-        ranked = self._rank_candidates(query_emb, candidates, threshold)
-        page, total, has_more = self._paginate_ranked_results(ranked, limit, offset)
+        page_limit = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        page, total, has_more = self._search_ranked_candidates(
+            query_emb,
+            threshold,
+            page_limit,
+            page_offset,
+            exclude_id=image_id,
+        )
         return {
             "results": page,
             "total": total,
             "has_more": has_more,
-            "offset": offset,
-            "limit": limit,
+            "offset": page_offset,
+            "limit": page_limit,
         }
 
     def search_by_upload(
@@ -471,28 +535,30 @@ class SimilarityIndex:
 
         query_emb = embed_image_pil(pil_image)
         if query_emb is None:
-            return []
+            page_limit = max(1, int(limit))
+            page_offset = max(0, int(offset))
+            return {
+                "results": [],
+                "total": 0,
+                "has_more": False,
+                "offset": page_offset,
+                "limit": page_limit,
+            }
 
-        with self.db.get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id, path, filename, embedding
-                FROM images
-                WHERE embedding IS NOT NULL
-                  AND COALESCE(is_readable, 1) = 1
-                """
-            )
-            candidates = cursor.fetchall()
-
-        ranked = self._rank_candidates(query_emb, candidates, threshold)
-        page, total, has_more = self._paginate_ranked_results(ranked, limit, offset)
+        page_limit = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        page, total, has_more = self._search_ranked_candidates(
+            query_emb,
+            threshold,
+            page_limit,
+            page_offset,
+        )
         return {
             "results": page,
             "total": total,
             "has_more": has_more,
-            "offset": offset,
-            "limit": limit,
+            "offset": page_offset,
+            "limit": page_limit,
         }
 
     def find_duplicates(
@@ -506,6 +572,25 @@ class SimilarityIndex:
             cursor = conn.cursor()
             cursor.execute(
                 """
+                SELECT COUNT(*)
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                """
+            )
+            embedded_count = int(cursor.fetchone()[0] or 0)
+
+            if embedded_count < 2:
+                raise SimilarityInsufficientEmbeddingsError(embedded_count)
+
+            if embedded_count > DUPLICATE_SYNC_MAX_EMBEDDINGS:
+                raise SimilarityDuplicateSearchTooLargeError(
+                    embedded_count,
+                    DUPLICATE_SYNC_MAX_EMBEDDINGS,
+                )
+
+            cursor.execute(
+                """
                 SELECT id, path, filename, embedding
                 FROM images
                 WHERE embedding IS NOT NULL
@@ -513,9 +598,6 @@ class SimilarityIndex:
                 """
             )
             rows = cursor.fetchall()
-
-        if len(rows) < 2:
-            raise SimilarityInsufficientEmbeddingsError(len(rows))
 
         # Build embedding matrix
         ids = [r[0] for r in rows]
@@ -592,52 +674,121 @@ class SimilarityIndex:
             "threshold": threshold,
         }
 
-    def _rank_candidates(
+    def _normalize_similarity_window(self, limit: int, offset: int) -> Tuple[int, int, int]:
+        page_limit = max(1, int(limit))
+        page_offset = max(0, int(offset))
+        keep_count = page_limit + page_offset + 1
+        if keep_count > SIMILARITY_SEARCH_MAX_WINDOW:
+            raise SimilaritySearchWindowTooLargeError(keep_count, SIMILARITY_SEARCH_MAX_WINDOW)
+        return page_limit, page_offset, keep_count
+
+    def _rank_candidate_rows(
         self,
         query_emb: np.ndarray,
         candidates: list,
         threshold: float,
     ) -> List[Dict[str, Any]]:
-        """Rank candidate images by similarity to query embedding."""
+        """Rank one bounded chunk of candidate images by similarity."""
         if not candidates:
             return []
 
-        # Vectorized similarity computation
-        candidate_embs = np.array([bytes_to_embedding(c[3]) for c in candidates])
         query_norm = np.linalg.norm(query_emb)
         if query_norm == 0:
             return []
 
+        valid_rows = []
+        embeddings = []
+        for candidate in candidates:
+            embedding = bytes_to_embedding(candidate[3])
+            if embedding.shape != query_emb.shape:
+                logger.warning(
+                    "Skipping similarity candidate %s because embedding shape %s does not match query shape %s",
+                    candidate[0],
+                    embedding.shape,
+                    query_emb.shape,
+                )
+                continue
+            valid_rows.append(candidate)
+            embeddings.append(embedding)
+
+        if not embeddings:
+            return []
+
+        candidate_embs = np.vstack(embeddings).astype(np.float32, copy=False)
         candidate_norms = np.linalg.norm(candidate_embs, axis=1)
         candidate_norms[candidate_norms == 0] = 1
-
         similarities = candidate_embs @ query_emb / (candidate_norms * query_norm)
 
-        # Filter and sort
         results = []
         for idx, sim in enumerate(similarities):
             if sim >= threshold:
+                row = valid_rows[idx]
                 results.append({
-                    "id": candidates[idx][0],
-                    "path": candidates[idx][1],
-                    "filename": candidates[idx][2],
+                    "id": row[0],
+                    "path": row[1],
+                    "filename": row[2],
                     "similarity": round(float(sim), 4),
                 })
-
-        results.sort(key=lambda x: x["similarity"], reverse=True)
         return results
 
-    def _paginate_ranked_results(
+    def _iter_embedding_candidate_chunks(self, exclude_id: Optional[int] = None):
+        """Yield readable embedding rows in DB-sized chunks without materializing all rows."""
+        with self.db.get_db() as conn:
+            cursor = conn.cursor()
+            params: Tuple[Any, ...] = ()
+            exclude_clause = ""
+            if exclude_id is not None:
+                exclude_clause = "AND id != ?"
+                params = (exclude_id,)
+
+            cursor.execute(
+                f"""
+                SELECT id, path, filename, embedding
+                FROM images
+                WHERE embedding IS NOT NULL
+                  AND COALESCE(is_readable, 1) = 1
+                  {exclude_clause}
+                ORDER BY id
+                """,
+                params,
+            )
+            while True:
+                rows = cursor.fetchmany(SIMILARITY_SEARCH_CHUNK_SIZE)
+                if not rows:
+                    break
+                yield rows
+
+    def _search_ranked_candidates(
         self,
-        ranked_results: List[Dict[str, Any]],
+        query_emb: np.ndarray,
+        threshold: float,
         limit: int,
         offset: int,
+        *,
+        exclude_id: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], int, bool]:
-        """Slice an already-ranked result list and report pagination metadata."""
-        page_limit = max(1, limit)
-        page_offset = max(0, offset)
-        total = len(ranked_results)
-        page = ranked_results[page_offset:page_offset + page_limit]
+        """Stream candidates through a bounded heap to avoid loading every embedding at once."""
+        page_limit, page_offset, keep_count = self._normalize_similarity_window(limit, offset)
+        total = 0
+        top_heap: List[Tuple[float, int, Dict[str, Any]]] = []
+
+        for chunk in self._iter_embedding_candidate_chunks(exclude_id=exclude_id):
+            for result in self._rank_candidate_rows(query_emb, chunk, threshold):
+                total += 1
+                item = (float(result["similarity"]), -int(result["id"]), result)
+                if len(top_heap) < keep_count:
+                    heapq.heappush(top_heap, item)
+                elif item[:2] > top_heap[0][:2]:
+                    heapq.heapreplace(top_heap, item)
+
+        ranked = [
+            result for _similarity, _negative_id, result in sorted(
+                top_heap,
+                key=lambda item: item[:2],
+                reverse=True,
+            )
+        ]
+        page = ranked[page_offset:page_offset + page_limit]
         has_more = total > (page_offset + len(page))
         return page, total, has_more
 

@@ -102,6 +102,7 @@
             <div class="nav-brand">
                 <span class="brand-icon" aria-hidden="true">🎨</span>
                 <span class="brand-text" data-i18n="brand.name">SD Image Sorter</span>
+                <span class="brand-version" id="brand-version" aria-label="Application version"></span>
             </div>
             <!-- Mobile Menu Toggle Button -->
             <button class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="mobile-nav-overlay">
@@ -111,7 +112,7 @@
             </button>
 
                 <div class="nav-tabs" role="tablist" aria-label="Application views">
-                    <button class="nav-tab active" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
+                    <button class="nav-tab active" id="nav-tab-gallery" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
                         <span class="tab-icon" aria-hidden="true">🖼️</span>
                         <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                     </button>
@@ -257,6 +258,16 @@
             <button class="bg-tag-progress-btn bg-scan-open-btn" id="bg-scan-open" title="Open scan details" data-i18n-title="scan.bgDetailsTitle"><span data-i18n="scan.bgDetails">Details</span></button>
         </div>
 
+        <!-- Background Missing-File Reconnect Progress Bar -->
+        <div id="bg-reconnect-progress" class="bg-tag-progress bg-reconnect-progress" style="display: none;" role="status" aria-live="polite">
+            <div class="bg-tag-progress-inner">
+                <div class="bg-tag-progress-fill bg-reconnect-progress-fill" id="bg-reconnect-progress-fill"></div>
+            </div>
+            <span class="bg-tag-progress-text" id="bg-reconnect-progress-text">Finding moved files...</span>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle">⏹ <span data-i18n="reconnect.bgStop">Stop</span></button>
+            <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open find moved files" data-i18n-title="reconnect.bgDetailsTitle"><span data-i18n="reconnect.bgDetails">Details</span></button>
+        </div>
+
         <!-- Main Content Area -->
         <main id="main-content" class="main-content" role="main" tabindex="-1">
             <!-- Gallery View -->
@@ -324,19 +335,53 @@
                     <div id="selection-actions" class="selection-panel" style="display: none;" aria-live="polite">
                         <div class="selection-panel-header">
                             <div class="selection-panel-copy">
-                                <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch Actions</span>
+                                <span class="selection-panel-title" data-i18n="selection.panelTitle">Batch</span>
                                 <span id="selection-count" class="selection-panel-count">0 items selected</span>
+                                <span id="selection-scope-summary" class="selection-panel-scope"></span>
                             </div>
-                            <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Deselect All</button>
+                            <button id="btn-clear-selection" class="btn btn-ghost btn-small selection-panel-clear" data-i18n="selection.deselectAll">Clear</button>
                         </div>
-                        <div class="selection-panel-actions">
-                            <button id="btn-select-all" class="btn btn-secondary full-width"><span>✓✓</span> <span data-i18n="selection.selectVisible">Select Visible</span></button>
-                            <button id="btn-invert-selection-visible" class="btn btn-secondary full-width"><span>⇄</span> <span data-i18n="selection.invertVisible">Invert Visible</span></button>
-                            <button id="btn-export-selected" class="btn btn-primary full-width"><span>📤</span> <span data-i18n="selection.exportPrompts">Export Prompts</span></button>
-                            <button id="btn-export-tags-selected" class="btn btn-secondary full-width"><span>🏷️</span> <span data-i18n="selection.exportTags">Export Tags</span></button>
-                            <button id="btn-batch-export-tags" class="btn btn-secondary full-width"><span>📝</span> <span data-i18n="selection.exportTagsToFiles">Export Tags to Files</span></button>
-                            <button id="btn-send-to-censor" class="btn btn-primary full-width"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor Edit</span></button>
-                            <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Delete Selected Files</span></button>
+                        <div class="selection-panel-section selection-panel-section-scope">
+                            <span class="selection-panel-section-title" data-i18n="selection.scopeSection">Choose images</span>
+                            <div class="selection-panel-actions selection-panel-pick-actions" aria-label="Selection tools">
+                                <button id="btn-select-all" class="btn btn-primary full-width" title="Select all images matching current filters"><span>✓✓</span> <span data-i18n="selection.selectAllFiltered">Select all matching</span></button>
+                                <button id="btn-invert-selection-filtered" class="btn btn-secondary full-width" title="Invert selection among filtered images"><span>⇄</span> <span data-i18n="selection.invertAllFiltered">Invert matching</span></button>
+                            </div>
+                            <span class="selection-panel-helper" data-i18n="selection.selectAllFilteredHelp">Uses the current Gallery filters, including images not scrolled into view.</span>
+                        </div>
+                        <div class="selection-panel-section">
+                            <span class="selection-panel-section-title" data-i18n="selection.commonSection">Common actions</span>
+                            <div class="selection-panel-actions selection-panel-primary-actions" aria-label="Common batch actions">
+                                <button id="btn-move-selected" class="btn btn-primary full-width" title="Move selected images to another folder"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
+                                <button id="btn-copy-selected" class="btn btn-secondary full-width" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
+                                <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send selected images to censor editor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor</span></button>
+                            </div>
+                        </div>
+                        <div class="selection-panel-section">
+                            <span class="selection-panel-section-title" data-i18n="selection.exportSection">Export</span>
+                            <div class="selection-panel-actions selection-panel-export-actions" aria-label="Export selected images">
+                                <button id="btn-export-selected" class="btn btn-secondary full-width selection-panel-explained-action">
+                                    <span>📤</span>
+                                    <span>
+                                        <strong data-i18n="selection.exportTextData">Combined Export...</strong>
+                                        <small data-i18n="selection.exportTextDataHelp">Prompt / Tags / CSV / JSONL</small>
+                                    </span>
+                                </button>
+                                <button id="btn-batch-export-tags" class="btn btn-secondary full-width selection-panel-explained-action">
+                                    <span>📝</span>
+                                    <span>
+                                        <strong data-i18n="selection.exportTagsToFiles">Same-name .txt...</strong>
+                                        <small data-i18n="selection.exportTagsToFilesHelp">LoRA captions, one file per image</small>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="selection-panel-section selection-panel-danger-section">
+                            <span class="selection-panel-section-title" data-i18n="selection.dangerSection">Remove</span>
+                            <div class="selection-panel-actions selection-panel-danger-actions" aria-label="Remove selected images">
+                                <button id="btn-remove-selected-gallery" class="btn btn-secondary full-width" title="Remove selected images from gallery (files not deleted)"><span>🧹</span> <span data-i18n="selection.removeFromGallery">Remove from Gallery</span></button>
+                                <button id="btn-delete-selected-files" class="btn btn-ghost danger full-width" title="Move selected image files to trash"><span>🗑</span> <span data-i18n="selection.deleteSelectedFiles">Move to Trash...</span></button>
+                            </div>
                         </div>
                     </div>
                 </aside>
@@ -365,11 +410,20 @@
                                 <span aria-hidden="true">🎲</span>
                                 <span data-i18n="gallery.random">Random</span>
                             </button>
+                            <button id="btn-reconnect-missing" class="btn btn-ghost btn-small" title="Find moved image files" aria-label="Find moved image files" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
+                                <span aria-hidden="true">🔎</span>
+                                <span data-i18n="reconnect.openButton">Find Missing</span>
+                            </button>
                             <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
                                 <span aria-hidden="true">✨</span>
                                 <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
                             </button>
+                            <button id="btn-cancel-aesthetic" class="btn btn-ghost btn-small danger" style="display:none" title="Stop aesthetic scoring" aria-label="Stop aesthetic scoring">
+                                <span aria-hidden="true">■</span>
+                                <span data-i18n="gallery.cancelAesthetic">Stop</span>
+                            </button>
                             <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
+                            <span class="header-status-chip is-info metadata-status-chip" id="metadata-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
                                 <button class="gen-tab active" data-gen="all" role="tab" aria-selected="true"><span data-i18n="common.all">All</span> <span class="gen-count" id="count-all">0</span></button>
@@ -405,6 +459,11 @@
                             </button>
                             <button class="view-btn" data-size="waterfall" title="Waterfall view" aria-label="Waterfall view" aria-pressed="false" data-i18n-title="gallery.viewWaterfall" data-i18n-aria="gallery.viewWaterfall">
                                 <span aria-hidden="true">▥</span>
+                            </button>
+                            <div class="divider-v" aria-hidden="true"></div>
+                            <button id="btn-open-model-manager" class="btn btn-ghost btn-small gallery-model-manager-button" type="button" aria-label="Open model manager">
+                                <span aria-hidden="true">🧰</span>
+                                <span data-i18n="models.manager">Setup</span>
                             </button>
                         </div>
 
@@ -505,10 +564,6 @@
                         <div class="spinner" aria-hidden="true"></div>
                         <span data-i18n="gallery.loading">Loading images...</span>
                     </div>
-                    <button id="btn-open-model-manager" class="gallery-model-manager-fab" type="button" aria-label="Open model manager">
-                        <span aria-hidden="true">🧰</span>
-                        <span data-i18n="models.manager">Setup</span>
-                    </button>
                 </div>
             </section>
 
@@ -516,7 +571,7 @@
             <div id="view-reader" class="view" style="display: none;">
                 <div class="reader-tools-header">
                     <div class="reader-tools-copy">
-                        <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Read / Edit Image Info</h2>
+                        <h2 class="reader-tools-title" data-i18n="reader.workspaceTitle">Read / Edit Metadata</h2>
                         <p class="reader-tools-subtitle" data-i18n="reader.workspaceSubtitle">Drop in an image to see prompts, model, and parameters right away, then save a cleaned-up copy if needed.</p>
                     </div>
                     <div class="reader-tools-tabs" role="tablist" aria-label="Reader tools">
@@ -642,12 +697,12 @@
                             <div class="reader-section reader-editor-section" id="reader-metadata-editor" hidden>
                                 <div class="reader-section-header">
                                     <button type="button" class="reader-section-toggle is-collapsed" data-target="reader-editor-body" data-collapse-key="editor">
-                                        <span class="reader-section-title" data-i18n="reader.editMetadata">Edit Image Info</span>
+                                        <span class="reader-section-title" data-i18n="reader.editMetadata">Edit Metadata / Generation Info</span>
                                         <span class="collapse-icon">▶</span>
                                     </button>
                                 </div>
                                 <div id="reader-editor-body" class="reader-editor-body" style="display: none;">
-                                    <p class="reader-editor-note" data-i18n="reader.editMetadataHint">Save a new copy after cleaning up the fields. PNG keeps the most image info.</p>
+                                    <p class="reader-editor-note" data-i18n="reader.editMetadataHint">Save a new copy after editing Prompt, model, and generation fields. PNG keeps the most metadata.</p>
                                     <div class="reader-editor-grid">
                                         <label class="reader-editor-field reader-editor-field-full">
                                             <span data-i18n="reader.prompt">Prompt</span>
@@ -748,7 +803,7 @@
                             <small id="obfuscate-compat-help" data-i18n="tools.compatBigTomatoHelp">Standard mode uses password / PNG Info compatible processing.</small>
                             <label class="obfuscate-checkbox-row" id="obfuscate-metadata-row">
                                 <input type="checkbox" id="obfuscate-preserve-metadata" checked>
-                                <span data-i18n="tools.preserveMetadata">Keep image info</span>
+                                <span data-i18n="tools.preserveMetadata">Keep metadata</span>
                             </label>
                             <label class="obfuscate-checkbox-row" id="obfuscate-legacy-row">
                                 <input type="checkbox" id="obfuscate-use-legacy-pnginfo">
@@ -835,17 +890,17 @@
                                 <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">First open copies Gallery filters once. After that, it uses its own scope.</div>
+                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">Auto-Separate uses the filters shown below. Later Gallery filter changes are not copied automatically.</div>
                             <div class="scope-status-card" id="autosep-scope-status">
                                 <div class="scope-status-header">
-                                    <span class="scope-status-badge" id="autosep-scope-badge">Using saved Auto-Separate scope</span>
-                                    <span class="scope-status-meta" id="autosep-scope-meta">Synced from current Gallery filters at --</span>
+                                    <span class="scope-status-badge" id="autosep-scope-badge">Auto-Separate will use these saved filters</span>
+                                    <span class="scope-status-meta" id="autosep-scope-meta">Copied from Gallery: --</span>
                                 </div>
-                                <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will keep using its saved scope until you resync.</div>
+                                <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will still use the filters shown here.</div>
                                 <div class="scope-status-actions">
-                                    <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Use Current Gallery Filters</button>
-                                    <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Resync from Gallery</button>
-                                    <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Keep Saved Scope</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Copy Current Gallery Filters</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Copy Gallery Filters Again</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Use These Saved Filters</button>
                                 </div>
                             </div>
                             <div class="filter-summary-compact" id="autosep-filter-summary">
@@ -887,9 +942,39 @@
                             <div class="autosep-preview-list" id="autosep-preview-list">
                                 <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
                             </div>
-                            <div class="helper-text" id="autosep-preview-scope-summary">Preview uses the saved Auto-Separate scope, not the live Gallery filters.</div>
+                            <div class="helper-text" id="autosep-preview-scope-summary">Preview uses the Auto-Separate filters shown here, not the live Gallery filters.</div>
                             <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</div>
                             <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
+                        </div>
+
+                        <div class="autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
+                            <div class="autosep-action-settings-header">
+                                <h4 id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</h4>
+                                <span class="autosep-action-settings-badge" data-i18n="autosep.actionSettingsBadge">Visible before you run</span>
+                            </div>
+                            <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
+                                <label class="segmented-option">
+                                    <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode checked>
+                                    <span data-i18n="autosep.operationModeMove">Move originals</span>
+                                </label>
+                                <label class="segmented-option">
+                                    <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode>
+                                    <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
+                                </label>
+                            </div>
+                            <div class="autosep-inline-options">
+                                <label class="checkbox-label autosep-inline-option">
+                                    <input type="checkbox" id="autosep-confirm-move-main" data-autosep-setting="confirmBeforeMove" checked>
+                                    <span class="checkbox-custom" aria-hidden="true"></span>
+                                    <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
+                                </label>
+                                <label class="checkbox-label autosep-inline-option">
+                                    <input type="checkbox" id="autosep-remember-destination-main" data-autosep-setting="rememberDestination" checked>
+                                    <span class="checkbox-custom" aria-hidden="true"></span>
+                                    <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
+                                </label>
+                            </div>
+                            <small class="helper-text" data-i18n="autosep.actionModeHelp">Move changes the library location. Copy keeps originals untouched.</small>
                         </div>
 
                         <button class="btn btn-primary btn-large" id="btn-execute-autosep">
@@ -919,7 +1004,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-remember-destination" checked>
+                            <input type="checkbox" id="autosep-remember-destination" data-autosep-setting="rememberDestination" checked>
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
                         </label>
@@ -928,7 +1013,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-auto-preview">
+                            <input type="checkbox" id="autosep-auto-preview" data-autosep-setting="autoPreview">
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.autoPreview">Auto-preview after filter changes</span>
                         </label>
@@ -937,7 +1022,7 @@
 
                     <div class="form-group">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="autosep-confirm-move" checked>
+                            <input type="checkbox" id="autosep-confirm-move" data-autosep-setting="confirmBeforeMove" checked>
                             <span class="checkbox-custom"></span>
                             <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
                         </label>
@@ -948,11 +1033,11 @@
                         <label data-i18n="autosep.operationModeTitle">File Action Mode</label>
                         <div class="segmented-control" role="radiogroup" aria-label="Auto-Separate action mode">
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode" value="move" checked>
+                                <input type="radio" name="autosep-operation-mode-settings" value="move" data-autosep-operation-mode checked>
                                 <span data-i18n="autosep.operationModeMove">Move originals</span>
                             </label>
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode" value="copy">
+                                <input type="radio" name="autosep-operation-mode-settings" value="copy" data-autosep-operation-mode>
                                 <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
                             </label>
                         </div>
@@ -1034,17 +1119,17 @@
                                 <button class="btn btn-primary btn-small" id="btn-manual-sort-filters"><span>🔍</span>
                                     <span data-i18n="gallery.editFilters">Edit Filters</span></button>
                             </div>
-                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">First open copies Gallery filters once. After that, it uses its own scope.</div>
+                            <div class="helper-text" id="manual-sort-scope-note" data-i18n="manual.scopeNote">Manual Sort uses the filters shown below. Later Gallery filter changes are not copied automatically.</div>
                             <div class="scope-status-card" id="manual-sort-scope-status">
                                 <div class="scope-status-header">
-                                    <span class="scope-status-badge" id="manual-sort-scope-badge">Using saved Manual Sort scope</span>
-                                    <span class="scope-status-meta" id="manual-sort-scope-meta">Synced from current Gallery filters at --</span>
+                                    <span class="scope-status-badge" id="manual-sort-scope-badge">Manual Sort will use these saved filters</span>
+                                    <span class="scope-status-meta" id="manual-sort-scope-meta">Copied from Gallery: --</span>
                                 </div>
-                                <div class="scope-status-detail" id="manual-sort-scope-detail">Gallery filters changed. Manual Sort will keep using its saved scope until you resync.</div>
+                                <div class="scope-status-detail" id="manual-sort-scope-detail">Gallery filters changed. Manual Sort will still use the filters shown here.</div>
                                 <div class="scope-status-actions">
-                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-use-gallery-scope" type="button" data-i18n="scope.useGallery">Use Current Gallery Filters</button>
-                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-resync-scope" type="button" data-i18n="scope.resyncGallery">Resync from Gallery</button>
-                                    <button class="btn btn-ghost btn-small" id="btn-manual-sort-keep-scope" type="button" data-i18n="scope.keepSaved">Keep Saved Scope</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-use-gallery-scope" type="button" data-i18n="scope.useGallery">Copy Current Gallery Filters</button>
+                                    <button class="btn btn-secondary btn-small" id="btn-manual-sort-resync-scope" type="button" data-i18n="scope.resyncGallery">Copy Gallery Filters Again</button>
+                                    <button class="btn btn-ghost btn-small" id="btn-manual-sort-keep-scope" type="button" data-i18n="scope.keepSaved">Use These Saved Filters</button>
                                 </div>
                             </div>
                             <div class="filter-summary-compact" id="manual-sort-filter-summary">
@@ -1067,7 +1152,7 @@
                             </div>
                         </div>
 
-                        <div class="helper-text" id="manual-sort-execution-scope">Session will use the saved Manual Sort scope, not the live Gallery filters.</div>
+                        <div class="helper-text" id="manual-sort-execution-scope">This session uses the Manual Sort filters shown here, not the live Gallery filters.</div>
                         <div class="filter-section">
                             <div class="filter-header-compact">
                                 <h4 data-i18n="manual.actionModeTitle">File Action Mode</h4>
@@ -1090,10 +1175,18 @@
                         </button>
 
                         <!-- Resume banner shown when a saved session is detected -->
-                        <div id="sort-resume-banner" style="display:none; align-items:center; gap:12px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
-                            <span>Unfinished session detected: <strong class="resume-count"></strong></span>
+                        <div id="sort-resume-banner" style="display:none; flex-direction:column; align-items:flex-start; gap:8px; margin-top:12px; padding:12px 16px; background:var(--bg-secondary,#2a2a2a); border:1px solid var(--accent,#7c6af7); border-radius:8px;">
+                            <div>
+                                <span data-i18n="manual.resumeBannerTitle">Unfinished session detected:</span>
+                                <strong class="resume-count"></strong>
+                            </div>
+                            <div class="helper-text resume-operation"></div>
+                            <div class="helper-text resume-folders"></div>
+                            <div class="helper-text resume-note" data-i18n="manual.resumeBannerNote">Setup preferences here may differ from the active saved session.</div>
+                            <div style="display:flex; gap:12px;">
                             <button class="btn btn-primary" id="btn-resume-sorting">Resume</button>
                             <button class="btn btn-secondary" id="btn-discard-session">Discard</button>
+                            </div>
                         </div>
                     </div>
 
@@ -1528,6 +1621,7 @@
                                 <select id="censor-model-type" class="toolbar-select censor-detect-select">
                                     <option value="legacy" data-i18n="censor.legacyYolo">YOLO</option>
                                     <option value="nudenet" data-i18n="censor.nudenet">NudeNet</option>
+                                    <option value="sam3" data-i18n="censor.sam3">SAM3</option>
                                     <option value="both" data-i18n="censor.both">Both</option>
                                 </select>
                                 <div class="censor-detect-actions-inline">
@@ -1535,6 +1629,10 @@
                                     <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll">⚡</button>
                                     <button class="btn btn-ghost btn-small censor-detect-action" id="btn-open-detect-modal" title="Settings" data-i18n-title="censor.autoDetectSettings">⚙️</button>
                                 </div>
+                            </div>
+                            <div class="censor-side-row sam3-prompt-row" id="sam3-prompt-row" style="display:none">
+                                <input type="text" id="sam3-custom-prompt" class="input-field" placeholder="e.g. exposed breast, face, hands" style="flex:1;font-size:12px;padding:6px 8px;">
+                                <button class="btn btn-ghost btn-small" id="btn-sam3-common-words" title="Common prompts" style="white-space:nowrap;">📋</button>
                             </div>
                             <div class="censor-side-row">
                                 <label class="censor-side-inline-label"><span data-i18n="censor.confidenceThreshold">Conf</span>: <span class="censor-side-value" id="censor-confidence-value-sidebar">0.50</span></label>
@@ -1744,7 +1842,7 @@
 
                         <details class="censor-detect-section censor-detect-section-pro" id="censor-pro-segmentation-group" style="margin-top:4px;">
                             <summary style="cursor:pointer; font-weight:600; font-size:13px; padding:8px 0; color:var(--text-secondary);">
-                                ✨ <span data-i18n="censor.proSegmentation">Pro Segmentation (SAM3)</span>
+                                ✨ <span data-i18n="censor.proSegmentation">SAM3 Text Segmentation</span>
                             </summary>
 
                             <div class="form-group" style="margin-top:6px;">
@@ -1753,9 +1851,10 @@
                             </div>
 
                             <div class="form-group">
-                                <label data-i18n="censor.advancedPrecision">Text Prompt Segmentation</label>
+                                <label data-i18n="censor.advancedPrecision">Text segmentation prompt</label>
                                 <input type="text" id="censor-text-prompt" class="input-field"
                                     placeholder="e.g. exposed breasts, face, tattoo, hand" data-i18n-placeholder="censor.textPromptPlaceholder">
+                                <small class="helper-text" id="censor-text-prompt-help" data-i18n="censor.promptHelpSam3Ready">Uses SAM3 text segmentation on the current image.</small>
                             </div>
 
                             <div class="modal-actions censor-detect-actions">
@@ -2148,7 +2247,6 @@
                             <button class="btn btn-ghost btn-small" id="artist-start-dismiss" type="button" data-i18n="guide.closeLabel">Got it</button>
                         </div>
                     </div>
-                    <div class="artist-results-header-note" data-i18n="artist.experimental">Experimental feature — model availability and result quality may vary.</div>
                     <div class="model-health-banner" id="artist-model-health"></div>
                     <!-- Stats Header -->
                     <div class="artist-stats" id="artist-stats">
@@ -2275,6 +2373,15 @@
                 </div>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
+                <section class="disk-usage-section" id="disk-usage-section" aria-labelledby="disk-usage-title">
+                    <header class="disk-usage-header">
+                        <h3 id="disk-usage-title" data-i18n="disk.title">Disk Usage</h3>
+                        <p class="disk-usage-description" data-i18n="disk.description">Check how much space the app is using on disk and clean caches that can be safely regenerated.</p>
+                    </header>
+                    <div class="disk-usage-body" id="disk-usage-body">
+                        <div class="disk-usage-loading" data-i18n="disk.loading">Reading disk usage…</div>
+                    </div>
+                </section>
             </div>
         </div>
 
@@ -2438,10 +2545,10 @@
                     <label class="checkbox-label">
                         <input type="checkbox" id="scan-quick-import" checked>
                         <span class="checkbox-custom" aria-hidden="true"></span>
-                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Show images first, fill details in background (recommended)</span>
+                        <span class="checkbox-text" id="scan-quick-import-label" data-i18n="scan.quickImportLabel">Fast import (recommended)</span>
                     </label>
                 </div>
-                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keep the default settings for large libraries.</div>
+                <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keeps image info; skips full bad-file check.</div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>
@@ -2484,13 +2591,65 @@
             </div>
         </div>
 
+        <div class="modal" id="reconnect-modal" role="dialog" aria-modal="true" aria-labelledby="reconnect-modal-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content modal-small">
+                <h3 id="reconnect-modal-title" data-i18n="reconnect.title">Find Moved Images</h3>
+                <p class="modal-description" data-i18n="reconnect.description">Use this if pictures were moved outside the app. It only updates gallery records; it will not move, delete, or edit files.</p>
+                <div class="form-group">
+                    <label for="reconnect-folder-path" id="reconnect-folder-path-label" data-i18n="reconnect.folderPath">Where should the app look?</label>
+                    <div class="folder-path-row">
+                        <input type="text" id="reconnect-folder-path" class="input-field" placeholder="D:\images\outputs" data-folder-browser-container="reconnect-folder-browser-container" aria-describedby="reconnect-folder-path-label reconnect-folder-feedback">
+                        <button type="button" class="btn-browse" id="btn-browse-reconnect-folder" aria-label="Browse for folder" title="Browse folders" data-i18n="scan.browse">Browse</button>
+                    </div>
+                    <small id="reconnect-folder-feedback" class="validation-feedback" aria-live="polite"></small>
+                    <div id="reconnect-folder-browser-container"></div>
+                </div>
+                <div class="helper-text" data-i18n="reconnect.scopeHelp">Tip: choose the folder or drive where the images may be now. A smaller folder is faster.</div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="reconnect-recursive" checked>
+                        <span class="checkbox-custom" aria-hidden="true"></span>
+                        <span class="checkbox-text" data-i18n="modal.includeSubfolders">Include subfolders</span>
+                    </label>
+                </div>
+                <details class="guided-advanced-panel" id="reconnect-advanced-options">
+                    <summary class="guided-advanced-summary">
+                        <span data-i18n="scan.advancedSummary">Advanced options</span>
+                        <span class="guided-advanced-hint" data-i18n="scan.advancedHint">Open only if needed.</span>
+                    </summary>
+                    <div class="guided-advanced-body">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="reconnect-verify-uncertain" checked>
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" data-i18n="reconnect.verifyUncertainLabel">Confirm uncertain matches by reading image pixels</span>
+                            </label>
+                            <small class="helper-text" data-i18n="reconnect.verifyUncertainHelp">Safer for duplicate names. Used only when filename, size, and date are not enough.</small>
+                        </div>
+                    </div>
+                </details>
+                <div class="progress-container" id="reconnect-progress-container" style="display: none;" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Find moved files progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="reconnect-progress-fill"></div>
+                    </div>
+                    <span class="progress-text" id="reconnect-progress-text" data-i18n="reconnect.starting">Starting search...</span>
+                </div>
+                <div class="reconnect-result-panel" id="reconnect-result-panel" style="display: none;" aria-live="polite"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" id="btn-cancel-reconnect" aria-label="Cancel finding moved files" data-i18n="modal.cancel">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-reconnect" aria-label="Start finding moved files" data-i18n="reconnect.startButton">Start Search</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Tag Modal -->
         <div class="modal" id="tag-modal" role="dialog" aria-modal="true" aria-labelledby="tag-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large tagger-modal-shell">
                 <button class="modal-close" id="btn-close-tag-modal" aria-label="Close">✕</button>
-                <h3 id="tag-modal-title" data-i18n="modal.tagTitle">Tag Images with WD14</h3>
-                <p class="modal-description" data-i18n="modal.tagDescription">Uses WD14 tagger to automatically tag your images with anime/illustration tags.</p>
+                <h3 id="tag-modal-title" data-i18n="modal.tagTitle">WD14 Auto Tagging</h3>
+                <p class="modal-description" data-i18n="modal.tagDescription">Use WD14-compatible models to generate tags for images.</p>
 
                 <div class="form-group">
                     <label for="tag-model-select" id="tag-model-select-label" data-i18n="modal.tagModel">Model</label>
@@ -2674,13 +2833,34 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-export">✕</button>
-                <h3 id="export-title" data-i18n="modal.exportPrompts">📤 Export Prompts</h3>
+                <h3 id="export-title" data-i18n="modal.exportPrompts">📤 Combined Export</h3>
                 <p class="modal-description" id="export-count">0 images selected</p>
+                <div class="form-group export-format-group">
+                    <label for="export-format" data-i18n="export.formatLabel">Output Format</label>
+                    <select id="export-format" class="input-field">
+                        <option value="" disabled data-i18n="export.groupText">Text outputs</option>
+                        <option value="prompt" data-i18n="export.formatPrompt">Prompt text</option>
+                        <option value="prompt_numbered" data-i18n="export.formatPromptNumbered">Prompt text + filenames</option>
+                        <option value="negative" data-i18n="export.formatNegative">Negative prompt</option>
+                        <option value="prompt_negative" data-i18n="export.formatPromptNegative">Prompt + Negative</option>
+                        <option value="" disabled data-i18n="export.groupCaption">Caption / Tags</option>
+                        <option value="tags" data-i18n="export.formatTags">Tags list</option>
+                        <option value="caption_tags" data-i18n="export.formatCaptionTags">Caption + Tags lines</option>
+                        <option value="caption_merged" data-i18n="export.formatCaptionMerged">Merged caption lines</option>
+                        <option value="" disabled data-i18n="export.groupAdvanced">Advanced formats</option>
+                        <option value="a1111" data-i18n="export.formatA1111">A1111 / Forge block</option>
+                        <option value="jsonl" data-i18n="export.formatJsonl">JSONL</option>
+                        <option value="csv" data-i18n="export.formatCsv">CSV table</option>
+                    </select>
+                    <small class="helper-text" data-i18n="export.formatHelper">Choose a format first. The preview below is the exact copy/download content.</small>
+                    <div class="export-format-preview" id="export-format-description" aria-live="polite"></div>
+                </div>
                 <div class="export-container">
                     <textarea id="export-text" class="input-field" rows="15" readonly></textarea>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-secondary" id="btn-export-tags-alt" data-i18n="modal.exportTagsAlt">Export Tags Instead</button>
+                    <button class="btn btn-secondary" id="btn-download-export" data-i18n="export.downloadFile">Download File</button>
                     <button class="btn btn-primary" id="btn-copy-export" data-i18n="modal.copyToClipboard">Copy to Clipboard</button>
                 </div>
             </div>
@@ -2720,28 +2900,63 @@
             <div class="modal-backdrop"></div>
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-batch-export">✕</button>
-                <h3 data-i18n="batchExport.title">📝 Export Tags to Files</h3>
+                <h3 data-i18n="batchExport.title">📝 Same-name .txt Captions</h3>
                 <p class="modal-description" id="batch-export-count">0 images selected</p>
 
                 <div class="form-group">
                     <label data-i18n="batchExport.outputFolder">Output Folder</label>
                     <input type="text" id="batch-export-folder" class="input-field" placeholder="D:\\exported_tags">
-                    <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Each image will create a .txt file with the same name</small>
+                    <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Creates one sidecar .txt per image. Best for LoRA caption files; JSON mode creates same-name .json.</small>
                 </div>
 
                 <div class="form-group">
-                    <label data-i18n="batchExport.tagPrefix">Tag Prefix (optional)</label>
-                    <input type="text" id="batch-export-prefix" class="input-field"
-                        placeholder="e.g., masterpiece, best quality, ">
-                    <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Text to add at the beginning of each tag file</small>
+                    <label for="batch-export-content-mode" data-i18n="batchExport.contentMode">File Content</label>
+                    <select id="batch-export-content-mode" class="input-field">
+                        <option value="" disabled data-i18n="batchExport.groupCommon">Common</option>
+                        <option value="caption_merged" data-i18n="batchExport.modeCaptionMerged">LoRA caption file</option>
+                        <option value="prompt" data-i18n="batchExport.modePrompt">Prompt text</option>
+                        <option value="tags" data-i18n="batchExport.modeTags">Tags</option>
+                        <option value="negative" data-i18n="batchExport.modeNegative">Negative prompt</option>
+                        <option value="prompt_negative" data-i18n="batchExport.modePromptNegative">Prompt + Negative</option>
+                        <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + Tags</option>
+                        <option value="" disabled data-i18n="batchExport.groupAdvanced">Advanced formats</option>
+                        <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge block</option>
+                        <option value="json" data-i18n="batchExport.modeJson">JSON</option>
+                    </select>
+                    <small class="helper-text" data-i18n="batchExport.contentModeHelper">Default creates LoRA caption files. Switch only when you need Prompt text, Tags, or advanced formats.</small>
+                    <div class="export-format-preview" id="batch-export-content-description" aria-live="polite"></div>
                 </div>
 
                 <div class="form-group">
-                    <label data-i18n="batchExport.tagBlacklist">Tag Blacklist (optional)</label>
-                    <textarea id="batch-export-blacklist" class="input-field" rows="3"
-                        placeholder="e.g., 1girl, solo, simple background"></textarea>
-                    <small class="helper-text" data-i18n="batchExport.tagBlacklistHelper">Comma-separated list of tags to exclude from export</small>
+                    <label for="batch-export-overwrite" data-i18n="batchExport.overwritePolicy">Existing .txt / .json files</label>
+                    <select id="batch-export-overwrite" class="input-field">
+                        <option value="unique" data-i18n="batchExport.overwriteUnique">Keep both by creating unique names</option>
+                        <option value="skip" data-i18n="batchExport.overwriteSkip">Skip existing files</option>
+                        <option value="overwrite" data-i18n="batchExport.overwriteReplace">Overwrite existing files</option>
+                    </select>
                 </div>
+
+                <details class="guided-advanced-panel batch-export-advanced-options" id="batch-export-advanced-options">
+                    <summary class="guided-advanced-summary">
+                        <span data-i18n="batchExport.advancedSummary">Advanced options</span>
+                        <span class="guided-advanced-hint" data-i18n="batchExport.advancedHint">Class token and blacklist for LoRA training captions.</span>
+                    </summary>
+                    <div class="guided-advanced-body">
+                        <div class="form-group">
+                            <label data-i18n="batchExport.tagPrefix">Prefix / Class Token (optional)</label>
+                            <input type="text" id="batch-export-prefix" class="input-field"
+                                placeholder="e.g., masterpiece, best quality, or sks person, ">
+                            <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Prepended to LoRA caption outputs. Leave blank for exact Prompt/metadata export.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label data-i18n="batchExport.tagBlacklist">Tag Blacklist (optional)</label>
+                            <textarea id="batch-export-blacklist" class="input-field" rows="3"
+                                placeholder="e.g., 1girl, solo, simple background"></textarea>
+                            <small class="helper-text" data-i18n="batchExport.tagBlacklistHelper">Comma-separated tags to exclude from training-caption outputs.</small>
+                        </div>
+                    </div>
+                </details>
 
                 <div class="progress-container" id="batch-export-progress" style="display: none;">
                     <div class="progress-bar">
@@ -3057,13 +3272,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label data-i18n="save.metadataHandling">Image Info</label>
+                        <label data-i18n="save.metadataHandling">Metadata / Generation Info</label>
                         <select id="save-metadata-option" class="input-field">
-                            <option value="strip" data-i18n="save.metadataStrip">Remove Image Info</option>
-                            <option value="keep" data-i18n="save.metadataKeep">Keep Original Image Info</option>
-                            <option value="minimal" data-i18n="save.metadataMinimal">Keep Only Basic Info</option>
+                            <option value="strip" data-i18n="save.metadataStrip">Remove metadata</option>
+                            <option value="keep" data-i18n="save.metadataKeep">Keep original metadata</option>
+                            <option value="minimal" data-i18n="save.metadataMinimal">Keep basic info only</option>
                         </select>
-                        <small class="helper-text" data-i18n="save.metadataHelper">Choose whether to keep, trim, or remove image info</small>
+                        <small class="helper-text" data-i18n="save.metadataHelper">Choose whether to keep, trim, or remove generation metadata.</small>
                     </div>
 
                     <div class="form-group">
@@ -3074,6 +3289,14 @@
                             <option value="webp" data-i18n="save.formatWebp">WebP (Smaller file, good quality)</option>
                         </select>
                         <small class="helper-text" data-i18n="save.formatHelper">Choose the output image format</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="save-allow-overwrite">
+                            <span data-i18n="save.allowOverwrite">Allow replacing existing files</span>
+                        </label>
+                        <small class="helper-text" data-i18n="save.allowOverwriteHelper">Leave off to block accidental overwrites. Turn on only when you intentionally want to replace matching output files.</small>
                     </div>
                 </div>
 
@@ -3231,6 +3454,8 @@
     <script src="/static/js/guide-translations.js"></script>
     <script src="/static/js/i18n.js"></script>
     <script src="/static/js/guide.js"></script>
+    <script src="/static/js/stores/filter-store.js"></script>
+    <script src="/static/js/stores/selection-store.js"></script>
     <!-- Main application (contains API, AppState, modals, toast, etc.) -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/folder-browser.js"></script>

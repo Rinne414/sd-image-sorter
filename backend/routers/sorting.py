@@ -6,8 +6,10 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, BackgroundTasks, Query, UploadFile, File
 
+from services.service_provider import ServiceProvider
+from services.state_compat import MutableStateProxy
 from services.sorting_service import (
     SortingService,
     ScanRequest,
@@ -22,21 +24,43 @@ from services.sorting_service import (
 router = APIRouter(prefix="/api", tags=["sorting"])
 
 # Service instance - will be set via dependency injection
-_sorting_service: Optional[SortingService] = None
+scan_progress: Any = None
+sort_session: Any = None
+
+
+def _bind_sorting_compat_state(service: SortingService) -> None:
+    """Keep legacy router-level state handles pointed at the service-owned state."""
+    global scan_progress, sort_session
+    scan_progress = service.get_scan_progress_proxy()
+    sort_session = service.get_sort_session_proxy()
+
+
+def _bind_lazy_sorting_compat_state() -> None:
+    """Expose legacy router-level state without creating SortingService at import time."""
+    global scan_progress, sort_session
+    scan_progress = MutableStateProxy(
+        lambda: get_sorting_service().get_scan_progress(),
+        lambda state: get_sorting_service().set_scan_progress(state),
+    )
+    sort_session = MutableStateProxy(
+        lambda: get_sorting_service().get_sort_session(),
+        lambda state: get_sorting_service().set_sort_session(state),
+    )
+
+
+_sorting_service_provider = ServiceProvider(SortingService, on_set=_bind_sorting_compat_state)
 
 
 def get_sorting_service() -> SortingService:
     """Dependency injection for SortingService."""
-    global _sorting_service
-    if _sorting_service is None:
-        _sorting_service = SortingService()
-    return _sorting_service
+    return _sorting_service_provider.get()
 
 
-def set_sorting_service(service: SortingService) -> None:
-    """Set the sorting service instance."""
-    global _sorting_service
-    _sorting_service = service
+def set_sorting_service(service: Optional[SortingService]) -> None:
+    """Set or clear the sorting service instance."""
+    _sorting_service_provider.set(service)
+    if service is None:
+        _bind_lazy_sorting_compat_state()
 
 
 def load_session_from_disk() -> None:
@@ -64,43 +88,7 @@ def set_sort_session(session: Dict[str, Any]) -> None:
     get_sorting_service().set_sort_session(session)
 
 
-# Property for backward compatibility with tests
-class _ScanProgressProxy:
-    """Proxy object that provides attribute-style access to scan progress."""
-
-    def __getitem__(self, key):
-        return get_sorting_service().get_scan_progress()[key]
-
-    def __setitem__(self, key, value):
-        progress = get_sorting_service().get_scan_progress()
-        progress[key] = value
-        get_sorting_service().set_scan_progress(progress)
-
-    def copy(self):
-        return get_sorting_service().get_scan_progress().copy()
-
-
-class _SortSessionProxy:
-    """Proxy object that provides attribute-style access to sort session."""
-
-    def __getitem__(self, key):
-        return get_sorting_service().get_sort_session()[key]
-
-    def __setitem__(self, key, value):
-        session = get_sorting_service().get_sort_session()
-        session[key] = value
-        get_sorting_service().set_sort_session(session)
-
-    def copy(self):
-        return get_sorting_service().get_sort_session().copy()
-
-
-scan_progress = _ScanProgressProxy()
-sort_session = _SortSessionProxy()
-
-
-# Import BatchTagExportRequest for export endpoint
-from services.tagging_service import BatchTagExportRequest
+_bind_lazy_sorting_compat_state()
 
 
 @router.post(
@@ -154,39 +142,8 @@ async def validate_path(
 )
 async def get_system_info_endpoint():
     """Get system hardware info and recommended tagger configuration."""
-    try:
-        from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
-        from hardware_monitor import get_system_info, recommend_tagger_config
-
-        system_info = get_system_info()
-        recommendation = recommend_tagger_config(system_info, model_name=DEFAULT_TAGGER_MODEL, use_gpu=True)
-        recommendations_by_model = {}
-        for model_name in TAGGER_MODELS.keys():
-            recommendations_by_model[model_name] = {
-                "gpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=True),
-                "cpu": recommend_tagger_config(system_info, model_name=model_name, use_gpu=False),
-            }
-        recommendations_by_model["custom"] = {
-            "gpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=True),
-            "cpu": recommend_tagger_config(system_info, model_name="custom", use_gpu=False),
-        }
-        return {
-            "system_info": system_info,
-            "recommendation": recommendation,
-            "recommendations_by_model": recommendations_by_model,
-        }
-    except Exception as e:
-        return {
-            "system_info": {"error": str(e)},
-            "recommendation": {
-                "recommended_batch_size": 2,
-                "recommended_use_gpu": False,
-                "recommended_session_refresh_interval": 0,
-                "risk_level": "medium",
-                "message": f"Hardware detection failed: {e}",
-            },
-            "recommendations_by_model": {},
-        }
+    service = get_sorting_service()
+    return service.get_system_info_payload()
 
 
 @router.post(
@@ -218,6 +175,27 @@ async def browse_folder(
 ):
     """Browse a folder and list its subdirectories."""
     return service.browse_folder(request.path)
+
+
+@router.post("/resolve-drop")
+async def resolve_drop(
+    data: Dict[str, Any],
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Resolve dropped filenames or folder name to a filesystem path."""
+    folder_name = str(data.get("folder_name") or "").strip()
+    filenames = list(data.get("filenames") or [])
+    dropped_files = data.get("files") or []
+    return service.resolve_drop(folder_name, filenames, dropped_files=dropped_files)
+
+
+@router.post("/import-files")
+async def import_files(
+    files: List[UploadFile] = File(...),
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Import uploaded image files directly into the gallery."""
+    return await service.import_uploaded_files(files)
 
 
 @router.post(
@@ -284,7 +262,7 @@ async def move_images(
     request: MoveRequest,
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Move specific images to a folder."""
+    """Move or copy specific images to a folder."""
     return service.move_images(request)
 
 
@@ -314,6 +292,14 @@ async def reset_batch_move_progress(
     return service.reset_batch_move_progress()
 
 
+@router.post("/batch-move/cancel")
+async def cancel_batch_move(
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Request cooperative cancellation of the active batch-move task."""
+    return service.cancel_batch_move()
+
+
 @router.post("/sort/start")
 async def start_sort_session(
     generators: Optional[str] = Query(default=None, max_length=1000),
@@ -322,6 +308,7 @@ async def start_sort_session(
     checkpoints: Optional[str] = Query(default=None, max_length=1000),
     loras: Optional[str] = Query(default=None, max_length=1000),
     prompts: Optional[str] = Query(default=None, max_length=1000),
+    artist: Optional[str] = Query(default=None, max_length=500),
     search: Optional[str] = Query(default=None, max_length=1000),
     min_width: Optional[int] = Query(default=None, ge=1, le=100000),
     max_width: Optional[int] = Query(default=None, ge=1, le=100000),
@@ -332,6 +319,7 @@ async def start_sort_session(
     max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     folders: Optional[str] = Query(default=None, max_length=4096),
     operation_mode: str = Query(default="move", max_length=16),
+    replace_existing: bool = Query(default=False),
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start a manual sort session."""
@@ -342,6 +330,7 @@ async def start_sort_session(
         checkpoints=checkpoints,
         loras=loras,
         prompts=prompts,
+        artist=artist,
         search=search,
         min_width=min_width,
         max_width=max_width,
@@ -352,6 +341,7 @@ async def start_sort_session(
         max_aesthetic=max_aesthetic,
         folders=folders,
         operation_mode=operation_mode,
+        replace_existing=replace_existing,
     )
 
 

@@ -12,6 +12,7 @@ Priority: HIGH
 import os
 import sys
 import json
+import base64
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -20,6 +21,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from utils.pagination_cursor import decode_image_cursor
 
 # Add parent directories to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -28,8 +30,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 class TestGetImages:
     """Tests for GET /api/images endpoint."""
 
-    def test_get_images_returns_list(self, test_client, test_db_with_images):
+    def test_get_images_returns_list(self, test_client, tmp_path):
         """Getting images should return a list."""
+        from PIL import Image
+
+        image_path = tmp_path / "router_list.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            checkpoint="sd_xl_base_1.0.safetensors [abcd1234]",
+            metadata_json="{}",
+        )
+
         response = test_client.get("/api/images")
 
         assert response.status_code == 200
@@ -37,6 +50,7 @@ class TestGetImages:
         assert "images" in data
         assert "total" in data
         assert isinstance(data["images"], list)
+        assert "checkpoint_normalized" in data["images"][0]
 
     def test_get_images_with_limit(self, test_client, test_db_with_images):
         """Limit parameter should limit results."""
@@ -104,6 +118,25 @@ class TestGetImages:
         for img in data["images"]:
             if img.get("prompt"):
                 assert "landscape" in img["prompt"].lower()
+
+    def test_filter_by_checkpoint_normalized_search_query(self, test_client, tmp_path):
+        from PIL import Image
+
+        image_path = tmp_path / "router_checkpoint_search.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        test_client.test_db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            checkpoint="RealisticVisionV51.safetensors [abc12345]",
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/images?search=realisticvisionv51")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["images"]) == 1
+        assert data["images"][0]["checkpoint_normalized"] == "RealisticVisionV51"
 
     def test_filter_by_dimensions(self, test_client, test_db_with_images):
         """Filtering by dimensions should work."""
@@ -230,6 +263,278 @@ class TestGetImages:
         assert image["filename"] == "listing-\ufffd.png"
         assert image["generator"] == "comfy\ufffdui"
 
+    def test_get_images_accepts_opaque_cursor_and_survives_deleted_anchor_row(self, test_client, tmp_path):
+        """Router pagination should accept opaque next_cursor tokens and continue after deleted anchor rows."""
+        import database as db
+
+        image_ids = []
+        for index in range(4):
+            image_path = tmp_path / f"opaque-router-{index}.png"
+            Image.new("RGB", (32, 32), color="white").save(image_path)
+            image_ids.append(
+                db.add_image(
+                    path=str(image_path),
+                    filename=image_path.name,
+                    metadata_json="{}",
+                    created_at=datetime(2024, 1, 1, 0, 0, index),
+                )
+            )
+
+        expected_ids = list(reversed(image_ids))
+        first_response = test_client.get("/api/images?sort_by=newest&limit=2")
+
+        assert first_response.status_code == 200
+        first_payload = first_response.json()
+        assert [item["id"] for item in first_payload["images"]] == expected_ids[:2]
+        assert first_payload["next_cursor"] != str(expected_ids[1])
+
+        cursor = decode_image_cursor(first_payload["next_cursor"])
+        assert cursor.image_id == expected_ids[1]
+        assert cursor.is_opaque is True
+
+        with db.get_db() as conn:
+            conn.execute("DELETE FROM images WHERE id = ?", (cursor.image_id,))
+
+        second_response = test_client.get(
+            f"/api/images?sort_by=newest&limit=2&cursor={first_payload['next_cursor']}"
+        )
+
+        assert second_response.status_code == 200
+        second_payload = second_response.json()
+        assert [item["id"] for item in second_payload["images"]] == expected_ids[2:]
+        assert second_payload["has_more"] is False
+
+
+class TestSelectionIds:
+    """Tests for POST /api/images/selection-ids endpoint."""
+
+    def test_selection_ids_returns_all_filtered_ids_in_sort_order(self, test_client, test_db_with_images):
+        """Filtered selection should return the full matching ID set in current sort order."""
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "sortBy": "name_asc",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": expected_ids,
+            "total": len(expected_ids),
+        }
+
+    def test_selection_ids_uses_exact_filter_contract(self, test_client, test_db_with_images):
+        """Filtered selection should reuse the real DB filter contract, including exact LoRA matching."""
+        comfyui_id = test_db_with_images["image_ids"][0]
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "generators": ["comfyui", "nai"],
+            "loras": ["add_detail"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": [comfyui_id],
+            "total": 1,
+        }
+
+    def test_selection_ids_rejects_invalid_sort(self, test_client, test_db_with_images):
+        """Filtered selection should reject invalid sort values instead of silently guessing."""
+        response = test_client.post("/api/images/selection-ids", json={
+            "sortBy": "not-a-real-sort",
+        })
+
+        assert response.status_code == 400
+        assert "Invalid sort_by value" in response.text
+
+    def test_selection_ids_treats_empty_aspect_ratio_as_no_filter(self, test_client, test_db_with_images):
+        """Frontend empty aspect-ratio values should not make all-filtered selection fail."""
+        response = test_client.post("/api/images/selection-ids", json={
+            "aspectRatio": "",
+            "sortBy": "name_asc",
+        })
+
+        assert response.status_code == 200
+        assert response.json()["total"] == len(test_db_with_images["image_ids"])
+
+    def test_selection_token_treats_empty_aspect_ratio_as_no_filter(self, test_client, test_db_with_images):
+        """Chunked all-filtered selection should also accept frontend empty aspect-ratio values."""
+        response = test_client.post("/api/images/selection-token", json={
+            "aspectRatio": "",
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 200
+        assert response.json()["total_estimate"] == len(test_db_with_images["image_ids"])
+
+    def test_selection_ids_post_filter_scans_sparse_matches_without_truncation(self, test_client, test_db_with_images):
+        """Selection ID resolution should not truncate when SQL prefilter returns many false positives."""
+        exact_ids = []
+        for index in range(5):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_exact_{index}.png",
+                    filename=f"router_selection_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+
+        for index in range(45):
+            test_client.test_db.add_image(
+                path=f"/test/router_selection_false_positive_{index}.png",
+                filename=f"router_selection_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        expected_ids = list(reversed(exact_ids))
+        response = test_client.post("/api/images/selection-ids", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": expected_ids,
+            "total": len(expected_ids),
+        }
+
+    def test_selection_query_token_returns_stateless_chunk_contract(self, test_client, test_db_with_images):
+        """Selection token should let clients page IDs without one giant response."""
+        response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["selection_token"]
+        assert payload["chunk_size"] == 2
+        assert payload["total_estimate"] == len(test_db_with_images["image_ids"])
+        assert payload["exact_total"] is True
+
+        first = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 0, "limit": 2},
+        )
+        second = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 2, "limit": 2},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+        assert first.json()["image_ids"] == expected_ids[:2]
+        assert first.json()["next_offset"] == 2
+        assert first.json()["has_more"] is True
+        assert second.json()["image_ids"] == expected_ids[2:4]
+
+    def test_selection_query_token_marks_prompt_total_as_estimate(self, test_client, test_db_with_images):
+        """Prompt terms can still require post-filtering, so token totals must be honest."""
+        response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["selection_token"]
+        assert payload["exact_total"] is False
+        assert isinstance(payload["total_estimate"], int)
+
+    def test_selection_chunk_post_filter_offset_skips_exact_matches_only(self, test_client, test_db_with_images):
+        """Chunked selection must not treat SQL false positives as offset positions."""
+        exact_ids = []
+        for index in range(5):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_chunk_exact_{index}.png",
+                    filename=f"router_selection_chunk_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+
+        for index in range(45):
+            test_client.test_db.add_image(
+                path=f"/test/router_selection_chunk_false_positive_{index}.png",
+                filename=f"router_selection_chunk_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+        token = token_response.json()["selection_token"]
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token, "offset": 2, "limit": 2},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == list(reversed(exact_ids))[2:4]
+
+    def test_selection_token_rejects_random_sort(self, test_client):
+        """Random ordering cannot be split into stateless offset chunks without duplicates/gaps."""
+        response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "random",
+            "chunkSize": 2,
+        })
+
+        assert response.status_code == 400
+        assert "random sort cannot use the chunked selection token protocol" in response.text
+
+    def test_selection_chunk_rejects_tampered_filter_types(self, test_client):
+        """Decoded token payloads should fail as 400 instead of leaking TypeError as 500."""
+        token_payload = {
+            "v": 1,
+            "filters": {
+                "sortBy": "newest",
+                "minWidth": "not-an-int",
+                "maxWidth": 100,
+            },
+        }
+        raw = json.dumps(token_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        selection_token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+        response = test_client.get("/api/images/selection-chunk", params={
+            "selection_token": selection_token,
+            "offset": 0,
+            "limit": 100,
+        })
+
+        assert response.status_code == 400
+        assert "Invalid selection token" in response.text
+
+    def test_selection_chunk_rejects_invalid_token(self, test_client):
+        """Chunk endpoint should not silently reinterpret malformed selection tokens."""
+        response = test_client.get("/api/images/selection-chunk", params={
+            "selection_token": "not-a-token",
+            "offset": 0,
+            "limit": 100,
+        })
+
+        assert response.status_code == 400
+        assert "Invalid selection token" in response.text
+
 
 class TestGetSingleImage:
     """Tests for GET /api/images/{image_id} endpoint."""
@@ -245,6 +550,7 @@ class TestGetSingleImage:
         assert "image" in data
         assert "tags" in data
         assert data["image"]["id"] == image_id
+        assert "checkpoint_normalized" in data["image"]
 
     def test_get_nonexistent_image(self, test_client):
         """Getting nonexistent image should return 404."""
@@ -368,6 +674,101 @@ class TestExportSelectionData:
     def test_export_selection_data_rejects_empty_ids(self, test_client):
         """Validation should reject empty export selections."""
         response = test_client.post("/api/images/export-data", json={"image_ids": []})
+
+        assert response.status_code == 400
+
+    def test_export_selection_data_accepts_selection_token_page(self, test_client, test_db_with_images):
+        """Large export previews should page by selection token instead of requiring giant ID payloads."""
+        token_response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 0,
+            "limit": 2,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        expected_by_filename = {
+            image["filename"]: image_id
+            for image, image_id in zip(test_db_with_images["images"], test_db_with_images["image_ids"])
+        }
+        expected_ids = [
+            expected_by_filename[filename]
+            for filename in sorted(expected_by_filename.keys())
+        ]
+        assert [item["id"] for item in data["images"]] == expected_ids[:2]
+        assert data["missing_ids"] == []
+        assert data["count"] == 2
+        assert data["total"] == len(test_db_with_images["image_ids"])
+        assert data["offset"] == 0
+        assert data["limit"] == 2
+        assert data["next_offset"] == 2
+        assert data["has_more"] is True
+        assert data["source"] == "selection_token"
+        assert data["exact_total"] is True
+
+    def test_export_selection_data_token_page_skips_prompt_false_positives(self, test_client, test_db):
+        """Token export paging must share selection post-filter offset semantics."""
+        exact_ids = []
+        for index in range(4):
+            exact_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/export_token_exact_{index}.png",
+                    filename=f"export_token_exact_{index}.png",
+                    prompt="hero, studio shot",
+                )
+            )
+        for index in range(20):
+            test_client.test_db.add_image(
+                path=f"/test/export_token_false_positive_{index}.png",
+                filename=f"export_token_false_positive_{index}.png",
+                prompt="superhero, studio shot",
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["hero"],
+            "sortBy": "newest",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 2,
+            "limit": 2,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == list(reversed(exact_ids))[2:4]
+        assert data["source"] == "selection_token"
+        assert data["exact_total"] is False
+
+    def test_export_selection_data_rejects_tampered_selection_token(self, test_client):
+        """Export-data token mode should fail closed like selection chunks."""
+        raw = json.dumps({"v": 1, "filters": {"tags": "not-a-list"}}).encode("utf-8")
+        selection_token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": selection_token,
+            "offset": 0,
+            "limit": 2,
+        })
+
+        assert response.status_code == 400
+
+    def test_export_selection_data_rejects_oversized_token_limit(self, test_client):
+        """Export-data token pages must keep the same cap as selection chunks."""
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": "not-a-token",
+            "offset": 0,
+            "limit": 10001,
+        })
 
         assert response.status_code == 400
 
@@ -552,6 +953,39 @@ class TestAestheticEndpoints:
         assert response.headers.get("X-Thumbnail-Placeholder") == "UNREADABLE"
 
 
+class TestRemoveSelectedImages:
+    """Tests for POST /api/images/remove-selected endpoint."""
+
+    def test_remove_selected_images_removes_database_rows_but_keeps_files(self, test_client, test_db, tmp_path):
+        import database as db
+        from PIL import Image
+
+        image_path = tmp_path / "remove-from-gallery.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [
+            {"tag": "kept_file", "confidence": 0.95},
+        ])
+
+        response = test_client.post(
+            "/api/images/remove-selected",
+            json={"image_ids": [image_id, 999999]},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["removed"] == 1
+        assert payload["missing_ids"] == [999999]
+        assert payload["permanent_delete"] is False
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is None
+        assert db.get_image_tags(image_id) == []
+
+
 class TestDeleteSelectedImages:
     """Tests for POST /api/images/delete-selected endpoint."""
 
@@ -578,9 +1012,18 @@ class TestDeleteSelectedImages:
         assert image_path.exists()
         assert db.get_image_by_id(image_id) is not None
 
-    def test_delete_selected_images_removes_files_and_database_rows(self, test_client, test_db, tmp_path):
+    def test_delete_selected_images_moves_files_to_trash_and_removes_database_rows(self, test_client, test_db, tmp_path, monkeypatch):
         import database as db
         from PIL import Image
+        from services import image_service
+
+        trashed_paths = []
+
+        def fake_move_file_to_trash(path):
+            trashed_paths.append(Path(path))
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
 
         image_path = tmp_path / "delete-success.png"
         Image.new("RGB", (8, 8), color="white").save(image_path)
@@ -599,13 +1042,21 @@ class TestDeleteSelectedImages:
         payload = response.json()
         assert payload["deleted"] == 1
         assert payload["failed"] == []
-        assert payload["permanent_delete"] is True
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
+        assert trashed_paths == [image_path]
         assert not image_path.exists()
         assert db.get_image_by_id(image_id) is None
 
-    def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path):
+    def test_delete_selected_images_reports_partial_failures_without_deleting_db_rows(self, test_client, test_db, tmp_path, monkeypatch):
         import database as db
         from PIL import Image
+        from services import image_service
+
+        def fake_move_file_to_trash(path):
+            Path(path).unlink()
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fake_move_file_to_trash)
 
         existing_path = tmp_path / "delete-partial-existing.png"
         missing_path = tmp_path / "delete-partial-missing.png"
@@ -630,7 +1081,8 @@ class TestDeleteSelectedImages:
         assert response.status_code == 200
         payload = response.json()
         assert payload["deleted"] == 1
-        assert payload["permanent_delete"] is True
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
         assert len(payload["failed"]) == 1
         assert payload["failed"][0]["image_id"] == missing_id
         assert payload["failed"][0]["filename"] == missing_path.name
@@ -638,6 +1090,39 @@ class TestDeleteSelectedImages:
         assert not existing_path.exists()
         assert db.get_image_by_id(existing_id) is None
         assert db.get_image_by_id(missing_id) is not None
+
+    def test_delete_selected_images_does_not_permanently_delete_when_trash_fails(self, test_client, test_db, tmp_path, monkeypatch):
+        import database as db
+        from PIL import Image
+        from services import image_service
+
+        image_path = tmp_path / "delete-trash-fails.png"
+        Image.new("RGB", (8, 8), color="white").save(image_path)
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            metadata_json="{}",
+        )
+
+        def fail_move_file_to_trash(path):
+            raise RuntimeError("trash unavailable")
+
+        monkeypatch.setattr(image_service, "move_file_to_trash", fail_move_file_to_trash)
+
+        response = test_client.post(
+            "/api/images/delete-selected",
+            json={"image_ids": [image_id], "confirm_delete_files": True},
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted"] == 0
+        assert payload["permanent_delete"] is False
+        assert payload["trash_used"] is True
+        assert len(payload["failed"]) == 1
+        assert "trash unavailable" in payload["failed"][0]["error"]
+        assert image_path.exists()
+        assert db.get_image_by_id(image_id) is not None
 
 
 class TestReparseImage:
@@ -662,6 +1147,55 @@ class TestReparseImage:
 
         # File doesn't exist, should fail with 404
         assert response.status_code == 404
+
+
+class TestExportSelectionData:
+    """Tests for selected-image prompt/tag export data."""
+
+    def test_export_data_includes_sd_negative_params_and_caption(self, test_client, tmp_path: Path):
+        """Export previews should expose enough SD data for Pro prompt/caption workflows."""
+        import database as db
+
+        image_path = tmp_path / "pro_export.png"
+        Image.new("RGB", (32, 32), "white").save(image_path)
+        metadata_json = json.dumps({
+            "_parsed": {
+                "generation_params": {
+                    "steps": 28,
+                    "sampler": "DPM++ 2M",
+                    "cfg_scale": 7.5,
+                    "seed": 12345,
+                    "size": "832x1216",
+                    "model": "ponyDiffusionV6XL.safetensors",
+                }
+            }
+        })
+        image_id = db.add_image(
+            path=str(image_path),
+            filename=image_path.name,
+            generator="webui",
+            prompt="masterpiece, 1girl",
+            negative_prompt="lowres, bad anatomy",
+            checkpoint="ponyDiffusionV6XL.safetensors",
+            width=832,
+            height=1216,
+            metadata_json=metadata_json,
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("anime girl standing", image_id))
+        db.add_tags(image_id, [{"tag": "solo", "confidence": 0.9}])
+
+        response = test_client.post("/api/images/export-data", json={"image_ids": [image_id]})
+
+        assert response.status_code == 200
+        data = response.json()
+        image = data["images"][0]
+        assert image["negative_prompt"] == "lowres, bad anatomy"
+        assert image["generation_params"]["steps"] == 28
+        assert image["generation_params"]["sampler"] == "DPM++ 2M"
+        assert image["generation_params"]["model"] == "ponyDiffusionV6XL.safetensors"
+        assert image["ai_caption"] == "anime girl standing"
+        assert image["tags"] == ["solo"]
 
 
 class TestUtilityImageEndpoints:
@@ -865,6 +1399,8 @@ class TestImageMetadataEditor:
         assert image["prompt"] == "cat"
         assert image["negative_prompt"] == "bad anatomy"
         assert image["checkpoint"] == "fooModel.safetensors"
+        assert image["checkpoint_normalized"] == "fooModel"
+        assert str(image["library_order_time"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
         assert str(image["created_at"]) == original_created_at.strftime("%Y-%m-%d %H:%M:%S")
         assert {tag["tag"] for tag in db.get_image_tags(image_id)} == {"kept_tag"}
 

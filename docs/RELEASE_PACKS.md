@@ -6,7 +6,7 @@ This document explains the release assets produced for the public build.
 
 Download:
 
-- `sd-image-sorter-vX.X.X-portable-python-win64.zip`
+- `sd-image-sorter-vX.X.X-windows-portable.zip`
 
 Then:
 
@@ -16,6 +16,8 @@ Then:
 4. Open `http://localhost:8487`.
 
 This package includes an embedded Python runtime — **no system Python install needed**.
+
+On NVIDIA machines, the first ONNX Runtime check may install CUDA / cuDNN runtime wheels after the normal dependency install. The launcher prints the actual pip progress during that step; do not close it just because it is still working under `Checking Windows ONNX Runtime package state...`.
 
 That package is meant to cover the common workflows:
 
@@ -28,35 +30,45 @@ That package is meant to cover the common workflows:
 
 | Package | Python Included | Models Included | Best For |
 |:--------|:---------------:|:---------------:|:---------|
-| `portable-python-win64` | Yes | Core models | **Most Windows users** — zero setup |
-| `portable-core-models` | No | Core models | Users who already have Python 3.9+ |
-| `app-python-win64` | Yes | None (auto-download) | Smaller download, okay with internet on first run |
-| `app` | No | None (auto-download) | Advanced users, Linux/Mac |
+| `sd-image-sorter-vX.X.X-windows-portable.zip` | Yes | None (auto-download) | **Most Windows users** — no system Python install |
+| `sd-image-sorter-vX.X.X-linux.tar.gz` | No | None (auto-download) | Advanced Linux users with Python 3.12+ |
+| `sd-image-sorter-vX.X.X-app-patch.zip` | No | None | In-app updater payload; not the recommended manual first install |
+| `sd-image-sorter-vX.X.X-release-manifest.json` | No | No | SHA256/size manifest used by the updater and release checks |
 
 ## Model Download Sources
 
 Models not bundled in the package will be downloaded automatically on first use.
 
 - **Default**: Downloaded from [HuggingFace](https://huggingface.co)
-- **Mainland China / GFW**: Set `HF_ENDPOINT=https://hf-mirror.com` in your environment or package-root `.env` file to use [hf-mirror](https://hf-mirror.com)
-- **ModelScope**: Available for Artist ID and SAM3 features via the UI model source selector
+- **Can't access HuggingFace?**: Open **Setup Now** and switch **Download Source** to hf-mirror or ModelScope
+- **ModelScope**: Available for Artist ID and SAM3 features
+
+## Package Manifest Model Policy
+
+Every app package writes `update/package-manifest.json` with a `model_artifact_policy` block.
+
+- Default app packages do **not** manage model payload files under `models/`; they only include model README/docs.
+- Runtime model files live under package-local `data/models` via launcher environment variables.
+- Auto-download model paths and optional release model assets are declared in the manifest so update/package checks do not mistake a model-free app package for a complete model bundle.
+- If a future staging mistake drops model binaries into a default app package, the package manifest excludes them unless the builder explicitly opts into model payload management.
 
 ## Manual App Updates
 
 The app only checks for updates when the user clicks the update button.
 
 - Default channel: GitHub Releases
-- Mainland China friendly option: set `SD_IMAGE_SORTER_UPDATE_API_URL`, `SD_IMAGE_SORTER_UPDATE_WEB_URL`, and `SD_IMAGE_SORTER_UPDATE_DOWNLOAD_URL_PREFIX` in the package-root `.env`
+- If GitHub is unreachable, the app will suggest setting up an update proxy
 - Default user guidance: if GitHub is unreachable, enable VPN and retry the manual update check
 - Asset selection rule: prefer `app-patch`, but automatically fall back to the platform full package when no patch asset exists
-- Safety rule: the updater only replaces release-managed app files and never touches `data/` or the updater runtime folders under `update/`
+- Safety rule: the updater only replaces release-managed app files and never touches protected runtime paths
 
 ## Why The Updater Never Touches `data/`
 
 This is intentional and must stay that way.
 
 - `data/` is package-local user state: database, favorites, downloaded models, cache, thumbnails, temp files, and other long-lived runtime data
-- `update/downloads`, `update/logs`, `update/state`, `update/worker`, and `update/backups` are updater runtime workspaces, not release payload content
+- `update/backups`, `update/downloads`, `update/logs`, `update/state`, and `update/worker` are updater runtime workspaces, not release payload content
+- Protected runtime prefixes are: `data`, `update/backups`, `update/downloads`, `update/logs`, `update/state`, `update/worker`
 - The in-app updater is meant to behave like "replace the app code in place", not "reinstall the whole environment from scratch"
 - Release packaging already excludes runtime folders, but the worker also hard-blocks them so a future packaging mistake cannot silently overwrite or delete user state
 - If a new release manifest ever tries to manage protected runtime paths, the worker aborts the update before copying or deleting installed files
@@ -84,7 +96,7 @@ Put all Kaloscope split files in one folder and extract the `.zip.001` file with
 - `sd-image-sorter-vX.X.X-sam3-modelscope-sam3pt.zip.002`
 
 This is included for advanced GPU users only.
-In the current verified setup, SAM3 should be treated as CUDA-only.
+In the current verified setup, SAM3 should be treated as CUDA-only. Windows and Linux launchers prepare the SAM3 Python runtime. macOS is not supported by this release line.
 
 ## Why The Large Models Are Split
 

@@ -1,7 +1,26 @@
 import { test, expect } from '@playwright/test'
 
+async function openMainPage(page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('#btn-tag')).toBeVisible()
+}
+
+async function openTagRuntimeAdvanced(page) {
+  const details = page.locator('#tag-runtime-advanced')
+  await expect(details).toHaveCount(1)
+  await expect.poll(async () => {
+    return details.evaluate((node) => {
+      if (node instanceof HTMLDetailsElement) {
+        node.open = true
+        return node.open
+      }
+      return false
+    })
+  }, { timeout: 5000 }).toBe(true)
+}
+
 test.describe('Tagger Runtime UI', () => {
-  test('custom model defaults to CPU Safe Mode and can be manually switched to GPU', async ({ page }) => {
+  test('custom model follows the recommended GPU preference and still allows a CPU Safe Mode override', async ({ page }) => {
     await page.route('**/api/system-info', async (route) => {
       await route.fulfill({
         status: 200,
@@ -28,8 +47,7 @@ test.describe('Tagger Runtime UI', () => {
       })
     })
 
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await openMainPage(page)
 
     await page.locator('#btn-tag').click()
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
@@ -37,17 +55,22 @@ test.describe('Tagger Runtime UI', () => {
     await page.locator('#tag-model-select').selectOption('custom')
     await expect(page.locator('#custom-model-group')).toBeVisible()
     await expect(page.locator('#custom-tags-group')).toBeVisible()
+    await openTagRuntimeAdvanced(page)
+    await expect(page.locator('#tag-use-gpu')).toBeChecked()
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Custom model on GPU|Custom model/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/Custom ONNX model.*GPU|Custom ONNX model/i)
+
+    await page.locator('#tag-use-gpu').evaluate((node) => {
+      const input = node as HTMLInputElement
+      input.checked = false
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
     await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
     await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode|Custom model/i)
-
-    await page.locator('#tag-runtime-advanced summary').click()
-    await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
-    await expect(page.locator('#tag-use-gpu')).toBeChecked()
   })
 
   test('similarity progress keeps 5/5 completion text for the legacy progress shape', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await openMainPage(page)
 
     await page.evaluate(() => {
       const view = document.getElementById('view-similar')
@@ -70,7 +93,7 @@ test.describe('Tagger Runtime UI', () => {
     })
 
     await expect(page.locator('#similar-embed-text')).toContainText('5/5')
-    await expect(page.locator('#similar-embed-text')).toContainText('4 embedded, 1 error')
+    await expect(page.locator('#similar-embed-text')).toContainText('4 embedded, 1 failed')
   })
 
   test('ToriiGate runtime UI shows actual backend, fallback reason, and memory pressure warning', async ({ page }) => {
@@ -100,14 +123,13 @@ test.describe('Tagger Runtime UI', () => {
       })
     })
 
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await openMainPage(page)
 
     await page.locator('#btn-tag').click()
     await expect(page.locator('#tag-modal.visible')).toBeVisible()
 
     await page.locator('#tag-model-select').selectOption('toriigate-0.5')
-    await page.locator('#tag-runtime-advanced summary').click()
+    await openTagRuntimeAdvanced(page)
     await page.evaluate(() => {
       const gpuCheckbox = document.getElementById('tag-use-gpu') as HTMLInputElement | null
       if (gpuCheckbox) gpuCheckbox.checked = true

@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, UploadFile, Query
 from starlette.concurrency import run_in_threadpool
 
+from services.service_provider import ServiceProvider
 from services.censor_service import (
     CensorService,
     CensorDetectRequest,
@@ -30,21 +31,11 @@ from services.censor_service import (
 router = APIRouter(prefix="/api/censor", tags=["censor"])
 
 # Service instance - will be set via dependency injection
-_censor_service: Optional[CensorService] = None
+_censor_service_provider = ServiceProvider(CensorService)
 
 
-def get_censor_service() -> CensorService:
-    """Dependency injection for CensorService."""
-    global _censor_service
-    if _censor_service is None:
-        _censor_service = CensorService()
-    return _censor_service
-
-
-def set_censor_service(service: CensorService) -> None:
-    """Set the censor service instance."""
-    global _censor_service
-    _censor_service = service
+get_censor_service = _censor_service_provider.get
+set_censor_service = _censor_service_provider.set
 
 
 @router.post(

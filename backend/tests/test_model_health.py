@@ -28,6 +28,59 @@ def test_generic_yolov8_filename_stays_general_object_when_no_privacy_labels_exi
     assert profile["recommended_for_censor"] is False
 
 
+def test_model_health_sam3_probe_does_not_import_torch_in_parent(monkeypatch):
+    import model_health
+
+    def fake_available(module_name: str) -> bool:
+        assert module_name != "torch"
+        return False
+
+    installed = {"torch", "transformers", "safetensors", "cv2", "timm"}
+    monkeypatch.setattr(model_health, "_module_available", fake_available)
+    monkeypatch.setattr(model_health, "_module_installed", lambda module_name: module_name in installed)
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.11.0+cu128",
+            "torch_cuda_build": "12.8",
+            "torch_cuda_available": True,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+
+    health = model_health.get_model_health()
+
+    assert health["censor"]["sam3"]["missing_dependency_packages"] == []
+    assert health["censor"]["sam3"]["torch_probe_source"] == "subprocess"
+
+
+def test_model_health_marks_sam3_unsupported_on_macos(monkeypatch):
+    import model_health
+
+    monkeypatch.setattr(model_health.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        model_health,
+        "_probe_torch_runtime",
+        lambda: {
+            "torch_version": "2.2.2",
+            "torch_cuda_build": None,
+            "torch_cuda_available": False,
+            "torch_probe_error": None,
+            "torch_probe_source": "subprocess",
+        },
+    )
+    monkeypatch.setattr(model_health, "get_sam3_checkpoint_path", lambda: None)
+
+    health = model_health.get_model_health()
+
+    sam3 = health["censor"]["sam3"]
+    assert sam3["available"] is False
+    assert sam3["missing_dependency_packages"] == []
+    assert "disabled on macOS" in sam3["message"]
+
+
 def test_startup_readiness_marks_gpu_tagger_ready_when_recommendation_prefers_gpu():
     readiness = get_startup_readiness(
         health={

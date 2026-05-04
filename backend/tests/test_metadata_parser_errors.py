@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import tempfile
+import zlib
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -18,6 +19,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from metadata_parser import MetadataParser, parse_image
+import metadata_parser as metadata_parser_module
 
 
 class TestFileNotFoundErrors:
@@ -266,6 +268,7 @@ class TestWebUIErrors:
 
         assert result is not None
 
+
     def test_partial_parameters(self, tmp_path: Path):
         """Partial parameters should be extracted."""
         from PIL import Image
@@ -328,6 +331,28 @@ Steps: 20, Sampler: euler"""
         assert result is not None
         # Prompt should include newlines or be joined
         assert result["prompt"] is not None
+
+
+class TestPNGCompressedChunkSafety:
+    """Tests for zTXt/iTXt bounded decompression safety behavior."""
+
+    def test_decode_png_ztxt_chunk_rejects_over_limit_decompression(self, monkeypatch):
+        parser = MetadataParser()
+        monkeypatch.setattr(metadata_parser_module, "_MAX_DECOMPRESSED_BYTES", 64)
+
+        compressed_text = zlib.compress(b"A" * 128)
+        chunk_data = b"Comment\x00" + b"\x00" + compressed_text
+
+        assert parser._decode_png_ztxt_chunk(chunk_data) is None
+
+    def test_decode_png_itxt_chunk_rejects_over_limit_decompression(self, monkeypatch):
+        parser = MetadataParser()
+        monkeypatch.setattr(metadata_parser_module, "_MAX_DECOMPRESSED_BYTES", 64)
+
+        compressed_text = zlib.compress(b"B" * 128)
+        chunk_data = b"Comment\x00" + b"\x01\x00" + b"\x00" + b"\x00" + compressed_text
+
+        assert parser._decode_png_itxt_chunk(chunk_data) is None
 
 
 class TestNAIErrors:

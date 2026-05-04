@@ -8,20 +8,16 @@ import logging
 import os
 import subprocess
 import sys
-import time
-import uuid
 from pathlib import Path
 from typing import Optional, Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, Field
-from starlette.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field, model_validator
 
-import database as db
 from config import get_temp_dir
-from metadata_parser import parse_image, verify_image_readable
 from services.image_service import ImageService
+from services.service_provider import ServiceProvider
 from utils.path_validation import PathValidationError
 
 
@@ -31,7 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["images"])
 
 # Service instance - will be set via dependency injection
-_image_service: Optional[ImageService] = None
+_image_service_provider = ServiceProvider(ImageService)
 READER_UPLOAD_TEMP_DIR = Path(get_temp_dir()) / "reader_uploads"
 READER_UPLOAD_TTL_SECONDS = 24 * 60 * 60
 PARSE_IMAGE_UPLOAD_MAX_BYTES = 64 * 1024 * 1024
@@ -43,8 +39,78 @@ class DeleteSelectedImagesRequest(BaseModel):
     confirm_delete_files: bool = False
 
 
+class RemoveSelectedImagesRequest(BaseModel):
+    # Per-image work is sequential; only the request payload memory matters.
+    # Internal SQLite IN(...) lookups already chunk at 500. 5M covers any
+    # realistic personal library; the previous 50k ceiling was rejecting
+    # real users with larger collections.
+    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
+
+
+class ReconnectMissingFilesRequest(BaseModel):
+    search_folder: str = Field(..., min_length=1, max_length=4096)
+    recursive: bool = True
+    verify_uncertain: bool = True
+
+
 class ExportSelectionRequest(BaseModel):
-    image_ids: List[int] = Field(..., min_length=1, max_length=50000)
+    # Same rationale as RemoveSelectedImagesRequest: sequential per-image
+    # work + chunked SQL means the ceiling only caps payload memory.
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=2000, ge=1, le=10000)
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self):
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
+
+
+class SelectionIdsRequest(BaseModel):
+    generators: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+    ratings: List[str] = Field(default_factory=list)
+    checkpoints: List[str] = Field(default_factory=list)
+    loras: List[str] = Field(default_factory=list)
+    prompts: List[str] = Field(default_factory=list)
+    artist: Optional[str] = None
+    search: str = ""
+    sortBy: str = "newest"
+    minWidth: Optional[int] = Field(default=None, ge=1, le=100000)
+    maxWidth: Optional[int] = Field(default=None, ge=1, le=100000)
+    minHeight: Optional[int] = Field(default=None, ge=1, le=100000)
+    maxHeight: Optional[int] = Field(default=None, ge=1, le=100000)
+    aspectRatio: Optional[str] = None
+    minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+
+
+class SelectionTokenRequest(SelectionIdsRequest):
+    chunkSize: int = Field(default=2000, ge=1, le=10000)
+
+
+class SelectionIdsResponse(BaseModel):
+    image_ids: List[int] = Field(default_factory=list)
+    total: int = 0
+
+
+class SelectionTokenResponse(BaseModel):
+    selection_token: str
+    total_estimate: int = 0
+    exact_total: bool = True
+    chunk_size: int = 2000
+
+
+class SelectionChunkResponse(BaseModel):
+    image_ids: List[int] = Field(default_factory=list)
+    offset: int = 0
+    limit: int = 2000
+    next_offset: Optional[int] = None
+    has_more: bool = False
 
 
 class ExportSelectionImage(BaseModel):
@@ -52,22 +118,40 @@ class ExportSelectionImage(BaseModel):
     filename: str = ""
     generator: Optional[str] = None
     prompt: str = ""
+    negative_prompt: str = ""
     checkpoint: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     aesthetic_score: Optional[float] = None
+    ai_caption: str = ""
+    generation_params: dict[str, Any] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
 
 
 class ExportSelectionResponse(BaseModel):
     images: List[ExportSelectionImage] = Field(default_factory=list)
     missing_ids: List[int] = Field(default_factory=list)
+    count: int = 0
+    total: int = 0
+    offset: int = 0
+    limit: int = 0
+    next_offset: Optional[int] = None
+    has_more: bool = False
+    source: str = "image_ids"
+    exact_total: bool = True
 
 
 class DeleteSelectedImagesResponse(BaseModel):
     deleted: int
     failed: List[dict[str, Any]]
-    permanent_delete: bool = True
+    permanent_delete: bool = False
+    trash_used: bool = True
+
+
+class RemoveSelectedImagesResponse(BaseModel):
+    removed: int
+    missing_ids: List[int] = Field(default_factory=list)
+    permanent_delete: bool = False
 
 
 class SaveEditedMetadataRequest(BaseModel):
@@ -85,41 +169,12 @@ class SaveEditedMetadataResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
-def get_image_service() -> ImageService:
-    """Dependency injection for ImageService."""
-    global _image_service
-    if _image_service is None:
-        _image_service = ImageService()
-    return _image_service
+class OpenFolderRequest(BaseModel):
+    image_id: Optional[int] = None
 
 
-def set_image_service(service: ImageService) -> None:
-    """Set the image service instance (for testing or custom configuration)."""
-    global _image_service
-    _image_service = service
-
-
-def _cleanup_stale_reader_uploads() -> None:
-    """Best-effort cleanup for temporary Reader uploads kept for follow-up save actions."""
-    try:
-        READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-        cutoff = time.time() - READER_UPLOAD_TTL_SECONDS
-        for candidate in READER_UPLOAD_TEMP_DIR.iterdir():
-            try:
-                if candidate.is_file() and candidate.stat().st_mtime < cutoff:
-                    candidate.unlink()
-            except OSError:
-                continue
-    except OSError:
-        logger.debug("Failed to prepare Reader temp directory", exc_info=True)
-
-
-def _allocate_reader_upload_path(filename: str) -> Path:
-    suffix = Path(filename or "").suffix.lower() or ".png"
-    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}:
-        suffix = ".png"
-    READER_UPLOAD_TEMP_DIR.mkdir(parents=True, exist_ok=True)
-    return READER_UPLOAD_TEMP_DIR / f"{uuid.uuid4().hex}{suffix}"
+get_image_service = _image_service_provider.get
+set_image_service = _image_service_provider.set
 
 
 @router.get(
@@ -139,7 +194,8 @@ All filter parameters support comma-separated values. Tag filters use AND logic
 - `GET /api/images?min_width=1920&aspect_ratio=landscape` - High-res landscape images
 
 **Pagination:**
-Use the `cursor` parameter with the `next_cursor` value from previous response to get the next page.
+Use the `cursor` parameter with the `next_cursor` value from the previous response to get the next page.
+Treat `next_cursor` as an opaque token and pass it back unchanged.
     """,
     responses={
         200: {
@@ -156,13 +212,16 @@ Use the `cursor` parameter with the `next_cursor` value from previous response t
                                 "prompt": "1girl, solo, masterpiece",
                                 "negative_prompt": "lowres, bad anatomy",
                                 "checkpoint": "sd_xl_base_1.0.safetensors",
+                                "checkpoint_normalized": "sd_xl_base_1.0",
                                 "width": 1024,
                                 "height": 1536,
                                 "rating": "general",
+                                "library_order_time": "2024-01-15T10:30:00Z",
+                                "source_file_mtime": "2024-02-01T08:45:12Z",
                                 "created_at": "2024-01-15T10:30:00Z"
                             }
                         ],
-                        "next_cursor": "1",
+                        "next_cursor": "eyJpZCI6MSwic29ydF92YWx1ZSI6IjIwMjQtMDEtMTVUMTA6MzA6MDBaIiwidiI6MX0",
                         "has_more": True,
                         "total": 500
                     }
@@ -231,8 +290,8 @@ async def get_images(
     ),
     cursor: Optional[str] = Query(
         default=None,
-        description="Cursor for pagination (image ID from previous page's next_cursor)",
-        examples=["42"],
+        description="Opaque cursor from the previous page's next_cursor value. Pass it back unchanged.",
+        examples=["eyJpZCI6NDIsInNvcnRfdmFsdWUiOiIyMDI0LTAxLTE1VDEwOjMwOjAwWiIsInYiOjF9"],
     ),
     offset: Optional[int] = Query(
         default=None,
@@ -316,6 +375,94 @@ async def get_images(
     )
 
 
+@router.post(
+    "/images/selection-token",
+    response_model=SelectionTokenResponse,
+    summary="Create a filtered selection token",
+    description="""
+Create a stateless token for the current gallery filter payload.
+
+Newer clients use this before fetching `/api/images/selection-chunk` pages so
+large filtered selections do not require one giant ID response. `total_estimate`
+is exact for indexed filters and marked as an estimate when prompt post-filtering
+may still remove SQL false positives.
+    """,
+)
+async def create_selection_token(
+    request: SelectionTokenRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Create a chunkable filtered-selection token."""
+    return service.create_selection_token(
+        generators=request.generators,
+        tags=request.tags,
+        ratings=request.ratings,
+        checkpoints=request.checkpoints,
+        loras=request.loras,
+        prompts=request.prompts,
+        artist=request.artist,
+        search=request.search,
+        sort_by=request.sortBy,
+        min_width=request.minWidth,
+        max_width=request.maxWidth,
+        min_height=request.minHeight,
+        max_height=request.maxHeight,
+        aspect_ratio=request.aspectRatio,
+        min_aesthetic=request.minAesthetic,
+        max_aesthetic=request.maxAesthetic,
+        chunk_size=request.chunkSize,
+    )
+
+
+@router.get(
+    "/images/selection-chunk",
+    response_model=SelectionChunkResponse,
+    summary="Fetch one filtered selection ID chunk",
+    description="Fetch one ordered image-ID chunk from a token created by `/api/images/selection-token`.",
+)
+async def get_selection_chunk(
+    selection_token: str = Query(..., min_length=1),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(2000, ge=1, le=10000),
+    service: ImageService = Depends(get_image_service),
+):
+    """Return one chunk of filtered-result image IDs."""
+    return service.get_selection_chunk(selection_token, offset=offset, limit=limit)
+
+
+@router.post(
+    "/images/reconnect-missing/start",
+    summary="Find moved files for missing gallery records",
+    description="Start a background search that reconnects missing library records to files found under a user-selected folder. It does not move, delete, or modify image files.",
+)
+async def start_reconnect_missing_files(
+    request: ReconnectMissingFilesRequest,
+    background_tasks: BackgroundTasks,
+    service: ImageService = Depends(get_image_service),
+):
+    return service.start_reconnect_missing_files(request, background_tasks)
+
+
+@router.get(
+    "/images/reconnect-missing/progress",
+    summary="Get moved-file search progress",
+)
+async def get_reconnect_missing_files_progress(
+    service: ImageService = Depends(get_image_service),
+):
+    return service.get_reconnect_progress()
+
+
+@router.post(
+    "/images/reconnect-missing/cancel",
+    summary="Stop moved-file search",
+)
+async def cancel_reconnect_missing_files(
+    service: ImageService = Depends(get_image_service),
+):
+    return service.cancel_reconnect_missing_files()
+
+
 @router.get(
     "/images/{image_id}",
     summary="Get a single image",
@@ -334,6 +481,7 @@ async def get_images(
                             "prompt": "1girl, solo, masterpiece",
                             "negative_prompt": "lowres, bad anatomy",
                             "checkpoint": "sd_xl_base_1.0.safetensors",
+                            "checkpoint_normalized": "sd_xl_base_1.0",
                             "width": 1024,
                             "height": 1536,
                             "rating": "general"
@@ -362,36 +510,83 @@ async def get_image(
     response_model=ExportSelectionResponse,
     summary="Get prompt and tag export data for selected images",
     description="""
-Return prompt text and tags for a selected image batch in one request.
+Return prompt text and tags for a selected image batch.
 
-Used by the export modal so the frontend does not spam one request per image.
-Missing image IDs are reported in `missing_ids` instead of failing the whole export.
+Legacy clients may pass explicit `image_ids`. Newer large-selection clients may
+pass `selection_token`, `offset`, and `limit` to page export preview data without
+sending a giant ID payload. Missing explicit IDs are reported in `missing_ids`
+instead of failing the whole export.
     """,
 )
 async def export_selection_data(
     request: ExportSelectionRequest,
     service: ImageService = Depends(get_image_service),
 ):
-    """Get export-ready prompt and tag data for multiple selected images."""
-    return service.get_export_selection_data(request.image_ids)
+    """Get export-ready prompt and tag data for selected images or a token chunk."""
+    if request.selection_token:
+        return service.get_export_selection_data_for_token(
+            request.selection_token,
+            offset=request.offset,
+            limit=request.limit,
+        )
+    return service.get_export_selection_data(request.image_ids or [])
+
+
+@router.post(
+    "/images/selection-ids",
+    response_model=SelectionIdsResponse,
+    summary="Resolve all image IDs for the current filtered result set",
+    description="""
+Return the full ordered ID set for the current gallery filter payload.
+
+This is used for truthful filtered-result selection. Unlike visible or loaded
+selection, this endpoint resolves the full matching result set in backend sort
+order, not just the thumbnails currently mounted in the DOM.
+    """,
+)
+async def get_selection_ids(
+    request: SelectionIdsRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Return the full filtered-result ID set for selection flows."""
+    return service.get_filtered_selection_ids(
+        generators=request.generators,
+        tags=request.tags,
+        ratings=request.ratings,
+        checkpoints=request.checkpoints,
+        loras=request.loras,
+        prompts=request.prompts,
+        artist=request.artist,
+        search=request.search,
+        sort_by=request.sortBy,
+        min_width=request.minWidth,
+        max_width=request.maxWidth,
+        min_height=request.minHeight,
+        max_height=request.maxHeight,
+        aspect_ratio=request.aspectRatio,
+        min_aesthetic=request.minAesthetic,
+        max_aesthetic=request.maxAesthetic,
+    )
 
 
 @router.post(
     "/images/delete-selected",
     response_model=DeleteSelectedImagesResponse,
-    summary="Delete selected image files from disk",
+    summary="Move selected image files to OS trash",
     description="""
-Delete the selected image files from disk and remove their database rows.
+Move the selected image files to the operating system Trash / Recycle Bin and
+remove their database rows.
 
 This is a destructive action and requires explicit confirmation from the client.
-The response reports partial failures per image instead of hiding them.
+The response reports partial failures per image instead of hiding them. The
+backend must not fall back to permanent deletion when trash is unavailable.
     """,
 )
 async def delete_selected_images(
     request: DeleteSelectedImagesRequest,
     service: ImageService = Depends(get_image_service),
 ):
-    """Delete selected image files from disk with partial-failure reporting."""
+    """Move selected image files to OS trash with partial-failure reporting."""
     if not request.confirm_delete_files:
         raise HTTPException(
             status_code=400,
@@ -399,6 +594,23 @@ async def delete_selected_images(
         )
 
     return service.delete_selected_image_files(request.image_ids)
+
+
+@router.post(
+    "/images/remove-selected",
+    response_model=RemoveSelectedImagesResponse,
+    summary="Remove selected images from the gallery index",
+    description="""
+Remove selected database rows from the local gallery without deleting the backing
+image files from disk. Re-scanning the source folder can add them back later.
+    """,
+)
+async def remove_selected_images(
+    request: RemoveSelectedImagesRequest,
+    service: ImageService = Depends(get_image_service),
+):
+    """Remove selected images from the gallery index without touching files."""
+    return service.remove_selected_images_from_gallery(request.image_ids)
 
 
 @router.post(
@@ -575,40 +787,18 @@ Supports Windows (explorer), Linux (xdg-open), and macOS (open -R).
     }
 )
 async def open_folder(
-    body: dict,
+    body: OpenFolderRequest,
     service: ImageService = Depends(get_image_service),
 ):
     """Open the containing folder of an image in the OS file explorer."""
-    image_id = body.get("image_id")
-    if image_id is None:
+    if body.image_id is None:
         raise HTTPException(status_code=400, detail="image_id is required")
 
-    image = db.get_image_by_id(image_id)
-    if not image:
-        raise HTTPException(status_code=404, detail="Image not found")
-
-    try:
-        file_path = service.resolve_image_source_path(image_id, image.get("path", ""))
-        normalized_path = os.path.normpath(file_path)
-
-        if sys.platform == "win32":
-            subprocess.Popen(["explorer", "/select,", normalized_path])
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", normalized_path])
-        else:
-            # Linux: open the parent directory
-            parent_dir = os.path.dirname(normalized_path)
-            subprocess.Popen(["xdg-open", parent_dir])
-
-        return {"success": True, "path": normalized_path}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to open folder for image %s: %s", image_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to open folder: {e}"
-        )
+    return service.open_image_folder(
+        body.image_id,
+        platform=sys.platform,
+        popen=subprocess.Popen,
+    )
 
 
 @router.post(
@@ -650,66 +840,15 @@ parameters, image dimensions, and file size.
         }
     }
 )
-async def parse_uploaded_image(file: UploadFile = File(...)):
+async def parse_uploaded_image(
+    file: UploadFile = File(...),
+    service: ImageService = Depends(get_image_service),
+):
     """Parse metadata from an uploaded image file without saving to database."""
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No file uploaded")
-
-    # Determine suffix from uploaded filename
-    _, ext = os.path.splitext(file.filename)
-    if not ext:
-        ext = ".png"
-
-    tmp_path = None
-    cleanup_tmp = True
-    try:
-        _cleanup_stale_reader_uploads()
-        tmp_path = _allocate_reader_upload_path(file.filename)
-        with open(tmp_path, "wb") as tmp:
-            total_bytes = 0
-            while True:
-                chunk = await file.read(PARSE_IMAGE_UPLOAD_CHUNK_SIZE)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
-                if total_bytes > PARSE_IMAGE_UPLOAD_MAX_BYTES:
-                    raise HTTPException(
-                        status_code=413,
-                        detail="Uploaded image is too large to parse (max 64MB)",
-                    )
-                tmp.write(chunk)
-
-        readable, read_error = await run_in_threadpool(verify_image_readable, str(tmp_path))
-        if not readable:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid or unreadable image file: {read_error or 'image decode failed'}",
-            )
-
-        # Parse metadata using the existing parser
-        result = await run_in_threadpool(parse_image, str(tmp_path))
-        if result.get("parse_error") or result.get("width", 0) <= 0 or result.get("height", 0) <= 0:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Failed to parse image metadata: {result.get('parse_error') or 'image metadata could not be read'}",
-            )
-
-        result["source_temp_path"] = str(tmp_path.resolve())
-        cleanup_tmp = False
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to parse uploaded image %s: %s", file.filename, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to parse image metadata: {e}"
-        )
-    finally:
-        await file.close()
-        # Clean up temp file
-        if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+    return await service.parse_uploaded_image(
+        file,
+        temp_dir=READER_UPLOAD_TEMP_DIR,
+        temp_ttl_seconds=READER_UPLOAD_TTL_SECONDS,
+        max_bytes=PARSE_IMAGE_UPLOAD_MAX_BYTES,
+        chunk_size=PARSE_IMAGE_UPLOAD_CHUNK_SIZE,
+    )

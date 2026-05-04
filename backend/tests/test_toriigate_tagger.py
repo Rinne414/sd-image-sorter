@@ -14,6 +14,11 @@ import toriigate_tagger as toriigate_module  # noqa: E402
 from toriigate_tagger import ToriiGateTagger  # noqa: E402
 
 
+def test_toriigate_revision_is_pinned_to_commit_hash():
+    assert toriigate_module.TORIIGATE_COMMIT_HASH != "main"
+    assert len(toriigate_module.TORIIGATE_COMMIT_HASH) == 40
+
+
 def test_extract_tags_normalizes_reasoning_and_booru_style_output():
     text = """
     <think>hidden reasoning</think>
@@ -129,6 +134,9 @@ def test_apply_cuda_memory_guard_caps_toriigate_gpu_fraction(monkeypatch):
         "torch",
         SimpleNamespace(cuda=fake_cuda),
     )
+    monkeypatch.setattr(toriigate_module, "hf_hub", SimpleNamespace())
+    monkeypatch.setattr(toriigate_module, "AutoProcessor", object())
+    monkeypatch.setattr(toriigate_module, "Qwen3_5ForConditionalGeneration", object())
 
     tagger = ToriiGateTagger(use_gpu=True)
     tagger._apply_cuda_memory_guard()

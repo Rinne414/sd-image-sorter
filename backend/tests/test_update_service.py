@@ -4,6 +4,7 @@ import io
 import json
 import tarfile
 import zipfile
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -44,7 +45,7 @@ def test_get_status_reports_available_patch_update(monkeypatch):
 
 def test_get_status_prefers_patch_over_full_package(monkeypatch):
     service = UpdateService()
-    monkeypatch.setattr(service, "_platform_key", lambda: "linux-mac")
+    monkeypatch.setattr(service, "_platform_key", lambda: "linux")
     monkeypatch.setattr(
         service,
         "_read_release_json",
@@ -54,7 +55,7 @@ def test_get_status_prefers_patch_over_full_package(monkeypatch):
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux-mac.tar.gz",
+                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
                     "size": 999,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
@@ -100,7 +101,7 @@ def test_get_status_flags_missing_patch_asset(monkeypatch):
 
 def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
     service = UpdateService()
-    monkeypatch.setattr(service, "_platform_key", lambda: "linux-mac")
+    monkeypatch.setattr(service, "_platform_key", lambda: "linux")
     monkeypatch.setattr(
         service,
         "_read_release_json",
@@ -110,7 +111,7 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
             "body": "notes",
             "assets": [
                 {
-                    "name": "sd-image-sorter-v9.9.9-linux-mac.tar.gz",
+                    "name": "sd-image-sorter-v9.9.9-linux.tar.gz",
                     "size": 456,
                     "browser_download_url": "https://example.com/full.tar.gz",
                     "content_type": "application/gzip",
@@ -125,7 +126,7 @@ def test_get_status_falls_back_to_full_package_when_patch_missing(monkeypatch):
     assert status["has_update"] is True
     assert status["latest_version"] == "9.9.9"
     assert status["asset"]["kind"] == "full"
-    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-linux-mac.tar.gz"
+    assert status["asset"]["name"] == "sd-image-sorter-v9.9.9-linux.tar.gz"
 
 
 def test_read_release_json_uses_configured_update_api_url(monkeypatch):
@@ -176,6 +177,56 @@ def test_select_update_asset_applies_download_proxy_prefix(monkeypatch):
     assert asset["download_url"] == "https://ghfast.top/https://github.com/example/patch.zip"
 
 
+def test_select_update_asset_attaches_release_manifest_url(monkeypatch):
+    service = UpdateService()
+
+    asset = service._select_update_asset(
+        {
+            "assets": [
+                {
+                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "size": 321,
+                    "browser_download_url": "https://example.com/patch.zip",
+                },
+                {
+                    "name": "sd-image-sorter-v9.9.9-release-manifest.json",
+                    "size": 123,
+                    "browser_download_url": "https://example.com/manifest.json",
+                },
+            ]
+        },
+        "9.9.9",
+    )
+
+    assert asset is not None
+    assert asset["manifest_download_url"] == "https://example.com/manifest.json"
+
+
+def test_resolve_asset_sha256_reads_release_manifest(monkeypatch):
+    service = UpdateService()
+    monkeypatch.setattr(
+        service,
+        "_read_release_manifest",
+        lambda url: {
+            "assets": [
+                {
+                    "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+                    "sha256": "abc123",
+                }
+            ]
+        },
+    )
+
+    sha256_value = service._resolve_asset_sha256(
+        {
+            "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+            "manifest_download_url": "https://example.com/manifest.json",
+        }
+    )
+
+    assert sha256_value == "abc123"
+
+
 def test_get_status_default_github_failure_explains_mirror_option(monkeypatch):
     service = UpdateService()
 
@@ -189,9 +240,8 @@ def test_get_status_default_github_failure_explains_mirror_option(monkeypatch):
 
     assert status["has_update"] is False
     assert "GitHub" in status["error"]
-    assert "Mainland China" in status["error"]
+    assert "network" in status["error"].lower()
     assert "VPN" in status["error"]
-    assert ".env" in status["error"]
 
 
 def test_save_proxy_channel_creates_package_local_override(monkeypatch, tmp_path: Path):
@@ -300,3 +350,43 @@ def test_prepare_update_launches_worker(monkeypatch, tmp_path: Path):
     assert result["status"] == "scheduled"
     assert result["downloaded_archive"] == str(archive_path)
     assert launched["path"] == manifest_path
+
+
+def test_download_asset_rejects_sha256_mismatch(monkeypatch, tmp_path: Path):
+    service = UpdateService()
+    payload = b"not-a-real-archive"
+
+    class FakeResponse:
+        def __enter__(self):
+            self._offset = 0
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, size=-1):
+            if self._offset >= len(payload):
+                return b""
+            if size < 0:
+                size = len(payload) - self._offset
+            chunk = payload[self._offset:self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+    monkeypatch.setattr(service, "_downloads_dir", lambda: tmp_path)
+    monkeypatch.setattr(service, "_validate_archive", lambda path: None)
+    monkeypatch.setattr(service, "_resolve_asset_sha256", lambda asset: hashlib.sha256(b"expected").hexdigest())
+    monkeypatch.setattr("services.update_service.urllib.request.urlopen", lambda request, timeout=0: FakeResponse())
+
+    asset = {
+        "name": "sd-image-sorter-v9.9.9-app-patch.zip",
+        "size_bytes": len(payload),
+        "download_url": "https://example.com/patch.zip",
+    }
+
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        service._download_asset(asset, "9.9.9")
+
+    final_path = tmp_path / "9.9.9" / "sd-image-sorter-v9.9.9-app-patch.zip"
+    assert final_path.exists() is False
+    assert final_path.with_name(final_path.name + ".tmp").exists() is False

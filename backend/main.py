@@ -62,6 +62,7 @@ import database as db
 from exceptions import (
     SDImageSorterError,
     ImageNotFoundError,
+    ImageFileNotFoundError,
     TaggingError,
     ScanError,
     ConfigurationError,
@@ -74,7 +75,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates, disk
 
 # Import services
 from services import (
@@ -85,10 +86,6 @@ from services import (
     SimilarityService,
 )
 
-
-# Lazy import tagger to avoid loading model at startup
-_tagger = None
-_tagger_settings: Dict[str, Any] = {}
 
 # Service instances (singleton pattern)
 _image_service: Optional[ImageService] = None
@@ -109,7 +106,6 @@ def get_tagger(
     use_gpu: bool = True
 ) -> "WD14Tagger":
     """Get or create the tagger instance with given settings."""
-    global _tagger, _tagger_settings
     from tagger import get_tagger as _get_tagger, DEFAULT_MODEL
 
     model_name = model_name or DEFAULT_MODEL
@@ -248,7 +244,8 @@ A local web application for managing, tagging, sorting, and censoring Stable Dif
 3. Browse images: `GET /api/images`
 4. Sort manually: `POST /api/sort/start`
 
-For detailed documentation, see `docs/API.md`.
+For detailed documentation, see `docs/API.md` in the GitHub repository:
+https://github.com/peter119lee/sd-image-sorter/blob/main/docs/API.md
     """,
     version=APP_VERSION,
     lifespan=lifespan,
@@ -390,6 +387,7 @@ app.include_router(models.router)
 app.include_router(obfuscation.router)
 app.include_router(aesthetic.router)
 app.include_router(updates.router)
+app.include_router(disk.router)
 
 
 # ============================================================
@@ -427,6 +425,7 @@ async def sd_image_sorter_exception_handler(request: Request, exc: SDImageSorter
     # Map exception types to HTTP status codes
     status_code_map = {
         ImageNotFoundError: 404,
+        ImageFileNotFoundError: 404,
         ValidationError: 400,
         PathSecurityError: 400,
         ConfigurationError: 500,

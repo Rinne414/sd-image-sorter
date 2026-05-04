@@ -904,6 +904,12 @@ const SimilarImages = {
                     `Need at least ${result.minimum_required || 2} embedded images before duplicate search is meaningful.`,
                     { count: result.minimum_required || 2 },
                 );
+            } else if (result.reason === 'too_many_embeddings') {
+                this.duplicateEmptyMessage = this._t(
+                    'similar.tooManyEmbeddingsForSyncDuplicates',
+                    `Duplicate search is limited to ${result.max_embeddings || 5000} embedded images for this synchronous tool. Narrow the library or use a staged/background duplicate workflow.`,
+                    { count: result.embedded_count || 0, max: result.max_embeddings || 5000 },
+                );
             }
             if (this.duplicateResults.length === 0) {
                 resultsContainer.innerHTML = `<div class="empty-state">${escapeHtml(this.duplicateEmptyMessage)}</div>`;

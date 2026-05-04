@@ -30,11 +30,12 @@ import shutil
 import tempfile
 import urllib.request
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 from PIL import Image
+from ai_runtime_guard import exclusive_ai_runtime
 from config import (
     ARTIST_MODEL_SOURCE_DEFAULT,
     ARTIST_HF_MODEL_ID,
@@ -42,6 +43,7 @@ from config import (
     ARTIST_LSNET_CODE_PATH,
     ARTIST_KALOSCOPE_CHECKPOINT,
     ARTIST_KALOSCOPE_CLASS_MAPPING,
+    get_artist_model_dir,
 )
 
 logger = logging.getLogger("sd-image-sorter.artist")
@@ -54,6 +56,12 @@ _model_lock = threading.Lock()
 ARTIST_THRESHOLD_DEFAULT = 0.03
 _model_source = None
 HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
+ARTIST_LSNET_RUNTIME_REVISION = "416d945e65b81ced93f1e762349d790ca92106b1"
+ARTIST_LSNET_RUNTIME_ZIP_URL = (
+    f"https://github.com/spawner1145/comfyui-lsnet/archive/{ARTIST_LSNET_RUNTIME_REVISION}.zip"
+)
+_MAX_ARTIST_RUNTIME_ZIP_ENTRIES = 1024
+_MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 
 def _is_kaloscope_model_id(model_id: Optional[str]) -> bool:
@@ -73,10 +81,15 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
     if ARTIST_LSNET_CODE_PATH:
         candidates.append(ARTIST_LSNET_CODE_PATH)
 
+    artist_root = Path(get_artist_model_dir())
     project_root = Path(__file__).resolve().parent.parent
     candidates.extend([
+        artist_root / "comfyui-lsnet-runtime",
+        artist_root / "comfyui-lsnet",
+        artist_root / "lsnet-test",
         project_root / "models" / "artist" / "comfyui-lsnet",
         project_root / "models" / "artist" / "lsnet-test",
+        project_root / "models" / "artist" / "comfyui-lsnet-runtime",
         project_root / "third_party" / "comfyui-lsnet",
         project_root / "third_party" / "lsnet-test",
     ])
@@ -89,8 +102,7 @@ def _resolve_lsnet_runtime_path() -> Optional[str]:
 
 
 def _get_artist_model_root() -> Path:
-    project_root = Path(__file__).resolve().parent.parent
-    target = project_root / "models" / "artist"
+    target = Path(get_artist_model_dir())
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -115,25 +127,30 @@ def _candidate_hf_endpoints() -> List[str]:
 
 
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
-    from huggingface_hub import hf_hub_download
-
     last_error: Optional[Exception] = None
     for endpoint in _candidate_hf_endpoints():
         try:
-            kwargs = {
-                "repo_id": repo_id,
-                "filename": filename,
-                "local_dir": local_dir,
-            }
+            base_url = endpoint or "https://huggingface.co"
+            url = f"{base_url.rstrip('/')}/{repo_id}/resolve/main/{filename}"
+            destination = Path(local_dir) / filename
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = destination.with_suffix(destination.suffix + ".tmp")
             if endpoint:
-                kwargs["endpoint"] = endpoint
                 logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
             else:
                 logger.info("Downloading %s from %s via HuggingFace", filename, repo_id)
-            return hf_hub_download(**kwargs)
+            request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.0"})
+            with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            tmp_path.replace(destination)
+            return str(destination.resolve())
         except Exception as exc:
             last_error = exc
             logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     if last_error is None:
         raise RuntimeError(f"Failed to download {filename} from {repo_id}")
@@ -146,18 +163,49 @@ def _download_and_extract_github_zip(zip_url: str, target_dir: Path) -> Path:
         tmp_dir_path = Path(tmp_dir)
         zip_path = tmp_dir_path / "repo.zip"
         urllib.request.urlretrieve(zip_url, zip_path)
+        extract_dir = tmp_dir_path / "extract"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        extract_root = extract_dir.resolve()
+        total_uncompressed_bytes = 0
         with zipfile.ZipFile(zip_path, "r") as archive:
-            extract_dir = tmp_dir_path / "extract"
-            for member in archive.namelist():
-                member_path = extract_dir / member
-                if not str(member_path.resolve()).startswith(str(extract_dir.resolve())):
-                    raise ValueError(f"Zip contains path traversal: {member}")
-            archive.extractall(extract_dir)
+            members = archive.infolist()
+            if len(members) > _MAX_ARTIST_RUNTIME_ZIP_ENTRIES:
+                raise ValueError("Zip contains too many entries to extract safely")
+            for member in members:
+                normalized_name = str(member.filename or "").replace("\\", "/").strip()
+                relative_name = PurePosixPath(normalized_name)
+                if (
+                    not normalized_name
+                    or relative_name.is_absolute()
+                    or normalized_name[:2].endswith(":")
+                    or ".." in relative_name.parts
+                ):
+                    raise ValueError(f"Zip contains path traversal: {member.filename}")
+                member_path = (extract_root / relative_name).resolve()
+                try:
+                    member_path.relative_to(extract_root)
+                except ValueError as exc:
+                    raise ValueError(f"Zip contains path traversal: {member.filename}") from exc
+                if not member.is_dir():
+                    total_uncompressed_bytes += member.file_size
+                    if total_uncompressed_bytes > _MAX_ARTIST_RUNTIME_UNCOMPRESSED_BYTES:
+                        raise ValueError("Zip uncompressed size exceeds the safe extraction limit")
+            for member in members:
+                normalized_name = str(member.filename or "").replace("\\", "/").strip()
+                member_path = (extract_root / PurePosixPath(normalized_name)).resolve()
+                if member.is_dir():
+                    member_path.mkdir(parents=True, exist_ok=True)
+                    continue
+                member_path.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(member, "r") as src, member_path.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
 
-        extracted_root = next((tmp_dir_path / "extract").iterdir())
+        extracted_roots = [path for path in extract_dir.iterdir() if path.is_dir()]
+        if len(extracted_roots) != 1:
+            raise ValueError("Zip must contain exactly one runtime root directory")
         if target_dir.exists():
             shutil.rmtree(target_dir)
-        shutil.move(str(extracted_root), str(target_dir))
+        shutil.move(str(extracted_roots[0]), str(target_dir))
     return target_dir
 
 
@@ -168,8 +216,7 @@ def _ensure_comfyui_lsnet_runtime() -> str:
         return str(target_dir)
 
     logger.info("Downloading comfyui-lsnet runtime into %s", target_dir)
-    zip_url = "https://github.com/spawner1145/comfyui-lsnet/archive/refs/heads/main.zip"
-    _download_and_extract_github_zip(zip_url, target_dir)
+    _download_and_extract_github_zip(ARTIST_LSNET_RUNTIME_ZIP_URL, target_dir)
     return str(target_dir)
 
 
@@ -243,11 +290,8 @@ def prepare_artist_assets(preferred_source: str = "auto") -> Dict[str, str]:
     source_order: List[str]
     preferred = str(preferred_source or "auto").strip().lower()
     if preferred == "modelscope":
-        source_order = ["modelscope", "huggingface"]
-    elif preferred == "huggingface":
-        source_order = ["huggingface", "modelscope"]
-    else:
-        source_order = ["huggingface", "modelscope"]
+        logger.warning("ModelScope artist preparation is disabled; using direct HuggingFace HTTP instead.")
+    source_order = ["huggingface"]
 
     for source in source_order:
         try:
@@ -901,6 +945,14 @@ class ArtistIdentifier:
                     "On Windows, install `triton-windows`.\n"
                     "On Linux, install a compatible Triton package for your PyTorch/CUDA stack."
                 ) from exc
+            # Any other missing module (timm, lsnet runtime peer deps, etc.) must also
+            # surface as a clear RuntimeError so callers see a real failure instead of
+            # an UnboundLocalError on `runtime_kind` further down.
+            raise RuntimeError(
+                f"Kaloscope2.0 runtime is missing module {exc.name!r}. "
+                "Verify the LSNet runtime checkout and that timm and its peer "
+                "dependencies are installed."
+            ) from exc
         except ImportError as exc:
             raise RuntimeError(
                 "Kaloscope2.0 requires `timm` plus a compatible LSNet runtime repository.\n"
@@ -914,7 +966,8 @@ class ArtistIdentifier:
         import torch
 
         create_model, resolve_data_config, create_transform = self._load_kaloscope_runtime_modules()
-        checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            checkpoint = self._load_kaloscope_checkpoint_blob(checkpoint_path)
         args = checkpoint.get("args")
         model_name = getattr(args, "model", None) or "lsnet_xl_artist_448"
         feature_dim = getattr(args, "feature_dim", None)
@@ -926,13 +979,14 @@ class ArtistIdentifier:
             raise RuntimeError("Kaloscope checkpoint is missing model weights.")
         state_dict = _normalize_state_dict_keys(state_dict)
 
-        model = create_model(
-            model_name,
-            pretrained=False,
-            num_classes=len(artists),
-            feature_dim=feature_dim,
-        )
-        load_result = model.load_state_dict(state_dict, strict=False)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            model = create_model(
+                model_name,
+                pretrained=False,
+                num_classes=len(artists),
+                feature_dim=feature_dim,
+            )
+            load_result = model.load_state_dict(state_dict, strict=False)
         unexpected = [key for key in load_result.unexpected_keys if not key.startswith("head_dist")]
         if unexpected:
             logger.warning("Kaloscope unexpected keys ignored: %s", unexpected[:10])
@@ -940,7 +994,8 @@ class ArtistIdentifier:
             logger.warning("Kaloscope missing keys during load: %s", load_result.missing_keys[:10])
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        model.to(device)
+        with exclusive_ai_runtime("artist-kaloscope-load"):
+            model.to(device)
         model.eval()
 
         data_config = resolve_data_config(
@@ -981,7 +1036,8 @@ class ArtistIdentifier:
         try:
             if path.endswith('.onnx'):
                 import onnxruntime as ort  # type: ignore
-                self._session = ort.InferenceSession(path)
+                with exclusive_ai_runtime("artist-onnx-load"):
+                    self._session = ort.InferenceSession(path)
                 self._model = "onnx"
                 self._backend = "onnx"
             else:
@@ -989,16 +1045,26 @@ class ArtistIdentifier:
                 if os.path.exists(class_mapping_path):
                     self._initialize_kaloscope(path, class_mapping_path)
                 else:
-                    # Try generic PyTorch model as legacy fallback
+                    # Try generic PyTorch model as legacy fallback. Pass
+                    # ``weights_only=False`` because PyTorch 2.6 flipped the
+                    # default to ``True`` and most user-supplied artist .pth
+                    # files contain pickled config classes outside the safe
+                    # globals allowlist; without this override they would
+                    # silently fall through to the ONNX path (which fails on
+                    # .pth) and end up in placeholder mode. The file is
+                    # user-placed inside the artist model directory, so we
+                    # treat it as a trusted source.
                     try:
                         import torch
-                        self._model = torch.load(path, map_location='cpu')
+                        with exclusive_ai_runtime("artist-torch-load"):
+                            self._model = torch.load(path, map_location='cpu', weights_only=False)
                         self._model.eval()
                         self._backend = "torch-generic"
                     except Exception:
                         # Fall back to ONNX runtime
                         import onnxruntime as ort  # type: ignore
-                        self._session = ort.InferenceSession(path)
+                        with exclusive_ai_runtime("artist-onnx-load"):
+                            self._session = ort.InferenceSession(path)
                         self._model = "onnx"
                         self._backend = "onnx"
             self._load_error = None
@@ -1022,8 +1088,9 @@ class ArtistIdentifier:
             else:
                 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-                self._processor = AutoImageProcessor.from_pretrained(model_name)
-                self._model = AutoModelForImageClassification.from_pretrained(model_name)
+                with exclusive_ai_runtime("artist-transformers-load"):
+                    self._processor = AutoImageProcessor.from_pretrained(model_name)
+                    self._model = AutoModelForImageClassification.from_pretrained(model_name)
                 self._model.eval()
                 self._backend = "transformers"
 
@@ -1091,7 +1158,8 @@ class ArtistIdentifier:
 
         try:
             # Load and preprocess image
-            image = Image.open(image_path).convert("RGB")
+            with Image.open(image_path) as source_image:
+                image = source_image.convert("RGB")
 
             if self._session is not None:
                 # ONNX inference
@@ -1142,7 +1210,8 @@ class ArtistIdentifier:
         input_name = self._session.get_inputs()[0].name
 
         # Run inference
-        outputs = self._session.run(None, {input_name: img_array})
+        with exclusive_ai_runtime("artist-onnx-inference"):
+            outputs = self._session.run(None, {input_name: img_array})
 
         # Apply softmax
         logits = outputs[0][0]
@@ -1159,7 +1228,7 @@ class ArtistIdentifier:
         tensor = self._transform(image).unsqueeze(0)
         assert self._model is not None
         device = next(self._model.parameters()).device
-        with torch.no_grad():
+        with torch.no_grad(), exclusive_ai_runtime("artist-kaloscope-inference"):
             logits = self._model(tensor.to(device))
             if isinstance(logits, tuple):
                 logits = logits[0]
@@ -1178,7 +1247,7 @@ class ArtistIdentifier:
         inputs = self._processor(images=image, return_tensors="pt")
 
         assert self._model is not None
-        with torch.no_grad():
+        with torch.no_grad(), exclusive_ai_runtime("artist-transformers-inference"):
             outputs = self._model(**inputs)
             logits = outputs.logits[0]
 
