@@ -12,32 +12,49 @@ v3.1.0 was driven by real user feedback and a focused tech-debt pass. Almost eve
 
 v3.1.0 完全由真实用户反馈和一轮聚焦的技术债务清理推动。下面几乎每一项修复，要么是来自用户在真机上跑 portable 包时报告的具体问题，要么是在偿还过去积累下来的复杂度——那些让 app 越来越难用、越来越难安全发版的东西。**衷心感谢每一位分享日志、截图、复现步骤的用户——这一版完全是因为你们才存在的。**
 
-### Added
+### Added / 新增
 - Reader is no longer just for viewing. Users can now edit prompt, negative prompt, seed, sampler, steps, CFG, size, model, and LoRA fields, then save the result as a new image directly from the app.
+  - Reader 不再只是看图。现在可以直接在 app 里编辑 prompt、负面 prompt、seed、采样器、步数、CFG、尺寸、模型、LoRA 等字段，改完直接另存成新图。
 - Reader save now lets users choose the output format (`png` / `webp` / `jpg`) and save location more directly, including images that were uploaded through the browser.
+  - Reader 保存时可以选输出格式（`png` / `webp` / `jpg`）和保存位置，浏览器上传进来的图也能存。
 - Folder scan now becomes usable earlier: the library can appear first, while the remaining images and metadata continue loading in the background.
+  - 资料夹扫描更早可用：图库会先显示出来，剩下的图片和 metadata 继续在后台加载，不用傻等。
 - SAM3 Pro Segmentation is available as an experimental option in the censor editor, alongside the existing Wenaka / NudeNet privacy detectors.
+  - 打码编辑器里多了 SAM3 Pro 文字 prompt 分割（实验性），跟原本的 Wenaka / NudeNet 隐私检测器并存。
 
-### Fixed
+### Fixed / 修复
 - Reader overwrite is now safer and less annoying. If the user saves to the same path, the app asks first instead of failing once before asking.
+  - Reader 覆盖保存更顺：保存到同一路径时会先问你要不要覆盖，而不是先报错一次再问。
 - Reader confirmation text no longer gets overwritten while the dialog is open.
+  - Reader 确认对话框开着的时候，文字不会再被动态覆写。
 - Desktop navigation no longer hides the Reader tab too aggressively on normal desktop screens.
+  - 桌面端导航不会再在正常桌面尺寸下把 Reader 页签藏起来。
 - WSL / Linux runs now handle old Windows drive paths (`L:\...`) properly, so affected libraries no longer lose thumbnails just because the backend is running in WSL.
+  - 在 WSL / Linux 跑后端时，旧的 Windows 路径（`L:\...`）也能正常处理，受影响的图库缩略图不会再因此消失。
 - Scan progress is clearer during large imports. Users now see that the app is still importing in the background instead of feeling like the scan froze.
+  - 大型扫描进度更清楚：后台还在继续导入时，画面会明确告诉你「还在跑」，不会再像卡死。
 - JPG / WebP warnings now explain the metadata limitations honestly instead of implying they behave like PNG.
+  - JPG / WebP 的提示会诚实告诉你 metadata 限制，不会再让人以为它们和 PNG 一样能塞所有信息。
 - SAM3 Pro censor no longer paints a giant box over the whole image when a prompt isn't actually present (e.g. asking for "exposed genitalia" on a clothed image). A presence-probability gate plus a max-mask-area cap rejects the whole-body false-positive collapse the model used to fall back to. Previously selectable concepts that genuinely *are* present (breasts, nipples, buttocks) keep working and recover small detections that the old score-only threshold accidentally filtered out.
+  - SAM3 Pro 打码不会再在 prompt 实际不存在的情况下把整张图框起来（比如在穿衣图上要 "exposed genitalia"）。新的 presence-probability 门控加上 mask 最大面积上限，挡掉了原本会塌缩成全身框的误判。真的存在的概念（breasts、nipples、buttocks）继续可用，而且原本被旧的纯分数阈值误过滤掉的小区域也救回来了。
 - Windows first launch no longer misreads a freshly installed CUDA PyTorch wheel through the old already-imported CPU `torch` module, which previously could trigger repeated multi-GB CUDA wheel downloads before falling back with a misleading warning.
+  - Windows 第一次启动不会再透过旧的、已经 import 进 process 的 CPU `torch` 模块去看刚装好的 CUDA PyTorch wheel，避免之前会重复下载好几 GB 的 CUDA wheel，最后还报一个误导性 warning 的状况。
 
-### Documentation
+### Documentation / 文档
 - README now states realistic first-launch disk-space and network-traffic budgets, including CUDA runtimes, pip cache, and on-demand AI model sizes.
+  - README 现在写出真实的首次启动磁盘空间和网络流量预算，包含 CUDA runtime、pip cache、按需下载的 AI 模型大小。
 
-### Known Limitations
+### Known Limitations / 已知限制
 - **SAM3 Pro Segmentation is experimental.** The text-prompted detection path is significantly weaker than its ComfyUI counterpart (which uses box-prompted refinement). Recall on anime/SD images is low and bounding boxes are often coarse. **Recommended workflow: keep NudeNet (default) or Wenaka YOLOv8 for primary censoring.** SAM3 is best treated as an opt-in experiment until a future release lands a hybrid NudeNet→SAM3 refine pipeline.
+  - **SAM3 Pro 文字 prompt 分割是实验性的。** 它的文字 prompt 路线明显比 ComfyUI 上的 box-prompt refine 用法弱：在动漫/SD 图上的召回率低、bounding box 也常常粗糙。**建议工作流：主打码请继续用 NudeNet（默认）或 Wenaka YOLOv8，把 SAM3 当成需要时再开的实验功能。** 我们下个版本会做 NudeNet→SAM3 的混合 refine 流程，到时候 SAM3 才会真正发挥价值。
 
-### Validation
+### Validation / 验证
 - Reader save / overwrite flow passed real browser validation end-to-end.
+  - Reader 保存 / 覆盖流程在真实浏览器里走完整 E2E 通过。
 - Scan and metadata regression tests passed after the v3.1.0 scan-experience updates.
+  - 扫描与 metadata 的 regression test 在 v3.1.0 扫描体验更新后通过。
 - SAM3 presence-gate regression verified on real anime/SD test images (no whole-body false positives on absent prompts; small-region recall preserved).
+  - SAM3 presence-gate 修复在真实动漫/SD 测试图上验证通过：prompt 不存在时不会出全身框、原本会被误过滤的小区域也保留下来了。
 
 ## [3.0.6] - 2026-04-20
 
