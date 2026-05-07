@@ -139,7 +139,7 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
                 logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
             else:
                 logger.info("Downloading %s from %s via HuggingFace", filename, repo_id)
-            request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.0"})
+            request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.1"})
             with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
             tmp_path.replace(destination)

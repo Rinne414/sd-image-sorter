@@ -64,6 +64,67 @@ class _FakeOrtModule:
         return ["CUDAExecutionProvider", "CPUExecutionProvider"]
 
 
+def _make_score_tagger(monkeypatch, *, threshold: float = 0.5, character_threshold: float = 0.8):
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+    return tagger_module.WD14Tagger(
+        model_name="wd-swinv2-tagger-v3",
+        threshold=threshold,
+        character_threshold=character_threshold,
+        use_gpu=False,
+    )
+
+
+def test_process_probs_applies_general_and_character_thresholds_strictly(monkeypatch):
+    tagger = _make_score_tagger(monkeypatch, threshold=0.5, character_threshold=0.8)
+    tagger.general_tags = [(0, "general_above"), (1, "general_below"), (2, "general_equal")]
+    tagger.character_tags = [(3, "char_above"), (4, "char_below"), (5, "char_equal")]
+    tagger.rating_tags = [(6, "general"), (7, "sensitive"), (8, "explicit")]
+
+    result = tagger._process_probs(
+        np.array([0.51, 0.49, 0.50, 0.81, 0.79, 0.80, 0.10, 0.30, 0.20], dtype=np.float32)
+    )
+
+    assert [item["tag"] for item in result["general_tags"]] == ["general_above", "general_equal"]
+    assert [item["tag"] for item in result["character_tags"]] == ["char_above", "char_equal"]
+    assert result["rating"] == "sensitive"
+    assert result["rating_confidences"] == pytest.approx({"general": 0.10, "sensitive": 0.30, "explicit": 0.20})
+    assert "general_below" not in {item["tag"] for item in result["all_tags"]}
+    assert "char_below" not in {item["tag"] for item in result["all_tags"]}
+
+
+def test_process_probs_ignores_invalid_probability_scores(monkeypatch):
+    tagger = _make_score_tagger(monkeypatch, threshold=0.5, character_threshold=0.8)
+    tagger.general_tags = [(0, "valid_general"), (1, "invalid_logit"), (2, "nan_general")]
+    tagger.character_tags = [(3, "invalid_negative_character")]
+    tagger.rating_tags = [(4, "general"), (5, "explicit")]
+
+    result = tagger._process_probs(
+        np.array([0.70, 6.0, np.nan, -0.10, 2.0, 0.60], dtype=np.float32)
+    )
+
+    assert [item["tag"] for item in result["general_tags"]] == ["valid_general"]
+    assert result["character_tags"] == []
+    assert result["rating"] == "explicit"
+    assert result["rating_confidences"]["general"] == 0.0
+    assert result["rating_confidences"]["explicit"] == pytest.approx(0.60)
+    assert all(0.0 <= item["confidence"] <= 1.0 for item in result["all_tags"])
+
+
+def test_sigmoid_output_activation_ignores_nonfinite_logits(monkeypatch):
+    tagger = _make_score_tagger(monkeypatch, threshold=0.9, character_threshold=0.8)
+    tagger._output_activation = "sigmoid"
+    tagger.general_tags = [(0, "invalid_positive_inf"), (1, "valid_logit")]
+    tagger.character_tags = []
+    tagger.rating_tags = []
+
+    result = tagger._process_probs(np.array([np.inf, 4.0], dtype=np.float32))
+
+    assert [item["tag"] for item in result["general_tags"]] == ["valid_logit"]
+    assert result["general_tags"][0]["confidence"] == pytest.approx(0.98201376)
+    assert "invalid_positive_inf" not in {item["tag"] for item in result["all_tags"]}
+
+
 class _CpuOnlySessionDespiteCudaRequest:
     calls: List[List[str]] = []
 
@@ -363,6 +424,7 @@ class _CamieBatchSession:
         output = np.zeros((batch.shape[0], 30), dtype=np.float32)
         output[:, 20] = 6.0
         output[:, 24] = 4.0
+        output[:, 25] = -1.0
         return [output]
 
 
@@ -379,7 +441,7 @@ def test_camie_metadata_and_preprocess_are_supported(monkeypatch, tmp_path):
 
     metadata_path = tmp_path / "camie-metadata.json"
     metadata_path.write_text(
-        '{"dataset_info":{"total_tags":30,"tag_mapping":{"idx_to_tag":{"20":"rating_general","24":"1girl"},"tag_to_category":{"rating_general":"rating","1girl":"general"}}}}',
+        '{"dataset_info":{"total_tags":30,"tag_mapping":{"idx_to_tag":{"20":"rating_general","24":"1girl","25":"weak_noise"},"tag_to_category":{"rating_general":"rating","1girl":"general","weak_noise":"general"}}}}',
         encoding='utf-8'
     )
 
@@ -395,6 +457,9 @@ def test_camie_metadata_and_preprocess_are_supported(monkeypatch, tmp_path):
 
     assert result["rating"] == "general"
     assert result["general_tags"][0]["tag"] == "1girl"
+    assert result["general_tags"][0]["confidence"] == pytest.approx(0.98201376)
+    assert all(item["tag"] != "weak_noise" for item in result["general_tags"])
+    assert all(0.0 <= item["confidence"] <= 1.0 for item in result["all_tags"])
     assert getattr(tagger.session, "last_input_shape", None) == (1, 3, 512, 512)
 
 
@@ -461,6 +526,37 @@ def test_pixai_onnx_preprocess_and_tags_are_supported(monkeypatch, tmp_path):
     assert getattr(tagger.session, "last_input_max", None) <= 1.01
 
 
+def test_custom_onnx_infers_nchw_input_layout(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _PixAIOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    image_path = tmp_path / "custom-nchw.png"
+    Image.new("RGB", (640, 320), color=(224, 128, 32)).save(image_path)
+
+    tags_path = tmp_path / "selected_tags.csv"
+    tags_path.write_text(
+        "id,tag_id,name,category,count,ips\n"
+        "0,1,1girl,0,10,[]\n"
+        "1,2,solo,0,10,[]\n"
+        "2,3,custom_character,4,10,[]\n",
+        encoding="utf-8",
+    )
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="wd-swinv2-tagger-v3",
+        model_path="custom.onnx",
+        tags_path=str(tags_path),
+        use_gpu=False,
+    )
+    monkeypatch.setattr(tagger, "_get_model_paths", lambda: ("custom.onnx", str(tags_path)))
+
+    result = tagger.tag(str(image_path))
+
+    assert result["general_tags"][0]["tag"] == "1girl"
+    assert result["character_tags"][0]["tag"] == "custom_character"
+    assert getattr(tagger.session, "last_input_shape", None) == (1, 3, 448, 448)
+
+
 def test_pixai_rating_fallback_can_escalate_to_explicit(monkeypatch, tmp_path):
     monkeypatch.setattr(tagger_module, "ort", _PixAIOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
@@ -506,3 +602,50 @@ def test_pixai_rating_fallback_can_escalate_to_explicit(monkeypatch, tmp_path):
 
     assert result["rating"] == "explicit"
     assert result["rating_confidences"]["explicit"] == 1.0
+
+
+def test_pixai_rating_fallback_uses_only_thresholded_tags(monkeypatch, tmp_path):
+    image_path = tmp_path / "pixai-low-explicit.png"
+    Image.new("RGB", (448, 448), color="white").save(image_path)
+
+    tags_path = tmp_path / "pixai-selected-tags.csv"
+    tags_path.write_text(
+        "id,tag_id,name,category,count,ips\n"
+        "0,1,pussy,0,10,[]\n"
+        "1,2,1girl,0,10,[]\n"
+        "2,3,hu_tao_(genshin_impact),4,10,[\"genshin_impact\"]\n",
+        encoding="utf-8",
+    )
+
+    class _LowExplicitPixAISession(_PixAIBatchSession):
+        def run(self, _outputs, inputs):
+            batch = inputs["input"]
+            self.last_input_shape = batch.shape
+            self.last_input_min = float(batch.min())
+            self.last_input_max = float(batch.max())
+            output = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            output[:, 0] = 0.29
+            output[:, 1] = 0.91
+            output[:, 2] = 0.9
+            return [output]
+
+    class _LowExplicitPixAIOrtModule(_FakeOrtModule):
+        InferenceSession = _LowExplicitPixAISession
+
+    monkeypatch.setattr(tagger_module, "ort", _LowExplicitPixAIOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="pixai-tagger-v0.9",
+        model_path="dummy.onnx",
+        tags_path=str(tags_path),
+        threshold=0.30,
+        use_gpu=False,
+    )
+    monkeypatch.setattr(tagger, "_get_model_paths", lambda: ("dummy.onnx", str(tags_path)))
+
+    result = tagger.tag(str(image_path))
+
+    assert result["rating"] == "general"
+    assert "pussy" not in {item["tag"] for item in result["general_tags"]}
+    assert result["rating_confidences"]["general"] == 1.0

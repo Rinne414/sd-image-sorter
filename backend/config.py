@@ -409,6 +409,7 @@ TAGGER_MODELS: dict = {
         "metadata_format": "camie_v2",
         "input_layout": "nchw",
         "input_normalization": "imagenet",
+        "output_activation": "sigmoid",
         "pad_color": [124, 116, 104],
         "default_threshold": 0.62,
         "default_character_threshold": 0.78,

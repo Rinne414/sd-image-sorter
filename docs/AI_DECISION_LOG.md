@@ -2183,3 +2183,38 @@ Use this structure for future entries:
   None
 - Validation:
   `cd backend && python -m pytest tests/test_sam3_refiner.py` (12 passed) and full suite `cd backend && python -m pytest tests/` (892 passed, 5 skipped).
+
+
+### ADR-AI-20260508-89: Custom tagger remains WD14-compatible ONNX only
+
+- Status: accepted
+- Area: tagger runtime / custom model UX / model-specific preprocessing
+- Context:
+  A user tried to run a locally supplied tagger through `Custom Local Model` and hit ONNX Runtime shape errors: the graph expected NCHW `[batch, 3, 448, 448]`, while the custom path prepared NHWC `[batch, 448, 448, 3]`. The current shipped model catalog also includes Camie, PixAI, and ToriiGate, which are not interchangeable generic WD14 paths: Camie needs JSON metadata and ImageNet/NCHW preprocessing, PixAI needs NCHW `[-1, 1]` preprocessing plus rating fallback, and ToriiGate uses a dedicated VLM backend rather than ONNX Runtime.
+- Decision:
+  `Custom Local Model` remains a generic WD14-compatible ONNX + CSV entry point, not an offline override for every built-in tagger. The ONNX runtime now infers NHWC vs NCHW from the model input shape so compatible custom ONNX exports with `[batch, 3, H, W]` run correctly. UI/README wording now tells users to choose Camie, PixAI, and ToriiGate from the model list instead of feeding their files through the custom path.
+- Why:
+  Making custom silently mimic every built-in model would require schema detection for metadata files, preprocessing, output categories, rating semantics, and non-ONNX backends. That would hide risky incompatibility behind a friendly label. Inferring tensor layout fixes the concrete compatible-ONNX bug without pretending custom is a universal model adapter.
+- Do not regress:
+  Do not route ToriiGate through `WD14Tagger` or accept non-ONNX custom tagger files. Do not allow custom JSON metadata until the request schema and validation explicitly model it. Keep built-in model-specific preprocessing in the named catalog entries unless a real custom metadata schema is added.
+- Evidence:
+  `backend/tagger.py`, `backend/services/tagging_service.py`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `README.md`, user screenshot showing ONNX Runtime `Got invalid dimensions ... Got: 448 Expected: 3`.
+- Validation:
+  Added `backend/tests/test_tagger.py::test_custom_onnx_infers_nchw_input_layout` to cover the NCHW custom ONNX case.
+
+### ADR-AI-20260508-90: Tagger thresholds must run only on normalized confidence probabilities
+
+- Status: accepted
+- Area: backend AI tagging accuracy / model-specific score semantics
+- Context:
+  The supported tagger catalog now includes classic WD14 ONNX models, Camie v2, PixAI v0.9, and ToriiGate. They do not all expose scores with the same semantics: WD/PixAI outputs are consumed as probabilities, Camie ONNX emits logits that need sigmoid normalization, and ToriiGate is a VLM caption-to-tags backend rather than a probability-thresholded classifier. Treating logits as confidence values can create impossible `confidence > 1` tags and makes weak/noisy model output look like strong matches, which users correctly perceive as random tagging.
+- Decision:
+  `WD14Tagger` normalizes model scores before thresholding. Built-in Camie declares `output_activation = sigmoid`; WD/PixAI/custom-compatible ONNX remain probability/identity outputs. Any NaN/Inf or out-of-range probability score is ignored before threshold checks, so invalid logits cannot pass general/character thresholds or win rating selection. PixAI rating fallback derives rating only from already-thresholded returned tags. ToriiGate remains documented as threshold-not-applicable because its confidence values mean "generated tag accepted by parser", not classifier probability.
+- Why:
+  Threshold sliders are a user promise: lower than threshold means not returned. That promise is only meaningful when scores are bounded confidence probabilities. Model-specific activation belongs in the built-in model config; custom remains WD14-compatible probability ONNX rather than a universal logits adapter. Failing closed on invalid custom scores is safer than emitting random-looking high-confidence tags.
+- Do not regress:
+  Do not remove Camie's sigmoid activation. Do not treat raw scores outside `[0, 1]` as valid confidence values. Do not make PixAI fallback inspect unreturned low-confidence explicit tags. Do not present ToriiGate's `confidence=1.0` as threshold probability; it is VLM parser output.
+- Evidence:
+  `backend/config.py`, `backend/tagger.py`, `backend/tests/test_tagger.py`, `backend/tests/test_toriigate_tagger.py`, `README.md`, and current HuggingFace examples for Camie/PixAI model usage.
+- Validation:
+  `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_tagger.py tests/test_toriigate_tagger.py tests/test_tagging_service.py` (`41 passed`).

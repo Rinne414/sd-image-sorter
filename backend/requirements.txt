@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements.txt backend/requirements.in
 #
-# lock-input-sha256: 0be30d9bb8491b413f78bacd466349283aaac5534a20722e72fae28fd0f8765e
+# lock-input-sha256: a613b80f1c1126594a8e6289d05a68983ab420380bcb4c718d75c67b678189b9
 #
 aiofiles==25.1.0
     # via -r backend/requirements.in
@@ -260,7 +260,7 @@ python-dateutil==2.9.0.post0
     # via matplotlib
 python-dotenv==1.2.2
     # via uvicorn
-python-multipart==0.0.26
+python-multipart==0.0.27
     # via -r backend/requirements.in
 pyyaml==6.0.3
     # via

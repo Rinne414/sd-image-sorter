@@ -101,6 +101,24 @@ def test_extract_tags_from_structured_json_caption_avoids_giant_sentence_fragmen
     assert not any(len(tag) > 40 for tag in tags)
 
 
+def test_extract_tags_from_long_caption_does_not_treat_sentence_as_single_tag():
+    text = (
+        "The picture shows a girl with white hair and blue eyes wearing a white shirt. "
+        "She is crying with her mouth open while looking at a screen."
+    )
+
+    tags = ToriiGateTagger._extract_tags(text)
+
+    assert "1girl" in tags
+    assert "white_hair" in tags
+    assert "blue_eyes" in tags
+    assert "white_shirt" in tags
+    assert "crying" in tags
+    assert "open_mouth" in tags
+    assert not any("the_picture_shows" in tag for tag in tags)
+    assert not any(len(tag) > 40 for tag in tags)
+
+
 def test_resize_for_inference_caps_large_images():
     image = Image.new("RGB", (4096, 4096), color="white")
 

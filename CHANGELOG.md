@@ -5,6 +5,28 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-05-08
+
+### Fixed / 修复
+- Fixed Custom ONNX tagger layout detection so WD14-compatible NCHW models (`[B,3,H,W]`) no longer crash with width/channel shape errors.
+  - 修复 Custom ONNX tagger 的输入布局判断，WD14 兼容的 NCHW 模型（`[B,3,H,W]`）不会再因为宽度/通道维度反了而崩。
+- Fixed Camie tagger score handling by applying sigmoid to logits before threshold filtering.
+  - 修复 Camie tagger 分数语义：先把 logits 过 sigmoid，再按阈值过滤。
+- Hardened tag filtering so NaN/Inf/out-of-range model scores are rejected instead of becoming random-looking tags.
+  - 加固标签过滤：NaN / Inf / 越界分数直接丢弃，不再变成看起来随机的标签。
+- Fixed PixAI fallback rating/category handling so it only uses tags that already passed the configured thresholds.
+  - 修复 PixAI fallback rating / 分类逻辑，只使用已经通过阈值的标签。
+- Clarified Custom model UX/docs: Custom is for WD14-compatible ONNX only; Camie, PixAI, and ToriiGate must use their built-in entries.
+  - 明确 Custom 模型的边界：Custom 只支持 WD14 兼容 ONNX；Camie、PixAI、ToriiGate 必须走内建模型选项。
+
+### Security / 安全
+- Updated `python-multipart` to `0.0.27` in backend runtime/dev lockfiles.
+  - 后端 runtime/dev lockfile 将 `python-multipart` 升到 `0.0.27`。
+
+### Validation / 验证
+- Added regression coverage for strict thresholds, invalid-score rejection, Camie sigmoid confidence, Custom NCHW ONNX input layout, PixAI thresholded fallback, and ToriiGate long-caption output handling.
+  - 新增回归测试覆盖严格阈值、非法分数拒绝、Camie sigmoid 置信度、Custom NCHW ONNX 输入布局、PixAI 阈值 fallback，以及 ToriiGate 长 caption 输出处理。
+
 ## [3.1.0] - 2026-05-04
 
 ### About This Release / 关于这一版
