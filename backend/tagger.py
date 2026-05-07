@@ -107,6 +107,7 @@ class WD14Tagger:
         self._supports_true_batch: bool = False
         self._input_layout: str = "nhwc"
         self._input_normalization: str = "wd14_bgr"
+        self._output_activation: str = "identity"
         self._pad_color: Tuple[int, int, int] = (255, 255, 255)
         self._metadata_format: str = "wd14_csv"
         self._resize_mode: str = "letterbox"
@@ -406,12 +407,16 @@ class WD14Tagger:
         width = 448
         height = 448
         if len(input_shape) == 4:
-            # WD14 exports used by this project are NHWC: [batch, height, width, 3]
+            # Model input shape is the source of truth for layout. Built-in WD14
+            # exports are usually NHWC, while newer/custom ONNX exports can be
+            # NCHW. Infer it here so Custom Local Model does not feed
+            # [B,H,W,3] into a [B,3,H,W] graph.
             if isinstance(input_shape[-1], int) and input_shape[-1] == 3:
+                self._input_layout = "nhwc"
                 height = int(input_shape[1]) if isinstance(input_shape[1], int) else height
                 width = int(input_shape[2]) if isinstance(input_shape[2], int) else width
-            # Fallback for potential NCHW layouts.
             elif isinstance(input_shape[1], int) and input_shape[1] == 3:
+                self._input_layout = "nchw"
                 height = int(input_shape[2]) if isinstance(input_shape[2], int) else height
                 width = int(input_shape[3]) if isinstance(input_shape[3], int) else width
 
@@ -461,8 +466,42 @@ class WD14Tagger:
             result["error"] = error
         return result
 
+    def _normalize_output_probs(self, probs: np.ndarray) -> np.ndarray:
+        """Convert model output to bounded confidence probabilities before thresholding."""
+        values = np.asarray(probs, dtype=np.float32)
+        invalid_values = ~np.isfinite(values)
+        if np.any(invalid_values):
+            logger.warning("Tagger output for %s contained NaN/Inf values; ignoring those scores.", self.model_name)
+            values = np.where(invalid_values, 0.0, values)
+
+        if self._output_activation == "sigmoid":
+            clipped_logits = np.clip(values, -80.0, 80.0)
+            values = 1.0 / (1.0 + np.exp(-clipped_logits))
+        elif self._output_activation not in {"identity", "probability", "none", ""}:
+            logger.warning(
+                "Unknown output_activation %r for %s; treating output as probabilities.",
+                self._output_activation,
+                self.model_name,
+            )
+
+        if np.any(invalid_values):
+            values = np.where(invalid_values, 0.0, values)
+
+        out_of_range = (values < -1e-6) | (values > 1.0 + 1e-6)
+        if np.any(out_of_range):
+            logger.warning(
+                "Tagger output for %s contained %d score(s) outside [0, 1]; "
+                "ignoring them so thresholds do not accept invalid logits.",
+                self.model_name,
+                int(np.count_nonzero(out_of_range)),
+            )
+            values = np.where(out_of_range, 0.0, values)
+
+        return np.clip(values, 0.0, 1.0)
+
     def _process_probs(self, probs: np.ndarray) -> Dict[str, Any]:
-        """Convert raw WD14 probabilities into the public result payload."""
+        """Convert raw model scores into the public result payload."""
+        probs = self._normalize_output_probs(probs)
         result = self._build_empty_result()
 
         for tag_id, tag_name in self.general_tags:
@@ -546,6 +585,7 @@ class WD14Tagger:
         model_config = MODELS.get(self.model_name, {})
         self._input_layout = str(model_config.get("input_layout", "nhwc")).lower()
         self._input_normalization = str(model_config.get("input_normalization", "wd14_bgr")).lower()
+        self._output_activation = str(model_config.get("output_activation", "identity")).lower()
         self._metadata_format = str(model_config.get("metadata_format", "wd14_csv")).lower()
         self._resize_mode = str(model_config.get("resize_mode", "letterbox")).lower()
         self._rating_fallback_mode = str(model_config.get("rating_fallback_mode", "none")).lower()

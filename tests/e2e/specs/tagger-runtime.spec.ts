@@ -58,7 +58,7 @@ test.describe('Tagger Runtime UI', () => {
     await openTagRuntimeAdvanced(page)
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
     await expect(page.locator('#tag-runtime-summary')).toContainText(/Custom model on GPU|Custom model/i)
-    await expect(page.locator('#tag-model-help')).toContainText(/Custom ONNX model.*GPU|Custom ONNX model/i)
+    await expect(page.locator('#tag-model-help')).toContainText(/Custom (WD14-compatible )?ONNX model.*GPU|Custom (WD14-compatible )?ONNX model/i)
 
     await page.locator('#tag-use-gpu').evaluate((node) => {
       const input = node as HTMLInputElement
