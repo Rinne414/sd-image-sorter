@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 画师识别的单图请求现在会在线程池中执行模型加载/推理；Kaloscope 加载很慢时，不再冻结其它 UI/API 请求。
 - Tagging cancel issued before the worker process is spawned is no longer silently swallowed: `cancel_tagging` now finalizes the `cancelled` state and invalidates the pending run id so the queued background task aborts when it finally executes, instead of clobbering progress back to `running` and starting an unkillable batch.
   - 标记任务在 worker 子进程起来之前就被取消时，不再被静默吃掉：`cancel_tagging` 现在会在锁内直接落地「已取消」状态并废弃排队中的 run id，让 FastAPI 后台任务真正执行时主动放弃，而不是把进度回写成 `running` 并启动一个无法取消的批次。
+- The rescue updater (`update.bat` / `backend/update_cli.py`) now probes the configured localhost port and refuses to apply an update while another SD Image Sorter instance is still running. Without this guard, the in-process apply + relaunch would race the existing window for the same port and leave the user with two instances on different ports. `--force` overrides the guard when the existing window is hung.
+  - 救援更新器（`update.bat` / `backend/update_cli.py`）现在会先探测配置的本机端口，如果还有 SD Image Sorter 实例在运行就拒绝直接覆盖；不加这层守护，就会出现 in-process apply + relaunch 和旧窗口抢同一个端口、最终两个实例占两个端口的情况。`--force` 可在旧窗口卡死时强制覆盖。
 
 ### Validation / 验证
 - Added regression coverage for Custom ONNX profile selection, explicit path failures, metadata validation, user-file safety, artist request threadpool dispatch, and deterministic E2E tag/artist persistence without live WD14 or Kaloscope loads.
@@ -34,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 新增启动端口选择、救援更新器、外部无 PID 更新应用和发布打包回归测试，确保 portable 包保留 `run` 自愈以及 `fix.bat` / `update.bat`。
 - Added regression coverage for the tagging cancel-vs-spawn race: cancellations issued before the worker process spawns finalize cleanly and invalidate the pending background task instead of being clobbered back into a running state.
   - 新增标记取消与 worker 启动竞态的回归测试：worker 子进程起来之前按下取消能落地「已取消」并废弃排队中的后台任务，不会被回写成 running。
+- Added regression coverage for the rescue updater's running-instance guard, covering the abort path with a clear error message, the `--force` bypass for hung windows, and the read-only `--check-only` exemption.
+  - 新增救援更新器「实例运行中」守护的回归测试，覆盖中止路径并提示明确错误信息、`--force` 在旧窗口卡死时的绕过，以及只读 `--check-only` 不受守护影响。
 
 ## [3.1.1] - 2026-05-08
 
