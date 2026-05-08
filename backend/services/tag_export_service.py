@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException
 
 import database as db
-from utils.path_validation import normalize_user_path, validate_folder_path
+from utils.path_validation import normalize_user_path, sanitize_filename, validate_folder_path
 
 
 PARAMETER_EXPORT_ORDER = [
@@ -125,7 +125,7 @@ def _join_caption_parts(parts: List[str]) -> str:
     seen = set()
     output: List[str] = []
     for part in parts:
-        normalized = str(part or "").strip().strip(",")
+        normalized = " ".join(str(part or "").split()).strip(",")
         if not normalized:
             continue
         key = normalized.lower()
@@ -157,9 +157,9 @@ def build_sidecar_content(
     prefix = str(prefix or "").strip()
 
     if mode == "tags":
-        return _join_caption_parts([prefix, *filtered_tags])
+        return _join_caption_parts(filtered_tags)
     if mode == "prompt":
-        return _join_caption_parts([prefix, prompt])
+        return prompt
     if mode == "negative":
         return negative_prompt
     if mode == "prompt_negative":
@@ -201,8 +201,10 @@ def _allocate_output_path(
     used_output_paths: set[str],
 ) -> Optional[str]:
     extension = _sidecar_extension(content_mode)
-    filename = str(image.get("filename") or f"image_{image.get('id') or 'unknown'}")
+    filename = sanitize_filename(str(image.get("filename") or f"image_{image.get('id') or 'unknown'}"))
     basename = os.path.splitext(filename)[0]
+    if not basename:
+        basename = f"image_{image.get('id') or 'unknown'}"
     candidate_names = [f"{basename}{extension}", f"{filename}{extension}"]
 
     for candidate_name in candidate_names:

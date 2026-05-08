@@ -149,6 +149,24 @@ class TestTagsLibrary:
         data = response.json()
         assert len(data["tags"]) <= 5
 
+    def test_tags_library_query_searches_full_table_before_limit(self, test_client, test_db):
+        """Search must not only filter the first frequency-limited tags."""
+        import database as db
+
+        for index in range(30):
+            image_id = db.add_image(path=f"/test/filler_{index}.png", filename=f"filler_{index}.png")
+            db.add_tags(image_id, [{"tag": f"zz_filler_{index:02d}", "confidence": 0.9}])
+
+        target_id = db.add_image(path="/test/nagisa.png", filename="nagisa.png")
+        db.add_tags(target_id, [{"tag": "nagisa_(blue_archive)", "confidence": 0.99}])
+
+        response = test_client.get("/api/tags/library?q=blue&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert [tag["tag"] for tag in data["tags"]] == ["nagisa_(blue_archive)"]
+
 
 class TestPromptsLibrary:
     """Tests for GET /api/prompts/library endpoint."""
@@ -197,6 +215,29 @@ class TestPromptsLibrary:
         assert response.status_code == 200
         data = response.json()
         assert len(data["prompts"]) <= 10
+
+    def test_prompts_library_query_searches_full_index_before_limit(self, test_client, test_db):
+        """Prompt search should find low-frequency tokens beyond default display order."""
+        import database as db
+
+        for index in range(30):
+            db.add_image(
+                path=f"/test/prompt_filler_{index}.png",
+                filename=f"prompt_filler_{index}.png",
+                prompt=f"zz filler {index}",
+            )
+        db.add_image(
+            path="/test/prompt_blue_archive.png",
+            filename="prompt_blue_archive.png",
+            prompt="nagisa_(blue_archive)",
+        )
+
+        response = test_client.get("/api/prompts/library?q=blue&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert [prompt["prompt"] for prompt in data["prompts"]] == ["nagisa (blue archive"]
 
 
 class TestLorasLibrary:
@@ -285,6 +326,29 @@ class TestLorasLibrary:
         lora_names = [l["lora"] for l in response.json()["loras"]]
         assert "indexed_style" in lora_names
         assert "prompt_style" in lora_names
+
+    def test_loras_library_query_searches_full_index_before_limit(self, test_client, test_db):
+        """LoRA search should query the full indexed LoRA table before display limiting."""
+        import database as db
+
+        for index in range(30):
+            db.add_image(
+                path=f"/test/lora_filler_{index}.png",
+                filename=f"lora_filler_{index}.png",
+                loras=[f"zz_filler_lora_{index:02d}"],
+            )
+        db.add_image(
+            path="/test/lora_blue_archive.png",
+            filename="lora_blue_archive.png",
+            loras=["nagisa_blue_archive"],
+        )
+
+        response = test_client.get("/api/loras/library?q=blue&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert [lora["lora"] for lora in data["loras"]] == ["nagisa_blue_archive"]
 
 
 class TestTagImportExport:
@@ -810,7 +874,8 @@ class TestExportTagsBatch:
             json={
                 "image_ids": [image_id],
                 "output_folder": str(output_dir),
-                "prefix": prefix
+                "prefix": prefix,
+                "content_mode": "caption_merged",
             }
         )
 
@@ -819,6 +884,57 @@ class TestExportTagsBatch:
         txt_file = output_dir / "prefix_test.txt"
         content = txt_file.read_text()
         assert content == "sks person, test_tag, second_tag"
+
+    def test_export_batch_prompt_mode_ignores_training_prefix(self, test_client, test_db, tmp_path: Path):
+        """Prompt sidecars should contain exact Prompt text even if the LoRA prefix field has stale text."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "prompt_exact.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename=img_path.name, prompt="raw prompt text")
+
+        output_dir = tmp_path / "prompt_exact_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "prompt",
+                "prefix": "sks person",
+            },
+        )
+
+        assert response.status_code == 200
+        assert (output_dir / "prompt_exact.txt").read_text(encoding="utf-8") == "raw prompt text"
+
+    def test_export_batch_tags_mode_ignores_training_prefix(self, test_client, test_db, tmp_path: Path):
+        """Tags sidecars should contain exact tags, not the LoRA Class Token field."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "tags_exact.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename=img_path.name)
+        db.add_tags(image_id, [{"tag": "alpha", "confidence": 0.9}])
+
+        output_dir = tmp_path / "tags_exact_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "prefix": "sks person",
+            },
+        )
+
+        assert response.status_code == 200
+        assert (output_dir / "tags_exact.txt").read_text(encoding="utf-8") == "alpha"
 
 
     def test_export_batch_returns_normalized_frontend_contract_fields(self, test_client, test_db, tmp_path: Path):
@@ -886,6 +1002,29 @@ class TestExportTagsBatch:
         assert data["exported"] == 2
         assert (output_dir / "sample.txt").exists()
         assert len(list(output_dir.glob("sample*.txt"))) == 2
+
+    def test_export_batch_sanitizes_sidecar_filename_from_bad_indexed_data(self, test_client, test_db, tmp_path: Path):
+        """Sidecar export must never let a stored filename escape the chosen output folder."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "unsafe_source.png"
+        Image.new("RGB", (100, 100), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="..\\evil:name.png")
+        db.add_tags(image_id, [{"tag": "safe_tag", "confidence": 0.9}])
+
+        output_dir = tmp_path / "safe_sidecars"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={"image_ids": [image_id], "output_folder": str(output_dir)},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["exported"] == 1
+        assert (output_dir / "evil_name.txt").read_text(encoding="utf-8") == "safe_tag"
+        assert not (tmp_path / "evil:name.txt").exists()
 
 
     def test_export_batch_skip_policy_keeps_existing_sidecars(self, test_client, test_db, tmp_path: Path):
@@ -1030,6 +1169,45 @@ class TestExportTagsBatch:
         content = (output_dir / "caption_sidecar.txt").read_text(encoding="utf-8")
         assert content == "a woman in soft light, soft light portrait, portrait"
         assert "solo" not in content
+
+    def test_export_batch_caption_sidecars_normalize_multiline_parts_to_one_line(self, test_client, test_db, tmp_path: Path):
+        """LoRA caption sidecars should stay one caption line even when prompt metadata is multiline."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "multiline_caption.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="best quality\ncinematic light, solo",
+            metadata_json="{}",
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("portrait\nsoft smile", image_id))
+        db.add_tags(image_id, [
+            {"tag": "cinematic light", "confidence": 0.9},
+            {"tag": "solo", "confidence": 0.8},
+        ])
+
+        output_dir = tmp_path / "multiline_caption_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "caption_merged",
+                "blacklist": ["solo"],
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "multiline_caption.txt").read_text(encoding="utf-8")
+        assert content == "portrait soft smile, best quality cinematic light, solo, cinematic light"
+        assert "\n" not in content
 
 
 class TestEdgeCases:

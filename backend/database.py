@@ -2814,12 +2814,106 @@ def get_all_tags() -> List[Dict[str, Any]]:
     return result
 
 
+def _facet_search_rank_params(normalized_query: str) -> List[str]:
+    escaped = escape_like_pattern(normalized_query)
+    return [
+        normalized_query,
+        f"{escaped}%",
+        f"% {escaped}%",
+        f"%({escaped}%",
+        f"%[{escaped}%",
+    ]
+
+
+def _facet_search_rank_sql(value_expr: str) -> str:
+    return f"""
+        CASE
+            WHEN {value_expr} = ? THEN 0
+            WHEN {value_expr} LIKE ? ESCAPE '\\' THEN 1
+            WHEN {value_expr} LIKE ? ESCAPE '\\'
+              OR {value_expr} LIKE ? ESCAPE '\\'
+              OR {value_expr} LIKE ? ESCAPE '\\' THEN 2
+            ELSE 3
+        END
+    """
+
+
+def _append_optional_limit(query: str, params: List[Any], limit: Optional[int]) -> Tuple[str, List[Any]]:
+    if limit is None:
+        return query, params
+    query += " LIMIT ?"
+    params.append(max(0, int(limit)))
+    return query, params
+
+
+def search_tags(
+    search_query: Optional[str],
+    *,
+    sort_by: str = "frequency",
+    limit: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Search all unique tags with normalized substring matching.
+
+    Unlike `get_all_tags()[:N]`, this searches the full tag table first and only
+    applies an optional caller-requested display limit after matching.
+    """
+    normalized_query = normalize_prompt_token(search_query or "")
+    if not normalized_query:
+        tags = get_all_tags()
+        if sort_by == "alphabetical":
+            tags = sorted(tags, key=lambda item: item["tag"].lower())
+        return {
+            "tags": tags if limit is None else tags[:max(0, int(limit))],
+            "total": len(tags),
+            "query": normalized_query,
+            "sort": sort_by,
+        }
+
+    value_expr = "REPLACE(LOWER(tag), '_', ' ')"
+    rank_sql = _facet_search_rank_sql(value_expr)
+    match_pattern = f"%{escape_like_pattern(normalized_query)}%"
+    order_tail = "tag COLLATE NOCASE ASC" if sort_by == "alphabetical" else "count DESC, tag COLLATE NOCASE ASC"
+    params: List[Any] = [
+        *_facet_search_rank_params(normalized_query),
+        match_pattern,
+    ]
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        total_row = cursor.execute(
+            f"""
+            SELECT COUNT(*) FROM (
+                SELECT tag
+                FROM tags
+                WHERE {value_expr} LIKE ? ESCAPE '\\'
+                GROUP BY tag
+            )
+            """,
+            (match_pattern,),
+        ).fetchone()
+        total = int(total_row[0] or 0) if total_row else 0
+
+        query = f"""
+            SELECT tag, COUNT(*) AS count, {rank_sql} AS relevance
+            FROM tags
+            WHERE {value_expr} LIKE ? ESCAPE '\\'
+            GROUP BY tag
+            ORDER BY relevance ASC, {order_tail}
+        """
+        query, params = _append_optional_limit(query, params, limit)
+        cursor.execute(query, params)
+        tags = [{"tag": row["tag"], "count": row["count"]} for row in cursor.fetchall()]
+
+    return {"tags": tags, "total": total, "query": normalized_query, "sort": sort_by}
+
+
 def _query_indexed_facet(
     *,
     table: str,
     value_column: str,
     output_key: str,
     limit: Optional[int] = None,
+    search_query: Optional[str] = None,
 ) -> Dict[str, Any]:
     # Whitelist guard: this helper composes table/column names into raw SQL via f-strings,
     # which is safe today because all callers pass hardcoded constants. The assertion
@@ -2834,47 +2928,65 @@ def _query_indexed_facet(
             f"_query_indexed_facet refusing unknown table/column pair: ({table!r}, {value_column!r})"
         )
 
-    normalized_limit = max(0, int(limit or 0))
+    normalized_query = normalize_prompt_token(search_query or "")
+    value_expr = f"REPLACE(LOWER({value_column}), '_', ' ')"
+    where_clause = ""
+    where_params: list[Any] = []
+    rank_select = ""
+    rank_order = ""
+
+    if normalized_query:
+        where_clause = f"WHERE {value_expr} LIKE ? ESCAPE '\\'"
+        where_params.append(f"%{escape_like_pattern(normalized_query)}%")
+        rank_select = f", {_facet_search_rank_sql(value_expr)} AS relevance"
+        rank_order = "relevance ASC, "
 
     with get_db() as conn:
         cursor = conn.cursor()
-        total_row = cursor.execute(f"SELECT COUNT(DISTINCT {value_column}) FROM {table}").fetchone()
+        total_row = cursor.execute(
+            f"SELECT COUNT(DISTINCT {value_column}) FROM {table} {where_clause}",
+            where_params,
+        ).fetchone()
         total = int(total_row[0] or 0) if total_row else 0
 
         query = f"""
-            SELECT {value_column} AS {output_key}, COUNT(*) AS count
+            SELECT {value_column} AS {output_key}, COUNT(*) AS count{rank_select}
             FROM {table}
+            {where_clause}
             GROUP BY {value_column}
-            ORDER BY count DESC, {value_column} ASC
+            ORDER BY {rank_order}count DESC, {value_column} COLLATE NOCASE ASC
         """
         params: list[Any] = []
-        if normalized_limit > 0:
-            query += " LIMIT ?"
-            params.append(normalized_limit)
+        if normalized_query:
+            params.extend(_facet_search_rank_params(normalized_query))
+        params.extend(where_params)
+        query, params = _append_optional_limit(query, params, limit)
 
         cursor.execute(query, params)
         rows = _rows_to_dicts(cursor.fetchall())
 
-    return {output_key + "s": rows, "total": total}
+    return {output_key + "s": rows, "total": total, "query": normalized_query}
 
 
-def get_all_prompt_tokens(*, limit: Optional[int] = None) -> Dict[str, Any]:
+def get_all_prompt_tokens(*, limit: Optional[int] = None, search_query: Optional[str] = None) -> Dict[str, Any]:
     """Get unique normalized prompt tokens from the indexed prompt-token table."""
     return _query_indexed_facet(
         table="image_prompt_tokens",
         value_column="token",
         output_key="prompt",
         limit=limit,
+        search_query=search_query,
     )
 
 
-def get_all_loras(*, limit: Optional[int] = None) -> Dict[str, Any]:
+def get_all_loras(*, limit: Optional[int] = None, search_query: Optional[str] = None) -> Dict[str, Any]:
     """Get unique normalized LoRAs from the indexed image_loras table."""
     return _query_indexed_facet(
         table="image_loras",
         value_column="lora_name",
         output_key="lora",
         limit=limit,
+        search_query=search_query,
     )
 
 
@@ -2911,19 +3023,42 @@ def get_metadata_status_counts() -> Dict[str, int]:
         return counts
 
 
-def get_all_checkpoints() -> List[Dict[str, Any]]:
+def get_all_checkpoints(
+    *,
+    limit: Optional[int] = None,
+    search_query: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """Get normalized checkpoint facets with counts for filtering and analytics."""
+    normalized_query = checkpoint_identity_key(search_query or "") or normalize_prompt_token(search_query or "")
+    value_expr = "LOWER(checkpoint_normalized)"
+    conditions = ["checkpoint_normalized IS NOT NULL", "TRIM(checkpoint_normalized) != ''"]
+    where_params: List[Any] = []
+    rank_select = ""
+    rank_order = ""
+
+    if normalized_query:
+        conditions.append(f"{value_expr} LIKE ? ESCAPE '\\'")
+        where_params.append(f"%{escape_like_pattern(normalized_query)}%")
+        rank_select = f", {_facet_search_rank_sql(value_expr)} AS relevance"
+        rank_order = "relevance ASC, "
+
+    where_clause = " AND ".join(conditions)
+
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT checkpoint_normalized, COUNT(*) as count
+        query = f"""
+            SELECT checkpoint_normalized, COUNT(*) as count{rank_select}
             FROM images
-            WHERE checkpoint_normalized IS NOT NULL AND TRIM(checkpoint_normalized) != ''
+            WHERE {where_clause}
             GROUP BY checkpoint_normalized
-            ORDER BY count DESC, checkpoint_normalized COLLATE NOCASE ASC
-            """
-        )
+            ORDER BY {rank_order}count DESC, checkpoint_normalized COLLATE NOCASE ASC
+        """
+        params: List[Any] = []
+        if normalized_query:
+            params.extend(_facet_search_rank_params(normalized_query))
+        params.extend(where_params)
+        query, params = _append_optional_limit(query, params, limit)
+        cursor.execute(query, params)
         return [
             {
                 "checkpoint": row["checkpoint_normalized"],

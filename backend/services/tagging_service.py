@@ -864,10 +864,10 @@ class TaggingService:
 
         return {"status": "cancelling", "message": "Cancellation requested"}
 
-    def get_all_tags(self, limit: int = 500) -> Dict[str, Any]:
+    def get_all_tags(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """Get all unique tags with occurrence counts."""
         tags = db.get_all_tags()
-        return {"tags": tags[:limit]}
+        return {"tags": tags if limit is None else tags[:limit], "total": len(tags)}
 
     def get_generators(self) -> Dict[str, Any]:
         """Get all generators with image counts."""
@@ -915,29 +915,33 @@ class TaggingService:
             "default": DEFAULT_TAGGER_MODEL,
         }
 
-    def get_tags_library(self, sort_by: str = "frequency", limit: int = 1000) -> Dict[str, Any]:
+    def get_tags_library(
+        self,
+        sort_by: str = "frequency",
+        limit: Optional[int] = None,
+        search_query: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get tags library with frequency and sorting options."""
         if sort_by not in VALID_SORT_OPTIONS:
             sort_by = "frequency"
 
-        tags = db.get_all_tags()
+        return db.search_tags(search_query, sort_by=sort_by, limit=limit)
 
-        if sort_by == "alphabetical":
-            tags = sorted(tags, key=lambda x: x["tag"].lower())
-
-        return {
-            "tags": tags[:limit],
-            "total": len(tags),
-            "sort": sort_by
-        }
-
-    def get_prompts_library(self, limit: int = 500) -> Dict[str, Any]:
+    def get_prompts_library(
+        self,
+        limit: Optional[int] = None,
+        search_query: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get unique prompt tokens from the normalized prompt-token index."""
-        return db.get_all_prompt_tokens(limit=limit)
+        return db.get_all_prompt_tokens(limit=limit, search_query=search_query)
 
-    def get_loras_library(self, limit: int = 500) -> Dict[str, Any]:
+    def get_loras_library(
+        self,
+        limit: Optional[int] = None,
+        search_query: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Get unique LoRAs from the normalized indexed LoRA table."""
-        return db.get_all_loras(limit=limit)
+        return db.get_all_loras(limit=limit, search_query=search_query)
 
     def export_tags(self) -> Dict[str, Any]:
         """Export all image tags as JSON for backup/transfer."""

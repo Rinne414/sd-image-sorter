@@ -315,13 +315,13 @@ Get all tags with counts.
 Get generators with counts.
 
 #### GET /api/tags/library
-Get tag library.
+Get tag library. Optional query params: `sort_by=frequency|alphabetical`, `q=<text>`, `limit=<n>`. Search runs across the full tag table before applying `limit`.
 
 #### GET /api/prompts/library
-Get prompt token library.
+Get prompt token library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full prompt-token index before applying `limit`.
 
 #### GET /api/loras/library
-Get LoRA library.
+Get LoRA library. Optional query params: `q=<text>`, `limit=<n>`. Search runs across the full LoRA index before applying `limit`.
 
 #### GET /api/tagger/models
 Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`.
@@ -368,15 +368,18 @@ Export all tag data as JSON.
 Import tag data from JSON.
 
 #### POST /api/tags/export-batch
-Export tags to `.txt` sidecar files.
+Export one same-name sidecar per selected image. Text modes write `.txt`; `json` writes `.json`.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `image_ids` | int[] | required | Images to export (min 1) |
 | `output_folder` | string | required | Output directory |
-| `prefix` | string | "" | Prefix/class token prepended to tag/caption sidecar lines |
+| `prefix` | string | "" | Optional Class Token prepended only to training-caption modes (`caption_tags`, `caption_merged`) |
+| `blacklist` | string[] | `[]` | Tags excluded from tag/caption outputs |
 | `content_mode` | string | `tags` | `tags`, `prompt`, `negative`, `prompt_negative`, `a1111`, `caption_tags`, `caption_merged`, or `json` |
 | `overwrite_policy` | string | `unique` | `unique` creates non-colliding filenames, `skip` leaves existing sidecars untouched, `overwrite` replaces sidecars |
+
+Mode rules: `prompt`, `negative`, `prompt_negative`, `a1111`, and `json` preserve the stored Prompt / generation data and ignore `prefix`. `tags` exports only tags after blacklist filtering. `caption_tags` writes optional Class Token + AI caption + Tags. `caption_merged` writes optional Class Token + AI caption + Prompt + Tags as one LoRA-training caption line.
 
 Response includes `status` (`ok`, `partial`, or `error`), `exported`, `skipped`, numeric `errors`/`error_count`, `error_messages`, `total`, `content_mode`, and `overwrite_policy`. `overwrite_policy=skip` returns `partial` when existing sidecars are intentionally left untouched.
 
@@ -417,7 +420,7 @@ Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel 
 Reset stuck batch move progress.
 
 #### POST /api/sort/start
-Start manual sort session. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
+Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
 
 #### GET /api/sort/current
 Get current sort image.
@@ -438,7 +441,7 @@ Clear current sort session.
 Clear all image records.
 
 #### GET /api/analytics
-Get analytics.
+Get analytics. Optional query params: `facet=checkpoints|loras|tags`, `q=<text>`, `limit=<n>` return a searched facet subset; search runs across the full indexed facet before applying `limit`.
 
 #### GET /api/stats
 Get database stats.

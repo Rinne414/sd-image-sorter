@@ -4134,7 +4134,10 @@ test.describe('Smoke Tests', () => {
       await route.fulfill({ json: { status: 'ok' } })
     })
     await page.route('**/api/sort/start**', async (route) => {
-      startArtist = new URL(route.request().url()).searchParams.get('artist')
+      const url = new URL(route.request().url())
+      const payload = route.request().postDataJSON() as { artist?: string | null }
+      startArtist = payload.artist ?? null
+      expect(url.searchParams.get('artist')).toBeNull()
       await route.fulfill({
         json: {
           status: 'ok',

@@ -149,6 +149,16 @@ def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
     assert "renderManualSortResumeBanner(null, { visible: true })" not in source
     assert "previousResumeSnapshot" in source
 
+def test_manual_sort_start_uses_json_body_not_query_string_filters():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "async startSortSession(" in source
+    assert "return this.post('/api/sort/start', {" in source
+    assert "params.set('tags', tags.join(','))" not in source
+    assert "this.post(`/api/sort/start?${params}`)" not in source
+
+
 def test_gallery_load_finally_clears_only_active_sequence():
     repo_root = Path(__file__).resolve().parents[2]
     source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
@@ -183,6 +193,23 @@ def test_metadata_resolving_chip_is_driven_by_stats_contract():
     assert "gallery.metadataResolving" in source
     assert "gallery.scanResolving" in source
     assert "countEl.textContent = countsResolving && count === 0 ? '…' : String(count);" in source
+
+
+def test_filter_facet_search_uses_backend_queries_not_prelimited_local_cache():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "const FACET_SUGGESTION_LIMIT = 24;" in source
+    assert "API.getTagsLibrary('frequency', {" in source
+    assert "API.getPromptsLibrary({" in source
+    assert "API.getAnalyticsFacet(facet, {" in source
+    assert "selectedCheckpointValues.forEach((checkpointValue)" in source
+    assert "(filterState.loras || []).forEach((lora)" in source
+    assert "tagsLibraryCache" not in source
+    assert "promptsLibraryCache" not in source
+    assert "return this.get(`/api/tags/library?sort_by=${sortBy}&limit=${limit}`);" not in source
+    assert "return this.get(`/api/prompts/library?limit=${limit}`);" not in source
+    assert "return this.get(`/api/loras/library?limit=${limit}`);" not in source
 
 
 def test_gallery_delete_key_removes_from_gallery_not_disk():
@@ -314,7 +341,8 @@ def test_export_ui_explains_output_formats_before_action():
     assert "合并导出..." in zh_source
     assert "Same-name .txt..." in en_source
     assert "同名 .txt..." in zh_source
-    assert "Sidecar caption" in zh_source
+    assert "训练 caption" in zh_source
+    assert "可选 Class Token + AI caption + Prompt + Tags" in zh_source
     assert "训练用 .txt" in zh_source
     assert "Prompt Sheet..." not in en_source
     assert "Caption Files..." not in en_source
