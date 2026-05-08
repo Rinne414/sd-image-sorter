@@ -5,6 +5,36 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2026-05-08
+
+### Added / 新增
+- Added `update.bat` as an external rescue updater so users can check, download, verify, and apply updates even when the web UI cannot open.
+  - 新增 `update.bat` 外部救援更新入口：即使网页进不去，也能检查、下载、校验并应用更新。
+- Added `fix.bat` as a rare diagnostics/repair tool for runtime packages, port diagnostics, and startup readiness snapshots. It does not start the app and is not the normal port fallback path.
+  - 新增 `fix.bat` 作为少数情况下使用的诊断/修复工具，用于 runtime 包修复、端口诊断和启动就绪快照；它不会启动 app，也不是普通端口兜底入口。
+
+### Fixed / 修复
+- Custom ONNX tagging now treats explicit local model and metadata paths as hard user contracts: missing files fail loudly, profile-specific metadata is validated, and user-supplied ONNX files are never deleted or replaced by the built-in model repair/download path.
+  - Custom ONNX 标注现在把用户显式填写的本地模型和 metadata 路径当成硬契约：文件不存在会明确失败，metadata 会按 profile 校验，并且绝不会删除或替换用户提供的本地 ONNX。
+- Custom Local Model now supports explicit WD14-compatible, PixAI, and Camie ONNX profiles while rejecting ToriiGate as a fake Custom ONNX path because ToriiGate uses the separate VLM/PyTorch backend.
+  - Custom Local Model 现在支持明确选择 WD14-compatible、PixAI、Camie ONNX profile；ToriiGate 会被拒绝伪装成 Custom ONNX，因为它走的是独立 VLM/PyTorch 后端。
+- Windows launchers now preflight the localhost port before opening the browser. If the default `8487` is refused by a Windows reserved/excluded TCP range, the launcher automatically uses the next safe localhost port and starts the backend on that same port; explicit `SD_IMAGE_SORTER_PORT` values still fail loudly instead of being silently changed.
+  - Windows 启动器现在会先检查 localhost 端口再打开浏览器。如果默认 `8487` 被 Windows 保留/排除端口段拒绝，会自动改用下一个安全的本机端口，并让后端绑定同一个端口；用户显式设置的 `SD_IMAGE_SORTER_PORT` 仍然会明确报错，不会偷偷改掉。
+- The selected launcher port is now written back into the backend environment before startup so runtime diagnostics and browser URL agree with the actual bind port.
+  - 启动器选出的端口现在会写回后端环境，确保运行时诊断、浏览器 URL 和实际绑定端口一致。
+- Artist identification single-image requests now run model loading/inference off the FastAPI event loop, so a slow Kaloscope load no longer freezes unrelated UI/API requests.
+  - 画师识别的单图请求现在会在线程池中执行模型加载/推理；Kaloscope 加载很慢时，不再冻结其它 UI/API 请求。
+- Tagging cancel issued before the worker process is spawned is no longer silently swallowed: `cancel_tagging` now finalizes the `cancelled` state and invalidates the pending run id so the queued background task aborts when it finally executes, instead of clobbering progress back to `running` and starting an unkillable batch.
+  - 标记任务在 worker 子进程起来之前就被取消时，不再被静默吃掉：`cancel_tagging` 现在会在锁内直接落地「已取消」状态并废弃排队中的 run id，让 FastAPI 后台任务真正执行时主动放弃，而不是把进度回写成 `running` 并启动一个无法取消的批次。
+
+### Validation / 验证
+- Added regression coverage for Custom ONNX profile selection, explicit path failures, metadata validation, user-file safety, artist request threadpool dispatch, and deterministic E2E tag/artist persistence without live WD14 or Kaloscope loads.
+  - 新增 Custom ONNX profile 选择、显式路径失败、metadata 校验、用户文件安全、画师识别线程池派发，以及不依赖在线 WD14 或 Kaloscope 加载的确定性 E2E 标签/画师持久化覆盖。
+- Added launcher port-selection, rescue updater, external PID-free update application, and release packaging regression coverage so portable builds keep `run` self-healing plus `fix.bat` / `update.bat`.
+  - 新增启动端口选择、救援更新器、外部无 PID 更新应用和发布打包回归测试，确保 portable 包保留 `run` 自愈以及 `fix.bat` / `update.bat`。
+- Added regression coverage for the tagging cancel-vs-spawn race: cancellations issued before the worker process spawns finalize cleanly and invalidate the pending background task instead of being clobbered back into a running state.
+  - 新增标记取消与 worker 启动竞态的回归测试：worker 子进程起来之前按下取消能落地「已取消」并废弃排队中的后台任务，不会被回写成 running。
+
 ## [3.1.1] - 2026-05-08
 
 ### Fixed / 修复

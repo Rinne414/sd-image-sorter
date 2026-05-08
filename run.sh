@@ -256,7 +256,21 @@ echo
 
 # Honor SD_IMAGE_SORTER_PORT override for the browser URL; default 8487.
 APP_PORT="${SD_IMAGE_SORTER_PORT:-8487}"
-APP_URL="http://localhost:${APP_PORT}"
+if ! PORT_SELECTION_OUTPUT=$(backend/venv/bin/python backend/launcher_port.py --format sh); then
+    eval "$PORT_SELECTION_OUTPUT"
+    echo "[ERROR] ${SD_IMAGE_SORTER_PORT_MESSAGE:-Could not select a localhost port.}"
+    echo
+    echo "If the port is blocked or reserved, choose another one, for example:"
+    echo "  SD_IMAGE_SORTER_PORT=8587 ./run.sh"
+    exit 1
+fi
+eval "$PORT_SELECTION_OUTPUT"
+APP_PORT="${SD_IMAGE_SORTER_PORT}"
+APP_URL_HOST="${SD_IMAGE_SORTER_URL_HOST:-127.0.0.1}"
+if [ "${SD_IMAGE_SORTER_PORT_STATUS:-ok}" = "changed" ]; then
+    echo "[WARN] ${SD_IMAGE_SORTER_PORT_MESSAGE}"
+fi
+APP_URL="http://${APP_URL_HOST}:${APP_PORT}"
 
 echo "=========================================="
 echo "  SD Image Sorter is running!"
@@ -282,4 +296,4 @@ echo
 
 # ── Start the server ─────────────────────────────────────────────
 cd backend
-$PYTHON_CMD main.py
+$PYTHON_CMD main.py --port "${APP_PORT}"

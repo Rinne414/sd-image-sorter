@@ -40,6 +40,13 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"Installing full AI runtime dependencies" in launcher_bytes
     assert b"backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt" in launcher_bytes
     assert b"-m pip install -r backend\\requirements.txt" not in launcher_bytes
+    assert b"backend\\launcher_port.py --format cmd > \"!PORT_ENV_FILE!\"" in launcher_bytes
+    assert b"SD_IMAGE_SORTER_PORT_STATUS" in launcher_bytes
+    assert b"SD_IMAGE_SORTER_URL_HOST" in launcher_bytes
+    assert b"PORT_CHECK_EXIT" in launcher_bytes
+    assert b"http://!APP_URL_HOST!:!APP_PORT!" in launcher_bytes
+    assert b"http://localhost:!APP_PORT!" not in launcher_bytes
+    assert b"main.py --port !APP_PORT!" in launcher_bytes
     assert launcher_bytes.endswith(b"pause\r\n")
 
 
@@ -92,6 +99,42 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
     assert not (stage_root / "data/images.db").exists()
     assert not (stage_root / "update/downloads/patch.zip").exists()
     assert not (stage_root / ".git/config").exists()
+
+
+def test_rescue_batch_files_are_release_managed(tmp_path):
+    release_builder = load_release_builder()
+
+    assert release_builder.should_skip_path(Path("fix.bat")) is False
+    assert release_builder.should_skip_path(Path("update.bat")) is False
+    assert release_builder.should_skip_path(Path("backend") / "update_cli.py") is False
+
+    fix_text = (ROOT / "fix.bat").read_text(encoding="utf-8")
+    update_text = (ROOT / "update.bat").read_text(encoding="utf-8")
+
+    assert "fix.bat is for rare repair/diagnostics only" in fix_text
+    assert "main.py" not in fix_text
+    assert "--diagnose --format text" in fix_text
+    assert r"backend\update_cli.py" in update_text
+    assert "--check-only" in update_text
+    assert "%*" in update_text
+    assert "run-portable.bat" in update_text
+
+    staged_files = {
+        "fix.bat": fix_text,
+        "update.bat": update_text,
+        "backend/update_cli.py": "print('update cli')\n",
+    }
+    for relative_path, content in staged_files.items():
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+    manifest_path = release_builder.write_package_manifest(tmp_path, "9.9.9")
+    managed_paths = set(json.loads(manifest_path.read_text(encoding="utf-8"))["managed_paths"])
+
+    assert "fix.bat" in managed_paths
+    assert "update.bat" in managed_paths
+    assert "backend/update_cli.py" in managed_paths
 
 
 def test_release_default_version_follows_app_info():

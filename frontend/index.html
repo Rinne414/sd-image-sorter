@@ -2648,8 +2648,8 @@
             <div class="modal-backdrop" aria-hidden="true"></div>
             <div class="modal-content modal-large tagger-modal-shell">
                 <button class="modal-close" id="btn-close-tag-modal" aria-label="Close">✕</button>
-                <h3 id="tag-modal-title" data-i18n="modal.tagTitle">WD14 Auto Tagging</h3>
-                <p class="modal-description" data-i18n="modal.tagDescription">Use WD14-compatible models to generate tags for images.</p>
+                <h3 id="tag-modal-title" data-i18n="modal.tagTitle">AI Auto Tagging</h3>
+                <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
 
                 <div class="form-group">
                     <label for="tag-model-select" id="tag-model-select-label" data-i18n="modal.tagModel">Model</label>
@@ -2677,6 +2677,16 @@
                         <span class="guided-advanced-hint" id="tag-advanced-options-hint" data-i18n="tagger.advancedHintPanel">Optional. Open this only if you want more control.</span>
                     </summary>
                     <div class="guided-advanced-body">
+                        <div class="form-group custom-model-group" id="custom-profile-group" style="display: none;">
+                            <label for="tag-custom-profile-select" data-i18n="modal.tagCustomProfile">Custom Model Type</label>
+                            <select id="tag-custom-profile-select" class="input-field">
+                                <option value="wd14" data-i18n="modal.tagCustomProfileWd14">WD14-compatible ONNX</option>
+                                <option value="camie-tagger-v2" data-i18n="modal.tagCustomProfileCamie">Camie ONNX</option>
+                                <option value="pixai-tagger-v0.9" data-i18n="modal.tagCustomProfilePixai">PixAI ONNX</option>
+                            </select>
+                            <small class="helper-text" data-i18n="modal.tagCustomProfileHelper">Choose the profile that matches your local model so preprocessing, metadata, and threshold semantics are correct.</small>
+                        </div>
+
                         <div class="form-group custom-model-group" id="custom-model-group" style="display: none;">
                             <label for="tag-model-path" data-i18n="modal.tagCustomModelPath">Custom Model Path (.onnx)</label>
                             <input type="text" id="tag-model-path" class="input-field"
@@ -2686,11 +2696,11 @@
                         </div>
 
                         <div class="form-group custom-model-group" id="custom-tags-group" style="display: none;">
-                            <label for="tag-tags-path" data-i18n="modal.tagTagsCsvPath">Tags CSV Path</label>
+                            <label for="tag-tags-path" data-i18n="modal.tagTagsCsvPath">Tags / Metadata Path</label>
                             <input type="text" id="tag-tags-path" class="input-field"
                                 data-i18n-placeholder="modal.tagTagsCsvPlaceholder"
-                                placeholder="Path to selected_tags.csv (required)">
-                            <small class="helper-text" data-i18n="modal.tagTagsCsvHelper">Required when using custom model</small>
+                                placeholder="Optional: selected_tags.csv or Camie metadata JSON">
+                            <small class="helper-text" data-i18n="modal.tagTagsCsvHelper">Optional when the metadata file is next to the model.</small>
                         </div>
 
                         <div class="system-info-panel" id="system-info-panel" style="display:none">

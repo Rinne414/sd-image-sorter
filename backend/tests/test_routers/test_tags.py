@@ -97,15 +97,21 @@ class TestTaggerModels:
         assert models["camie-tagger-v2"]["default_threshold"] == 0.62
         assert models["camie-tagger-v2"]["default_character_threshold"] == 0.78
         assert models["camie-tagger-v2"]["disabled"] is False
+        assert models["camie-tagger-v2"]["custom_profile_supported"] is True
+        assert models["camie-tagger-v2"]["custom_metadata_format"] == "camie_v2"
+        assert models["camie-tagger-v2"]["custom_tags_file_hint"] == ".json metadata"
 
         assert "pixai-tagger-v0.9" in models
         assert models["pixai-tagger-v0.9"]["default_threshold"] == 0.3
         assert models["pixai-tagger-v0.9"]["default_character_threshold"] == 0.85
         assert models["pixai-tagger-v0.9"]["disabled"] is False
+        assert models["pixai-tagger-v0.9"]["custom_profile_supported"] is True
+        assert models["pixai-tagger-v0.9"]["custom_tags_file_hint"] == "selected_tags.csv"
 
         assert "toriigate-0.5" in models
         assert models["toriigate-0.5"]["disabled"] is False
         assert models["toriigate-0.5"]["gpu_confirmation_required"] is False
+        assert models["toriigate-0.5"]["custom_profile_supported"] is False
 
 
 class TestTagsLibrary:
@@ -623,9 +629,14 @@ class TestTaggingPipeline:
         data = response.json()
         assert ".onnx" in data["error"]
 
-    def test_start_tagging_allows_custom_gpu_combo_without_backend_block(self, test_client):
+    def test_start_tagging_allows_custom_gpu_combo_without_backend_block(self, test_client, tmp_path: Path):
         """Backend should no longer hard-block custom GPU runs; the frontend owns the warning UX."""
         from routers import tags as tags_router
+
+        model_path = tmp_path / "custom-model.onnx"
+        model_path.write_bytes(b"fake custom onnx")
+        tags_path = tmp_path / "selected_tags.csv"
+        tags_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
 
         tags_router.get_tagging_service().set_tagger_getter(lambda **kwargs: object())
 
@@ -633,8 +644,8 @@ class TestTaggingPipeline:
             response = test_client.post(
                 "/api/tag/start",
                 json={
-                    "model_path": "C:/models/custom-model.onnx",
-                    "tags_path": "C:/models/selected_tags.csv",
+                    "model_path": str(model_path),
+                    "tags_path": str(tags_path),
                     "use_gpu": True,
                 }
             )

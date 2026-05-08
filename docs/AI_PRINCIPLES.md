@@ -1,6 +1,6 @@
 # AI Principles For This Repo
 
-**Updated:** 2026-05-01
+**Updated:** 2026-05-08
 **Purpose:** Give future AI agents a local decision framework so they do not overwrite deliberate product choices with generic "best practice" cleanup.
 
 ## Why This Exists
@@ -181,6 +181,8 @@ Clear, delete, overwrite, and similar dangerous actions should be separated from
 
 Save, export, continue, and other common productive actions should be easy to find and use.
 
+User-supplied local model/checkpoint files are user data. Runtime repair paths may replace app-managed downloads, but must not delete or re-download a file that came from an explicit local path.
+
 ### 9. Compact icon actions are allowed, but only when the meaning is truly obvious
 
 Icon-only or emoji-first buttons are acceptable when they genuinely save space and remain obvious across English and Chinese UI.
@@ -219,6 +221,21 @@ Prefer targeted resource controls:
 - explicit payload/pixel budgets for large image edits
 
 Do not make every workflow slower, disable GPU by default, or serialize cheap metadata/UI work just to hide a crash bug in one heavy AI path.
+
+### 13. Double-click entry must work; rescue paths must exist outside the app
+
+For startup, packaging, and update work, treat entry usability as a product invariant, not a convenience detail.
+
+Keep these rules aligned unless the user explicitly changes product direction:
+
+- normal users should start through the normal launcher (`run.bat`, generated `run-portable.bat`, or `run.sh`)
+- launcher-level startup blockers must be fixed in the normal launcher path, not moved into a rarely used support script
+- if the launcher must choose a different localhost URL, it must open the browser at the actual selected URL
+- `fix.bat` is diagnostics/repair only; it must not become an alternate everyday launcher
+- when a blocker can prevent the web UI from opening, there must be an update or recovery path that does not require the web UI
+- release packages and app-patch manifests must include root launchers and rescue scripts, not only frontend/backend files
+
+The short lesson for future AI: **double-click must get users in; errors must be understandable; if users cannot get in, they must still be able to update.**
 
 ## Core Principles
 

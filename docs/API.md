@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.1.1
+**Version:** 3.1.2
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -324,7 +324,7 @@ Get prompt token library.
 Get LoRA library.
 
 #### GET /api/tagger/models
-Get available WD14 tagger models.
+Get available tagger models and runtime guidance. Each model item includes default thresholds, GPU/runtime guidance, and Custom profile metadata such as `custom_profile_supported`, `custom_metadata_format`, and `custom_tags_file_hint`.
 
 #### POST /api/tag/start
 Start background tagging (alias for POST /api/tag).
@@ -334,12 +334,17 @@ Start background tagging.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `image_ids` | int[] | [] | Specific images (empty = all untagged) |
-| `model` | string | "eva02-large" | WD14 model name |
-| `general_threshold` | float | 0.35 | Threshold for general tags |
-| `character_threshold` | float | 0.75 | Threshold for character tags |
-| `rating_threshold` | float | 0.5 | Threshold for rating tags |
-| `overwrite` | bool | false | Re-tag already tagged images |
+| `image_ids` | int[] \| null | null | Specific images (`null` + `retag_all=false` = all untagged) |
+| `threshold` | float | 0.35 | Threshold for general tags after score normalization |
+| `character_threshold` | float | 0.85 | Threshold for character tags after score normalization |
+| `retag_all` | bool | false | Re-tag already tagged images when no explicit `image_ids` are supplied |
+| `model_name` | string \| null | default tagger | Built-in tagger model name, or the selected Custom profile when `model_path` is used |
+| `model_path` | string \| null | null | Local Custom ONNX model path; must exist and end in `.onnx`. User-supplied files are never deleted or re-downloaded by the repair path |
+| `tags_path` | string \| null | null | Optional local tag metadata path for Custom ONNX only; requires `model_path`. If supplied, it must exist and match the selected profile extension. If omitted, the tagger auto-detects profile-specific metadata next to the model: WD14/PixAI use `selected_tags.csv`; Camie uses `camie-tagger-v2-metadata.json` or `metadata.json` |
+| `custom_profile` | string \| null | null | Custom ONNX profile: `wd14`, `camie-tagger-v2`, or `pixai-tagger-v0.9`. `toriigate-0.5` is rejected because ToriiGate is not ONNX |
+| `use_gpu` | bool | true | Request GPU runtime when available |
+| `allow_unsafe_acceleration` | bool | false | Reserved unsafe acceleration override |
+| `batch_size` | int \| null | null | Optional user override for runtime chunk size. If omitted, Custom ONNX starts conservatively |
 
 #### GET /api/tag/progress
 Get tagging progress.

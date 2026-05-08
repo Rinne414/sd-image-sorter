@@ -363,3 +363,32 @@ def test_queue_solitaire_escapes_file_and_section_values_before_inner_html():
     assert '<option value="${escapeQueueHtml(s.id)}">${escapeQueueHtml(s.name)}' in source
     assert "escapeQueueHtml(item?.outputFilename || item?.originalFilename || state.previewId)" in source
     assert "${item?.outputFilename || item?.originalFilename || state.previewId}" not in source
+
+
+def test_custom_tagger_profile_ui_and_payload_contract():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert 'id="tag-custom-profile-select"' in html
+    assert 'value="wd14"' in html
+    assert 'value="camie-tagger-v2"' in html
+    assert 'value="pixai-tagger-v0.9"' in html
+    assert "custom_profile: options.customProfile || null" in source
+    assert "options.customProfile = customProfile;" in source
+    assert "options.modelName = customProfile;" in source
+    assert "if (tagsPath)" in source
+    assert "options.tagsPath = tagsPath;" in source
+    assert "showToast(appT('tag.tagsMetadataRequired'" not in source
+    assert "if (applyModelDefaults && meta && (!isCustom || effectiveModelForUi !== 'custom'))" in source
+    assert "batchSelect?.dataset.userChosen === '1'" in source
+    assert "modal.tagCustomProfile" in en_source
+    assert "modal.tagCustomProfile" in zh_source
+    assert "tagger.customCamieHelp" in en_source
+    assert "tagger.customCamieHelp" in zh_source
+    assert "tag.tagsMetadataRequired" in en_source
+    assert "tag.tagsMetadataRequired" in zh_source
+    assert "Optional if the file sits next to the model" in en_source
+    assert "如果文件就在模型旁边可不填" in zh_source

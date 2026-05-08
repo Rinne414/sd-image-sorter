@@ -649,3 +649,186 @@ def test_pixai_rating_fallback_uses_only_thresholded_tags(monkeypatch, tmp_path)
     assert result["rating"] == "general"
     assert "pussy" not in {item["tag"] for item in result["general_tags"]}
     assert result["rating_confidences"]["general"] == 1.0
+
+
+def test_custom_profile_aliases_resolve_to_real_model_profiles(monkeypatch):
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    assert tagger_module.WD14Tagger._resolve_model_profile("custom", "model.onnx") == "wd-swinv2-tagger-v3"
+    assert tagger_module.WD14Tagger._resolve_model_profile("wd14-compatible", "model.onnx") == "wd-swinv2-tagger-v3"
+    assert tagger_module.WD14Tagger._resolve_model_profile("camie-tagger-v2", "model.onnx") == "camie-tagger-v2"
+    assert tagger_module.WD14Tagger._resolve_model_profile("pixai-tagger-v0.9", "model.onnx") == "pixai-tagger-v0.9"
+
+
+def test_custom_wd14_profile_does_not_follow_mutable_default_model(monkeypatch):
+    monkeypatch.setattr(tagger_module, "DEFAULT_MODEL", "camie-tagger-v2")
+
+    assert tagger_module.WD14Tagger._resolve_model_profile("custom", "model.onnx") == "wd-swinv2-tagger-v3"
+    assert tagger_module.WD14Tagger._resolve_model_profile("wd14", "model.onnx") == "wd-swinv2-tagger-v3"
+
+
+def test_custom_model_load_error_does_not_delete_user_supplied_file(monkeypatch, tmp_path):
+    class _CorruptCustomSession:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("INVALID_PROTOBUF: corrupt custom export")
+
+    class _CorruptCustomOrtModule(_FakeOrtModule):
+        InferenceSession = _CorruptCustomSession
+
+    monkeypatch.setattr(tagger_module, "ort", _CorruptCustomOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "custom.onnx"
+    model_path.write_bytes(b"not really onnx but user-owned")
+    tags_path = tmp_path / "selected_tags.csv"
+    tags_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="custom",
+        model_path=str(model_path),
+        tags_path=str(tags_path),
+        use_gpu=False,
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to load ONNX model"):
+        tagger.load()
+
+    assert model_path.exists()
+
+
+def test_custom_model_missing_path_does_not_fallback_to_builtin_download(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="custom",
+        model_path=str(tmp_path / "missing-custom.onnx"),
+        tags_path=None,
+        use_gpu=False,
+    )
+
+    with pytest.raises(FileNotFoundError, match="Custom ONNX model file not found"):
+        tagger._get_model_paths()
+
+
+def test_explicit_custom_tags_path_missing_does_not_autodiscover_neighbor_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "custom.onnx"
+    model_path.write_bytes(b"fake")
+    (tmp_path / "selected_tags.csv").write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="custom",
+        model_path=str(model_path),
+        tags_path=str(tmp_path / "typo-selected-tags.csv"),
+        use_gpu=False,
+    )
+
+    with pytest.raises(FileNotFoundError, match="Custom tags/metadata file not found"):
+        tagger._get_model_paths()
+
+
+def test_custom_camie_profile_autodetects_metadata_json_next_to_model(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _CamieOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "camie-custom.onnx"
+    model_path.write_bytes(b"fake")
+    metadata_path = tmp_path / "camie-tagger-v2-metadata.json"
+    metadata_path.write_text(
+        '{"dataset_info":{"total_tags":30,"tag_mapping":{"idx_to_tag":{"20":"rating_general","24":"1girl"},"tag_to_category":{"rating_general":"rating","1girl":"general"}}}}',
+        encoding="utf-8",
+    )
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="camie-tagger-v2",
+        model_path=str(model_path),
+        tags_path=None,
+        use_gpu=False,
+    )
+
+    resolved_model_path, resolved_tags_path = tagger._get_model_paths()
+
+    assert resolved_model_path == str(model_path)
+    assert resolved_tags_path == str(metadata_path)
+
+
+def test_custom_wd14_profile_does_not_autodetect_camie_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "custom-wd14.onnx"
+    model_path.write_bytes(b"fake")
+    (tmp_path / "camie-tagger-v2-metadata.json").write_text("{}", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="wd14",
+        model_path=str(model_path),
+        tags_path=None,
+        use_gpu=False,
+    )
+
+    with pytest.raises(ValueError, match="Tags/metadata file not found"):
+        tagger._get_model_paths()
+
+
+def test_custom_camie_profile_does_not_autodetect_selected_tags_csv(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _CamieOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "camie-custom.onnx"
+    model_path.write_bytes(b"fake")
+    (tmp_path / "selected_tags.csv").write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="camie-tagger-v2",
+        model_path=str(model_path),
+        tags_path=None,
+        use_gpu=False,
+    )
+
+    with pytest.raises(ValueError, match="Tags/metadata file not found"):
+        tagger._get_model_paths()
+
+
+def test_custom_pixai_profile_rejects_direct_json_metadata(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _PixAIOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "pixai-custom.onnx"
+    model_path.write_bytes(b"fake")
+    metadata_path = tmp_path / "metadata.json"
+    metadata_path.write_text("{}", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="pixai-tagger-v0.9",
+        model_path=str(model_path),
+        tags_path=str(metadata_path),
+        use_gpu=False,
+    )
+
+    with pytest.raises(ValueError, match=r"pixai-tagger-v0.9.*\.csv"):
+        tagger._get_model_paths()
+
+
+def test_custom_camie_profile_does_not_fallback_to_wd14_csv(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _CamieOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    model_path = tmp_path / "camie-custom.onnx"
+    model_path.write_bytes(b"fake")
+    csv_path = tmp_path / "selected_tags.csv"
+    csv_path.write_text("tag_id,name,category,count\n0,general,0,1\n", encoding="utf-8")
+
+    tagger = tagger_module.WD14Tagger(
+        model_name="camie-tagger-v2",
+        model_path=str(model_path),
+        tags_path=None,
+        use_gpu=False,
+    )
+
+    with pytest.raises(ValueError, match="camie-tagger-v2-metadata.json"):
+        tagger._get_model_paths()

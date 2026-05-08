@@ -60,6 +60,7 @@ def _prepare_pending_update(
     payload_files: dict[str, str],
     target_version: str = "3.1.1",
     nested_payload_root: str = "sd-image-sorter",
+    current_pid: int = 123456789,
 ) -> tuple[Path, Path, Path, Path, Path]:
     package_root = tmp_path / "app"
     update_root = package_root / "update"
@@ -111,7 +112,7 @@ def _prepare_pending_update(
         json.dumps(
             {
                 "created_at": 0,
-                "current_pid": 123456789,
+                "current_pid": current_pid,
                 "package_root": str(package_root),
                 "archive_path": str(archive_path),
                 "target_version": target_version,
@@ -126,6 +127,40 @@ def _prepare_pending_update(
     )
 
     return pending_manifest_path, package_root, update_root, data_root, logs / "update.log"
+
+
+
+def test_apply_update_with_external_manifest_does_not_wait_for_pid_zero(monkeypatch, tmp_path: Path):
+    pending_manifest_path, package_root, _update_root, _data_root, log_path = _prepare_pending_update(
+        tmp_path,
+        current_manifest_paths=[
+            "frontend/version.txt",
+            "update/package-manifest.json",
+        ],
+        new_manifest_paths=[
+            "frontend/version.txt",
+            "update/package-manifest.json",
+        ],
+        installed_files={
+            "frontend/version.txt": "old-ui\n",
+        },
+        payload_files={
+            "frontend/version.txt": "new-ui\n",
+        },
+        current_pid=0,
+    )
+
+    monkeypatch.setattr(
+        update_worker,
+        "_wait_for_pid_exit",
+        lambda pid, timeout_seconds, log_path: (_ for _ in ()).throw(AssertionError("must not wait for PID 0")),
+    )
+
+    result = update_worker.apply_update(pending_manifest_path)
+
+    assert result == 0
+    assert (package_root / "frontend" / "version.txt").read_text(encoding="utf-8") == "new-ui\n"
+    assert "No running app process was provided" in log_path.read_text(encoding="utf-8")
 
 
 def test_apply_update_accepts_nested_full_package_payload(monkeypatch, tmp_path: Path):

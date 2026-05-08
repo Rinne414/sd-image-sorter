@@ -585,5 +585,6 @@ if __name__ == "__main__":
     _check_host_security(args.host)
     _configure_event_loop_policy()
     os.environ["SD_IMAGE_SORTER_BIND_HOST"] = args.host
+    os.environ["SD_IMAGE_SORTER_PORT"] = str(args.port)
     logger.info(f"Starting server on {args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port)

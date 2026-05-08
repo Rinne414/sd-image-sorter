@@ -989,6 +989,7 @@ const API = {
             model_name: options.modelName || null,
             model_path: options.modelPath || null,
             tags_path: options.tagsPath || null,
+            custom_profile: options.customProfile || null,
             image_ids: options.imageIds || null,
             retag_all: options.retagAll || false,
             use_gpu: options.useGpu ?? true,
@@ -2084,6 +2085,20 @@ function getLocalizedTaggerMeta(modelName, meta) {
     };
 }
 
+function getCustomTaggerProfile() {
+    return normalizeTaggerModelName($('#tag-custom-profile-select')?.value || 'wd14', 'wd14');
+}
+
+function getEffectiveTaggerModelForUi(modelName, options = {}) {
+    const { isCustom = false } = options;
+    if (!isCustom) return normalizeTaggerModelName(modelName, 'wd-swinv2-tagger-v3');
+    const customProfile = getCustomTaggerProfile();
+    if (customProfile === 'camie-tagger-v2' || customProfile === 'pixai-tagger-v0.9') {
+        return customProfile;
+    }
+    return 'custom';
+}
+
 function isToriiGateTaggerModel(modelName, options = {}) {
     const { isCustom = false } = options;
     if (isCustom) return false;
@@ -2343,6 +2358,18 @@ function renderTaggerModelSnapshot(meta, options = {}) {
             `<span class="tagger-model-badge">${escapeHtml(appT('tagger.onnxOnlyBadge', 'ONNX only'))}</span>`,
             `<span class="tagger-model-badge">${escapeHtml(appT('tagger.schemaUnknownBadge', 'Schema unknown'))}</span>`,
         ].join('');
+        const profileName = getCustomTaggerProfile();
+        const profileMeta = profileName && profileName !== 'wd14' ? getLocalizedTaggerMeta(profileName, getTaggerModelMeta(profileName)) : null;
+        if (profileMeta?.description) {
+            subtitleEl.textContent = appT('tagger.customProfileSubtitle', 'Custom local model using {profile} profile.').replace('{profile}', profileName);
+            badgesEl.innerHTML = [
+                `<span class="tagger-model-badge is-warning">${escapeHtml(appT('tagger.customBadge', 'Custom'))}</span>`,
+                `<span class="tagger-model-badge">${escapeHtml(profileName)}</span>`,
+                `<span class="tagger-model-badge">${escapeHtml(appT('tagger.profileAwareBadge', 'Profile aware'))}</span>`,
+            ].join('');
+            noteEl.textContent = appT('tagger.customProfileNote', "The app will use this profile's preprocessing, metadata parser, confidence normalization, and rating behavior.");
+            return;
+        }
         noteEl.textContent = appT('tagger.customNote', 'Start from one stable run first. Raise chunk size only after that.');
         return;
     }
@@ -2602,6 +2629,8 @@ function syncTaggerModelUi(options = {}) {
     const runtimeProviderChip = $('#tag-runtime-provider-chip');
     const runtimeAdvanced = $('#tag-runtime-advanced');
     const runtimeAdvancedHint = $('#tag-runtime-advanced-hint');
+    const customProfileGroup = $('#custom-profile-group');
+    const customProfileSelect = $('#tag-custom-profile-select');
     const customModelGroup = $('#custom-model-group');
     const customTagsGroup = $('#custom-tags-group');
     const disabledNotice = $('#tagger-disabled-notice');
@@ -2612,14 +2641,15 @@ function syncTaggerModelUi(options = {}) {
     const rawValue = modelSelect.value || '';
     const isCustom = rawValue === 'custom';
     const normalizedModel = normalizeTaggerModelName(rawValue, 'wd-swinv2-tagger-v3');
-    const rawMeta = getTaggerModelMeta(normalizedModel);
-    const meta = getLocalizedTaggerMeta(normalizedModel, rawMeta);
-    const isToriiGate = isToriiGateTaggerModel(normalizedModel, { isCustom });
-    const gpuLocked = isGpuLockedTaggerModel(normalizedModel, { isCustom });
+    const effectiveModelForUi = getEffectiveTaggerModelForUi(normalizedModel, { isCustom });
+    const rawMeta = getTaggerModelMeta(effectiveModelForUi === 'custom' ? normalizedModel : effectiveModelForUi);
+    const meta = getLocalizedTaggerMeta(effectiveModelForUi === 'custom' ? normalizedModel : effectiveModelForUi, rawMeta);
+    const isToriiGate = isToriiGateTaggerModel(effectiveModelForUi, { isCustom: false });
+    const gpuLocked = isGpuLockedTaggerModel(effectiveModelForUi, { isCustom });
     const gpuUserChosen = useGpu?.dataset.userChosen === '1';
     const currentGpuSelection = useGpu?.checked ?? true;
-    const activeHardwareRecommendation = getTaggerHardwareRecommendation(normalizedModel, { isCustom, useGpu: currentGpuSelection });
-    const gpuHardwareRecommendation = getTaggerHardwareRecommendation(normalizedModel, { isCustom, useGpu: true });
+    const activeHardwareRecommendation = getTaggerHardwareRecommendation(effectiveModelForUi, { isCustom: effectiveModelForUi === 'custom', useGpu: currentGpuSelection });
+    const gpuHardwareRecommendation = getTaggerHardwareRecommendation(effectiveModelForUi, { isCustom: effectiveModelForUi === 'custom', useGpu: true });
     const hardwareRecommendation = activeHardwareRecommendation || gpuHardwareRecommendation;
     const providerState = getTaggerProviderState();
     const hardwareProbeLoaded = providerState.probeLoaded;
@@ -2628,7 +2658,7 @@ function syncTaggerModelUi(options = {}) {
     const hardwareRisk = String(hardwareRecommendation?.risk_level || '').toLowerCase();
     const hardwarePrefersGpu = isToriiGate
         ? (hardwareProbeLoaded ? torchGpuAvailable : currentGpuSelection)
-        : (isCustom
+        : (effectiveModelForUi === 'custom'
             ? (hardwareProbeLoaded ? onnxGpuAvailable : currentGpuSelection)
             : (gpuHardwareRecommendation
                 ? Boolean(gpuHardwareRecommendation.recommended_use_gpu)
@@ -2636,17 +2666,19 @@ function syncTaggerModelUi(options = {}) {
     const hardwareHighRisk = hardwareRisk === 'high';
     const taggingIsRunning = $('#btn-start-tag')?.disabled === true;
     const modelDisabled = !isCustom && Boolean(meta?.disabled);
-    const modelPrefersGpu = isCustom ? onnxGpuAvailable : Boolean(meta?.gpu_default ?? true);
+    const modelPrefersGpu = isCustom && effectiveModelForUi === 'custom' ? onnxGpuAvailable : Boolean(meta?.gpu_default ?? true);
     const recommendedGpu = gpuLocked
         ? false
         : (hardwareProbeLoaded ? (modelPrefersGpu && hardwarePrefersGpu) : currentGpuSelection);
 
+    if (customProfileGroup) customProfileGroup.style.display = isCustom ? 'block' : 'none';
+    if (customProfileSelect) customProfileSelect.disabled = taggingIsRunning;
     if (customModelGroup) customModelGroup.style.display = isCustom ? 'block' : 'none';
     if (customTagsGroup) customTagsGroup.style.display = isCustom ? 'block' : 'none';
     renderTaggerModelSnapshot(meta, { isCustom, modelDisabled, rawMeta });
     syncTaggerThresholdUi({ isToriiGate });
 
-    if (applyModelDefaults && meta && !isCustom) {
+    if (applyModelDefaults && meta && (!isCustom || effectiveModelForUi !== 'custom')) {
         applyTaggerModelThresholdDefaults(meta);
     }
 
@@ -2674,9 +2706,16 @@ function syncTaggerModelUi(options = {}) {
 
     if (modelHelp) {
         if (isCustom) {
-            modelHelp.textContent = (useGpu?.checked ?? false)
-                ? appT('tagger.customModelHelpGpuPreferred', 'Custom ONNX model. GPU mode is on for this run. CPU Safe Mode is still safer if stability is unknown.')
-                : appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+            const customProfile = getCustomTaggerProfile();
+            if (customProfile === 'camie-tagger-v2') {
+                modelHelp.textContent = appT('tagger.customCamieHelp', 'Custom Camie ONNX: use the Camie metadata JSON. Logits are sigmoid-normalized before thresholds.');
+            } else if (customProfile === 'pixai-tagger-v0.9') {
+                modelHelp.textContent = appT('tagger.customPixaiHelp', 'Custom PixAI ONNX: use selected_tags.csv. PixAI preprocessing and rating fallback are enabled.');
+            } else {
+                modelHelp.textContent = (useGpu?.checked ?? false)
+                    ? appT('tagger.customModelHelpGpuPreferred', 'Custom ONNX model. GPU mode is on for this run. CPU Safe Mode is still safer if stability is unknown.')
+                    : appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+            }
         } else if (modelDisabled) {
             modelHelp.textContent = meta?.disabled_reason || appT('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
         } else {
@@ -2685,8 +2724,8 @@ function syncTaggerModelUi(options = {}) {
     }
 
     const gpuEnabled = useGpu?.checked ?? false;
-    const riskyGpu = modelDisabled ? false : isRiskyTaggerGpuSelection(normalizedModel, {
-        isCustom,
+    const riskyGpu = modelDisabled ? false : isRiskyTaggerGpuSelection(effectiveModelForUi, {
+        isCustom: isCustom && effectiveModelForUi === 'custom',
         useGpu: gpuEnabled,
         recommendedGpu
     });
@@ -2850,11 +2889,11 @@ function syncTaggerModelUi(options = {}) {
     }
 
     syncTaggerRuntimeChunkUi({
-        modelName: normalizedModel,
+        modelName: effectiveModelForUi,
         gpuEnabled,
         gpuLocked,
         riskyGpu,
-        isCustom,
+        isCustom: isCustom && effectiveModelForUi === 'custom',
         isToriiGate
     });
 
@@ -3664,6 +3703,11 @@ function initEventListeners() {
     $('#tag-model-select').addEventListener('change', () => {
         delete $('#tag-use-gpu')?.dataset.userChosen;
         syncTaggerModelUi({ applyModelDefaults: true, toastOnAutoSafe: true });
+    });
+    $('#tag-custom-profile-select')?.addEventListener('change', () => {
+        delete $('#tag-use-gpu')?.dataset.userChosen;
+        syncTaggerModelUi({ applyModelDefaults: true, toastOnAutoSafe: true });
+        syncTagAdvancedUi();
     });
     $('#tag-use-gpu')?.addEventListener('change', () => {
         $('#tag-use-gpu').dataset.userChosen = '1';
@@ -5515,6 +5559,7 @@ function setTaggingUiState(isRunning, options = {}) {
     const characterThresholdInput = $('#tag-character-threshold');
     const retagAll = $('#tag-retag-all');
     const useGpu = $('#tag-use-gpu');
+    const customProfile = $('#tag-custom-profile-select');
     const modelPath = $('#tag-model-path');
     const tagsPath = $('#tag-tags-path');
     const exportBtn = $('#btn-export-tags-json');
@@ -5534,7 +5579,7 @@ function setTaggingUiState(isRunning, options = {}) {
             : (options.idleLabel || appT('common.close', 'Close'));
     }
 
-    [modelSelect, thresholdInput, characterThresholdInput, retagAll, useGpu, modelPath, tagsPath, exportBtn, importBtn].forEach((element) => {
+    [modelSelect, thresholdInput, characterThresholdInput, retagAll, useGpu, customProfile, modelPath, tagsPath, exportBtn, importBtn].forEach((element) => {
         if (element) {
             element.disabled = isRunning;
         }
@@ -5635,19 +5680,19 @@ async function startTagging() {
     if (isCustomModel) {
         const modelPath = $('#tag-model-path')?.value?.trim() || '';
         const tagsPath = $('#tag-tags-path')?.value?.trim() || '';
+        const customProfile = getCustomTaggerProfile();
 
         if (!modelPath) {
             showToast(appT('tag.modelPathRequired', 'Please enter a model path'), 'error');
             return;
         }
 
-        if (!tagsPath) {
-            showToast(appT('tag.tagsCsvRequired', 'Please enter a Tags CSV path'), 'error');
-            return;
-        }
-
         options.modelPath = modelPath;
-        options.tagsPath = tagsPath;
+        if (tagsPath) {
+            options.tagsPath = tagsPath;
+        }
+        options.customProfile = customProfile;
+        options.modelName = customProfile;
     } else {
         options.modelName = modelSelect;
     }
@@ -5658,11 +5703,16 @@ async function startTagging() {
     // Advanced runtime chunk size now maps to the backend's true WD14 batch size
     // where the selected model supports dynamic batching.
     const batchSelect = document.getElementById('tagger-batch-size');
-    options.batchSize = isToriiGateTaggerModel(modelSelect, { isCustom: isCustomModel })
-        ? 1
-        : (batchSelect
-            ? Math.min(128, parseInt(batchSelect.value, 10) || getRecommendedTaggerChunkSize(modelSelect, { isCustom: isCustomModel, useGpu: options.useGpu }))
-            : Math.min(128, getRecommendedTaggerChunkSize(modelSelect, { isCustom: isCustomModel, useGpu: options.useGpu })));
+    const effectiveModelForBatch = getEffectiveTaggerModelForUi(modelSelect, { isCustom: isCustomModel });
+    if (isToriiGateTaggerModel(effectiveModelForBatch, { isCustom: false })) {
+        options.batchSize = 1;
+    } else if (batchSelect?.dataset.userChosen === '1') {
+        const recommendedBatchSize = getRecommendedTaggerChunkSize(effectiveModelForBatch, {
+            isCustom: isCustomModel && effectiveModelForBatch === 'custom',
+            useGpu: options.useGpu,
+        });
+        options.batchSize = Math.min(128, parseInt(batchSelect.value, 10) || recommendedBatchSize);
+    }
 
     if (gpuLocked) {
         options.useGpu = false;

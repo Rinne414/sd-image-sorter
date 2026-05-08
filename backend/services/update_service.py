@@ -587,12 +587,19 @@ class UpdateService:
         safe_version = re.sub(r"[^0-9A-Za-z._-]+", "-", version) or "latest"
         return self._state_dir() / f"pending-update-{safe_version}.json"
 
-    def _write_pending_manifest(self, *, archive_path: Path, version: str, relaunch: bool) -> Path:
+    def _write_pending_manifest(
+        self,
+        *,
+        archive_path: Path,
+        version: str,
+        relaunch: bool,
+        current_pid: int | None = None,
+    ) -> Path:
         launcher_path = self._resolve_launcher_path()
         timestamp = int(time.time())
         payload = {
             "created_at": timestamp,
-            "current_pid": os.getpid(),
+            "current_pid": os.getpid() if current_pid is None else int(current_pid),
             "package_root": str(PACKAGE_ROOT),
             "archive_path": str(archive_path),
             "target_version": version,

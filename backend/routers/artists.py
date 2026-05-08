@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Dict
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from artist_identifier import (
@@ -130,7 +131,12 @@ class ArtistImageListResponse(BaseModel):
 
 
 def _configure_artist_service(service: ArtistService) -> None:
-    service.set_identifier_getter(get_artist_identifier)
+    if os.environ.get("SD_IMAGE_SORTER_E2E_FAKE_ARTIST") == "1":
+        from services.artist_service import _e2e_artist_identifier_getter
+
+        service.set_identifier_getter(_e2e_artist_identifier_getter)
+    else:
+        service.set_identifier_getter(get_artist_identifier)
 
 
 _artist_service_provider = ServiceProvider(
@@ -141,7 +147,7 @@ _artist_service_provider = ServiceProvider(
 
 def get_artist_service() -> ArtistService:
     service = _artist_service_provider.get()
-    service.set_identifier_getter(get_artist_identifier)
+    _configure_artist_service(service)
     return service
 
 
@@ -214,7 +220,8 @@ async def identify_artist(
         HTTPException 404: Image not found or file missing on disk
     """
     try:
-        result = service.identify_image(
+        result = await run_in_threadpool(
+            service.identify_image,
             image_id=request.image_id,
             threshold=request.threshold,
             top_k=request.top_k,
@@ -384,6 +391,20 @@ async def get_artist_diagnostics():
         (HF fallback / ModelScope fallback / local), treat the feature as
         available even when the Kaloscope files are missing.
     """
+    if os.environ.get("SD_IMAGE_SORTER_E2E_FAKE_ARTIST") == "1":
+        return {
+            "status": "ok",
+            "available": True,
+            "message": "Artist E2E fixture runtime is ready.",
+            "runtime_loaded": True,
+            "runtime_backend": "e2e-fixture",
+            "runtime_path": None,
+            "checkpoint_path": None,
+            "class_mapping_path": None,
+            "missing_dependencies": [],
+            "runtime_note": None,
+        }
+
     artist = dict(get_model_health()["artist"])
     live_loaded = False
     live_backend: Optional[str] = None

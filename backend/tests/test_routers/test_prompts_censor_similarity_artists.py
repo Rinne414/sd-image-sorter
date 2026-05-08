@@ -1587,6 +1587,94 @@ class TestArtistsRouterValidation:
         assert response.status_code == 200
         assert captured["threshold"] == ARTIST_THRESHOLD_DEFAULT
 
+    def test_identify_route_dispatches_model_work_to_threadpool(self):
+        import asyncio
+        import threading
+        from routers import artists as artists_router
+
+        event_loop_thread_id = threading.get_ident()
+        captured = {}
+
+        class FakeService:
+            def identify_image(self, **kwargs):
+                captured["inline_thread_id"] = threading.get_ident()
+                captured["kwargs"] = kwargs
+                return {
+                    "image_id": kwargs["image_id"],
+                    "artist": "fixture_artist",
+                    "confidence": 0.91,
+                    "top_predictions": [{"artist": "fixture_artist", "confidence": 0.91}],
+                    "model_loaded": True,
+                    "experimental": True,
+                }
+
+        async def fake_run_in_threadpool(func, **kwargs):
+            captured["dispatched_func"] = func
+            captured["dispatched_kwargs"] = kwargs
+            return func(**kwargs)
+
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            monkeypatch.setattr(artists_router, "run_in_threadpool", fake_run_in_threadpool)
+            response = asyncio.run(
+                artists_router.identify_artist(
+                    artists_router.IdentifyRequest(image_id=123, threshold=0.12, top_k=3),
+                    service=FakeService(),
+                )
+            )
+        finally:
+            monkeypatch.undo()
+
+        assert response.image_id == 123
+        assert captured["dispatched_func"].__name__ == "identify_image"
+        assert captured["dispatched_kwargs"] == {
+            "image_id": 123,
+            "threshold": 0.12,
+            "top_k": 3,
+            "model_source": "huggingface",
+            "model_path": None,
+        }
+        assert captured["inline_thread_id"] == event_loop_thread_id
+
+    def test_e2e_fake_artist_identifier_writes_prediction_without_real_runtime(self, test_client, monkeypatch, tmp_path):
+        from routers import artists as artists_router
+        from PIL import Image
+
+        image_path = tmp_path / "artist_e2e_fixture.png"
+        Image.new("RGB", (64, 64), color="cyan").save(image_path)
+        image_id = test_client.test_db.add_image(
+            path=str(image_path),
+            filename="artist_e2e_fixture.png",
+            metadata_json="{}",
+        )
+
+        monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_ARTIST", "1")
+        artists_router.set_artist_service(None)
+
+        try:
+            response = test_client.post(
+                "/api/artists/identify",
+                json={"image_id": image_id, "threshold": 0.0, "top_k": 2},
+            )
+
+            assert response.status_code == 200
+            payload = response.json()
+            assert payload["artist"] == "fixture_artist"
+            assert payload["model_loaded"] is True
+
+            with test_client.test_db.get_db() as conn:
+                row = conn.execute(
+                    "SELECT artist, confidence, top_predictions FROM artist_predictions WHERE image_id = ?",
+                    (image_id,),
+                ).fetchone()
+
+            assert row is not None
+            assert row["artist"] == "fixture_artist"
+            assert row["confidence"] == pytest.approx(0.97)
+            assert "fixture_artist" in row["top_predictions"]
+        finally:
+            artists_router.set_artist_service(None)
+
     def test_identify_batch_passes_model_configuration_to_background_task(self, test_client, monkeypatch, tmp_path):
         from routers import artists as artists_router
 
@@ -1704,6 +1792,18 @@ class TestArtistsRouterValidation:
         assert data["status"] == "ok"
         assert "available" in data
         assert "message" in data
+
+    def test_artist_diagnostics_reports_ready_for_e2e_fake_runtime(self, test_client, monkeypatch):
+        monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_ARTIST", "1")
+
+        response = test_client.get("/api/artists/diagnostics")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["available"] is True
+        assert data["runtime_loaded"] is True
+        assert data["runtime_backend"] == "e2e-fixture"
+        assert data["missing_dependencies"] == []
 
     def test_artist_stats_include_artist_confidence_summary(self, test_client, test_db):
         image_id = test_db.add_image(path="/tmp/artist-test.png", filename="artist-test.png", metadata_json="{}")

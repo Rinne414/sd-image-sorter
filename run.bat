@@ -223,7 +223,41 @@ echo.
 REM -- Honor SD_IMAGE_SORTER_PORT override for the browser URL; default 8487.
 set "APP_PORT=!SD_IMAGE_SORTER_PORT!"
 if "!APP_PORT!"=="" set "APP_PORT=8487"
-set "APP_URL=http://localhost:!APP_PORT!"
+set "PORT_ENV_FILE=!TEMP!\sd-image-sorter-port-!RANDOM!.tmp"
+backend\venv\Scripts\python.exe backend\launcher_port.py --format cmd > "!PORT_ENV_FILE!"
+set "PORT_CHECK_EXIT=!ERRORLEVEL!"
+for /f "usebackq tokens=1,* delims==" %%A in ("!PORT_ENV_FILE!") do (
+    set "%%A=%%B"
+)
+del "!PORT_ENV_FILE!" >nul 2>&1
+if "!SD_IMAGE_SORTER_PORT_STATUS!"=="" (
+    echo [ERROR] Could not check localhost port availability.
+    pause
+    exit /b 1
+)
+if /I "!SD_IMAGE_SORTER_PORT_STATUS!"=="error" (
+    echo [ERROR] !SD_IMAGE_SORTER_PORT_MESSAGE!
+    echo.
+    echo If Windows reserved port !APP_PORT!, either reboot or run:
+    echo   netsh interface ipv4 show excludedportrange protocol=tcp
+    echo Then choose another port, for example:
+    echo   set SD_IMAGE_SORTER_PORT=8587
+    echo   run.bat
+    pause
+    exit /b 1
+)
+if not "!PORT_CHECK_EXIT!"=="0" (
+    echo [ERROR] Could not check localhost port availability.
+    pause
+    exit /b 1
+)
+set "APP_PORT=!SD_IMAGE_SORTER_PORT!"
+set "APP_URL_HOST=!SD_IMAGE_SORTER_URL_HOST!"
+if "!APP_URL_HOST!"=="" set "APP_URL_HOST=127.0.0.1"
+if /I "!SD_IMAGE_SORTER_PORT_STATUS!"=="changed" (
+    echo [WARN] !SD_IMAGE_SORTER_PORT_MESSAGE!
+)
+set "APP_URL=http://!APP_URL_HOST!:!APP_PORT!"
 
 echo.
 echo ==========================================
@@ -239,7 +273,7 @@ start "" !APP_URL!
 
 cd backend
 call venv\Scripts\activate.bat 2>nul
-python main.py
+python main.py --port !APP_PORT!
 
 echo.
 echo Server stopped.

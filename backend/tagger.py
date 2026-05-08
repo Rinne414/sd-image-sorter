@@ -28,8 +28,10 @@ from config import (
     get_wd14_model_dir,
 )
 from ai_runtime_guard import exclusive_ai_runtime
+from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
+CUSTOM_WD14_PROFILE_MODEL = "wd-swinv2-tagger-v3"
 
 # Will be imported lazily
 ort = None
@@ -76,7 +78,7 @@ class WD14Tagger:
         Args:
             model_name: One of the supported model names (for auto-download)
             model_path: Direct path to .onnx file (overrides model_name)
-            tags_path: Direct path to selected_tags.csv (required if model_path is set)
+            tags_path: Direct path to selected_tags.csv or metadata JSON (optional if model-adjacent metadata exists)
             model_dir: Directory to store/load models. If None, uses config default.
             threshold: Confidence threshold for general tags
             character_threshold: Confidence threshold for character tags
@@ -84,9 +86,9 @@ class WD14Tagger:
         """
         _ensure_imports()
 
-        self.model_name = model_name
-        self.model_path = model_path
-        self.tags_path = tags_path
+        self.model_name = self._resolve_model_profile(model_name, model_path)
+        self.model_path = normalize_user_path(model_path) if model_path else model_path
+        self.tags_path = normalize_user_path(tags_path) if tags_path else tags_path
         self.model_dir = model_dir or get_wd14_model_dir()
         self.threshold = threshold
         self.character_threshold = character_threshold
@@ -118,6 +120,23 @@ class WD14Tagger:
         self._session_refresh_interval: int = 0
         self._learned_stable_gpu_batch_size: Optional[int] = None
         self._successful_gpu_batch_runs: int = 0
+
+    @staticmethod
+    def _resolve_model_profile(model_name: str, model_path: Optional[str]) -> str:
+        """Map custom-local aliases to a real model profile."""
+        if not model_path:
+            return model_name
+        normalized = str(model_name or "").strip().lower()
+        custom_profile_aliases = {
+            "",
+            "custom",
+            "wd14",
+            "wd14-compatible",
+            "wd14_csv",
+        }
+        if normalized in custom_profile_aliases:
+            return CUSTOM_WD14_PROFILE_MODEL
+        return model_name
 
     def _build_session_options(self, gpu_enabled: bool) -> "ort.SessionOptions":
         """Build ONNX Runtime session options optimized for the current hardware mode."""
@@ -160,7 +179,7 @@ class WD14Tagger:
             return ort.InferenceSession(model_path, sess_options=sess_options, providers=providers)
         except Exception as e:
             error_msg = str(e)
-            if "INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg:
+            if not self.model_path and ("INVALID_PROTOBUF" in error_msg or "Protobuf parsing failed" in error_msg):
                 logger.error(f"Model file is corrupted: {model_path}")
                 logger.info("Attempting to delete and re-download...")
 
@@ -211,20 +230,60 @@ class WD14Tagger:
     
     def _get_model_paths(self) -> Tuple[str, str]:
         """Get model and tags file paths."""
-        # If direct paths are provided, use them
-        if self.model_path and os.path.exists(self.model_path):
-            if self.tags_path and os.path.exists(self.tags_path):
+        # If direct paths are provided, use them. Explicit local paths are hard contracts:
+        # a typo must fail loudly, not fall back to downloading or auto-discovery.
+        if self.model_path:
+            if not os.path.exists(self.model_path):
+                raise FileNotFoundError(f"Custom ONNX model file not found: {self.model_path}")
+
+            model_config = MODELS.get(self.model_name, {})
+            metadata_format = str(model_config.get("metadata_format", "wd14_csv")).lower()
+            allowed_tag_exts = {".json"} if metadata_format == "camie_v2" else {".csv"}
+            if self.tags_path:
+                if not os.path.exists(self.tags_path):
+                    raise FileNotFoundError(f"Custom tags/metadata file not found: {self.tags_path}")
+                tags_ext = os.path.splitext(self.tags_path)[1].lower()
+                if tags_ext not in allowed_tag_exts:
+                    allowed_text = " or ".join(sorted(allowed_tag_exts))
+                    raise ValueError(
+                        f"Tags/metadata file for {self.model_name} must be {allowed_text}."
+                    )
                 return self.model_path, self.tags_path
-            # Try to find tags file next to model
+            # Try to find the profile-specific tags/metadata file next to the model.
             model_dir = os.path.dirname(self.model_path)
-            possible_tags = [
-                os.path.join(model_dir, "selected_tags.csv"),
-                os.path.join(model_dir, "..", "selected_tags.csv"),
-            ]
+            configured_tags_file = str(model_config.get("tags_file") or "").strip()
+            candidate_names = []
+            if configured_tags_file:
+                candidate_names.append(configured_tags_file)
+            if metadata_format == "camie_v2":
+                candidate_names.extend(["camie-tagger-v2-metadata.json", "metadata.json"])
+            else:
+                candidate_names.append("selected_tags.csv")
+
+            possible_tags = []
+            seen_tags = set()
+            for candidate_name in candidate_names:
+                if not candidate_name:
+                    continue
+                if os.path.splitext(candidate_name)[1].lower() not in allowed_tag_exts:
+                    continue
+                for candidate_path in [
+                    os.path.join(model_dir, candidate_name),
+                    os.path.join(model_dir, "..", candidate_name),
+                ]:
+                    normalized_candidate = os.path.normpath(candidate_path)
+                    if normalized_candidate in seen_tags:
+                        continue
+                    seen_tags.add(normalized_candidate)
+                    possible_tags.append(normalized_candidate)
             for tags_path in possible_tags:
                 if os.path.exists(tags_path):
                     return self.model_path, tags_path
-            raise ValueError(f"Tags file not found. Please provide tags_path for custom model.")
+            expected = " or ".join(candidate_names) or "a supported tags/metadata file"
+            raise ValueError(
+                f"Tags/metadata file not found for {self.model_name}. Expected {expected}. "
+                "Please provide tags_path for custom model."
+            )
         
         # Otherwise, download from HuggingFace
         return self._download_model()
@@ -1138,7 +1197,7 @@ def get_tagger(
 
     with _tagger_lock:
         new_settings = {
-            "model_name": model_name,
+            "model_name": WD14Tagger._resolve_model_profile(model_name, model_path),
             "model_path": model_path,
             "tags_path": tags_path,
             "use_gpu": use_gpu

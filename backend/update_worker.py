@@ -356,8 +356,11 @@ def apply_update(manifest_path: Path) -> int:
     extracted_root = work_root / f"extract-{int(time.time())}"
     backup_root = update_root / "backups" / f"{int(time.time())}-{target_version}"
 
-    _log(f"Waiting for process {current_pid} to exit", log_path=log_path)
-    _wait_for_pid_exit(current_pid, timeout_seconds=180, log_path=log_path)
+    if current_pid > 0:
+        _log(f"Waiting for process {current_pid} to exit", log_path=log_path)
+        _wait_for_pid_exit(current_pid, timeout_seconds=180, log_path=log_path)
+    else:
+        _log("No running app process was provided; applying update immediately", log_path=log_path)
 
     if extracted_root.exists():
         shutil.rmtree(extracted_root, ignore_errors=True)
