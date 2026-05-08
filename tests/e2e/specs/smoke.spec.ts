@@ -721,7 +721,8 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#view-artist.active')).toBeVisible()
 
     await openView(page, 'gallery')
-    await expect(page.locator('#gallery-grid')).toBeVisible()
+    await expect(page.locator('#view-gallery.active')).toBeVisible()
+    await expect(page.locator('#gallery-grid .gallery-item, #gallery-empty-state:visible').first()).toBeVisible()
   })
 
   test('auto-separate and manual sort should inherit the current gallery search on first open only', async ({ page }) => {

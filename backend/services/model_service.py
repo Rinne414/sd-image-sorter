@@ -18,6 +18,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
+from app_info import APP_VERSION
 from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_wd14_model_dir, get_yolo_model_dir
 from model_health import get_model_health, get_sam3_checkpoint_path
 
@@ -38,7 +39,7 @@ _DOWNLOAD_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36 sd-image-sorter/3.1.1"
+        f"Chrome/124.0.0.0 Safari/537.36 sd-image-sorter/{APP_VERSION}"
     ),
     "Accept": "application/json, */*;q=0.8",
 }

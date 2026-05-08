@@ -1142,7 +1142,8 @@ window.I18nLang_zhCN = {
     'tag.startFailed': '启动打标签失败',
     'tag.modelUnavailable': '当前构建里这个打标签模型不可用。',
     'tag.modelPathRequired': '请输入模型路径',
-    'tag.tagsCsvRequired': '请输入 Tags CSV 路径',
+    'tag.tagsCsvRequired': '请输入标签/metadata 路径，或把它放在模型文件旁边。',
+    'tag.tagsMetadataRequired': '请输入标签/metadata 路径，或把它放在模型文件旁边。',
 
     // ========================
     // Image Detail Modal
@@ -1220,8 +1221,8 @@ window.I18nLang_zhCN = {
     // ========================
     // Tag Modal
     // ========================
-    'modal.tagTitle': 'WD14 自动打标',
-    'modal.tagDescription': '选择 WD14 兼容模型，给图片生成 Tags。',
+    'modal.tagTitle': 'AI 自动打标',
+    'modal.tagDescription': '选择支持的 tagger 模型，给图片生成 Tags。',
     'modal.tagModel': '模型',
     'modal.tagModelSnapshot': '当前方案',
     'modal.tagRuntimePlan': '本次运行方式',
@@ -1232,10 +1233,15 @@ window.I18nLang_zhCN = {
     'modal.tagCustomModel': '自定义本地模型...',
     'modal.tagCustomModelPath': '自定义模型路径 (.onnx)',
     'modal.tagCustomModelPathPlaceholder': '填入本地 .onnx 模型文件路径',
-    'modal.tagCustomModelPathHelper': '这里仅适合 WD14 兼容的 ONNX 标注模型。Camie、PixAI、ToriiGate 请直接从模型列表选择。',
-    'modal.tagTagsCsvPath': '标签 CSV 路径',
-    'modal.tagTagsCsvPlaceholder': '填入 selected_tags.csv 的路径',
-    'modal.tagTagsCsvHelper': '自定义 WD14 兼容 ONNX 模型必须提供。',
+    'modal.tagCustomModelPathHelper': '本地 ONNX 文件路径。上方必须选对 Custom Model Type，应用才会使用正确预处理和阈值语义。',
+    'modal.tagCustomProfile': '自定义模型类型',
+    'modal.tagCustomProfileWd14': 'WD14 兼容 ONNX',
+    'modal.tagCustomProfileCamie': 'Camie ONNX',
+    'modal.tagCustomProfilePixai': 'PixAI ONNX',
+    'modal.tagCustomProfileHelper': '选择本地模型真实来源。这里决定预处理、标签 metadata 解析、置信度归一化和 rating fallback。',
+    'modal.tagTagsCsvPath': '标签 / Metadata 路径',
+    'modal.tagTagsCsvPlaceholder': '可选：selected_tags.csv，或 Camie metadata JSON',
+    'modal.tagTagsCsvHelper': '如果文件就在模型旁边可不填。WD14/PixAI 使用 selected_tags.csv；Camie 使用 metadata JSON。',
     'modal.tagGeneralThreshold': '通用标签阈值',
     'modal.tagCharacterThreshold': '角色标签阈值',
     'modal.tagThresholdNotUsedTitle': '这个模型不使用 WD14 阈值。',
@@ -1907,17 +1913,22 @@ window.I18nLang_zhCN = {
     'tagger.runtimeAdaptiveMax': '自适应最高吞吐模式已启用。',
     'tagger.runtimeCustomGpu': '自定义模型运行在 GPU，上限更高但更不稳。',
     'tagger.runtimeCustomCpu': '自定义模型运行在 CPU Safe Mode，建议先从这里开始。',
-    'tagger.customModelHelpGpuPreferred': '这次自定义 WD14 兼容 ONNX 运行已开启 GPU。',
+    'tagger.customModelHelpGpuPreferred': '这次自定义 ONNX 运行已开启 GPU。',
     'tagger.runtimeRiskyGpu': 'GPU 覆盖模式已启用，速度更高但风险也更高。',
     'tagger.runtimeAdaptiveGpu': '自适应 GPU 模式已启用。',
     'tagger.runtimeCpuSafe': 'CPU Safe Mode 已启用，较慢但更稳。',
 
     // Tagger Model Snapshot
-    'tagger.customSubtitle': '自定义本地 WD14 兼容 ONNX 模型。',
+    'tagger.customSubtitle': '带可选模型 profile 的自定义本地 ONNX 标注器。',
     'tagger.customBadge': '自定义',
+    'tagger.profileAwareBadge': 'Profile 已匹配',
+    'tagger.customProfileSubtitle': '本地模型使用 {profile} profile。',
+    'tagger.customProfileNote': '应用会使用这个 profile 的预处理、metadata 解析、置信度归一化和 rating 行为。',
+    'tagger.customCamieHelp': '自定义 Camie ONNX：请提供 Camie metadata JSON；logits 会先 sigmoid 再按阈值过滤。',
+    'tagger.customPixaiHelp': '自定义 PixAI ONNX：请提供 selected_tags.csv；会启用 PixAI 预处理和 rating fallback。',
     'tagger.onnxOnlyBadge': '仅 ONNX',
     'tagger.schemaUnknownBadge': '架构未知',
-    'tagger.customNote': 'Camie、PixAI、ToriiGate 用内置模型项；Custom 只知道通用 ONNX + CSV。',
+    'tagger.customNote': '未知 WD14-like 导出选 WD14-compatible；本地 Camie/PixAI ONNX 请选择对应 profile。',
     'tagger.defaultSummary': 'WD14 标注模型',
     'tagger.defaultNote': '所选模型会影响速度、质量和硬件负载。',
     'tagger.tierLight': '轻量',
@@ -1929,7 +1940,7 @@ window.I18nLang_zhCN = {
     'tagger.minimumAdaptive': '批次会按当前空闲显存/内存自动限制。',
 
     // Tagger syncTaggerModelUi strings
-    'tagger.customModelHelp': '自定义 WD14 兼容 ONNX 模型。先用 CPU Safe Mode 开始。',
+    'tagger.customModelHelp': '自定义 ONNX 模型。先用 CPU Safe Mode 开始。',
     'tagger.highRiskSuffix': ' 此硬件被标记为长时间 GPU 运行的高风险设备，因此 CPU 是安全的默认选项。',
     'tagger.recommendedChunkSuffix': ' 推荐批次大小：{chunk}。',
     'tagger.customRecommendedChunkSuffix': ' 推荐起始批次大小：{chunk}。',

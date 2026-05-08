@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
@@ -23,6 +23,35 @@ from metadata_parser import verify_image_readable
 from services.state_compat import MutableStateProxy
 from services.tag_export_service import export_tags_batch_request
 from utils.source_paths import resolve_existing_indexed_image_path
+from utils.path_validation import normalize_user_path, validate_file_path
+
+CUSTOM_PROFILE_ALIASES = {
+    "": "wd14",
+    "custom": "wd14",
+    "wd14": "wd14",
+    "wd14-compatible": "wd14",
+    "wd14_csv": "wd14",
+    "wd14-csv": "wd14",
+    "wd-eva02-large-tagger-v3": "wd14",
+    "wd-swinv2-tagger-v3": "wd14",
+    "wd-convnext-tagger-v3": "wd14",
+    "wd-vit-tagger-v3": "wd14",
+    "wd-vit-large-tagger-v3": "wd14",
+    "camie-tagger-v2": "camie-tagger-v2",
+    "pixai-tagger-v0.9": "pixai-tagger-v0.9",
+    "toriigate-0.5": "toriigate-0.5",
+}
+CUSTOM_ONNX_PROFILE_NAMES = {
+    "wd14",
+    "camie-tagger-v2",
+    "pixai-tagger-v0.9",
+}
+CUSTOM_WD14_PROFILE_MODEL = "wd-swinv2-tagger-v3"
+CUSTOM_PROFILE_MODEL_NAMES = {
+    "wd14": CUSTOM_WD14_PROFILE_MODEL,
+    "camie-tagger-v2": "camie-tagger-v2",
+    "pixai-tagger-v0.9": "pixai-tagger-v0.9",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +69,8 @@ BATCH_EXPORT_LIMIT = 5_000_000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
 TRUE_BATCH_MODEL_MAX = 32
 CPU_CHUNK_MAX = 64
+CUSTOM_ONNX_GPU_START_CHUNK_MAX = 8
+CUSTOM_ONNX_CPU_START_CHUNK_MAX = 8
 TORIIGATE_GPU_CHUNK_MAX = 1
 TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
 
@@ -226,6 +257,54 @@ def _build_tag_progress_state(
     }
 
 
+class _E2ETaggingStub:
+    """Small deterministic tagger for Playwright full-flow tests only."""
+
+    use_gpu = False
+
+    def load(self) -> None:
+        return None
+
+    def set_session_refresh_interval(self, _interval: int) -> None:
+        return None
+
+    def tag_batch(
+        self,
+        image_paths: List[str],
+        *,
+        preferred_batch_size: int = 1,
+        min_batch_size: int = 1,
+        return_runtime_info: bool = False,
+    ) -> Any:
+        results = []
+        for image_path in image_paths:
+            stem = Path(image_path).stem.replace("_", " ").replace("-", " ").strip() or "image"
+            all_tags = [
+                {"tag": "e2e_fixture", "confidence": 0.99, "category": "general"},
+                {"tag": stem, "confidence": 0.88, "category": "general"},
+                {"tag": "general", "confidence": 0.99, "category": "rating"},
+            ]
+            results.append({
+                "all_tags": all_tags,
+                "general_tags": all_tags[:2],
+                "character_tags": [],
+                "rating": {"tag": "general", "confidence": 0.99},
+                "error": None,
+            })
+        runtime_info = {
+            "requested_batch_size": preferred_batch_size,
+            "effective_batch_size": max(min_batch_size, min(preferred_batch_size, max(1, len(image_paths)))),
+            "fallbacks": [],
+        }
+        if return_runtime_info:
+            return results, runtime_info
+        return results
+
+
+def _e2e_tagger_getter(**_kwargs: Any) -> _E2ETaggingStub:
+    return _E2ETaggingStub()
+
+
 def _tagging_worker_main(
     runtime_plan_payload: Dict[str, Any],
     progress_queue: Any,
@@ -348,7 +427,10 @@ def _tagging_worker_main(
         else:
             send("running", "Loading model on CPU...")
 
-        tagger_getter = get_toriigate_tagger if runtime_backend == "toriigate" else get_tagger
+        if os.environ.get("SD_IMAGE_SORTER_E2E_FAKE_TAGGER") == "1" and runtime_backend != "toriigate":
+            tagger_getter = _e2e_tagger_getter
+        else:
+            tagger_getter = get_toriigate_tagger if runtime_backend == "toriigate" else get_tagger
         tagger = tagger_getter(
             model_name=effective_model_name,
             model_path=request.model_path,
@@ -619,6 +701,7 @@ class TagRequest(BaseModel):
     model_name: Optional[str] = Field(default=None, max_length=256)
     model_path: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
     tags_path: Optional[str] = Field(default=None, max_length=PATH_MAX_LENGTH)
+    custom_profile: Optional[str] = Field(default=None, max_length=64)
     use_gpu: bool = True
     allow_unsafe_acceleration: bool = False
     batch_size: Optional[int] = Field(default=None, ge=1, le=128)
@@ -725,9 +808,30 @@ class TaggingService:
 
             worker = self._worker_process
 
-        worker_stopped = worker is None
+            # If start_tagging just queued a background task but the worker
+            # process has not been spawned yet, _worker_process is still None.
+            # Finalize the cancellation here and bump _active_run_id so the
+            # pending _run_tagging_job aborts when it finally executes (its
+            # run_id will no longer match self._active_run_id, so it takes
+            # the should_abort path instead of clobbering progress and
+            # spawning a worker that nobody can cancel).
+            if worker is None:
+                self._progress = _build_tag_progress_state(
+                    "cancelled",
+                    current=current,
+                    total=total,
+                    tagged=tagged,
+                    errors=errors,
+                    message=f"Tagging cancelled at {current}/{total}.",
+                    run_id=run_id,
+                )
+                self._active_run_id += 1
+                self._cancel_requested = False
+                return {"status": "cancelled", "message": "Tagging cancelled"}
+
+        worker_stopped = not worker.is_alive()
         # If the worker is alive, give it a short grace period then forcefully terminate
-        if worker is not None and worker.is_alive():
+        if worker.is_alive():
             worker.join(timeout=3.0)
             if worker.is_alive():
                 logger.warning("Tagger worker did not stop cooperatively, terminating process.")
@@ -800,6 +904,9 @@ class TaggingService:
                 "minimum_gpu_available_vram_mb": config.get("minimum_gpu_available_vram_mb"),
                 "minimum_cpu_total_ram_gb": config.get("minimum_cpu_total_ram_gb"),
                 "minimum_cpu_available_ram_gb": config.get("minimum_cpu_available_ram_gb"),
+                "custom_profile_supported": str(config.get("runtime_backend", "wd14")).lower() != "toriigate",
+                "custom_metadata_format": config.get("metadata_format", "wd14_csv"),
+                "custom_tags_file_hint": ".json metadata" if config.get("metadata_format") == "camie_v2" else "selected_tags.csv",
             }
             for name, config in TAGGER_MODELS.items()
         ]
@@ -962,44 +1069,96 @@ class TaggingService:
 
         return list(deduped.values())
 
+    def _resolve_custom_profile(self, request: TagRequest) -> str:
+        """Resolve the custom ONNX profile selected by the user."""
+        raw_profile = (request.custom_profile or request.model_name or "wd14").strip().lower()
+        return CUSTOM_PROFILE_ALIASES.get(raw_profile, raw_profile or "wd14")
+
     def _resolve_model_name(self, request: TagRequest) -> str:
-        """Resolve the effective built-in model name for a request."""
+        """Resolve the effective built-in model/profile name for a request."""
         if request.model_path:
-            return "custom"
+            profile = self._resolve_custom_profile(request)
+            return CUSTOM_PROFILE_MODEL_NAMES.get(profile, profile)
         return (request.model_name or DEFAULT_TAGGER_MODEL).strip()
 
     def _validate_tag_request(self, request: TagRequest) -> None:
         """Reject unsafe or invalid tagger combinations before background work starts."""
         if request.model_path:
-            model_ext = os.path.splitext(request.model_path)[1].lower()
+            custom_profile = self._resolve_custom_profile(request)
+            if custom_profile not in CUSTOM_ONNX_PROFILE_NAMES:
+                if custom_profile == "toriigate-0.5":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "ToriiGate is not an ONNX tagger. Use the built-in ToriiGate entry for auto-download, "
+                            "or add a dedicated local ToriiGate directory profile instead of the Custom ONNX path."
+                        ),
+                    )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported custom tagger profile: {custom_profile}",
+                )
+            normalized_model_path = normalize_user_path(request.model_path)
+            model_ext = os.path.splitext(normalized_model_path)[1].lower()
             if model_ext != ".onnx":
                 raise HTTPException(
                     status_code=400,
-                    detail="Custom tagger model must be an .onnx file.",
+                    detail="Custom ONNX tagger model must be an .onnx file.",
                 )
-
-        if request.tags_path:
-            tags_ext = os.path.splitext(request.tags_path)[1].lower()
-            if tags_ext != ".csv":
+            is_valid_model_path, model_path_error = validate_file_path(
+                normalized_model_path,
+                allowed_extensions={".onnx"},
+            )
+            if not is_valid_model_path:
                 raise HTTPException(
                     status_code=400,
-                    detail="Custom tags file must be a .csv file.",
+                    detail=f"Custom ONNX tagger model path is invalid: {model_path_error}.",
                 )
+            request.model_path = normalized_model_path
+
+        if request.tags_path and not request.model_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Custom tags/metadata path requires a Custom ONNX model_path.",
+            )
+
+        if request.tags_path:
+            normalized_tags_path = normalize_user_path(request.tags_path)
+            tags_ext = os.path.splitext(normalized_tags_path)[1].lower()
+            custom_profile = self._resolve_custom_profile(request)
+            allowed_tags_exts = {".json"} if custom_profile == "camie-tagger-v2" else {".csv"}
+            if tags_ext not in allowed_tags_exts:
+                allowed_text = " or ".join(sorted(allowed_tags_exts))
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Custom tags/metadata file for {custom_profile} must be {allowed_text}.",
+                )
+            if request.model_path:
+                is_valid_tags_path, tags_path_error = validate_file_path(
+                    normalized_tags_path,
+                    allowed_extensions=allowed_tags_exts,
+                )
+                if not is_valid_tags_path:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Custom tags/metadata path for {custom_profile} is invalid: {tags_path_error}.",
+                    )
+                request.tags_path = normalized_tags_path
 
         model_name = self._resolve_model_name(request)
-        if not request.model_path and model_name not in TAGGER_MODELS:
+        if model_name not in TAGGER_MODELS:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown tagger model: {model_name}",
             )
 
+        model_config = TAGGER_MODELS.get(model_name, {})
+        if model_config.get("disabled"):
+            raise HTTPException(
+                status_code=409,
+                detail=model_config.get("disabled_reason") or f"Model {model_name} is not available in the current build.",
+            )
         if not request.model_path:
-            model_config = TAGGER_MODELS.get(model_name, {})
-            if model_config.get("disabled"):
-                raise HTTPException(
-                    status_code=409,
-                    detail=model_config.get("disabled_reason") or f"Model {model_name} is not available in the current build.",
-                )
             self._validate_model_hardware_requirements(model_name, request.use_gpu)
 
     def _validate_model_hardware_requirements(self, model_name: str, use_gpu: bool) -> None:
@@ -1129,7 +1288,8 @@ class TaggingService:
             cpu_pause_seconds = 0.01 if fetch_batch_size >= 24 else 0.0
 
         if request.model_path:
-            fetch_batch_size = min(fetch_batch_size, TRUE_BATCH_MODEL_MAX if effective_use_gpu else CPU_CHUNK_MAX)
+            custom_start_cap = CUSTOM_ONNX_GPU_START_CHUNK_MAX if effective_use_gpu else CUSTOM_ONNX_CPU_START_CHUNK_MAX
+            fetch_batch_size = min(fetch_batch_size, custom_start_cap)
         elif runtime_backend == "toriigate":
             fetch_batch_size = min(fetch_batch_size, TORIIGATE_GPU_CHUNK_MAX if effective_use_gpu else 1)
 

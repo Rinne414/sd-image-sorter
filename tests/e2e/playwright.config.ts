@@ -194,6 +194,12 @@ export default defineConfig({
       // never picks it up.
       SD_IMAGE_SORTER_TEST_ALLOW_FILE_DOWNLOADS: '1',
       SD_IMAGE_SORTER_DOWNLOAD_CHUNK_DELAY_MS: process.env.SD_IMAGE_SORTER_DOWNLOAD_CHUNK_DELAY_MS || '80',
+      // Keep full UI/API/database tagging coverage deterministic in CI without
+      // downloading or loading 500MB+ WD14 ONNX files. Production never sets this.
+      SD_IMAGE_SORTER_E2E_FAKE_TAGGER: '1',
+      // Keep artist identification UI/API/persistence coverage deterministic
+      // without loading the experimental Kaloscope runtime during Playwright.
+      SD_IMAGE_SORTER_E2E_FAKE_ARTIST: '1',
     },
     reuseExistingServer: process.env.PW_REUSE_SERVER === '1',
     timeout: 120000,

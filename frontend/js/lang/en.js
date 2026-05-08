@@ -967,7 +967,8 @@ window.I18nLang_en = {
     'tag.startFailed': 'Failed to start tagging',
     'tag.modelUnavailable': 'This tagger model is not available in the current build.',
     'tag.modelPathRequired': 'Please enter a model path',
-    'tag.tagsCsvRequired': 'Please enter a Tags CSV path',
+    'tag.tagsCsvRequired': 'Please enter a tags/metadata path, or place it next to the model file.',
+    'tag.tagsMetadataRequired': 'Please enter a tags/metadata path, or place it next to the model file.',
 
     // ========================
     // Image Detail Modal
@@ -1045,8 +1046,8 @@ window.I18nLang_en = {
     // ========================
     // Tag Modal
     // ========================
-    'modal.tagTitle': 'WD14 Auto Tagging',
-    'modal.tagDescription': 'Pick a WD14-compatible model and generate tags for images.',
+    'modal.tagTitle': 'AI Auto Tagging',
+    'modal.tagDescription': 'Pick a supported tagger model and generate tags for images.',
     'modal.tagModel': 'Model',
     'modal.tagModelSnapshot': 'Current Plan',
     'modal.tagRuntimePlan': 'How This Run Will Work',
@@ -1057,10 +1058,15 @@ window.I18nLang_en = {
     'modal.tagCustomModel': 'Custom Local Model...',
     'modal.tagCustomModelPath': 'Custom Model Path (.onnx)',
     'modal.tagCustomModelPathPlaceholder': 'Paste the path to your local .onnx model file',
-    'modal.tagCustomModelPathHelper': 'Use a WD14-compatible ONNX tagger here. Choose Camie, PixAI, or ToriiGate from the model list instead.',
-    'modal.tagTagsCsvPath': 'Tags CSV Path',
-    'modal.tagTagsCsvPlaceholder': 'Paste the path to selected_tags.csv',
-    'modal.tagTagsCsvHelper': 'Required for custom WD14-compatible ONNX models.',
+    'modal.tagCustomModelPathHelper': 'Path to the local ONNX file. Pick the matching Custom Model Type above so preprocessing and thresholds are correct.',
+    'modal.tagCustomProfile': 'Custom Model Type',
+    'modal.tagCustomProfileWd14': 'WD14-compatible ONNX',
+    'modal.tagCustomProfileCamie': 'Camie ONNX',
+    'modal.tagCustomProfilePixai': 'PixAI ONNX',
+    'modal.tagCustomProfileHelper': 'Choose the exact family your local model was exported from. This controls preprocessing, tag metadata parsing, confidence normalization, and rating fallback.',
+    'modal.tagTagsCsvPath': 'Tags / Metadata Path',
+    'modal.tagTagsCsvPlaceholder': 'Optional: selected_tags.csv, or Camie metadata JSON',
+    'modal.tagTagsCsvHelper': 'Optional if the file sits next to the model. WD14/PixAI use selected_tags.csv; Camie uses metadata JSON.',
     'modal.tagGeneralThreshold': 'General Tag Threshold',
     'modal.tagCharacterThreshold': 'Character Tag Threshold',
     'modal.tagThresholdNotUsedTitle': 'This model does not use WD14 thresholds.',
@@ -1741,17 +1747,22 @@ window.I18nLang_en = {
     'tagger.runtimeAdaptiveMax': 'Adaptive max-throughput mode is active.',
     'tagger.runtimeCustomGpu': 'Custom model on GPU. Faster, but less predictable.',
     'tagger.runtimeCustomCpu': 'Custom model on CPU Safe Mode. Start here first.',
-    'tagger.customModelHelpGpuPreferred': 'Custom WD14-compatible ONNX model. GPU is on for this run.',
+    'tagger.customModelHelpGpuPreferred': 'Custom ONNX model. GPU is on for this run.',
     'tagger.runtimeRiskyGpu': 'GPU override is active. Faster, but riskier.',
     'tagger.runtimeAdaptiveGpu': 'Adaptive GPU mode is active.',
     'tagger.runtimeCpuSafe': 'CPU Safe Mode is active. Slower, but safer.',
 
     // Tagger Model Snapshot
-    'tagger.customSubtitle': 'Custom local WD14-compatible ONNX model.',
+    'tagger.customSubtitle': 'Custom local ONNX tagger with a selectable model profile.',
     'tagger.customBadge': 'Custom',
+    'tagger.profileAwareBadge': 'Profile aware',
+    'tagger.customProfileSubtitle': 'Custom local model using {profile} profile.',
+    'tagger.customProfileNote': 'The app will use this profile\'s preprocessing, metadata parser, confidence normalization, and rating behavior.',
+    'tagger.customCamieHelp': 'Custom Camie ONNX: use the Camie metadata JSON. Logits are sigmoid-normalized before thresholds.',
+    'tagger.customPixaiHelp': 'Custom PixAI ONNX: use selected_tags.csv. PixAI preprocessing and rating fallback are enabled.',
     'tagger.onnxOnlyBadge': 'ONNX only',
     'tagger.schemaUnknownBadge': 'Schema unknown',
-    'tagger.customNote': 'Use built-in entries for Camie, PixAI, and ToriiGate; Custom only knows generic ONNX + CSV.',
+    'tagger.customNote': 'For unknown WD14-like exports, use WD14-compatible. For local Camie/PixAI ONNX, pick that exact profile.',
     'tagger.defaultSummary': 'WD14 tagger model',
     'tagger.defaultNote': 'The selected model changes speed, quality, and load.',
     'tagger.tierLight': 'Light',
@@ -1763,7 +1774,7 @@ window.I18nLang_en = {
     'tagger.minimumAdaptive': 'Batch size is auto-limited by free VRAM/RAM.',
 
     // Tagger syncTaggerModelUi strings
-    'tagger.customModelHelp': 'Custom WD14-compatible ONNX model. Start with CPU Safe Mode first.',
+    'tagger.customModelHelp': 'Custom ONNX model. Start with CPU Safe Mode first.',
     'tagger.highRiskSuffix': ' This hardware profile is marked high-risk for long GPU runs, so CPU is the safe default.',
     'tagger.recommendedChunkSuffix': ' Recommended batch size: {chunk}.',
     'tagger.customRecommendedChunkSuffix': ' Recommended starting batch size: {chunk}.',

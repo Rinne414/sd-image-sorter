@@ -2187,7 +2187,7 @@ Use this structure for future entries:
 
 ### ADR-AI-20260508-89: Custom tagger remains WD14-compatible ONNX only
 
-- Status: accepted
+- Status: superseded by ADR-AI-20260508-93
 - Area: tagger runtime / custom model UX / model-specific preprocessing
 - Context:
   A user tried to run a locally supplied tagger through `Custom Local Model` and hit ONNX Runtime shape errors: the graph expected NCHW `[batch, 3, 448, 448]`, while the custom path prepared NHWC `[batch, 448, 448, 3]`. The current shipped model catalog also includes Camie, PixAI, and ToriiGate, which are not interchangeable generic WD14 paths: Camie needs JSON metadata and ImageNet/NCHW preprocessing, PixAI needs NCHW `[-1, 1]` preprocessing plus rating fallback, and ToriiGate uses a dedicated VLM backend rather than ONNX Runtime.
@@ -2218,3 +2218,125 @@ Use this structure for future entries:
   `backend/config.py`, `backend/tagger.py`, `backend/tests/test_tagger.py`, `backend/tests/test_toriigate_tagger.py`, `README.md`, and current HuggingFace examples for Camie/PixAI model usage.
 - Validation:
   `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_tagger.py tests/test_toriigate_tagger.py tests/test_tagging_service.py` (`41 passed`).
+
+### ADR-AI-20260508-91: Launchers may auto-shift only reserved default localhost ports
+
+- Status: accepted
+- Area: Windows startup / launcher UX / localhost port semantics
+- Context:
+  A Windows portable launch on real hardware failed after readiness checks with `WinError 10013` while binding `127.0.0.1:8487`. This failure happens before the browser can use the app and is commonly caused by Windows excluded/reserved TCP port ranges from Hyper-V, WSL, VPN, or security software. It is different from normal `address already in use`: another running SD Image Sorter instance on `8487` should not cause a second backend to silently start against the same package-local database on another port.
+- Decision:
+  Launchers run `backend/launcher_port.py` before opening the browser. When no explicit `SD_IMAGE_SORTER_PORT` is set and the default port fails with access denied / refused-by-OS semantics, the launcher searches upward from `8488` and exports the selected port before starting `main.py --port ...`. Browser URL and backend bind port must always come from the same selected value. If the user explicitly set `SD_IMAGE_SORTER_PORT`, the launcher fails loudly instead of changing it. If the port is simply already in use, the launcher also fails loudly and tells the user to use the existing tab or close the process.
+- Why:
+  Beginners should not have to diagnose Windows reserved port ranges to open a local-only app. Auto-shifting the default keeps first launch friendly. Preserving explicit overrides and refusing to auto-shift normal port-in-use cases protects user intent and avoids accidental double-running against one local database.
+- Do not regress:
+  Do not open the browser before port selection. Do not let `run-portable.bat`, `run.bat`, `run.sh`, or the release package template hardcode a URL that can differ from the backend bind port. Do not silently change an explicit `SD_IMAGE_SORTER_PORT`. Do not treat normal address-in-use as safe auto-fallback.
+- Evidence:
+  User-provided portable log from 2026-05-08 showing successful readiness checks followed by `ERROR: [Errno 13] ... ('127.0.0.1', 8487): [winerror 10013]` and shutdown. Current files: `backend/launcher_port.py`, `run-portable.bat`, `run.bat`, `run.sh`, `scripts/build_release_packages.py`.
+- Validation:
+  `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_launcher_port.py tests/test_update_cli.py tests/test_release_build.py tests/test_update_service.py tests/test_update_worker.py` (`79 passed`).
+
+### ADR-AI-20260508-92: Rescue batch files are external safety nets, not alternate launchers
+
+- Status: accepted
+- Area: Windows portable UX / update reachability / support tooling
+- Context:
+  v3.1.1 exposed a bad support trap: the only normal update path lived inside the web UI, but a startup bind failure can prevent users from ever reaching the web UI. Adding external `.bat` files is necessary, but making `fix.bat` an alternate startup path would train normal users to launch through a repair script and would hide the real startup contract.
+- Decision:
+  `run.bat` and generated `run-portable.bat` own normal startup self-healing, including reserved-default-port detection, selected port propagation to `main.py --port ...`, and opening the browser at the actual selected URL. `update.bat` is an external rescue updater that uses the same package-local data/config/update/cache paths as the launcher, checks the release channel, downloads a verified update archive, writes a pending manifest with `current_pid=0`, applies it via `update_worker.apply_update`, and relaunches through the normal launcher when possible. `update_worker` treats `current_pid <= 0` as an external/no-running-app manifest and applies immediately instead of waiting for a process. `fix.bat` is for rare diagnostics/repair only: it reports version/path, probes the configured/default port with `launcher_port.py --diagnose`, shows Windows excluded TCP ranges when available, runs ONNX Runtime and PyTorch/SAM3 repair scripts, and prints startup readiness. It must not run `main.py` or become the normal way to choose a fallback port.
+- Why:
+  Normal users should double-click the normal launcher and get into the app. If a Windows reserved port blocks default `8487`, the launcher should silently pick a safe bindable localhost port and open the matching URL. `fix.bat` should stay a support tool users almost never need. `update.bat` provides the missing escape hatch when a blocker prevents access to the in-app updater.
+- Do not regress:
+  Do not move reserved-port auto-fallback into `fix.bat`. Do not let `fix.bat` start the server, open the browser, or call `main.py`. Do not remove `update.bat` from release-managed files. Do not let `update.bat` use different data/config/update/model directories from `run.bat` / `run-portable.bat`; otherwise updates and diagnostics will operate on the wrong package state. Do not make `update_worker` wait on `current_pid=0`; that value is the external updater's explicit no-app-process sentinel.
+- Evidence:
+  User correction on 2026-05-08: `fix.bat` should not be “启动进不去时自动换安全端口再启动”; that behavior belongs inside `run`, with the browser auto-opened to the changed URL. Current files: `run.bat`, `scripts/build_release_packages.py`, `backend/launcher_port.py`, `backend/update_cli.py`, `backend/update_worker.py`, `fix.bat`, `update.bat`, `backend/tests/test_release_build.py`, `backend/tests/test_update_cli.py`, `backend/tests/test_update_worker.py`.
+- Validation:
+  `cd backend && PYTHONPATH=. python3 -m py_compile launcher_port.py update_cli.py services/update_service.py main.py && PYTHONPATH=. python3 -m pytest -q -s tests/test_launcher_port.py tests/test_update_cli.py tests/test_release_build.py tests/test_update_service.py tests/test_update_worker.py` (`79 passed`). Follow-up: `TMPDIR=/mnt/l/Antigravitiy code/sd-image-sorter/.tmp/pytest-tmp PYTHONPATH=. python3 -m pytest -s tests/test_update_worker.py::test_apply_update_with_external_manifest_does_not_wait_for_pid_zero tests/test_update_cli.py -q` (`5 passed`).
+
+### ADR-AI-20260508-93: Custom ONNX tagger is profile-aware for WD14, Camie, and PixAI
+
+- Status: accepted
+- Area: tagger runtime / custom model UX / model-specific preprocessing / threshold semantics
+- Supersedes:
+  ADR-AI-20260508-89. The old “Custom remains WD14-compatible ONNX only” decision was too restrictive and conflicted with the product goal of keeping local workflows inside the app when the backend already has the required model-specific runtime profiles.
+- Context:
+  A user correctly challenged the earlier boundary that told users to avoid `Custom Local Model` for Camie and PixAI. Camie and PixAI are ONNX taggers; their local files are not unsafe by nature. The unsafe part was treating them as generic WD14 CSV/probability/NHWC models. Current code already has explicit Camie and PixAI configs for metadata format, preprocessing, output activation, thresholds, and rating fallback.
+- Decision:
+  `Custom Local Model` is a profile-aware ONNX entry point. The UI exposes `Custom Model Type` with WD14-compatible, Camie, and PixAI options. For local custom paths, the backend maps that selected profile to the real built-in config before loading the ONNX file. WD14-compatible uses `selected_tags.csv`; PixAI uses `selected_tags.csv` plus PixAI preprocessing and rating fallback; Camie uses metadata JSON plus NCHW/ImageNet preprocessing and sigmoid score normalization. ToriiGate remains excluded from Custom ONNX because it is not an ONNX tagger and runs through the dedicated VLM/PyTorch backend.
+- Why:
+  Banning Camie/PixAI from Custom was a lazy stopgap. The correct invariant is not “only WD14”; it is “only run a local model when the app knows its schema.” A profile selector makes the schema explicit, keeps validation strict, and avoids random tags by applying the right metadata parser, normalization, threshold defaults, and rating behavior. The Custom path still starts with conservative runtime chunks because a user-supplied ONNX file can differ from the exact built-in export even when it uses the same profile.
+- Do not regress:
+  Do not collapse Custom back to “WD14 only.” Do not let Camie run with CSV metadata or identity logits. Do not let PixAI run with JSON metadata or without PixAI preprocessing/rating fallback. Do not route ToriiGate through `WD14Tagger` or accept it as a Custom ONNX profile. Do not send frontend auto-selected batch size as a user override; only user-edited advanced batch size should override the backend's conservative Custom default.
+- Evidence:
+  Current files: `backend/services/tagging_service.py`, `backend/tagger.py`, `frontend/index.html`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `README.md`. Regression coverage: `backend/tests/test_tagging_service.py`, `backend/tests/test_tagger.py`, `backend/tests/test_routers/test_tags.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_tagging_service.py::test_runtime_plan_maps_legacy_custom_model_paths_to_wd14_profile tests/test_tagging_service.py::test_runtime_plan_uses_custom_camie_profile_for_local_onnx tests/test_tagging_service.py::test_runtime_plan_uses_custom_pixai_profile_for_local_onnx tests/test_tagging_service.py::test_custom_camie_profile_rejects_csv_metadata_path tests/test_tagging_service.py::test_custom_pixai_profile_rejects_json_metadata_path tests/test_tagging_service.py::test_custom_toriigate_profile_is_rejected_because_it_is_not_onnx tests/test_tagger.py::test_custom_profile_aliases_resolve_to_real_model_profiles tests/test_tagger.py::test_custom_camie_profile_autodetects_metadata_json_next_to_model` (`8 passed`).
+
+
+### ADR-AI-20260508-94: Launcher URL host and custom tagger metadata must match the selected runtime profile
+
+- Status: accepted
+- Area: startup launcher contract / custom tagger file contract / release safety
+- Context:
+  Two adjacent regressions were found during autonomous reliability review. First, the new launcher port probe honored `SD_IMAGE_SORTER_HOST`, but `run.bat`, `run.sh`, and the portable launcher template still built browser URLs as `http://localhost:<port>`. If a user intentionally binds another loopback address such as `127.0.0.2` or `::1`, the backend can bind one host while the launcher opens a different host. Second, profile-aware Custom ONNX tagging correctly exposed Camie/PixAI profiles, but `WD14Tagger._get_model_paths()` could still auto-fallback Camie to `selected_tags.csv` when `tags_path` was omitted. That lets a Camie runtime reach the JSON metadata parser with a WD14 CSV file, producing a runtime crash instead of a clear validation error.
+- Decision:
+  `backend/launcher_port.py` now exports `SD_IMAGE_SORTER_URL_HOST` alongside the selected port. Launchers and generated portable launchers build `APP_URL` from that exported URL host plus the selected port, not from a hardcoded `localhost`. `WD14Tagger._get_model_paths()` is profile-aware for custom local paths: Camie only auto-discovers JSON metadata candidates, WD14/PixAI only auto-discover CSV candidates, and explicitly supplied `tags_path` must use the selected profile's allowed extension.
+- Why:
+  Port and bind-host are one startup contract; matching only the port is not enough. Custom tagger profiles are one model-schema contract; selecting Camie but silently accepting WD14 CSV breaks the same invariant the profile selector was added to protect. Both fixes fail closed with actionable errors instead of opening the wrong URL or crashing deep in inference setup.
+- Do not regress:
+  Do not reintroduce hardcoded `http://localhost:<port>` into launchers once a bind host override exists. Do not remove `SD_IMAGE_SORTER_URL_HOST` from launcher output without replacing it with an equivalent host-aware URL mechanism. Do not allow Camie custom paths to fall back to `selected_tags.csv`, and do not allow WD14/PixAI custom paths to fall back to Camie JSON unless their profile metadata rules are explicitly changed and tested.
+- Evidence:
+  Current files: `backend/launcher_port.py`, `run.bat`, `run.sh`, `scripts/build_release_packages.py`, `backend/tagger.py`, `backend/tests/test_launcher_port.py`, `backend/tests/test_release_build.py`, `backend/tests/test_tagger.py`.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest backend/tests/test_launcher_port.py backend/tests/test_release_build.py -q` (`35 passed`). `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest backend/tests/test_tagger.py backend/tests/test_tagging_service.py backend/tests/test_routers/test_tags.py -q` (`86 passed`). `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest backend/tests --ignore=backend/tests/test_sam3_refiner.py -q` (`902 passed, 1 skipped`). Full `backend/tests` collection without ignore is still blocked in this environment by missing `torch` for `backend/tests/test_sam3_refiner.py`.
+
+### ADR-AI-20260508-95: Custom ONNX metadata is optional but user files are never repair-deleted
+
+- Status: accepted
+- Area: custom tagger UX / local file safety / API compatibility
+- Context:
+  A follow-up code audit found two contract mismatches in the profile-aware Custom ONNX path. The backend could already auto-detect profile-specific tag metadata beside a custom model, but the frontend still blocked start unless `tags_path` was filled in. Separately, `WD14Tagger._create_session()` reused the built-in corrupted-download repair path for every ONNX load, so an invalid user-supplied `model_path` that raised `INVALID_PROTOBUF` could be deleted before failing to re-download a built-in model. A third compatibility edge existed when old clients sent `model_path` with a concrete WD model name instead of `custom` / `wd14`.
+- Decision:
+  Custom ONNX `tags_path` is optional in the frontend and API contract when the matching metadata file is next to the ONNX model. `WD14Tagger` only auto-discovers metadata that matches the selected profile: WD14/PixAI discover CSV only; Camie discovers JSON only. Explicit `model_path` and explicit `tags_path` are hard contracts: if supplied, they must exist and must not silently fall back to built-in downloads or neighbor-file auto-discovery; `tags_path` without `model_path` is rejected because built-in taggers ignore that field. Explicit `tags_path` must use the selected profile's allowed extension. Corrupted-model auto-delete/re-download now applies only to app-managed built-in downloads, never to an explicit local `model_path`. Legacy WD built-in names paired with `model_path` are normalized to the WD14-compatible custom profile.
+- Why:
+  The useful UX invariant is “select the right schema, then the app can help find the matching metadata,” not “force every user to paste two paths.” The safety invariant is stronger: local model paths are user-owned files, not cache entries. A repair path that is correct for app-managed HuggingFace downloads is destructive when pointed at a user's custom export.
+- Do not regress:
+  Do not make `tags_path` mandatory again unless backend auto-discovery is removed at the same time. Do not accept `tags_path` without `model_path`, because that field has no built-in-model effect. Do not let custom Camie consume CSV or custom WD14/PixAI consume JSON. Do not delete, overwrite, or re-download user-supplied `model_path` files during model-load repair. Do not reject legacy custom requests that pass a WD built-in `model_name` with `model_path`; normalize them to WD14-compatible behavior.
+- Evidence:
+  Current files: `backend/tagger.py`, `backend/services/tagging_service.py`, `frontend/js/app.js`, `frontend/index.html`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `README.md`, `docs/API.md`, `docs/AI_PRINCIPLES.md`. Regression coverage: `backend/tests/test_tagger.py`, `backend/tests/test_tagging_service.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_tagger.py::test_custom_profile_aliases_resolve_to_real_model_profiles tests/test_tagger.py::test_custom_wd14_profile_does_not_follow_mutable_default_model tests/test_tagger.py::test_custom_model_load_error_does_not_delete_user_supplied_file tests/test_tagger.py::test_custom_camie_profile_autodetects_metadata_json_next_to_model tests/test_tagger.py::test_custom_wd14_profile_does_not_autodetect_camie_json tests/test_tagger.py::test_custom_camie_profile_does_not_autodetect_selected_tags_csv tests/test_tagger.py::test_custom_pixai_profile_rejects_direct_json_metadata tests/test_tagger.py::test_custom_camie_profile_does_not_fallback_to_wd14_csv tests/test_tagging_service.py::test_runtime_plan_maps_legacy_custom_model_paths_to_wd14_profile tests/test_tagging_service.py::test_custom_model_path_with_legacy_wd_model_name_stays_wd14_compatible tests/test_tagging_service.py::test_custom_wd14_runtime_plan_ignores_mutable_default_model tests/test_tagging_service.py::test_runtime_plan_uses_custom_camie_profile_for_local_onnx tests/test_tagging_service.py::test_runtime_plan_uses_custom_pixai_profile_for_local_onnx tests/test_frontend_contract.py::test_custom_tagger_profile_ui_and_payload_contract` (`14 passed`).
+
+### ADR-AI-20260508-96: Playwright tagging E2E uses a test-only tagger seam, not live WD14 downloads
+
+- Status: accepted
+- Area: release CI / E2E determinism / local AI runtime boundaries
+- Context:
+  Release CI hung in the real UI scan-then-tag flow after Model Manager tests reset the isolated Playwright model directory. The tag flow then tried to prepare/load the real WD14 ONNX model inside `.tmp/e2e-data-<port>/models`, leaving `/api/tag/progress` in long-running `running` state while polling. That tests network/model availability and Windows file-lock timing more than it tests the product flow.
+- Decision:
+  Playwright webServer sets `SD_IMAGE_SORTER_E2E_FAKE_TAGGER=1`. When that flag is present, non-ToriiGate tagging workers use a tiny deterministic in-process tagger that still goes through the real scan endpoint, tag start endpoint, progress queue, image readability checks, content fingerprinting, `database.add_tags_batch`, and image detail reads. Production launchers and normal runtime never set this flag. ToriiGate remains excluded from this seam because its behavior is a separate VLM/PyTorch backend.
+- Why:
+  E2E should prove the app workflow and persistence contract, not depend on downloading/loading 500MB+ HuggingFace assets during every release gate. Real model correctness remains covered by backend tagger/runtime tests and manual/model-manager flows. Keeping the seam behind an explicit `SD_IMAGE_SORTER_E2E_FAKE_TAGGER` environment variable makes the boundary obvious and prevents production drift.
+- Do not regress:
+  Do not make Playwright release CI depend on live WD14/PixAI/Camie downloads for scan/tag persistence coverage. Do not enable the fake tagger outside test-controlled environments. If the seam is removed, replace it with an equally deterministic local fixture model and keep `/api/tag/progress` from polling indefinitely on missing/slow model assets.
+- Evidence:
+  Current files: `backend/services/tagging_service.py`, `tests/e2e/playwright.config.ts`, `backend/tests/test_tagging_service.py`, `tests/e2e/specs/manual-regression.spec.ts`.
+- Validation:
+  `cd backend && TMPDIR=/mnt/l/Antigravitiy code/sd-image-sorter/.tmp/pytest-tmp PYTHONPATH=. python3 -m pytest -q -s tests/test_tagging_service.py::test_e2e_fake_tagger_completes_without_downloading_real_model tests/test_update_worker.py::test_apply_update_with_external_manifest_does_not_wait_for_pid_zero tests/test_update_cli.py` (`6 passed`).
+
+### ADR-AI-20260508-97: Playwright artist E2E uses a test-only identifier seam, and single-image artist inference must not block FastAPI
+
+- Status: accepted
+- Area: release CI / E2E determinism / local AI runtime boundaries / API responsiveness
+- Context:
+  Release CI exposed a shared failure chain after Model Manager tests reset the isolated Playwright model directory and then artist identification tried to load/run the real experimental Kaloscope runtime during a single `/api/artists/identify` probe. The endpoint was declared `async` but called synchronous model preparation and inference inline. While Kaloscope was loading or stuck in a bad fixture/runtime state, unrelated page navigations and model-manager requests timed out behind the same event loop.
+- Decision:
+  `/api/artists/identify` dispatches `ArtistService.identify_image(...)` through `run_in_threadpool`, matching the existing censor/similarity pattern for heavy local AI work. Playwright webServer also sets `SD_IMAGE_SORTER_E2E_FAKE_ARTIST=1`; when that flag is present, the artist router reports a ready fixture runtime from diagnostics and injects a tiny deterministic identifier that still goes through the real image lookup, path resolution, fingerprinting, derived-state write, API response, and UI polling contracts. Production launchers and normal runtime never set this flag.
+- Why:
+  A local desktop app must stay responsive while optional AI models prepare. E2E should prove the UI/API/database workflow, not depend on loading the experimental Kaloscope runtime in every release gate. Real model readiness remains covered by Model Manager status/prepare flows and backend model-health/runtime tests.
+- Do not regress:
+  Do not run artist model loading or inference inline on the FastAPI event loop. Do not make Playwright release CI depend on live Kaloscope inference for artist UI/persistence coverage. Do not enable `SD_IMAGE_SORTER_E2E_FAKE_ARTIST` outside explicit test-controlled environments. If the seam is removed, replace it with an equally deterministic local fixture model and keep unrelated page/API requests responsive during artist model preparation.
+- Evidence:
+  Current files: `backend/routers/artists.py`, `backend/services/artist_service.py`, `tests/e2e/playwright.config.ts`, `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`, `tests/e2e/specs/manual-regression.spec.ts`.
+- Validation:
+  `cd backend && TMPDIR=/mnt/l/Antigravitiy code/sd-image-sorter/.tmp/pytest-tmp PYTHONPATH=. python3 -m pytest -q -s tests/test_routers/test_prompts_censor_similarity_artists.py::TestArtistsRouterValidation::test_identify_route_dispatches_model_work_to_threadpool tests/test_routers/test_prompts_censor_similarity_artists.py::TestArtistsRouterValidation::test_e2e_fake_artist_identifier_writes_prediction_without_real_runtime` (`2 passed`).

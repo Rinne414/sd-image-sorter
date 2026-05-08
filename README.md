@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.1.1-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.1.2-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.12%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.1-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.1-linux.tar.gz"><b>Download for Linux</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-linux.tar.gz"><b>Download for Linux</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -147,7 +147,7 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.1.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.1-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.1.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
@@ -155,11 +155,11 @@
 
 ### Linux
 
-1. 下载 [sd-image-sorter-v3.1.1-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.1-linux.tar.gz)
+1. 下载 [sd-image-sorter-v3.1.2-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-linux.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.1.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.1.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -328,9 +328,9 @@ run.bat
 
 ### 4. 自定义 ONNX 模型怎么选
 
-自定义模型的结构和显存占用未知，所以应用不会给它做“按模型名识别”的额外收紧，只按你的硬件上限来限制。
+自定义模型的结构和显存占用仍可能和内建模型不同，所以 Custom 路径默认用保守 chunk 起步；只有你在高级选项里手动改 batch size，才会按硬件推荐上限尝试更大的值。
 
-`Custom Local Model` 不是“所有内置模型的离线路径入口”。它只适合 WD14 兼容的本地 ONNX 标注器，并且需要匹配的 `selected_tags.csv`。Camie、PixAI、ToriiGate 请直接从模型下拉列表选择：它们需要各自的 metadata、预处理、rating fallback 或 VLM 后端，不能当作普通 custom ONNX 来可靠运行。
+`Custom Local Model` 不是盲跑入口；它现在有 **Custom Model Type**。本地 WD14-like / PixAI / Camie ONNX 都可以走 Custom，但必须选对 profile：WD14/PixAI 使用 `selected_tags.csv`，Camie 使用 metadata JSON。metadata 路径可不填，只要对应文件放在模型旁边；如果你显式填写 model / metadata 路径，文件必须真实存在。应用只按所选 profile 自动发现匹配格式，且不会删除或重下载你提供的本地 ONNX。应用会按 profile 套用对应预处理、metadata 解析、置信度归一化和 rating fallback。ToriiGate 不是 ONNX tagger，它走 VLM/PyTorch 后端；请继续使用内建 ToriiGate 项，不能伪装成 Custom ONNX。
 
 标签阈值只按已经归一化到 `[0, 1]` 的 confidence 执行：WD/PixAI 直接使用概率；Camie 的 logits 会先 sigmoid；异常的 NaN/Inf/越界分数会被忽略，避免把无效 logits 当成高置信标签。ToriiGate 是 VLM 生成标签，不使用 WD14 阈值。
 
@@ -456,7 +456,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.1.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.1-windows-portable.zip)
+1. Download [sd-image-sorter-v3.1.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -467,7 +467,7 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 #### Linux
 
 ```bash
-tar xzf sd-image-sorter-v3.1.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.1.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -570,9 +570,9 @@ ToriiGate:
 
 #### Custom ONNX guidance
 
-Custom ONNX models do not get extra model-name-specific caps because the app cannot reliably know their real memory footprint in advance. Treat the hardware recommendation as the highest chunk value worth trying on your machine.
+Custom ONNX models still may not match the exact memory profile of their built-in source, so the Custom path starts with a conservative chunk by default. Only a user-edited advanced batch size attempts the larger hardware-recommended limit.
 
-`Custom Local Model` is not the offline entry point for every built-in tagger. It is for WD14-compatible local ONNX taggers with a matching `selected_tags.csv`. Select Camie, PixAI, and ToriiGate from the model dropdown instead: they need model-specific metadata, preprocessing, rating fallback, or the dedicated VLM backend, so they are not reliable as generic custom ONNX runs.
+`Custom Local Model` is not a blind runner anymore; it now has a **Custom Model Type**. Local WD14-like, PixAI, and Camie ONNX files can use Custom when the matching profile is selected: WD14/PixAI use `selected_tags.csv`, while Camie uses its metadata JSON. The metadata path is optional when the matching file sits next to the model; if you explicitly enter a model or metadata path, that file must exist. The app only auto-discovers files that match the selected profile, and it never deletes or re-downloads a user-supplied local ONNX. The selected profile controls preprocessing, metadata parsing, confidence normalization, and rating fallback. ToriiGate is not an ONNX tagger; it uses the VLM/PyTorch backend, so keep using the built-in ToriiGate entry instead of pretending it is Custom ONNX.
 
 Tag thresholds are applied only to confidence scores normalized to `[0, 1]`: WD/PixAI use probabilities directly; Camie logits are sigmoid-normalized first; invalid NaN/Inf/out-of-range scores are ignored so bad logits cannot become high-confidence random tags. ToriiGate is VLM-generated and does not use WD14 thresholds.
 

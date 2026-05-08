@@ -28,6 +28,33 @@ ProgressCallback = Callable[[Dict[str, Any]], None]
 ARTIST_IMAGE_LOOKUP_CHUNK_SIZE = 500
 
 
+class _E2EArtistIdentifierStub:
+    """Small deterministic artist identifier for Playwright full-flow tests only."""
+
+    def __init__(self, *, threshold: float) -> None:
+        self.threshold = float(threshold)
+
+    def identify(self, image_path: str, top_k: int = 5) -> Dict[str, Any]:
+        stem = os.path.splitext(os.path.basename(image_path))[0]
+        artist = "fixture_artist"
+        confidence = 0.97
+        top_predictions = [
+            {"artist": artist, "confidence": confidence},
+            {"artist": f"fixture_{stem[:24] or 'image'}", "confidence": 0.61},
+            {"artist": "undefined", "confidence": 0.01},
+        ][: max(1, int(top_k or 1))]
+        return {
+            "artist": artist if confidence >= self.threshold else "undefined",
+            "confidence": confidence,
+            "top_predictions": top_predictions,
+            "model_loaded": True,
+        }
+
+
+def _e2e_artist_identifier_getter(**kwargs: Any) -> _E2EArtistIdentifierStub:
+    return _E2EArtistIdentifierStub(threshold=float(kwargs.get("threshold") or 0.0))
+
+
 class ArtistService:
     """Service wrapper for artist-identification routes."""
 

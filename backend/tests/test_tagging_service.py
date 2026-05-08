@@ -2,6 +2,8 @@
 Unit tests for tagging service runtime planning.
 """
 
+import multiprocessing
+import queue
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +14,7 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import database as db  # noqa: E402
+import services.tagging_service as tagging_service  # noqa: E402
 from services.tagging_service import TagImportRequest, TagRequest, TaggingService  # noqa: E402
 from services.tagging_service import _build_tag_progress_state  # noqa: E402
 from services.tagging_service import _format_runtime_adjustment_message  # noqa: E402
@@ -234,9 +237,8 @@ def test_hardware_recommendation_prefers_gpu_for_toriigate_with_torch_cuda_only(
     assert recommendation["risk_level"] == "low"
 
 
-def test_runtime_plan_uses_custom_profile_for_custom_model_paths():
+def _build_custom_runtime_plan(request: TagRequest):
     service = TaggingService()
-
     with patch(
         "hardware_monitor.get_system_info",
         return_value={
@@ -249,17 +251,253 @@ def test_runtime_plan_uses_custom_profile_for_custom_model_paths():
             "available_ram_gb": 40,
         },
     ):
-        plan = service._build_runtime_plan(
-            TagRequest(
-                model_path="C:/models/custom-model.onnx",
-                tags_path="C:/models/selected_tags.csv",
-                use_gpu=True,
-            )
-        )
+        return service._build_runtime_plan(request)
 
-    assert plan["model_name"] == "custom"
+
+def _write_custom_tagger_files(tmp_path: Path, *, profile: str = "wd14") -> tuple[Path, Path]:
+    model_path = tmp_path / f"{profile}-custom.onnx"
+    model_path.write_bytes(b"fake custom onnx")
+    if profile == "camie-tagger-v2":
+        tags_path = tmp_path / "camie-tagger-v2-metadata.json"
+        tags_path.write_text("{}", encoding="utf-8")
+    else:
+        tags_path = tmp_path / "selected_tags.csv"
+        tags_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+    return model_path, tags_path
+
+
+def test_runtime_plan_maps_legacy_custom_model_paths_to_wd14_profile(tmp_path: Path):
+    model_path, tags_path = _write_custom_tagger_files(tmp_path)
+
+    plan = _build_custom_runtime_plan(
+        TagRequest(
+            model_name="custom",
+            model_path=str(model_path),
+            tags_path=str(tags_path),
+            use_gpu=True,
+        )
+    )
+
+    assert plan["model_name"] == "wd-swinv2-tagger-v3"
+    assert plan["request"]["custom_profile"] is None
     assert plan["fetch_batch_size"] == 8
     assert "Custom ONNX model on GPU" in plan["startup_notice"]
+
+
+def test_custom_model_path_with_legacy_wd_model_name_stays_wd14_compatible(tmp_path: Path):
+    service = TaggingService()
+    model_path, tags_path = _write_custom_tagger_files(tmp_path)
+    request = TagRequest(
+        model_name="wd-eva02-large-tagger-v3",
+        model_path=str(model_path),
+        tags_path=str(tags_path),
+        use_gpu=False,
+    )
+
+    service._validate_tag_request(request)
+    plan = _build_custom_runtime_plan(request)
+
+    assert plan["model_name"] == "wd-swinv2-tagger-v3"
+
+
+def test_custom_wd14_runtime_plan_ignores_mutable_default_model(monkeypatch, tmp_path: Path):
+    import services.tagging_service as tagging_service_module
+
+    monkeypatch.setattr(tagging_service_module, "DEFAULT_TAGGER_MODEL", "camie-tagger-v2")
+    model_path, tags_path = _write_custom_tagger_files(tmp_path)
+
+    plan = _build_custom_runtime_plan(
+        TagRequest(
+            model_name="custom",
+            custom_profile="wd14",
+            model_path=str(model_path),
+            tags_path=str(tags_path),
+            use_gpu=True,
+        )
+    )
+
+    assert plan["model_name"] == "wd-swinv2-tagger-v3"
+
+
+def test_runtime_plan_uses_custom_camie_profile_for_local_onnx(tmp_path: Path):
+    service = TaggingService()
+    model_path, tags_path = _write_custom_tagger_files(tmp_path, profile="camie-tagger-v2")
+    request = TagRequest(
+        model_name="custom",
+        custom_profile="camie-tagger-v2",
+        model_path=str(model_path),
+        tags_path=str(tags_path),
+        use_gpu=False,
+    )
+
+    service._validate_tag_request(request)
+    plan = _build_custom_runtime_plan(request)
+
+    assert plan["model_name"] == "camie-tagger-v2"
+    assert plan["fetch_batch_size"] <= 64
+    assert "Custom ONNX model on CPU Safe Mode" in plan["startup_notice"]
+
+
+def test_runtime_plan_uses_custom_pixai_profile_for_local_onnx(tmp_path: Path):
+    service = TaggingService()
+    model_path, tags_path = _write_custom_tagger_files(tmp_path, profile="pixai-tagger-v0.9")
+    request = TagRequest(
+        model_name="custom",
+        custom_profile="pixai-tagger-v0.9",
+        model_path=str(model_path),
+        tags_path=str(tags_path),
+        use_gpu=True,
+    )
+
+    service._validate_tag_request(request)
+    plan = _build_custom_runtime_plan(request)
+
+    assert plan["model_name"] == "pixai-tagger-v0.9"
+    assert "Custom ONNX model on GPU" in plan["startup_notice"]
+
+
+def test_custom_camie_profile_rejects_csv_metadata_path(tmp_path: Path):
+    service = TaggingService()
+    model_path, _ = _write_custom_tagger_files(tmp_path, profile="camie-tagger-v2")
+    csv_path = tmp_path / "selected_tags.csv"
+    csv_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="custom",
+                custom_profile="camie-tagger-v2",
+                model_path=str(model_path),
+                tags_path=str(csv_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "camie-tagger-v2" in str(exc.detail)
+        assert ".json" in str(exc.detail)
+    else:
+        raise AssertionError("Expected Camie custom profile to reject CSV metadata")
+
+
+def test_custom_pixai_profile_rejects_json_metadata_path(tmp_path: Path):
+    service = TaggingService()
+    model_path, _ = _write_custom_tagger_files(tmp_path, profile="pixai-tagger-v0.9")
+    json_path = tmp_path / "pixai.json"
+    json_path.write_text("{}", encoding="utf-8")
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="custom",
+                custom_profile="pixai-tagger-v0.9",
+                model_path=str(model_path),
+                tags_path=str(json_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "pixai-tagger-v0.9" in str(exc.detail)
+        assert ".csv" in str(exc.detail)
+    else:
+        raise AssertionError("Expected PixAI custom profile to reject JSON metadata")
+
+
+def test_custom_model_path_must_exist_before_runtime_plan(tmp_path: Path):
+    service = TaggingService()
+    missing_model_path = tmp_path / "missing.onnx"
+    tags_path = tmp_path / "selected_tags.csv"
+    tags_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="custom",
+                model_path=str(missing_model_path),
+                tags_path=str(tags_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "model path is invalid" in str(exc.detail)
+        assert "File does not exist" in str(exc.detail)
+    else:
+        raise AssertionError("Expected missing custom model_path to be rejected")
+
+
+def test_explicit_custom_tags_path_must_exist(tmp_path: Path):
+    service = TaggingService()
+    model_path = tmp_path / "custom.onnx"
+    model_path.write_bytes(b"fake custom onnx")
+    missing_tags_path = tmp_path / "missing-selected-tags.csv"
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="custom",
+                model_path=str(model_path),
+                tags_path=str(missing_tags_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "tags/metadata path" in str(exc.detail)
+        assert "File does not exist" in str(exc.detail)
+    else:
+        raise AssertionError("Expected missing explicit tags_path to be rejected")
+
+
+def test_custom_tags_path_without_model_path_is_rejected(tmp_path: Path):
+    service = TaggingService()
+    tags_path = tmp_path / "selected_tags.csv"
+    tags_path.write_text("id,name,category\n0,1girl,0\n", encoding="utf-8")
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="wd-swinv2-tagger-v3",
+                tags_path=str(tags_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "requires a Custom ONNX model_path" in str(exc.detail)
+    else:
+        raise AssertionError("Expected standalone tags_path to be rejected")
+
+
+def test_custom_paths_are_trimmed_before_extension_and_existence_checks(tmp_path: Path):
+    service = TaggingService()
+    model_path, tags_path = _write_custom_tagger_files(tmp_path)
+    request = TagRequest(
+        model_name="custom",
+        model_path=f"  {model_path}  ",
+        tags_path=f"  {tags_path}  ",
+    )
+
+    service._validate_tag_request(request)
+
+    assert request.model_path == str(model_path)
+    assert request.tags_path == str(tags_path)
+
+
+def test_custom_toriigate_profile_is_rejected_because_it_is_not_onnx(tmp_path: Path):
+    service = TaggingService()
+    model_path, tags_path = _write_custom_tagger_files(tmp_path)
+
+    try:
+        service._validate_tag_request(
+            TagRequest(
+                model_name="custom",
+                custom_profile="toriigate-0.5",
+                model_path=str(model_path),
+                tags_path=str(tags_path),
+            )
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "not an ONNX tagger" in str(exc.detail)
+    else:
+        raise AssertionError("Expected ToriiGate custom profile to be rejected")
 
 
 def test_import_tags_overwrite_uses_shared_batch_writer_and_refreshes_tag_cache(test_db, tmp_path: Path):
@@ -437,6 +675,127 @@ def test_cancel_tagging_marks_run_cancelled_once_worker_stops():
     assert progress["current"] == 4
     assert progress["total"] == 12
     assert "cancelled" in progress["message"].lower()
+
+
+def test_cancel_tagging_invalidates_pending_run_when_worker_not_yet_spawned():
+    """Regression for the cancel-vs-spawn race: if the user cancels between
+    start_tagging queueing the FastAPI background task and _run_tagging_job
+    actually spawning the worker process (i.e. _worker_process is still None),
+    cancel_tagging must finalize 'cancelled' immediately AND bump
+    _active_run_id so the pending background task aborts when it eventually
+    executes. Without the bump, _run_tagging_job's `run_id == _active_run_id`
+    branch would clobber progress back to 'running' and spawn a worker that
+    nobody can cancel.
+    """
+    service = TaggingService()
+    service._active_run_id = 5
+    service._progress = _build_tag_progress_state(
+        "running",
+        current=0,
+        total=0,
+        message="Preparing tagger...",
+        run_id=5,
+    )
+    service._worker_process = None
+    service._worker_cancel_event = None
+    service._cancel_requested = False
+
+    result = service.cancel_tagging()
+    progress = service.get_progress()
+
+    assert result["status"] == "cancelled"
+    assert progress["status"] == "cancelled"
+    assert "cancelled" in progress["message"].lower()
+    assert service._active_run_id > 5, (
+        "active_run_id must be bumped so the pending _run_tagging_job aborts"
+    )
+    assert service._cancel_requested is False, (
+        "_cancel_requested must not leak into the next run"
+    )
+
+
+def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel():
+    """Companion regression: when _run_tagging_job finally executes after the
+    pre-spawn cancellation, it must take the should_abort path because run_id
+    no longer matches _active_run_id. Progress must stay 'cancelled' instead
+    of being overwritten back to 'running', and no worker process may be
+    bound to the service.
+    """
+    service = TaggingService()
+    service.set_tagger_getter(lambda **kwargs: object())
+
+    pending_run_id = 5
+    service._active_run_id = pending_run_id + 1
+    service._progress = _build_tag_progress_state(
+        "cancelled",
+        current=0,
+        total=0,
+        message="Tagging cancelled at 0/0.",
+        run_id=pending_run_id,
+    )
+    service._worker_process = None
+    service._worker_cancel_event = None
+    service._cancel_requested = False
+
+    request = TagRequest(model_name="wd-swinv2-tagger-v3", use_gpu=False)
+
+    with patch("hardware_monitor.get_system_info", return_value={}), patch(
+        "hardware_monitor.recommend_tagger_config",
+        return_value={
+            "recommended_batch_size": 16,
+            "recommended_cpu_chunk_size": 12,
+            "recommended_session_refresh_interval": 0,
+        },
+    ):
+        service._run_tagging_job(request, run_id=pending_run_id)
+
+    progress = service.get_progress()
+    assert progress["status"] == "cancelled", (
+        "abort path must not clobber the cancelled progress"
+    )
+    assert progress["run_id"] == pending_run_id
+    assert service._worker_process is None
+
+
+def test_e2e_fake_tagger_completes_without_downloading_real_model(monkeypatch, tmp_path: Path):
+    image_path = tmp_path / "fake-tagger.png"
+    Image.new("RGB", (16, 16), color=(120, 80, 40)).save(image_path)
+    image_id = db.add_image(str(image_path), image_path.name, metadata_json="{}")
+
+    monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_TAGGER", "1")
+    monkeypatch.setattr(tagging_service, "verify_image_readable", lambda path: (True, None))
+
+    payload = {
+        "request": {
+            "model_name": "wd-swinv2-tagger-v3",
+            "image_ids": [image_id],
+            "retag_all": False,
+            "use_gpu": False,
+        },
+        "model_name": "wd-swinv2-tagger-v3",
+        "effective_use_gpu": False,
+        "fetch_batch_size": 2,
+    }
+    ctx = multiprocessing.get_context("spawn")
+    progress_queue = ctx.Queue()
+    cancel_event = ctx.Event()
+
+    try:
+        tagging_service._tagging_worker_main(payload, progress_queue, cancel_event)
+        messages = []
+        while True:
+            try:
+                messages.append(progress_queue.get_nowait())
+            except queue.Empty:
+                break
+    finally:
+        progress_queue.close()
+        progress_queue.join_thread()
+
+    assert messages[-1]["status"] == "done"
+    assert messages[-1]["tagged"] == 1
+    stored = db.get_image_tags(image_id)
+    assert any(tag["tag"] == "e2e_fixture" for tag in stored)
 
 
 def test_stale_worker_progress_cannot_override_newer_run_state():
