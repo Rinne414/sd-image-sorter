@@ -339,13 +339,6 @@
             this._setText('#custom-tags-group label', 'modal.tagTagsCsvPath');
             this._setPlaceholder('#tag-tags-path', 'modal.tagTagsCsvPath');
             this._setText('#custom-tags-group .helper-text', 'modal.tagTagsCsvHelper');
-            this._setTextAll('#tag-modal .form-group > label:not(.checkbox-label)', [
-                'modal.tagModel',
-                'modal.tagCustomModelPath',
-                'modal.tagTagsCsvPath',
-                'modal.tagGeneralThreshold',
-                'modal.tagCharacterThreshold'
-            ]);
             this._setCheckboxTexts('#tag-modal', ['modal.tagRetagAll', 'modal.tagUseGpu']);
             // Do NOT reset #tag-gpu-help here. Runtime state in app.js owns this dynamic copy.
             // MutationObserver refreshes must not clobber CPU Safe Mode / GPU fallback semantics.
