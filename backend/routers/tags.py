@@ -95,7 +95,7 @@ _bind_lazy_tagging_compat_state()
     }
 )
 async def get_all_tags(
-    limit: int = Query(default=500, ge=1, le=100000, description="Maximum tags to return"),
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all tags"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get all unique tags with occurrence counts."""
@@ -154,20 +154,22 @@ async def get_generators(
 )
 async def get_tags_library(
     sort_by: str = Query(default="frequency", description="Sort order: 'frequency' or 'alphabetical'"),
-    limit: int = Query(default=1000, ge=1, le=5000, description="Maximum tags to return"),
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching tags"),
+    q: Optional[str] = Query(default=None, description="Search all tags with normalized substring matching"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get tags library with frequency and sorting options."""
-    return service.get_tags_library(sort_by, limit)
+    return service.get_tags_library(sort_by=sort_by, limit=limit, search_query=q)
 
 
 @router.get("/prompts/library")
 async def get_prompts_library(
-    limit: int = Query(default=500, ge=1, le=5000, description="Maximum prompt tokens to return"),
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching prompt tokens"),
+    q: Optional[str] = Query(default=None, description="Search all prompt tokens with normalized substring matching"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique prompt tokens from images with frequency counts."""
-    return service.get_prompts_library(limit)
+    return service.get_prompts_library(limit=limit, search_query=q)
 
 
 @router.get(
@@ -196,11 +198,12 @@ The index is maintained from both the `loras` JSON array and `<lora:name:weight>
     }
 )
 async def get_loras_library(
-    limit: int = Query(default=500, ge=1, le=5000, description="Maximum LoRAs to return"),
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching LoRAs"),
+    q: Optional[str] = Query(default=None, description="Search all LoRAs with normalized substring matching"),
     service: TaggingService = Depends(get_tagging_service),
 ):
     """Get unique LoRAs from images with frequency counts."""
-    return service.get_loras_library(limit)
+    return service.get_loras_library(limit=limit, search_query=q)
 
 
 @router.get("/tags/export")

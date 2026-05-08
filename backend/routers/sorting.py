@@ -6,7 +6,7 @@ Refactored to use Service Layer pattern with dependency injection.
 """
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, Depends, BackgroundTasks, Query, UploadFile, File
+from fastapi import APIRouter, Body, Depends, BackgroundTasks, Query, UploadFile, File
 
 from services.service_provider import ServiceProvider
 from services.state_compat import MutableStateProxy
@@ -18,6 +18,7 @@ from services.sorting_service import (
     BatchMoveRequest,
     FolderConfig,
     BrowseFolderRequest,
+    ManualSortStartRequest,
 )
 
 
@@ -300,14 +301,16 @@ async def cancel_batch_move(
     return service.cancel_batch_move()
 
 
+
 @router.post("/sort/start")
 async def start_sort_session(
-    generators: Optional[str] = Query(default=None, max_length=1000),
-    tags: Optional[str] = Query(default=None, max_length=1000),
-    ratings: Optional[str] = Query(default=None, max_length=1000),
-    checkpoints: Optional[str] = Query(default=None, max_length=1000),
-    loras: Optional[str] = Query(default=None, max_length=1000),
-    prompts: Optional[str] = Query(default=None, max_length=1000),
+    request: Optional[ManualSortStartRequest] = Body(default=None),
+    generators: Optional[str] = Query(default=None),
+    tags: Optional[str] = Query(default=None),
+    ratings: Optional[str] = Query(default=None),
+    checkpoints: Optional[str] = Query(default=None),
+    loras: Optional[str] = Query(default=None),
+    prompts: Optional[str] = Query(default=None),
     artist: Optional[str] = Query(default=None, max_length=500),
     search: Optional[str] = Query(default=None, max_length=1000),
     min_width: Optional[int] = Query(default=None, ge=1, le=100000),
@@ -323,6 +326,28 @@ async def start_sort_session(
     service: SortingService = Depends(get_sorting_service),
 ):
     """Start a manual sort session."""
+    if request is not None:
+        return service.start_sort_session(
+            generators=request.generators,
+            tags=request.tags,
+            ratings=request.ratings,
+            checkpoints=request.checkpoints,
+            loras=request.loras,
+            prompts=request.prompts,
+            artist=request.artist,
+            search=request.search,
+            min_width=request.min_width,
+            max_width=request.max_width,
+            min_height=request.min_height,
+            max_height=request.max_height,
+            aspect_ratio=request.aspect_ratio,
+            min_aesthetic=request.min_aesthetic,
+            max_aesthetic=request.max_aesthetic,
+            folders=request.folders,
+            operation_mode=request.operation_mode,
+            replace_existing=request.replace_existing,
+        )
+
     return service.start_sort_session(
         generators=generators,
         tags=tags,
@@ -398,10 +423,13 @@ async def clear_gallery(
 
 @router.get("/analytics")
 async def get_analytics(
+    facet: Optional[str] = Query(default=None, description="Optional facet to fetch: checkpoints, loras, or tags"),
+    q: Optional[str] = Query(default=None, description="Search all values in the selected facet"),
+    limit: Optional[int] = Query(default=None, ge=1, description="Optional display limit; omitted returns all matching values"),
     service: SortingService = Depends(get_sorting_service),
 ):
     """Get popular tags, checkpoints, and loras."""
-    return service.get_analytics()
+    return service.get_analytics(facet=facet, search_query=q, limit=limit)
 
 
 @router.get("/stats")

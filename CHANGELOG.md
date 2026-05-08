@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 新增 `fix.bat` 作为少数情况下使用的诊断/修复工具，用于 runtime 包修复、端口诊断和启动就绪快照；它不会启动 app，也不是普通端口兜底入口。
 
 ### Fixed / 修复
+- Facet search now searches the full indexed library before applying display limits, so typing partial terms like `blue` can find lower-frequency tags such as `nagisa_(blue_archive)` instead of only searching the first preloaded slice.
+  - Facet 搜索现在会先查完整索引库，再应用显示数量限制；输入 `blue` 这类局部词时，可以找到低频标签（例如 `nagisa_(blue_archive)`），不再只搜前端预载的前几百/一千项。
+- Manual Sort now starts from a JSON request body instead of packing large tag/checkpoint/LoRA/prompt scopes into the URL, while keeping the legacy query-string API compatible. Large filter scopes no longer fail because of arbitrary query-length limits.
+  - Manual Sort 现在通过 JSON 请求体启动，不再把大量 tag / checkpoint / LoRA / prompt 筛选条件塞进 URL，同时保留旧 query-string API 兼容；大型筛选范围不会再因为随意的查询字符串长度限制失败。
 - Custom ONNX tagging now treats explicit local model and metadata paths as hard user contracts: missing files fail loudly, profile-specific metadata is validated, and user-supplied ONNX files are never deleted or replaced by the built-in model repair/download path.
   - Custom ONNX 标注现在把用户显式填写的本地模型和 metadata 路径当成硬契约：文件不存在会明确失败，metadata 会按 profile 校验，并且绝不会删除或替换用户提供的本地 ONNX。
 - Custom Local Model now supports explicit WD14-compatible, PixAI, and Camie ONNX profiles while rejecting ToriiGate as a fake Custom ONNX path because ToriiGate uses the separate VLM/PyTorch backend.

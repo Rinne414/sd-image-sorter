@@ -92,8 +92,8 @@ class MoveRequest(BaseModel):
         return v
 
 
-class BatchMoveRequest(BaseModel):
-    """Request model for batch move operations."""
+class SortFilterRequest(BaseModel):
+    """Shared filter model for bulk sort-style operations."""
     generators: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     ratings: Optional[List[str]] = None
@@ -109,8 +109,6 @@ class BatchMoveRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     min_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     max_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
-    destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
-    operation: str = Field(default="move")
 
     @field_validator('aspect_ratio')
     @classmethod
@@ -142,12 +140,25 @@ class BatchMoveRequest(BaseModel):
             raise ValueError('max_aesthetic cannot be less than min_aesthetic')
         return v
 
+
+class BatchMoveRequest(SortFilterRequest):
+    """Request model for batch move operations."""
+    destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    operation: str = Field(default="move")
+
     @field_validator('operation')
     @classmethod
     def validate_operation(cls, v: str) -> str:
         if v not in VALID_FILE_OPERATIONS:
             raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
+
+
+class ManualSortStartRequest(SortFilterRequest):
+    """Request model for starting manual sort without query-string size limits."""
+    folders: Optional[Dict[str, str]] = None
+    operation_mode: str = Field(default="move", max_length=16)
+    replace_existing: bool = False
 
 
 class FolderConfig(BaseModel):
@@ -303,15 +314,31 @@ class SortingService:
                 filtered.append(entry)
         return filtered
 
-    def _parse_sort_folders(self, folders: Optional[str]) -> Dict[str, str]:
-        """Parse and validate manual-sort folder config from query params."""
+    @staticmethod
+    def _coerce_sort_filter_values(values: Optional[Any]) -> Optional[List[str]]:
+        if values is None:
+            return None
+        if isinstance(values, str):
+            raw_values = values.split(",")
+        elif isinstance(values, (list, tuple, set)):
+            raw_values = values
+        else:
+            raw_values = [values]
+        normalized = [str(value).strip() for value in raw_values if str(value).strip()]
+        return normalized or None
+
+    def _parse_sort_folders(self, folders: Optional[Any]) -> Dict[str, str]:
+        """Parse and validate manual-sort folder config from JSON body or legacy query params."""
         if not folders:
             return {}
 
-        try:
-            raw_config = json.loads(folders)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Invalid folders payload") from exc
+        if isinstance(folders, dict):
+            raw_config = folders
+        else:
+            try:
+                raw_config = json.loads(folders)
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(status_code=400, detail="Invalid folders payload") from exc
 
         if not isinstance(raw_config, dict):
             raise HTTPException(status_code=400, detail="Invalid folders payload")
@@ -1376,12 +1403,12 @@ class SortingService:
 
     def start_sort_session(
         self,
-        generators: Optional[str] = None,
-        tags: Optional[str] = None,
-        ratings: Optional[str] = None,
-        checkpoints: Optional[str] = None,
-        loras: Optional[str] = None,
-        prompts: Optional[str] = None,
+        generators: Optional[Any] = None,
+        tags: Optional[Any] = None,
+        ratings: Optional[Any] = None,
+        checkpoints: Optional[Any] = None,
+        loras: Optional[Any] = None,
+        prompts: Optional[Any] = None,
         artist: Optional[str] = None,
         search: Optional[str] = None,
         min_width: Optional[int] = None,
@@ -1391,7 +1418,7 @@ class SortingService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
-        folders: Optional[str] = None,
+        folders: Optional[Any] = None,
         operation_mode: str = "move",
         replace_existing: bool = False,
     ) -> Dict[str, Any]:
@@ -1420,12 +1447,12 @@ class SortingService:
         if min_aesthetic is not None and max_aesthetic is not None and min_aesthetic > max_aesthetic:
             raise HTTPException(status_code=400, detail="min_aesthetic cannot be greater than max_aesthetic")
 
-        gen_list = generators.split(",") if generators else None
-        tag_list = tags.split(",") if tags else None
-        rating_list = ratings.split(",") if ratings else None
-        cp_list = checkpoints.split(",") if checkpoints else None
-        lr_list = loras.split(",") if loras else None
-        prompt_list = prompts.split(",") if prompts else None
+        gen_list = self._coerce_sort_filter_values(generators)
+        tag_list = self._coerce_sort_filter_values(tags)
+        rating_list = self._coerce_sort_filter_values(ratings)
+        cp_list = self._coerce_sort_filter_values(checkpoints)
+        lr_list = self._coerce_sort_filter_values(loras)
+        prompt_list = self._coerce_sort_filter_values(prompts)
         artist_name = artist.strip() if artist else None
         search_query = search.strip() if search else None
 
@@ -1882,8 +1909,21 @@ class SortingService:
             cursor.execute("DELETE FROM images")
         return {"status": "ok", "message": "Gallery cleared"}
 
-    def get_analytics(self) -> Dict[str, Any]:
+    def get_analytics(
+        self,
+        facet: Optional[str] = None,
+        search_query: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Get all tags, checkpoints, and loras with counts."""
+        normalized_facet = str(facet or "").strip().lower()
+        if normalized_facet in {"checkpoint", "checkpoints"}:
+            return {"checkpoints": db.get_all_checkpoints(limit=limit, search_query=search_query)}
+        if normalized_facet in {"lora", "loras"}:
+            return db.get_all_loras(limit=limit, search_query=search_query)
+        if normalized_facet in {"tag", "tags"}:
+            return {"top_tags": db.search_tags(search_query, limit=limit).get("tags", [])}
+
         with db.get_db() as conn:
             cursor = conn.cursor()
 

@@ -371,7 +371,7 @@
                                     <span>📝</span>
                                     <span>
                                         <strong data-i18n="selection.exportTagsToFiles">Same-name .txt...</strong>
-                                        <small data-i18n="selection.exportTagsToFilesHelp">LoRA captions, one file per image</small>
+                                        <small data-i18n="selection.exportTagsToFilesHelp">Training captions, one file per image</small>
                                     </span>
                                 </button>
                             </div>
@@ -2916,7 +2916,7 @@
                 <div class="form-group">
                     <label data-i18n="batchExport.outputFolder">Output Folder</label>
                     <input type="text" id="batch-export-folder" class="input-field" placeholder="D:\\exported_tags">
-                    <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Creates one sidecar .txt per image. Best for LoRA caption files; JSON mode creates same-name .json.</small>
+                    <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Creates one same-name sidecar per image. LoRA caption mode writes .txt; JSON mode writes .json.</small>
                 </div>
 
                 <div class="form-group">
@@ -2933,7 +2933,7 @@
                         <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge block</option>
                         <option value="json" data-i18n="batchExport.modeJson">JSON</option>
                     </select>
-                    <small class="helper-text" data-i18n="batchExport.contentModeHelper">Default creates LoRA caption files. Switch only when you need Prompt text, Tags, or advanced formats.</small>
+                    <small class="helper-text" data-i18n="batchExport.contentModeHelper">Default LoRA caption = optional Class Token + AI caption + Prompt + Tags, one line per image.</small>
                     <div class="export-format-preview" id="batch-export-content-description" aria-live="polite"></div>
                 </div>
 
@@ -2949,14 +2949,14 @@
                 <details class="guided-advanced-panel batch-export-advanced-options" id="batch-export-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="batchExport.advancedSummary">Advanced options</span>
-                        <span class="guided-advanced-hint" data-i18n="batchExport.advancedHint">Class token and blacklist for LoRA training captions.</span>
+                        <span class="guided-advanced-hint" data-i18n="batchExport.advancedHint">Class token and blacklist apply to training-caption modes.</span>
                     </summary>
                     <div class="guided-advanced-body">
                         <div class="form-group">
                             <label data-i18n="batchExport.tagPrefix">Prefix / Class Token (optional)</label>
                             <input type="text" id="batch-export-prefix" class="input-field"
                                 placeholder="e.g., masterpiece, best quality, or sks person, ">
-                            <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Prepended to LoRA caption outputs. Leave blank for exact Prompt/metadata export.</small>
+                            <small class="helper-text" data-i18n="batchExport.tagPrefixHelper">Prepended only to training-caption outputs. Prompt, Tags, Negative, A1111, and JSON stay exact.</small>
                         </div>
 
                         <div class="form-group">

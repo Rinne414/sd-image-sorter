@@ -112,6 +112,8 @@ const FILTERED_SELECTION_CONFIRM_THRESHOLD = 10000;
 const FILTERED_SELECTION_CHUNK_SIZE = 2000;
 const EXPORT_PREVIEW_MAX_IMAGES = 2000;
 const EXPORT_PREVIEW_MAX_CHARS = 200000;
+const FACET_SUGGESTION_LIMIT = 24;
+const FACET_FILTER_SEARCH_LIMIT = 200;
 
 function readStoredBoolean(storageKey, fallback = false) {
     try {
@@ -837,20 +839,35 @@ const API = {
         return this.get('/api/tags');
     },
 
-    async getTagsLibrary(sortBy = 'frequency', limit = 1000) {
-        return this.get(`/api/tags/library?sort_by=${sortBy}&limit=${limit}`);
+    async getTagsLibrary(sortBy = 'frequency', options = {}) {
+        const requestOptions = typeof options === 'number' ? { limit: options } : (options || {});
+        const params = new URLSearchParams();
+        params.set('sort_by', sortBy);
+        if (requestOptions.limit != null) params.set('limit', String(requestOptions.limit));
+        if (requestOptions.query) params.set('q', requestOptions.query);
+        return this.get(`/api/tags/library?${params.toString()}`);
     },
 
     async importTags(images, overwrite = false) {
         return this.post('/api/tags/import', { images, overwrite });
     },
 
-    async getPromptsLibrary(limit = 1000) {
-        return this.get(`/api/prompts/library?limit=${limit}`);
+    async getPromptsLibrary(options = {}) {
+        const requestOptions = typeof options === 'number' ? { limit: options } : (options || {});
+        const params = new URLSearchParams();
+        if (requestOptions.limit != null) params.set('limit', String(requestOptions.limit));
+        if (requestOptions.query) params.set('q', requestOptions.query);
+        const queryString = params.toString();
+        return this.get(`/api/prompts/library${queryString ? `?${queryString}` : ''}`);
     },
 
-    async getLorasLibrary(limit = 1000) {
-        return this.get(`/api/loras/library?limit=${limit}`);
+    async getLorasLibrary(options = {}) {
+        const requestOptions = typeof options === 'number' ? { limit: options } : (options || {});
+        const params = new URLSearchParams();
+        if (requestOptions.limit != null) params.set('limit', String(requestOptions.limit));
+        if (requestOptions.query) params.set('q', requestOptions.query);
+        const queryString = params.toString();
+        return this.get(`/api/loras/library${queryString ? `?${queryString}` : ''}`);
     },
 
     async getGenerators() {
@@ -860,6 +877,15 @@ const API = {
     // Stats
     async getStats() {
         return this.get('/api/stats');
+    },
+
+    async getAnalyticsFacet(facet, options = {}) {
+        const params = new URLSearchParams();
+        if (facet) params.set('facet', facet);
+        if (options.query) params.set('q', options.query);
+        if (options.limit != null) params.set('limit', String(options.limit));
+        const queryString = params.toString();
+        return this.get(`/api/analytics${queryString ? `?${queryString}` : ''}`);
     },
 
     async getAestheticStatus() {
@@ -1043,27 +1069,26 @@ const API = {
 
     // Manual Sort
     async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null, replaceExisting = false) {
-        const params = new URLSearchParams();
-        if (generators?.length) params.set('generators', generators.join(','));
-        if (tags?.length) params.set('tags', tags.join(','));
-        if (ratings?.length) params.set('ratings', ratings.join(','));
-        if (checkpoints?.length) params.set('checkpoints', checkpoints.join(','));
-        if (loras?.length) params.set('loras', loras.join(','));
-        if (prompts?.length) params.set('prompts', prompts.join(','));
-        if (artist) params.set('artist', String(artist).trim());
-        if (search) params.set('search', search);
-        if (dimensions?.minWidth) params.set('min_width', dimensions.minWidth);
-        if (dimensions?.maxWidth) params.set('max_width', dimensions.maxWidth);
-        if (dimensions?.minHeight) params.set('min_height', dimensions.minHeight);
-        if (dimensions?.maxHeight) params.set('max_height', dimensions.maxHeight);
-        const aspectRatio = normalizeAspectRatioFilter(dimensions?.aspectRatio);
-        if (aspectRatio) params.set('aspect_ratio', aspectRatio);
-        if (aesthetic?.min != null) params.set('min_aesthetic', aesthetic.min);
-        if (aesthetic?.max != null) params.set('max_aesthetic', aesthetic.max);
-        if (folders) params.set('folders', JSON.stringify(folders));
-        if (operationMode) params.set('operation_mode', operationMode);
-        if (replaceExisting) params.set('replace_existing', 'true');
-        return this.post(`/api/sort/start?${params}`);
+        return this.post('/api/sort/start', {
+            generators,
+            tags,
+            ratings,
+            checkpoints,
+            loras,
+            prompts,
+            artist: artist ? String(artist).trim() : null,
+            search,
+            min_width: dimensions?.minWidth || null,
+            max_width: dimensions?.maxWidth || null,
+            min_height: dimensions?.minHeight || null,
+            max_height: dimensions?.maxHeight || null,
+            aspect_ratio: normalizeAspectRatioFilter(dimensions?.aspectRatio) || null,
+            min_aesthetic: aesthetic?.min ?? null,
+            max_aesthetic: aesthetic?.max ?? null,
+            folders,
+            operation_mode: operationMode || 'move',
+            replace_existing: Boolean(replaceExisting),
+        });
     },
 
     async getCurrentSortImage() {
@@ -4106,14 +4131,16 @@ function initEventListeners() {
     $('#library-tab-prompts')?.addEventListener('click', () => switchLibraryTab('prompts'));
     $('#library-tab-loras')?.addEventListener('click', () => switchLibraryTab('loras'));
 
-    // Checkpoint search in filter modal
+    // Checkpoint search in filter modal - query backend facets, not just loaded rows
+    const debouncedCheckpointSearch = debounce((value) => searchModalFilterFacet('checkpoints', value), 200);
     $('#modal-checkpoint-search')?.addEventListener('input', (e) => {
-        filterModalList('modal-checkpoint-list', e.target.value);
+        debouncedCheckpointSearch(e.target.value);
     });
 
-    // Lora search in filter modal
+    // LoRA search in filter modal - query backend facets, not just loaded rows
+    const debouncedLoraSearch = debounce((value) => searchModalFilterFacet('loras', value), 200);
     $('#modal-lora-search')?.addEventListener('input', (e) => {
-        filterModalList('modal-lora-list', e.target.value);
+        debouncedLoraSearch(e.target.value);
     });
 
     // --- Batch Tag Export Modal ---
@@ -4474,6 +4501,40 @@ function filterModalList(listId, query) {
             item.style.display = text.includes(query) ? '' : 'none';
         }
     });
+}
+
+async function searchModalFilterFacet(facet, query) {
+    const normalizedQuery = String(query || '').trim();
+    const targetListId = facet === 'checkpoints' ? 'modal-checkpoint-list' : 'modal-lora-list';
+    const list = document.getElementById(targetListId);
+    if (!list) return;
+
+    try {
+        if (!normalizedQuery) {
+            const data = FilterModalController.optionData || AppState.analytics || await API.getStats();
+            if (facet === 'checkpoints') {
+                renderCheckpointFilterList(data.checkpoints || []);
+            } else {
+                renderLoraFilterList(data.loras || []);
+            }
+            updateFilterModalSummary();
+            return;
+        }
+
+        const result = await API.getAnalyticsFacet(facet, {
+            query: normalizedQuery,
+            limit: FACET_FILTER_SEARCH_LIMIT,
+        });
+        if (facet === 'checkpoints') {
+            renderCheckpointFilterList(result.checkpoints || []);
+        } else {
+            renderLoraFilterList(result.loras || []);
+        }
+        updateFilterModalSummary();
+    } catch (error) {
+        Logger.error('Filter facet search failed:', error);
+        filterModalList(targetListId, normalizedQuery);
+    }
 }
 
 
@@ -5103,7 +5164,6 @@ function _refreshScanDrivenViews(force = false, options = {}) {
         return;
     }
     _scanLastAutoRefreshAt = now;
-    promptsLibraryCache = null;
     if (refreshGallery) {
         if (AppState.currentView === 'gallery') {
             const loadOptions = {
@@ -5819,7 +5879,6 @@ async function pollTagProgress() {
             setTaggingUiState(false);
             resetTagUiProgressState();
             syncTaggerModelUi();
-            promptsLibraryCache = null; // Invalidate cache after tagging
             loadImages();
             loadStats();
         } else if (progress.status === 'cancelled') {
@@ -6348,9 +6407,6 @@ async function loadImages(appendMode = false, options = {}) {
                 }
             }
         }
-
-        if (!appendMode) tagsLibraryCache = null;
-
         if (window.Gallery) {
             if (appendMode) {
                 Gallery.appendImages(result.images);
@@ -6615,6 +6671,7 @@ const libraryData = {
     filterState: null,
     returnFilterOptions: null,
     optionData: null,
+    searchRequestId: 0,
 };
 
 function openTagsLibrary(options = {}) {
@@ -6669,6 +6726,61 @@ function switchLibraryTab(tab) {
     loadLibraryContent();
 }
 
+async function fetchLibraryFacet(tab, { sortBy = 'frequency', query = '', optionData = null } = {}) {
+    const normalizedQuery = String(query || '').trim();
+    if (optionData && !normalizedQuery) {
+        if (tab === 'tags' && optionData.tags?.length) {
+            return { items: optionData.tags, total: optionData.tags.length };
+        }
+        if (tab === 'loras' && optionData.loras?.length) {
+            return { items: optionData.loras, total: optionData.loras.length };
+        }
+        if (tab === 'prompts' && optionData.prompts?.length) {
+            return { items: optionData.prompts, total: optionData.prompts.length };
+        }
+    }
+
+    if (tab === 'tags') {
+        const result = await API.getTagsLibrary(sortBy, { query: normalizedQuery || null });
+        return { items: result.tags || [], total: result.total || 0 };
+    }
+    if (tab === 'loras') {
+        const result = await API.getLorasLibrary({ query: normalizedQuery || null });
+        return { items: result.loras || [], total: result.total || 0 };
+    }
+    const result = await API.getPromptsLibrary({ query: normalizedQuery || null });
+    return { items: result.prompts || [], total: result.total || 0 };
+}
+
+function renderLibraryFacet(tab, items) {
+    if (tab === 'tags') {
+        libraryData.tags = items;
+        renderLibraryTags(items);
+    } else if (tab === 'loras') {
+        libraryData.loras = items;
+        renderLibraryLoras(items);
+    } else {
+        libraryData.prompts = items;
+        renderLibraryPrompts(items);
+    }
+}
+
+function setLibraryStatsText(tab, count) {
+    const statsText = $('#library-stats-text');
+    if (!statsText) return;
+    const t = (key, params, fallback) => {
+        const translated = window.I18n?.t?.(key, params);
+        return translated && translated !== key ? translated : (fallback || key);
+    };
+    if (tab === 'tags') {
+        statsText.textContent = t('library.tagsFound', { count }, `${count} unique tags found`);
+    } else if (tab === 'loras') {
+        statsText.textContent = t('library.lorasFound', { count }, `${count} unique LoRAs found`);
+    } else {
+        statsText.textContent = t('library.promptsFound', { count }, `${count} unique prompts found`);
+    }
+}
+
 async function loadLibraryContent() {
     const content = $('#library-content');
     const statsText = $('#library-stats-text');
@@ -6696,62 +6808,12 @@ async function loadLibraryContent() {
     }
 
     try {
-        if (libraryData.optionData) {
-            if (currentTab === 'tags') {
-                const tags = libraryData.optionData.tags || [];
-                if (tags.length > 0) {
-                    libraryData.tags = tags;
-                    renderLibraryTags(tags);
-                    if (statsText) {
-                        statsText.textContent = t('library.tagsFound', { count: tags.length }, `${tags.length} unique tags found`);
-                    }
-                    return;
-                }
-            } else if (currentTab === 'loras') {
-                const loras = libraryData.optionData.loras || [];
-                if (loras.length > 0) {
-                    libraryData.loras = loras;
-                    renderLibraryLoras(loras);
-                    if (statsText) {
-                        statsText.textContent = t('library.lorasFound', { count: loras.length }, `${loras.length} unique LoRAs found`);
-                    }
-                    return;
-                }
-            } else {
-                const prompts = libraryData.optionData.prompts || [];
-                if (prompts.length > 0) {
-                    libraryData.prompts = prompts;
-                    renderLibraryPrompts(prompts);
-                    if (statsText) {
-                        statsText.textContent = t('library.promptsFound', { count: prompts.length }, `${prompts.length} unique prompts found`);
-                    }
-                    return;
-                }
-            }
-        }
-
-        if (currentTab === 'tags') {
-            const result = await API.getTagsLibrary(sortBy);
-            libraryData.tags = result.tags;
-            renderLibraryTags(result.tags);
-            if (statsText) {
-                statsText.textContent = t('library.tagsFound', { count: result.total }, `${result.total} unique tags found`);
-            }
-        } else if (currentTab === 'loras') {
-            const result = await API.getLorasLibrary();
-            libraryData.loras = result.loras;
-            renderLibraryLoras(result.loras);
-            if (statsText) {
-                statsText.textContent = t('library.lorasFound', { count: result.total }, `${result.total} unique LoRAs found`);
-            }
-        } else {
-            const result = await API.getPromptsLibrary();
-            libraryData.prompts = result.prompts;
-            renderLibraryPrompts(result.prompts);
-            if (statsText) {
-                statsText.textContent = t('library.promptsFound', { count: result.total }, `${result.total} unique prompts found`);
-            }
-        }
+        const result = await fetchLibraryFacet(currentTab, {
+            sortBy,
+            optionData: libraryData.optionData,
+        });
+        renderLibraryFacet(currentTab, result.items);
+        setLibraryStatsText(currentTab, result.total);
     } catch (error) {
         const fallbackMessages = {
             tags: t('library.loadTagsFailed', null, 'Failed to load tag library'),
@@ -6870,25 +6932,29 @@ function renderLibraryLoras(loras) {
     });
 }
 
-function filterLibraryContent() {
-    const query = $('#library-search')?.value.toLowerCase() || '';
+const filterLibraryContent = debounce(async () => {
+    const query = $('#library-search')?.value || '';
+    const tab = libraryData.currentTab;
+    const requestId = ++libraryData.searchRequestId;
 
-    if (libraryData.currentTab === 'tags') {
-        const filtered = libraryData.tags.filter(t => t.tag.toLowerCase().includes(query));
-        renderLibraryTags(filtered);
-    } else if (libraryData.currentTab === 'loras') {
-        const filtered = (libraryData.loras || []).filter(l => l.lora.toLowerCase().includes(query));
-        renderLibraryLoras(filtered);
-    } else {
-        const filtered = libraryData.prompts.filter(p => p.prompt.toLowerCase().includes(query));
-        renderLibraryPrompts(filtered);
+    try {
+        const result = await fetchLibraryFacet(tab, {
+            sortBy: $('#library-sort')?.value || 'frequency',
+            query,
+            optionData: libraryData.optionData,
+        });
+        if (requestId !== libraryData.searchRequestId || tab !== libraryData.currentTab) return;
+        renderLibraryFacet(tab, result.items);
+        setLibraryStatsText(tab, result.total);
+    } catch (error) {
+        Logger.error('Library search error:', error);
     }
-}
+}, 200);
 
 // ============== Modal Tag/Prompt Autocomplete ==============
 
 // searchModalTags and searchModalPrompts are defined in the Filter Modal section below
-// (single definition, using direct API.getTags() / cached API.getPromptsLibrary())
+// (single definition, using API facet searches instead of pre-limited local caches)
 
 // renderModalActiveTags and renderModalActivePrompts are defined in the Filter Modal section below
 
@@ -7125,13 +7191,13 @@ function getExportFormatDescription(format) {
 
 function getBatchExportContentDescription(mode) {
     const descriptions = {
-        caption_merged: appT('batchExport.descCaptionMerged', 'Writes one same-name .txt per image for LoRA training: AI caption, Prompt, and Tags merged into one caption.'),
+        caption_merged: appT('batchExport.descCaptionMerged', 'Writes one same-name .txt per image for LoRA training: optional Class Token + AI caption + Prompt + Tags, merged into one line.'),
         prompt: appT('batchExport.descPrompt', 'Writes one same-name .txt per image containing only Prompt text.'),
-        tags: appT('batchExport.descTags', 'Writes one same-name .txt per image containing only Tags.'),
+        tags: appT('batchExport.descTags', 'Writes one same-name .txt per image containing only Tags. The Class Token field is ignored.'),
         negative: appT('batchExport.descNegative', 'Writes one same-name .txt per image containing only Negative prompt.'),
         prompt_negative: appT('batchExport.descPromptNegative', 'Writes one same-name .txt per image with Prompt plus Negative prompt.'),
         a1111: appT('batchExport.descA1111', 'Writes one same-name .txt per image in A1111 / Forge parameter-block format for regeneration.'),
-        caption_tags: appT('batchExport.descCaptionTags', 'Writes one same-name .txt per image with AI caption plus Tags, without the original Prompt.'),
+        caption_tags: appT('batchExport.descCaptionTags', 'Writes one same-name .txt per image with optional Class Token + AI caption + Tags, without the original Prompt.'),
         json: appT('batchExport.descJson', 'Writes one same-name .json per image with Prompt, Tags, model, size, and generation parameters.'),
     };
     return descriptions[mode] || descriptions.caption_merged;
@@ -8346,33 +8412,9 @@ async function loadModalFilterLists() {
 
     try {
         const data = optionData || AppState.analytics || await API.getStats();
-        const selectedCheckpointValues = new Set(
-            (filterState.checkpoints || []).map(normalizeCheckpointFilterValue).filter(Boolean)
-        );
 
-        // Render checkpoints
-        if (cpList) {
-            cpList.innerHTML = (data.checkpoints || []).length > 0 ? (data.checkpoints || []).map(cp => `
-                <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(getCheckpointOptionValue(cp))}" ${selectedCheckpointValues.has(getCheckpointOptionValue(cp)) ? 'checked' : ''}>
-                    <span class="checkbox-custom"></span>
-                    <span class="checkbox-text">${escapeHtml(cp.checkpoint || getCheckpointOptionValue(cp))}</span>
-                    <span class="checkbox-count">${cp.count}</span>
-                </label>
-            `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noCheckpoints', null, 'No checkpoints found yet.'))}</div>`;
-        }
-
-        // Render loras
-        if (loraList) {
-            loraList.innerHTML = (data.loras || []).length > 0 ? (data.loras || []).map(l => `
-                <label class="checkbox-label">
-                    <input type="checkbox" value="${escapeHtml(l.lora)}" ${filterState.loras?.includes(l.lora) ? 'checked' : ''}>
-                    <span class="checkbox-custom"></span>
-                    <span class="checkbox-text">${escapeHtml(l.lora)}</span>
-                    <span class="checkbox-count">${l.count}</span>
-                </label>
-            `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noLoras', null, 'No LoRAs found yet.'))}</div>`;
-        }
+        renderCheckpointFilterList(data.checkpoints || [], t);
+        renderLoraFilterList(data.loras || [], t);
 
         updateFilterModalSummary();
     } catch (e) {
@@ -8382,6 +8424,55 @@ async function loadModalFilterLists() {
         if (loraList) loraList.innerHTML = `<div class="filter-empty-state">${escapeHtml(t('filter.failedLoadLoras', null, 'Failed to load LoRAs.'))}</div>`;
         updateFilterModalSummary();
     }
+}
+
+function renderCheckpointFilterList(checkpoints, t = appT) {
+    const cpList = $('#modal-checkpoint-list');
+    if (!cpList) return;
+    const filterState = getFilterModalState();
+    const selectedCheckpointValues = new Set(
+        (filterState.checkpoints || []).map(normalizeCheckpointFilterValue).filter(Boolean)
+    );
+    const normalizedItems = [...(checkpoints || [])];
+    const presentValues = new Set(normalizedItems.map(getCheckpointOptionValue).filter(Boolean));
+    selectedCheckpointValues.forEach((checkpointValue) => {
+        if (!presentValues.has(checkpointValue)) {
+            normalizedItems.push({
+                checkpoint: checkpointValue,
+                checkpoint_normalized: checkpointValue,
+                count: '✓',
+            });
+        }
+    });
+    cpList.innerHTML = normalizedItems.length > 0 ? normalizedItems.map(cp => `
+        <label class="checkbox-label">
+            <input type="checkbox" value="${escapeHtml(getCheckpointOptionValue(cp))}" ${selectedCheckpointValues.has(getCheckpointOptionValue(cp)) ? 'checked' : ''}>
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">${escapeHtml(cp.checkpoint || getCheckpointOptionValue(cp))}</span>
+            <span class="checkbox-count">${cp.count}</span>
+        </label>
+    `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noCheckpoints', null, 'No checkpoints found yet.'))}</div>`;
+}
+
+function renderLoraFilterList(loras, t = appT) {
+    const loraList = $('#modal-lora-list');
+    if (!loraList) return;
+    const filterState = getFilterModalState();
+    const normalizedItems = [...(loras || [])];
+    const presentValues = new Set(normalizedItems.map(l => l.lora).filter(Boolean));
+    (filterState.loras || []).forEach((lora) => {
+        if (lora && !presentValues.has(lora)) {
+            normalizedItems.push({ lora, count: '✓' });
+        }
+    });
+    loraList.innerHTML = normalizedItems.length > 0 ? normalizedItems.map(l => `
+        <label class="checkbox-label">
+            <input type="checkbox" value="${escapeHtml(l.lora)}" ${filterState.loras?.includes(l.lora) ? 'checked' : ''}>
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">${escapeHtml(l.lora)}</span>
+            <span class="checkbox-count">${l.count}</span>
+        </label>
+    `).join('') : `<div class="filter-empty-state">${escapeHtml(t('filter.noLoras', null, 'No LoRAs found yet.'))}</div>`;
 }
 
 function updateFilterModalSummary() {
@@ -8472,7 +8563,7 @@ const _debouncedTagSearch = debounce(async (query) => {
         if (FilterModalController.optionData?.tags) {
             const filtered = FilterModalController.optionData.tags
                 .filter(t => t.tag.toLowerCase().replace(/_/g, ' ').includes(normalizedQuery))
-                .slice(0, 24);
+                .slice(0, FACET_SUGGESTION_LIMIT);
 
             if (filtered.length > 0) {
                 suggestionsEl.innerHTML = filtered.map(t => `
@@ -8498,16 +8589,11 @@ const _debouncedTagSearch = debounce(async (query) => {
             }
         }
 
-        // Use cached tags to avoid repeated API calls on every keystroke
-        const now = Date.now();
-        if (!tagsLibraryCache || (now - tagsLibraryCacheTime) > TAGS_CACHE_TTL) {
-            tagsLibraryCache = await API.getTags();
-            tagsLibraryCacheTime = now;
-        }
-        const result = tagsLibraryCache;
-        const filtered = result.tags
-            .filter(t => t.tag.toLowerCase().replace(/_/g, ' ').includes(normalizedQuery))
-            .slice(0, 24);
+        const result = await API.getTagsLibrary('frequency', {
+            query,
+            limit: FACET_SUGGESTION_LIMIT,
+        });
+        const filtered = result.tags || [];
 
         suggestionsEl.innerHTML = filtered.map(t => `
             <div class="tag-suggestion" data-tag="${escapeHtml(t.tag)}">
@@ -8542,15 +8628,6 @@ function searchModalTags(query) {
     _debouncedTagSearch(query);
 }
 
-// Cache for prompts library to avoid repeated API calls
-let promptsLibraryCache = null;
-let promptsLibraryCacheTime = 0;
-const PROMPTS_CACHE_TTL = 30000; // 30 seconds
-// Cache for tags to avoid repeated API calls on every keystroke
-let tagsLibraryCache = null;
-let tagsLibraryCacheTime = 0;
-const TAGS_CACHE_TTL = 30000; // 30 seconds
-
 // searchModalPrompts - debounced wrapper for prompt autocomplete in filter modal
 const _debouncedPromptSearch = debounce(async (query) => {
     const suggestionsEl = $('#modal-prompt-suggestions');
@@ -8566,7 +8643,7 @@ const _debouncedPromptSearch = debounce(async (query) => {
         if (FilterModalController.optionData?.prompts) {
             const filtered = FilterModalController.optionData.prompts
                 .filter(p => p.prompt.toLowerCase().includes(query.toLowerCase().replace(/_/g, ' ')))
-                .slice(0, 24);
+                .slice(0, FACET_SUGGESTION_LIMIT);
 
             if (filtered.length > 0) {
                 suggestionsEl.innerHTML = filtered.map(p => `
@@ -8593,17 +8670,11 @@ const _debouncedPromptSearch = debounce(async (query) => {
             }
         }
 
-        // Cache the prompts library for better performance (with TTL)
-        const now = Date.now();
-        if (!promptsLibraryCache || (now - promptsLibraryCacheTime) > PROMPTS_CACHE_TTL) {
-            const result = await API.getPromptsLibrary();
-            promptsLibraryCache = result.prompts || [];
-            promptsLibraryCacheTime = now;
-        }
-
-        const filtered = promptsLibraryCache
-            .filter(p => p.prompt.toLowerCase().includes(query.toLowerCase().replace(/_/g, ' ')))
-            .slice(0, 24);
+        const result = await API.getPromptsLibrary({
+            query,
+            limit: FACET_SUGGESTION_LIMIT,
+        });
+        const filtered = result.prompts || [];
 
         suggestionsEl.innerHTML = filtered.map(p => `
             <div class="tag-suggestion" data-prompt="${escapeHtml(p.prompt)}">

@@ -2340,3 +2340,56 @@ Use this structure for future entries:
   Current files: `backend/routers/artists.py`, `backend/services/artist_service.py`, `tests/e2e/playwright.config.ts`, `backend/tests/test_routers/test_prompts_censor_similarity_artists.py`, `tests/e2e/specs/manual-regression.spec.ts`.
 - Validation:
   `cd backend && TMPDIR=/mnt/l/Antigravitiy code/sd-image-sorter/.tmp/pytest-tmp PYTHONPATH=. python3 -m pytest -q -s tests/test_routers/test_prompts_censor_similarity_artists.py::TestArtistsRouterValidation::test_identify_route_dispatches_model_work_to_threadpool tests/test_routers/test_prompts_censor_similarity_artists.py::TestArtistsRouterValidation::test_e2e_fake_artist_identifier_writes_prediction_without_real_runtime` (`2 passed`).
+
+### ADR-AI-20260509-98: LoRA caption export is one training-caption line, not a vague sidecar dump
+
+- Status: accepted
+- Area: export semantics / LoRA training workflow / bilingual UX copy
+- Context:
+  The user challenged whether `LoRA caption` actually meant Prompt + Tags or something else. Investigation found the UI was vague and the backend did not fully match the labels: `prompt` and `tags` sidecar modes could be polluted by the advanced Prefix / Class Token field, and `caption_merged` could write multiline files when stored AI captions or prompts contained newlines. Sidecar filenames also trusted stored `filename` values more than necessary.
+- Decision:
+  `LoRA caption file` means one same-name `.txt` per image for training, written as one caption line: optional Class Token / Prefix + AI caption + Prompt + Tags. `Caption + Tags` is also a training-caption mode and may use the Prefix, but it intentionally excludes the original Prompt. Exact export modes (`Prompt text`, `Tags`, `Negative prompt`, `Prompt + Negative`, `A1111 / Forge block`, and `JSON`) ignore Prefix/Class Token and preserve their named data shape. Batch sidecar filenames are sanitized before writing inside the selected output folder.
+- Why:
+  Export labels are user promises. If a user selects `Prompt text`, prepending a LoRA class token is wrong. If a user selects `Tags`, injecting arbitrary Prefix text is wrong. If a LoRA trainer expects one caption file per image, silently writing multiple lines from metadata newlines is wrong. The UI should explain the formula directly instead of making beginners infer what `LoRA caption` means.
+- Do not regress:
+  Do not let Prefix/Class Token affect exact Prompt/Tags/Negative/A1111/JSON exports. Do not let `caption_merged` or `caption_tags` output raw multiline caption parts. Do not rename the helper text back to vague `LoRA captions` without showing the formula. Do not build sidecar output paths from unsanitized stored filenames.
+- Supersedes:
+  Clarifies ADR-AI-20260429-51, ADR-AI-20260430-74, and ADR-AI-20260430-78 for Prefix/Class Token scope and the concrete `LoRA caption` formula.
+- Evidence:
+  User question on 2026-05-09; current files: `backend/services/tag_export_service.py`, `frontend/index.html`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `docs/API.md`, `.plans/sd-image-sorter-release/docs/api-contracts.md`, `backend/tests/test_routers/test_tags.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `node --check frontend/js/app.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest -q backend/tests/test_routers/test_tags.py::TestExportTagsBatch backend/tests/test_routers/test_images.py::TestExportSelectionData backend/tests/test_frontend_contract.py` (`34 passed`); `npm --prefix tests/e2e test -- smoke.spec.ts -g "export modal|batch sidecar export"` (`3 passed`).
+
+### ADR-AI-20260509-99: Facet search must query the full indexed library before display limiting
+
+- Status: accepted
+- Area: gallery filter UX / tag prompt LoRA checkpoint facet search / power-user scale
+- Context:
+  The user reported that searching `blue` did not show an existing tag such as `nagisa_(blue_archive)`. The root cause was not matching syntax; the UI searched only a pre-limited client-side facet list (`/api/tags` default 500, library defaults around 1000, prompt/LoRA library defaults around 500/1000). Any lower-frequency tag, prompt token, LoRA, or checkpoint outside that slice was invisible even when it matched the query.
+- Decision:
+  Facet search for tags, prompt tokens, LoRAs, and checkpoints must search the full indexed database first, then apply any optional display limit to the matched result set. `/api/tags/library`, `/api/prompts/library`, and `/api/loras/library` accept optional `q` and optional `limit`; omitting `limit` returns all matching facet rows. `/api/analytics` accepts optional `facet`, `q`, and `limit` for checkpoint/LoRA/tag facet search. Frontend autocomplete uses small display limits only for the suggestion popup, but the query is sent to backend full-library search. Library modal search and filter modal checkpoint/LoRA search also route through backend facet queries instead of filtering a pre-limited local array.
+- Why:
+  A search box that cannot find existing values is worse than no search box. Display limits are valid UI rendering controls; they are not valid search scope controls. This follows the repo principle that performance work must not quietly weaken total library size support or shrink the product into a toy.
+- Do not regress:
+  Do not reintroduce default facet endpoints that return only the top N values and then rely on frontend `.includes()` as the only search path. Do not make autocomplete fetch `/api/tags` or a cached pre-limited prompt/LoRA library and search locally. Do not cap backend `q` search before matching; apply `limit` only after filtering and relevance ordering. Keep small suggestion counts as a display choice only.
+- Evidence:
+  Current files: `backend/database.py`, `backend/services/tagging_service.py`, `backend/routers/tags.py`, `backend/services/sorting_service.py`, `backend/routers/sorting.py`, `frontend/js/app.js`, `.plans/sd-image-sorter-release/docs/api-contracts.md`, `backend/tests/test_routers/test_tags.py`, `backend/tests/test_routers/test_sorting.py`, `backend/tests/test_frontend_contract.py`.
+- Validation:
+  `python3 -m compileall -q backend/database.py backend/services/tagging_service.py backend/routers/tags.py backend/services/sorting_service.py backend/routers/sorting.py`; `node --check frontend/js/app.js`; `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_routers/test_tags.py::TestGetTags tests/test_routers/test_tags.py::TestTagsLibrary tests/test_routers/test_tags.py::TestPromptsLibrary tests/test_routers/test_tags.py::TestLorasLibrary tests/test_routers/test_sorting.py::TestAnalytics tests/test_frontend_contract.py` (`42 passed`).
+
+### ADR-AI-20260509-100: Manual Sort large filter scopes use JSON body, not query-string payloads
+
+- Status: accepted
+- Area: manual sort API / large-library filters / power-user scale
+- Context:
+  The hard-limit audit found another arbitrary limit class after the facet-search fix: Manual Sort still started sessions through `/api/sort/start` query parameters, with long filter scopes encoded as comma-separated URL strings. Large tag, checkpoint, LoRA, or prompt selections could hit query-size or `max_length=1000` validation before the backend ever queried the indexed library.
+- Decision:
+  Preferred Manual Sort clients send a JSON request body to `POST /api/sort/start`, carrying filter arrays and the folder map directly. The legacy query-string API remains supported for compatibility. The backend service accepts both array values and legacy comma-separated strings, and folder parsing accepts either a JSON object body or the old JSON-encoded query value.
+- Why:
+  Query strings are a navigation/paging convenience, not a safe transport for large structured filter scopes. Manual Sort is a power-user workflow that may intentionally combine many tags, LoRAs, checkpoints, prompt terms, and destination folders; silently constraining that through URL length turns the product into a toy for large libraries.
+- Do not regress:
+  Do not move Manual Sort frontend startup back to `this.post(`/api/sort/start?${params}`)` or re-add arbitrary 1000-character query limits for tag/checkpoint/LoRA/prompt scopes. Keep the legacy query path working, but treat JSON body as the primary API contract for rich filter scopes.
+- Evidence:
+  Current files: `backend/routers/sorting.py`, `backend/services/sorting_service.py`, `frontend/js/app.js`, `backend/tests/test_routers/test_sorting.py`, `backend/tests/test_frontend_contract.py`, `docs/API.md`, `.plans/sd-image-sorter-release/docs/api-contracts.md`, `CHANGELOG.md`.
+- Validation:
+  `python3 -m compileall -q backend/routers/sorting.py backend/services/sorting_service.py`; `node --check frontend/js/app.js`; `cd backend && PYTHONPATH=. python3 -m pytest -q -s tests/test_routers/test_sorting.py::TestSortSession::test_start_sort_session_accepts_json_body_for_large_filter_payloads tests/test_routers/test_sorting.py::TestSortSession::test_start_sort_session tests/test_routers/test_sorting.py::TestSortSession::test_start_sort_session_forwards_search_query tests/test_routers/test_sorting.py::TestSortSession::test_start_sort_session_rejects_invalid_folders_payload tests/test_frontend_contract.py::test_manual_sort_start_uses_json_body_not_query_string_filters` (`5 passed`).

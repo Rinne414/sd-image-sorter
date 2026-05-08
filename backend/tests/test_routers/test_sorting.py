@@ -1019,6 +1019,32 @@ class TestSortSession:
         kwargs = mock_ids.call_args.kwargs
         assert kwargs["artist"] == "artist_sort_session_20260428"
 
+    def test_start_sort_session_accepts_json_body_for_large_filter_payloads(self, test_client, tmp_path: Path):
+        """Manual Sort should not force large tag/LoRA/checkpoint scopes through query-string limits."""
+        long_tag = "manual_sort_long_tag_" + ("x" * 1400)
+        long_lora = "manual_sort_long_lora_" + ("y" * 1400)
+        long_prompt = "manual sort prompt " + ("z" * 1400)
+        folder = tmp_path / "manual-sort-long-filter-dest"
+
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start",
+                json={
+                    "tags": [long_tag],
+                    "loras": [long_lora],
+                    "prompts": [long_prompt],
+                    "folders": {"w": str(folder)},
+                    "operation_mode": "copy",
+                },
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["tags"] == [long_tag]
+        assert kwargs["loras"] == [long_lora]
+        assert kwargs["prompt_terms"] == [long_prompt]
+        assert response.json()["operation_mode"] == "copy"
+
     def test_start_sort_session_rejects_invalid_folders_payload(self, test_client):
         """Bad folders JSON should fail instead of silently becoming an empty config."""
         response = test_client.post(
@@ -1770,6 +1796,48 @@ class TestAnalytics:
         assert data["checkpoints"][0]["checkpoint"] == "ponyXLV6"
         assert data["checkpoints"][0]["checkpoint_normalized"] == "ponyXLV6"
         assert data["checkpoints"][0]["count"] == 2
+
+    def test_analytics_checkpoint_query_searches_full_table_before_limit(self, test_client):
+        for index in range(30):
+            test_client.test_db.add_image(
+                path=f"/tmp/analytics_cp_filler_{index}.png",
+                filename=f"analytics_cp_filler_{index}.png",
+                checkpoint=f"zz_filler_model_{index:02d}.safetensors",
+                metadata_json="{}",
+            )
+        test_client.test_db.add_image(
+            path="/tmp/analytics_cp_blue.png",
+            filename="analytics_cp_blue.png",
+            checkpoint="nagisa_blue_archive.safetensors",
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/analytics?facet=checkpoints&q=blue&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [checkpoint["checkpoint"] for checkpoint in data["checkpoints"]] == ["nagisa_blue_archive"]
+
+    def test_analytics_lora_query_searches_full_index_before_limit(self, test_client):
+        for index in range(30):
+            test_client.test_db.add_image(
+                path=f"/tmp/analytics_lora_filler_{index}.png",
+                filename=f"analytics_lora_filler_{index}.png",
+                loras=[f"zz_filler_lora_{index:02d}"],
+                metadata_json="{}",
+            )
+        test_client.test_db.add_image(
+            path="/tmp/analytics_lora_blue.png",
+            filename="analytics_lora_blue.png",
+            loras=["nagisa_blue_archive"],
+            metadata_json="{}",
+        )
+
+        response = test_client.get("/api/analytics?facet=loras&q=blue&limit=5")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [lora["lora"] for lora in data["loras"]] == ["nagisa_blue_archive"]
 
     def test_get_stats(self, test_client, test_db_with_images):
         """Getting stats should return summary."""
