@@ -423,12 +423,13 @@ TAGGER_MODELS: dict = {
         "input_layout": "nchw",
         "input_normalization": "minus_one_to_one",
         "resize_mode": "stretch",
-        # The PixAI v0.9 ONNX export emits per-tag logits, not probabilities.
-        # Without sigmoid, ~10% of logits land in [0, 1] (roughly 940/9000 per
-        # image) and the rest get clamped to 0 by the out-of-range guard, so
-        # threshold comparisons run against meaningless values. v3.1.1 fixed
-        # this same issue for Camie but missed PixAI.
-        "output_activation": "sigmoid",
+        # PixAI v0.9 ONNX has 3 outputs: embedding(1024), logits(13461),
+        # prediction(13461). prediction = sigmoid(logits) and is the correct
+        # probability vector for thresholding. We must use output index 2
+        # (prediction), NOT index 0 (embedding). output_activation stays
+        # identity because prediction is already in [0, 1].
+        "output_index": 2,
+        "output_activation": "identity",
         "default_threshold": 0.30,
         "default_character_threshold": 0.85,
         "supports_rating": False,

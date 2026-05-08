@@ -464,6 +464,8 @@ def test_camie_metadata_and_preprocess_are_supported(monkeypatch, tmp_path):
 
 
 class _PixAIBatchSession:
+    """Simulates PixAI v0.9 ONNX which has 3 outputs: embedding, logits, prediction.
+    The runtime must use output_index=2 (prediction) which contains pre-sigmoidd probs."""
     def __init__(self, *_args, **_kwargs):
         self._providers = ["CPUExecutionProvider"]
         self.last_input_shape = None
@@ -481,10 +483,12 @@ class _PixAIBatchSession:
         self.last_input_shape = batch.shape
         self.last_input_min = float(batch.min())
         self.last_input_max = float(batch.max())
-        output = np.zeros((batch.shape[0], 8), dtype=np.float32)
-        output[:, 0] = 0.92
-        output[:, 2] = 0.9
-        return [output]
+        embedding = np.zeros((batch.shape[0], 1024), dtype=np.float32)
+        logits = np.zeros((batch.shape[0], 8), dtype=np.float32)
+        prediction = np.zeros((batch.shape[0], 8), dtype=np.float32)
+        prediction[:, 0] = 0.92
+        prediction[:, 2] = 0.9
+        return [embedding, logits, prediction]
 
 
 class _PixAIOrtModule(_FakeOrtModule):
@@ -492,24 +496,26 @@ class _PixAIOrtModule(_FakeOrtModule):
 
 
 def test_pixai_onnx_preprocess_and_tags_are_supported(monkeypatch, tmp_path):
-    # PixAI v0.9 ONNX emits per-tag logits; the runtime now applies sigmoid
-    # on top. Use logit-space mock values so post-sigmoid scores still pass
-    # the configured general/character thresholds.
-    class _PixAILogitsSession(_PixAIBatchSession):
+    # PixAI v0.9 ONNX has 3 outputs: embedding(1024), logits(N), prediction(N).
+    # The runtime uses output_index=2 (prediction) which is already sigmoid'd.
+    # Mock returns probabilities at index 2.
+    class _PixAIPredictionSession(_PixAIBatchSession):
         def run(self, _outputs, inputs):
             batch = inputs["input"]
             self.last_input_shape = batch.shape
             self.last_input_min = float(batch.min())
             self.last_input_max = float(batch.max())
-            output = np.zeros((batch.shape[0], 8), dtype=np.float32)
-            output[:, 0] = 3.0  # sigmoid(3.0) ≈ 0.953 (1girl, general)
-            output[:, 2] = 2.5  # sigmoid(2.5) ≈ 0.924 (hu_tao, character) > char_threshold 0.85
-            return [output]
+            embedding = np.zeros((batch.shape[0], 1024), dtype=np.float32)
+            logits = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            prediction = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            prediction[:, 0] = 0.92  # 1girl (general, passes 0.30)
+            prediction[:, 2] = 0.90  # hu_tao (character, passes 0.85)
+            return [embedding, logits, prediction]
 
-    class _PixAILogitsOrtModule(_FakeOrtModule):
-        InferenceSession = _PixAILogitsSession
+    class _PixAIPredictionOrtModule(_FakeOrtModule):
+        InferenceSession = _PixAIPredictionSession
 
-    monkeypatch.setattr(tagger_module, "ort", _PixAILogitsOrtModule)
+    monkeypatch.setattr(tagger_module, "ort", _PixAIPredictionOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
 
     image_path = tmp_path / "pixai.png"
@@ -543,8 +549,33 @@ def test_pixai_onnx_preprocess_and_tags_are_supported(monkeypatch, tmp_path):
     assert getattr(tagger.session, "last_input_max", None) <= 1.01
 
 
+class _CustomNchwSession:
+    """Single-output NCHW session for testing custom model layout inference."""
+    def __init__(self, *_args, **_kwargs):
+        self._providers = ["CPUExecutionProvider"]
+        self.last_input_shape = None
+
+    def get_providers(self):
+        return list(self._providers)
+
+    def get_inputs(self):
+        return [type("FakeInput", (), {"shape": ["batch", 3, 448, 448], "name": "input"})()]
+
+    def run(self, _outputs, inputs):
+        batch = inputs["input"]
+        self.last_input_shape = batch.shape
+        output = np.zeros((batch.shape[0], 8), dtype=np.float32)
+        output[:, 0] = 0.92
+        output[:, 2] = 0.9
+        return [output]
+
+
+class _CustomNchwOrtModule(_FakeOrtModule):
+    InferenceSession = _CustomNchwSession
+
+
 def test_custom_onnx_infers_nchw_input_layout(monkeypatch, tmp_path):
-    monkeypatch.setattr(tagger_module, "ort", _PixAIOrtModule)
+    monkeypatch.setattr(tagger_module, "ort", _CustomNchwOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
 
     image_path = tmp_path / "custom-nchw.png"
@@ -596,11 +627,13 @@ def test_pixai_rating_fallback_can_escalate_to_explicit(monkeypatch, tmp_path):
             self.last_input_shape = batch.shape
             self.last_input_min = float(batch.min())
             self.last_input_max = float(batch.max())
-            output = np.zeros((batch.shape[0], 8), dtype=np.float32)
-            output[:, 0] = 0.97
-            output[:, 1] = 0.95
-            output[:, 2] = 0.9
-            return [output]
+            embedding = np.zeros((batch.shape[0], 1024), dtype=np.float32)
+            logits = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            prediction = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            prediction[:, 0] = 0.97
+            prediction[:, 1] = 0.95
+            prediction[:, 2] = 0.9
+            return [embedding, logits, prediction]
 
     class _ExplicitPixAIOrtModule(_FakeOrtModule):
         InferenceSession = _ExplicitPixAISession
@@ -640,16 +673,17 @@ def test_pixai_rating_fallback_uses_only_thresholded_tags(monkeypatch, tmp_path)
             self.last_input_shape = batch.shape
             self.last_input_min = float(batch.min())
             self.last_input_max = float(batch.max())
-            output = np.zeros((batch.shape[0], 8), dtype=np.float32)
-            # PixAI emits logits; post-sigmoid these become:
-            # pussy:  sigmoid(-1.5) ≈ 0.182 < 0.30 (below threshold, must NOT
-            #                                       leak into the explicit fallback)
-            # 1girl:  sigmoid(2.5)  ≈ 0.924 (passes general threshold)
-            # hu_tao: sigmoid(2.0)  ≈ 0.881 (passes character threshold 0.85)
-            output[:, 0] = -1.5
-            output[:, 1] = 2.5
-            output[:, 2] = 2.0
-            return [output]
+            embedding = np.zeros((batch.shape[0], 1024), dtype=np.float32)
+            logits = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            prediction = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            # prediction is already sigmoid'd probabilities:
+            # pussy:  0.18 < 0.30 (below threshold, must NOT leak into fallback)
+            # 1girl:  0.92 (passes general threshold)
+            # hu_tao: 0.88 (passes character threshold 0.85)
+            prediction[:, 0] = 0.18
+            prediction[:, 1] = 0.92
+            prediction[:, 2] = 0.88
+            return [embedding, logits, prediction]
 
     class _LowExplicitPixAIOrtModule(_FakeOrtModule):
         InferenceSession = _LowExplicitPixAISession
@@ -856,15 +890,14 @@ def test_custom_camie_profile_does_not_fallback_to_wd14_csv(monkeypatch, tmp_pat
         tagger._get_model_paths()
 
 
-def test_pixai_config_uses_sigmoid_output_activation():
-    """Bug X regression: PixAI v0.9 ONNX emits logits, so its config must
-    declare output_activation=sigmoid. Without this, ~10% of logits land in
-    [0, 1] and the rest get clamped to 0 by the out-of-range guard, so the
-    threshold compares against meaningless values. v3.1.1 fixed this for
-    Camie but missed PixAI; this contract test prevents future regressions
-    in either model.
+def test_pixai_config_uses_prediction_output_index():
+    """PixAI v0.9 ONNX has 3 outputs: embedding(1024), logits(13461),
+    prediction(13461). The prediction tensor is already sigmoid'd, so
+    output_activation must be identity and output_index must be 2.
+    Camie still needs sigmoid applied to its single logits output.
     """
     from config import TAGGER_MODELS
 
-    assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_activation") == "sigmoid"
+    assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_activation") == "identity"
+    assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_index") == 2
     assert TAGGER_MODELS["camie-tagger-v2"].get("output_activation") == "sigmoid"

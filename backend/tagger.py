@@ -110,6 +110,7 @@ class WD14Tagger:
         self._input_layout: str = "nhwc"
         self._input_normalization: str = "wd14_bgr"
         self._output_activation: str = "identity"
+        self._output_index: int = 0
         self._pad_color: Tuple[int, int, int] = (255, 255, 255)
         self._metadata_format: str = "wd14_csv"
         self._resize_mode: str = "letterbox"
@@ -488,7 +489,7 @@ class WD14Tagger:
         assert self.session is not None
         input_name = self._input_name or self.session.get_inputs()[0].name
         try:
-            return self.session.run(None, {input_name: input_data})[0]
+            return self.session.run(None, {input_name: input_data})[self._output_index]
         except Exception as error:
             if not allow_gpu_fallback or not self._session_uses_gpu():
                 raise
@@ -496,7 +497,7 @@ class WD14Tagger:
             assert self.session is not None
             self._refresh_session_metadata()
             retry_input_name = self._input_name or self.session.get_inputs()[0].name
-            return self.session.run(None, {retry_input_name: input_data})[0]
+            return self.session.run(None, {retry_input_name: input_data})[self._output_index]
 
     def _finalize_processed_images(self, image_count: int) -> None:
         """Advance refresh counters after successfully processing one or more images."""
@@ -645,6 +646,7 @@ class WD14Tagger:
         self._input_layout = str(model_config.get("input_layout", "nhwc")).lower()
         self._input_normalization = str(model_config.get("input_normalization", "wd14_bgr")).lower()
         self._output_activation = str(model_config.get("output_activation", "identity")).lower()
+        self._output_index = int(model_config.get("output_index", 0))
         self._metadata_format = str(model_config.get("metadata_format", "wd14_csv")).lower()
         self._resize_mode = str(model_config.get("resize_mode", "letterbox")).lower()
         self._rating_fallback_mode = str(model_config.get("rating_fallback_mode", "none")).lower()
