@@ -492,7 +492,24 @@ class _PixAIOrtModule(_FakeOrtModule):
 
 
 def test_pixai_onnx_preprocess_and_tags_are_supported(monkeypatch, tmp_path):
-    monkeypatch.setattr(tagger_module, "ort", _PixAIOrtModule)
+    # PixAI v0.9 ONNX emits per-tag logits; the runtime now applies sigmoid
+    # on top. Use logit-space mock values so post-sigmoid scores still pass
+    # the configured general/character thresholds.
+    class _PixAILogitsSession(_PixAIBatchSession):
+        def run(self, _outputs, inputs):
+            batch = inputs["input"]
+            self.last_input_shape = batch.shape
+            self.last_input_min = float(batch.min())
+            self.last_input_max = float(batch.max())
+            output = np.zeros((batch.shape[0], 8), dtype=np.float32)
+            output[:, 0] = 3.0  # sigmoid(3.0) ≈ 0.953 (1girl, general)
+            output[:, 2] = 2.5  # sigmoid(2.5) ≈ 0.924 (hu_tao, character) > char_threshold 0.85
+            return [output]
+
+    class _PixAILogitsOrtModule(_FakeOrtModule):
+        InferenceSession = _PixAILogitsSession
+
+    monkeypatch.setattr(tagger_module, "ort", _PixAILogitsOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
 
     image_path = tmp_path / "pixai.png"
@@ -624,9 +641,14 @@ def test_pixai_rating_fallback_uses_only_thresholded_tags(monkeypatch, tmp_path)
             self.last_input_min = float(batch.min())
             self.last_input_max = float(batch.max())
             output = np.zeros((batch.shape[0], 8), dtype=np.float32)
-            output[:, 0] = 0.29
-            output[:, 1] = 0.91
-            output[:, 2] = 0.9
+            # PixAI emits logits; post-sigmoid these become:
+            # pussy:  sigmoid(-1.5) ≈ 0.182 < 0.30 (below threshold, must NOT
+            #                                       leak into the explicit fallback)
+            # 1girl:  sigmoid(2.5)  ≈ 0.924 (passes general threshold)
+            # hu_tao: sigmoid(2.0)  ≈ 0.881 (passes character threshold 0.85)
+            output[:, 0] = -1.5
+            output[:, 1] = 2.5
+            output[:, 2] = 2.0
             return [output]
 
     class _LowExplicitPixAIOrtModule(_FakeOrtModule):
@@ -832,3 +854,17 @@ def test_custom_camie_profile_does_not_fallback_to_wd14_csv(monkeypatch, tmp_pat
 
     with pytest.raises(ValueError, match="camie-tagger-v2-metadata.json"):
         tagger._get_model_paths()
+
+
+def test_pixai_config_uses_sigmoid_output_activation():
+    """Bug X regression: PixAI v0.9 ONNX emits logits, so its config must
+    declare output_activation=sigmoid. Without this, ~10% of logits land in
+    [0, 1] and the rest get clamped to 0 by the out-of-range guard, so the
+    threshold compares against meaningless values. v3.1.1 fixed this for
+    Camie but missed PixAI; this contract test prevents future regressions
+    in either model.
+    """
+    from config import TAGGER_MODELS
+
+    assert TAGGER_MODELS["pixai-tagger-v0.9"].get("output_activation") == "sigmoid"
+    assert TAGGER_MODELS["camie-tagger-v2"].get("output_activation") == "sigmoid"
