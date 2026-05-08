@@ -757,7 +757,7 @@ def test_run_tagging_job_aborts_when_run_id_was_invalidated_by_pre_spawn_cancel(
     assert service._worker_process is None
 
 
-def test_e2e_fake_tagger_completes_without_downloading_real_model(monkeypatch, tmp_path: Path):
+def test_e2e_fake_tagger_completes_without_downloading_real_model(test_db, monkeypatch, tmp_path: Path):
     image_path = tmp_path / "fake-tagger.png"
     Image.new("RGB", (16, 16), color=(120, 80, 40)).save(image_path)
     image_id = db.add_image(str(image_path), image_path.name, metadata_json="{}")
