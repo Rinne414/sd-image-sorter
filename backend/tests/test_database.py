@@ -444,6 +444,22 @@ class TestDatabaseInit:
             db.DATABASE_PATH = original_path
             db._pragmas_initialized = set()
 
+    def test_post_migration_vacuum_failure_is_best_effort(self, caplog):
+        """Low-space VACUUM failure must warn, not undo successful metadata compaction."""
+        import sqlite3
+
+        class FailingVacuumConnection:
+            def execute(self, sql):
+                assert str(sql).strip().upper() == "VACUUM"
+                raise sqlite3.OperationalError("database or disk is full")
+
+        with caplog.at_level("WARNING", logger="database"):
+            db._run_post_migration_vacuum(FailingVacuumConnection())
+
+        assert "VACUUM failed" in caplog.text
+        assert "images.db may not shrink" in caplog.text
+
+
 
 class TestImageCRUD:
     """Tests for image CRUD operations."""
@@ -1829,6 +1845,66 @@ class TestCollectionOperations:
 
         assert collection is not None
         assert collection["slug"] == "favorites"
+
+    def test_image_and_collection_writes_compact_raw_metadata_json(self, test_db):
+        raw_metadata = json.dumps({
+            "workflow": "x" * 20_000,
+            "_parsed": {
+                "generation_params": {"sampler": "Euler a"},
+            },
+        })
+        image_id = db.add_image(
+            path="/test/raw-compact.png",
+            filename="raw-compact.png",
+            metadata_json=raw_metadata,
+        )
+        db.update_image_metadata(
+            image_id=image_id,
+            generator="comfyui",
+            prompt="updated",
+            negative_prompt=None,
+            metadata_json=raw_metadata,
+            width=512,
+            height=512,
+            file_size=1024,
+            checkpoint=None,
+            loras=[],
+        )
+        collection = db.get_collection_by_slug("favorites")
+        db.add_collection_item(
+            collection_id=collection["id"],
+            source_image_id=image_id,
+            copied_path="/favorites/raw-compact.png",
+            prompt="updated",
+            negative_prompt=None,
+            checkpoint=None,
+            loras=None,
+            metadata_json=raw_metadata,
+            created_at=None,
+            width=512,
+            height=512,
+            file_size=1024,
+        )
+
+        with db.get_db() as conn:
+            image_json = conn.execute(
+                "SELECT metadata_json FROM images WHERE id = ?",
+                (image_id,),
+            ).fetchone()["metadata_json"]
+            collection_json = conn.execute(
+                "SELECT metadata_json FROM collection_items WHERE source_image_id = ?",
+                (image_id,),
+            ).fetchone()["metadata_json"]
+
+        expected = {
+            "_compact": {"version": 1},
+            "_parsed": {"generation_params": {"sampler": "Euler a"}},
+        }
+        assert json.loads(image_json) == expected
+        assert json.loads(collection_json) == expected
+        assert len(image_json) < 512
+        assert len(collection_json) < 512
+
 
     def test_add_collection_item(self, test_db):
         """Adding item to collection should work."""

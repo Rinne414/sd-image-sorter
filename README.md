@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.1.2-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.1.3-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.12%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.3-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-linux.tar.gz"><b>Download for Linux</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.3-linux.tar.gz"><b>Download for Linux</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -147,7 +147,7 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.1.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.1.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.3-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
@@ -155,11 +155,11 @@
 
 ### Linux
 
-1. 下载 [sd-image-sorter-v3.1.2-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-linux.tar.gz)
+1. 下载 [sd-image-sorter-v3.1.3-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.3-linux.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.1.2-linux.tar.gz
+tar xzf sd-image-sorter-v3.1.3-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -180,15 +180,30 @@ run.bat
 默认会在 `http://127.0.0.1:8487` 启动（可通过 `SD_IMAGE_SORTER_PORT` 覆盖）。
 
 > [!TIP]
-> Windows 便携版自带 Python 3.12。AI 模型按需自动下载。首次启动时间长一点是正常的，不是死了。
+> Windows 便携版自带 Python 3.12。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
 
 ## 下载与运行说明
 
+
+### 首次启动能直接用什么？什么需要下载 / 重启？
+
+| 状态 | 功能 | 说明 |
+|:--|:--|:--|
+| 第一次 `run.bat` 后直接可用 | 扫描 / 导入图库、浏览、筛选、搜索、批量选择、自动分类、WASD 手动分类、Prompt Lab、元数据读取、手动打码编辑器、导出同名 sidecar | 只依赖轻量核心包；不会主动拉 Torch / SAM3 / NudeNet / Ultralytics / FastEmbed。 |
+| 需要下载模型文件，但不需要额外 Python 包 | WD14 / Camie / PixAI ONNX 打标 | 点击 **功能准备 / Prepare** 或首次打标时下载模型文件；ONNX Runtime 已在核心依赖里。 |
+| 需要 Prepare / Download，可能要求重启 | CLIP 相似搜索、美学评分、画师识别、NudeNet、Privacy YOLO、SAM3、ToriiGate | 如果准备过程安装了 Python 包，界面会提示重启；必须重启后再用对应功能。ToriiGate 首次模型约 5 GB，SAM3 / Torch 也会占用较多空间。 |
+
+缩略图缓存默认上限是 **500 MB**。它只删可重新生成的缩略图，不会删原图；你可以在 **功能准备 → 磁盘占用 → 缩略图缓存上限** 改大小，填 `0` 可关闭持久缩略图缓存。界面会提示取舍：上限越低越省磁盘，但大图库滚动时可能更常重建缩略图，CPU / 硬盘 IO 会更忙。
+
+旧用户如果之前已经安装过全量 AI Python 包，可以在 **功能准备 → 磁盘占用 → Python 运行环境** 点击「下次启动重建轻量运行环境」。它只会安排下次启动器启动时重建 Python 运行环境，源码/Linux 版会重建 `backend/venv`，Windows 便携版会清掉嵌入式 Python 的已安装包；不会删除 `data/`、`images.db`、设置、缓存或已下载模型。
+
 ### GPU / 运行时说明
 
-- NVIDIA 显卡会优先使用 `onnxruntime-gpu`
-- NVIDIA 首次启动如果停在 `Checking Windows ONNX Runtime package state...`，可能是在补 CUDA / cuDNN 运行库；新版会显示真实 pip 进度，不是死机
-- Intel Arc / AMD Radeon 会切到 `onnxruntime-directml`
+- 默认启动走轻量核心依赖，不会主动下载 Torch / SAM3 / NudeNet / Ultralytics / FastEmbed 等重型包
+- 需要一次性安装旧的全量 AI 运行库时，可先设置 `SD_IMAGE_SORTER_INSTALL_FULL_AI=1` 再运行启动器
+- NVIDIA 显卡在全量模式下会优先使用 `onnxruntime-gpu`
+- NVIDIA 全量模式首次启动如果停在 `Checking Windows ONNX Runtime package state...`，可能是在补 CUDA / cuDNN 运行库；新版会显示真实 pip 进度，不是死机
+- Intel Arc / AMD Radeon 在全量模式下会切到 `onnxruntime-directml`
 - 没有合适 GPU 也能 CPU 跑，只是慢一些
 - `v3.0.2` 修了 Windows 下部分显卡 VRAM 识别不准导致 batch size 偏保守的问题
 - `v3.0.3` 修了 portable launcher 无视 `SD_IMAGE_SORTER_PORT` 打开错误 URL、Civitai 下载 403、艺术家识别诊断接口一直回 `available:false`、ToriiGate 首次下载没有明确 5 GB 提示
@@ -456,7 +471,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.1.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.2-windows-portable.zip)
+1. Download [sd-image-sorter-v3.1.3-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.1.3-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -467,7 +482,7 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 #### Linux
 
 ```bash
-tar xzf sd-image-sorter-v3.1.2-linux.tar.gz
+tar xzf sd-image-sorter-v3.1.3-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -480,6 +495,19 @@ git clone https://github.com/peter119lee/sd-image-sorter.git
 cd sd-image-sorter
 ./run.sh
 ```
+
+
+### What Works Immediately vs. What Needs Setup?
+
+| Status | Features | Notes |
+|:--|:--|:--|
+| Ready after first launch | Scan/import, gallery browsing, metadata reading, filters/search, batch selection, auto-separate, WASD manual sort, Prompt Lab, manual censor editor, sidecar export | Uses only the lightweight core install. It does not pull Torch / SAM3 / NudeNet / Ultralytics / FastEmbed automatically. |
+| Needs model files only | WD14 / Camie / PixAI ONNX tagging | Click **Setup Now / Prepare** or start tagging to download model files; ONNX Runtime is already part of core. |
+| Needs Prepare / Download and may need restart | CLIP similarity, aesthetic scoring, Artist ID, NudeNet, Privacy YOLO, SAM3, ToriiGate | If Prepare installs Python packages, restart before using that feature. ToriiGate first model download is about 5 GB; SAM3 / Torch can also be large. |
+
+Thumbnail cache is capped at **500 MB** by default. It only removes regeneratable thumbnails, never original images. Change it in **Setup Now → Disk Usage → Thumbnail cache limit**; set `0` to disable persistent thumbnail caching. The UI explains the trade-off: lower limits save disk, but large-gallery scrolling can spend more CPU / disk I/O regenerating thumbnails.
+
+If an old install already pulled full AI Python packages, use **Setup Now → Disk Usage → Python runtime environment → Rebuild lightweight runtime on next start**. It schedules the next launcher start to rebuild only the Python runtime: source/Linux builds recreate `backend/venv`, and Windows portable clears installed packages from embedded Python. `data/`, `images.db`, settings, caches, and downloaded models are kept.
 
 ### Tech Stack
 

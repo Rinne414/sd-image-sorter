@@ -850,3 +850,26 @@ Quality bar:
   Next user-facing release that touches the censor sidebar or detect modal layout.
 - Deferred because:
   v3.1.0 publish window was prioritized; the underlying behaviour is correct (Wenaka is detected and recommended automatically), so this is a clarity-only follow-up rather than a regression.
+
+### Debt-21: Optional AI dependency groups are not fully locked per group
+
+- Status: open
+- Type: dependency reproducibility / bandwidth control
+- Impact: medium
+- Risk if ignored:
+  Feature Setup can install optional packages with broad version specs such as `torch>=2.0.0`, `fastembed>=0.4.0`, or `ultralytics>=8.4.0`. This preserves lightweight first launch, but the exact download size and transitive dependencies can drift over time and may differ from the full runtime lock.
+- Related files:
+  `backend/optional_dependencies.py`
+  `backend/services/model_service.py`
+  `backend/requirements.txt`
+  `backend/requirements-core.txt`
+- Observed problem:
+  The core lock is intentionally small and the full AI lock remains available, but per-feature optional installs are not yet backed by separate lock files such as `requirements-clip.txt`, `requirements-censor.txt`, or `requirements-sam3.txt`. The helper now refuses system-Python installs unless explicitly overridden and skips satisfied packages with minimum-version checks, but it still asks pip to resolve broad specs at Prepare time.
+- Why this is debt:
+  Lightweight startup solved the immediate bandwidth/storage complaint. For release-grade reproducibility, optional feature groups should also be pinned so a Prepare click downloads a predictable dependency set.
+- Better long-term shape:
+  Add feature-scoped optional lock files or a locked mapping generated from the same source as `requirements.txt`, then make `optional_dependencies.py` install from those locks. Keep the UI restart reminder because runtime package installs can still require a fresh Python process.
+- Revisit trigger:
+  Before publishing a release that heavily promotes Feature Setup / Prepare, or when users report optional Prepare downloading unexpected packages.
+- Deferred because:
+  The urgent user-impacting problem was default first-run size and DB bloat. Implementing, compiling, and testing separate cross-platform optional locks is larger and should be handled as a dedicated dependency packaging pass.

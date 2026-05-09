@@ -312,6 +312,72 @@ class TestScan:
         assert progress["new"] == 1
         assert db.get_image_count() == 1
 
+
+
+    def test_scan_logs_heartbeat_when_worker_makes_no_progress(self, tmp_path: Path, isolated_sorting_service, monkeypatch, caplog):
+        """If a scan stalls inside a blocking function, the console should still show low-frequency state."""
+        import logging
+        import time
+        from fastapi import BackgroundTasks
+        from services import sorting_service as sorting_service_module
+        from services.sorting_service import ScanRequest
+
+        monkeypatch.setattr(sorting_service_module, "SCAN_LOG_HEARTBEAT_SECONDS", 0.01)
+
+        def slow_scan_folder(*_args, **_kwargs):
+            time.sleep(0.05)
+            return {
+                "total": 0,
+                "counted": 0,
+                "total_final": True,
+                "import_complete": True,
+                "errors": 0,
+                "new": 0,
+                "updated": 0,
+                "removed": 0,
+                "library_ready": True,
+                "metadata_processed": 0,
+                "metadata_total": 0,
+                "metadata_total_final": True,
+                "recent_errors": [],
+            }
+
+        monkeypatch.setattr(sorting_service_module, "scan_folder", slow_scan_folder)
+        background_tasks = BackgroundTasks()
+
+        with caplog.at_level(logging.INFO, logger="services.sorting_service"):
+            isolated_sorting_service.start_scan(
+                ScanRequest(folder_path=str(tmp_path), recursive=False),
+                background_tasks,
+            )
+            background_tasks.tasks[0].func()
+
+        assert any("Scan heartbeat:" in record.getMessage() for record in caplog.records)
+
+    def test_scan_logs_start_summary_and_bad_file_samples(self, test_client, tmp_path: Path, caplog):
+        """Console logs should be sparse but useful for debugging large scans."""
+        import logging
+        from PIL import Image
+
+        Image.new("RGB", (64, 64), color="green").save(tmp_path / "good.png")
+        (tmp_path / "broken.png").write_bytes(b"not-a-real-png")
+
+        with caplog.at_level(logging.INFO, logger="services.sorting_service"):
+            response = test_client.post(
+                "/api/scan",
+                json={"folder_path": str(tmp_path), "recursive": False},
+            )
+
+        assert response.status_code == 200
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("Scan started:" in message and str(tmp_path) in message for message in messages)
+        assert any("Scan completed:" in message and "errors=1" in message for message in messages)
+        assert any("Scan skipped 1 unreadable file(s)" in message and "broken.png" in message for message in messages)
+        assert not any(
+            "Invalid PNG signature" in record.getMessage() and record.levelno >= logging.ERROR
+            for record in caplog.records
+        )
+
     def test_scan_mixed_root_keeps_good_files_and_reports_corrupt_and_truncated_names(self, test_client, tmp_path: Path):
         """Mixed scan roots should finish, index good files, and name bad files in progress."""
         import database as db
@@ -2125,3 +2191,50 @@ class TestResolveDropSecurity:
         # validation and reaches the SQL layer.
         result = isolated_sorting_service.resolve_drop("%", [], None)
         assert result["folder_path"] == ""
+
+
+def test_scan_progress_marks_user_visible_stalled_warning(isolated_sorting_service, monkeypatch):
+    monkeypatch.setattr("services.sorting_service.SCAN_UI_STALLED_SECONDS", 10.0)
+    isolated_sorting_service.set_scan_progress({
+        "status": "running",
+        "step": "metadata",
+        "current": 42,
+        "processed": 42,
+        "total": 100,
+        "metadata_processed": 40,
+        "metadata_total": 100,
+        "metadata_pending": 8,
+        "message": "Reading metadata...",
+        "current_item": "slow.png",
+        "started_at": 100.0,
+        "updated_at": 110.0,
+    })
+    monkeypatch.setattr("services.sorting_service.time.time", lambda: 125.0)
+
+    progress = isolated_sorting_service.get_scan_progress()
+
+    assert progress["attention_required"] is True
+    assert progress["stalled_seconds"] == 15
+    assert "metadata" in progress["attention_message"].lower()
+    assert progress["diagnostics_available"] is True
+
+
+def test_scan_progress_does_not_mark_stalled_when_recently_updated(isolated_sorting_service, monkeypatch):
+    monkeypatch.setattr("services.sorting_service.SCAN_UI_STALLED_SECONDS", 10.0)
+    isolated_sorting_service.set_scan_progress({
+        "status": "running",
+        "step": "importing",
+        "current": 10,
+        "processed": 10,
+        "total": 100,
+        "message": "Importing...",
+        "started_at": 100.0,
+        "updated_at": 123.0,
+    })
+    monkeypatch.setattr("services.sorting_service.time.time", lambda: 125.0)
+
+    progress = isolated_sorting_service.get_scan_progress()
+
+    assert progress["attention_required"] is False
+    assert progress["stalled_seconds"] == 2
+    assert progress["diagnostics_available"] is True

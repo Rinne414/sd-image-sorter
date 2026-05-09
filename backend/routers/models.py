@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from optional_dependencies import UnsafeDependencyInstallError
 from services.model_service import (
     ExternalAuthRequiredError,
     ModelPreparationFailedError,
@@ -46,6 +47,8 @@ def _empty_prepare_result() -> Dict[str, Any]:
         "manual_steps": [],
         "target_dir": "",
         "external_url": "",
+        "restart_recommended": False,
+        "installed_packages": [],
     }
 
 
@@ -99,7 +102,13 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
         result_status = str(result.get("status") or "ok")
         prepare_status = "done" if result_status in {"ok", "ready"} else "warning"
         with _prepare_lock:
-            _prepare_result.update(status=prepare_status, message=result.get("message", "Ready."), error="")
+            _prepare_result.update(
+                status=prepare_status,
+                message=result.get("message", "Ready."),
+                error="",
+                restart_recommended=bool(result.get("restart_recommended")),
+                installed_packages=list(result.get("installed_packages") or []),
+            )
     except (ExternalAuthRequiredError, ModelPreparationFailedError) as exc:
         # Forward the rich payload (manual_steps, external_url, target_dir,
         # provider, error type) so the frontend can render a guidance
@@ -114,6 +123,22 @@ def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional
                 manual_steps=list(exc.payload.get("manual_steps") or []),
                 target_dir=str(exc.payload.get("target_dir") or ""),
                 external_url=str(exc.payload.get("external_url") or ""),
+            )
+    except UnsafeDependencyInstallError as exc:
+        message = str(exc)
+        with _prepare_lock:
+            _prepare_result.update(
+                status="error",
+                error=message,
+                message=message,
+                error_type="UnsafeSystemPythonInstall",
+                provider="Python runtime",
+                manual_steps=[
+                    "Close this SD Image Sorter window.",
+                    "Start the app with run.bat, run-portable.bat, or run.sh so it uses the app-owned Python runtime.",
+                    "Open Feature Setup again and click Prepare for this feature.",
+                    "If you intentionally manage your own Python, activate a virtual environment first or set SD_IMAGE_SORTER_ALLOW_SYSTEM_PIP_INSTALL=1.",
+                ],
             )
     except ValueError as exc:
         with _prepare_lock:

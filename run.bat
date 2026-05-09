@@ -17,15 +17,17 @@ set "CACHE_DIR=%DATA_DIR%\cache"
 set "MODELS_DIR=%DATA_DIR%\models"
 set "FAVORITES_DIR=%DATA_DIR%\favorites"
 set "CONFIG_DIR=%DATA_DIR%\config"
+set "STATE_DIR=%DATA_DIR%\state"
 set "THUMBNAIL_DIR=%DATA_DIR%\thumbnails"
 
-for %%D in ("%DATA_DIR%" "%UPDATE_DIR%" "%TMP_DIR%" "%CACHE_DIR%" "%MODELS_DIR%" "%FAVORITES_DIR%" "%CONFIG_DIR%" "%THUMBNAIL_DIR%") do (
+for %%D in ("%DATA_DIR%" "%UPDATE_DIR%" "%TMP_DIR%" "%CACHE_DIR%" "%MODELS_DIR%" "%FAVORITES_DIR%" "%CONFIG_DIR%" "%STATE_DIR%" "%THUMBNAIL_DIR%") do (
     if not exist "%%~D" mkdir "%%~D"
 )
 
 set "SD_IMAGE_SORTER_LAUNCHER=run.bat"
 set "SD_IMAGE_SORTER_DATA_DIR=%DATA_DIR%"
 set "SD_IMAGE_SORTER_CONFIG_DIR=%CONFIG_DIR%"
+set "SD_IMAGE_SORTER_STATE_DIR=%STATE_DIR%"
 set "SD_IMAGE_SORTER_TMP_DIR=%TMP_DIR%"
 set "SD_IMAGE_SORTER_UPDATE_DIR=%UPDATE_DIR%"
 set "SD_IMAGE_SORTER_THUMBNAIL_DIR=%THUMBNAIL_DIR%"
@@ -46,6 +48,27 @@ set "TORCH_HOME=%DATA_DIR%\torch"
 set "PIP_CACHE_DIR=%DATA_DIR%\pip-cache"
 set "TEMP=%TMP_DIR%"
 set "TMP=%TMP_DIR%"
+
+REM -- If the user requested a lightweight runtime reset from Feature Setup,
+REM -- consume that request before activating Python. Never delete data/, models, or DB.
+set "VENV_REBUILD_MARKER=%STATE_DIR%\rebuild-core-venv.json"
+if exist "!VENV_REBUILD_MARKER!" (
+    echo [INFO] Lightweight runtime rebuild requested.
+    echo        Removing backend\venv only; user data, models, cache settings, and images.db stay untouched.
+    if exist "backend\venv" (
+        rmdir /s /q "backend\venv"
+        if exist "backend\venv" (
+            echo [ERROR] Could not remove backend\venv.
+            echo         Close every SD Image Sorter / Python window, then run run.bat again.
+            pause
+            exit /b 1
+        )
+    )
+    if exist "backend\.requirements_hash" del "backend\.requirements_hash" >nul 2>&1
+    del "!VENV_REBUILD_MARKER!" >nul 2>&1
+    echo        Runtime environment will be recreated with the selected dependency mode.
+    echo.
+)
 
 REM -- Find Python
 set "PYTHON_CMD="
@@ -121,11 +144,17 @@ if not exist "backend\venv\Scripts\python.exe" set FIRST_RUN=1
 set NEED_INSTALL=0
 set NEW_HASH=
 set OLD_HASH=
+set "INSTALL_REQUIREMENTS=backend\requirements-core.txt"
+set "INSTALL_MODE_LABEL=core runtime dependencies"
+if "!SD_IMAGE_SORTER_INSTALL_FULL_AI!"=="1" (
+    set "INSTALL_REQUIREMENTS=backend\requirements.txt"
+    set "INSTALL_MODE_LABEL=full AI runtime dependencies"
+)
 
 if !FIRST_RUN! EQU 1 (
     echo ==========================================
     echo   First run - setting up environment...
-    echo   This may take 10-20 minutes if GPU runtimes are needed.
+    echo   Lightweight setup installs core runtime first.
     echo ==========================================
     echo.
 
@@ -148,13 +177,13 @@ if !FIRST_RUN! EQU 1 (
             echo [INFO] certutil not found. Refreshing dependencies to stay in sync.
             set NEED_INSTALL=1
         ) else (
-            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile backend\requirements.txt MD5 ^| findstr /r /v "hash of file CertUtil"') do (
+            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile "!INSTALL_REQUIREMENTS!" MD5 ^| findstr /r /v "hash of file CertUtil"') do (
                 if not defined NEW_HASH set "NEW_HASH=%%H"
             )
             set "NEW_HASH=!NEW_HASH: =!"
             set /p OLD_HASH=<backend\.requirements_hash
             if /I not "!NEW_HASH!"=="!OLD_HASH!" (
-                echo [INFO] requirements.txt changed. Updating dependencies...
+                echo [INFO] !INSTALL_REQUIREMENTS! changed. Updating dependencies...
                 set NEED_INSTALL=1
             )
         )
@@ -162,7 +191,7 @@ if !FIRST_RUN! EQU 1 (
 )
 
 if !NEED_INSTALL! EQU 0 (
-    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime, torch, transformers, ultralytics, fastembed, open_clip, timm, sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2" >nul 2>&1
+    backend\venv\Scripts\python.exe -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>&1
     if errorlevel 1 (
         echo [INFO] Python runtime packages look incomplete. Reinstalling dependencies...
         set NEED_INSTALL=1
@@ -177,8 +206,13 @@ if !NEED_INSTALL! EQU 1 (
         pause
         exit /b 1
     )
-    echo [2/3] Installing full AI runtime dependencies...
-    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation -r backend\requirements.txt
+    echo [2/3] Installing !INSTALL_MODE_LABEL!...
+    if /I "!INSTALL_REQUIREMENTS!"=="backend\requirements-core.txt" (
+        echo       Heavy AI packages install later only when you click Prepare/Download for that feature.
+    ) else (
+        echo       Full AI mode may take 10-20 minutes and download large GPU/runtime packages.
+    )
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation -r "!INSTALL_REQUIREMENTS!"
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause
@@ -187,7 +221,7 @@ if !NEED_INSTALL! EQU 1 (
     if not defined NEW_HASH (
         where certutil >nul 2>&1
         if not errorlevel 1 (
-            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile backend\requirements.txt MD5 ^| findstr /r /v "hash of file CertUtil"') do (
+            for /f "skip=1 tokens=* delims=" %%H in ('certutil -hashfile "!INSTALL_REQUIREMENTS!" MD5 ^| findstr /r /v "hash of file CertUtil"') do (
                 if not defined NEW_HASH set "NEW_HASH=%%H"
             )
             set "NEW_HASH=!NEW_HASH: =!"
@@ -200,19 +234,29 @@ if !NEED_INSTALL! EQU 1 (
     echo.
 )
 
-echo [Info] Checking Windows ONNX Runtime package state...
-backend\venv\Scripts\python.exe backend\repair_onnxruntime.py --auto
-if errorlevel 1 (
-    echo [WARN] Could not auto-repair ONNX Runtime package state.
-    echo        The app can still start, but WD14 tagging may stay on CPU.
+if "!SD_IMAGE_SORTER_INSTALL_FULL_AI!"=="1" (
+    echo [Info] Checking Windows ONNX Runtime package state...
+    backend\venv\Scripts\python.exe backend\repair_onnxruntime.py --auto
+    if errorlevel 1 (
+        echo [WARN] Could not auto-repair ONNX Runtime package state.
+        echo        The app can still start, but WD14 tagging may stay on CPU.
+    )
+) else (
+    echo [Info] Skipping Windows ONNX GPU repair for lightweight startup.
+    echo        WD14 can still run on CPU; set SD_IMAGE_SORTER_INSTALL_FULL_AI=1 for GPU runtime repair.
 )
 echo.
 
-echo [Info] Checking Windows PyTorch / SAM3 runtime package state...
-backend\venv\Scripts\python.exe backend\repair_torch_runtime.py --auto
-if errorlevel 1 (
-    echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.
-    echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.
+if "!SD_IMAGE_SORTER_INSTALL_FULL_AI!"=="1" (
+    echo [Info] Checking Windows PyTorch / SAM3 runtime package state...
+    backend\venv\Scripts\python.exe backend\repair_torch_runtime.py --auto
+    if errorlevel 1 (
+        echo [WARN] Could not auto-repair PyTorch / SAM3 runtime package state.
+        echo        The app can still start, but SAM3 and CUDA Torch features may stay unavailable.
+    )
+) else (
+    echo [Info] Skipping Windows PyTorch / SAM3 repair for lightweight startup.
+    echo        Set SD_IMAGE_SORTER_INSTALL_FULL_AI=1 or use Model Manager Prepare when needed.
 )
 echo.
 
@@ -274,7 +318,14 @@ start "" !APP_URL!
 cd backend
 call venv\Scripts\activate.bat 2>nul
 python main.py --port !APP_PORT!
+set "SERVER_EXIT_CODE=!ERRORLEVEL!"
 
 echo.
-echo Server stopped.
+if "!SERVER_EXIT_CODE!"=="0" (
+    echo Server stopped normally.
+) else (
+    echo [ERROR] Server exited with code !SERVER_EXIT_CODE!.
+    echo         If startup failed immediately, check whether another SD Image Sorter window is already using port !APP_PORT!.
+    echo         You can run fix.bat for port/runtime diagnostics.
+)
 pause

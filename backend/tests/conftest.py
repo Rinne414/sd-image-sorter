@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+os.environ.setdefault("SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR", "thread")
 
 
 # ============================================================================

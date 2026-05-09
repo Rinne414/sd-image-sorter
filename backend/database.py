@@ -49,6 +49,7 @@ from utils.model_names import (
     normalize_checkpoint_name as _normalize_checkpoint_name,
 )
 from utils.pagination_cursor import encode_image_cursor_from_image
+from metadata_storage import compact_existing_metadata_json, compact_metadata_json
 
 
 logger = logging.getLogger(__name__)
@@ -615,6 +616,17 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
     )
 
 
+def _run_post_migration_vacuum(conn: sqlite3.Connection) -> None:
+    try:
+        conn.execute("VACUUM")
+    except sqlite3.Error as exc:
+        logger.warning(
+            "Database metadata compaction succeeded, but VACUUM failed; "
+            "images.db may not shrink until a later cleanup run: %s",
+            exc,
+        )
+
+
 def _recover_stale_pending_metadata_rows(conn: sqlite3.Connection) -> int:
     """
     Quarantine placeholder scan rows that survived a previous process crash.
@@ -657,6 +669,7 @@ def init_db() -> None:
     from migrations import get_migrations
 
     conn = get_connection()
+    vacuum_after_commit = False
     try:
         _ensure_schema_version_table(conn)
         current_version = _get_schema_version(conn)
@@ -667,7 +680,9 @@ def init_db() -> None:
             savepoint_name = f"migration_{migration.version}"
             conn.execute(f"SAVEPOINT {savepoint_name}")
             try:
-                migration.apply(conn)
+                result = migration.apply(conn)
+                if bool(result):
+                    vacuum_after_commit = True
                 _set_schema_version(conn, migration.version)
                 conn.execute(f"RELEASE SAVEPOINT {savepoint_name}")
             except Exception:
@@ -679,6 +694,8 @@ def init_db() -> None:
         _recover_stale_pending_metadata_rows(conn)
 
         conn.commit()
+        if vacuum_after_commit:
+            _run_post_migration_vacuum(conn)
     except Exception:
         conn.rollback()
         raise
@@ -807,6 +824,13 @@ def _get_existing_images_by_paths(
     return existing
 
 
+def _compact_persisted_metadata_json(metadata_json: Any) -> str:
+    compacted = compact_existing_metadata_json(metadata_json)
+    if compacted is not None:
+        return compacted
+    return compact_metadata_json({})
+
+
 def _upsert_image_record(
     cursor: sqlite3.Cursor,
     record: Dict[str, Any],
@@ -814,6 +838,7 @@ def _upsert_image_record(
 ) -> Tuple[int, str]:
     """Insert or update a single image row using an existing transaction."""
     path = _normalize_indexed_image_path(record["path"])
+    record["metadata_json"] = _compact_persisted_metadata_json(record.get("metadata_json"))
     serialized_loras = _serialize_loras(record.get("loras"))
     metadata_status = record.get("metadata_status") or "complete"
     record["checkpoint_normalized"] = normalize_checkpoint_name(record.get("checkpoint"))
@@ -3202,6 +3227,7 @@ def update_image_metadata(
     preserve_derived_state: bool = False,
 ):
     """Update parsed metadata fields for an existing image without replacing the row."""
+    metadata_json = _compact_persisted_metadata_json(metadata_json)
     with get_db() as conn:
         cursor = conn.cursor()
         serialized_loras = _serialize_loras(loras)
@@ -3336,6 +3362,7 @@ def add_collection_item(
     file_size: Optional[int],
 ) -> int:
     """Insert or replace a collection snapshot item."""
+    metadata_json = _compact_persisted_metadata_json(metadata_json)
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(

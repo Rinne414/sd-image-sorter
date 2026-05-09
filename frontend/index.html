@@ -2368,7 +2368,7 @@
                 <div class="modal-header">
                     <div>
                         <h2 id="model-manager-title" data-i18n="models.title">Feature Setup</h2>
-                        <p class="modal-description" data-i18n="models.description">See which features are ready to use. If something is missing, download or repair it here.</p>
+                        <p class="modal-description" data-i18n="models.description">See which features are ready now, which ones need extra downloads, and how much cache the app may keep.</p>
                     </div>
                 </div>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
@@ -2549,6 +2549,7 @@
                     </label>
                 </div>
                 <div class="helper-text" id="scan-recommended-hint" data-i18n="scan.recommendedHint">Keeps image info; skips full bad-file check.</div>
+                <div class="helper-text" id="scan-storage-hint" data-i18n="scan.storageHint">Local SSD folders scan best; network/cloud folders can look stalled while the OS is still reading files.</div>
                 <details class="guided-advanced-panel" id="scan-advanced-options">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="scan.advancedSummary">Advanced options</span>
@@ -2583,6 +2584,26 @@
                         <div class="progress-fill" id="scan-progress-fill"></div>
                     </div>
                     <span class="progress-text" id="scan-progress-text" data-i18n="modal.scanStarting">Starting import...</span>
+                </div>
+                <div class="scan-diagnostics-card" id="scan-diagnostics-card" style="display: none;" role="status" aria-live="polite">
+                    <div class="scan-diagnostics-main">
+                        <strong data-i18n="scan.diagnosticsTitle">Scan looks stalled</strong>
+                        <span id="scan-diagnostics-message">No visible progress yet. The scan may still be waiting on a slow image.</span>
+                        <dl class="scan-diagnostics-meta" id="scan-diagnostics-meta" aria-label="Scan diagnostics details" data-i18n-aria="scan.diagnosticsMetaLabel">
+                            <div><dt data-i18n="scan.diagnosticsStep">Step</dt><dd id="scan-diagnostics-step">-</dd></div>
+                            <div><dt data-i18n="scan.diagnosticsCurrent">Current</dt><dd id="scan-diagnostics-current">-</dd></div>
+                            <div><dt data-i18n="scan.diagnosticsPending">Pending</dt><dd id="scan-diagnostics-pending">-</dd></div>
+                            <div><dt data-i18n="scan.diagnosticsCompleted">Completed</dt><dd id="scan-diagnostics-completed">-</dd></div>
+                        </dl>
+                        <small class="scan-diagnostics-privacy" data-i18n="scan.diagnosticsPrivacy">Diagnostics may include image filenames. Review before sharing if filenames are private.</small>
+                    </div>
+                    <div class="scan-diagnostics-actions">
+                        <button type="button" class="btn btn-secondary btn-small" id="btn-copy-scan-diagnostics" data-i18n="scan.copyDiagnostics">Copy diagnostics</button>
+                        <button type="button" class="btn btn-secondary btn-small" id="btn-open-scan-log" data-i18n="scan.openLog">Open log file</button>
+                        <button type="button" class="btn btn-ghost btn-small" id="btn-copy-scan-log-path" data-i18n="scan.copyLogPath">Copy log path</button>
+                        <button type="button" class="btn btn-ghost btn-small danger" id="btn-stop-scan-from-diagnostics" data-i18n="scan.stopButton">Stop Import</button>
+                        <small id="scan-diagnostics-path"></small>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-cancel-scan" aria-label="Cancel scan" data-i18n="modal.cancel">Cancel</button>

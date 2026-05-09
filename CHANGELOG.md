@@ -5,6 +5,36 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-05-09
+
+### Fixed / 修复
+- Large folder scans are now safer for 80k+ metadata-heavy libraries: metadata parsing uses bounded process workers by default, timed-out metadata reads are skipped instead of freezing the whole scan, expected corrupt-image metadata failures stay out of normal console noise, and scan progress exposes stalled-state diagnostics with support log access. This does not mean every filesystem wait can be killed; network/cloud drives, antivirus, SQLite/disk I/O, or OS directory enumeration can still be slow, but the UI now tells users what is happening and how to collect support information.
+  - 大图库扫描现在对 8 万+ 带 metadata 的图片更安全：metadata 解析默认走有上限的进程 worker，单图 metadata 超时会跳过而不是拖死整个扫描，常见坏图 metadata 错误不会刷爆普通终端，并且扫描进度会暴露卡住诊断和支持日志入口。这不代表所有文件系统等待都能被强杀；网络盘/云盘、杀毒软件、SQLite/磁盘 I/O、系统枚举目录仍可能很慢，但 UI 会明确告诉用户当前情况和如何收集支持信息。
+- Metadata storage compaction now covers old and new write paths: scans, reparses, copied images, direct DB upserts, and favorites/collection snapshots are normalized to compact `_compact` / `_parsed` payloads instead of re-copying legacy raw EXIF/XMP/ComfyUI workflow blobs back into `images.db`. Migration 009 also catches raw-only metadata rows that an already-run v8 migration could have missed.
+  - metadata 存储瘦身现在覆盖旧库和新写入口：扫描、重新解析、复制图片、直接 DB upsert、收藏/collection 快照都会统一写入 compact 的 `_compact` / `_parsed`，不会把旧 raw EXIF/XMP/ComfyUI workflow 大块数据重新塞回 `images.db`；新增迁移 009 会补压已经跑过 v8 但漏掉的 raw-only metadata 行。
+- Feature Setup now keeps first launch lightweight: the default launcher installs only core dependencies, heavy AI Python packages move behind Prepare, system Python is protected from accidental optional installs, and old full-AI installs can schedule a next-start lightweight runtime rebuild without deleting `data/`, `images.db`, settings, caches, or downloaded models.
+  - Feature Setup 现在让首次启动保持轻量：默认启动器只装核心依赖，重型 AI Python 包改为按需 Prepare，system Python 默认不会被误装 optional 包；旧的 full-AI 安装可以安排下次启动重建轻量运行环境，而且不会删除 `data/`、`images.db`、设置、缓存或已下载模型。
+- Thumbnail cache now has a default 500 MB cap, can be disabled with a `0` limit, and explains the disk-vs-CPU/IO trade-off in Disk Usage.
+  - 缩略图缓存现在默认上限为 500 MB，可用 `0` 关闭持久缓存，并在 Disk Usage 里明确说明省空间与重建缩略图 CPU/IO 开销之间的取舍。
+- Feature Setup / Disk Usage no longer advertises externally redirected temp/cache/thumbnail paths as one-click safe cleanup targets. The cleanup list is app-owned `data/` cache only, symlinked safe-cache roots are refused, symlink targets are not counted as reclaimable bytes, and external package/model/runtime cache locations remain visible as informational/preserved rows.
+  - Feature Setup / 磁盘占用不再把被环境变量重定向到外部的临时/缓存/缩略图路径显示成“一键安全清理”。可清理列表只包含 app 自己 `data/` 下的缓存，symlink 形式的可清理根目录会被拒绝，symlink 指向的外部目标不会被算成可回收空间，外部包/模型/运行时缓存会作为信息展示/保留。
+- Feature Setup / Disk Usage asks for a second confirmation before cleaning any selected cache whose size could not be fully scanned, and the manual setup guide keeps keyboard focus inside the dialog.
+  - Feature Setup / 磁盘占用现在会在清理大小未完整扫描的缓存前二次确认，并且手动设置引导弹窗会把键盘焦点留在弹窗内。
+- ToriiGate optional setup now requires a Transformers version new enough for the Qwen3.5 classes it imports, and Linux full-AI launcher installs no longer repeat because of a temporary filtered requirements hash.
+  - ToriiGate optional setup 现在要求足够新的 Transformers 版本来匹配实际导入的 Qwen3.5 类；Linux full-AI 启动器也不会再因为临时过滤后的 requirements hash 反复安装。
+
+### Release Notes / 发布注意
+- Existing users who still see large Python runtime usage should open **Feature Setup → Disk Usage → Python runtime environment → Rebuild lightweight runtime on next start**, then close and restart the app.
+  - 旧用户如果 Python runtime 占用仍然很大，请进入 **Feature Setup → Disk Usage → Python 运行环境 → 下次启动重建轻量运行环境**，然后关闭并重启 app。
+- The first launch after upgrading an old metadata-heavy `images.db` may spend time compacting metadata and running `VACUUM`; very large databases need temporary free disk space while SQLite rewrites the file.
+  - 旧的大 metadata `images.db` 升级后首次启动可能会花时间压缩 metadata 并执行 `VACUUM`；超大数据库在 SQLite 重写文件时需要临时空闲磁盘空间。
+- Lower thumbnail cache limits save disk, but large-gallery scrolling may regenerate thumbnails more often and use more CPU / disk I/O.
+  - 缩略图缓存上限调低会省磁盘，但大图库滚动时可能更频繁重建缩略图，占用更多 CPU / 磁盘 IO。
+
+### Validation / 验证
+- Added regression coverage for scan diagnostics contracts, metadata compaction write paths and migrations, Disk Usage cleanup safety, runtime rebuild, optional dependency install guards, and release packaging launcher behavior.
+  - 新增回归覆盖扫描诊断契约、metadata compact 写入口和迁移、Disk Usage 清理安全、runtime rebuild、optional dependency 安装保护，以及发布包启动器行为。
+
 ## [3.1.2] - 2026-05-08
 
 ### Added / 新增

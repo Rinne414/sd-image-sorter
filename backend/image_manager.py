@@ -5,9 +5,10 @@ import logging
 import os
 import shutil
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
 from typing import List, Dict, Any, Optional, Callable, Iterator
 from datetime import datetime
+from collections.abc import MutableMapping
 from pathlib import Path
 import json
 
@@ -26,6 +27,7 @@ from database import (
     STALE_PENDING_METADATA_READ_ERROR,
 )
 from image_fingerprint import compute_image_content_fingerprint
+from metadata_storage import compact_existing_metadata_json, compact_metadata_json
 from metadata_parser import parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
@@ -37,6 +39,91 @@ SCAN_DB_BATCH_SIZE = 200
 SCAN_PROGRESS_MIN_INTERVAL_SECONDS = 0.25
 SCAN_PROGRESS_EVERY_N_ITEMS = 50
 DEFAULT_METADATA_WORKERS = max(2, min(8, (os.cpu_count() or 4)))
+SCAN_METADATA_BACKLOG_PER_WORKER = 4
+SCAN_METADATA_MIN_BACKLOG = 16
+try:
+    SCAN_METADATA_TIMEOUT_SECONDS = max(
+        0.0,
+        float(os.environ.get("SD_IMAGE_SORTER_SCAN_METADATA_TIMEOUT_SECONDS", "120")),
+    )
+except ValueError:
+    SCAN_METADATA_TIMEOUT_SECONDS = 120.0
+SCAN_METADATA_DRAIN_WAIT_SECONDS = 0.2
+SCAN_METADATA_EXECUTOR_MODE = os.environ.get(
+    "SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR",
+    "process",
+).strip().lower()
+
+
+def _metadata_executor_mode() -> str:
+    """Return the configured metadata worker isolation mode."""
+    if SCAN_METADATA_EXECUTOR_MODE in {"process", "processes", "isolated"}:
+        return "process"
+    if SCAN_METADATA_EXECUTOR_MODE in {"thread", "threads", "legacy"}:
+        return "thread"
+    logger.warning(
+        "Unknown SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR=%r; using process isolation",
+        SCAN_METADATA_EXECUTOR_MODE,
+    )
+    return "process"
+
+
+def _create_metadata_executor(worker_count: int) -> Any:
+    """Create the metadata worker executor. Process mode lets timeouts kill stuck C extensions."""
+    worker_count = max(1, int(worker_count or 1))
+    if _metadata_executor_mode() == "process":
+        return ProcessPoolExecutor(max_workers=worker_count)
+    return ThreadPoolExecutor(max_workers=worker_count)
+
+
+def _terminate_metadata_executor_workers(executor: Any) -> bool:
+    """Best-effort terminate metadata workers after a hard timeout."""
+    terminate_workers = getattr(executor, "terminate_workers", None)
+    if callable(terminate_workers):
+        terminate_workers()
+        return True
+
+    processes = getattr(executor, "_processes", None)
+    if isinstance(processes, MutableMapping):
+        terminated = False
+        for process in list(processes.values()):
+            if process is None:
+                continue
+            try:
+                if process.is_alive():
+                    process.terminate()
+                    terminated = True
+            except Exception as exc:
+                logger.debug("Failed to terminate metadata worker process: %s", exc)
+
+        for process in list(processes.values()):
+            if process is None:
+                continue
+            try:
+                process.join(timeout=1.0)
+                if process.is_alive() and hasattr(process, "kill"):
+                    process.kill()
+                    process.join(timeout=1.0)
+            except Exception as exc:
+                logger.debug("Failed to join terminated metadata worker process: %s", exc)
+        return terminated
+
+    return False
+
+
+def _shutdown_metadata_executor(executor: Any, *, wait_for_workers: bool = False) -> None:
+    try:
+        executor.shutdown(wait=wait_for_workers, cancel_futures=True)
+    except TypeError:
+        executor.shutdown(wait=wait_for_workers)
+    except Exception as exc:
+        logger.debug("Failed to shut down metadata executor cleanly: %s", exc)
+
+
+def _metadata_job_for_retry(job: Dict[str, Any]) -> Dict[str, Any]:
+    retry_job = dict(job)
+    retry_job.pop("submitted_at", None)
+    return retry_job
 
 
 def _chunked(items: Iterator[Any], size: int) -> Iterator[List[Any]]:
@@ -49,6 +136,12 @@ def _chunked(items: Iterator[Any], size: int) -> Iterator[List[Any]]:
             batch = []
     if batch:
         yield batch
+
+
+def _metadata_backlog_limit(worker_count: int) -> int:
+    """Return a bounded metadata queue size for large-library scans."""
+    per_worker_limit = max(1, int(worker_count or 1)) * max(1, int(SCAN_METADATA_BACKLOG_PER_WORKER))
+    return max(1, min(SCAN_DB_BATCH_SIZE, max(SCAN_METADATA_MIN_BACKLOG, per_worker_limit)))
 
 
 def _deserialize_loras(value: Any) -> Optional[List[str]]:
@@ -178,7 +271,7 @@ def _build_placeholder_record(
         "generator": "unknown",
         "prompt": None,
         "negative_prompt": None,
-        "metadata_json": "{}",
+        "metadata_json": compact_metadata_json({}),
         "width": None,
         "height": None,
         "file_size": int(stat_result.st_size),
@@ -206,11 +299,7 @@ def _build_metadata_success_record(
     content_fingerprint: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Convert parsed metadata into a database row update."""
-    try:
-        metadata_json = json.dumps(metadata["metadata"])
-    except (TypeError, ValueError) as exc:
-        logger.warning("Could not serialize metadata for %s: %s", image_path, exc)
-        metadata_json = "{}"
+    metadata_json = compact_metadata_json(metadata.get("metadata"))
 
     gen_params = metadata.get("metadata", {}).get("_parsed", {}).get("generation_params") or {}
     model_hash = gen_params.get("model_hash")
@@ -257,7 +346,7 @@ def _build_metadata_error_record(
         "generator": "unknown",
         "prompt": None,
         "negative_prompt": None,
-        "metadata_json": "{}",
+        "metadata_json": compact_metadata_json({}),
         "width": None,
         "height": None,
         "file_size": source_size,
@@ -622,6 +711,7 @@ def scan_folder(
                 "metadata_processed": result["metadata_processed"],
                 "metadata_total": result["metadata_total"],
                 "metadata_total_final": False,
+                "metadata_pending": 0,
                 "total_final": True,
             },
             force=True,
@@ -648,6 +738,7 @@ def scan_folder(
                 "metadata_processed": result["metadata_processed"],
                 "metadata_total": result["metadata_total"],
                 "metadata_total_final": result["metadata_total_final"],
+                "metadata_pending": len(in_flight),
                 "total_final": result["total_final"],
             },
             force=True,
@@ -662,12 +753,33 @@ def scan_folder(
     metadata_completed_paths: set[str] = set()
     processed_count = 0
     worker_count = max(1, int(metadata_workers or DEFAULT_METADATA_WORKERS))
-    in_flight = {}
+    backlog_limit = _metadata_backlog_limit(worker_count)
+    in_flight: Dict[Any, Dict[str, Any]] = {}
 
-    def _submit_metadata_job(executor: ThreadPoolExecutor, job: Dict[str, Any]) -> None:
-        future = executor.submit(_parse_metadata_job, job)
-        in_flight[future] = job
-        result["metadata_total"] += 1
+    def _ensure_metadata_executor() -> Any:
+        nonlocal executor
+        if executor is None:
+            executor = _create_metadata_executor(worker_count)
+        return executor
+
+    def _restart_metadata_executor() -> Any:
+        nonlocal executor
+        if executor is not None:
+            _shutdown_metadata_executor(executor)
+        executor = _create_metadata_executor(worker_count)
+        return executor
+
+    def _submit_metadata_job(active_executor: Any, job: Dict[str, Any], *, count_total: bool = True) -> None:
+        nonlocal executor
+        try:
+            future = active_executor.submit(parse_metadata_job, job)
+        except Exception as exc:
+            logger.warning("Restarting metadata executor after submit failure: %s", exc)
+            active_executor = _restart_metadata_executor()
+            future = active_executor.submit(parse_metadata_job, job)
+        in_flight[future] = {**job, "submitted_at": time.monotonic()}
+        if count_total:
+            result["metadata_total"] += 1
 
     def _handle_metadata_job_result(job_result: Dict[str, Any]) -> None:
         filename = job_result["filename"]
@@ -711,6 +823,7 @@ def scan_folder(
         result["metadata_processed"] += 1
         progress_details["errors"] = result["errors"]
         progress_details["metadata_processed"] = result["metadata_processed"]
+        progress_details["metadata_pending"] = len(in_flight)
 
         if len(pending_metadata_records) >= SCAN_DB_BATCH_SIZE:
             _flush_metadata_records(pending_metadata_records)
@@ -725,17 +838,132 @@ def scan_folder(
             force=bool(progress_details.get("last_error")),
         )
 
-    def _drain_metadata_futures(wait_for_all: bool = False) -> None:
+    def _build_metadata_timeout_result(job: Dict[str, Any]) -> Dict[str, Any]:
+        image_path = job["path"]
+        filename = job["filename"]
+        try:
+            stat_result = os.stat(image_path)
+        except OSError:
+            stat_result = None
+        timeout_seconds = SCAN_METADATA_TIMEOUT_SECONDS
+        error_message = f"Metadata extraction timed out after {timeout_seconds:g} seconds"
+        return {
+            "filename": filename,
+            "generator": None,
+            "record": _build_metadata_error_record(image_path, filename, stat_result, error_message),
+            "error": {"filename": filename, "error": error_message, "kind": "timeout"},
+        }
+
+    def _handle_timed_out_metadata_futures() -> int:
+        nonlocal executor
+        if SCAN_METADATA_TIMEOUT_SECONDS <= 0:
+            return 0
+        now = time.monotonic()
+        timed_out = []
+        for future, job in tuple(in_flight.items()):
+            submitted_at = float(job.get("submitted_at") or now)
+            if now - submitted_at >= SCAN_METADATA_TIMEOUT_SECONDS:
+                timed_out.append((future, job))
+
+        if not timed_out:
+            return 0
+
+        timeout_futures = {future for future, _job in timed_out}
+        killed_workers = bool(executor is not None and _terminate_metadata_executor_workers(executor))
+        retry_jobs: List[Dict[str, Any]] = []
+
+        if killed_workers:
+            all_in_flight = list(in_flight.items())
+            in_flight.clear()
+            for future, job in all_in_flight:
+                future.cancel()
+                if future in timeout_futures:
+                    _handle_metadata_job_result(_build_metadata_timeout_result(job))
+                else:
+                    retry_jobs.append(_metadata_job_for_retry(job))
+            if executor is not None:
+                _shutdown_metadata_executor(executor, wait_for_workers=False)
+            executor = None
+            if retry_jobs:
+                restarted_executor = _ensure_metadata_executor()
+                for retry_job in retry_jobs:
+                    _submit_metadata_job(restarted_executor, retry_job, count_total=False)
+        else:
+            for future, job in timed_out:
+                in_flight.pop(future, None)
+                future.cancel()
+                _handle_metadata_job_result(_build_metadata_timeout_result(job))
+
+        return len(timed_out)
+
+    def _emit_metadata_waiting_progress() -> None:
+        _emit_progress(
+            result["metadata_processed"],
+            result["metadata_total"],
+            "",
+            {
+                "errors": result["errors"],
+                "last_error": None,
+                "phase": "metadata",
+                "library_ready": result["library_ready"],
+                "counted": result["counted"],
+                "import_processed": processed_count,
+                "import_total": result["counted"] or result["total"],
+                "import_complete": result["import_complete"],
+                "metadata_processed": result["metadata_processed"],
+                "metadata_total": result["metadata_total"],
+                "metadata_total_final": result["metadata_total_final"],
+                "metadata_pending": len(in_flight),
+                "total_final": result["total_final"],
+            },
+        )
+
+    def _metadata_future_error_result(job: Dict[str, Any], exc: Exception) -> Dict[str, Any]:
+        image_path = job.get("path", "")
+        filename = job.get("filename") or os.path.basename(image_path)
+        try:
+            stat_result = os.stat(image_path)
+        except OSError:
+            stat_result = None
+        error_message = str(exc)
+        return {
+            "filename": filename,
+            "generator": None,
+            "record": _build_metadata_error_record(image_path, filename, stat_result, error_message),
+            "error": {"filename": filename, "error": error_message, "kind": "unexpected"},
+        }
+
+    def _drain_metadata_futures(wait_for_all: bool = False, wait_for_one: bool = False) -> None:
         while in_flight:
             _check_cancel()
-            timeout = 0.2 if wait_for_all else 0
+            if _handle_timed_out_metadata_futures() and wait_for_one:
+                break
+            if not in_flight:
+                break
+
+            timeout = SCAN_METADATA_DRAIN_WAIT_SECONDS if wait_for_all or wait_for_one else 0
             done, _pending = wait(tuple(in_flight.keys()), timeout=timeout, return_when=FIRST_COMPLETED)
             if not done:
+                if wait_for_all or wait_for_one:
+                    _emit_metadata_waiting_progress()
+                    continue
                 break
 
             for future in done:
-                in_flight.pop(future, None)
-                _handle_metadata_job_result(future.result())
+                job = in_flight.pop(future, None)
+                try:
+                    job_result = future.result()
+                except Exception as exc:
+                    logger.error("Unexpected metadata worker failure: %s", exc, exc_info=True)
+                    job_result = _metadata_future_error_result(job or {}, exc)
+                _handle_metadata_job_result(job_result)
+
+            if wait_for_one:
+                break
+
+    def _drain_metadata_until_backlog_below_limit() -> None:
+        while len(in_flight) >= backlog_limit:
+            _drain_metadata_futures(wait_for_one=True)
 
     def _reconcile_interrupted_scan_placeholders() -> None:
         _flush_metadata_records(pending_metadata_records)
@@ -772,11 +1000,13 @@ def scan_folder(
                 result["updated"] = max(0, result["updated"] - marked)
                 result["metadata_updated"] = max(0, result["metadata_updated"] - marked)
 
+    executor: Optional[Any] = None
     try:
         result["counted"] = _count_images_for_total()
+        result["total"] = result["counted"]
         result["total_final"] = True
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        try:
             # Pipeline: placeholder import and metadata backfill overlap.
             for image_batch in _chunked(_iter_images(), SCAN_DB_BATCH_SIZE):
                 _check_cancel()
@@ -788,7 +1018,6 @@ def scan_folder(
                     _check_cancel()
                     image_path = image_entry["path"]
                     cached_stat = image_entry.get("stat")
-                    result["total"] += 1
                     processed_count += 1
                     filename = os.path.basename(image_path)
                     progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
@@ -849,7 +1078,8 @@ def scan_folder(
 
                 _flush_placeholder_records(pending_placeholder_records)
                 for job in batch_metadata_jobs:
-                    _submit_metadata_job(executor, job)
+                    _drain_metadata_until_backlog_below_limit()
+                    _submit_metadata_job(_ensure_metadata_executor(), job)
 
                 if batch_metadata_jobs or processed_count > 0:
                     _emit_library_ready()
@@ -879,10 +1109,18 @@ def scan_folder(
                         "metadata_processed": result["metadata_processed"],
                         "metadata_total": result["metadata_total"],
                         "metadata_total_final": result["metadata_total_final"],
+                        "metadata_pending": len(in_flight),
                         "total_final": result["total_final"],
                     },
                     force=True,
                 )
+        finally:
+            if executor is not None:
+                if in_flight:
+                    for future in tuple(in_flight.keys()):
+                        future.cancel()
+                    _terminate_metadata_executor_workers(executor)
+                _shutdown_metadata_executor(executor, wait_for_workers=False)
     except ScanCancelledError:
         _reconcile_interrupted_scan_placeholders()
         raise
@@ -945,7 +1183,7 @@ def _build_copied_image_record(
         "generator": source_row.get("generator") or "unknown",
         "prompt": source_row.get("prompt"),
         "negative_prompt": source_row.get("negative_prompt"),
-        "metadata_json": source_row.get("metadata_json") or "{}",
+        "metadata_json": compact_existing_metadata_json(source_row.get("metadata_json")) or compact_metadata_json({}),
         "width": source_row.get("width"),
         "height": source_row.get("height"),
         "file_size": int(stat_result.st_size),
@@ -1126,7 +1364,7 @@ def reparse_image_metadata(
             generator="unknown",
             prompt=None,
             negative_prompt=None,
-            metadata_json="{}",
+            metadata_json=compact_metadata_json({}),
             width=None,
             height=None,
             file_size=stat_result.st_size,
@@ -1142,9 +1380,9 @@ def reparse_image_metadata(
         return metadata
 
     try:
-        metadata_json = json.dumps(metadata["metadata"])
+        metadata_json = compact_metadata_json(metadata.get("metadata"))
     except (TypeError, ValueError):
-        metadata_json = "{}"
+        metadata_json = compact_metadata_json({})
 
     try:
         content_fingerprint = compute_image_content_fingerprint(image_path)

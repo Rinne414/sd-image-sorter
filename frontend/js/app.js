@@ -924,6 +924,14 @@ const API = {
         return this.post('/api/disk/cleanup', { keys });
     },
 
+    async setDiskSettings(settings) {
+        return this.post('/api/disk/settings', settings);
+    },
+
+    async rebuildCoreRuntime() {
+        return this.post('/api/disk/runtime/rebuild-core', {});
+    },
+
     async getMirror() {
         return this.get('/api/models/mirror');
     },
@@ -985,6 +993,14 @@ const API = {
 
     async getScanProgress() {
         return this.get('/api/scan/progress');
+    },
+
+    async getSupportDiagnostics(lines = 200) {
+        return this.get(`/api/support/diagnostics?lines=${encodeURIComponent(lines)}`);
+    },
+
+    async openSupportLog() {
+        return this.post('/api/support/open-log', {});
     },
 
     async cancelScan() {
@@ -3687,6 +3703,10 @@ function initEventListeners() {
     // Scan modal
     $('#btn-cancel-scan').addEventListener('click', requestStopScan);
     $('#btn-start-scan').addEventListener('click', startScan);
+    $('#btn-copy-scan-diagnostics')?.addEventListener('click', copyScanDiagnostics);
+    $('#btn-open-scan-log')?.addEventListener('click', openScanLogFile);
+    $('#btn-copy-scan-log-path')?.addEventListener('click', copyScanLogPath);
+    $('#btn-stop-scan-from-diagnostics')?.addEventListener('click', requestStopScan);
     $('#btn-cancel-reconnect')?.addEventListener('click', requestStopReconnectMissing);
     $('#btn-start-reconnect')?.addEventListener('click', startReconnectMissing);
 
@@ -5148,6 +5168,7 @@ async function requestStopScan() {
             unlockLiveProgressText('#scan-progress-text', 'modal.scanStarting', 'Starting...');
             resetProgressTracker(_scanProgressTracker);
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
         }
     } catch (error) {
         showToast(formatUserError(error, appT('scan.failedCancel', 'Failed to stop import')), 'error');
@@ -5260,6 +5281,11 @@ function _updateBgScanProgress(progress) {
         return;
     }
 
+    if (progress?.attention_required) {
+        textEl.textContent = buildScanAttentionMessage(progress, { compact: true });
+        return;
+    }
+
     if (metrics.isCounting) {
         textEl.textContent = appT('progress.countingImages', 'Counting images... {count} found')
             .replace('{count}', String(metrics.counted || metrics.processed || 0));
@@ -5302,6 +5328,172 @@ function _hideBgScanProgress() {
     const bar = $('#bg-scan-progress');
     if (bar) bar.style.display = 'none';
     resetProgressTracker(_scanBackgroundProgressTracker);
+}
+
+function buildScanAttentionMessage(progress, options = {}) {
+    const compact = Boolean(options.compact);
+    const stalledSeconds = Number(progress?.stalled_seconds || 0);
+    const pending = Number(progress?.metadata_pending || 0);
+    const currentItem = progress?.current_item || appT('scan.diagnosticsCurrentUnknown', 'current file');
+    const secondsText = stalledSeconds > 0 ? `${Math.round(stalledSeconds)}s` : appT('scan.diagnosticsSomeTime', 'some time');
+    const key = compact ? 'scan.backgroundStalledDetailed' : 'scan.diagnosticsDefaultDetailed';
+    const fallback = compact
+        ? 'Scan needs attention: no visible progress for {seconds}. Open details to copy diagnostics.'
+        : 'No visible progress for {seconds}. The app may be waiting on a slow, broken, or network-drive image. If this does not recover in 1-2 minutes, copy diagnostics for support.';
+    return appT(key, fallback, {
+        seconds: secondsText,
+        pending: String(pending),
+        current: currentItem,
+        step: progress?.step || progress?.status || '-',
+    });
+}
+
+function rememberScanDiagnosticsInteraction() {
+    _scanDiagnosticsHoldUntil = Date.now() + SCAN_DIAGNOSTICS_HOLD_MS;
+}
+
+function rememberScanLogPath(rawPath = '', redactedPath = '') {
+    _scanLastLogPath = rawPath || '';
+    _scanLastLogPathRedacted = redactedPath || (rawPath ? '<PATH>' : '');
+}
+
+function _formatScanDiagnosticsPayload(payload) {
+    const parts = [
+        'SD Image Sorter scan diagnostics',
+        `App version: ${payload?.app_version || 'unknown'}`,
+        `Log file: ${payload?.log_file_path_redacted || (payload?.log_file_path ? '<PATH>' : 'unavailable')}`,
+        `Log exists: ${payload?.log_file_exists ? 'yes' : 'no'}`,
+        `Access log: ${payload?.access_log_enabled ? 'on' : 'off'}`,
+        `Log level: ${payload?.log_level || 'unknown'}`,
+        '',
+        'Recent backend log:',
+        payload?.recent_log_text || '(no log lines available)',
+    ];
+    return parts.join('\n');
+}
+
+async function copyScanDiagnostics() {
+    try {
+        rememberScanDiagnosticsInteraction();
+        const payload = await API.getSupportDiagnostics(200);
+        const copied = await copyTextToClipboard(
+            _formatScanDiagnosticsPayload(payload),
+            appT('scan.diagnosticsCopied', 'Diagnostics copied')
+        );
+        if (!copied) {
+            showToast(appT('scan.diagnosticsCopyFailed', 'Could not copy diagnostics automatically'), 'warning');
+        }
+    } catch (error) {
+        Logger.error('Failed to copy scan diagnostics:', error);
+        showToast(appT('scan.diagnosticsFetchFailed', 'Could not load diagnostics'), 'error');
+    }
+}
+
+async function copyScanLogPath() {
+    try {
+        rememberScanDiagnosticsInteraction();
+        let pathToCopy = _scanLastLogPath;
+        if (!pathToCopy) {
+            const payload = await API.getSupportDiagnostics(1);
+            rememberScanLogPath(payload?.log_file_path || '', payload?.log_file_path_redacted || '');
+            const pathEl = $('#scan-diagnostics-path');
+            if (pathEl && _scanLastLogPathRedacted) {
+                pathEl.textContent = _scanLastLogPathRedacted;
+                pathEl.title = _scanLastLogPathRedacted;
+            }
+            pathToCopy = _scanLastLogPath;
+        }
+        if (!pathToCopy) {
+            showToast(appT('scan.copyLogPathUnavailable', 'Log path is not available'), 'warning');
+            return;
+        }
+        const copied = await copyTextToClipboard(pathToCopy, appT('scan.logPathCopied', 'Log path copied'));
+        if (!copied) {
+            showToast(appT('scan.logPathCopyFailed', 'Could not copy log path automatically'), 'warning');
+        }
+    } catch (error) {
+        Logger.error('Failed to copy scan log path:', error);
+        showToast(appT('scan.logPathCopyFailed', 'Could not copy log path automatically'), 'error');
+    }
+}
+
+async function openScanLogFile() {
+    try {
+        const result = await API.openSupportLog();
+        const pathEl = $('#scan-diagnostics-path');
+        rememberScanDiagnosticsInteraction();
+        rememberScanLogPath(result?.path || '', result?.path_redacted || '');
+        if (pathEl && result?.path) {
+            pathEl.textContent = result.path_redacted || '<PATH>';
+            pathEl.title = result.path_redacted || '<PATH>';
+        }
+        if (result?.opened === false) {
+            showToast(appT('scan.openLogUnavailable', 'Could not open automatically; the log path is shown. Copy that path if you need to send the log file to support.'), 'warning');
+            return;
+        }
+        showToast(appT('scan.logOpened', 'Opened support log location'), 'success');
+    } catch (error) {
+        Logger.error('Failed to open scan log file:', error);
+        showToast(formatUserError(error, appT('scan.openLogFailed', 'Could not open support log')), 'error');
+    }
+}
+
+function updateScanDiagnosticsCard(progress) {
+    _scanLastProgress = progress || null;
+    const card = $('#scan-diagnostics-card');
+    if (!card) return;
+
+    const activeStatus = ['running', 'cancelling'].includes(progress?.status);
+    const holdActive = activeStatus && Date.now() < _scanDiagnosticsHoldUntil;
+    const shouldShow = Boolean(progress?.attention_required || holdActive);
+    card.style.display = shouldShow ? 'flex' : 'none';
+    card.classList.toggle('is-visible', shouldShow);
+    if (!shouldShow) return;
+
+    const messageEl = $('#scan-diagnostics-message');
+    const pathEl = $('#scan-diagnostics-path');
+    const stopButton = $('#btn-stop-scan-from-diagnostics');
+    const stepEl = $('#scan-diagnostics-step');
+    const currentEl = $('#scan-diagnostics-current');
+    const pendingEl = $('#scan-diagnostics-pending');
+    const completedEl = $('#scan-diagnostics-completed');
+    if (messageEl) {
+        messageEl.removeAttribute('data-i18n');
+        messageEl.textContent = progress?.attention_required
+            ? buildScanAttentionMessage(progress)
+            : appT('scan.diagnosticsRecentlyActive', 'Progress resumed. Keeping diagnostics visible briefly in case you still need them.');
+    }
+    if (stepEl) {
+        stepEl.removeAttribute('data-i18n');
+        stepEl.textContent = progress.step || progress.status || '-';
+    }
+    if (currentEl) {
+        currentEl.removeAttribute('data-i18n');
+        currentEl.textContent = progress.current_item || progress.message || '-';
+    }
+    if (pendingEl) {
+        pendingEl.removeAttribute('data-i18n');
+        pendingEl.textContent = String(progress.metadata_pending ?? 0);
+    }
+    if (completedEl) {
+        completedEl.removeAttribute('data-i18n');
+        const completed = progress.metadata_total
+            ? `${progress.metadata_processed || 0}/${progress.metadata_total}`
+            : `${progress.processed || progress.current || 0}/${progress.total || '?'}`;
+        completedEl.textContent = completed;
+    }
+    if (pathEl) {
+        pathEl.textContent = _scanLastLogPathRedacted || (progress.diagnostics_available
+            ? appT('scan.diagnosticsLogReady', 'Support log is ready to copy or open.')
+            : '');
+        pathEl.title = _scanLastLogPathRedacted || '';
+    }
+    if (stopButton) {
+        stopButton.disabled = progress.status === 'cancelling';
+        stopButton.textContent = progress.status === 'cancelling'
+            ? appT('scan.stoppingButton', 'Stopping...')
+            : appT('scan.stopButton', 'Stop Import');
+    }
 }
 
 function _initBgScanProgressButtons() {
@@ -5390,6 +5582,7 @@ async function pollScanProgress(retryCount = 0) {
         });
 
         _updateBgScanProgress(progress);
+        updateScanDiagnosticsCard(progress);
 
         if (progress.library_ready && !_scanLibraryReadyHandled && progress.status === 'running') {
             _scanLibraryReadyHandled = true;
@@ -5430,6 +5623,7 @@ async function pollScanProgress(retryCount = 0) {
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
             _refreshScanDrivenViews(true, { refreshGallery: true });
             // Auto-tag: if checkbox was on, trigger tagging with current settings
             const autoTagCheckbox = document.getElementById('scan-auto-tag');
@@ -5455,6 +5649,7 @@ async function pollScanProgress(retryCount = 0) {
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
         } else if (progress.status === 'error') {
             showToast(progress.message || appT('scan.failedStatus', 'Import failed'), 'error');
             $('#scan-progress-container').style.display = 'none';
@@ -5465,6 +5660,7 @@ async function pollScanProgress(retryCount = 0) {
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
         } else if (progress.status === 'running') {
             setScanCancelButtonState('running');
             setTimeout(() => pollScanProgress(0), 500);
@@ -5483,6 +5679,7 @@ async function pollScanProgress(retryCount = 0) {
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
         }
     } catch (error) {
         Logger.error('Poll error:', error);
@@ -5498,6 +5695,7 @@ async function pollScanProgress(retryCount = 0) {
             _scanLibraryReadyHandled = false;
             _scanLastAutoRefreshAt = 0;
             _hideBgScanProgress();
+            updateScanDiagnosticsCard(null);
         }
     }
 }
@@ -5545,6 +5743,11 @@ let _tagLastCurrent = 0;
 let _tagLastTotal = 0;
 let _scanProgressTracker = createProgressTracker();
 let _scanBackgroundProgressTracker = createProgressTracker();
+let _scanLastProgress = null;
+let _scanLastLogPath = '';
+let _scanLastLogPathRedacted = '';
+const SCAN_DIAGNOSTICS_HOLD_MS = 10000;
+let _scanDiagnosticsHoldUntil = 0;
 let _scanLibraryReadyHandled = false;
 let _scanLastAutoRefreshAt = 0;
 let _reconnectPollTimer = null;
@@ -7938,6 +8141,118 @@ function renderModalActivePrompts() {
 
 // ============== Model Manager ==============
 
+function renderFeatureAvailabilityNotice() {
+    const summaryEl = $('#model-manager-summary');
+    const gridEl = $('#model-manager-grid');
+    if (!summaryEl || !gridEl) return;
+
+    let noticeEl = document.getElementById('feature-availability-notice');
+    if (!noticeEl) {
+        noticeEl = document.createElement('section');
+        noticeEl.id = 'feature-availability-notice';
+        noticeEl.className = 'feature-availability-notice';
+        gridEl.parentElement.insertBefore(noticeEl, gridEl);
+    }
+
+    const readyItems = [
+        appT('features.ready.gallery', 'Import / scan folders, browse gallery, read SD metadata'),
+        appT('features.ready.filters', 'Filter, search, batch select, auto-separate, and WASD manual sort'),
+        appT('features.ready.prompts', 'Prompt Lab, tag library, export sidecar .txt / .json files'),
+        appT('features.ready.censorManual', 'Manual censor editor tools: brush, pen, eraser, clone, preview/save'),
+        appT('features.ready.wd14', 'WD14 / ONNX tagging after model-file download; no extra Python runtime install'),
+    ];
+    const prepareItems = [
+        appT('features.prepare.clip', 'CLIP similarity / duplicate search: installs fastembed and downloads CLIP files'),
+        appT('features.prepare.aesthetic', 'Aesthetic scoring: installs torch + open-clip and downloads CLIP/head files'),
+        appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors and downloads Kaloscope files'),
+        appT('features.prepare.censorAi', 'AI censor detectors: NudeNet / Privacy YOLO / SAM3 install their own runtimes and model files'),
+        appT('features.prepare.toriigate', 'ToriiGate VLM tagging: heavy PyTorch runtime + about 5 GB model download on first use'),
+    ];
+
+    noticeEl.innerHTML = `
+        <div class="feature-availability-card is-ready">
+            <strong>${escapeHtml(appT('features.readyTitle', 'Ready after first run.bat'))}</strong>
+            <ul>${readyItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+        </div>
+        <div class="feature-availability-card is-prepare">
+            <strong>${escapeHtml(appT('features.prepareTitle', 'Needs Prepare / Download'))}</strong>
+            <p>${escapeHtml(appT('features.prepareRestartNote', 'If Prepare installs Python packages, restart the app before using that feature. The UI will warn you when this happens.'))}</p>
+            <ul>${prepareItems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+        </div>
+    `;
+}
+
+function getThumbnailCacheSettings(data = {}) {
+    const settingsLimit = Number(data?.settings?.thumbnail_cache_max_mb);
+    if (Number.isFinite(settingsLimit)) return settingsLimit;
+    const statsLimit = Number(data?.thumbnail_cache?.max_size_mb);
+    if (Number.isFinite(statsLimit)) return statsLimit;
+    return 500;
+}
+
+async function requestCoreRuntimeRebuild() {
+    const runtime = await API.getCacheStatus().then(data => data?.runtime_environment || {}).catch(() => ({}));
+    const venvSize = runtime.venv_size_complete === false
+        ? appT('disk.runtimeSizeUnknown', 'large / not fully scanned')
+        : _formatBytes(Number(runtime.venv_size_bytes || 0));
+    showConfirm(
+        appT('disk.rebuildCoreConfirmTitle', 'Rebuild lightweight runtime on next start?'),
+        appT('disk.rebuildCoreConfirmBody', 'This schedules the app-owned Python runtime to be rebuilt the next time you start the app, then core dependencies are reinstalled. User data, images.db, settings, caches, and downloaded models are not deleted. Current runtime size: {size}. Heavy AI Python packages must be prepared again later.', { size: venvSize }),
+        async () => {
+            const button = $('#btn-rebuild-core-runtime');
+            const originalLabel = button?.textContent || '';
+            if (button) {
+                button.disabled = true;
+                button.textContent = appT('disk.rebuildScheduling', 'Scheduling…');
+            }
+            try {
+                await API.rebuildCoreRuntime();
+                showToast(appT('disk.rebuildScheduled', 'Lightweight runtime rebuild scheduled. Close the app and start it again to free the old Python environment.'), 'warning');
+                loadDiskUsage();
+            } catch (error) {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = originalLabel;
+                }
+                showToast(formatUserError(error, appT('disk.rebuildFailed', 'Failed to schedule runtime rebuild')), 'error');
+            }
+        }
+    );
+}
+
+async function saveDiskSettings() {
+    const input = $('#thumbnail-cache-limit-input');
+    const button = $('#btn-save-cache-settings');
+    if (!input || !button) return;
+
+    const rawValue = Number(input.value);
+    if (!Number.isFinite(rawValue) || rawValue < 0 || rawValue > 102400) {
+        showToast(appT('disk.limitInvalid', 'Enter a cache limit from 0 to 102400 MB.'), 'warning');
+        return;
+    }
+
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = appT('disk.saving', 'Saving…');
+    try {
+        const result = await API.setDiskSettings({ thumbnail_cache_max_mb: Math.round(rawValue) });
+        renderDiskUsage({
+            ...(await API.getCacheStatus().catch(() => ({}))),
+            ...result,
+        });
+        const freedBytes = Number(result?.limit_cleanup?.freed_bytes || 0);
+        const message = freedBytes > 0
+            ? appT('disk.limitSavedFreed', 'Cache limit saved. Freed {freed}.', { freed: _formatBytes(freedBytes) })
+            : appT('disk.limitSaved', 'Cache limit saved.');
+        showToast(message, 'success');
+    } catch (error) {
+        button.disabled = false;
+        button.textContent = originalLabel;
+        showToast(formatUserError(error, appT('disk.limitSaveFailed', 'Failed to save cache limit')), 'error');
+    }
+}
+
+
 async function openModelManager() {
     const summaryEl = $('#model-manager-summary');
     const gridEl = $('#model-manager-grid');
@@ -7982,6 +8297,8 @@ function renderModelManager(models = []) {
             <span>${escapeHtml(appT('models.total', 'Tracked runtimes'))}</span>
         </div>
     `;
+
+    renderFeatureAvailabilityNotice();
 
     API.getMirror().then((mirrorData) => {
         const current = mirrorData?.mirror || 'auto';
@@ -8076,6 +8393,17 @@ function renderModelManager(models = []) {
         `;
     }).join('');
 
+    const withRestartReminder = (message, prepareResult) => {
+        if (!prepareResult?.restart_recommended) return message;
+        const packages = Array.isArray(prepareResult.installed_packages)
+            ? prepareResult.installed_packages.join(', ')
+            : '';
+        const reminder = packages
+            ? appT('models.restartAfterInstallWithPackages', 'Installed Python packages: {packages}. Restart the app before using this feature.', { packages })
+            : appT('models.restartAfterInstall', 'Restart the app before using this feature.');
+        return message ? `${message} ${reminder}` : reminder;
+    };
+
     gridEl.querySelectorAll('.btn-prepare-model').forEach((button) => {
         button.addEventListener('click', async () => {
             const modelId = button.dataset.modelId;
@@ -8110,14 +8438,14 @@ function renderModelManager(models = []) {
                     if (pr && !pr.active && pr.model_id === modelId && pr.status) {
                         finished = true;
                         if (pr.status === 'done') {
-                            showToast(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), 'success');
+                            showToast(withRestartReminder(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), pr), pr.restart_recommended ? 'warning' : 'success');
                             const refreshed = await API.getModelStatus();
                             renderModelManager(refreshed.models || []);
                             document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
                             return;
                         }
                         if (pr.status === 'warning') {
-                            showToast(pr.message || appT('models.needsRuntimeToast', 'Model files are present, but runtime setup is incomplete.'), 'warning');
+                            showToast(withRestartReminder(pr.message || appT('models.needsRuntimeToast', 'Model files are present, but runtime setup is incomplete.'), pr), 'warning');
                             const refreshed = await API.getModelStatus();
                             renderModelManager(refreshed.models || []);
                             document.dispatchEvent(new CustomEvent('model-status-changed', { detail: { modelId } }));
@@ -8163,12 +8491,15 @@ function _formatBytes(bytes) {
     return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
+let _modelSetupGuideCleanup = null;
+
 function showModelSetupGuide(pr) {
     // Build a one-off backdrop+dialog so the structured manual_steps from
     // the backend (Civitai login wall, archive verification failure, ...)
     // become an actionable recovery path instead of a stale toast.
-    const existing = document.getElementById('model-setup-guide-backdrop');
-    if (existing) existing.remove();
+    if (_modelSetupGuideCleanup) {
+        _modelSetupGuideCleanup({ restoreFocus: false });
+    }
 
     const provider = String(pr.provider || '').trim();
     const message = String(pr.message || appT('models.prepareFailed', 'Model setup failed'));
@@ -8185,6 +8516,7 @@ function showModelSetupGuide(pr) {
     const copyLabel = appT('models.copyTargetDir', 'Copy folder path');
     const closeLabel = appT('models.guideClose', 'Close');
 
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const backdrop = document.createElement('div');
     backdrop.id = 'model-setup-guide-backdrop';
     backdrop.className = 'modal-backdrop visible';
@@ -8229,14 +8561,40 @@ function showModelSetupGuide(pr) {
     backdrop.appendChild(dialog);
     document.body.appendChild(backdrop);
 
-    const close = () => {
+    const getFocusableElements = () => Array.from(dialog.querySelectorAll(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+    )).filter((el) => {
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden';
+    });
+
+    const close = ({ restoreFocus = true } = {}) => {
         document.removeEventListener('keydown', onKeydown);
+        if (_modelSetupGuideCleanup === close) {
+            _modelSetupGuideCleanup = null;
+        }
         backdrop.remove();
+        if (restoreFocus) previousFocus?.focus?.();
     };
     const onKeydown = (e) => {
         if (e.key === 'Escape') {
             e.preventDefault();
             close();
+        } else if (e.key === 'Tab') {
+            const focusable = getFocusableElements();
+            if (focusable.length === 0) {
+                e.preventDefault();
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
         }
     };
 
@@ -8246,6 +8604,7 @@ function showModelSetupGuide(pr) {
     });
     dialog.addEventListener('click', (e) => e.stopPropagation());
     document.addEventListener('keydown', onKeydown);
+    _modelSetupGuideCleanup = close;
 
     document.getElementById('model-setup-guide-close-x')?.addEventListener('click', close);
     document.getElementById('model-setup-guide-close')?.addEventListener('click', close);
@@ -8310,8 +8669,9 @@ function renderDiskUsage(data) {
     const preserved = Array.isArray(data?.preserved) ? data.preserved : [];
 
     const safeRows = safe.map((entry) => {
+        const sizeUnknown = entry.size_complete === false;
         const checked = entry.size_bytes > 0 ? 'checked' : '';
-        const sizeText = _formatBytes(entry.size_bytes);
+        const sizeText = sizeUnknown ? appT('disk.sizeNotFullyScanned', 'large / not fully scanned') : _formatBytes(entry.size_bytes);
         return `
             <label class="disk-cache-row" data-key="${escapeHtml(entry.key)}">
                 <input type="checkbox" class="disk-cache-checkbox" data-key="${escapeHtml(entry.key)}" ${checked}>
@@ -8322,33 +8682,99 @@ function renderDiskUsage(data) {
         `;
     }).join('');
 
-    const preservedRows = preserved.map((entry) => `
-        <div class="disk-preserved-row">
-            <span class="disk-preserved-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
-            <span class="disk-preserved-size">${escapeHtml(_formatBytes(entry.size_bytes))}</span>
-        </div>
-    `).join('');
+    const preservedRows = preserved.map((entry) => {
+        const sizeLabel = entry.size_complete === false
+            ? appT('disk.sizeNotFullyScanned', 'large / not fully scanned')
+            : _formatBytes(entry.size_bytes);
+        const pathHtml = entry.path
+            ? `<span class="disk-preserved-path" title="${escapeHtml(entry.path)}">${escapeHtml(entry.path)}</span>`
+            : '';
+        return `
+            <div class="disk-preserved-row">
+                <span class="disk-preserved-name">${escapeHtml(appT(entry.label_key, entry.key))}</span>
+                <span class="disk-preserved-size">${escapeHtml(sizeLabel)}</span>
+                ${pathHtml}
+            </div>
+        `;
+    }).join('');
 
-    const totalSafe = safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
-    const totalPreserved = preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0);
+    const totalSafeComplete = safe.every(e => e.size_complete !== false);
+    const totalSafe = totalSafeComplete
+        ? safe.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0)
+        : null;
+    const totalSafeText = totalSafeComplete
+        ? _formatBytes(totalSafe)
+        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
+    const hasCleanableSafe = safe.some(e => e.exists && (e.size_complete === false || Number(e.size_bytes || 0) > 0));
+    const totalPreservedComplete = preserved.every(e => e.size_complete !== false);
+    const totalPreserved = totalPreservedComplete
+        ? preserved.reduce((sum, e) => sum + Number(e.size_bytes || 0), 0)
+        : null;
+    const totalPreservedText = totalPreservedComplete
+        ? _formatBytes(totalPreserved)
+        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
+    const thumbnailLimit = getThumbnailCacheSettings(data);
+    const thumbnailStats = data?.thumbnail_cache || {};
+    const runtime = data?.runtime_environment || {};
+    const thumbnailSafeEntry = safe.find(entry => entry.key === 'thumbnails');
+    const thumbnailSizeKnown = thumbnailStats.total_size_bytes != null || thumbnailSafeEntry?.size_complete !== false;
+    const thumbnailCurrent = Number(thumbnailStats.total_size_bytes ?? thumbnailSafeEntry?.size_bytes ?? 0);
+    const thumbnailCurrentText = thumbnailSizeKnown
+        ? _formatBytes(thumbnailCurrent)
+        : appT('disk.sizeNotFullyScanned', 'large / not fully scanned');
+    const thumbnailLimitText = thumbnailLimit > 0
+        ? appT('disk.thumbnailLimitStatus', '{current} used / {limit} limit', { current: thumbnailCurrentText, limit: `${thumbnailLimit} MB` })
+        : appT('disk.thumbnailLimitDisabled', 'Persistent thumbnail cache is disabled.');
+    const runtimeSizeKnown = runtime.venv_size_complete !== false;
+    const runtimeSize = Number(runtime.venv_size_bytes || 0);
+    const rebuildPending = Boolean(runtime.rebuild_core_pending);
+    const runtimeStatusText = rebuildPending
+        ? appT('disk.rebuildPending', 'Rebuild scheduled for next start')
+        : runtimeSizeKnown
+            ? appT('disk.runtimeSizeStatus', '{size} currently used', { size: _formatBytes(runtimeSize) })
+            : appT('disk.runtimeSizeUnknownStatus', 'Large / not fully scanned');
 
     bodyEl.innerHTML = `
+        <div class="disk-section disk-settings-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.thumbnailLimitTitle', 'Thumbnail cache limit'))}</strong>
+                <span class="disk-section-total">${escapeHtml(thumbnailLimitText)}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.thumbnailLimitHint', 'Default is 500 MB. Lower values save disk space but may regenerate thumbnails more often. 0 disables persistent thumbnail caching. Original images are never deleted.'))}</p>
+            <p class="disk-section-hint disk-tradeoff-hint">${escapeHtml(appT('disk.thumbnailTradeoffHint', 'Storage vs speed: lowering this limit saves disk, but scrolling large galleries can use more CPU/IO because thumbnails must be recreated.'))}</p>
+            <div class="disk-setting-row">
+                <label for="thumbnail-cache-limit-input">${escapeHtml(appT('disk.thumbnailLimitLabel', 'Max thumbnail cache'))}</label>
+                <input id="thumbnail-cache-limit-input" class="input-field" type="number" min="0" max="102400" step="50" value="${escapeHtml(String(thumbnailLimit))}">
+                <span class="disk-setting-unit">MB</span>
+                <button class="btn btn-primary btn-small" id="btn-save-cache-settings">${escapeHtml(appT('disk.saveSettings', 'Save'))}</button>
+            </div>
+        </div>
+        <div class="disk-section disk-runtime-section">
+            <div class="disk-section-header">
+                <strong>${escapeHtml(appT('disk.runtimeTitle', 'Python runtime environment'))}</strong>
+                <span class="disk-section-total">${escapeHtml(runtimeStatusText)}</span>
+            </div>
+            <p class="disk-section-hint">${escapeHtml(appT('disk.runtimeHint', 'If an old install already pulled heavy AI Python packages, schedule a lightweight rebuild. The next launcher start rebuilds only the Python runtime and reinstalls core dependencies; data, images.db, settings, models, and caches are kept.'))}</p>
+            <div class="disk-actions">
+                <button class="btn btn-ghost btn-small" id="btn-rebuild-core-runtime" ${rebuildPending ? 'disabled' : ''}>${escapeHtml(rebuildPending ? appT('disk.rebuildPendingButton', 'Rebuild scheduled') : appT('disk.rebuildCoreRuntime', 'Rebuild lightweight runtime on next start'))}</button>
+            </div>
+        </div>
         <div class="disk-section">
             <div class="disk-section-header">
                 <strong>${escapeHtml(appT('disk.safeToClean', 'Safe to clean'))}</strong>
-                <span class="disk-section-total">${escapeHtml(_formatBytes(totalSafe))}</span>
+                <span class="disk-section-total">${escapeHtml(totalSafeText)}</span>
             </div>
             <p class="disk-section-hint">${escapeHtml(appT('disk.safeHint', 'These caches will be regenerated as needed if you delete them.'))}</p>
             <div class="disk-cache-list">${safeRows || `<div class="disk-empty">${escapeHtml(appT('disk.nothingToClean', 'Nothing to clean.'))}</div>`}</div>
             <div class="disk-actions">
-                <button class="btn btn-primary btn-small" id="btn-clean-caches" ${totalSafe === 0 ? 'disabled' : ''}>${escapeHtml(appT('disk.cleanSelected', 'Clean Selected'))}</button>
+                <button class="btn btn-primary btn-small" id="btn-clean-caches" ${hasCleanableSafe ? '' : 'disabled'}>${escapeHtml(appT('disk.cleanSelected', 'Clean Selected'))}</button>
                 <button class="btn btn-ghost btn-small" id="btn-refresh-disk-usage">${escapeHtml(appT('disk.refresh', 'Refresh'))}</button>
             </div>
         </div>
         <div class="disk-section">
             <div class="disk-section-header">
                 <strong>${escapeHtml(appT('disk.preserved', 'Preserved (do not delete)'))}</strong>
-                <span class="disk-section-total">${escapeHtml(_formatBytes(totalPreserved))}</span>
+                <span class="disk-section-total">${escapeHtml(totalPreservedText)}</span>
             </div>
             <p class="disk-section-hint">${escapeHtml(appT('disk.preservedHint', 'These contain models, settings, or your personal data. The app will not delete them from this screen.'))}</p>
             <div class="disk-preserved-list">${preservedRows}</div>
@@ -8358,32 +8784,54 @@ function renderDiskUsage(data) {
     $('#btn-refresh-disk-usage')?.addEventListener('click', () => {
         loadDiskUsage();
     });
+    $('#btn-save-cache-settings')?.addEventListener('click', saveDiskSettings);
+    $('#btn-rebuild-core-runtime')?.addEventListener('click', requestCoreRuntimeRebuild);
+    $('#thumbnail-cache-limit-input')?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') saveDiskSettings();
+    });
     $('#btn-clean-caches')?.addEventListener('click', async () => {
         const checked = Array.from(bodyEl.querySelectorAll('.disk-cache-checkbox:checked')).map((el) => el.dataset.key);
         if (checked.length === 0) {
             showToast(appT('disk.selectAtLeastOne', 'Select at least one cache to clean.'), 'warning');
             return;
         }
-        const btn = $('#btn-clean-caches');
-        const original = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = appT('disk.cleaning', 'Cleaning…');
-        try {
-            const result = await API.cleanCaches(checked);
-            const cleaned = Array.isArray(result?.cleaned) ? result.cleaned : [];
-            const errors = Array.isArray(result?.errors) ? result.errors : [];
-            const totalFreed = cleaned.reduce((sum, e) => sum + Number(e.freed_bytes || 0), 0);
-            if (errors.length > 0) {
-                showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} item(s) had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
-            } else {
-                showToast(appT('disk.cleanedSuccess', 'Freed {freed} of disk space.', { freed: _formatBytes(totalFreed) }), 'success');
+        const runClean = async () => {
+            const btn = $('#btn-clean-caches');
+            const original = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = appT('disk.cleaning', 'Cleaning…');
+            try {
+                const result = await API.cleanCaches(checked);
+                const cleaned = Array.isArray(result?.cleaned) ? result.cleaned : [];
+                const errors = Array.isArray(result?.errors) ? result.errors : [];
+                const totalFreed = cleaned.reduce((sum, e) => sum + Number(e.freed_bytes || 0), 0);
+                if (errors.length > 0) {
+                    showToast(appT('disk.cleanedWithErrors', 'Cleaned {freed}, but {count} item(s) had problems.', { freed: _formatBytes(totalFreed), count: errors.length }), 'warning');
+                } else {
+                    showToast(appT('disk.cleanedSuccess', 'Freed {freed} of disk space.', { freed: _formatBytes(totalFreed) }), 'success');
+                }
+                loadDiskUsage();
+            } catch (error) {
+                showToast(formatUserError(error, appT('disk.cleanFailed', 'Failed to clean caches')), 'error');
+                btn.disabled = false;
+                btn.textContent = original;
             }
-            loadDiskUsage();
-        } catch (error) {
-            showToast(formatUserError(error, appT('disk.cleanFailed', 'Failed to clean caches')), 'error');
-            btn.disabled = false;
-            btn.textContent = original;
+        };
+        const unknownEntries = checked
+            .map((key) => safe.find((entry) => entry.key === key))
+            .filter((entry) => entry?.size_complete === false);
+        if (unknownEntries.length > 0) {
+            const names = unknownEntries
+                .map((entry) => appT(entry.label_key, entry.key))
+                .join(', ');
+            showConfirm(
+                appT('disk.cleanUnknownConfirmTitle', 'Clean cache with unknown size?'),
+                appT('disk.cleanUnknownConfirmBody', 'The app could not fully scan the size for: {items}. Clean anyway? Only selected app-owned caches will be emptied; images.db, settings, models, and original images are not deleted.', { items: names }),
+                runClean
+            );
+            return;
         }
+        await runClean();
     });
 }
 
@@ -9115,6 +9563,14 @@ function refreshLocalizedImageCount() {
 }
 
 function refreshLocalizedDynamicUi() {
+    if (_scanLastProgress) {
+        _updateBgScanProgress(_scanLastProgress);
+        updateScanDiagnosticsCard(_scanLastProgress);
+        const scanCancelButton = $('#btn-cancel-scan');
+        if (scanCancelButton?.dataset.liveLabel === '1') {
+            setScanCancelButtonState(_scanLastProgress.status === 'cancelling' ? 'cancelling' : 'running');
+        }
+    }
     refreshLocalizedImageCount();
     updateFilterSummary();
     updateSelectionUI();
@@ -9594,6 +10050,9 @@ function buildAppContext() {
         removeGalleryImagesByIds,
         addRecentFolder,
         getRecentFolders,
+        updateScanDiagnosticsCard,
+        copyScanDiagnostics,
+        openScanLogFile,
         clampTaggerChunkToAvailableOption,
         $,
         $$

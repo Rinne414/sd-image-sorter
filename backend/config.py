@@ -4,6 +4,7 @@ Configuration management for SD Image Sorter.
 All configurable values are centralized here with environment variable support.
 Copy .env.example to .env and customize as needed.
 """
+import json
 import logging
 import os
 import tempfile
@@ -110,6 +111,19 @@ def read_float_env(name: str, default: float) -> float:
         raise ValueError(f"Invalid {name}: expected number, got {raw_value!r}") from exc
 
 
+def read_bool_env(name: str, default: bool) -> bool:
+    """Read a boolean env var with a clear startup error for invalid values."""
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"Invalid {name}: expected boolean, got {raw_value!r}")
+
+
 PROJECT_ROOT: Path = _get_project_root()
 BACKEND_DIR: Path = _get_backend_dir()
 PACKAGE_ROOT: Path = PROJECT_ROOT
@@ -151,6 +165,9 @@ THUMBNAIL_DIR: Path = Path(
 ).expanduser()
 UPDATE_CHANNEL_CONFIG_PATH: Path = CONFIG_DIR / "update-channel.json"
 DOWNLOAD_MIRROR_CONFIG_PATH: Path = CONFIG_DIR / "download-mirror.json"
+APP_SETTINGS_CONFIG_PATH: Path = CONFIG_DIR / "app-settings.json"
+DEFAULT_THUMBNAIL_CACHE_MAX_MB: int = 500
+MAX_THUMBNAIL_CACHE_MAX_MB: int = 102400
 
 
 VALID_MIRRORS = ("auto", "hf-mirror", "modelscope")
@@ -194,15 +211,73 @@ def get_download_mirror() -> str:
 
 
 def save_download_mirror(mirror: str) -> None:
-    import json as _json
     mirror = str(mirror).strip().lower()
     if mirror not in VALID_MIRRORS:
         mirror = "auto"
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     DOWNLOAD_MIRROR_CONFIG_PATH.write_text(
-        _json.dumps({"mirror": mirror}, indent=2),
+        json.dumps({"mirror": mirror}, indent=2),
         encoding="utf-8",
     )
+
+
+def _read_app_settings() -> dict:
+    if not APP_SETTINGS_CONFIG_PATH.exists():
+        return {}
+    try:
+        raw = APP_SETTINGS_CONFIG_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.warning("Could not read app settings %s: %s", APP_SETTINGS_CONFIG_PATH, exc)
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        logger.warning("App settings file %s is corrupt (%s); using defaults", APP_SETTINGS_CONFIG_PATH, exc)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_app_settings(settings: dict) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    APP_SETTINGS_CONFIG_PATH.write_text(
+        json.dumps(settings, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _normalize_thumbnail_cache_max_mb(value: object, *, default: int = DEFAULT_THUMBNAIL_CACHE_MAX_MB) -> int:
+    try:
+        max_mb = int(value)
+    except (TypeError, ValueError):
+        return default
+    if max_mb < 0:
+        return default
+    return min(max_mb, MAX_THUMBNAIL_CACHE_MAX_MB)
+
+
+def get_thumbnail_cache_max_mb() -> int:
+    raw_env = os.environ.get("SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB")
+    if raw_env is not None:
+        try:
+            env_value = int(raw_env)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB: expected integer, got {raw_env!r}"
+            ) from exc
+        if env_value < 0:
+            raise ValueError("Invalid SD_IMAGE_SORTER_THUMBNAIL_CACHE_MAX_MB: expected integer >= 0")
+        return min(env_value, MAX_THUMBNAIL_CACHE_MAX_MB)
+
+    settings = _read_app_settings()
+    return _normalize_thumbnail_cache_max_mb(settings.get("thumbnail_cache_max_mb"))
+
+
+def save_thumbnail_cache_max_mb(max_mb: int) -> int:
+    normalized = _normalize_thumbnail_cache_max_mb(max_mb)
+    settings = _read_app_settings()
+    settings["thumbnail_cache_max_mb"] = normalized
+    _write_app_settings(settings)
+    return normalized
 MANUAL_SORT_SESSION_FILE: str = os.environ.get(
     "SD_IMAGE_SORTER_SORT_SESSION_FILE",
     str(STATE_DIR / "sort-session.json"),
@@ -240,10 +315,7 @@ SERVER_PORT: int = read_int_env("SD_IMAGE_SORTER_PORT", 8487)
 CORS_ORIGIN_REGEX: str = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
 
 # Lightweight API rate limiting
-RATE_LIMIT_ENABLED: bool = os.environ.get(
-    "SD_IMAGE_SORTER_ENABLE_RATE_LIMIT",
-    "true",
-).lower() in ("true", "1", "yes")
+RATE_LIMIT_ENABLED: bool = read_bool_env("SD_IMAGE_SORTER_ENABLE_RATE_LIMIT", True)
 RATE_LIMIT_WINDOW_SECONDS: int = max(
     1,
     read_int_env("SD_IMAGE_SORTER_RATE_LIMIT_WINDOW_SECONDS", 60),
@@ -252,10 +324,7 @@ RATE_LIMIT_MAX_REQUESTS: int = max(
     1,
     read_int_env("SD_IMAGE_SORTER_RATE_LIMIT_MAX_REQUESTS", 1000),
 )
-RATE_LIMIT_APPLY_TO_LOOPBACK: bool = os.environ.get(
-    "SD_IMAGE_SORTER_RATE_LIMIT_LOOPBACK",
-    "false",
-).lower() in ("true", "1", "yes")
+RATE_LIMIT_APPLY_TO_LOOPBACK: bool = read_bool_env("SD_IMAGE_SORTER_RATE_LIMIT_LOOPBACK", False)
 
 
 # =============================================================================
@@ -595,6 +664,20 @@ LOG_LEVEL: str = os.environ.get(
     "SD_IMAGE_SORTER_LOG_LEVEL",
     "INFO"
 )
+
+# Keep the console focused on app-level status by default. Set to true when
+# diagnosing HTTP routing/client polling noise.
+LOG_ACCESS_ENABLED: bool = read_bool_env("SD_IMAGE_SORTER_ACCESS_LOG", False)
+
+# Console scrollback can be truncated by terminals/launchers, so keep a small
+# rotating backend log for support/debugging by default.
+LOG_FILE_ENABLED: bool = read_bool_env("SD_IMAGE_SORTER_LOG_FILE", True)
+LOG_FILE_PATH: str = os.environ.get(
+    "SD_IMAGE_SORTER_LOG_FILE_PATH",
+    str(DATA_DIR / "logs" / "backend.log"),
+)
+LOG_FILE_MAX_BYTES: int = max(64 * 1024, read_int_env("SD_IMAGE_SORTER_LOG_FILE_MAX_BYTES", 5 * 1024 * 1024))
+LOG_FILE_BACKUP_COUNT: int = max(1, read_int_env("SD_IMAGE_SORTER_LOG_FILE_BACKUP_COUNT", 3))
 
 
 # =============================================================================

@@ -89,6 +89,25 @@ class TestCorruptedFileErrors:
         # Generator should be unknown for corrupted files
         assert result["generator"] == "unknown"
 
+
+    def test_corrupted_png_does_not_log_warning_or_error(self, tmp_path: Path, caplog):
+        """Known-bad images should be reported in scan results, not spam console tracebacks."""
+        corrupted_path = tmp_path / "corrupted-noisy.png"
+        corrupted_path.write_bytes(b"not a valid png file content")
+
+        import logging
+
+        with caplog.at_level(logging.DEBUG, logger="metadata_parser"):
+            result = parse_image(str(corrupted_path))
+
+        assert result["generator"] == "unknown"
+        assert result.get("parse_error")
+        noisy_records = [
+            record for record in caplog.records
+            if record.levelno >= logging.WARNING and "corrupted-noisy.png" in record.getMessage()
+        ]
+        assert noisy_records == []
+
     def test_parse_truncated_file(self, tmp_path: Path):
         """Parsing truncated file should be handled."""
         from PIL import Image

@@ -23,7 +23,7 @@ def test_non_windows_does_not_run_pip(monkeypatch):
         "_torch_probe",
         lambda: {"torch_version": "2.11.0+cpu", "torchvision_version": "0.26.0", "torch_cuda_build": None, "torch_cuda_available": False},
     )
-    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["sam3==0.1.3"])
+    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["transformers>=5.6.0"])
 
     result = repair_torch_runtime.repair_windows_torch_runtime()
 
@@ -41,7 +41,7 @@ def test_amd_windows_keeps_standard_torch(monkeypatch):
         "_torch_probe",
         lambda: {"torch_version": "2.11.0+cpu", "torchvision_version": "0.26.0", "torch_cuda_build": None, "torch_cuda_available": False},
     )
-    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["sam3==0.1.3"])
+    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["transformers>=5.6.0"])
 
     result = repair_torch_runtime.repair_windows_torch_runtime()
 
@@ -72,7 +72,7 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
         "_torch_probe_subprocess",
         lambda: {"torch_version": "2.11.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
     )
-    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["sam3==0.1.3", "einops"])
+    monkeypatch.setattr(repair_torch_runtime, "_missing_sam3_runtime_packages", lambda: ["transformers>=5.6.0", "safetensors"])
     monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
 
     result = repair_torch_runtime.repair_windows_torch_runtime()
@@ -97,8 +97,10 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
         "preserve the numpy 1.x wheels the rest of the install set was "
         "built against."
     )
-    assert "sam3==0.1.3" in pip_calls[1]
-    assert "einops" in pip_calls[1]
+    assert "transformers>=5.6.0" in pip_calls[1]
+    assert "safetensors" in pip_calls[1]
+    assert "sam3==0.1.3" not in pip_calls[1]
+    assert "decord" not in pip_calls[1]
 
 
 def test_cuda_install_uses_fresh_subprocess_probe_after_pip_reinstall(monkeypatch):

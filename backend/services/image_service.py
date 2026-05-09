@@ -36,6 +36,7 @@ from thumbnail_cache import (
     generate_placeholder_thumbnail,
     clear_cache as clear_thumbnail_cache,
     cleanup_old_cache,
+    enforce_cache_size_limit,
     get_cache_stats,
     SUPPORTED_SIZES,
 )
@@ -1934,6 +1935,7 @@ class ImageService:
         return {"deleted_count": count}
 
     def cleanup_thumbnail_cache(self, max_age_days: int = 30) -> Dict[str, Any]:
-        """Remove cached thumbnails older than max_age_days."""
+        """Remove cached thumbnails older than max_age_days, then enforce size cap."""
         count = cleanup_old_cache(max_age_days)
-        return {"deleted_count": count, "max_age_days": max_age_days}
+        size_cleanup = enforce_cache_size_limit(force=True)
+        return {"deleted_count": count, "max_age_days": max_age_days, "size_cleanup": size_cleanup}

@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/disk", tags=["disk"])
 
 
+class CacheSettingsRequest(BaseModel):
+    thumbnail_cache_max_mb: int = Field(..., ge=0, le=102400)
+
+
 class CleanRequest(BaseModel):
     # Caller must provide explicit keys. Server enforces a whitelist
     # (``disk_service.SAFE_TO_CLEAN_KEYS``) so an unexpected client cannot
@@ -30,6 +34,18 @@ class CleanRequest(BaseModel):
 def cache_status():
     """Return safe-to-clean and preserved directory sizes."""
     return disk_service.get_cache_status()
+
+
+@router.post("/settings", summary="Update disk/cache settings")
+def update_settings(request: CacheSettingsRequest):
+    """Persist cache limits and apply safe cleanup immediately."""
+    return disk_service.update_cache_settings(thumbnail_cache_max_mb=request.thumbnail_cache_max_mb)
+
+
+@router.post("/runtime/rebuild-core", summary="Schedule lightweight Python environment rebuild")
+def rebuild_core_runtime():
+    """Schedule backend/venv rebuild for the next launcher start."""
+    return disk_service.request_core_runtime_rebuild()
 
 
 @router.post("/cleanup", summary="Wipe whitelisted cache directories")
