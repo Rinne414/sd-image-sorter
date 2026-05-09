@@ -4,6 +4,7 @@ import io
 import json
 import sys
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -41,6 +42,7 @@ def _zip_payload(files: dict[str, bytes]) -> bytes:
 def _fake_health(default_model_path: str = "") -> dict:
     return {
         "wd14": {"installed_models": [], "model_path": None},
+        "toriigate": {"available": False, "model_name": "toriigate-0.5", "model_dir": "/models/toriigate/toriigate-0.5", "message": "missing"},
         "clip": {"available": False, "runtime_loaded": False, "model_path": None, "message": "missing"},
         "artist": {"available": False, "checkpoint_path": None, "runtime_path": None, "message": "missing"},
         "censor": {
@@ -58,7 +60,7 @@ def test_model_inventory_is_built_without_router_imports(monkeypatch):
     inventory = model_service.ModelService().build_model_inventory()
 
     model_ids = {item["id"] for item in inventory}
-    assert {"wd14", "clip", "aesthetic", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
+    assert {"wd14", "toriigate", "clip", "aesthetic", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
     assert all("status" in item and "download_supported" in item for item in inventory)
 
 
@@ -138,6 +140,28 @@ def test_download_privacy_yolo_bundle_returns_auth_payload_for_html_login(monkey
     assert exc_info.value.payload["external_url"] == model_service.PRIVACY_YOLO_PAGE_URL
 
 
+
+
+def test_prepare_model_returns_restart_hint_when_optional_dependencies_installed(monkeypatch):
+    installed_groups = []
+
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: installed_groups.append(group) or model_service.DependencyInstallResult(("fastembed>=0.4.0",), True),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "similarity",
+        SimpleNamespace(ensure_clip_model_ready=lambda: "/models/clip/model.onnx"),
+    )
+
+    result = model_service.ModelService().prepare_model("clip")
+
+    assert installed_groups == ["clip"]
+    assert result["restart_recommended"] is True
+    assert result["installed_packages"] == ["fastembed>=0.4.0"]
+
 def test_prepare_model_unknown_id_is_domain_error():
     with pytest.raises(ValueError, match="cannot be prepared"):
         model_service.ModelService().prepare_model("not-a-model")
@@ -149,21 +173,22 @@ def test_prepare_sam3_existing_checkpoint_reports_runtime_gap(monkeypatch):
     health["censor"]["sam3"] = {
         "available": False,
         "checkpoint_path": checkpoint,
-        "missing_dependencies": ["sam3", "einops"],
-        "missing_dependency_packages": ["sam3", "einops"],
+        "missing_dependencies": ["transformers", "safetensors"],
+        "missing_dependency_packages": ["transformers", "safetensors"],
         "cuda_available": False,
         "torch_cuda_build": None,
-        "message": "SAM3 checkpoint is installed, but SAM3 is not ready: missing Python packages: sam3, einops; this app's Python has CPU-only PyTorch; SAM3 needs a CUDA-enabled Torch build.",
+        "message": "SAM3 checkpoint is installed, but SAM3 is not ready: missing Python packages: transformers, safetensors; this app's Python has CPU-only PyTorch; SAM3 needs a CUDA-enabled Torch build.",
     }
     monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
     monkeypatch.setattr(model_service, "get_model_health", lambda: health)
+    monkeypatch.setattr(model_service, "ensure_group", lambda group: model_service.DependencyInstallResult((), False))
 
     result = model_service.ModelService().prepare_model("sam3")
 
     assert result["status"] == "needs_runtime"
     assert result["ready"] is False
     assert result["paths"]["checkpoint_path"] == checkpoint
-    assert result["missing_dependency_packages"] == ["sam3", "einops"]
+    assert result["missing_dependency_packages"] == ["transformers", "safetensors"]
     assert "checkpoint is installed" in result["message"]
     assert "CPU-only PyTorch" in result["message"]
 
@@ -215,6 +240,7 @@ def test_prepare_sam3_existing_checkpoint_repairs_runtime_before_final_status(mo
 
     monkeypatch.setattr(model_service, "get_sam3_checkpoint_path", lambda: checkpoint)
     monkeypatch.setattr(model_service, "get_model_health", lambda: next(health_results))
+    monkeypatch.setattr(model_service, "ensure_group", lambda group: model_service.DependencyInstallResult((), False))
     monkeypatch.setattr(
         model_service,
         "_repair_sam3_runtime_if_possible",
@@ -235,8 +261,8 @@ def test_model_inventory_explains_sam3_checkpoint_with_missing_runtime(monkeypat
     health["censor"]["sam3"] = {
         "available": False,
         "checkpoint_path": checkpoint,
-        "missing_dependencies": ["sam3", "einops"],
-        "missing_dependency_packages": ["sam3", "einops"],
+        "missing_dependencies": ["transformers", "safetensors"],
+        "missing_dependency_packages": ["transformers", "safetensors"],
         "cuda_available": False,
         "torch_version": "2.11.0+cpu",
         "torch_cuda_build": None,
@@ -250,7 +276,7 @@ def test_model_inventory_explains_sam3_checkpoint_with_missing_runtime(monkeypat
 
     assert sam3["status"] == "missing"
     assert sam3["message_key"] == "models.sam3.missingDepsCpuTorch"
-    assert sam3["message_params"] == {"deps": "sam3, einops"}
+    assert sam3["message_params"] == {"deps": "transformers, safetensors"}
     assert sam3["path"] == checkpoint
 
 
@@ -270,3 +296,51 @@ def test_prepare_router_marks_runtime_gap_as_warning(monkeypatch):
         assert models_router._prepare_result["active"] is False
         assert models_router._prepare_result["status"] == "warning"
         assert models_router._prepare_result["message"] == "runtime missing"
+
+
+def test_prepare_toriigate_returns_restart_hint_when_runtime_installed(monkeypatch):
+    installed_groups = []
+
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: installed_groups.append(group) or model_service.DependencyInstallResult(("torch>=2.0.0",), True),
+    )
+
+    result = model_service.ModelService().prepare_model("toriigate")
+
+    assert installed_groups == ["toriigate"]
+    assert result["status"] == "needs_restart"
+    assert result["restart_recommended"] is True
+
+
+def test_prepare_toriigate_downloads_after_runtime_exists(monkeypatch, tmp_path):
+    installed_groups = []
+    fake_tagger_calls = []
+    model_dir = tmp_path / "toriigate"
+
+    class FakeToriiGateTagger:
+        def __init__(self, model_name="toriigate-0.5", model_dir=None, use_gpu=False):
+            fake_tagger_calls.append((model_name, model_dir, use_gpu))
+
+        def _download_model(self):
+            target = model_dir / "toriigate-0.5"
+            target.mkdir(parents=True)
+            (target / "config.json").write_text("{}", encoding="utf-8")
+            (target / "model.safetensors").write_bytes(b"model")
+            return str(target)
+
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group",
+        lambda group: installed_groups.append(group) or model_service.DependencyInstallResult((), False),
+    )
+    monkeypatch.setattr(model_service, "get_toriigate_model_dir", lambda: str(model_dir))
+    monkeypatch.setitem(sys.modules, "toriigate_tagger", SimpleNamespace(ToriiGateTagger=FakeToriiGateTagger))
+
+    result = model_service.ModelService().prepare_model("toriigate")
+
+    assert installed_groups == ["toriigate"]
+    assert fake_tagger_calls == [("toriigate-0.5", str(model_dir), False)]
+    assert result["status"] == "ok"
+    assert Path(result["paths"]["model_dir"]).name == "toriigate-0.5"

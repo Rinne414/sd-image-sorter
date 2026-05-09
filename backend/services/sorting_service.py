@@ -17,9 +17,10 @@ from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
-from config import MANUAL_SORT_SESSION_FILE
+from config import MANUAL_SORT_SESSION_FILE, read_float_env
 import database as db
 from constants import VALID_ASPECT_RATIOS
+import image_manager as image_manager_module
 from image_manager import scan_folder, move_image, copy_image, parse_metadata_job
 from database import add_images_batch
 from metadata_parser import verify_image_readable
@@ -44,6 +45,17 @@ BATCH_MOVE_FETCH_CHUNK = 500
 SEARCH_MAX_LENGTH = 1000
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
+SCAN_LOG_HEARTBEAT_SECONDS = max(
+    0.0,
+    read_float_env("SD_IMAGE_SORTER_SCAN_LOG_HEARTBEAT_SECONDS", 15.0),
+)
+SCAN_UI_STALLED_SECONDS = max(
+    5.0,
+    read_float_env(
+        "SD_IMAGE_SORTER_SCAN_UI_STALLED_SECONDS",
+        max(45.0, SCAN_LOG_HEARTBEAT_SECONDS * 3),
+    ),
+)
 
 
 class ScanRequest(BaseModel):
@@ -205,10 +217,16 @@ class SortingService:
             "metadata_processed": 0,
             "metadata_total": 0,
             "metadata_total_final": False,
+            "metadata_pending": 0,
             "message": "",
             "current_item": None,
             "started_at": None,
             "updated_at": None,
+            "attention_required": False,
+            "attention_message": "",
+            "stalled_seconds": 0,
+            "diagnostics_available": True,
+            "diagnostics_endpoint": "/api/support/diagnostics",
         }
 
     @staticmethod
@@ -439,10 +457,49 @@ class SortingService:
                 return candidate
         return None
 
+    def _with_scan_attention_fields(self, progress: Dict[str, Any]) -> Dict[str, Any]:
+        """Add UI-facing stalled-scan diagnostics without mutating worker progress."""
+        now = time.time()
+        updated_at = progress.get("updated_at") or progress.get("started_at") or now
+        try:
+            idle_for = max(0.0, now - float(updated_at))
+        except (TypeError, ValueError):
+            idle_for = 0.0
+
+        status = progress.get("status")
+        step = str(progress.get("step") or "scan")
+        is_active = status in {"running", "cancelling"}
+        attention_required = bool(is_active and idle_for >= SCAN_UI_STALLED_SECONDS)
+        if attention_required:
+            pending = int(progress.get("metadata_pending", 0) or 0)
+            current_item = progress.get("current_item") or "current file"
+            if step == "metadata" or pending > 0:
+                message = (
+                    f"No visible metadata progress for {int(idle_for)}s. "
+                    f"Pending metadata jobs: {pending}. Current item: {current_item}. "
+                    "The scan may still be waiting on a slow or broken image; copy diagnostics if this keeps growing."
+                )
+            else:
+                message = (
+                    f"No visible scan progress for {int(idle_for)}s while step={step}. "
+                    f"Current item: {current_item}. Copy diagnostics if this keeps growing."
+                )
+        else:
+            message = ""
+
+        return {
+            **progress,
+            "attention_required": attention_required,
+            "attention_message": message,
+            "stalled_seconds": int(idle_for),
+            "diagnostics_available": True,
+            "diagnostics_endpoint": "/api/support/diagnostics",
+        }
+
     def get_scan_progress(self) -> Dict[str, Any]:
         """Get the current scan progress."""
         with self._scan_lock:
-            return self._scan_progress.copy()
+            return self._with_scan_attention_fields(self._scan_progress.copy())
 
     def get_scan_progress_proxy(self) -> MutableStateProxy:
         """Expose the legacy dict-style scan-progress handle from the service."""
@@ -799,6 +856,7 @@ class SortingService:
                 "metadata_processed": 0,
                 "metadata_total": 0,
                 "metadata_total_final": False,
+                "metadata_pending": 0,
                 "message": "Syncing folder index..." if request.cleanup_missing else "Counting images before import...",
                 "current_item": None,
                 "started_at": started_at,
@@ -810,6 +868,57 @@ class SortingService:
                 return
 
             try:
+                logger.info(
+                    "Scan started: folder=%s recursive=%s quick_import=%s cleanup_missing=%s force_reparse=%s metadata_workers=%s metadata_backlog_limit=%s metadata_timeout=%ss heartbeat=%ss",
+                    normalized_folder_path,
+                    request.recursive,
+                    request.quick_import,
+                    request.cleanup_missing,
+                    request.force_reparse,
+                    image_manager_module.DEFAULT_METADATA_WORKERS,
+                    image_manager_module._metadata_backlog_limit(image_manager_module.DEFAULT_METADATA_WORKERS),
+                    image_manager_module.SCAN_METADATA_TIMEOUT_SECONDS,
+                    SCAN_LOG_HEARTBEAT_SECONDS,
+                )
+
+                heartbeat_stop = threading.Event()
+
+                def heartbeat_loop() -> None:
+                    if SCAN_LOG_HEARTBEAT_SECONDS <= 0:
+                        return
+                    while not heartbeat_stop.wait(SCAN_LOG_HEARTBEAT_SECONDS):
+                        progress = self.get_scan_progress()
+                        if progress.get("status") not in {"running", "cancelling"}:
+                            continue
+                        heartbeat_now = time.time()
+                        updated_at = float(progress.get("updated_at") or progress.get("started_at") or heartbeat_now)
+                        started = float(progress.get("started_at") or started_at or heartbeat_now)
+                        logger.info(
+                            "Scan heartbeat: folder=%s status=%s step=%s processed=%s/%s counted=%s import_complete=%s library_ready=%s metadata=%s/%s pending=%s errors=%s current=%s idle_for=%.1fs elapsed=%.1fs",
+                            normalized_folder_path,
+                            progress.get("status", "unknown"),
+                            progress.get("step", "unknown"),
+                            progress.get("processed", progress.get("current", 0)),
+                            progress.get("total", 0) if progress.get("total_final") else "?",
+                            progress.get("counted", 0),
+                            progress.get("import_complete", False),
+                            progress.get("library_ready", False),
+                            progress.get("metadata_processed", 0),
+                            progress.get("metadata_total", 0),
+                            progress.get("metadata_pending", 0),
+                            progress.get("errors", 0),
+                            progress.get("current_item") or "-",
+                            max(0.0, heartbeat_now - updated_at),
+                            max(0.0, heartbeat_now - started),
+                        )
+
+                heartbeat_thread = threading.Thread(
+                    target=heartbeat_loop,
+                    name=f"scan-heartbeat-{run_id}",
+                    daemon=True,
+                )
+                heartbeat_thread.start()
+
                 def progress_cb(current, total, filename, details=None):
                     now = time.time()
                     details = details or {}
@@ -824,6 +933,7 @@ class SortingService:
                     import_processed = int(details.get("import_processed", current) or 0) if isinstance(details, dict) else int(current or 0)
                     import_total = int(details.get("import_total", total) or 0) if isinstance(details, dict) else int(total or 0)
                     import_complete = bool(details.get("import_complete", self._scan_progress.get("import_complete", False))) if isinstance(details, dict) else bool(self._scan_progress.get("import_complete", False))
+                    metadata_pending = int(details.get("metadata_pending", self._scan_progress.get("metadata_pending", 0)) or 0) if isinstance(details, dict) else int(self._scan_progress.get("metadata_pending", 0) or 0)
                     state_current = import_processed
                     state_total = import_total or total
                     message = f"Processing: {filename}" if filename else "Scanning files..."
@@ -908,6 +1018,7 @@ class SortingService:
                         metadata_processed=metadata_processed,
                         metadata_total=metadata_total,
                         metadata_total_final=metadata_total_final,
+                        metadata_pending=metadata_pending,
                         message=message,
                         current_item=current_item,
                         updated_at=now,
@@ -938,6 +1049,32 @@ class SortingService:
                 if recent_errors:
                     filenames = ", ".join(item.get("filename", "unknown") for item in recent_errors[-3:])
                     summary += f" Bad files: {filenames}."
+                duration_seconds = max(0.0, now - float(self._scan_progress.get("started_at") or now))
+                metadata_processed = result.get("metadata_processed", 0)
+                metadata_total = result.get("metadata_total", 0)
+                logger.info(
+                    "Scan completed: folder=%s files=%s indexed_new=%s unchanged_or_updated=%s removed=%s metadata=%s/%s errors=%s duration=%.1fs",
+                    normalized_folder_path,
+                    result.get("total", 0),
+                    new_count,
+                    updated_count,
+                    removed_count,
+                    metadata_processed,
+                    metadata_total,
+                    errors,
+                    duration_seconds,
+                )
+                if recent_errors:
+                    samples = "; ".join(
+                        f"{item.get('filename', 'unknown')}: {item.get('error', 'Unreadable image')}"
+                        for item in recent_errors[-3:]
+                    )
+                    logger.warning(
+                        "Scan skipped %s unreadable file(s). Samples: %s. Open Scan Progress in the UI for recent errors; set SD_IMAGE_SORTER_LOG_LEVEL=DEBUG for parser tracebacks.",
+                        errors,
+                        samples,
+                    )
+
                 self._set_scan_progress_if_current(
                     run_id,
                     {
@@ -958,6 +1095,7 @@ class SortingService:
                         "metadata_processed": result.get("metadata_processed", 0),
                         "metadata_total": result.get("metadata_total", 0),
                         "metadata_total_final": result.get("metadata_total_final", True),
+                        "metadata_pending": 0,
                         "message": summary,
                         "current_item": None,
                         "started_at": self._scan_progress.get("started_at"),
@@ -972,6 +1110,13 @@ class SortingService:
                 now = time.time()
                 if isinstance(e, ScanCancelledError):
                     current_state = self.get_scan_progress()
+                    logger.info(
+                        "Scan cancelled: folder=%s processed=%s total=%s errors=%s",
+                        normalized_folder_path,
+                        current_state.get("processed", current_state.get("current", 0)),
+                        current_state.get("total", 0),
+                        current_state.get("errors", 0),
+                    )
                     self._set_scan_progress_if_current(
                         run_id,
                         {
@@ -992,6 +1137,7 @@ class SortingService:
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
                             "metadata_total_final": current_state.get("metadata_total_final", False),
+                            "metadata_pending": current_state.get("metadata_pending", 0),
                             "message": (
                                 f"Scan cancelled at {current_state.get('processed', current_state.get('current', 0))}/{current_state.get('total', 0)}."
                                 if current_state.get("total_final", False) and current_state.get("total", 0)
@@ -1004,6 +1150,13 @@ class SortingService:
                     )
                 else:
                     current_state = self.get_scan_progress()
+                    logger.exception(
+                        "Scan failed: folder=%s processed=%s total=%s errors=%s",
+                        normalized_folder_path,
+                        current_state.get("processed", current_state.get("current", 0)),
+                        current_state.get("total", 0),
+                        current_state.get("errors", 0),
+                    )
                     self._set_scan_progress_if_current(
                         run_id,
                         {
@@ -1024,6 +1177,7 @@ class SortingService:
                             "metadata_processed": current_state.get("metadata_processed", 0),
                             "metadata_total": current_state.get("metadata_total", 0),
                             "metadata_total_final": current_state.get("metadata_total_final", False),
+                            "metadata_pending": current_state.get("metadata_pending", 0),
                             "message": "Scan failed due to an internal error",
                             "current_item": current_state.get("current_item"),
                             "started_at": current_state.get("started_at"),
@@ -1031,6 +1185,10 @@ class SortingService:
                         }
                     )
             finally:
+                if "heartbeat_stop" in locals():
+                    heartbeat_stop.set()
+                if "heartbeat_thread" in locals() and heartbeat_thread.is_alive():
+                    heartbeat_thread.join(timeout=0.5)
                 current_state = self.get_scan_progress()
                 if current_state["status"] == "running":
                     self._update_scan_progress_if_current(

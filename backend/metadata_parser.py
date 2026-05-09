@@ -209,7 +209,7 @@ class MetadataParser:
 
         except Exception as e:
             result["parse_error"] = str(e)
-            logger.error("Error parsing %s: %s", image_path, e, exc_info=True)
+            logger.debug("Failed to parse metadata for %s: %s", image_path, e, exc_info=True)
 
         return result
 
@@ -3325,7 +3325,7 @@ class MetadataParser:
                         logger.debug("Failed to decode WebP XMP: %s", e)
 
         except Exception as e:
-            logger.error("Error extracting WebP XMP from %s: %s", image_path, e)
+            logger.debug("Error extracting WebP XMP from %s: %s", image_path, e, exc_info=True)
 
         return metadata
 

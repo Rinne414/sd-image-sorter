@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements-dev.txt backend/requirements-dev.in
 #
-# lock-input-sha256: 67bfb97f63a4d447cc25952ce5562669bfd0e6af085981e284db8cd76db101db
+# lock-input-sha256: f427e1329ab64727c401454369042c2e3b93719f20c5445b6d20af72f5113048
 #
 aiofiles==25.1.0
     # via -r backend/requirements.txt

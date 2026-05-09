@@ -24,13 +24,15 @@ CACHE_DIR="${DATA_DIR}/cache"
 MODELS_DIR="${DATA_DIR}/models"
 FAVORITES_DIR="${DATA_DIR}/favorites"
 CONFIG_DIR="${DATA_DIR}/config"
+STATE_DIR="${DATA_DIR}/state"
 THUMBNAIL_DIR="${DATA_DIR}/thumbnails"
 
-mkdir -p "${DATA_DIR}" "${UPDATE_DIR}" "${TMP_DIR}" "${CACHE_DIR}" "${MODELS_DIR}" "${FAVORITES_DIR}" "${CONFIG_DIR}" "${THUMBNAIL_DIR}"
+mkdir -p "${DATA_DIR}" "${UPDATE_DIR}" "${TMP_DIR}" "${CACHE_DIR}" "${MODELS_DIR}" "${FAVORITES_DIR}" "${CONFIG_DIR}" "${STATE_DIR}" "${THUMBNAIL_DIR}"
 
 export SD_IMAGE_SORTER_LAUNCHER="run.sh"
 export SD_IMAGE_SORTER_DATA_DIR="${DATA_DIR}"
 export SD_IMAGE_SORTER_CONFIG_DIR="${CONFIG_DIR}"
+export SD_IMAGE_SORTER_STATE_DIR="${STATE_DIR}"
 export SD_IMAGE_SORTER_TMP_DIR="${TMP_DIR}"
 export SD_IMAGE_SORTER_UPDATE_DIR="${UPDATE_DIR}"
 export SD_IMAGE_SORTER_THUMBNAIL_DIR="${THUMBNAIL_DIR}"
@@ -52,6 +54,24 @@ export PIP_CACHE_DIR="${DATA_DIR}/pip-cache"
 export TMPDIR="${TMP_DIR}"
 export TEMP="${TMP_DIR}"
 export TMP="${TMP_DIR}"
+
+# ── Consume Feature Setup runtime rebuild request before Python starts ──
+VENV_REBUILD_MARKER="${STATE_DIR}/rebuild-core-venv.json"
+if [ -f "${VENV_REBUILD_MARKER}" ]; then
+    echo "[INFO] Lightweight runtime rebuild requested."
+    echo "       Removing backend/venv only; user data, models, cache settings, and images.db stay untouched."
+    if [ -d "backend/venv" ]; then
+        if ! rm -rf "backend/venv"; then
+            echo "[ERROR] Could not remove backend/venv."
+            echo "        Close every SD Image Sorter / Python process, then run ./run.sh again."
+            exit 1
+        fi
+    fi
+    rm -f "backend/.requirements_hash"
+    rm -f "${VENV_REBUILD_MARKER}"
+    echo "       Runtime environment will be recreated with the selected dependency mode."
+    echo
+fi
 
 # ── Check if Python is available ─────────────────────────────────
 PYTHON_CMD=""
@@ -122,31 +142,38 @@ source backend/venv/bin/activate
 
 # ── Check if dependencies need installing/updating ──────────────
 NEED_INSTALL=0
+INSTALL_REQUIREMENTS="backend/requirements-core.txt"
+INSTALL_MODE_LABEL="core runtime dependencies"
+if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-}" = "1" ]; then
+    INSTALL_REQUIREMENTS="backend/requirements.txt"
+    INSTALL_MODE_LABEL="full AI runtime dependencies"
+fi
+REQUIREMENTS_HASH_FILE="backend/.requirements_hash"
 
 # On first run, always install
 if [ "$FIRST_RUN" -eq 1 ]; then
     NEED_INSTALL=1
 fi
 
-# Check if requirements.txt changed since last install
+# Check if the selected requirements file changed since last install
 if [ "$NEED_INSTALL" -eq 0 ]; then
-    if [ ! -f "backend/.requirements_hash" ]; then
+    if [ ! -f "${REQUIREMENTS_HASH_FILE}" ]; then
         NEED_INSTALL=1
     else
         # Generate current hash
         if command -v md5sum &> /dev/null; then
-            NEW_HASH=$(md5sum backend/requirements.txt | awk '{print $1}')
+            NEW_HASH=$(md5sum "${INSTALL_REQUIREMENTS}" | awk '{print $1}')
         elif command -v md5 &> /dev/null; then
-            NEW_HASH=$(md5 -q backend/requirements.txt)
+            NEW_HASH=$(md5 -q "${INSTALL_REQUIREMENTS}")
         else
             # Fallback: always reinstall if no hash tool available
             NEED_INSTALL=1
         fi
 
         if [ "$NEED_INSTALL" -eq 0 ]; then
-            OLD_HASH=$(cat backend/.requirements_hash)
+            OLD_HASH=$(cat "${REQUIREMENTS_HASH_FILE}")
             if [ "$NEW_HASH" != "$OLD_HASH" ]; then
-                echo "[INFO] requirements.txt has changed since last install."
+                echo "[INFO] ${INSTALL_REQUIREMENTS} has changed since last install."
                 NEED_INSTALL=1
             fi
         fi
@@ -155,7 +182,7 @@ fi
 
 # ── Install/update dependencies ─────────────────────────────────
 if [ "$NEED_INSTALL" -eq 0 ]; then
-    if ! backend/venv/bin/python -c "import platform; modules=['fastapi','PIL','numpy','onnxruntime','torch','transformers','ultralytics','fastembed','open_clip','timm','cv2']; modules += [] if platform.system() == 'Darwin' else ['sam3','einops','hydra','omegaconf','pycocotools','decord','iopath']; [__import__(module) for module in modules]" >/dev/null 2>&1; then
+    if ! backend/venv/bin/python -c "modules=['fastapi','PIL','numpy','onnxruntime']; [__import__(module) for module in modules]" >/dev/null 2>&1; then
         echo "[INFO] Python runtime packages look incomplete. Reinstalling dependencies..."
         NEED_INSTALL=1
     fi
@@ -167,8 +194,12 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
     else
         echo "[INFO] Updating dependencies..."
     fi
-    echo "      This may take 10-20 minutes on first run if GPU runtimes are needed."
-    echo "      Please be patient, large AI runtime packages are being installed."
+    echo "      Installing ${INSTALL_MODE_LABEL}."
+    if [ "${INSTALL_REQUIREMENTS}" = "backend/requirements-core.txt" ]; then
+        echo "      Heavy AI packages install later only when you click Prepare/Download for that feature."
+    else
+        echo "      Full AI mode may take 10-20 minutes and download large GPU/runtime packages."
+    fi
     echo
 
     echo "[INFO] Preparing Python build tools for source-only packages..."
@@ -179,8 +210,8 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
         exit 1
     fi
 
-    INSTALL_REQUIREMENTS="backend/requirements.txt"
-    if [ "$(uname -s)" = "Linux" ]; then
+    HASH_REQUIREMENTS="${INSTALL_REQUIREMENTS}"
+    if [ "${INSTALL_REQUIREMENTS}" = "backend/requirements.txt" ] && [ "$(uname -s)" = "Linux" ]; then
         echo "[INFO] Installing CPU PyTorch baseline for reliable Linux first run..."
         if ! backend/venv/bin/python backend/launcher_pip.py install --index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0; then
             echo
@@ -214,11 +245,13 @@ PYFILTER
         exit 1
     fi
 
-    # Save requirements hash for future change detection
+    # Save the originally selected lockfile hash. On Linux full-AI installs we
+    # may install from a temporary filtered file after preinstalling CPU Torch;
+    # hashing that temp file would make every later launch reinstall.
     if command -v md5sum &> /dev/null; then
-        md5sum backend/requirements.txt | awk '{print $1}' > backend/.requirements_hash
+        md5sum "${HASH_REQUIREMENTS}" | awk '{print $1}' > "${REQUIREMENTS_HASH_FILE}"
     elif command -v md5 &> /dev/null; then
-        md5 -q backend/requirements.txt > backend/.requirements_hash
+        md5 -q "${HASH_REQUIREMENTS}" > "${REQUIREMENTS_HASH_FILE}"
     fi
 
     echo
@@ -229,19 +262,31 @@ else
     echo
 fi
 
-echo "[Info] Checking ONNX Runtime package state..."
-backend/venv/bin/python backend/repair_onnxruntime.py --auto || {
-    echo "[WARN] Could not auto-repair ONNX Runtime package state."
-    echo "       The app can still start, but WD14 tagging may stay on CPU."
-}
-echo
+if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-}" = "1" ]; then
+    echo "[Info] Checking ONNX Runtime package state..."
+    backend/venv/bin/python backend/repair_onnxruntime.py --auto || {
+        echo "[WARN] Could not auto-repair ONNX Runtime package state."
+        echo "       The app can still start, but WD14 tagging may stay on CPU."
+    }
+    echo
+else
+    echo "[Info] Skipping ONNX GPU repair for lightweight startup."
+    echo "       WD14 can still run on CPU; set SD_IMAGE_SORTER_INSTALL_FULL_AI=1 for GPU runtime repair."
+    echo
+fi
 
-echo "[Info] Checking PyTorch / SAM3 runtime package state..."
-backend/venv/bin/python backend/repair_torch_runtime.py --auto || {
-    echo "[WARN] Could not auto-repair PyTorch / SAM3 runtime package state."
-    echo "       The app can still start, but SAM3 and CUDA Torch features may stay unavailable."
-}
-echo
+if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-}" = "1" ]; then
+    echo "[Info] Checking PyTorch / SAM3 runtime package state..."
+    backend/venv/bin/python backend/repair_torch_runtime.py --auto || {
+        echo "[WARN] Could not auto-repair PyTorch / SAM3 runtime package state."
+        echo "       The app can still start, but SAM3 and CUDA Torch features may stay unavailable."
+    }
+    echo
+else
+    echo "[Info] Skipping PyTorch / SAM3 repair for lightweight startup."
+    echo "       Set SD_IMAGE_SORTER_INSTALL_FULL_AI=1 or use Model Manager Prepare when needed."
+    echo
+fi
 
 echo "[Info] Checking startup readiness..."
 backend/venv/bin/python backend/model_health.py --startup

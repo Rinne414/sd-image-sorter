@@ -70,13 +70,9 @@ TORCH_CUDA_INDEXES: Sequence[Tuple[str, str, Tuple[int, int]]] = (
 )
 PYTORCH_FALLBACK_INDEX = "https://pypi.org/simple"
 SAM3_RUNTIME_IMPORTS: Sequence[Tuple[str, str]] = (
-    ("sam3", "sam3==0.1.3"),
-    ("einops", "einops"),
-    ("hydra", "hydra-core"),
-    ("omegaconf", "omegaconf"),
-    ("pycocotools", "pycocotools"),
-    ("decord", "decord"),
-    ("iopath", "iopath"),
+    ("transformers", "transformers>=5.6.0"),
+    ("safetensors", "safetensors"),
+    ("cv2", "opencv-python"),
 )
 
 

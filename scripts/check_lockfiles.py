@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = ROOT / "backend"
 LOCK_INPUT_HASH_PREFIX = "# lock-input-sha256: "
 LOCK_TARGETS = {
+    "requirements-core.txt": ("requirements-core.in",),
     "requirements.txt": ("requirements.in",),
     "requirements-dev.txt": ("requirements.in", "requirements.txt", "requirements-dev.in"),
 }

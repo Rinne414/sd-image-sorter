@@ -108,6 +108,16 @@ function writeStubModule(relativePath: string, contents: string) {
   fs.writeFileSync(filePath, contents)
 }
 
+function writeStubPackageMetadata(packageName: string, version: string) {
+  const normalizedName = packageName.replace(/[-.]+/g, '_')
+  const distInfoDir = path.join(e2eStubModulesDir, `${normalizedName}-${version}.dist-info`)
+  fs.mkdirSync(distInfoDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(distInfoDir, 'METADATA'),
+    `Metadata-Version: 2.1\nName: ${packageName}\nVersion: ${version}\n`
+  )
+}
+
 fs.mkdirSync(e2eFixtureRoot, { recursive: true })
 const artistRuntimeZip = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime.zip')
 const artistRuntimeSource = path.join(e2eFixtureRoot, 'comfyui-lsnet-runtime-source')
@@ -119,6 +129,8 @@ ensureFile(artistCheckpoint, 32 * 1024 * 1024, 'k')
 fs.writeFileSync(artistMapping, 'artist_id,artist_name\n0,fixture_artist\n')
 ensureFile(sam3Checkpoint, 32 * 1024 * 1024, 's')
 writeStubModule('torch.py', `__version__ = '2.9.0+cu128'\nclass version:\n    cuda = '12.8'\nclass cuda:\n    @staticmethod\n    def is_available():\n        return True\n`)
+writeStubModule('transformers.py', `__version__ = '5.9.0'\n`)
+writeStubModule('safetensors.py', `__version__ = '0.7.0'\n`)
 writeStubModule('timm.py', '')
 writeStubModule('sam3/__init__.py', '')
 writeStubModule('einops.py', '')
@@ -128,6 +140,10 @@ writeStubModule('pycocotools/__init__.py', '')
 writeStubModule('decord.py', '')
 writeStubModule('iopath/__init__.py', '')
 writeStubModule('cv2.py', '')
+writeStubPackageMetadata('torch', '2.9.0')
+writeStubPackageMetadata('transformers', '5.9.0')
+writeStubPackageMetadata('timm', '1.0.0')
+writeStubPackageMetadata('safetensors', '0.7.0')
 
 const onboardingStorageState = {
   cookies: [],

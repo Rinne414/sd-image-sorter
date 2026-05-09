@@ -420,3 +420,72 @@ def test_custom_tagger_profile_ui_and_payload_contract():
     assert "tag.tagsMetadataRequired" in zh_source
     assert "Optional if the file sits next to the model" in en_source
     assert "如果文件就在模型旁边可不填" in zh_source
+
+
+
+def test_feature_setup_explains_lightweight_startup_and_cache_limit():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "model-manager-summary" in html
+    assert "renderFeatureAvailabilityNotice" in source
+    assert "thumbnail-cache-limit-input" in source
+    assert "saveDiskSettings" in source
+    assert "requestCoreRuntimeRebuild" in source
+    assert "disk.thumbnailTradeoffHint" in source
+    assert "/api/disk/runtime/rebuild-core" in source
+    assert "models.restartAfterInstallWithPackages" in source
+
+
+def test_scan_stalled_diagnostics_are_visible_and_copyable_from_frontend():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
+    en_source = (repo_root / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_source = (repo_root / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "scan-diagnostics-card" in html
+    assert "btn-copy-scan-diagnostics" in html
+    assert "btn-open-scan-log" in html
+    assert "btn-copy-scan-log-path" in html
+    assert "btn-stop-scan-from-diagnostics" in html
+    assert "scan-diagnostics-meta" in html
+    assert "data-i18n-aria=\"scan.diagnosticsMetaLabel\"" in html
+    assert "scan-storage-hint" in html
+    assert 'id="scan-diagnostics-message" data-i18n' not in html
+    assert "messageEl.removeAttribute('data-i18n')" in source
+    assert "stepEl.removeAttribute('data-i18n')" in source
+    assert "currentEl.removeAttribute('data-i18n')" in source
+    assert "updateScanDiagnosticsCard(progress)" in source
+    assert "_scanLastProgress" in source
+    assert "_updateBgScanProgress(_scanLastProgress)" in source
+    assert "progress?.attention_required" in source
+    assert "API.getSupportDiagnostics(200)" in source
+    assert "API.getSupportDiagnostics(1)" in source
+    assert "payload?.log_file_path_redacted" in source
+    assert "rememberScanLogPath" in source
+    assert "progress?.attention_required" in source
+    assert "buildScanAttentionMessage(progress" in source
+    assert "SCAN_DIAGNOSTICS_HOLD_MS" in source
+    assert "pathEl.title = result.path_redacted" in source
+    assert "result.message || appT('scan.openLogUnavailable'" not in source
+    assert "scan.backgroundStalledDetailed" in source
+    assert "copyScanDiagnostics" in source
+    assert "openScanLogFile" in source
+    assert "copyScanLogPath" in source
+    assert "/api/support/diagnostics" in source
+    assert "/api/support/open-log" in source
+    assert ".scan-diagnostics-card" in css
+    for key in [
+        "scan.diagnosticsTitle",
+        "scan.backgroundStalledDetailed",
+        "scan.copyLogPath",
+        "scan.logPathCopied",
+        "scan.logPathCopyFailed",
+        "scan.copyLogPathUnavailable",
+        "scan.diagnosticsMetaLabel",
+    ]:
+        assert key in en_source
+        assert key in zh_source

@@ -4,6 +4,7 @@ Unit tests for scan progress callbacks.
 
 import os
 import sys
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -94,6 +95,41 @@ def test_copy_image_replaces_stale_target_row_state(test_db, tmp_path: Path):
             (copied_id,),
         ).fetchone()[0]
     assert artist_count == 0
+
+
+def test_copied_image_record_compacts_legacy_raw_metadata(test_db, tmp_path: Path):
+    source_path = tmp_path / "source-raw.png"
+    copied_path = tmp_path / "copied-raw.png"
+    Image.new("RGB", (32, 32), color="purple").save(source_path)
+    raw_metadata = json.dumps({
+        "xmp": "x" * 20_000,
+        "Description": "legacy raw description",
+        "_parsed": {
+            "generation_params": {"steps": 24},
+        },
+    })
+    source_row = {
+        "generator": "webui",
+        "prompt": "prompt",
+        "negative_prompt": None,
+        "metadata_json": raw_metadata,
+        "width": 32,
+        "height": 32,
+        "file_size": source_path.stat().st_size,
+        "checkpoint": None,
+        "loras": "[]",
+        "is_readable": 1,
+        "metadata_status": "complete",
+    }
+
+    record = image_manager._build_copied_image_record(source_row, str(copied_path), source_path.stat())
+
+    stored = json.loads(record["metadata_json"])
+    assert stored == {
+        "_compact": {"version": 1},
+        "_parsed": {"generation_params": {"steps": 24}},
+    }
+    assert len(record["metadata_json"]) < 512
 
 
 def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, tmp_path: Path):
@@ -245,6 +281,46 @@ def test_scan_folder_preserves_created_at_when_file_mtime_changes(test_db, tmp_p
     assert rescanned_row["library_order_time"] == original_row["library_order_time"]
     assert rescanned_row["source_file_mtime"] != original_row["source_file_mtime"]
     assert rescanned_row["created_at"] == original_row["created_at"]
+
+
+def test_scan_folder_persists_compact_metadata_summary(test_db, tmp_path: Path):
+    image_path = tmp_path / "large-workflow.png"
+    huge_workflow = {
+        "nodes": [
+            {
+                "id": index,
+                "type": "Note",
+                "widgets_values": ["x" * 2048],
+            }
+            for index in range(60)
+        ]
+    }
+    prompt_graph = {
+        "1": {
+            "class_type": "CheckpointLoaderSimple",
+            "inputs": {"ckpt_name": "compact-model.safetensors"},
+        },
+        "2": {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"text": "compact prompt"},
+        },
+    }
+    pnginfo = PngInfo()
+    pnginfo.add_text("prompt", json.dumps(prompt_graph))
+    pnginfo.add_text("workflow", json.dumps(huge_workflow))
+    Image.new("RGB", (64, 64), color="white").save(image_path, pnginfo=pnginfo)
+
+    scan_folder(str(tmp_path), recursive=False)
+    row = db.get_image_by_path(str(image_path))
+    stored = json.loads(row["metadata_json"])
+
+    assert row["generator"] == "comfyui"
+    assert row["checkpoint"] == "compact-model.safetensors"
+    assert stored["_compact"]["version"] == 1
+    assert stored["_parsed"]["model_assets"]["primary_model_name"] == "compact-model.safetensors"
+    assert "prompt" not in stored
+    assert "workflow" not in stored
+    assert len(row["metadata_json"]) < 4096
 
 
 def test_scan_folder_preserves_derived_state_when_only_metadata_changes(test_db, tmp_path: Path):
@@ -559,3 +635,135 @@ def test_get_folder_stats_skips_symlinked_images(tmp_path: Path):
 
     assert stats["total_files"] == 1
     assert stats["by_extension"] == {".png": 1}
+
+
+def test_scan_folder_terminates_stuck_metadata_worker_after_timeout(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "stuck-metadata.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    class FakeFuture:
+        def __init__(self):
+            self.cancelled = False
+        def cancel(self):
+            self.cancelled = True
+            return True
+        def result(self):
+            raise AssertionError("timed-out future should not be awaited")
+
+    class FakeExecutor:
+        instances = []
+        def __init__(self, max_workers=None):
+            self.max_workers = max_workers
+            self.future = FakeFuture()
+            self.terminated = 0
+            self.shutdowns = []
+            FakeExecutor.instances.append(self)
+        def submit(self, fn, job):
+            return self.future
+        def terminate_workers(self):
+            self.terminated += 1
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdowns.append((wait, cancel_futures))
+
+    clock = {"now": 1000.0}
+    monkeypatch.setattr("image_manager.ThreadPoolExecutor", FakeExecutor)
+    monkeypatch.setattr("image_manager.wait", lambda futures, timeout=None, return_when=None: (set(), set(futures)))
+    monkeypatch.setattr("image_manager.time.monotonic", lambda: clock.__setitem__("now", clock["now"] + 0.25) or clock["now"])
+    monkeypatch.setattr("image_manager.SCAN_METADATA_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr("image_manager.SCAN_METADATA_DRAIN_WAIT_SECONDS", 0.01)
+
+    result = scan_folder(str(tmp_path), recursive=False, quick_import=True, metadata_workers=1)
+
+    assert result["total"] == 1
+    assert result["counted"] == 1
+    assert result["errors"] == 1
+    assert result["metadata_processed"] == 1
+    assert result["metadata_total"] == 1
+    assert result["recent_errors"][-1]["kind"] == "timeout"
+    assert FakeExecutor.instances[-1].terminated == 1
+    assert FakeExecutor.instances[-1].shutdowns[-1] == (False, True)
+
+
+def test_scan_folder_terminates_pending_metadata_workers_on_cancel(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "cancel-stuck-metadata.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    class FakeFuture:
+        def __init__(self):
+            self.cancelled = False
+        def cancel(self):
+            self.cancelled = True
+            return True
+        def result(self):
+            raise AssertionError("cancelled metadata future should not be awaited")
+
+    class FakeExecutor:
+        instances = []
+        def __init__(self, max_workers=None):
+            self.future = FakeFuture()
+            self.terminated = 0
+            self.shutdowns = []
+            FakeExecutor.instances.append(self)
+        def submit(self, fn, job):
+            return self.future
+        def terminate_workers(self):
+            self.terminated += 1
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdowns.append((wait, cancel_futures))
+
+    state = {"cancel": False}
+
+    def progress_callback(current, total, filename, details=None):
+        if (details or {}).get("phase") == "metadata" and (details or {}).get("metadata_pending", 0) > 0:
+            state["cancel"] = True
+
+    monkeypatch.setattr("image_manager.ThreadPoolExecutor", FakeExecutor)
+    monkeypatch.setattr("image_manager.wait", lambda futures, timeout=None, return_when=None: (set(), set(futures)))
+    monkeypatch.setattr("image_manager.SCAN_METADATA_TIMEOUT_SECONDS", 120.0)
+    monkeypatch.setattr("image_manager.SCAN_METADATA_DRAIN_WAIT_SECONDS", 0.01)
+
+    with pytest.raises(ScanCancelledError):
+        scan_folder(
+            str(tmp_path),
+            recursive=False,
+            quick_import=True,
+            metadata_workers=1,
+            progress_callback=progress_callback,
+            stop_requested=lambda: state["cancel"],
+        )
+
+    assert FakeExecutor.instances[-1].future.cancelled is True
+    assert FakeExecutor.instances[-1].terminated == 1
+    assert FakeExecutor.instances[-1].shutdowns[-1] == (False, True)
+
+
+def test_scan_folder_does_not_terminate_thread_executor_when_timeout_has_no_kill_hook(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "thread-timeout.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    class FakeFuture:
+        def cancel(self):
+            return True
+        def result(self):
+            raise AssertionError("timed-out future should not be awaited")
+
+    class FakeThreadOnlyExecutor:
+        def __init__(self, max_workers=None):
+            self.future = FakeFuture()
+            self.shutdowns = []
+        def submit(self, fn, job):
+            return self.future
+        def shutdown(self, wait=True, cancel_futures=False):
+            self.shutdowns.append((wait, cancel_futures))
+
+    clock = {"now": 2000.0}
+    monkeypatch.setattr("image_manager.ThreadPoolExecutor", FakeThreadOnlyExecutor)
+    monkeypatch.setattr("image_manager.wait", lambda futures, timeout=None, return_when=None: (set(), set(futures)))
+    monkeypatch.setattr("image_manager.time.monotonic", lambda: clock.__setitem__("now", clock["now"] + 0.25) or clock["now"])
+    monkeypatch.setattr("image_manager.SCAN_METADATA_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr("image_manager.SCAN_METADATA_DRAIN_WAIT_SECONDS", 0.01)
+
+    result = scan_folder(str(tmp_path), recursive=False, quick_import=True, metadata_workers=1)
+
+    assert result["errors"] == 1
+    assert result["recent_errors"][-1]["kind"] == "timeout"

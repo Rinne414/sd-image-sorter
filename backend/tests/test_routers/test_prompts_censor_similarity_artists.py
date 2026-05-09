@@ -1378,6 +1378,7 @@ class TestSimilarityRouterValidation:
                 model_service.build_civitai_auth_error(Path("/tmp/privacy-yolo"))
             )
 
+        monkeypatch.setattr(model_service, "ensure_group", lambda _group: model_service.DependencyInstallResult(installed_packages=()))
         monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_auth_wall)
         models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 
@@ -1394,6 +1395,37 @@ class TestSimilarityRouterValidation:
         assert pr["status"] == "error"
         assert "Civitai" in pr["message"]
 
+    def test_prepare_optional_dependency_system_python_error_returns_guidance(self, test_client, monkeypatch):
+        import time
+        from routers import models as models_router
+        from services import model_service
+        from optional_dependencies import UnsafeDependencyInstallError
+
+        def raise_unsafe_install(self, model_id, source=None, variant=None):
+            raise UnsafeDependencyInstallError(
+                "Refusing to install optional AI Python packages into the system Python environment. "
+                "Start SD Image Sorter with run.bat, run-portable.bat, or run.sh so the app-owned Python runtime is used. "
+                "Packages not installed: torch>=2.0.0"
+            )
+
+        monkeypatch.setattr(model_service.ModelService, "prepare_model", raise_unsafe_install)
+        models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
+
+        response = test_client.post("/api/models/prepare", json={"model_id": "artist"})
+        assert response.status_code == 200
+
+        for _ in range(50):
+            time.sleep(0.05)
+            prog = test_client.get("/api/models/download-progress").json()
+            pr = prog.get("prepare_result", {})
+            if not pr.get("active") and pr.get("status") == "error":
+                break
+
+        assert pr["status"] == "error"
+        assert pr["error_type"] == "UnsafeSystemPythonInstall"
+        assert "system Python environment" in pr["message"]
+        assert any("run-portable.bat" in step for step in pr["manual_steps"])
+
     def test_prepare_censor_legacy_bad_archive_returns_structured_download_failure(self, test_client, monkeypatch):
         import time
         from routers import models as models_router
@@ -1407,6 +1439,7 @@ class TestSimilarityRouterValidation:
                 )
             )
 
+        monkeypatch.setattr(model_service, "ensure_group", lambda _group: model_service.DependencyInstallResult(installed_packages=()))
         monkeypatch.setattr(model_service.ModelService, "download_privacy_yolo_bundle", raise_prepare_failure)
         models_router._prepare_result.update(active=False, model_id="", status="", message="", error="")
 

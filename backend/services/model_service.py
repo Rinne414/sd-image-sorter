@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import json
 import logging
 import os
@@ -19,8 +20,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional
 
 from app_info import APP_VERSION
-from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_wd14_model_dir, get_yolo_model_dir
+from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
 from model_health import get_model_health, get_sam3_checkpoint_path
+from optional_dependencies import DependencyInstallResult, ensure_group
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -68,6 +70,32 @@ class ModelPreparationFailedError(RuntimeError):
         super().__init__(payload.get("message") or payload.get("error") or "Model preparation failed")
         self.payload = payload
         self.status_code = status_code
+
+
+def _with_dependency_result(result: Dict[str, Any], install_result: DependencyInstallResult) -> Dict[str, Any]:
+    if not install_result.installed_packages:
+        return result
+    return {
+        **result,
+        "installed_packages": list(install_result.installed_packages),
+        "restart_recommended": install_result.restart_recommended,
+    }
+
+
+def _dependency_restart_result(model_id: str, install_result: DependencyInstallResult) -> Optional[Dict[str, Any]]:
+    if not install_result.installed_packages:
+        return None
+    packages = ", ".join(install_result.installed_packages)
+    return {
+        "status": "needs_restart",
+        "model_id": model_id,
+        "message": (
+            f"Installed Python packages for this feature: {packages}. "
+            "Restart SD Image Sorter, then click Prepare again if model files still need downloading."
+        ),
+        "installed_packages": list(install_result.installed_packages),
+        "restart_recommended": True,
+    }
 
 
 _ALLOWED_DOWNLOAD_SCHEMES = ("https", "http")
@@ -408,16 +436,15 @@ class ModelService:
         aesthetic_message = "Aesthetic predictor dependencies are not installed"
         aesthetic_head_path = str(PROJECT_ROOT / "models" / "aesthetic" / "sa_0_4_vit_l_14_linear.pth")
         aesthetic_head_exists = Path(aesthetic_head_path).exists()
-        try:
-            from aesthetic import is_available
-
-            aesthetic_available = is_available()
-            if aesthetic_available:
-                aesthetic_message = "Aesthetic predictor is ready (CLIP + linear head)."
-            elif aesthetic_head_exists:
-                aesthetic_message = "Linear head downloaded but CLIP dependencies missing (torch/open_clip)."
-        except ImportError:
-            pass
+        aesthetic_runtime_ready = (
+            importlib.util.find_spec("torch") is not None
+            and importlib.util.find_spec("open_clip") is not None
+        )
+        aesthetic_available = bool(aesthetic_head_exists and aesthetic_runtime_ready)
+        if aesthetic_available:
+            aesthetic_message = "Aesthetic predictor is ready (CLIP + linear head)."
+        elif aesthetic_head_exists:
+            aesthetic_message = "Linear head downloaded but CLIP dependencies missing (torch/open_clip)."
 
         def with_status(*, is_ready: bool, is_downloaded: bool) -> Dict[str, str]:
             if is_ready:
@@ -433,6 +460,11 @@ class ModelService:
             wd14_message_key = "models.wd14.missing"
             wd14_message = "WD14 model files are missing and can be downloaded on demand."
             wd14_message_params = {}
+
+        # -- ToriiGate --
+        toriigate = health.get("toriigate", {})
+        toriigate_available = bool(toriigate.get("available"))
+        toriigate_dir = toriigate.get("model_dir") or str(Path(get_toriigate_model_dir()) / "toriigate-0.5")
 
         # -- CLIP --
         clip_health = health["clip"]
@@ -525,6 +557,26 @@ class ModelService:
                 "download_supported": True,
                 "variants": [item["name"] for item in health["wd14"]["installed_models"]],
                 "installed_variants": installed_wd14,
+            },
+            {
+                "id": "toriigate",
+                "name": "ToriiGate 0.5",
+                "group": "Tagging",
+                "group_key": "models.group.tagging",
+                "available": toriigate_available,
+                **with_status(
+                    is_ready=toriigate_available,
+                    is_downloaded=bool(Path(toriigate_dir).joinpath("config.json").exists()),
+                ),
+                "message": toriigate.get("message") or "ToriiGate files are not downloaded yet. The first run will need a large model download.",
+                "message_key": "models.toriigate.ready" if toriigate_available else "models.toriigate.missing",
+                "path": toriigate_dir,
+                "download_supported": True,
+                "setup_steps": [
+                    "Click Prepare / Download to install the PyTorch/Transformers runtime if missing.",
+                    "Restart SD Image Sorter if the Prepare result says Python packages were installed.",
+                    "Click Prepare / Download again to download the ToriiGate model files (~5 GB) if they are not present.",
+                ],
             },
             {
                 "id": "clip",
@@ -628,9 +680,9 @@ class ModelService:
                 "path": sam3["checkpoint_path"],
                 "download_supported": True,
                 "setup_steps": [
-                    "First launch installs SAM3 Python runtime packages before the server starts; no manual pip step should be needed.",
-                    "Click Prepare / Download to fetch model.safetensors, or place sam3.pt / model.safetensors manually only if the download fails: " + str(Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"),
-                    "On Windows with NVIDIA, the launcher installs CUDA Torch before the app opens so SAM3 can run immediately after the checkpoint is ready.",
+                    "Click Prepare / Download to install SAM3 Python runtime packages if they are missing.",
+                    "Restart SD Image Sorter if the Prepare result says Python packages were installed.",
+                    "Click Prepare / Download again to fetch model.safetensors, or place sam3.pt / model.safetensors manually only if the download fails: " + str(Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"),
                 ],
                 "external_links": [
                     {
@@ -791,18 +843,44 @@ class ModelService:
                 "paths": {"model_path": model_path, "tags_path": tags_path},
             }
 
+
+        if normalized_model_id == "toriigate":
+            dependency_result = ensure_group("toriigate")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
+            from toriigate_tagger import ToriiGateTagger
+
+            model_dir = get_toriigate_model_dir()
+            tagger = ToriiGateTagger(model_name="toriigate-0.5", model_dir=model_dir, use_gpu=False)
+            resolved_dir = tagger._download_model()
+            return _with_dependency_result({
+                "status": "ok",
+                "model_id": normalized_model_id,
+                "message": "ToriiGate runtime and model files are ready.",
+                "paths": {"model_dir": resolved_dir},
+            }, dependency_result)
+
         if normalized_model_id == "clip":
+            dependency_result = ensure_group("clip")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
             from similarity import ensure_clip_model_ready
 
             model_path = ensure_clip_model_ready()
-            return {
+            return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": "CLIP model is ready.",
                 "paths": {"model_path": model_path},
-            }
+            }, dependency_result)
 
         if normalized_model_id == "artist":
+            dependency_result = ensure_group("artist")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
             from config import (
                 ARTIST_HF_MODEL_ID,
                 ARTIST_KALOSCOPE_CHECKPOINT,
@@ -866,7 +944,7 @@ class ModelService:
                     f"Check server logs for download errors."
                 )
 
-            return {
+            return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": f"Artist checkpoint downloaded via direct HTTP from {hf_base}.",
@@ -875,31 +953,48 @@ class ModelService:
                     "checkpoint_path": str(checkpoint_dest.resolve()),
                     "class_mapping_path": str(mapping_dest.resolve()),
                 },
-            }
+            }, dependency_result)
 
         if normalized_model_id == "censor-nudenet":
+            dependency_result = ensure_group("nudenet")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
             from nudenet_detector import get_nudenet_detector
 
             detector = get_nudenet_detector()
             detector.load()
             refreshed = get_model_health()["censor"]["nudenet"]
-            return {
+            return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": "NudeNet runtime is ready.",
                 "paths": {"model_path": refreshed["model_path"]},
-            }
+            }, dependency_result)
 
         if normalized_model_id == "censor-legacy":
+            # Keep first launch light, but preserve the existing .pt YOLO path
+            # once the user explicitly prepares the legacy censor model.
+            dependency_result = ensure_group("yolo")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
             downloaded = self.download_privacy_yolo_bundle()
-            return {
+            return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": "Privacy YOLO files were downloaded from Civitai.",
                 "paths": downloaded,
-            }
+            }, dependency_result)
 
         if normalized_model_id == "sam3":
+            dependency_result = DependencyInstallResult(installed_packages=())
+            if platform.system() != "Darwin":
+                dependency_result = ensure_group("sam3")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
+
             def sam3_prepare_result(checkpoint_path: Optional[str]) -> Dict[str, Any]:
                 health = get_model_health()["censor"]["sam3"]
                 is_ready = bool(health.get("available"))
@@ -923,7 +1018,7 @@ class ModelService:
                 if not result.get("ready"):
                     result["runtime_repair"] = _repair_sam3_runtime_if_possible()
                     result = {**sam3_prepare_result(checkpoint_before), "runtime_repair": result["runtime_repair"]}
-                return result
+                return _with_dependency_result(result, dependency_result)
 
             sam3_dir = Path(get_sam3_model_dir()) / "facebook-sam3-modelscope"
             sam3_dir.mkdir(parents=True, exist_ok=True)
@@ -954,9 +1049,13 @@ class ModelService:
             if not result.get("ready"):
                 result["runtime_repair"] = _repair_sam3_runtime_if_possible()
                 result = {**sam3_prepare_result(refreshed_path), "runtime_repair": result["runtime_repair"]}
-            return result
+            return _with_dependency_result(result, dependency_result)
 
         if normalized_model_id == "aesthetic":
+            dependency_result = ensure_group("aesthetic")
+            restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
+            if restart_result:
+                return restart_result
             from aesthetic import _ensure_loaded, _get_models_dir, is_available
 
             head_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
@@ -966,18 +1065,18 @@ class ModelService:
 
             if is_available():
                 _ensure_loaded()
-                return {
+                return _with_dependency_result({
                     "status": "ok",
                     "model_id": normalized_model_id,
                     "message": "Aesthetic predictor is ready.",
                     "paths": {"head_path": str(head_path)},
-                }
-            return {
+                }, dependency_result)
+            return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": "Linear head downloaded. CLIP model will download on first scoring run.",
                 "paths": {"head_path": str(head_path)},
-            }
+            }, dependency_result)
 
         raise ValueError(f"Model '{model_id}' cannot be prepared from the UI yet.")
 

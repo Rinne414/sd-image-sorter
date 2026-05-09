@@ -7,6 +7,7 @@ import io
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ import asyncio
 from typing import Optional, Tuple
 
 from PIL import Image, ImageDraw
-from config import get_thumbnail_cache_dir
+from config import get_thumbnail_cache_dir, get_thumbnail_cache_max_mb
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,9 @@ CACHE_MAX_AGE_DAYS = 30  # Invalidate cached thumbnails older than this
 
 # Thread lock for cache cleanup operations
 _cache_lock = threading.Lock()
+_last_size_cleanup_ts = 0.0
+_approx_cache_size_bytes: Optional[int] = None
+SIZE_CLEANUP_INTERVAL_SECONDS = 60
 
 
 def _ensure_cache_dir() -> Path:
@@ -58,12 +62,148 @@ def _get_cache_path(cache_key: str) -> Path:
     return CACHE_DIR / cache_key
 
 
+def _iter_cache_files() -> list[tuple[Path, int, float]]:
+    if not CACHE_DIR.exists():
+        return []
+    files: list[tuple[Path, int, float]] = []
+    for cache_file in CACHE_DIR.iterdir():
+        if not cache_file.is_file() or cache_file.suffix != ".webp":
+            continue
+        try:
+            stat = cache_file.stat()
+        except OSError:
+            continue
+        files.append((cache_file, stat.st_size, stat.st_mtime))
+    return files
+
+
+def _scan_cache_files_limited(*, max_files: int = 10000, max_seconds: float = 0.15) -> tuple[int, int, bool]:
+    if not CACHE_DIR.exists():
+        return 0, 0, True
+    total_size = 0
+    file_count = 0
+    deadline = time.monotonic() + max_seconds
+    try:
+        for cache_file in CACHE_DIR.iterdir():
+            if file_count >= max_files or time.monotonic() > deadline:
+                return file_count, total_size, False
+            if not cache_file.is_file() or cache_file.suffix != ".webp":
+                continue
+            file_count += 1
+            try:
+                total_size += cache_file.stat().st_size
+            except OSError:
+                pass
+    except OSError as exc:
+        logger.debug("Limited thumbnail cache scan failed under %s: %s", CACHE_DIR, exc)
+        return file_count, total_size, False
+    return file_count, total_size, True
+
+
+def enforce_cache_size_limit(*, force: bool = False, added_bytes: int = 0) -> dict:
+    """Trim thumbnail cache to the configured max size.
+
+    Deleting thumbnails is safe: they are derived files and will be regenerated
+    if the user scrolls back to those images. The default cap is intentionally
+    finite so scanning 100k+ images cannot silently grow forever.
+    """
+    global _last_size_cleanup_ts, _approx_cache_size_bytes
+
+    max_mb = get_thumbnail_cache_max_mb()
+    max_bytes = max_mb * 1024 * 1024
+    now = datetime.now(timezone.utc).timestamp()
+    if added_bytes and _approx_cache_size_bytes is not None:
+        _approx_cache_size_bytes += max(0, int(added_bytes))
+
+    if (
+        not force
+        and max_bytes > 0
+        and _approx_cache_size_bytes is not None
+        and _approx_cache_size_bytes <= max_bytes
+        and now - _last_size_cleanup_ts < SIZE_CLEANUP_INTERVAL_SECONDS
+    ):
+        return {
+            "deleted_count": 0,
+            "freed_bytes": 0,
+            "total_size_bytes": _approx_cache_size_bytes,
+            "max_size_bytes": max_bytes,
+            "skipped": True,
+        }
+
+    if (
+        not force
+        and max_bytes > 0
+        and _approx_cache_size_bytes is None
+        and now - _last_size_cleanup_ts < SIZE_CLEANUP_INTERVAL_SECONDS
+    ):
+        return {
+            "deleted_count": 0,
+            "freed_bytes": 0,
+            "total_size_bytes": None,
+            "max_size_bytes": max_bytes,
+            "skipped": True,
+        }
+
+    if not CACHE_DIR.exists():
+        _last_size_cleanup_ts = now
+        _approx_cache_size_bytes = 0
+        return {
+            "deleted_count": 0,
+            "freed_bytes": 0,
+            "total_size_bytes": 0,
+            "max_size_bytes": max_bytes,
+            "skipped": False,
+        }
+
+    with _cache_lock:
+        files = _iter_cache_files()
+        total_size = sum(size for _, size, _ in files)
+        deleted_count = 0
+        freed_bytes = 0
+
+        if max_bytes <= 0:
+            victims = sorted(files, key=lambda item: item[2])
+        elif total_size > max_bytes:
+            victims = sorted(files, key=lambda item: item[2])
+        else:
+            victims = []
+
+        for cache_file, size, _mtime in victims:
+            if max_bytes > 0 and total_size <= max_bytes:
+                break
+            try:
+                cache_file.unlink()
+            except OSError as exc:
+                logger.debug("Failed to evict thumbnail cache file %s: %s", cache_file, exc)
+                continue
+            deleted_count += 1
+            freed_bytes += size
+            total_size = max(0, total_size - size)
+
+    _last_size_cleanup_ts = now
+    _approx_cache_size_bytes = total_size
+    return {
+        "deleted_count": deleted_count,
+        "freed_bytes": freed_bytes,
+        "total_size_bytes": total_size,
+        "max_size_bytes": max_bytes,
+        "skipped": False,
+    }
+
+
+def enforce_cache_size_limit_if_due(*, added_bytes: int = 0) -> dict:
+    return enforce_cache_size_limit(force=False, added_bytes=added_bytes)
+
+
 def get_cached_thumbnail(source_path: str, size: int) -> Optional[Tuple[bytes, datetime]]:
     """Check if a valid cached thumbnail exists.
 
     Returns:
         Tuple of (thumbnail_bytes, last_modified) if cache hit, None if cache miss.
     """
+    if get_thumbnail_cache_max_mb() <= 0:
+        return None
+
     if size not in SUPPORTED_SIZES:
         # Fall back to nearest supported size
         size = min(SUPPORTED_SIZES, key=lambda s: abs(s - size))
@@ -138,9 +278,13 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
     cache_key = _get_cache_key(source_path, size, source_mtime)
     cache_path = _get_cache_path(cache_key)
 
+    if get_thumbnail_cache_max_mb() <= 0:
+        return (thumbnail_bytes, source_modified)
+
     try:
         with open(cache_path, "wb") as f:
             f.write(thumbnail_bytes)
+        enforce_cache_size_limit_if_due(added_bytes=len(thumbnail_bytes))
     except OSError as e:
         # Log but don't fail - cache write is optional
         logger.warning("Failed to write thumbnail cache: %s", e)
@@ -246,6 +390,8 @@ def clear_cache() -> int:
                 except OSError as e:
                     logger.debug("Failed to delete cache file %s: %s", cache_file, e)
 
+    global _approx_cache_size_bytes
+    _approx_cache_size_bytes = 0
     return count
 
 
@@ -274,6 +420,9 @@ def cleanup_old_cache(max_age_days: int = CACHE_MAX_AGE_DAYS) -> int:
                 except OSError as e:
                     logger.debug("Failed to cleanup cache file %s: %s", cache_file, e)
 
+    global _approx_cache_size_bytes
+    if count:
+        _approx_cache_size_bytes = None
     return count
 
 
@@ -283,25 +432,32 @@ def get_cache_stats() -> dict:
     Returns:
         Dictionary with cache statistics.
     """
+    max_mb = get_thumbnail_cache_max_mb()
+    max_bytes = max_mb * 1024 * 1024
+
     if not CACHE_DIR.exists():
         return {
             "exists": False,
             "file_count": 0,
             "total_size_bytes": 0,
             "total_size_mb": 0.0,
+            "max_size_bytes": max_bytes,
+            "max_size_mb": max_mb,
+            "limit_enabled": max_mb > 0,
         }
 
-    file_count = 0
-    total_size = 0
-
-    for cache_file in CACHE_DIR.iterdir():
-        if cache_file.is_file() and cache_file.suffix == ".webp":
-            file_count += 1
-            total_size += cache_file.stat().st_size
+    global _approx_cache_size_bytes
+    file_count, total_size, complete = _scan_cache_files_limited()
+    if complete:
+        _approx_cache_size_bytes = total_size
 
     return {
         "exists": True,
         "file_count": file_count,
-        "total_size_bytes": total_size,
-        "total_size_mb": round(total_size / (1024 * 1024), 2),
+        "file_count_complete": complete,
+        "total_size_bytes": total_size if complete else None,
+        "total_size_mb": round(total_size / (1024 * 1024), 2) if complete else None,
+        "max_size_bytes": max_bytes,
+        "max_size_mb": max_mb,
+        "limit_enabled": max_mb > 0,
     }

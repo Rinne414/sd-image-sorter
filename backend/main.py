@@ -12,10 +12,15 @@ import ipaddress
 import os
 import sys
 import asyncio
+import shutil
+import subprocess
 import logging
 import threading
 import time
 import traceback
+import re
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from collections import defaultdict, deque
 from typing import Optional, Dict, Any
 from contextlib import asynccontextmanager
@@ -37,16 +42,60 @@ from config import (
     RATE_LIMIT_MAX_REQUESTS as CONFIG_RATE_LIMIT_MAX_REQUESTS,
     RATE_LIMIT_APPLY_TO_LOOPBACK as CONFIG_RATE_LIMIT_APPLY_TO_LOOPBACK,
     LOG_LEVEL,
+    LOG_ACCESS_ENABLED,
+    LOG_FILE_ENABLED,
+    LOG_FILE_PATH,
+    LOG_FILE_MAX_BYTES,
+    LOG_FILE_BACKUP_COUNT,
     BACKEND_DIR,
     validate_config,
     ensure_directories,
 )
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+def configure_console_logging() -> None:
+    """Keep normal console output quiet while preserving a support log file."""
+    level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
+    log_format = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
+    formatter = logging.Formatter(log_format, datefmt="%H:%M:%S")
+    logging.basicConfig(level=level, format=log_format, datefmt="%H:%M:%S")
+    logging.getLogger().setLevel(level)
+    logging.getLogger("uvicorn.access").setLevel(
+        logging.INFO if LOG_ACCESS_ENABLED else logging.WARNING
+    )
+
+    if not LOG_FILE_ENABLED:
+        return
+
+    log_path = Path(LOG_FILE_PATH)
+    existing_paths = {
+        str(getattr(handler, "baseFilename", ""))
+        for handler in logging.getLogger().handlers
+        if isinstance(handler, RotatingFileHandler)
+    }
+    if str(log_path) in existing_paths:
+        return
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=LOG_FILE_MAX_BYTES,
+            backupCount=LOG_FILE_BACKUP_COUNT,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(file_handler)
+    except OSError as exc:
+        logging.getLogger("sd-image-sorter").warning(
+            "Could not initialize file log at %s: %s",
+            LOG_FILE_PATH,
+            exc,
+        )
+
+
+configure_console_logging()
 logger = logging.getLogger("sd-image-sorter")
 
 from PIL import Image as _PILImage
@@ -390,6 +439,102 @@ app.include_router(updates.router)
 app.include_router(disk.router)
 
 
+def _read_tail_lines(path: Path, max_lines: int) -> tuple[list[str], int]:
+    if max_lines <= 0 or not path.exists() or not path.is_file():
+        return [], 0
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return [], 0
+    return lines[-max_lines:], len(lines)
+
+
+def _redact_support_log_text(text: str) -> str:
+    """Redact likely local filesystem paths before exposing logs to the browser."""
+    field_boundary = r"(?=(?:\s+[-A-Za-z0-9_]+[:=])|[\r\n\"'<>]|$)"
+    text = re.sub(rf"[A-Za-z]:\\.*?{field_boundary}", "<PATH>", text)
+    text = re.sub(rf"(?<!\w)/(?:mnt|home|Users|var|tmp|Volumes|media)/.*?{field_boundary}", "<PATH>", text)
+    return text
+
+
+def build_support_diagnostics(max_lines: int = 200) -> Dict[str, Any]:
+    """Return a bounded, redacted diagnostics payload users can copy from the UI."""
+    log_path = Path(LOG_FILE_PATH)
+    lines, line_count = _read_tail_lines(log_path, max(1, min(int(max_lines or 200), 1000)))
+    redacted_lines = [_redact_support_log_text(line) for line in lines]
+    recent_log_text = "\n".join(redacted_lines)
+    return {
+        "app_version": APP_VERSION,
+        "log_level": LOG_LEVEL.upper(),
+        "access_log_enabled": bool(LOG_ACCESS_ENABLED),
+        "log_file_enabled": bool(LOG_FILE_ENABLED),
+        "log_file_path": str(log_path),
+        "log_file_path_redacted": _redact_support_log_text(str(log_path)),
+        "log_file_exists": log_path.exists(),
+        "log_file_max_bytes": LOG_FILE_MAX_BYTES,
+        "log_file_backup_count": LOG_FILE_BACKUP_COUNT,
+        "log_line_count": line_count,
+        "recent_log_text": recent_log_text,
+        "recent_log_lines": redacted_lines,
+    }
+
+
+def _build_file_manager_command(path: Path) -> Optional[list[str]]:
+    """Build an OS file-manager command for a trusted local path, if one exists."""
+    normalized_path = str(path.resolve())
+    if sys.platform == "win32":
+        return ["explorer", "/select,", normalized_path] if path.is_file() else ["explorer", normalized_path]
+    if sys.platform == "darwin":
+        opener = shutil.which("open")
+        if not opener:
+            return None
+        return [opener, "-R", normalized_path] if path.is_file() else [opener, normalized_path]
+
+    opener = shutil.which("xdg-open")
+    if not opener:
+        return None
+    target = normalized_path if path.is_dir() else str(path.parent.resolve())
+    return [opener, target]
+
+
+def _open_path_in_file_manager(path: Path) -> bool:
+    """Open a known local path in the OS file manager without accepting user input."""
+    command = _build_file_manager_command(path)
+    if not command:
+        return False
+    subprocess.Popen(command)
+    return True
+
+
+def open_support_log_file() -> Dict[str, Any]:
+    """Open the configured support log location in the user's file manager."""
+    if not LOG_FILE_ENABLED:
+        raise HTTPException(status_code=409, detail="Support log file is disabled")
+
+    log_path = Path(LOG_FILE_PATH)
+
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if not log_path.exists():
+            log_path.touch()
+        opened = _open_path_in_file_manager(log_path)
+    except OSError as exc:
+        logger.warning("Failed to open support log file %s: %s", LOG_FILE_PATH, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to open support log file: {exc}") from exc
+
+    payload = {
+        "success": opened,
+        "opened": opened,
+        "path": str(log_path),
+        "path_redacted": _redact_support_log_text(str(log_path)),
+        "exists": log_path.exists(),
+    }
+    if not opened:
+        payload["message"] = "No OS file manager command is available; copy the log path manually."
+    return payload
+
+
+
 # ============================================================
 # Exception Handlers
 # ============================================================
@@ -501,6 +646,18 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+@app.get("/api/support/diagnostics")
+async def support_diagnostics(lines: int = 200):
+    """Return a bounded support diagnostics bundle for copy/paste debugging."""
+    return build_support_diagnostics(max_lines=lines)
+
+
+@app.post("/api/support/open-log")
+async def support_open_log():
+    """Open the rotating support log file in the OS file manager."""
+    return open_support_log_file()
+
+
 @app.get("/")
 async def root():
     """Serve the main frontend page."""
@@ -586,5 +743,18 @@ if __name__ == "__main__":
     _configure_event_loop_policy()
     os.environ["SD_IMAGE_SORTER_BIND_HOST"] = args.host
     os.environ["SD_IMAGE_SORTER_PORT"] = str(args.port)
-    logger.info(f"Starting server on {args.host}:{args.port}")
-    uvicorn.run(app, host=args.host, port=args.port)
+    logger.info(
+        "Starting server on %s:%s (access_log=%s, log_level=%s, log_file=%s)",
+        args.host,
+        args.port,
+        "on" if LOG_ACCESS_ENABLED else "off",
+        LOG_LEVEL.upper(),
+        LOG_FILE_PATH if LOG_FILE_ENABLED else "off",
+    )
+    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.port,
+        access_log=LOG_ACCESS_ENABLED,
+        log_level=LOG_LEVEL.lower(),
+    )

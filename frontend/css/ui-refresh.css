@@ -1280,6 +1280,48 @@ textarea:focus,
     color: var(--text-primary);
 }
 
+
+.feature-availability-notice {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin: 0 0 16px;
+}
+.feature-availability-card {
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(191, 219, 254, 0.08);
+}
+.feature-availability-card.is-ready {
+    border-color: rgba(34, 197, 94, 0.26);
+}
+.feature-availability-card.is-prepare {
+    border-color: rgba(245, 158, 11, 0.28);
+}
+.feature-availability-card strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-primary, #f8fafc);
+    font-size: 14px;
+}
+.feature-availability-card p {
+    margin: 0 0 8px;
+    color: var(--text-secondary, #d4e3f1);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.feature-availability-card ul {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-secondary, #d4e3f1);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.feature-availability-card li + li {
+    margin-top: 4px;
+}
+
 .model-manager-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -2324,6 +2366,90 @@ textarea:focus,
     0%   { transform: translateX(-120%); }
     60%  { transform: translateX(180%); }
     100% { transform: translateX(220%); }
+}
+
+.scan-diagnostics-card {
+    display: none;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid rgba(245, 158, 11, 0.36);
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(15, 23, 42, 0.58));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    color: var(--text-primary, #e5e7eb);
+}
+
+.scan-diagnostics-card.is-visible {
+    display: flex;
+}
+
+.scan-diagnostics-main {
+    display: grid;
+    gap: 5px;
+    line-height: 1.45;
+}
+
+.scan-diagnostics-main strong {
+    color: #fbbf24;
+}
+
+.scan-diagnostics-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 12px;
+    margin: 8px 0 0;
+}
+
+.scan-diagnostics-meta div {
+    min-width: 0;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.34);
+}
+
+.scan-diagnostics-meta dt {
+    margin: 0 0 3px;
+    color: var(--text-muted, #a1a1aa);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.scan-diagnostics-meta dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text-primary, #e5e7eb);
+    font-size: 0.88rem;
+}
+
+.scan-diagnostics-privacy {
+    color: var(--text-muted, #a1a1aa);
+}
+
+@media (max-width: 640px) {
+    .scan-diagnostics-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+.scan-diagnostics-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.scan-diagnostics-actions small {
+    color: var(--text-muted, #a1a1aa);
+    flex-basis: 100%;
+    overflow-wrap: anywhere;
+}
+
+.scan-diagnostics-actions .danger {
+    border-color: rgba(239, 68, 68, 0.38);
+    color: var(--danger, #ef4444);
 }
 
 /* Gallery item fade-in entrance */
@@ -5401,6 +5527,42 @@ html.lang-zh #view-censor .queue-action-btn span {
     color: var(--text-secondary, #d4e3f1);
     font-size: 12px;
 }
+
+.disk-settings-section {
+    border-color: rgba(45, 212, 191, 0.12);
+}
+.disk-runtime-section {
+    border: 1px solid rgba(251, 191, 36, 0.16);
+    background: rgba(251, 191, 36, 0.045);
+}
+.disk-tradeoff-hint {
+    color: var(--warning, #fbbf24);
+}
+.disk-setting-row {
+    display: grid;
+    grid-template-columns: minmax(130px, 1fr) minmax(100px, 140px) auto auto;
+    align-items: center;
+    gap: 8px;
+}
+.disk-setting-row label,
+.disk-setting-unit {
+    color: var(--text-secondary, #d4e3f1);
+    font-size: 13px;
+}
+.disk-setting-row .input-field {
+    min-width: 0;
+}
+@media (max-width: 640px) {
+    .disk-setting-row {
+        grid-template-columns: 1fr auto;
+    }
+    .disk-setting-row label,
+    .disk-setting-row .input-field,
+    .disk-setting-row button {
+        grid-column: 1 / -1;
+    }
+}
+
 .disk-cache-list,
 .disk-preserved-list {
     display: flex;
@@ -5449,14 +5611,25 @@ html.lang-zh #view-censor .queue-action-btn span {
     white-space: nowrap;
 }
 .disk-preserved-row {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 3px 12px;
     padding: 4px 8px;
     font-size: 13px;
     color: var(--text-secondary, #d4e3f1);
 }
 .disk-preserved-size {
     font-variant-numeric: tabular-nums;
+}
+.disk-preserved-path {
+    grid-column: 1 / -1;
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--text-tertiary, #8aa1b8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .disk-actions {
     display: flex;

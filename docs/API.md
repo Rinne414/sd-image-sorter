@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.1.2
+**Version:** 3.1.3
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -168,13 +168,13 @@ Serve a thumbnail for the image.
 | `size` | int | 256 | Max dimension in pixels (1-4096) |
 
 #### GET /api/thumbnail-cache/stats
-Get thumbnail cache statistics.
+Get thumbnail cache statistics, including `max_size_mb`, `max_size_bytes`, and whether the persistent thumbnail cache limit is enabled.
 
 #### POST /api/thumbnail-cache/clear
 Clear all cached thumbnails.
 
 #### POST /api/thumbnail-cache/cleanup
-Remove old cached thumbnails.
+Remove old cached thumbnails, then enforce the configured thumbnail cache size limit.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -396,7 +396,7 @@ Start folder scan.
 
 #### GET /api/scan/progress
 Get scan progress.
-The payload now includes step-oriented fields such as `step`, `current_item`, `started_at`, `updated_at`, and `recent_errors`. Scan now verifies real image decode, so corrupt / truncated files are reported by filename and excluded from the normal library.
+The payload includes step-oriented fields such as `step`, `current_item`, `started_at`, `updated_at`, `recent_errors`, `metadata_pending`, `attention_required`, `attention_message`, `stalled_seconds`, `diagnostics_available`, and `diagnostics_endpoint`. When `attention_required=true`, clients should show a visible stalled-scan warning and offer diagnostics copy/open actions instead of leaving the user with a frozen-looking progress bar. Corrupt / truncated files are reported by filename and excluded from the normal library.
 
 #### POST /api/scan/cancel
 Cancel the active scan task.
@@ -678,6 +678,7 @@ The response includes step-oriented status fields such as `message`, `current_it
 #### GET /api/artists/models
 List artist models.
 
+
 #### GET /api/artists/diagnostics
 Get Kaloscope / LSNet runtime diagnostics for the frontend banner.
 
@@ -736,6 +737,14 @@ Resolve dropped filenames or folder name to a filesystem path.
 #### POST /api/import-files
 Import uploaded image files directly into the gallery.
 
+### Support
+
+#### GET /api/support/diagnostics
+Return a copyable support diagnostics payload for stalled scans and troubleshooting. The payload includes app/version/runtime flags, scan progress snapshots, and a redacted tail of the backend log; local paths inside log lines are redacted before returning to the browser.
+
+#### POST /api/support/open-log
+Open the configured rotating backend support log in the operating system file manager. The endpoint does not accept a user-supplied path; it only opens the app-controlled `LOG_FILE_PATH` location so the scan dialog can offer an "Open log file" action. If no OS opener is available, it returns `opened=false` with the log path instead of failing with a server error. The JSON response includes both the raw local `path` for local clipboard use and `path_redacted` for display, so frontend UI must display the redacted value and only copy the raw path on explicit user action.
+
 ### Updates
 
 #### GET /api/updates/status
@@ -774,7 +783,13 @@ When an update is scheduled, response includes `pending_manifest` and `restart_r
 ### Disk
 
 #### GET /api/disk/cache-status
-Report sizes of cache directories the user can safely clean and informational sizes for preserved directories (models, settings, user data). Response shape: `{safe_to_clean: [{key, label_key, path, size_bytes, exists}], preserved: [{key, label_key, size_bytes}]}`.
+Report sizes of cache directories the user can safely clean, informational sizes for preserved directories (models, settings, user data), cache settings, and the local Python runtime environment. Expensive folders are scanned with a small time/file budget so Feature Setup does not hang on huge old installs; when a size is incomplete, `size_complete` is `false` and `size_bytes` may be `null`. `tmp`, `thumbnails`, `pip_cache`, and `cache` are always the app-owned `data/tmp`, `data/thumbnails`, `data/pip-cache`, and `data/cache`; external `SD_IMAGE_SORTER_TMP_DIR`, `SD_IMAGE_SORTER_THUMBNAIL_DIR`, `PIP_CACHE_DIR`, or `SD_IMAGE_SORTER_CACHE_DIR` values are ignored for one-click cleanup. Size reporting does not follow symlinks, so external targets are not counted as app-reclaimable bytes. Response shape: `{safe_to_clean: [{key, label_key, path, size_bytes, size_complete, exists}], preserved: [{key, label_key, path, size_bytes, size_complete}], settings: {thumbnail_cache_max_mb}, thumbnail_cache: {file_count, total_size_bytes, total_size_mb, max_size_bytes, max_size_mb, limit_enabled}, runtime_environment: {runtime_kind, runtime_path, runtime_rebuild_target, venv_path, venv_exists, venv_size_bytes, venv_size_complete, rebuild_core_pending, rebuild_marker_path}}`.
+
+#### POST /api/disk/settings
+Persist disk/cache settings and apply safe cleanup immediately. Body: `{thumbnail_cache_max_mb: number}` where `0` disables persistent thumbnail writes and values above `0` cap regeneratable thumbnail files. Returns `{settings, thumbnail_cache, limit_cleanup}`.
+
+#### POST /api/disk/runtime/rebuild-core
+Schedule a safe lightweight Python environment rebuild for the next launcher start. This writes a marker under `data/state`; the running backend does **not** delete its own active Python runtime. On the next `run.bat` / `run.sh`, the launcher removes only `backend/venv`, clears `backend/.requirements_hash`, and reinstalls the selected dependency mode. On generated `run-portable.bat`, the launcher clears only embedded Python's pip-installed `Lib/site-packages` and `Scripts` directories, then reinstalls core dependencies. `data/`, `images.db`, settings, caches, downloaded models, and the embedded Python base files are left untouched. Returns `{scheduled, restart_required, runtime_environment}`.
 
 #### POST /api/disk/cleanup
 Wipe the contents of whitelisted cache directories. Body: `{keys: ["tmp" | "pip_cache" | "thumbnails" | "cache"]}`. Strict whitelist enforced server-side; unknown keys are rejected. Returns `{cleaned: [{key, freed_bytes}], errors: [{key, error}]}` with partial-failure reporting.

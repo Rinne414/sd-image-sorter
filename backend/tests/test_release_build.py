@@ -11,6 +11,16 @@ ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "scripts" / "build_release_packages.py"
 
 
+def _read_app_version() -> str:
+    match = re.search(
+        r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']',
+        (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None
+    return match.group(1)
+
+
 def load_release_builder():
     spec = importlib.util.spec_from_file_location("build_release_packages", BUILD_SCRIPT)
     assert spec is not None
@@ -30,15 +40,20 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"setlocal enabledelayedexpansion\r\n" in launcher_bytes
     assert b"set \"PIP_CMD=!PYTHON_DIR!\\Scripts\\pip.exe\"" in launcher_bytes
     assert b"set \"SD_IMAGE_SORTER_DATA_DIR=!DATA_DIR!\"" in launcher_bytes
+    assert b"set \"SD_IMAGE_SORTER_STATE_DIR=!STATE_DIR!\"" in launcher_bytes
     assert b"set \"SD_IMAGE_SORTER_LAUNCHER=run-portable.bat\"" in launcher_bytes
     assert b"set \"TEMP=!TMP_DIR!\"" in launcher_bytes
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
-    assert b"import fastapi, PIL" in launcher_bytes
-    assert b"sam3, einops, hydra, omegaconf, pycocotools, decord, iopath, cv2" in launcher_bytes
-    assert b"Preparing Python build tools for source-only packages" in launcher_bytes
+    assert b"import fastapi, PIL, numpy, onnxruntime" in launcher_bytes
+    assert b"requirements-core.txt" in launcher_bytes
+    assert b"RUNTIME_REBUILD_MARKER=!STATE_DIR!\\rebuild-core-venv.json" in launcher_bytes
+    assert b"Clearing embedded Python packages only" in launcher_bytes
+    assert b"Could not clear embedded Python site-packages" in launcher_bytes
+    assert b"Could not clear embedded Python Scripts" in launcher_bytes
+    assert b"!PYTHON_DIR!\\Lib\\site-packages" in launcher_bytes
+    assert b"Heavy AI packages install on Prepare" in launcher_bytes
     assert b"backend\\launcher_pip.py install setuptools wheel" in launcher_bytes
-    assert b"Installing full AI runtime dependencies" in launcher_bytes
-    assert b"backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt" in launcher_bytes
+    assert b"Installing lightweight core dependencies" in launcher_bytes
     assert b"-m pip install -r backend\\requirements.txt" not in launcher_bytes
     assert b"backend\\launcher_port.py --format cmd > \"!PORT_ENV_FILE!\"" in launcher_bytes
     assert b"SD_IMAGE_SORTER_PORT_STATUS" in launcher_bytes
@@ -47,6 +62,8 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"http://!APP_URL_HOST!:!APP_PORT!" in launcher_bytes
     assert b"http://localhost:!APP_PORT!" not in launcher_bytes
     assert b"main.py --port !APP_PORT!" in launcher_bytes
+    assert b"Server exited with code !SERVER_EXIT_CODE!" in launcher_bytes
+    assert b"Error output above" not in launcher_bytes
     assert launcher_bytes.endswith(b"pause\r\n")
 
 
@@ -139,14 +156,23 @@ def test_rescue_batch_files_are_release_managed(tmp_path):
 
 def test_release_default_version_follows_app_info():
     release_builder = load_release_builder()
-    match = re.search(
-        r'^APP_VERSION\s*=\s*["\']([^"\']+)["\']',
-        (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8"),
+
+    assert release_builder.DEFAULT_VERSION == _read_app_version()
+
+
+def test_release_public_docs_versions_follow_app_info():
+    app_version = _read_app_version()
+    readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
+    changelog_text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    assert f"version-{app_version}-ff8a00" in readme_text
+    assert f"sd-image-sorter-v{app_version}-windows-portable.zip" in readme_text
+    assert f"sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
+    assert re.search(
+        rf"^## \[{re.escape(app_version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
+        changelog_text,
         re.MULTILINE,
     )
-
-    assert match is not None
-    assert release_builder.DEFAULT_VERSION == match.group(1)
 
 
 def test_release_bootstrap_downloads_are_pinned_to_immutable_sources():
@@ -400,18 +426,61 @@ def _assert_platform_specific_wheels_guarded(requirements_path: Path):
 
 
 def test_runtime_requirements_keep_platform_specific_wheels_guarded():
-    """The shared launcher requirements file must remain installable on Windows/Linux."""
+    """The optional full-AI requirements file keeps platform-specific wheels guarded."""
     requirements_path = ROOT / "backend" / "requirements.txt"
     _assert_platform_specific_wheels_guarded(requirements_path)
     requirements_text = requirements_path.read_text(encoding="utf-8")
-    for package_name in ("sam3==0.1.3", "einops==0.8.2", "hydra-core==1.3.2", "omegaconf==2.3.0", "pycocotools==2.0.11", "decord==0.6.0", "iopath==0.1.10"):
-        assert package_name in requirements_text
-    for locked_line in (
-        'sam3==0.1.3 ; sys_platform != "darwin"',
-        'decord==0.6.0 ; sys_platform != "darwin"',
-        'iopath==0.1.10 ; sys_platform != "darwin"',
+    for package_name in (
+        "sam3==0.1.3",
+        "einops==",
+        "hydra-core==",
+        "omegaconf==",
+        "pycocotools==",
+        "decord==",
+        "iopath==",
     ):
-        assert locked_line in requirements_text
+        assert package_name not in requirements_text
+    assert "transformers==" in requirements_text
+    assert "safetensors==" in requirements_text
+    assert "opencv-python==" in requirements_text
+
+
+def test_core_requirements_exclude_heavy_ai_packages():
+    requirements_text = (ROOT / "backend" / "requirements-core.txt").read_text(encoding="utf-8")
+    for package_name in (
+        "torch==",
+        "torchvision==",
+        "sam3==",
+        "ultralytics==",
+        "fastembed==",
+        "open-clip-torch==",
+        "transformers==",
+        "timm==",
+        "nudenet==",
+        "onnxruntime-gpu==",
+        "nvidia-",
+        "cuda-",
+        "triton==",
+    ):
+        assert package_name not in requirements_text
+    assert 'onnxruntime==1.25.0 ; sys_platform == "linux"' in requirements_text
+    assert 'onnxruntime==1.19.2 ; sys_platform == "darwin"' in requirements_text
+    assert 'onnxruntime==1.20.1 ; sys_platform == "win32"' in requirements_text
+    assert 'uvloop==0.22.1 ; sys_platform != "win32"' in requirements_text
+    assert 'cffi==2.0.0 ; sys_platform == "win32"' in requirements_text
+    assert "fastapi==" in requirements_text
+
+
+def test_prepare_flow_frontend_warns_when_restart_is_needed():
+    app_js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+    en_js = (ROOT / "frontend" / "js" / "lang" / "en.js").read_text(encoding="utf-8")
+    zh_js = (ROOT / "frontend" / "js" / "lang" / "zh-CN.js").read_text(encoding="utf-8")
+
+    assert "withRestartReminder" in app_js
+    assert "restart_recommended" in app_js
+    assert "installed_packages" in app_js
+    assert "models.restartAfterInstallWithPackages" in en_js
+    assert "使用这个功能前请重启应用" in zh_js
 
 
 def test_dev_requirements_keep_platform_specific_wheels_guarded():
@@ -453,15 +522,26 @@ def test_launchers_reject_python_older_than_runtime_lock():
     assert "LSS 12" in run_bat
     assert "Python 3.9" not in run_bat
     assert "backend/launcher_pip.py install setuptools wheel" in run_sh
-    assert 'INSTALL_REQUIREMENTS="backend/requirements.txt"' in run_sh
+    assert 'INSTALL_REQUIREMENTS="backend/requirements-core.txt"' in run_sh
+    assert 'SD_IMAGE_SORTER_INSTALL_FULL_AI' in run_sh
     assert 'backend/launcher_pip.py install --no-build-isolation -r "${INSTALL_REQUIREMENTS}"' in run_sh
     assert "macOS is not supported by this release package" in run_sh
     assert "--index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0" in run_sh
     assert "requirements-linux-runtime.txt" in run_sh
+    assert "HASH_REQUIREMENTS=\"${INSTALL_REQUIREMENTS}\"" in run_sh
+    assert "md5sum \"${HASH_REQUIREMENTS}\"" in run_sh
     assert '"nvidia-"' in run_sh
     assert '"cuda-"' in run_sh
+    assert "Skipping ONNX GPU repair for lightweight startup" in run_sh
+    assert 'VENV_REBUILD_MARKER="${STATE_DIR}/rebuild-core-venv.json"' in run_sh
+    assert 'rm -rf "backend/venv"' in run_sh
+    assert 'rm -f "backend/.requirements_hash"' in run_sh
     assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install setuptools wheel" in run_bat
-    assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install --no-build-isolation -r backend\\requirements.txt" in run_bat
+    assert 'backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install --no-build-isolation -r "!INSTALL_REQUIREMENTS!"' in run_bat
+    assert 'VENV_REBUILD_MARKER=%STATE_DIR%\\rebuild-core-venv.json' in run_bat
+    assert 'rmdir /s /q "backend\\venv"' in run_bat
+    assert 'del "backend\\.requirements_hash"' in run_bat
+    assert "requirements-core.txt" in run_bat
 
 
 def test_current_install_docs_match_python_312_floor():
@@ -531,3 +611,10 @@ def test_frontend_i18n_and_censor_css_keep_safety_contracts():
     for hardcoded_accent in ("rgba(168, 85, 247", "rgba(124, 58, 237", "#a855f7", "#7c3aed", "#e9d5ff"):
         assert hardcoded_accent not in css_text
     assert "var(--censor-accent" in censor_css
+
+def test_model_manager_sam3_setup_copy_matches_lazy_prepare_policy():
+    model_service = (ROOT / "backend" / "services" / "model_service.py").read_text(encoding="utf-8")
+
+    assert "First launch installs SAM3 Python runtime packages" not in model_service
+    assert "Click Prepare / Download to install SAM3 Python runtime packages if they are missing." in model_service
+    assert "Restart SD Image Sorter if the Prepare result says Python packages were installed." in model_service

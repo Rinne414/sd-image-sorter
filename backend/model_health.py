@@ -282,7 +282,7 @@ def _load_yolo_class_names(model_path: Path) -> List[str]:
         except Exception:
             continue
 
-    if model_path.suffix.lower() in {".pt", ".pth"} and _module_available("ultralytics"):
+    if model_path.suffix.lower() in {".pt", ".pth"} and _module_installed("ultralytics"):
         try:
             from ultralytics import YOLO
 
@@ -628,15 +628,15 @@ def get_model_health() -> Dict[str, Any]:
             ),
         },
         "clip": {
-            "available": bool(clip_model_path) and _module_available("fastembed"),
+            "available": bool(clip_model_path) and _module_installed("fastembed"),
             "model_downloaded": bool(clip_model_path),
-            "runtime_available": _module_available("fastembed"),
+            "runtime_available": _module_installed("fastembed"),
             "runtime_loaded": _clip_model_loaded(),
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
             "message": (
                 "Local CLIP model ready."
-                if clip_model_path and _module_available("fastembed")
+                if clip_model_path and _module_installed("fastembed")
                 else (
                     "CLIP model files are downloaded, but the FastEmbed runtime is missing."
                     if clip_model_path
@@ -664,15 +664,15 @@ def get_model_health() -> Dict[str, Any]:
                 ),
             },
             "nudenet": {
-                "available": _module_available("nudenet"),
+                "available": _module_installed("nudenet"),
                 "model_downloaded": nudenet_model.exists(),
                 "model_path": str(nudenet_model.resolve()) if nudenet_model.exists() else None,
                 "message": (
                     "NudeNet runtime is ready."
-                    if _module_available("nudenet") and nudenet_model.exists()
+                    if _module_installed("nudenet") and nudenet_model.exists()
                     else (
                         "NudeNet runtime is installed. The detector can still prepare/download its model on first use."
-                        if _module_available("nudenet")
+                        if _module_installed("nudenet")
                         else "NudeNet runtime is not installed yet."
                     )
                 ),

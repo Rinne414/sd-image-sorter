@@ -222,7 +222,22 @@ Prefer targeted resource controls:
 
 Do not make every workflow slower, disable GPU by default, or serialize cheap metadata/UI work just to hide a crash bug in one heavy AI path.
 
-### 13. Double-click entry must work; rescue paths must exist outside the app
+### 13. Lightweight defaults beat eager heavyweight setup
+
+Most users do not have unlimited disk, bandwidth, or patience. Default startup should install only what is needed to open, scan, browse, sort, and use the core local app. Heavy AI runtimes should be prepared on explicit user action or through an explicit full-AI mode.
+
+Keep these rules aligned unless the user explicitly changes product direction:
+
+- do not copy recoverable raw image metadata into the SQLite index just because it is easy
+- do not install GB-scale model runtimes on first launch for features the user may never use
+- do not silently remove heavy features; move them behind clear Prepare / Download actions
+- if a running backend installs Python packages on demand, tell the user to restart before trusting that feature
+- never install optional AI Python packages into system Python by default; require app-owned runtime (`backend/venv` or generated `run-portable.bat` embedded Python), an active virtualenv, or an explicit developer override
+- cleanup UI must only delete app-owned cache paths under `data/`; environment variables such as `SD_IMAGE_SORTER_TMP_DIR`, `SD_IMAGE_SORTER_THUMBNAIL_DIR`, `PIP_CACHE_DIR`, or `SD_IMAGE_SORTER_CACHE_DIR` must not turn a global/user directory into a one-click cleanup target, and symlink targets must not be counted as app-reclaimable bytes
+
+The short lesson for future AI: **default light, opt into heavy, keep the feature.**
+
+### 14. Double-click entry must work; rescue paths must exist outside the app
 
 For startup, packaging, and update work, treat entry usability as a product invariant, not a convenience detail.
 
