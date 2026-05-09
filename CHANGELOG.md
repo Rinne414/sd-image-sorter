@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Feature Setup / 磁盘占用现在会在清理大小未完整扫描的缓存前二次确认，并且手动设置引导弹窗会把键盘焦点留在弹窗内。
 - ToriiGate optional setup now requires a Transformers version new enough for the Qwen3.5 classes it imports, and Linux full-AI launcher installs no longer repeat because of a temporary filtered requirements hash.
   - ToriiGate optional setup 现在要求足够新的 Transformers 版本来匹配实际导入的 Qwen3.5 类；Linux full-AI 启动器也不会再因为临时过滤后的 requirements hash 反复安装。
+- Thumbnail cache writes are now atomic (write-then-rename), preventing corrupt partial thumbnails when concurrent requests or crashes overlap.
+  - 缩略图缓存写入现在是原子操作（先写临时文件再 rename），避免并发请求或崩溃导致半写损坏的缩略图。
+- Stale `.tmp` files left in the thumbnail cache by interrupted writes are now cleaned up automatically during periodic cache maintenance.
+  - 被中断写入遗留在缩略图缓存里的 `.tmp` 文件现在会在定期缓存维护时自动清理。
+- Artist ID optional dependency group now declares the same Transformers version floor as SAM3 and ToriiGate, preventing version drift across feature groups.
+  - Artist ID 的 optional dependency group 现在和 SAM3、ToriiGate 声明相同的 Transformers 最低版本，防止 feature group 之间版本漂移。
+- File-rename collision loops in sidecar export and image move/copy operations now have a safety cap, preventing theoretical infinite loops when a destination folder contains an extreme number of identically-named files.
+  - sidecar 导出和图片 move/copy 的文件名冲突重试循环现在有安全上限，防止目标目录中存在极端数量同名文件时的理论死循环。
 
 ### Release Notes / 发布注意
 - Existing users who still see large Python runtime usage should open **Feature Setup → Disk Usage → Python runtime environment → Rebuild lightweight runtime on next start**, then close and restart the app.

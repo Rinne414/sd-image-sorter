@@ -225,11 +225,13 @@ def _allocate_output_path(
 
     stem = filename
     counter = 1
-    while True:
+    while counter <= 10000:
         candidate_path = os.path.join(output_folder, f"{stem}_{counter}{extension}")
         if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
             return candidate_path
         counter += 1
+
+    return None
 
 
 def export_tags_batch_request(request: Any) -> Dict[str, Any]:

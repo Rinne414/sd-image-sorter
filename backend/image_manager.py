@@ -1163,10 +1163,16 @@ def _prepare_destination_path(
     if os.path.exists(new_path) and (new_path != image_path or operation == "copy"):
         base, ext = os.path.splitext(filename)
         counter = 1
-        while os.path.exists(new_path):
+        while os.path.exists(new_path) and counter <= 10000:
             new_filename = f"{base}_{counter}{ext}"
             new_path = os.path.abspath(os.path.join(destination_folder, new_filename))
             counter += 1
+        if os.path.exists(new_path):
+            raise FileOperationError(
+                "Could not find an available filename after 10000 attempts",
+                path=destination_folder,
+                operation=operation,
+            )
 
     return image_path, new_path
 

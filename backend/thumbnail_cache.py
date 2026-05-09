@@ -282,12 +282,17 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
         return (thumbnail_bytes, source_modified)
 
     try:
-        with open(cache_path, "wb") as f:
+        tmp_path = cache_path.with_suffix(".tmp")
+        with open(tmp_path, "wb") as f:
             f.write(thumbnail_bytes)
+        os.replace(str(tmp_path), str(cache_path))
         enforce_cache_size_limit_if_due(added_bytes=len(thumbnail_bytes))
     except OSError as e:
-        # Log but don't fail - cache write is optional
         logger.warning("Failed to write thumbnail cache: %s", e)
+        try:
+            cache_path.with_suffix(".tmp").unlink(missing_ok=True)
+        except OSError:
+            pass
 
     return (thumbnail_bytes, source_modified)
 
@@ -412,13 +417,17 @@ def cleanup_old_cache(max_age_days: int = CACHE_MAX_AGE_DAYS) -> int:
 
     with _cache_lock:
         for cache_file in CACHE_DIR.iterdir():
-            if cache_file.is_file() and cache_file.suffix == ".webp":
-                try:
-                    if cache_file.stat().st_mtime < cutoff_time:
-                        cache_file.unlink()
-                        count += 1
-                except OSError as e:
-                    logger.debug("Failed to cleanup cache file %s: %s", cache_file, e)
+            if not cache_file.is_file():
+                continue
+            try:
+                if cache_file.suffix == ".tmp":
+                    cache_file.unlink()
+                    count += 1
+                elif cache_file.suffix == ".webp" and cache_file.stat().st_mtime < cutoff_time:
+                    cache_file.unlink()
+                    count += 1
+            except OSError as e:
+                logger.debug("Failed to cleanup cache file %s: %s", cache_file, e)
 
     global _approx_cache_size_bytes
     if count:
