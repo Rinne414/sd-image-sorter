@@ -28,7 +28,7 @@ class UnsafeDependencyInstallError(RuntimeError):
 OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     "clip": ("fastembed>=0.4.0",),
     "aesthetic": ("torch>=2.0.0", "open-clip-torch>=2.24.0"),
-    "artist": ("torch>=2.0.0", "transformers>=4.36.0", "timm>=0.9.0", "safetensors>=0.4.0"),
+    "artist": ("torch>=2.0.0", "transformers>=5.6.0", "timm>=0.9.0", "safetensors>=0.4.0"),
     "nudenet": ("nudenet>=3.0.0",),
     "yolo": ("ultralytics>=8.4.0",),
     "sam3": (
