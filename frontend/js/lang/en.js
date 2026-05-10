@@ -1336,7 +1336,7 @@ window.I18nLang_en = {
     'features.prepareRestartNote': 'If Prepare installs Python packages, restart the app before using that feature. The UI will warn you when this happens.',
     'features.prepare.clip': 'CLIP similarity / duplicate search: installs fastembed and downloads CLIP files',
     'features.prepare.aesthetic': 'Aesthetic scoring: installs torch + open-clip and downloads CLIP/head files',
-    'features.prepare.artist': 'Artist ID: installs torch/transformers/timm/safetensors and downloads Kaloscope files',
+    'features.prepare.artist': 'Artist ID: installs torch/transformers/timm/safetensors/triton and downloads Kaloscope files',
     'features.prepare.censorAi': 'AI censor detectors: NudeNet / Privacy YOLO / SAM3 install their own runtimes and model files',
     'features.prepare.toriigate': 'ToriiGate VLM tagging: installs PyTorch/Transformers and downloads about 5 GB on first use',
 

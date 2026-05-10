@@ -25,6 +25,8 @@ class UnsafeDependencyInstallError(RuntimeError):
     """Raised when optional packages would be installed outside the app venv."""
 
 
+_TRITON_PACKAGE = "triton-windows" if sys.platform == "win32" else "triton>=3.0.0"
+
 OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
     "clip": ("fastembed>=0.4.0",),
     "aesthetic": ("torch>=2.0.0", "open-clip-torch>=2.24.0"),
@@ -38,6 +40,10 @@ OPTIONAL_DEPENDENCY_GROUPS: dict[str, tuple[str, ...]] = {
         "opencv-python>=4.9.0",
     ),
     "toriigate": ("torch>=2.0.0", "transformers>=5.6.0", "safetensors>=0.4.0"),
+}
+
+SOFT_DEPENDENCY_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
+    "artist": (("triton", _TRITON_PACKAGE),),
 }
 
 
@@ -61,6 +67,7 @@ IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
     "nudenet": "nudenet>=3.0.0",
     "ultralytics": "ultralytics>=8.4.0",
     "cv2": "opencv-python>=4.9.0",
+    "triton": _TRITON_PACKAGE,
 }
 
 
@@ -171,4 +178,40 @@ def ensure_group(group: str) -> DependencyInstallResult:
     return DependencyInstallResult(
         installed_packages=tuple(packages_to_install),
         restart_recommended=bool(packages_to_install),
+    )
+
+
+import logging as _logging
+
+_dep_logger = _logging.getLogger("sd-image-sorter.deps")
+
+
+def ensure_group_with_soft_deps(group: str) -> DependencyInstallResult:
+    """Install core group deps, then best-effort install soft deps (triton etc.).
+
+    Soft deps failing does NOT block the core install or raise an error.
+    """
+    result = ensure_group(group)
+    soft_entries = SOFT_DEPENDENCY_GROUPS.get(group)
+    if not soft_entries:
+        return result
+
+    soft_installed: list[str] = []
+    for module_name, package_spec in soft_entries:
+        if not _needs_install(module_name, package_spec):
+            continue
+        try:
+            install_packages([package_spec])
+            soft_installed.append(package_spec)
+        except Exception as exc:
+            _dep_logger.warning(
+                "Optional package %s could not be installed (non-fatal): %s",
+                package_spec,
+                exc,
+            )
+
+    all_installed = list(result.installed_packages) + soft_installed
+    return DependencyInstallResult(
+        installed_packages=tuple(all_installed),
+        restart_recommended=bool(all_installed),
     )

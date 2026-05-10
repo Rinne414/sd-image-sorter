@@ -574,8 +574,7 @@ def get_model_health() -> Dict[str, Any]:
         artist_missing.append("torch")
     if not _module_installed("timm"):
         artist_missing.append("timm")
-    if platform.system() == "Windows" and not _module_installed("triton"):
-        artist_missing.append("triton")
+    artist_triton_available = _module_installed("triton")
     artist_hf_available = _module_installed("huggingface_hub")
     artist_ms_available = _module_installed("modelscope")
     artist_has_any_source = True
@@ -738,9 +737,16 @@ def get_model_health() -> Dict[str, Any]:
             "modelscope_available": artist_ms_available,
             "has_download_source": artist_has_any_source,
             "runtime_note": (
-                "On Windows, comfyui-lsnet may log 'SkaFn failed; falling back to PyTorchSkaFn'. That fallback is usually okay if artist predictions still appear."
-                if platform.system() == "Windows"
-                else None
+                (
+                    "triton is not installed. The LSNet runtime may fall back to PyTorchSkaFn (slower but functional). "
+                    "Install triton-windows to use the optimized kernel."
+                )
+                if platform.system() == "Windows" and not artist_triton_available
+                else (
+                    "On Windows, comfyui-lsnet may log 'SkaFn failed; falling back to PyTorchSkaFn'. That fallback is usually okay if artist predictions still appear."
+                    if platform.system() == "Windows"
+                    else None
+                )
             ),
             "message": (
                 "Kaloscope runtime is ready."
