@@ -8164,7 +8164,7 @@ function renderFeatureAvailabilityNotice() {
     const prepareItems = [
         appT('features.prepare.clip', 'CLIP similarity / duplicate search: installs fastembed and downloads CLIP files'),
         appT('features.prepare.aesthetic', 'Aesthetic scoring: installs torch + open-clip and downloads CLIP/head files'),
-        appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors and downloads Kaloscope files'),
+        appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors/triton and downloads Kaloscope files'),
         appT('features.prepare.censorAi', 'AI censor detectors: NudeNet / Privacy YOLO / SAM3 install their own runtimes and model files'),
         appT('features.prepare.toriigate', 'ToriiGate VLM tagging: heavy PyTorch runtime + about 5 GB model download on first use'),
     ];
@@ -9105,7 +9105,9 @@ const _debouncedPromptSearch = debounce(async (query) => {
                     el.addEventListener('click', () => {
                         const prompt = el.dataset.prompt;
                         const filterState = getFilterModalState();
-                        if (!filterState.prompts.includes(prompt)) {
+                        const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
+                        const normalizedExisting = filterState.prompts.map(normalize);
+                        if (!normalizedExisting.includes(normalize(prompt))) {
                             filterState.prompts = [...filterState.prompts, prompt];
                             renderModalActivePrompts();
                         }
@@ -9140,7 +9142,9 @@ const _debouncedPromptSearch = debounce(async (query) => {
             el.addEventListener('click', () => {
                 const prompt = el.dataset.prompt;
                 const filterState = getFilterModalState();
-                if (!filterState.prompts.includes(prompt)) {
+                const normalize = s => s.toLowerCase().replace(/_/g, ' ').trim();
+                const normalizedExisting = filterState.prompts.map(normalize);
+                if (!normalizedExisting.includes(normalize(prompt))) {
                     filterState.prompts = [...filterState.prompts, prompt];
                     renderModalActivePrompts();
                 }

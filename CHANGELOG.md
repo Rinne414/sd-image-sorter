@@ -5,6 +5,14 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.4] - 2026-05-10
+
+### Fixed / 修复
+- **Artist ID / Kaloscope availability**: `triton` is no longer a hard blocker for Artist ID on Windows. The health check now treats triton as informational instead of blocking `available=True`. Feature Setup Prepare now also installs `triton-windows` (Windows) or `triton` (Linux) as a best-effort soft dependency — if the install fails, core Artist ID still works with the PyTorch fallback.
+  - **画师识别 / Kaloscope 可用性**：`triton` 不再是 Windows 上画师识别的硬性阻断条件。健康检查现在把 triton 视为信息提示而非阻止 `available=True`。Feature Setup 的 Prepare 现在也会尝试安装 `triton-windows`（Windows）或 `triton`（Linux）作为 best-effort 软依赖——如果安装失败，核心画师识别仍然可以通过 PyTorch fallback 正常工作。
+- **Prompt filter duplicate bug**: Clicking a prompt suggestion in the filter modal now normalizes underscores to spaces before checking for duplicates, matching the existing Enter-key handler behavior. Previously, clicking a suggestion could add a duplicate prompt if the existing filter used spaces while the suggestion used underscores (or vice versa).
+  - **Prompt 过滤器重复 bug**：在过滤器弹窗中点击 prompt 建议现在会在检查重复前将下划线正规化为空格，与已有的回车键处理逻辑一致。之前点击建议可能会添加重复的 prompt（如果现有过滤器用空格而建议用下划线，或反之）。
+
 ## [3.1.3] - 2026-05-09
 
 ### Fixed / 修复

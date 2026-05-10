@@ -1511,7 +1511,7 @@ window.I18nLang_zhCN = {
     'features.prepareRestartNote': '如果准备过程安装了 Python 包，使用该功能前必须重启应用。界面会明确提醒你。',
     'features.prepare.clip': 'CLIP 相似图 / 重复图搜索：安装 fastembed 并下载 CLIP 文件',
     'features.prepare.aesthetic': '美学评分：安装 torch + open-clip 并下载 CLIP / 评分头文件',
-    'features.prepare.artist': '画师识别：安装 torch / transformers / timm / safetensors 并下载 Kaloscope 文件',
+    'features.prepare.artist': '画师识别：安装 torch / transformers / timm / safetensors / triton 并下载 Kaloscope 文件',
     'features.prepare.censorAi': 'AI 自动打码检测：NudeNet / Privacy YOLO / SAM3 会安装各自运行库和模型文件',
     'features.prepare.toriigate': 'ToriiGate VLM 打标：安装 PyTorch / Transformers，首次还要下载约 5 GB 模型',
 

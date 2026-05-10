@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 from app_info import APP_VERSION
 from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
 from model_health import get_model_health, get_sam3_checkpoint_path
-from optional_dependencies import DependencyInstallResult, ensure_group
+from optional_dependencies import DependencyInstallResult, ensure_group, ensure_group_with_soft_deps
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -877,7 +877,7 @@ class ModelService:
             }, dependency_result)
 
         if normalized_model_id == "artist":
-            dependency_result = ensure_group("artist")
+            dependency_result = ensure_group_with_soft_deps("artist")
             restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
             if restart_result:
                 return restart_result
