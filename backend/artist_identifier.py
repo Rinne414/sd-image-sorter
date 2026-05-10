@@ -275,7 +275,9 @@ def _has_lsnet_runtime() -> bool:
         import timm  # noqa: F401
         try:
             from lsnet_model import lsnet_artist  # noqa: F401
-        except ImportError:
+        except ImportError as inner_exc:
+            if isinstance(inner_exc, ModuleNotFoundError) and inner_exc.name != "lsnet_model":
+                return False
             from model import lsnet_artist  # noqa: F401
         return True
     except ImportError:
@@ -935,7 +937,9 @@ class ArtistIdentifier:
             try:
                 from lsnet_model import lsnet_artist  # noqa: F401
                 runtime_kind = "comfyui-lsnet"
-            except ImportError:
+            except ImportError as inner_exc:
+                if isinstance(inner_exc, ModuleNotFoundError) and inner_exc.name != "lsnet_model":
+                    raise
                 from model import lsnet_artist  # noqa: F401
                 runtime_kind = "lsnet-test"
         except ModuleNotFoundError as exc:
