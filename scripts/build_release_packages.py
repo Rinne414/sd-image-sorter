@@ -104,6 +104,8 @@ EXCLUDED_NAMES = {
     ".mypy_cache",
     ".ruff_cache",
     ".coverage",
+    "coverage.xml",
+    "htmlcov",
     "nul",
 }
 
