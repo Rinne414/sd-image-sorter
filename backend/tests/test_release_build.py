@@ -4,6 +4,7 @@ import importlib.util
 import json
 import re
 import hashlib
+import sys
 from pathlib import Path
 
 
@@ -45,6 +46,10 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert b"set \"TEMP=!TMP_DIR!\"" in launcher_bytes
     assert b"if not exist \"!PYTHON_CMD!\" (" in launcher_bytes
     assert b"import fastapi, PIL, numpy, onnxruntime" in launcher_bytes
+    import_probe_lines = [line for line in launcher_bytes.splitlines() if b'-c "import ' in line]
+    assert import_probe_lines == [b'    "!PYTHON_CMD!" -c "import fastapi, PIL, numpy, onnxruntime" >nul 2>&1']
+    for optional_import in (b"sam3", b"decord", b"iopath", b"pycocotools", b"cv2"):
+        assert optional_import not in import_probe_lines[0]
     assert b"requirements-core.txt" in launcher_bytes
     assert b"RUNTIME_REBUILD_MARKER=!STATE_DIR!\\rebuild-core-venv.json" in launcher_bytes
     assert b"Clearing embedded Python packages only" in launcher_bytes
@@ -618,3 +623,48 @@ def test_model_manager_sam3_setup_copy_matches_lazy_prepare_policy():
     assert "First launch installs SAM3 Python runtime packages" not in model_service
     assert "Click Prepare / Download to install SAM3 Python runtime packages if they are missing." in model_service
     assert "Restart SD Image Sorter if the Prepare result says Python packages were installed." in model_service
+
+
+def _load_lazy_release_qa_module(name: str):
+    script_path = ROOT / "scripts" / "lazy_release_qa.py"
+    spec = importlib.util.spec_from_file_location(name, script_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_lazy_release_qa_uses_matching_node_runtime_for_linux_python(monkeypatch):
+    module = _load_lazy_release_qa_module("lazy_release_qa_for_test")
+
+    captured = {}
+
+    def fake_first_executable(*candidates):
+        captured["candidates"] = candidates
+        return str(candidates[0])
+
+    monkeypatch.setattr(module, "_first_executable", fake_first_executable)
+
+    node = module._node_executable("/usr/bin/python3")
+
+    assert node == "node"
+    assert captured["candidates"][0] == "node"
+    assert not str(captured["candidates"][0]).lower().endswith(".exe")
+
+
+def test_lazy_release_qa_uses_windows_node_for_windows_python(monkeypatch):
+    module = _load_lazy_release_qa_module("lazy_release_qa_for_test_windows")
+
+    captured = {}
+
+    def fake_first_executable(*candidates):
+        captured["candidates"] = candidates
+        return str(candidates[0])
+
+    monkeypatch.setattr(module, "_first_executable", fake_first_executable)
+
+    node = module._node_executable("C:/Python312/python.exe")
+
+    assert node.lower().endswith("node.exe")
+    assert str(captured["candidates"][0]).endswith("node.exe")

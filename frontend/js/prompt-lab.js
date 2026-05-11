@@ -23,6 +23,7 @@ const PromptLab = {
     exclusionRules: [],
     presets: [],
     generatedPrompt: '',
+    generatedPromptCore: '',
     isReady: false,
     eventsBound: false,
     randomizeExcludedCategories: new Set(['unknown', 'rating', 'meta']),
@@ -38,6 +39,10 @@ const PromptLab = {
         scoredImages: 8,
         recipes: 8,
     },
+
+    // User-controlled fixed tags for generated prompts.
+    prependTags: '',
+    appendTags: '',
 
     // Current builder state (slot-based)
     slots: {},       // { category: [selected tags] }
@@ -388,16 +393,110 @@ const PromptLab = {
         const searchInput = document.getElementById('promptlab-search');
         const tagSetSelect = document.getElementById('promptlab-set-select');
         const applyTagSet = document.getElementById('btn-promptlab-apply-tagset');
+        const prependInput = document.getElementById('promptlab-prepend');
+        const appendInput = document.getElementById('promptlab-append');
 
         if (searchInput) searchInput.disabled = !isReady;
         if (tagSetSelect) tagSetSelect.disabled = !isReady;
         if (applyTagSet) applyTagSet.disabled = !isReady;
+        if (prependInput) prependInput.disabled = !isReady;
+        if (appendInput) appendInput.disabled = !isReady;
         this.updateActionState();
     },
 
     invalidateGeneratedPrompt() {
         this.generatedPrompt = '';
+        this.generatedPromptCore = '';
         this.renderOutput();
+    },
+
+    _parsePromptTags(value) {
+        return String(value || '')
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean);
+    },
+
+    _normalizePromptTag(tag) {
+        return String(tag || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/_+/g, '_');
+    },
+
+    _mergePromptTags(...tagGroups) {
+        const merged = [];
+        const seen = new Set();
+
+        for (const group of tagGroups) {
+            for (const tag of group) {
+                const key = this._normalizePromptTag(tag);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                merged.push(tag);
+            }
+        }
+
+        return merged;
+    },
+
+    _applyPrependAppend(prompt) {
+        const prepend = this._parsePromptTags(this.prependTags);
+        const core = this._parsePromptTags(prompt);
+        const append = this._parsePromptTags(this.appendTags);
+        return this._mergePromptTags(prepend, core, append).join(', ');
+    },
+
+    _stripAffixesFromPrompt(prompt, prependTags = this.prependTags, appendTags = this.appendTags) {
+        const affixKeys = new Set([
+            ...this._parsePromptTags(prependTags),
+            ...this._parsePromptTags(appendTags),
+        ].map((tag) => this._normalizePromptTag(tag)).filter(Boolean));
+
+        if (affixKeys.size === 0) {
+            return String(prompt || '').trim();
+        }
+
+        return this._parsePromptTags(prompt)
+            .filter((tag) => !affixKeys.has(this._normalizePromptTag(tag)))
+            .join(', ');
+    },
+
+    _readAffixInputs() {
+        const prependInput = document.getElementById('promptlab-prepend');
+        const appendInput = document.getElementById('promptlab-append');
+        this.prependTags = prependInput?.value || '';
+        this.appendTags = appendInput?.value || '';
+    },
+
+    _syncAffixInputs() {
+        const prependInput = document.getElementById('promptlab-prepend');
+        const appendInput = document.getElementById('promptlab-append');
+        if (prependInput) prependInput.value = this.prependTags || '';
+        if (appendInput) appendInput.value = this.appendTags || '';
+    },
+
+    _refreshOutputFromAffixes(previousPrepend = this.prependTags, previousAppend = this.appendTags) {
+        const outputEl = document.getElementById('promptlab-output');
+        const currentOutput = outputEl?.value || this.generatedPrompt || '';
+        const core = this.generatedPromptCore || this._stripAffixesFromPrompt(currentOutput, previousPrepend, previousAppend);
+
+        this.generatedPromptCore = core;
+        this.generatedPrompt = core ? this._applyPrependAppend(core) : '';
+        this.renderOutput();
+    },
+
+    handleAffixInput() {
+        const previousPrepend = this.prependTags;
+        const previousAppend = this.appendTags;
+        this._readAffixInputs();
+
+        const outputEl = document.getElementById('promptlab-output');
+        const currentOutput = outputEl?.value || this.generatedPrompt || '';
+        if (currentOutput.trim() || this.generatedPromptCore.trim()) {
+            this._refreshOutputFromAffixes(previousPrepend, previousAppend);
+        }
     },
 
     getSelectedTags() {
@@ -781,7 +880,9 @@ const PromptLab = {
             }
 
             const result = await window.App.API.post('/api/prompts/generate', config);
-            this.generatedPrompt = result.positive_prompt || result.prompt || '';
+            this._readAffixInputs();
+            this.generatedPromptCore = result.positive_prompt || result.prompt || '';
+            this.generatedPrompt = this._applyPrependAppend(this.generatedPromptCore);
             this.renderOutput();
 
             if (result.warnings?.length > 0) {
@@ -870,6 +971,7 @@ const PromptLab = {
     // ============== Presets ==============
 
     async savePreset() {
+        this._readAffixInputs();
         const name = await window.App.showInputModal(
             this._t('promptlab.savePresetTitle', 'Save Preset'),
             this._t('promptlab.savePresetMessage', 'Enter a name for this preset:'),
@@ -884,6 +986,8 @@ const PromptLab = {
                     slots: { ...this.slots },
                     weights: { ...this.weights },
                     locked: { ...this.locked },
+                    prependTags: this.prependTags,
+                    appendTags: this.appendTags,
                 }
             });
             await this.loadPresets();
@@ -905,6 +1009,9 @@ const PromptLab = {
             this.slots = { ...(preset.config.slots || {}) };
             this.weights = { ...(preset.config.weights || {}) };
             this.locked = { ...(preset.config.locked || {}) };
+            this.prependTags = preset.config.prependTags || '';
+            this.appendTags = preset.config.appendTags || '';
+            this._syncAffixInputs();
 
             this.invalidateGeneratedPrompt();
             this.renderCategoryBrowser();
@@ -973,8 +1080,9 @@ const PromptLab = {
     // ============== Copy ==============
 
     usePromptInGallery() {
-        if (!this.generatedPrompt) return;
-        window.App.applyPromptFilter(this.generatedPrompt);
+        const prompt = document.getElementById('promptlab-output')?.value || this.generatedPrompt;
+        if (!prompt) return;
+        window.App.applyPromptFilter(prompt);
     },
 
     copyPrompt() {
@@ -1002,6 +1110,9 @@ const PromptLab = {
         const btnCopy = document.getElementById('btn-promptlab-copy');
         const btnClear = document.getElementById('btn-promptlab-clear');
         const btnSavePreset = document.getElementById('btn-promptlab-save-preset');
+        const outputEl = document.getElementById('promptlab-output');
+        const prependInput = document.getElementById('promptlab-prepend');
+        const appendInput = document.getElementById('promptlab-append');
 
         btnGenerate?.addEventListener('click', () => this.generate());
         btnUseGallery?.addEventListener('click', () => this.usePromptInGallery());
@@ -1010,6 +1121,13 @@ const PromptLab = {
         btnCopy?.addEventListener('click', () => this.copyPrompt());
         btnClear?.addEventListener('click', () => this.clearAll());
         btnSavePreset?.addEventListener('click', () => this.savePreset());
+        outputEl?.addEventListener('input', (event) => {
+            this.generatedPrompt = event.target.value;
+            this.generatedPromptCore = this._stripAffixesFromPrompt(event.target.value);
+            this.updateActionState();
+        });
+        prependInput?.addEventListener('input', () => this.handleAffixInput());
+        appendInput?.addEventListener('input', () => this.handleAffixInput());
 
         const setSelector = document.getElementById('promptlab-set-select');
         setSelector?.addEventListener('change', (e) => {

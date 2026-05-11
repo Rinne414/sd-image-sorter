@@ -2526,3 +2526,37 @@ Use this structure for future entries:
   Current files: `backend/database.py`, `backend/image_manager.py`, `backend/metadata_storage.py`, `backend/migrations/008_compact_persisted_metadata.py`, `backend/migrations/009_compact_raw_only_metadata.py`, `backend/services/disk_service.py`, `backend/optional_dependencies.py`, `backend/requirements.in`, `frontend/js/app.js`, `frontend/css/ui-refresh.css`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_database.py`, `backend/tests/test_image_manager.py`, `backend/tests/test_migration_contract.py`, `backend/tests/test_disk_service.py`, `backend/tests/test_optional_dependencies.py`, `docs/API.md`, `CHANGELOG.md`.
 - Validation:
   Targeted checks should cover DB write-boundary compaction, copied-image compaction, migration 009 for already-v8 databases, app-owned cache reporting, symlink size accounting, and ToriiGate dependency floor alignment.
+
+### ADR-AI-20260511-109: Prompt Lab fixed affixes are part of generated prompt semantics
+
+- Status: accepted
+- Area: Prompt Lab UX / prompt generation semantics / preset behavior
+- Context:
+  Users need Prompt Lab generation to support fixed tags before and after the generated result, for common SD patterns such as always starting with quality tags and ending with resolution/detail tags. The risky version of this feature is two hidden text inputs that only append strings after generation, because users would not know when the fields apply, duplicates would leak into copied prompts, and saved presets would not restore the actual generation setup.
+- Decision:
+  Prompt Lab Random output now treats fixed beginning and fixed ending tags as part of the generated prompt output contract. Generate/Randomize merges `prependTags`, the generated core prompt, and `appendTags` in that order, removes duplicates using trimmed case-insensitive tag keys with spaces and underscores treated the same, and preserves the first visible spelling/order. The UI explains this as beginner-facing “fixed tags before/after Generate” with “auto dedupe” copy. Saved Prompt Lab presets include `prependTags` and `appendTags`; loading a preset restores those fields. Clearing the builder clears selected slots/output but intentionally keeps the fixed affix fields so users can generate multiple prompts with the same house style.
+- Why:
+  For SD workflows, these fixed tags are not decorative UI state; they are repeatable prompt-building intent. Prefix tags should win when the generated result repeats the same tag, because users put them there to control ordering. Keeping affixes across Clear supports the common “try another prompt with the same base quality/style wrapper” workflow and avoids making users retype house defaults.
+- Do not regress:
+  Do not reintroduce duplicate fixed/generated tags in the final Prompt Lab output. Do not save presets without the fixed beginning/end fields. Do not make Clear erase affixes unless the UI gains a separate explicit “clear fixed tags” action. Do not hide this behavior behind unexplained Prepend/Append labels; the UI must keep beginner-readable copy that says the fields are merged on Generate/Randomize and duplicates are removed.
+- Evidence:
+  Current files: `frontend/index.html`, `frontend/js/prompt-lab.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `frontend/css/ui-refresh.css`, `tests/e2e/specs/smoke.spec.ts`.
+- Validation:
+  `node --check frontend/js/prompt-lab.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`; `node ./scripts/run-playwright.mjs test specs/smoke.spec.ts -g "Prompt Lab fixed beginning/end tags"` (`1 passed`).
+
+### ADR-AI-20260512-110: Tagger stays content-only; export owns selected-batch caption edits
+
+- Status: accepted
+- Area: Tagger semantics / Prompt Lab UX / batch export UX / optional dependency reproducibility
+- Context:
+  Prompt-building fixed tags and export-time training-caption edits look similar at first glance, but they serve different user jobs. If prepend/append or class-token behavior is put into the tagger, every tagged image appears to have the same added tags, blurring the line between AI-recognized image content and user-authored caption intent. Users also need to apply prefixes/blacklists only to a selected subset during export.
+- Decision:
+  Keep the tagger content-only. Do not add Prompt Lab prepend/append or export prefix/blacklist behavior to AI tag detection. Prompt Lab keeps fixed beginning/end tags because it is a prompt builder. Batch Export keeps Prefix / Class Token and blacklist because it is selected-batch post-processing. The export UI must explicitly say it affects only the currently selected Gallery images. Auto Censor model selection now surfaces the actual selected local YOLO file near the detector selector, so users do not have to open Advanced Model Picker just to know what will run. Optional Feature Setup dependency installs now prefer exact versions already pinned in `backend/requirements.txt` before falling back to broad specs, reducing release-time resolver drift without creating separate feature lock files yet.
+- Why:
+  Users should be able to trust that tagger output means “the model saw this in the image.” Prompt Lab and Export are user-authored transformation layers and should say so. Batch export is the right place for “only these selected images get this class token / blacklist” because selection scope is already explicit there. Censor model labels must reflect the actually-used file to avoid support reports like “why is Wenaka missing?” when the app already selected it. Optional Prepare installs should match the shipped release lock as much as possible so feature setup remains predictable.
+- Do not regress:
+  Do not add fixed prompt tags, training class tokens, or blacklist filtering to the tagger pipeline. Do not remove the selected-scope copy from Combined Export or Same-name .txt export. Do not hide the active YOLO filename only inside the advanced picker. Do not go back to broad optional package specs when a package is pinned in `backend/requirements.txt`.
+- Evidence:
+  Current files: `frontend/index.html`, `frontend/js/app.js`, `frontend/js/censor-edit.js`, `frontend/js/prompt-lab.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/optional_dependencies.py`, `backend/tests/test_optional_dependencies.py`, `tests/e2e/specs/smoke.spec.ts`, `CHANGELOG.md`, `release-notes.md`, `docs/RELEASE_NOTES_v3.1.5.md`.
+- Validation:
+  Targeted checks should cover Prompt Lab affix dedupe, export selected-scope copy, batch export selected-scope copy and payload, visible censor active YOLO filename, optional dependency lock mapping, release build launcher import probe, and full CI before publishing.

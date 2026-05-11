@@ -1765,6 +1765,80 @@ textarea:focus,
     line-height: 1.6;
 }
 
+.promptlab-affix-panel {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 14px;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 38%),
+        rgba(7, 14, 25, 0.58);
+}
+
+.promptlab-affix-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.promptlab-affix-title strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.promptlab-affix-title p,
+.promptlab-affix-example {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.promptlab-affix-badge {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.14);
+    color: #fed7aa;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.promptlab-affix-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.promptlab-affix-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.promptlab-affix-field label {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.promptlab-affix-field .input-field {
+    min-height: 40px;
+    padding: 10px 12px;
+}
+
+.promptlab-affix-example {
+    padding-top: 2px;
+    color: #fcd34d;
+}
+
 /* Prompt Lab — Tab-based multi-mode layout */
 .promptlab-container {
     display: flex;
@@ -3015,6 +3089,17 @@ textarea:focus,
     #view-censor .censor-sidebar-v2.right {
         width: clamp(240px, 26vw, 292px) !important;
         min-width: clamp(240px, 26vw, 292px) !important;
+    }
+}
+
+@media (max-width: 720px) {
+    .promptlab-affix-title,
+    .promptlab-affix-row {
+        grid-template-columns: 1fr;
+    }
+
+    .promptlab-affix-title {
+        display: grid;
     }
 }
 
