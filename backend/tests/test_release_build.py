@@ -81,6 +81,10 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path("docs") / "screenshots" / "gallery.png") is True
     assert release_builder.should_skip_path(Path("data") / "images.db") is True
     assert release_builder.should_skip_path(Path("update") / "downloads" / "patch.zip") is True
+    assert release_builder.should_skip_path(Path("coverage.xml")) is True
+    assert release_builder.should_skip_path(Path("backend") / "coverage.xml") is True
+    assert release_builder.should_prune_directory(Path("htmlcov")) is True
+    assert release_builder.should_prune_directory(Path("backend") / "htmlcov") is True
     assert release_builder.should_skip_path(Path(".env.example")) is False
     assert release_builder.should_skip_path(Path("README.md")) is False
 
@@ -100,6 +104,10 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
         "artifacts/release/staging/recursive.txt": "must not copy\n",
         "data/images.db": "must not copy\n",
         "update/downloads/patch.zip": "must not copy\n",
+        "coverage.xml": "must not copy\n",
+        "backend/coverage.xml": "must not copy\n",
+        "htmlcov/index.html": "must not copy\n",
+        "backend/htmlcov/index.html": "must not copy\n",
         ".git/config": "must not copy\n",
     }
     for relative_path, content in files.items():
@@ -120,6 +128,10 @@ def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_p
     assert not (stage_root / "artifacts/release/staging/recursive.txt").exists()
     assert not (stage_root / "data/images.db").exists()
     assert not (stage_root / "update/downloads/patch.zip").exists()
+    assert not (stage_root / "coverage.xml").exists()
+    assert not (stage_root / "backend/coverage.xml").exists()
+    assert not (stage_root / "htmlcov/index.html").exists()
+    assert not (stage_root / "backend/htmlcov/index.html").exists()
     assert not (stage_root / ".git/config").exists()
 
 

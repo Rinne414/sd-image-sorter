@@ -85,7 +85,14 @@ Thumbs.db
 mypy_*.txt
 
 # Coverage and cache
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 backend/.coverage
+backend/.coverage.*
+backend/coverage.xml
+backend/htmlcov/
 backend/.mypy_cache/
 
 # Thumbnail cache (runtime generated)
