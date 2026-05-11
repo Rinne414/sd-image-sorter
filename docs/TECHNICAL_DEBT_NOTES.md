@@ -831,11 +831,11 @@ Quality bar:
 
 ### Debt-20: Auto censor model dropdown labels do not reflect the actually-selected file
 
-- Status: open
+- Status: resolved in v3.1.5
 - Type: UX contract / user comprehension
 - Impact: low
-- Risk if ignored:
-  Users who download a recommended legacy YOLO file (Wenaka, or any custom `.pt` / `.onnx`) and place it in `data/models/yolo/` see only the generic "YOLO" option in the auto-censor model selector. They cannot tell which file the auto path will use without expanding the Advanced Model Picker, and have already filed at least one report ("why is Wenaka missing?") because of this. Real-user trust signal is weaker than it should be.
+- Resolution:
+  v3.1.5 adds compact helper/status copy next to the auto-censor model selector. When a legacy YOLO file is selected, the UI shows the actual file name being used, and the status updates when Advanced Model Picker changes the selected file.
 - Related files:
   `frontend/index.html` (`#censor-model-type` select around the auto-censor sidebar)
   `frontend/js/censor-edit.js` (`populateCensorModelSelect`, `updateDetectionModelInputs`, `updateSelectedLegacyModelHelp`)
@@ -847,28 +847,28 @@ Quality bar:
 - Better long-term shape:
   Append the active legacy file name in parentheses on the `YOLO` and `Both` options (and ideally also display it as a single-line status under the dropdown), e.g. `YOLO (wenaka_yolov8s-seg.onnx)` or `YOLO (custom: my_finetune.pt)`. The label must update dynamically when the user picks a different file in the Advanced Model Picker — i.e., the parenthesized name must always reflect the truly-selected legacy file, not be hard-coded to "Wenaka".
 - Revisit trigger:
-  Next user-facing release that touches the censor sidebar or detect modal layout.
+  Reopen only if users still cannot tell which YOLO file is active after v3.1.5, or if the selector is redesigned.
 - Deferred because:
-  v3.1.0 publish window was prioritized; the underlying behaviour is correct (Wenaka is detected and recommended automatically), so this is a clarity-only follow-up rather than a regression.
+  Not deferred anymore for the compact status-line fix. Renaming the select options themselves remains optional polish; the core confusion is addressed by visible selected-file status.
 
 ### Debt-21: Optional AI dependency groups are not fully locked per group
 
-- Status: open
+- Status: partially mitigated in v3.1.5
 - Type: dependency reproducibility / bandwidth control
 - Impact: medium
 - Risk if ignored:
-  Feature Setup can install optional packages with broad version specs such as `torch>=2.0.0`, `fastembed>=0.4.0`, or `ultralytics>=8.4.0`. This preserves lightweight first launch, but the exact download size and transitive dependencies can drift over time and may differ from the full runtime lock.
+  Feature Setup now installs top-level optional packages from the platform-matching pins in `backend/requirements.txt` when those pins exist, while still using broad minimum versions only for already-installed satisfaction checks. Transitive dependency resolution can still drift because the app does not yet install from feature-scoped lock files.
 - Related files:
   `backend/optional_dependencies.py`
   `backend/services/model_service.py`
   `backend/requirements.txt`
   `backend/requirements-core.txt`
 - Observed problem:
-  The core lock is intentionally small and the full AI lock remains available, but per-feature optional installs are not yet backed by separate lock files such as `requirements-clip.txt`, `requirements-censor.txt`, or `requirements-sam3.txt`. The helper now refuses system-Python installs unless explicitly overridden and skips satisfied packages with minimum-version checks, but it still asks pip to resolve broad specs at Prepare time.
+  The core lock is intentionally small and the full AI lock remains available, but per-feature optional installs are not yet backed by separate lock files such as `requirements-clip.txt`, `requirements-censor.txt`, or `requirements-sam3.txt`. v3.1.5 reduces drift by converting matching top-level optional package specs to platform-aware release pins from `backend/requirements.txt` at install time. Pip still resolves transitive dependencies rather than consuming a complete per-feature lock.
 - Why this is debt:
   Lightweight startup solved the immediate bandwidth/storage complaint. For release-grade reproducibility, optional feature groups should also be pinned so a Prepare click downloads a predictable dependency set.
 - Better long-term shape:
-  Add feature-scoped optional lock files or a locked mapping generated from the same source as `requirements.txt`, then make `optional_dependencies.py` install from those locks. Keep the UI restart reminder because runtime package installs can still require a fresh Python process.
+  Add feature-scoped optional lock files or a locked mapping generated from the same source as `requirements.txt`, then make `optional_dependencies.py` install complete per-feature locked dependency sets. Keep the UI restart reminder because runtime package installs can still require a fresh Python process.
 - Revisit trigger:
   Before publishing a release that heavily promotes Feature Setup / Prepare, or when users report optional Prepare downloading unexpected packages.
 - Deferred because:

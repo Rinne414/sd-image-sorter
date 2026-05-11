@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=backend/requirements.txt backend/requirements.in
 #
-# lock-input-sha256: 55eca0b2d91bf4cda8d073d13f78dc2f068d206842d4136c7d12c5aaf90b14cb
+# lock-input-sha256: ac7eb8f28810ade88626a97d4fdb1d65d360d2db7ac52f56c23c7593020d91ae
 #
 aiofiles==25.1.0
     # via -r backend/requirements.in
@@ -324,7 +324,7 @@ ultralytics==8.4.41
     # via -r backend/requirements.in
 ultralytics-thop==2.0.19
     # via ultralytics
-urllib3==2.6.3
+urllib3==2.7.0
     # via requests
 uvicorn[standard]==0.46.0
     # via -r backend/requirements.in

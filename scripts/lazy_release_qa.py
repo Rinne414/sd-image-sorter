@@ -561,8 +561,6 @@ def _first_executable(*candidates: str | Path) -> str:
 
 def _node_executable(python_executable: str) -> str:
     windows_node = Path("/mnt/c/Program Files/nodejs/node.exe")
-    if os.name != "nt" and windows_node.exists():
-        return str(windows_node)
     if python_executable.lower().endswith(".exe"):
         return _first_executable(windows_node, Path("C:/Program Files/nodejs/node.exe"), "node")
     return _first_executable("node", Path("/usr/bin/node"), Path("/usr/local/bin/node"), windows_node)

@@ -785,7 +785,7 @@ def test_e2e_fake_tagger_completes_without_downloading_real_model(test_db, monke
         messages = []
         while True:
             try:
-                messages.append(progress_queue.get_nowait())
+                messages.append(progress_queue.get(timeout=5))
             except queue.Empty:
                 break
     finally:

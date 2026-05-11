@@ -9,10 +9,13 @@ import importlib.metadata
 import importlib.util
 import os
 import re
+from pathlib import Path
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Iterable, Sequence
+
+from packaging.markers import InvalidMarker, Marker
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,67 @@ IMPORT_TO_PACKAGE_HINT: dict[str, str] = {
     "triton": _TRITON_PACKAGE,
 }
 
+
+_REQUIREMENTS_CACHE: dict[str, str] | None = None
+
+
+def _normalize_package_name(package_name: str) -> str:
+    return package_name.lower().replace("-", "_")
+
+
+def _requirement_marker_matches(marker_text: str | None) -> bool:
+    if not marker_text:
+        return True
+    try:
+        return Marker(marker_text).evaluate()
+    except InvalidMarker:
+        return False
+
+
+def _load_requirement_version_map() -> dict[str, str]:
+    global _REQUIREMENTS_CACHE
+    if _REQUIREMENTS_CACHE is not None:
+        return _REQUIREMENTS_CACHE
+
+    mapping: dict[str, str] = {}
+    requirements_path = Path(__file__).resolve().parent / "requirements.txt"
+    if not requirements_path.exists():
+        _REQUIREMENTS_CACHE = mapping
+        return mapping
+
+    requirement_line = re.compile(
+        r"^([A-Za-z0-9_.-]+)(?:\[[^\]]+\])?\s*(==|>=)\s*([^;\s]+)(?:\s*;\s*(.+))?$"
+    )
+    for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or line.startswith("-"):
+            continue
+        match = requirement_line.match(line)
+        if not match:
+            continue
+        package_name, _operator, version, marker_text = match.groups()
+        if not _requirement_marker_matches(marker_text):
+            continue
+        normalized = _normalize_package_name(package_name)
+        mapping[normalized] = f"{package_name}=={version.strip()}"
+
+    _REQUIREMENTS_CACHE = mapping
+    return mapping
+
+
+def _lock_package_spec(package_spec: str) -> str:
+    match = re.match(r"^([A-Za-z0-9_.-]+)\s*(==|>=)\s*([^;\[]+)", package_spec)
+    if not match:
+        lock_map = _load_requirement_version_map()
+        return lock_map.get(_normalize_package_name(package_spec), package_spec)
+
+    package_name, operator, _required_version = match.groups()
+    if operator != ">=":
+        return package_spec
+
+    lock_map = _load_requirement_version_map()
+    locked = lock_map.get(_normalize_package_name(package_name))
+    return locked or package_spec
 
 def missing_imports(module_names: Iterable[str]) -> list[str]:
     return [module_name for module_name in module_names if importlib.util.find_spec(module_name) is None]
@@ -153,9 +217,10 @@ def install_packages(packages: Sequence[str]) -> None:
 def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
     packages = []
     for module_name in module_names:
-        package = IMPORT_TO_PACKAGE_HINT.get(module_name, module_name)
-        if _needs_install(module_name, package) and package not in packages:
-            packages.append(package)
+        package_spec = IMPORT_TO_PACKAGE_HINT.get(module_name, module_name)
+        locked_package = _lock_package_spec(package_spec)
+        if _needs_install(module_name, package_spec) and locked_package not in packages:
+            packages.append(locked_package)
     install_packages(packages)
     return DependencyInstallResult(
         installed_packages=tuple(packages),
@@ -171,8 +236,9 @@ def ensure_group(group: str) -> DependencyInstallResult:
 
     packages_to_install = []
     for module_name, package in zip(imports, packages):
-        if _needs_install(module_name, package) and package not in packages_to_install:
-            packages_to_install.append(package)
+        locked_package = _lock_package_spec(package)
+        if _needs_install(module_name, package) and locked_package not in packages_to_install:
+            packages_to_install.append(locked_package)
 
     install_packages(packages_to_install)
     return DependencyInstallResult(
@@ -198,11 +264,12 @@ def ensure_group_with_soft_deps(group: str) -> DependencyInstallResult:
 
     soft_installed: list[str] = []
     for module_name, package_spec in soft_entries:
+        locked_package = _lock_package_spec(package_spec)
         if not _needs_install(module_name, package_spec):
             continue
         try:
-            install_packages([package_spec])
-            soft_installed.append(package_spec)
+            install_packages([locked_package])
+            soft_installed.append(locked_package)
         except Exception as exc:
             _dep_logger.warning(
                 "Optional package %s could not be installed (non-fatal): %s",

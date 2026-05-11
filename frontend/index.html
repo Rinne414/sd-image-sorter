@@ -1624,6 +1624,8 @@
                                     <option value="sam3" data-i18n="censor.sam3">SAM3</option>
                                     <option value="both" data-i18n="censor.both">Both</option>
                                 </select>
+                                <small class="helper-text" id="censor-model-type-help" data-i18n="censor.modelTypeHelp">YOLO uses the local file shown below. Both runs YOLO plus NudeNet together.</small>
+                                <small class="helper-text" id="censor-model-type-status" aria-live="polite"></small>
                                 <div class="censor-detect-actions-inline">
                                     <button class="btn btn-primary btn-small censor-detect-action" id="btn-auto-detect-current" title="Detect Current (D)" data-i18n-title="censor.detectCurrent">🎯 <kbd>D</kbd></button>
                                     <button class="btn btn-secondary btn-small censor-detect-action" id="btn-auto-detect-all-sidebar" title="Detect All" data-i18n-title="censor.detectAll">⚡</button>
@@ -2202,6 +2204,26 @@
                                     </div>
                                 </div>
                                 <div class="promptlab-output-body">
+                                    <div class="promptlab-affix-panel" aria-label="Fixed tags before and after Generate" data-i18n-aria="promptlab.affixPanelAria">
+                                        <div class="promptlab-affix-title">
+                                            <span class="promptlab-affix-badge" data-i18n="promptlab.affixBadge">Auto dedupe</span>
+                                            <div>
+                                                <strong data-i18n="promptlab.affixTitle">Fixed tags before/after Generate</strong>
+                                                <p data-i18n="promptlab.affixHint">Write comma-separated tags here. Generate/Randomize will merge them with the result and remove duplicates automatically.</p>
+                                            </div>
+                                        </div>
+                                        <div class="promptlab-affix-row">
+                                            <div class="promptlab-affix-field">
+                                                <label for="promptlab-prepend" data-i18n="promptlab.prepend">Put at the beginning</label>
+                                                <input type="text" id="promptlab-prepend" class="input-field" placeholder="masterpiece, best quality" data-i18n-placeholder="promptlab.prependPlaceholder">
+                                            </div>
+                                            <div class="promptlab-affix-field">
+                                                <label for="promptlab-append" data-i18n="promptlab.append">Put at the end</label>
+                                                <input type="text" id="promptlab-append" class="input-field" placeholder="highres, absurdres" data-i18n-placeholder="promptlab.appendPlaceholder">
+                                            </div>
+                                        </div>
+                                        <div class="promptlab-affix-example" data-i18n="promptlab.affixExample">Example: if Prepend has "masterpiece" and Generate also returns "masterpiece", the final prompt keeps it once.</div>
+                                    </div>
                                     <textarea id="promptlab-output" placeholder="Click Generate or Randomize..." data-i18n-placeholder="promptlab.outputPlaceholder"></textarea>
                                     <div id="promptlab-warnings"></div>
                                 </div>
@@ -2865,7 +2887,8 @@
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-export">✕</button>
                 <h3 id="export-title" data-i18n="modal.exportPrompts">📤 Combined Export</h3>
-                <p class="modal-description" id="export-count">0 images selected</p>
+                <p class="modal-description" id="export-count">This export includes only 0 selected images.</p>
+                <small class="helper-text" data-i18n="export.scopeHelp">Only the images selected in Gallery are included here.</small>
                 <div class="form-group export-format-group">
                     <label for="export-format" data-i18n="export.formatLabel">Output Format</label>
                     <select id="export-format" class="input-field">
@@ -2932,7 +2955,8 @@
             <div class="modal-content modal-medium">
                 <button class="modal-close" id="btn-close-batch-export">✕</button>
                 <h3 data-i18n="batchExport.title">📝 Same-name .txt Captions</h3>
-                <p class="modal-description" id="batch-export-count">0 images selected</p>
+                <p class="modal-description" id="batch-export-count">This batch export includes only 0 selected images.</p>
+                <small class="helper-text" data-i18n="batchExport.scopeHelp">This only writes files for the images selected in Gallery.</small>
 
                 <div class="form-group">
                     <label data-i18n="batchExport.outputFolder">Output Folder</label>

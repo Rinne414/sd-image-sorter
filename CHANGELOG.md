@@ -5,6 +5,25 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.5] - 2026-05-12
+
+### Changed / 改进
+- **Prompt Lab fixed tags**: Generate / Randomize now supports fixed beginning and ending tags with automatic duplicate removal. Presets save and restore these fields, and the UI explains the behavior in beginner-readable copy.
+  - **Prompt Lab 固定标签**：生成 / 随机生成现在支持固定加开头和固定加结尾，并自动去重。Preset 会保存 / 恢复这些字段，界面文案也改成新手能直接看懂。
+- **Export scope clarity**: Combined Export and same-name `.txt` export now explicitly say they only affect the currently selected Gallery images, so users can add training caption prefixes/blacklists to just one selected batch.
+  - **导出范围更清楚**：Combined Export 和同名 `.txt` 导出现在明确说明只影响当前在图库里选中的图片，方便只给某一批训练 caption 加前缀 / 黑名单。
+- **Censor model clarity**: Auto Censor now shows the actual local YOLO file being used near the detector selector, instead of hiding it inside the advanced picker only.
+  - **打码模型更清楚**：自动打码现在会在检测器选择器附近显示实际使用的本地 YOLO 文件，不再只藏在高级选择器里。
+- **Optional AI dependency predictability**: Feature Setup optional Python installs now prefer the exact versions already pinned in `backend/requirements.txt` when preparing feature groups, reducing surprise resolver drift.
+  - **可选 AI 依赖更可预测**：Feature Setup 准备可选功能时，会优先使用 `backend/requirements.txt` 里已经锁定的精确版本，减少 pip 临场解析漂移。
+- **Security lock refresh**: `urllib3` is pinned to `2.7.0` in the full/dev runtime locks to clear the current pip-audit CVE report.
+  - **安全锁定更新**：full/dev runtime lock 中的 `urllib3` 已升到 `2.7.0`，解决当前 pip-audit 报告的 CVE。
+
+### Fixed / 修复
+- **Portable launcher runtime check**: The portable launcher dependency probe now checks only startup-critical packages (`fastapi`, `PIL`, `numpy`, `onnxruntime`). Optional heavy AI packages no longer force repeated `pip install` on every startup.
+  - **Portable 启动依赖检查**：便携版启动器现在只检查启动必需包（`fastapi`、`PIL`、`numpy`、`onnxruntime`）。可选重型 AI 包不会再导致每次启动都重跑 `pip install`。
+
+
 ## [3.1.4] - 2026-05-10
 
 ### Fixed / 修复

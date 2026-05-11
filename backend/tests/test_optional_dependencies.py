@@ -1,6 +1,31 @@
 from __future__ import annotations
 
+import platform
+import sys
+
 import optional_dependencies
+
+
+def test_requirement_lock_map_uses_release_pins():
+    optional_dependencies._REQUIREMENTS_CACHE = None
+
+    lock_map = optional_dependencies._load_requirement_version_map()
+
+    expected_torch = "torch==2.2.2" if sys.platform == "darwin" and platform.machine() == "x86_64" else "torch==2.11.0"
+    expected_opencv = (
+        "opencv-python==4.10.0.84"
+        if sys.platform == "darwin" and platform.machine() == "arm64"
+        else "opencv-python==4.9.0.80"
+        if sys.platform == "darwin"
+        else "opencv-python==4.11.0.86"
+    )
+
+    assert lock_map["transformers"] == "transformers==5.6.2"
+    assert lock_map["fastembed"] == "fastembed==0.8.0"
+    assert lock_map["torch"] == expected_torch
+    assert lock_map["opencv_python"] == expected_opencv
+    assert optional_dependencies._lock_package_spec("transformers>=5.6.0") == "transformers==5.6.2"
+    assert optional_dependencies._lock_package_spec("torch>=2.0.0") == expected_torch
 
 
 def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
@@ -16,8 +41,8 @@ def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
 
     result = optional_dependencies.ensure_group("sam3")
 
-    assert installed == ["transformers>=5.6.0"]
-    assert result.installed_packages == ("transformers>=5.6.0",)
+    assert installed == ["transformers==5.6.2"]
+    assert result.installed_packages == ("transformers==5.6.2",)
     assert result.restart_recommended is True
 
 
@@ -34,8 +59,8 @@ def test_toriigate_requires_transformers_version_with_qwen35_support(monkeypatch
 
     result = optional_dependencies.ensure_group("toriigate")
 
-    assert installed == ["transformers>=5.6.0"]
-    assert result.installed_packages == ("transformers>=5.6.0",)
+    assert installed == ["transformers==5.6.2"]
+    assert result.installed_packages == ("transformers==5.6.2",)
     assert result.restart_recommended is True
 
 

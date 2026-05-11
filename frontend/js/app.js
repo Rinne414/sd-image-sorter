@@ -7616,7 +7616,7 @@ async function showExportModalWithFormat(format = 'prompt') {
 
     _currentExportModalData = null;
     _currentExportFormat = format;
-    $('#export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
+    $('#export-count').textContent = appT('export.selectedCount', 'This export includes only {count} selected images.', {
         count: AppState.selectedIds.size,
     });
     const select = $('#export-format');
@@ -7678,7 +7678,7 @@ function showBatchExportModal() {
         return;
     }
 
-    $('#batch-export-count').textContent = appT('export.imagesSelected', '{count} images selected', {
+    $('#batch-export-count').textContent = appT('batchExport.selectedCount', 'This batch export includes only {count} selected images.', {
         count: AppState.selectedIds.size,
     });
     const contentModeSelect = $('#batch-export-content-mode');

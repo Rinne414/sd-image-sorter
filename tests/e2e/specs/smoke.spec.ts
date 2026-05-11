@@ -725,6 +725,53 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#gallery-grid .gallery-item, #gallery-empty-state:visible').first()).toBeVisible()
   })
 
+  test('Prompt Lab fixed beginning/end tags are obvious and deduplicated', async ({ page }) => {
+    await page.route('**/api/prompts/categories', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          categories: {
+            character: ['1girl'],
+            style: ['masterpiece'],
+          },
+        }),
+      })
+    })
+    await page.route('**/api/prompts/sets', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sets: [] }) })
+    })
+    await page.route('**/api/prompts/exclusions', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ rules: [] }) })
+    })
+    await page.route('**/api/prompts/presets', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ presets: [] }) })
+    })
+    await page.route('**/api/prompts/generate', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ positive_prompt: '1girl, masterpiece, dress', negative_prompt: '', warnings: [] }),
+      })
+    })
+
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await openView(page, 'promptlab')
+    await page.locator('.promptlab-tab[data-mode="random"]').click()
+
+    await expect(page.locator('.promptlab-affix-panel')).toContainText(/Auto dedupe|自动去重/i)
+    await expect(page.locator('.promptlab-affix-panel')).toContainText(/duplicates|重复/i)
+    await page.locator('#promptlab-prepend').fill('masterpiece, best quality')
+    await page.locator('#promptlab-append').fill('highres, masterpiece')
+
+    await page.locator('.cat-header[data-cat="character"]').click()
+    await page.locator('.cat-tag', { hasText: '1girl' }).click()
+    await page.locator('#btn-promptlab-generate').click()
+
+    await expect(page.locator('#promptlab-output')).toHaveValue('masterpiece, best quality, 1girl, dress, highres')
+  })
+
   test('auto-separate and manual sort should inherit the current gallery search on first open only', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.removeItem('sd-image-sorter-filter-state')
@@ -2493,6 +2540,8 @@ test.describe('Smoke Tests', () => {
       await window.App.showExportModal()
     })
     await expect(page.locator('#export-modal.visible')).toBeVisible()
+    await expect(page.locator('#export-count')).toContainText('This export includes only 2501 selected images')
+    await expect(page.locator('#export-modal')).toContainText('Only the images selected in Gallery are included here')
     await expect(page.locator('#btn-download-export')).toBeVisible()
     await expect(page.locator('#export-text')).toHaveValue(/Preview only shows the first 2000 of 2501 selected images/)
     await expect.poll(() => requestedPayloadSizes.length).toBe(1)
@@ -2545,6 +2594,8 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-batch-export-tags').click()
 
     await expect(page.locator('#batch-export-modal.visible')).toBeVisible()
+    await expect(page.locator('#batch-export-count')).toContainText('This batch export includes only 2 selected images')
+    await expect(page.locator('#batch-export-modal')).toContainText('This only writes files for the images selected in Gallery')
     await expect(page.locator('#batch-export-content-mode')).toBeVisible()
     await expect(page.locator('#batch-export-content-mode option[value="caption_merged"]')).toHaveText('LoRA caption file')
     await expect(page.locator('#batch-export-content-mode option[data-i18n="batchExport.groupAdvanced"]')).toHaveText('Advanced formats')
@@ -4783,6 +4834,8 @@ test.describe('Smoke Tests', () => {
     // censor-simple-guide is hidden in the redesigned UI (info moved to settings popup)
     await page.locator('#btn-open-detect-modal').click()
     await expect(page.locator('#detect-modal.visible')).toBeVisible()
+    await expect(page.locator('#censor-model-type-help')).toContainText('YOLO uses the local file shown below')
+    await expect(page.locator('#censor-model-type-status')).toContainText('Use this file: wenaka_yolov8s-seg.onnx')
 
     // Model details and advanced picker are in collapsed <details> sections
     // Open them to test their content
@@ -4821,6 +4874,7 @@ test.describe('Smoke Tests', () => {
       return advancedLegacyModelPath
     }, { timeout: 10000 }).not.toBe('')
     await page.selectOption('#censor-model-file', advancedLegacyModelPath)
+    await expect(page.locator('#censor-model-type-status')).toContainText('Use this file: yolo26s-seg.onnx')
     await expect(page.locator('#censor-simple-guide')).toContainText('general fixed-class segmentation model')
     await expect(page.locator('.target-region-check').first()).toBeEnabled()
     await expect(page.locator('#censor-target-region-help')).toContainText(/switch back to the recommended privacy detector|Wenaka \/ NudeNet families|自动切回推荐的隐私检测路线/i)

@@ -448,7 +448,7 @@ function bindEvents() {
         CensorState.modelPath = selectedPath;
         const modelPathInput = $('#censor-model-path');
         if (modelPathInput) {
-            modelPathInput.value = selectedPath;
+            modelPathInput.value = '';
         }
         localStorage.setItem('censor_model_path', CensorState.modelPath);
         const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
@@ -478,6 +478,8 @@ function bindEvents() {
 
     $('#censor-model-type')?.addEventListener('change', () => {
         updateDetectionModelInputs();
+        const legacy = (CensorState.backendModelStatus?.models || []).find(model => model.id === 'legacy');
+        updateSelectedLegacyModelHelp(legacy);
         renderCensorCapabilityPanel();
     });
 
@@ -812,6 +814,9 @@ function bindEvents() {
             if (modelFileEl) modelFileEl.value = '';
             $('#censor-model-path').value = path;
             localStorage.setItem('censor_model_path', path);
+            const legacy = getLegacyBackendStatus();
+            updateSelectedLegacyModelHelp(legacy);
+            renderCensorCapabilityPanel();
         }
     });
 
@@ -2861,6 +2866,7 @@ function updateSelectedLegacyModelHelp(legacyModel) {
     const selectedFile = getLegacyModelRecordByPath(selectedPath) || getLegacyModelRecordByPath(legacyModel?.default_model_path);
     if (!selectedFile) {
         help.textContent = censorT('censor.noLocalYoloFound', null, 'No local YOLO model was found. NudeNet can still work if it is installed.');
+        updateSelectedLegacyModelStatus(null);
         return;
     }
 
@@ -2872,6 +2878,20 @@ function updateSelectedLegacyModelHelp(legacyModel) {
         parts.push(selectedFile.message);
     }
     help.textContent = parts.join(' · ');
+    updateSelectedLegacyModelStatus(selectedFile);
+}
+
+function updateSelectedLegacyModelStatus(selectedFile) {
+    const status = document.getElementById('censor-model-type-status');
+    if (!status) return;
+    status.removeAttribute('data-i18n');
+
+    if (!selectedFile) {
+        status.textContent = '';
+        return;
+    }
+
+    status.textContent = censorT('censor.selectedModelOption', { name: selectedFile.name }, 'Use this file: {name}');
 }
 
 function populateCensorModelSelect(legacyModel) {
@@ -2896,6 +2916,11 @@ function populateCensorModelSelect(legacyModel) {
         select.value = currentValue;
     } else {
         select.value = '';
+    }
+
+    const modelPathInput = document.getElementById('censor-model-path');
+    if (modelPathInput) {
+        modelPathInput.value = currentValue && !seen.has(currentValue) ? currentValue : '';
     }
 
     syncAdvancedLegacyModelUi(legacyModel);
