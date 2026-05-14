@@ -274,7 +274,7 @@ body::after {
     gap: 6px;
 }
 
-.nav-bar.nav-actions-compact #btn-clear-db,
+.nav-bar.nav-actions-compact #btn-open-model-manager,
 .nav-bar.nav-actions-compact #btn-tags-library,
 .nav-bar.nav-actions-compact #btn-language-toggle,
 .nav-bar.nav-actions-compact #btn-app-update,
@@ -284,7 +284,7 @@ body::after {
     justify-content: center;
 }
 
-.nav-bar.nav-actions-compact #btn-clear-db span:last-child,
+.nav-bar.nav-actions-compact #btn-open-model-manager span:last-child,
 .nav-bar.nav-actions-compact #btn-tags-library span:last-child,
 .nav-bar.nav-actions-compact #btn-language-toggle span:last-child,
 .nav-bar.nav-actions-compact #btn-app-update span:last-child,
@@ -1245,18 +1245,16 @@ textarea:focus,
     color: #fff;
 }
 
-.gallery-model-manager-button {
+.gallery-clear-button {
     align-items: center;
-    border-color: rgba(45, 212, 191, 0.26);
     display: inline-flex;
     gap: 6px;
     min-height: 36px;
     white-space: nowrap;
 }
 
-.gallery-model-manager-button:hover,
-.gallery-model-manager-button:focus-visible {
-    border-color: rgba(245, 158, 11, 0.45);
+.gallery-clear-button:hover,
+.gallery-clear-button:focus-visible {
     outline: none;
 }
 

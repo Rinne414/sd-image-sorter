@@ -1846,7 +1846,7 @@ class TestEdgeCases:
 
         result = parse_image(str(img_path))
 
-        assert result["generator"] == "unknown"
+        assert result["generator"] == "others"
         assert result["prompt"] == "json prompt"
         assert result["negative_prompt"] == "json negative"
         assert result["checkpoint"] == "json_model.safetensors"

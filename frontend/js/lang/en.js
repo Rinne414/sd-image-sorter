@@ -133,6 +133,7 @@ window.I18nLang_en = {
     'generator.forge': 'Forge',
     'generator.webui': 'WebUI',
     'generator.unknown': 'Unknown',
+    'generator.others': 'Others',
 
     // Sort options
     'sort.newest': 'Newest',

@@ -135,6 +135,7 @@ window.I18nLang_zhCN = {
     'generator.forge': 'Forge',
     'generator.webui': 'WebUI',
     'generator.unknown': '未知',
+    'generator.others': '其他',
 
     // Sort options
     'sort.newest': '最新',

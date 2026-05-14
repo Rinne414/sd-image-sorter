@@ -199,6 +199,10 @@
                             <span>🏷️</span>
                             <span data-i18n="action.tag">Tag Images</span>
                         </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-model-manager" aria-label="Open model manager">
+                            <span>🧰</span>
+                            <span data-i18n="models.manager">Setup</span>
+                        </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-tags-library">
                             <span>📚</span>
                             <span data-i18n="action.library">Library</span>
@@ -215,9 +219,9 @@
                 </div>
             </div>
             <div class="nav-actions">
-                <button id="btn-clear-db" class="btn btn-ghost danger" aria-label="Clear gallery database">
-                    <span aria-hidden="true">🗑️</span>
-                    <span data-i18n="action.clearGallery">Clear Gallery</span>
+                <button id="btn-open-model-manager" class="btn btn-ghost" type="button" aria-label="Open model manager" data-i18n-aria="models.title">
+                    <span aria-hidden="true">🧰</span>
+                    <span data-i18n="models.manager">Setup</span>
                 </button>
                 <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.library" data-i18n-aria="action.library">
                     <span aria-hidden="true">📚</span>
@@ -440,6 +444,7 @@
                                 <button class="gen-tab" data-gen="forge" role="tab" aria-selected="false">Forge <span class="gen-count" id="count-forge">0</span></button>
                                 <button class="gen-tab" data-gen="webui" role="tab" aria-selected="false">WebUI <span class="gen-count" id="count-webui">0</span></button>
                                 <button class="gen-tab" data-gen="unknown" role="tab" aria-selected="false">Unknown <span class="gen-count" id="count-unknown">0</span></button>
+                                <button class="gen-tab" data-gen="others" role="tab" aria-selected="false">Others <span class="gen-count" id="count-others">0</span></button>
                             </div>
                         </div>
                         <div class="view-options">
@@ -469,9 +474,9 @@
                                 <span aria-hidden="true">▥</span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
-                            <button id="btn-open-model-manager" class="btn btn-ghost btn-small gallery-model-manager-button" type="button" aria-label="Open model manager">
-                                <span aria-hidden="true">🧰</span>
-                                <span data-i18n="models.manager">Setup</span>
+                            <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" aria-label="Clear gallery database">
+                                <span aria-hidden="true">🗑️</span>
+                                <span data-i18n="action.clearGallery">Clear Gallery</span>
                             </button>
                         </div>
 
@@ -3178,6 +3183,7 @@
                                     <label class="checkbox-label"><input type="checkbox" value="webui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">WebUI</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="forge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Forge</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Unknown</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="others" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Others</span></label>
                                 </div>
                             </div>
 
