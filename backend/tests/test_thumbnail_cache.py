@@ -94,3 +94,25 @@ def test_cache_stats_use_limited_scan_for_large_thumbnail_cache(monkeypatch, tmp
     assert stats["file_count_complete"] is False
     assert stats["total_size_bytes"] is None
     assert stats["total_size_mb"] is None
+
+
+def test_force_cache_cleanup_uses_limited_scan(monkeypatch, tmp_path):
+    monkeypatch.setattr(thumbnail_cache, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(thumbnail_cache, "get_thumbnail_cache_max_mb", lambda: 1)
+
+    calls = []
+
+    def fake_limited_scan(max_files):
+        calls.append(max_files)
+        return [], False
+
+    def fail_full_scan():
+        raise AssertionError("force cleanup must not scan the full cache directory")
+
+    monkeypatch.setattr(thumbnail_cache, "_iter_cache_files_limited", fake_limited_scan)
+    monkeypatch.setattr(thumbnail_cache, "_iter_cache_files", fail_full_scan)
+
+    result = thumbnail_cache.enforce_cache_size_limit(force=True)
+
+    assert calls == [thumbnail_cache.FORCE_CLEANUP_SCAN_LIMIT]
+    assert result["partial"] is True

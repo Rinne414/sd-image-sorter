@@ -215,6 +215,7 @@ function createDefaultSelectionState() {
         scope: 'visible',
         filterKey: null,
         selectionToken: null,
+        selectionTotal: 0,
     };
 }
 
@@ -230,12 +231,16 @@ function cloneSelectionState(selectionState) {
     const selectionToken = scope === 'filtered' && typeof source.selectionToken === 'string' && source.selectionToken
         ? source.selectionToken
         : null;
+    const selectionTotal = scope === 'filtered'
+        ? Math.max(0, Number(source.selectionTotal || 0) || 0)
+        : 0;
     return {
         selectionMode: Boolean(source.selectionMode),
         selectedIds: new Set(Array.from(source.selectedIds || [])),
         scope,
         filterKey,
         selectionToken,
+        selectionTotal,
     };
 }
 
@@ -373,6 +378,7 @@ const AppState = {
     selectionScope: AppSelectionStore ? AppSelectionStore.getState().scope : 'visible',
     selectionFilterKey: AppSelectionStore ? AppSelectionStore.getState().filterKey : null,
     selectionToken: AppSelectionStore ? AppSelectionStore.getState().selectionToken : null,
+    selectionTotal: AppSelectionStore ? AppSelectionStore.getState().selectionTotal : 0,
     selectionDataCache: {
         key: null,
         data: null
@@ -412,6 +418,7 @@ if (AppSelectionStore) {
         AppState.selectionScope = nextState.scope;
         AppState.selectionFilterKey = nextState.filterKey || null;
         AppState.selectionToken = nextState.selectionToken || null;
+        AppState.selectionTotal = nextState.selectionTotal || 0;
     });
 }
 
@@ -445,6 +452,7 @@ function setSelectionState(nextSelection) {
     AppState.selectionScope = nextState.scope;
     AppState.selectionFilterKey = nextState.filterKey || null;
     AppState.selectionToken = nextState.selectionToken || null;
+    AppState.selectionTotal = nextState.selectionTotal || 0;
     return nextState;
 }
 
@@ -458,6 +466,7 @@ function updateSelectionState(updater) {
         scope: AppState.selectionScope,
         filterKey: AppState.selectionFilterKey,
         selectionToken: AppState.selectionToken,
+        selectionTotal: AppState.selectionTotal,
     });
     const nextState = typeof updater === 'function'
         ? (updater(draft) ?? draft)
@@ -475,6 +484,7 @@ function mutateSelectedIds(mutator, { scope = null } = {}) {
             if (scope !== 'filtered') {
                 selection.filterKey = null;
                 selection.selectionToken = null;
+                selection.selectionTotal = 0;
             }
         }
     });
@@ -487,8 +497,8 @@ function clearSelectedIds(options = {}) {
 }
 
 function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
-    if (!AppState?.selectedIds || AppState.selectedIds.size === 0) return false;
     if (AppState.selectionScope !== 'filtered') return false;
+    if (!AppState.selectionToken && (!AppState?.selectedIds || AppState.selectedIds.size === 0)) return false;
 
     const currentFilterKey = getSelectionFilterCacheKey(filters);
     if (!AppState.selectionFilterKey || AppState.selectionFilterKey === currentFilterKey) {
@@ -500,6 +510,7 @@ function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
         selection.scope = 'visible';
         selection.filterKey = null;
         selection.selectionToken = null;
+        selection.selectionTotal = 0;
     });
     resetSelectionDataCache();
 
@@ -777,11 +788,15 @@ const API = {
         return this.post('/api/images/selection-ids', buildSelectionFilterRequest(filters));
     },
 
-    async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE) {
-        return this.post('/api/images/selection-token', {
+    async createSelectionToken(filters = {}, chunkSize = FILTERED_SELECTION_CHUNK_SIZE, options = {}) {
+        const payload = {
             ...buildSelectionFilterRequest(filters),
             chunkSize,
-        });
+        };
+        if (Array.isArray(options.excludedImageIds) && options.excludedImageIds.length > 0) {
+            payload.excludedImageIds = options.excludedImageIds;
+        }
+        return this.post('/api/images/selection-token', payload);
     },
 
     async getSelectionChunk(selectionToken, { offset = 0, limit = FILTERED_SELECTION_CHUNK_SIZE } = {}) {
@@ -812,17 +827,24 @@ const API = {
         return this.post('/api/open-folder', { image_id: imageId });
     },
 
-    async deleteSelectedImages(imageIds) {
-        return this.post('/api/images/delete-selected', {
-            image_ids: imageIds,
-            confirm_delete_files: true
-        });
+    async deleteSelectedImages(imageIds, options = {}) {
+        const payload = { confirm_delete_files: true };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/delete-selected', payload);
     },
 
-    async removeSelectedImages(imageIds) {
-        return this.post('/api/images/remove-selected', {
-            image_ids: imageIds,
-        });
+    async removeSelectedImages(imageIds, options = {}) {
+        const payload = {};
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/images/remove-selected', payload);
     },
 
     getImageUrl(id) {
@@ -1123,15 +1145,20 @@ const API = {
     },
 
     // Batch Sidecar Export
-    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique') {
-        return this.post('/api/tags/export-batch', {
-            image_ids: imageIds,
+    async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
+        const payload = {
             output_folder: outputFolder,
             blacklist: blacklist,
             prefix: prefix,
             content_mode: contentMode,
             overwrite_policy: overwritePolicy
-        });
+        };
+        if (options.selectionToken) {
+            payload.selection_token = options.selectionToken;
+        } else {
+            payload.image_ids = imageIds;
+        }
+        return this.post('/api/tags/export-batch', payload);
     },
 
     // Prompts Library — removed duplicate, kept single definition above
@@ -2093,7 +2120,7 @@ function getTaggerLocalizedScale(value) {
 
 let _taggerModelCatalog = [];
 let _taggerModelCatalogMap = new Map();
-const TAGGER_CHUNK_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32];
+const TAGGER_CHUNK_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 24, 32, 48, 64];
 
 function normalizeTaggerModelName(value, fallback = 'wd-swinv2-tagger-v3') {
     const rawValue = String(value ?? '').trim();
@@ -2203,18 +2230,18 @@ function describeTaggerRuntime(options = {}) {
     } = options;
 
     if (gpuLocked) {
-        return appT('tagger.runtimeAdaptiveMax', 'Adaptive max-throughput mode is active. The app pushes GPU speed first, then falls back only if the run becomes unstable.');
+        return appT('tagger.runtimeAdaptiveMax', 'Adaptive max-throughput mode is active. The app uses GPU first, then falls back only if the GPU provider fails.');
     }
 
     if (isCustom) {
         if (gpuEnabled) {
-            return appT('tagger.runtimeCustomGpu', 'Custom model on GPU. Faster when it works, but less predictable than CPU Safe Mode.');
+            return appT('tagger.runtimeCustomGpu', 'Custom model on GPU.');
         }
-        return appT('tagger.runtimeCustomCpu', 'Custom model on CPU Safe Mode. Finish one stable run first, then try GPU only if needed.');
+        return appT('tagger.runtimeCustomCpu', 'Custom model is set to CPU only.');
     }
 
     if (riskyGpu) {
-        return appT('tagger.runtimeRiskyGpu', 'GPU override is active. Automatic hardware limits still apply, but this path is less conservative than CPU Safe Mode.');
+        return appT('tagger.runtimeRiskyGpu', 'GPU mode is enabled. Automatic hardware limits still apply.');
     }
 
     if (gpuEnabled) {
@@ -2224,7 +2251,7 @@ function describeTaggerRuntime(options = {}) {
         return `${appT('tagger.runtimeAdaptiveGpu', 'Adaptive GPU mode is active. The app is already using the recommended fast path for this hardware.')}${focus}`;
     }
 
-    return appT('tagger.runtimeCpuSafe', 'CPU Safe Mode is active. Slower, but safer when VRAM is tight or other AI tools are already running.');
+    return appT('tagger.runtimeCpuSafe', 'CPU mode is active. GPU acceleration is off for this run.');
 }
 
 function getTaggerHardwareRecommendation(modelName = null, options = {}) {
@@ -2584,13 +2611,13 @@ function syncTaggerRuntimeChunkUi(options = {}) {
         delete batchSelect.dataset.userChosen;
 
         if (batchRecommendation) {
-            batchRecommendation.textContent = appT('tagger.chunkHelpToriiGateFixed', 'ToriiGate uses a fixed safe chunk size of 1.');
+            batchRecommendation.textContent = appT('tagger.chunkHelpToriiGateFixed', 'ToriiGate uses a fixed chunk size of 1.');
         }
         if (chunkChip) {
             setTaggerStatusChip(chunkChip, 'Chunk 1', 'is-safe');
         }
         batchHelp.textContent = gpuEnabled
-            ? appT('tagger.chunkHelpToriiGateGpu', 'ToriiGate uses the multimodal PyTorch backend. Chunk size is fixed to 1 in Safe Mode to avoid VRAM spikes.')
+            ? appT('tagger.chunkHelpToriiGateGpu', 'ToriiGate uses the multimodal PyTorch backend. Chunk size is fixed to 1 for this backend.')
             : appT('tagger.chunkHelpToriiGateCpu', 'ToriiGate on CPU uses fixed chunk size 1.');
         return;
     }
@@ -2615,7 +2642,7 @@ function syncTaggerRuntimeChunkUi(options = {}) {
         batchRecommendation.textContent = (isCustom
             ? (gpuEnabled
                 ? appT('tagger.chunkHelpRecommendedCustomGpu', 'Recommended starting chunk size: {chunk}. Keep custom GPU runs conservative until the model proves stable.')
-                : appT('tagger.chunkHelpRecommendedCustomCpu', 'Recommended starting chunk size: {chunk}. Finish one stable CPU run before you raise it.'))
+                : appT('tagger.chunkHelpRecommendedCustomCpu', 'Recommended starting chunk size: {chunk}. Increase only when tuning throughput.'))
             : appT('tagger.chunkHelpRecommended', 'Recommended chunk size: {chunk}. Leave this alone unless you are deliberately tuning throughput.'))
             .replace('{chunk}', recommendedChunk);
     }
@@ -2697,20 +2724,12 @@ function syncTaggerModelUi(options = {}) {
     const onnxGpuAvailable = providerState.hasCuda || providerState.hasDml;
     const torchGpuAvailable = providerState.hasTorchCuda || providerState.hasCuda || providerState.hasTensorRt;
     const hardwareRisk = String(hardwareRecommendation?.risk_level || '').toLowerCase();
-    const hardwarePrefersGpu = isToriiGate
-        ? (hardwareProbeLoaded ? torchGpuAvailable : currentGpuSelection)
-        : (effectiveModelForUi === 'custom'
-            ? (hardwareProbeLoaded ? onnxGpuAvailable : currentGpuSelection)
-            : (gpuHardwareRecommendation
-                ? Boolean(gpuHardwareRecommendation.recommended_use_gpu)
-                : currentGpuSelection));
+    const hardwarePrefersGpu = true;
     const hardwareHighRisk = hardwareRisk === 'high';
     const taggingIsRunning = $('#btn-start-tag')?.disabled === true;
     const modelDisabled = !isCustom && Boolean(meta?.disabled);
-    const modelPrefersGpu = isCustom && effectiveModelForUi === 'custom' ? onnxGpuAvailable : Boolean(meta?.gpu_default ?? true);
-    const recommendedGpu = gpuLocked
-        ? false
-        : (hardwareProbeLoaded ? (modelPrefersGpu && hardwarePrefersGpu) : currentGpuSelection);
+    const modelPrefersGpu = Boolean(meta?.gpu_default ?? true);
+    const recommendedGpu = gpuLocked ? false : (modelPrefersGpu && hardwarePrefersGpu);
 
     if (customProfileGroup) customProfileGroup.style.display = isCustom ? 'block' : 'none';
     if (customProfileSelect) customProfileSelect.disabled = taggingIsRunning;
@@ -2723,17 +2742,10 @@ function syncTaggerModelUi(options = {}) {
         applyTaggerModelThresholdDefaults(meta);
     }
 
-    if (useGpu && (gpuLocked || (applyModelDefaults && !gpuUserChosen)) && (gpuLocked || hardwareProbeLoaded)) {
-        const changedToSafeMode = useGpu.checked && !recommendedGpu;
+    if (useGpu && gpuLocked) {
+        useGpu.checked = false;
+    } else if (useGpu && applyModelDefaults && !gpuUserChosen) {
         useGpu.checked = recommendedGpu;
-        if (changedToSafeMode && toastOnAutoSafe) {
-            showToast(
-                gpuLocked
-                    ? appT('tagger.toastMaxQualityCpuSafe', 'Max Quality now runs in protected CPU Safe Mode inside the app.')
-                    : appT('tagger.toastAutoSafeMode', 'This model was switched to CPU Safe Mode to avoid crashes.'),
-                'warning'
-            );
-        }
     }
 
     if (runtimeAdvanced && applyModelDefaults && !taggingIsRunning) {
@@ -2754,8 +2766,8 @@ function syncTaggerModelUi(options = {}) {
                 modelHelp.textContent = appT('tagger.customPixaiHelp', 'Custom PixAI ONNX: use selected_tags.csv. PixAI preprocessing and rating fallback are enabled.');
             } else {
                 modelHelp.textContent = (useGpu?.checked ?? false)
-                    ? appT('tagger.customModelHelpGpuPreferred', 'Custom ONNX model. GPU mode is on for this run. CPU Safe Mode is still safer if stability is unknown.')
-                    : appT('tagger.customModelHelp', 'Custom ONNX model. Start with CPU Safe Mode first.');
+                    ? appT('tagger.customModelHelpGpuPreferred', 'Custom ONNX model. GPU mode is on for this run.')
+                    : appT('tagger.customModelHelp', 'Custom ONNX model. CPU mode is selected for this run.');
             }
         } else if (modelDisabled) {
             modelHelp.textContent = meta?.disabled_reason || appT('tagger.modelListedFuture', 'This model is listed for future integration but is not runnable in the current build.');
@@ -2886,7 +2898,7 @@ function syncTaggerModelUi(options = {}) {
         } else if (hardwareHighRisk && !gpuEnabled) {
             runtimeAdvancedHint.textContent = appT('tagger.advHintHighRisk', 'Optional. This machine is marked high-risk for long GPU tagging.');
         } else if (isCustom) {
-            runtimeAdvancedHint.textContent = appT('tagger.advHintCustom', 'Optional. Leave this alone until your custom model finishes one stable CPU run.');
+            runtimeAdvancedHint.textContent = appT('tagger.advHintCustom', 'Optional. Change this only when troubleshooting a custom model.');
         } else if (gpuEnabled && !riskyGpu) {
             runtimeAdvancedHint.textContent = appT('tagger.advHintRecommended', 'Optional. The recommended mode is already active.');
         } else {
@@ -2911,21 +2923,21 @@ function syncTaggerModelUi(options = {}) {
                 ? appT('tagger.gpuHelpToriiGateGpu', 'ToriiGate is using the multimodal PyTorch backend on GPU. Keep chunk size small.')
                 : appT('tagger.gpuHelpToriiGateCpu', 'ToriiGate is using the multimodal PyTorch backend on CPU. This is valid but much slower than CUDA.');
         } else if (!hardwareProbeLoaded) {
-            gpuHelp.textContent = appT('tagger.gpuHelpPendingProbe', 'Hardware probe is still loading. GPU remains enabled by default unless the runtime check later proves it unsafe or unavailable.');
+            gpuHelp.textContent = appT('tagger.gpuHelpPendingProbe', 'Hardware probe is still loading. GPU remains enabled by default while the runtime check finishes.');
         } else if (gpuLocked) {
-            gpuHelp.textContent = appT('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput and falls back only if the run becomes unstable.');
+            gpuHelp.textContent = appT('tagger.gpuHelpAdaptive', 'Adaptive runtime is active for this model. The app prefers GPU throughput.');
         } else if (!gpuEnabled) {
             gpuHelp.textContent = isCustom
-                ? appT('tagger.gpuHelpCustomCpu', 'CPU Safe Mode is active for the custom model. Switch back to GPU Preferred if you need more speed and the model stays stable.')
+                ? appT('tagger.gpuHelpCustomCpu', 'CPU mode is active for the custom model. Switch GPU back on if you want acceleration.')
                 : (hardwareHighRisk
-                    ? appT('tagger.gpuHelpHighRiskCpu', 'CPU Safe Mode is active because this hardware profile is marked high-risk for long GPU tagging runs.')
-                    : appT('tagger.gpuHelpCpuSafe', 'CPU Safe Mode is active. Use this when VRAM is tight or other AI tools are already running.'));
+                    ? appT('tagger.gpuHelpHighRiskCpu', 'CPU mode is active. GPU acceleration is disabled for this run.')
+                    : appT('tagger.gpuHelpCpuSafe', 'CPU mode is active. GPU acceleration is disabled for this run.'));
         } else if (riskyGpu) {
-            gpuHelp.textContent = appT('tagger.gpuHelpRiskyOverride', 'GPU override is active. Automatic hardware limits still apply, but this path will lean harder on the runtime than CPU Safe Mode.');
+            gpuHelp.textContent = appT('tagger.gpuHelpRiskyOverride', 'GPU mode is active. Automatic hardware limits still apply.');
         } else if (meta?.safe_mode_note) {
             gpuHelp.textContent = appT('tagger.gpuHelpRecommendedNote', 'Recommended GPU mode is active. {note}').replace('{note}', meta.safe_mode_note);
         } else {
-            gpuHelp.textContent = appT('tagger.gpuHelpRecommendedDefault', 'Recommended GPU mode is active for this model. Switch to CPU Safe Mode only if you need extra stability.');
+            gpuHelp.textContent = appT('tagger.gpuHelpRecommendedDefault', 'GPU mode is active for this model.');
         }
     }
 
@@ -2970,9 +2982,10 @@ function syncSelectionModeButton() {
 }
 
 function emitSelectionStateChanged() {
+    const selectedCount = getSelectedGalleryCount();
     const detail = {
         selectionMode: Boolean(AppState.selectionMode),
-        selectedCount: AppState.selectedIds.size,
+        selectedCount,
         selectionScope: AppState.selectionScope || 'visible',
     };
     window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
@@ -3011,7 +3024,7 @@ function confirmLargeFilteredSelection(total) {
 
     const confirmMessage = appT(
         'selection.largeFilteredConfirm',
-        'This will select {count} filtered images and may use a lot of memory. Continue?',
+        'This will select {count} filtered images using a compact selection token. Continue?',
         { count: normalizedTotal }
     );
     return window.confirm(confirmMessage);
@@ -3021,8 +3034,8 @@ function shouldFallbackToSelectionIds(error) {
     return [404, 405, 501].includes(Number(error?.apiStatus));
 }
 
-async function resolveFilteredSelectionIdsViaChunks(filterPayload) {
-    const tokenPayload = await API.createSelectionToken(filterPayload, FILTERED_SELECTION_CHUNK_SIZE);
+async function resolveFilteredSelectionIdsViaChunks(filterPayload, options = {}) {
+    const tokenPayload = await API.createSelectionToken(filterPayload, FILTERED_SELECTION_CHUNK_SIZE, options);
     const selectionToken = tokenPayload?.selection_token;
     if (!selectionToken) {
         throw new Error('Selection token response was missing a token');
@@ -3033,29 +3046,13 @@ async function resolveFilteredSelectionIdsViaChunks(filterPayload) {
         return { cancelled: true, imageIds: [] };
     }
 
-    const chunkSize = Math.max(1, Math.min(
-        Number(tokenPayload?.chunk_size || FILTERED_SELECTION_CHUNK_SIZE),
-        10000
-    ));
-    const imageIds = [];
-    let offset = 0;
-
-    while (true) {
-        const chunk = await API.getSelectionChunk(selectionToken, { offset, limit: chunkSize });
-        imageIds.push(...normalizeSelectionImageIds(chunk?.image_ids));
-
-        if (!chunk?.has_more) {
-            break;
-        }
-
-        const nextOffset = Number(chunk?.next_offset);
-        if (!Number.isFinite(nextOffset) || nextOffset <= offset) {
-            throw new Error('Selection chunk response did not advance');
-        }
-        offset = nextOffset;
-    }
-
-    return { cancelled: false, imageIds, selectionToken };
+    return {
+        cancelled: false,
+        imageIds: [],
+        selectionToken,
+        total: totalEstimate,
+        exactTotal: tokenPayload?.exact_total !== false,
+    };
 }
 
 async function resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload) {
@@ -3065,16 +3062,12 @@ async function resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload) {
     if (!confirmLargeFilteredSelection(total)) {
         return { cancelled: true, imageIds: [] };
     }
-    return { cancelled: false, imageIds, selectionToken: null };
+    return { cancelled: false, imageIds, selectionToken: null, total };
 }
 
-async function resolveFilteredSelectionIds(filterPayload) {
-    if (filterPayload?.sortBy === 'random') {
-        return resolveFilteredSelectionIdsViaLegacyEndpoint(filterPayload);
-    }
-
+async function resolveFilteredSelectionIds(filterPayload, options = {}) {
     try {
-        return await resolveFilteredSelectionIdsViaChunks(filterPayload);
+        return await resolveFilteredSelectionIdsViaChunks(filterPayload, options);
     } catch (error) {
         if (!shouldFallbackToSelectionIds(error)) {
             throw error;
@@ -3104,10 +3097,11 @@ async function selectAllFilteredResults() {
         }
 
         updateSelectionState((selection) => {
-            selection.selectedIds = new Set(result.imageIds);
+            selection.selectedIds = result.selectionToken ? new Set() : new Set(result.imageIds);
             selection.scope = 'filtered';
             selection.filterKey = filterKey;
             selection.selectionToken = result.selectionToken || null;
+            selection.selectionTotal = Number(result.total || result.imageIds?.length || 0);
         });
 
         if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
@@ -3133,7 +3127,8 @@ async function invertAllFilteredResults() {
     try {
         const filterPayload = buildSelectionFilterRequest();
         const filterKey = JSON.stringify(filterPayload);
-        const result = await resolveFilteredSelectionIds(filterPayload);
+        const excludedImageIds = getSelectedGalleryIds();
+        const result = await resolveFilteredSelectionIds(filterPayload, { excludedImageIds });
         if (result.cancelled) {
             updateSelectionUI();
             return;
@@ -3145,15 +3140,44 @@ async function invertAllFilteredResults() {
         }
 
         const currentSelected = new Set(AppState.selectedIds || []);
-        const nextSelected = new Set(
-            result.imageIds.filter((imageId) => !currentSelected.has(imageId))
-        );
+        const activeSelectionToken = getActiveSelectionTokenForActions();
 
         updateSelectionState((selection) => {
+            if (activeSelectionToken) {
+                if (currentSelected.size === 0) {
+                    selection.selectedIds = new Set();
+                    selection.scope = 'visible';
+                    selection.filterKey = null;
+                    selection.selectionToken = null;
+                    selection.selectionTotal = 0;
+                    return;
+                }
+
+                selection.selectedIds = new Set(currentSelected);
+                selection.scope = 'filtered';
+                selection.filterKey = filterKey;
+                selection.selectionToken = null;
+                selection.selectionTotal = currentSelected.size;
+                return;
+            }
+
+            if (result.selectionToken) {
+                selection.selectedIds = currentSelected;
+                selection.scope = 'filtered';
+                selection.filterKey = filterKey;
+                selection.selectionToken = result.selectionToken;
+                selection.selectionTotal = Number(result.total || 0);
+                return;
+            }
+
+            const nextSelected = new Set(
+                result.imageIds.filter((imageId) => !currentSelected.has(imageId))
+            );
             selection.selectedIds = nextSelected;
             selection.scope = 'filtered';
             selection.filterKey = filterKey;
             selection.selectionToken = null;
+            selection.selectionTotal = nextSelected.size;
         });
 
         if (window.Gallery && typeof Gallery.syncSelectionState === 'function') {
@@ -3195,7 +3219,8 @@ function setSelectionMode(enabled, options = {}) {
             selection.selectedIds = new Set();
             selection.scope = 'visible';
             selection.filterKey = null;
-        selection.selectionToken = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         }
     });
 
@@ -3291,7 +3316,7 @@ function switchView(viewName) {
         const selActions = $('#selection-actions');
         if (selActions) selActions.style.display = 'none';
         collapseSelectionMoreActions();
-    } else if (AppState.selectionMode && AppState.selectedIds && AppState.selectedIds.size > 0) {
+    } else if (AppState.selectionMode && getSelectedGalleryCount() > 0) {
         // Show FAB if we have selections and are returning to gallery
         const selActions = $('#selection-actions');
         if (selActions) selActions.style.display = 'grid';
@@ -3325,6 +3350,10 @@ function switchView(viewName) {
         });
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
+    } else if (viewName === 'health') {
+        if (window.LibraryHealth && typeof window.LibraryHealth.init === 'function') {
+            window.LibraryHealth.init();
+        }
     } else if (viewName === 'promptlab') {
         if (typeof window.initPromptLab === 'function') window.initPromptLab();
     } else if (viewName === 'artist') {
@@ -3344,10 +3373,43 @@ function switchView(viewName) {
 }
 
 function getSelectedGalleryExamples(ids, limit = 5) {
+    const imageById = new Map((AppState.images || []).map((image) => [Number(image.id), image]));
     return ids
         .slice(0, limit)
-        .map((id) => AppState.images.find((image) => image.id === id)?.filename || `Image ${id}`)
+        .map((id) => imageById.get(Number(id))?.filename || `Image ${id}`)
         .join(', ');
+}
+
+function getSelectedGalleryCount() {
+    if (AppState.selectionScope === 'filtered' && AppState.selectionToken) {
+        return Math.max(0, Number(AppState.selectionTotal || AppState.selectedIds?.size || 0) || 0);
+    }
+    return AppState.selectedIds?.size || 0;
+}
+
+function getActiveSelectionTokenForActions() {
+    if (AppState.selectionScope !== 'filtered' || !AppState.selectionToken) {
+        return null;
+    }
+    if (AppState.selectionFilterKey !== getSelectionFilterCacheKey(AppState.filters)) {
+        return null;
+    }
+    return AppState.selectionToken;
+}
+
+function isFilteredSelectionActiveForCurrentFilters() {
+    return Boolean(getActiveSelectionTokenForActions());
+}
+
+function clearGallerySelectionAfterBulkAction() {
+    updateSelectionState((selection) => {
+        selection.selectedIds = new Set();
+        selection.scope = 'visible';
+        selection.filterKey = null;
+        selection.selectionToken = null;
+        selection.selectionTotal = 0;
+    });
+    resetSelectionDataCache();
 }
 
 function getSelectedGalleryIds() {
@@ -3357,30 +3419,36 @@ function getSelectedGalleryIds() {
 }
 
 async function deleteGalleryImagesByIds(imageIds) {
+    const selectionToken = getActiveSelectionTokenForActions();
     const ids = normalizeSelectionImageIds(imageIds);
+    const count = selectionToken ? getSelectedGalleryCount() : ids.length;
 
-    if (ids.length === 0) {
+    if (count === 0) {
         showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
-    const examples = getSelectedGalleryExamples(ids);
+    const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
     const title = appT('selection.deleteConfirmTitle', 'Move selected image files to Trash?');
     const message = appT(
         'selection.deleteConfirmBody',
         'This moves {count} original file(s) to the operating system Trash / Recycle Bin and removes them from this gallery. Use Remove from Gallery if you only want to clean the index. Examples: {examples}'
     )
-        .replace('{count}', ids.length)
-        .replace('{examples}', examples || ids.slice(0, 5).join(', '));
+        .replace('{count}', count)
+        .replace('{examples}', examples || (selectionToken
+            ? appT('selection.filteredExamples', 'current filtered selection')
+            : ids.slice(0, 5).join(', ')));
 
     showConfirm(title, message, async () => {
         try {
-            const result = await API.deleteSelectedImages(ids);
+            const result = await API.deleteSelectedImages(ids, { selectionToken });
             const failed = Array.isArray(result.failed) ? result.failed : [];
             const failedIds = new Set(failed.map((item) => Number(item.image_id)));
 
-            const deletedIds = ids.filter((id) => !failedIds.has(id));
-            if (deletedIds.length > 0) {
+            if (selectionToken) {
+                clearGallerySelectionAfterBulkAction();
+            } else {
+                const deletedIds = ids.filter((id) => !failedIds.has(id));
                 mutateSelectedIds((selectedIds) => {
                     deletedIds.forEach((id) => selectedIds.delete(id));
                 });
@@ -3424,29 +3492,37 @@ function deleteSelectedGalleryImages() {
 }
 
 async function removeGalleryImagesByIds(imageIds) {
+    const selectionToken = getActiveSelectionTokenForActions();
     const ids = normalizeSelectionImageIds(imageIds);
+    const count = selectionToken ? getSelectedGalleryCount() : ids.length;
 
-    if (ids.length === 0) {
+    if (count === 0) {
         showToast(appT('selection.emptyHint', 'Select images, or choose all current filter matches.'), 'info');
         return;
     }
 
-    const examples = getSelectedGalleryExamples(ids);
+    const examples = selectionToken ? '' : getSelectedGalleryExamples(ids);
     const title = appT('selection.removeConfirmTitle', 'Remove selected images from gallery?');
     const message = appT(
         'selection.removeConfirmBody',
         'This removes {count} image record(s) from this gallery only. Files stay on disk and can be re-imported by scanning again. Examples: {examples}'
     )
-        .replace('{count}', ids.length)
-        .replace('{examples}', examples || ids.slice(0, 5).join(', '));
+        .replace('{count}', count)
+        .replace('{examples}', examples || (selectionToken
+            ? appT('selection.filteredExamples', 'current filtered selection')
+            : ids.slice(0, 5).join(', ')));
 
     showConfirm(title, message, async () => {
         try {
-            const result = await API.removeSelectedImages(ids);
-            mutateSelectedIds((selectedIds) => {
-                ids.forEach((id) => selectedIds.delete(id));
-            });
-            resetSelectionDataCache();
+            const result = await API.removeSelectedImages(ids, { selectionToken });
+            if (selectionToken) {
+                clearGallerySelectionAfterBulkAction();
+            } else {
+                mutateSelectedIds((selectedIds) => {
+                    ids.forEach((id) => selectedIds.delete(id));
+                });
+                resetSelectionDataCache();
+            }
             updateSelectionUI();
             emitSelectionStateChanged();
             if (window.Gallery && typeof window.Gallery.syncSelectionState === 'function') {
@@ -4225,8 +4301,12 @@ function initEventListeners() {
     // --- Censored Edit ---
     $('#btn-send-to-censor')?.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (AppState.selectedIds.size > 0) {
-            addToCensorQueue(Array.from(AppState.selectedIds));
+        if (getSelectedGalleryCount() > 0) {
+            if (getActiveSelectionTokenForActions()) {
+                showToast(appT('selection.censorRequiresExplicitIds', 'Censor queue needs explicit selected images. Select visible images instead of all filtered results.'), 'info');
+                return;
+            }
+            addToCensorQueue(getSelectedGalleryIds());
             return;
         }
         switchView('censor');
@@ -5998,7 +6078,7 @@ async function startTagging() {
         $('#tag-progress-fill').style.width = '0%';
         _tagLastProgressPercent = 0;
         _tagLastProgressText = gpuLocked
-            ? t('tag.preparingMaxQuality', 'Preparing Max Quality model in protected CPU Safe Mode...')
+            ? t('tag.preparingMaxQuality', 'Preparing Max Quality model on CPU...')
             : (options.useGpu
                 ? t('tag.preparingGpu', 'Preparing model on GPU...')
                 : t('tag.preparingCpu', 'Preparing model on CPU...'));
@@ -6593,7 +6673,8 @@ async function loadImages(appendMode = false, options = {}) {
                         selection.selectedIds = new Set();
                         selection.scope = 'visible';
                         selection.filterKey = null;
-        selection.selectionToken = null;
+                        selection.selectionToken = null;
+                        selection.selectionTotal = 0;
                     });
                     if (typeof updateSelectionUI === 'function') updateSelectionUI();
                     emitSelectionStateChanged();
@@ -7166,7 +7247,8 @@ function updateSelectionUI() {
     const countEl = $('#selection-count');
     const scopeEl = $('#selection-scope-summary');
     const grid = $('#gallery-grid');
-    const hasSelection = AppState.selectedIds.size > 0;
+    const selectedCount = getSelectedGalleryCount();
+    const hasSelection = selectedCount > 0;
     const selectionPanelVisible = AppState.selectionMode && AppState.currentView === 'gallery';
     const canRunBatchActions = selectionPanelVisible && hasSelection;
     const buttonIds = [
@@ -7211,7 +7293,7 @@ function updateSelectionUI() {
         panel.style.display = 'grid';
         if (countEl) {
             countEl.textContent = hasSelection
-                ? (window.I18n?.t?.('selection.count', { count: AppState.selectedIds.size }) || `${AppState.selectedIds.size} items selected`)
+                ? (window.I18n?.t?.('selection.count', { count: selectedCount }) || `${selectedCount} items selected`)
                 : (window.I18n?.t?.('selection.emptyHint') || 'Select images, or choose all current filter matches.');
         }
         if (scopeEl) {
@@ -7612,12 +7694,13 @@ function renderExportModalText(format = null) {
 }
 
 async function showExportModalWithFormat(format = 'prompt') {
-    if (AppState.selectedIds.size === 0) return;
+    const selectedCount = getSelectedGalleryCount();
+    if (selectedCount === 0) return;
 
     _currentExportModalData = null;
     _currentExportFormat = format;
     $('#export-count').textContent = appT('export.selectedCount', 'This export includes only {count} selected images.', {
-        count: AppState.selectedIds.size,
+        count: selectedCount,
     });
     const select = $('#export-format');
     if (select) select.value = format;
@@ -7632,7 +7715,7 @@ async function showExportModalWithFormat(format = 'prompt') {
     showModal('export-modal');
 
     try {
-        const ids = Array.from(AppState.selectedIds);
+        const ids = getSelectedGalleryIds();
         _currentExportModalData = await loadSelectionPreviewData(ids, EXPORT_PREVIEW_MAX_IMAGES);
         renderExportModalText(format);
     } catch (e) {
@@ -7673,13 +7756,14 @@ function downloadCurrentExportText() {
 
 
 function showBatchExportModal() {
-    if (AppState.selectedIds.size === 0) {
+    const selectedCount = getSelectedGalleryCount();
+    if (selectedCount === 0) {
         showToast(appT('export.selectImagesFirst', 'Please select images first'), 'error');
         return;
     }
 
     $('#batch-export-count').textContent = appT('batchExport.selectedCount', 'This batch export includes only {count} selected images.', {
-        count: AppState.selectedIds.size,
+        count: selectedCount,
     });
     const contentModeSelect = $('#batch-export-content-mode');
     if (contentModeSelect && !contentModeSelect.value) {
@@ -7848,7 +7932,8 @@ async function executeBatchExport() {
     const contentMode = $('#batch-export-content-mode')?.value || 'caption_merged';
     const overwritePolicy = $('#batch-export-overwrite')?.value || 'unique';
 
-    const imageIds = Array.from(AppState.selectedIds);
+    const selectionToken = getActiveSelectionTokenForActions();
+    const imageIds = selectionToken ? [] : Array.from(AppState.selectedIds);
 
     // Show progress
     const progressEl = $('#batch-export-progress');
@@ -7861,7 +7946,7 @@ async function executeBatchExport() {
     if (startBtn) startBtn.disabled = true;
 
     try {
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy);
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken });
 
         $('#batch-export-progress-fill').style.width = '100%';
 
@@ -8159,9 +8244,9 @@ function renderFeatureAvailabilityNotice() {
         appT('features.ready.filters', 'Filter, search, batch select, auto-separate, and WASD manual sort'),
         appT('features.ready.prompts', 'Prompt Lab, tag library, export sidecar .txt / .json files'),
         appT('features.ready.censorManual', 'Manual censor editor tools: brush, pen, eraser, clone, preview/save'),
-        appT('features.ready.wd14', 'WD14 / ONNX tagging after model-file download; no extra Python runtime install'),
     ];
     const prepareItems = [
+        appT('features.prepare.wd14', 'WD14 / ONNX tagging: downloads model files and repairs Windows GPU runtime when needed'),
         appT('features.prepare.clip', 'CLIP similarity / duplicate search: installs fastembed and downloads CLIP files'),
         appT('features.prepare.aesthetic', 'Aesthetic scoring: installs torch + open-clip and downloads CLIP/head files'),
         appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors/triton and downloads Kaloscope files'),
@@ -9817,7 +9902,7 @@ function initGlobalKeyboardShortcuts() {
         }
         // Escape - Clear selection
         else if (e.key === 'Escape') {
-            if (AppState.selectedIds.size > 0) {
+            if (getSelectedGalleryCount() > 0) {
                 e.preventDefault();
                 clearSelectedIds({ scope: 'visible' });
                 updateSelectionUI();
@@ -9830,7 +9915,7 @@ function initGlobalKeyboardShortcuts() {
         }
         // Delete - Remove from gallery only; permanent disk delete stays behind the explicit dangerous button.
         else if (e.key === 'Delete') {
-            if (AppState.selectedIds.size > 0) {
+            if (getSelectedGalleryCount() > 0) {
                 e.preventDefault();
                 removeSelectedGalleryImages();
             }
@@ -9997,6 +10082,8 @@ function buildAppContext() {
         loadStats,
         updateSelectionUI,
         emitSelectionStateChanged,
+        getSelectedGalleryCount,
+        isFilteredSelectionActiveForCurrentFilters,
         showConfirm,
         showRandomImage,
         showAnalytics,

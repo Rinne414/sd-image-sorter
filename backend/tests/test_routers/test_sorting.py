@@ -268,19 +268,18 @@ class TestScan:
         )
 
         phases = [event["details"].get("phase") for event in events]
-        assert "counting" in phases
-        assert "counted" in phases
-        assert phases.index("counted") < phases.index("importing")
-
-        counted_event = next(event for event in events if event["details"].get("phase") == "counted")
-        assert counted_event["total"] == 3
-        assert counted_event["details"]["import_total"] == 3
-        assert counted_event["details"]["total_final"] is True
+        assert "counting" not in phases
+        assert "counted" not in phases
+        assert "importing" in phases
 
         import_events = [event for event in events if event["details"].get("phase") == "importing"]
         assert import_events
-        assert all(event["total"] == 3 for event in import_events)
-        assert all(event["details"]["import_total"] == 3 for event in import_events)
+        assert import_events[0]["current"] == 1
+        assert import_events[0]["total"] == 1
+        assert import_events[0]["details"]["import_total"] == 1
+        assert import_events[0]["details"]["total_final"] is False
+        assert result["total"] == 3
+        assert result["total_final"] is True
 
         metadata_events = [event for event in events if event["details"].get("phase") == "metadata"]
         assert metadata_events
@@ -2238,3 +2237,63 @@ def test_scan_progress_does_not_mark_stalled_when_recently_updated(isolated_sort
     assert progress["attention_required"] is False
     assert progress["stalled_seconds"] == 2
     assert progress["diagnostics_available"] is True
+
+def test_library_health_reports_metadata_and_archive_signals(test_client, tmp_path):
+    from PIL import Image
+
+    image_a = tmp_path / "same.png"
+    image_b_dir = tmp_path / "nested"
+    image_b_dir.mkdir()
+    image_b = image_b_dir / "same.png"
+    image_c = tmp_path / "broken.png"
+    Image.new("RGB", (32, 32), "white").save(image_a)
+    Image.new("RGB", (64, 32), "black").save(image_b)
+    Image.new("RGB", (16, 16), "red").save(image_c)
+
+    db = test_client.test_db
+    db.add_image(
+        path=str(image_a),
+        filename=image_a.name,
+        generator="comfyui",
+        prompt="1girl, solo",
+        checkpoint="model.safetensors",
+        width=32,
+        height=32,
+        file_size=image_a.stat().st_size,
+        metadata_json="{}",
+    )
+    db.add_image(
+        path=str(image_b),
+        filename=image_b.name,
+        generator="unknown",
+        prompt="",
+        checkpoint=None,
+        width=64,
+        height=32,
+        file_size=image_b.stat().st_size,
+        metadata_json="{}",
+    )
+    broken_id = db.add_image(
+        path=str(image_c),
+        filename=image_c.name,
+        generator="webui",
+        prompt="bad metadata",
+        checkpoint="broken.safetensors",
+        width=16,
+        height=16,
+        file_size=image_c.stat().st_size,
+        metadata_json="{}",
+    )
+    db.mark_image_unreadable(broken_id, "decode failed")
+
+    response = test_client.get("/api/library-health?sample_limit=3")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["summary"]["total_images"] == 3
+    assert data["issue_counts"]["missing_prompt"] == 1
+    assert data["issue_counts"]["unreadable"] == 1
+    assert data["duplicate_filenames"]["images"] == 2
+    assert data["duplicate_filenames"]["samples"][0]["filename"] == "same.png"
+    assert data["recommendations"]
+    assert 0 <= data["summary"]["quality_score"] <= 100

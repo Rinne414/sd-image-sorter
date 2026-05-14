@@ -617,7 +617,7 @@ ARTIST_KALOSCOPE_CLASS_MAPPING: str = os.environ.get(
 # =============================================================================
 
 # Allowed image extensions
-ALLOWED_IMAGE_EXTENSIONS: set = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+ALLOWED_IMAGE_EXTENSIONS: set = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tif', '.tiff'}
 
 # Allowed model extensions
 ALLOWED_MODEL_EXTENSIONS: set = {'.onnx', '.pt', '.pth', '.safetensors'}

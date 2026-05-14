@@ -873,3 +873,27 @@ Quality bar:
   Before publishing a release that heavily promotes Feature Setup / Prepare, or when users report optional Prepare downloading unexpected packages.
 - Deferred because:
   The urgent user-impacting problem was default first-run size and DB bloat. Implementing, compiling, and testing separate cross-platform optional locks is larger and should be handled as a dedicated dependency packaging pass.
+
+### Debt-22: Token-scoped bulk operations are chunked but still synchronous HTTP
+- Status: mitigated
+- Type: scalability / UX progress model debt
+- Impact: medium
+- Risk if ignored:
+  The current large-selection fixes avoid browser 200k-ID materialization and backend all-at-once image/tag maps, but delete/remove and same-name sidecar export can still occupy one HTTP request for a long time on very large libraries or slow disks.
+- Related files:
+  `backend/services/image_service.py`
+  `backend/services/tag_export_service.py`
+  `backend/services/tagging_service.py`
+  `backend/routers/images.py`
+  `backend/routers/tags.py`
+  `frontend/js/app.js`
+- Observed problem:
+  Token mode now chunks IDs/data and snapshots destructive scopes before mutation, but it reports completion only at request end. Users do not yet get resumable job IDs, progress polling, pause/resume, or retry-at-failed-file semantics for these token-scoped Gallery actions.
+- Why this is debt:
+  The app no longer melts memory for 200k-image selections, but a slow disk/network share can still make the browser look busy for a long-running synchronous request. This is a UX/progress gap, not the original memory/OOM bug.
+- Better long-term shape:
+  Promote token delete/remove/export to background jobs with durable job IDs, progress endpoints, cancellation, error samples, and chunk checkpoints. Keep the current token filter contract as the job input, and snapshot IDs server-side before destructive mutation.
+- Revisit trigger:
+  Before adding more token-scoped bulk actions, before advertising multi-hundred-thousand-image export as a polished workflow, or when users report long-running export/delete requests timing out.
+- Deferred because:
+  The release-blocking issue was unbounded browser/backend memory and giant JSON payloads. The current implementation fixes that root cause while preserving existing API compatibility; a full background-job framework is larger release work.

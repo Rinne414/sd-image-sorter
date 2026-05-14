@@ -103,7 +103,8 @@ let boundHandlers = {
     panMousemove: null,
     panMouseup: null,
     spaceKeydown: null,
-    spaceKeyup: null
+    spaceKeyup: null,
+    resize: null
 };
 
 let censorModelStatusPromise = null;
@@ -354,6 +355,12 @@ let censorEventsInitialized = false;
 
 function initCensorEdit() {
     const { $, $$ } = window.App || { $: (s) => document.querySelector(s), $$: (s) => document.querySelectorAll(s) };
+
+    // Re-attach resize listener if it was cleaned up
+    if (!boundHandlers.resize) {
+        boundHandlers.resize = _handleCensorResize;
+        window.addEventListener('resize', _handleCensorResize);
+    }
 
     // Load saved settings (use optional chaining for elements that may not exist)
     const modelPathEl = $('#censor-model-path');
@@ -2424,18 +2431,24 @@ function fitCanvasToContainer(canvas, imgW, imgH) {
     canvas.style.height = `${finalH}px`;
 }
 
-// Re-fit on window resize
-window.addEventListener('resize', () => {
-    if (CensorState.activeId && CensorState.originalImage) {
-        const c1 = document.getElementById('censor-canvas');
-        const c2 = document.getElementById('censor-canvas-buffer');
-        const referenceCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
-        const width = referenceCanvas?.width || CensorState.originalImage.width;
-        const height = referenceCanvas?.height || CensorState.originalImage.height;
-        fitCanvasToContainer(c1, width, height);
-        fitCanvasToContainer(c2, width, height);
-    }
-});
+// Re-fit on window resize (debounced, removable)
+let _resizeDebounceTimer = null;
+function _handleCensorResize() {
+    clearTimeout(_resizeDebounceTimer);
+    _resizeDebounceTimer = setTimeout(() => {
+        if (CensorState.activeId && CensorState.originalImage) {
+            const c1 = document.getElementById('censor-canvas');
+            const c2 = document.getElementById('censor-canvas-buffer');
+            const referenceCanvas = document.getElementById(CensorState.activeCanvasId || 'censor-canvas');
+            const width = referenceCanvas?.width || CensorState.originalImage.width;
+            const height = referenceCanvas?.height || CensorState.originalImage.height;
+            fitCanvasToContainer(c1, width, height);
+            fitCanvasToContainer(c2, width, height);
+        }
+    }, 150);
+}
+boundHandlers.resize = _handleCensorResize;
+window.addEventListener('resize', _handleCensorResize);
 
 function saveCurrentCanvasToState(serializedState = null) {
     // Save from the CURRENT active canvas
@@ -5284,6 +5297,12 @@ function cleanupCensorViewFull() {
     CensorState.isErasing = false;
     isPanning = false;
     spacePressed = false;
+
+    if (boundHandlers.resize) {
+        window.removeEventListener('resize', boundHandlers.resize);
+        boundHandlers.resize = null;
+        clearTimeout(_resizeDebounceTimer);
+    }
 
     const wrapper = document.querySelector('.censor-canvas-wrapper-v2');
     if (wrapper) {

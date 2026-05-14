@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, List, Optional
+import base64
+import binascii
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional
 
 from fastapi import HTTPException
 
@@ -38,6 +40,106 @@ VALID_CONTENT_MODES = {
     "json",
 }
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
+EXPORT_DB_CHUNK_SIZE = 500
+SELECTION_TOKEN_VERSION = 2
+
+
+def _normalize_export_image_ids(image_ids: Iterable[Any]) -> List[int]:
+    normalized_ids: List[int] = []
+    seen_ids: set[int] = set()
+    for raw_image_id in image_ids or []:
+        try:
+            image_id = int(raw_image_id)
+        except (TypeError, ValueError):
+            continue
+        if image_id <= 0 or image_id in seen_ids:
+            continue
+        seen_ids.add(image_id)
+        normalized_ids.append(image_id)
+    return normalized_ids
+
+
+def _iter_id_list_chunks(image_ids: Iterable[Any], chunk_size: int = EXPORT_DB_CHUNK_SIZE) -> Iterator[List[int]]:
+    normalized_chunk_size = max(1, int(chunk_size or EXPORT_DB_CHUNK_SIZE))
+    chunk: List[int] = []
+    seen_ids: set[int] = set()
+    for raw_image_id in image_ids or []:
+        try:
+            image_id = int(raw_image_id)
+        except (TypeError, ValueError):
+            continue
+        if image_id <= 0 or image_id in seen_ids:
+            continue
+        seen_ids.add(image_id)
+        chunk.append(image_id)
+        if len(chunk) >= normalized_chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _decode_selection_token(selection_token: str) -> Dict[str, Any]:
+    try:
+        padded = selection_token + "=" * (-len(selection_token) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+    except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid selection token")
+
+    if not isinstance(payload, dict) or payload.get("v") != SELECTION_TOKEN_VERSION:
+        raise HTTPException(status_code=400, detail="Invalid selection token")
+    filters = payload.get("filters")
+    if not isinstance(filters, dict):
+        raise HTTPException(status_code=400, detail="Invalid selection token")
+    if (filters.get("sortBy") or "newest") == "random":
+        raise HTTPException(status_code=400, detail="random sort cannot use selection-token export")
+    return filters
+
+
+def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPORT_DB_CHUNK_SIZE) -> Iterator[List[int]]:
+    filters = _decode_selection_token(selection_token)
+    yield from db.iter_filtered_image_id_chunks(
+        chunk_size=chunk_size,
+        generators=filters.get("generators") or None,
+        tags=filters.get("tags") or None,
+        ratings=filters.get("ratings") or None,
+        checkpoints=filters.get("checkpoints") or None,
+        loras=filters.get("loras") or None,
+        search_query=filters.get("search") or None,
+        sort_by=filters.get("sortBy") or "newest",
+        min_width=filters.get("minWidth"),
+        max_width=filters.get("maxWidth"),
+        min_height=filters.get("minHeight"),
+        max_height=filters.get("maxHeight"),
+        prompt_terms=filters.get("prompts") or None,
+        aspect_ratio=filters.get("aspectRatio"),
+        artist=filters.get("artist"),
+        min_aesthetic=filters.get("minAesthetic"),
+        max_aesthetic=filters.get("maxAesthetic"),
+        excluded_image_ids=filters.get("excludedImageIds") or None,
+    )
+
+
+def count_selection_token_ids(selection_token: str) -> int:
+    filters = _decode_selection_token(selection_token)
+    return db.get_filtered_image_count(
+        generators=filters.get("generators") or None,
+        tags=filters.get("tags") or None,
+        ratings=filters.get("ratings") or None,
+        checkpoints=filters.get("checkpoints") or None,
+        loras=filters.get("loras") or None,
+        search_query=filters.get("search") or None,
+        min_width=filters.get("minWidth"),
+        max_width=filters.get("maxWidth"),
+        min_height=filters.get("minHeight"),
+        max_height=filters.get("maxHeight"),
+        prompt_terms=filters.get("prompts") or None,
+        aspect_ratio=filters.get("aspectRatio"),
+        artist=filters.get("artist"),
+        min_aesthetic=filters.get("minAesthetic"),
+        max_aesthetic=filters.get("maxAesthetic"),
+        excluded_image_ids=filters.get("excludedImageIds") or None,
+    )
 
 
 def extract_generation_params(image: Dict[str, Any]) -> Dict[str, Any]:
@@ -234,7 +336,13 @@ def _allocate_output_path(
     return None
 
 
-def export_tags_batch_request(request: Any) -> Dict[str, Any]:
+def export_tags_batch_request(
+    request: Any,
+    *,
+    id_chunks: Optional[Iterable[List[int]]] = None,
+    total: Optional[int] = None,
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Dict[str, Any]:
     """Export selected image metadata to sidecar files."""
     output_folder = normalize_user_path(str(request.output_folder or ""))
     is_valid, error = validate_folder_path(output_folder, allow_create=True)
@@ -257,59 +365,63 @@ def export_tags_batch_request(request: Any) -> Dict[str, Any]:
     used_output_paths = set()
     output_folder_ready = os.path.isdir(output_folder)
 
-    # Pre-batch DB reads to avoid N+1 — with the 5M ceiling, a per-id
-    # round-trip in this loop would block the request for many minutes
-    # before the first sidecar is written. `get_images_by_ids` and
-    # `get_image_tags_map` already chunk IN(...) at 500 ids internally.
-    image_id_list = list(request.image_ids)
-    images_map = db.get_images_by_ids(image_id_list)
-    tags_map = db.get_image_tags_map(image_id_list)
+    if id_chunks is None:
+        id_chunks = _iter_id_list_chunks(getattr(request, "image_ids", []) or [], EXPORT_DB_CHUNK_SIZE)
+    total_count = int(total if total is not None else len(_normalize_export_image_ids(getattr(request, "image_ids", []) or [])))
+    processed = 0
 
-    for image_id in image_id_list:
-        try:
-            image = images_map.get(image_id)
-            if not image:
+    for image_id_list in id_chunks:
+        images_map = db.get_images_by_ids(image_id_list)
+        tags_map = db.get_image_tags_map(image_id_list)
+
+        for image_id in image_id_list:
+            processed += 1
+            if progress_callback:
+                progress_callback({"processed": processed, "total": total_count, "current_id": image_id})
+            try:
+                image = images_map.get(image_id)
+                if not image:
+                    error_count += 1
+                    error_messages.append(f"Image {image_id} not found")
+                    continue
+
+                tags = tags_map.get(image_id, [])
+                file_content = build_sidecar_content(
+                    image,
+                    tags,
+                    content_mode=content_mode,
+                    blacklist=blacklist,
+                    prefix=prefix,
+                )
+                output_path = _allocate_output_path(output_folder, image, content_mode, overwrite_policy, used_output_paths)
+                if output_path is None:
+                    skipped += 1
+                    continue
+
+                if not output_folder_ready:
+                    try:
+                        os.makedirs(output_folder, exist_ok=True)
+                    except OSError as exc:
+                        raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
+                    output_folder_ready = True
+
+                with open(output_path, "w", encoding="utf-8") as handle:
+                    handle.write(file_content)
+
+                used_output_paths.add(output_path)
+                exported += 1
+            except HTTPException:
+                raise
+            except Exception as exc:
                 error_count += 1
-                error_messages.append(f"Image {image_id} not found")
-                continue
-
-            tags = tags_map.get(image_id, [])
-            file_content = build_sidecar_content(
-                image,
-                tags,
-                content_mode=content_mode,
-                blacklist=blacklist,
-                prefix=prefix,
-            )
-            output_path = _allocate_output_path(output_folder, image, content_mode, overwrite_policy, used_output_paths)
-            if output_path is None:
-                skipped += 1
-                continue
-
-            if not output_folder_ready:
-                try:
-                    os.makedirs(output_folder, exist_ok=True)
-                except OSError as exc:
-                    raise HTTPException(status_code=400, detail=f"Cannot create output folder: {exc}") from exc
-                output_folder_ready = True
-
-            with open(output_path, "w", encoding="utf-8") as handle:
-                handle.write(file_content)
-
-            used_output_paths.add(output_path)
-            exported += 1
-        except HTTPException:
-            raise
-        except Exception as exc:
-            error_count += 1
-            error_messages.append(f"Error exporting sidecar for image {image_id}: {exc}")
+                error_messages.append(f"Error exporting sidecar for image {image_id}: {exc}")
 
     return {
         "exported": exported,
         "skipped": skipped,
         "error_count": error_count,
         "error_messages": error_messages,
-        "total": len(request.image_ids),
+        "total": total_count,
         "content_mode": content_mode,
         "overwrite_policy": overwrite_policy,
     }

@@ -208,22 +208,11 @@ const PromptLab = {
                 return this.imageCatalog;
             }
 
-            const allImages = [];
-            let cursor = null;
-            let hasMore = true;
-            while (hasMore) {
-                const result = await api.getImages({
-                    sortBy: 'newest',
-                    limit: 500,
-                    cursor,
-                });
-                const rows = Array.isArray(result?.images) ? result.images : [];
-                allImages.push(...rows);
-                cursor = result?.next_cursor || null;
-                hasMore = Boolean(result?.has_more && cursor);
-            }
-
-            this.imageCatalog = allImages;
+            const result = await api.getImages({
+                sortBy: 'newest',
+                limit: 200,
+            });
+            this.imageCatalog = Array.isArray(result?.images) ? result.images : [];
             this.imageCatalogLoaded = true;
             this.imageCatalogPromise = null;
             return this.imageCatalog;
@@ -321,18 +310,35 @@ const PromptLab = {
         }
 
         const query = String(document.getElementById('pl-image-picker-search')?.value || '').trim().toLowerCase();
-        const images = this._getPromptLabImages().filter((image) => {
-            if (!query) return true;
-            const checkpoint = String(image.checkpoint || '').replace(/\\/g, '/').split('/').pop() || '';
-            const haystack = [
-                image.filename || '',
-                image.prompt || '',
-                image.negative_prompt || '',
-                checkpoint,
-            ].join(' ').toLowerCase();
-            return haystack.includes(query);
-        });
 
+        if (query && window.App?.API?.getImages) {
+            this._searchPickerDebounced(query, grid, count);
+            return;
+        }
+
+        const images = this._getPromptLabImages();
+        this._renderPickerGrid(images, grid, count);
+    },
+
+    _searchPickerTimer: null,
+    _searchPickerDebounced(query, grid, count) {
+        clearTimeout(this._searchPickerTimer);
+        this._searchPickerTimer = setTimeout(async () => {
+            try {
+                const result = await window.App.API.getImages({
+                    sortBy: 'newest',
+                    limit: 200,
+                    search: query,
+                });
+                const images = Array.isArray(result?.images) ? result.images : [];
+                this._renderPickerGrid(images, grid, count);
+            } catch {
+                this._renderPickerGrid([], grid, count);
+            }
+        }, 300);
+    },
+
+    _renderPickerGrid(images, grid, count) {
         if (count) {
             count.textContent = this._t('promptlab.pickImageCount', '{count} images', { count: images.length }).replace('{count}', images.length);
         }

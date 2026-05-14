@@ -153,7 +153,7 @@ def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, t
     assert db.get_image_by_path(str(copied_path)) is None
 
 
-def test_scan_folder_counts_before_import_for_real_scan_total(test_db, tmp_path: Path):
+def test_scan_folder_default_streams_import_without_counting_pass(test_db, tmp_path: Path):
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"sample-{index}.png")
 
@@ -173,6 +173,37 @@ def test_scan_folder_counts_before_import_for_real_scan_total(test_db, tmp_path:
 
     assert result["total"] == 2
     assert progress_events
+    phases = [event["details"].get("phase") for event in progress_events]
+    assert "counting" not in phases
+    assert "counted" not in phases
+    assert "importing" in phases
+
+    first_import = next(event for event in progress_events if event["details"].get("phase") == "importing")
+    assert first_import["current"] == 1
+    assert first_import["total"] == 1
+    assert first_import["filename"]
+    assert first_import["details"].get("total_final") is False
+
+
+def test_scan_folder_precise_total_counts_before_import(test_db, tmp_path: Path):
+    for index in range(2):
+        Image.new("RGB", (64, 64), color="white").save(tmp_path / f"precise-{index}.png")
+
+    progress_events = []
+
+    def progress_callback(current, total, filename, details=None):
+        progress_events.append(
+            {
+                "current": current,
+                "total": total,
+                "filename": filename,
+                "details": details or {},
+            }
+        )
+
+    result = scan_folder(str(tmp_path), recursive=False, progress_callback=progress_callback, precise_total=True)
+
+    assert result["total"] == 2
     phases = [event["details"].get("phase") for event in progress_events]
     assert phases[0] == "counting"
     assert "counted" in phases
@@ -467,6 +498,100 @@ def test_scan_folder_skips_reparsing_unchanged_images(test_db, tmp_path: Path, m
     assert parse_calls["count"] == 0
 
 
+def test_scan_folder_reparses_unchanged_images_with_old_parser_version(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "old-parser-version.jpg"
+    Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+    stat = image_path.stat()
+
+    db.add_image(
+        path=str(image_path),
+        filename=image_path.name,
+        metadata_json=json.dumps({"_parsed": {"version": 5}}),
+        width=64,
+        height=64,
+        file_size=stat.st_size,
+        source_mtime_ns=stat.st_mtime_ns,
+        source_size=stat.st_size,
+        metadata_status="complete",
+    )
+
+    parse_calls = {"count": 0}
+    original_parse = image_manager.parse_image
+
+    def tracking_parse(*args, **kwargs):
+        parse_calls["count"] += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(image_manager, "parse_image", tracking_parse)
+
+    result = scan_folder(str(tmp_path), recursive=False)
+
+    assert result["updated"] == 1
+    assert result["unchanged"] == 0
+    assert result["metadata_updated"] == 1
+    assert parse_calls["count"] == 1
+
+
+def test_scan_folder_does_not_reparse_old_non_jpeg_parser_version(test_db, tmp_path: Path, monkeypatch):
+    image_path = tmp_path / "old-parser-version.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+    stat = image_path.stat()
+
+    db.add_image(
+        path=str(image_path),
+        filename=image_path.name,
+        metadata_json=json.dumps({"_parsed": {"version": 5}}),
+        width=64,
+        height=64,
+        file_size=stat.st_size,
+        source_mtime_ns=stat.st_mtime_ns,
+        source_size=stat.st_size,
+        metadata_status="complete",
+    )
+
+    parse_calls = {"count": 0}
+    original_parse = image_manager.parse_image
+
+    def tracking_parse(*args, **kwargs):
+        parse_calls["count"] += 1
+        return original_parse(*args, **kwargs)
+
+    monkeypatch.setattr(image_manager, "parse_image", tracking_parse)
+
+    result = scan_folder(str(tmp_path), recursive=False)
+
+    assert result["updated"] == 1
+    assert result["unchanged"] == 1
+    assert result["metadata_updated"] == 0
+    assert parse_calls["count"] == 0
+
+
+def test_scan_folder_indexes_tiff_metadata(test_db, tmp_path: Path):
+    from PIL.TiffImagePlugin import ImageFileDirectory_v2
+
+    image_path = tmp_path / "metadata.tiff"
+    parameters = (
+        "indexed tiff prompt\n"
+        "Negative prompt: indexed tiff negative\n"
+        "Steps: 18, Sampler: Euler, CFG scale: 5, Seed: 5, Size: 64x64, "
+        "Model: indexed_tiff.safetensors"
+    )
+    ifd = ImageFileDirectory_v2()
+    ifd[270] = parameters
+    Image.new("RGB", (64, 64), color="yellow").save(image_path, "TIFF", tiffinfo=ifd)
+
+    result = scan_folder(str(tmp_path), recursive=False)
+    image = test_db.get_image_by_path(str(image_path))
+
+    assert result["new"] == 1
+    assert result["metadata_processed"] == 1
+    assert image is not None
+    assert image["filename"] == "metadata.tiff"
+    assert image["generator"] == "webui"
+    assert image["prompt"] == "indexed tiff prompt"
+    assert image["checkpoint"] == "indexed_tiff.safetensors"
+
+
 def test_scan_folder_force_reparses_unchanged_images(test_db, tmp_path: Path, monkeypatch):
     image_path = tmp_path / "force-reread.png"
     Image.new("RGB", (64, 64), color="white").save(image_path)
@@ -560,7 +685,7 @@ def test_scan_folder_emits_library_ready_before_metadata_progress(test_db, tmp_p
     assert phases.index("library_ready") < phases.index("metadata")
 
 
-def test_scan_folder_marks_total_final_after_counting_before_import(test_db, tmp_path: Path):
+def test_scan_folder_precise_total_marks_total_final_after_counting_before_import(test_db, tmp_path: Path):
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"growing-{index}.png")
 
@@ -577,7 +702,13 @@ def test_scan_folder_marks_total_final_after_counting_before_import(test_db, tmp
         if phase in total_final_by_phase:
             total_final_by_phase[phase].append(details.get("total_final"))
 
-    result = scan_folder(str(tmp_path), recursive=False, progress_callback=progress_callback, quick_import=True)
+    result = scan_folder(
+        str(tmp_path),
+        recursive=False,
+        progress_callback=progress_callback,
+        quick_import=True,
+        precise_total=True,
+    )
 
     assert total_final_by_phase["counting"]
     assert any(flag is False for flag in total_final_by_phase["counting"])

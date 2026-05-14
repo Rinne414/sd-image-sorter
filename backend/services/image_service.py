@@ -10,6 +10,7 @@ import io
 import json
 import os
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -67,7 +68,8 @@ DEFAULT_PAGE_SIZE = 100
 SELECTION_IDS_FETCH_CHUNK = 2000
 SELECTION_TOKEN_DEFAULT_CHUNK = 2000
 SELECTION_TOKEN_MAX_CHUNK = 10000
-SELECTION_TOKEN_VERSION = 1
+SELECTION_TOKEN_MAX_EXCLUDED_IDS = 10000
+SELECTION_TOKEN_VERSION = 2
 SELECTION_TOKEN_RANDOM_SORT_ERROR = (
     "random sort cannot use the chunked selection token protocol; use selection-ids or a snapshot protocol"
 )
@@ -109,6 +111,32 @@ def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]
         raise _invalid_selection_token()
     text = str(value).strip()
     return text or None
+
+
+def _coerce_selection_id_list(value: Any, field_name: str, *, max_length: int) -> List[int]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise _invalid_selection_token()
+    if len(value) > max_length:
+        raise HTTPException(status_code=400, detail=f"{field_name} exceeds max length of {max_length}")
+
+    normalized: List[int] = []
+    seen_ids: set[int] = set()
+    for raw_id in value:
+        if isinstance(raw_id, bool):
+            raise _invalid_selection_token()
+        try:
+            image_id = int(raw_id)
+        except (TypeError, ValueError):
+            raise _invalid_selection_token()
+        if image_id <= 0:
+            raise _invalid_selection_token()
+        if image_id in seen_ids:
+            continue
+        seen_ids.add(image_id)
+        normalized.append(image_id)
+    return normalized
 
 
 def move_file_to_trash(path: str) -> None:
@@ -217,7 +245,7 @@ def _cleanup_stale_reader_uploads(temp_dir: Path, ttl_seconds: int) -> None:
 
 def _allocate_reader_upload_path(temp_dir: Path, filename: str) -> Path:
     suffix = Path(filename or "").suffix.lower() or ".png"
-    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif"}:
+    if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}:
         suffix = ".png"
     temp_dir.mkdir(parents=True, exist_ok=True)
     return temp_dir / f"{uuid.uuid4().hex}{suffix}"
@@ -978,37 +1006,39 @@ class ImageService:
                 "trash_used": True,
             }
 
-        images_map = db.get_images_by_ids(normalized_ids)
+        for batch_start in range(0, len(normalized_ids), 500):
+            batch_ids = normalized_ids[batch_start:batch_start + 500]
+            images_map = db.get_images_by_ids(batch_ids)
 
-        for image_id in normalized_ids:
-            image = images_map.get(image_id)
-            if not image:
-                failed.append({
-                    "image_id": image_id,
-                    "filename": None,
-                    "error": "Image not found",
-                })
-                continue
+            for image_id in batch_ids:
+                image = images_map.get(image_id)
+                if not image:
+                    failed.append({
+                        "image_id": image_id,
+                        "filename": None,
+                        "error": "Image not found",
+                    })
+                    continue
 
-            filename = image.get("filename") or Path(str(image.get("path") or "")).name or f"image_{image_id}"
+                filename = image.get("filename") or Path(str(image.get("path") or "")).name or f"image_{image_id}"
 
-            try:
-                source_path = self.resolve_image_source_path(image_id, image.get("path", ""))
-                move_file_to_trash(source_path)
-                db.delete_image(image_id)
-                deleted += 1
-            except HTTPException as exc:
-                failed.append({
-                    "image_id": image_id,
-                    "filename": filename,
-                    "error": exc.detail or "Image file not found on disk",
-                })
-            except Exception as exc:
-                failed.append({
-                    "image_id": image_id,
-                    "filename": filename,
-                    "error": str(exc),
-                })
+                try:
+                    source_path = self.resolve_image_source_path(image_id, image.get("path", ""))
+                    move_file_to_trash(source_path)
+                    db.delete_image(image_id)
+                    deleted += 1
+                except HTTPException as exc:
+                    failed.append({
+                        "image_id": image_id,
+                        "filename": filename,
+                        "error": exc.detail or "Image file not found on disk",
+                    })
+                except Exception as exc:
+                    failed.append({
+                        "image_id": image_id,
+                        "filename": filename,
+                        "error": str(exc),
+                    })
 
         return {
             "deleted": deleted,
@@ -1017,8 +1047,23 @@ class ImageService:
             "trash_used": True,
         }
 
-    def remove_selected_images_from_gallery(self, image_ids: List[int]) -> Dict[str, Any]:
-        """Remove images from the local gallery index without deleting files."""
+    def delete_selected_image_files_by_token(self, selection_token: str) -> Dict[str, Any]:
+        """Move all images referenced by a filtered-selection token to trash in chunks."""
+        deleted = 0
+        failed: List[Dict[str, Any]] = []
+        for batch_ids in self._iter_selection_token_snapshot_chunks(selection_token, chunk_size=500):
+            result = self.delete_selected_image_files(batch_ids)
+            deleted += int(result.get("deleted", 0) or 0)
+            failed.extend(result.get("failed", []) or [])
+
+        return {
+            "deleted": deleted,
+            "failed": failed,
+            "permanent_delete": False,
+            "trash_used": True,
+        }
+
+    def _remove_selected_image_id_chunk(self, image_ids: List[int]) -> Dict[str, Any]:
         normalized_ids: List[int] = []
         seen_ids = set()
         for raw_image_id in image_ids or []:
@@ -1029,11 +1074,7 @@ class ImageService:
             normalized_ids.append(image_id)
 
         if not normalized_ids:
-            return {
-                "removed": 0,
-                "missing_ids": [],
-                "permanent_delete": False,
-            }
+            return {"removed": 0, "missing_ids": []}
 
         existing_ids = {
             int(image_id)
@@ -1043,11 +1084,99 @@ class ImageService:
         removed = db.delete_images_by_ids(normalized_ids)
         missing_ids = [image_id for image_id in normalized_ids if image_id not in existing_ids]
 
+        return {"removed": removed, "missing_ids": missing_ids}
+
+    def remove_selected_images_from_gallery(self, image_ids: List[int]) -> Dict[str, Any]:
+        """Remove images from the local gallery index without deleting files."""
+        removed = 0
+        missing_ids: List[int] = []
+
+        normalized_ids: List[int] = []
+        seen_ids = set()
+        for raw_image_id in image_ids or []:
+            image_id = int(raw_image_id)
+            if image_id <= 0 or image_id in seen_ids:
+                continue
+            seen_ids.add(image_id)
+            normalized_ids.append(image_id)
+
+        for batch_start in range(0, len(normalized_ids), 500):
+            result = self._remove_selected_image_id_chunk(normalized_ids[batch_start:batch_start + 500])
+            removed += int(result.get("removed", 0) or 0)
+            missing_ids.extend(result.get("missing_ids", []) or [])
+
         return {
             "removed": removed,
             "missing_ids": missing_ids,
             "permanent_delete": False,
         }
+
+    def remove_selected_images_from_gallery_by_token(self, selection_token: str) -> Dict[str, Any]:
+        """Remove token-selected images from the gallery index in bounded chunks."""
+        removed = 0
+        missing_ids: List[int] = []
+        for batch_ids in self._iter_selection_token_snapshot_chunks(selection_token, chunk_size=500):
+            result = self._remove_selected_image_id_chunk(batch_ids)
+            removed += int(result.get("removed", 0) or 0)
+            missing_ids.extend(result.get("missing_ids", []) or [])
+
+        return {
+            "removed": removed,
+            "missing_ids": missing_ids,
+            "permanent_delete": False,
+        }
+
+    def _iter_selection_token_snapshot_chunks(self, selection_token: str, *, chunk_size: int = 500):
+        """Snapshot token IDs to a temp file before mutating matching rows."""
+        contract = self._decode_selection_token(selection_token)
+        if contract["sortBy"] == "random":
+            raise HTTPException(status_code=400, detail=SELECTION_TOKEN_RANDOM_SORT_ERROR)
+
+        temp_path: Optional[str] = None
+        try:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+                temp_path = handle.name
+                for batch_ids in db.iter_filtered_image_id_chunks(
+                    chunk_size=chunk_size,
+                    generators=contract["generators"],
+                    tags=contract["tags"],
+                    ratings=contract["ratings"],
+                    checkpoints=contract["checkpoints"],
+                    loras=contract["loras"],
+                    search_query=contract["search"] or None,
+                    sort_by=contract["sortBy"],
+                    min_width=contract["minWidth"],
+                    max_width=contract["maxWidth"],
+                    min_height=contract["minHeight"],
+                    max_height=contract["maxHeight"],
+                    prompt_terms=contract["prompts"],
+                    aspect_ratio=contract["aspectRatio"],
+                    artist=contract["artist"],
+                    min_aesthetic=contract["minAesthetic"],
+                    max_aesthetic=contract["maxAesthetic"],
+                ):
+                    for image_id in batch_ids:
+                        handle.write(f"{int(image_id)}\n")
+
+            batch: List[int] = []
+            with open(temp_path, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        image_id = int(line.strip())
+                    except ValueError:
+                        continue
+                    batch.append(image_id)
+                    if len(batch) >= chunk_size:
+                        yield batch
+                        batch = []
+            if batch:
+                yield batch
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    logger.debug("Failed to remove selection snapshot temp file: %s", temp_path)
 
     def get_images(
         self,
@@ -1070,6 +1199,7 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        excluded_image_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1271,6 +1401,7 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        excluded_image_ids: Optional[List[int]] = None,
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
@@ -1283,6 +1414,11 @@ class ImageService:
         max_height = _coerce_optional_int_filter(max_height, "maxHeight")
         min_aesthetic = _coerce_optional_float_filter(min_aesthetic, "minAesthetic")
         max_aesthetic = _coerce_optional_float_filter(max_aesthetic, "maxAesthetic")
+        excluded_image_ids = _coerce_selection_id_list(
+            excluded_image_ids,
+            "excludedImageIds",
+            max_length=SELECTION_TOKEN_MAX_EXCLUDED_IDS,
+        )
 
         self._validate_common_gallery_filters(
             sort_by=sort_by,
@@ -1309,6 +1445,7 @@ class ImageService:
             "aspectRatio": aspect_ratio,
             "minAesthetic": min_aesthetic,
             "maxAesthetic": max_aesthetic,
+            "excludedImageIds": excluded_image_ids,
         }
 
     def _selection_ids_from_contract(
@@ -1335,6 +1472,7 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            excluded_image_ids=contract.get("excludedImageIds"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
             offset=offset,
             limit=limit,
@@ -1357,6 +1495,7 @@ class ImageService:
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            excluded_image_ids=contract.get("excludedImageIds"),
         )
 
     def _encode_selection_token(self, contract: Dict[str, Any]) -> str:
@@ -1403,6 +1542,7 @@ class ImageService:
                 aspect_ratio=filters.get("aspectRatio"),
                 min_aesthetic=filters.get("minAesthetic"),
                 max_aesthetic=filters.get("maxAesthetic"),
+                excluded_image_ids=filters.get("excludedImageIds"),
             )
         except HTTPException:
             raise

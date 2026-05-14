@@ -18,16 +18,25 @@ from typing import Optional, Dict, Any, Tuple, List, Set
 from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 import os
+from pathlib import Path
 import zlib
 
 
 logger = logging.getLogger(__name__)
 
 
-PARSED_METADATA_VERSION = 5
+PARSED_METADATA_VERSION = 7
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_PNG_CHUNK_BYTES = 64 * 1024 * 1024       # 64 MB – generous cap for any single PNG chunk
 _MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024    # 64 MB – cap for zlib-decompressed text data
+JPEG_SIGNATURE = b"\xff\xd8"
+_MAX_JPEG_SEGMENT_BYTES = 64 * 1024 * 1024
+_MAX_XMP_CHUNK_BYTES = 8 * 1024 * 1024
+_MAX_SIDECAR_BYTES = 256 * 1024
+_MAX_SIDECAR_DIRECTORY_CACHE_ENTRIES = 4096
+_MAX_SIDECAR_DIRECTORY_CACHE_FILENAMES = 50_000
+SIDECAR_EXTENSIONS = (".txt", ".json", ".xmp")
+_sidecar_directory_cache: Dict[str, Tuple[Tuple[int, int], Optional[Set[str]]]] = {}
 
 
 class MetadataParser:
@@ -190,6 +199,20 @@ class MetadataParser:
 
             # Detect generator and extract prompts, checkpoint, loras + extras
             parsed = self._detect_and_parse(metadata["metadata"])
+            if parsed["generator"] == "unknown" and not any((parsed.get("prompt"), parsed.get("negative_prompt"), parsed.get("checkpoint"), parsed.get("loras"))):
+                sidecar_metadata = self._load_sidecar_metadata(image_path)
+                if sidecar_metadata:
+                    combined_metadata = {**metadata["metadata"], **sidecar_metadata}
+                    sidecar_parsed = self._detect_and_parse(combined_metadata)
+                    if sidecar_parsed["generator"] != "unknown" or any((
+                        sidecar_parsed.get("prompt"),
+                        sidecar_parsed.get("negative_prompt"),
+                        sidecar_parsed.get("checkpoint"),
+                        sidecar_parsed.get("loras"),
+                    )):
+                        metadata["metadata"] = combined_metadata
+                        result["metadata"] = self._serialize_metadata(combined_metadata)
+                        parsed = sidecar_parsed
             result["generator"] = parsed["generator"]
             result["prompt"] = parsed["prompt"]
             result["negative_prompt"] = parsed["negative_prompt"]
@@ -227,11 +250,19 @@ class MetadataParser:
             if hasattr(img, 'info'):
                 metadata = dict(img.info)
 
+            metadata.update(self._extract_gif_comment_metadata(img))
+
             metadata.update(self._extract_exif(img))
             metadata.update(self._extract_exif_ifd(img))
 
             if img.format == 'WEBP':
                 metadata.update(self._extract_webp_xmp(image_path))
+
+            if img.format in ('JPEG', 'JPG'):
+                metadata.update(self._extract_jpeg_xmp(image_path))
+
+            if img.format in ('TIFF', 'MPO'):
+                metadata.update(self._extract_tiff_xmp(img))
 
             if img.format in ('JPEG', 'JPG', 'WEBP'):
                 metadata.update(self._extract_jpeg_sd_metadata(img))
@@ -445,6 +476,199 @@ class MetadataParser:
                 else:
                     result[key] = str(value)
         return result
+
+    def _decode_exif_user_comment(self, value: Any) -> Optional[str]:
+        """Decode EXIF UserComment bytes written by SD tools for JPEG/WebP."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            text = value
+            if text.startswith("ASCII") or text.startswith("UNICODE"):
+                text = text[7:].strip("\0 ")
+            return text.strip() or None
+        if not isinstance(value, bytes):
+            text = str(value).strip()
+            return text or None
+
+        if value.startswith(b"ASCII\x00\x00\x00"):
+            text = value[8:].decode("utf-8", errors="replace")
+        elif value.startswith(b"UNICODE\x00"):
+            payload = value[8:]
+            text = self._decode_exif_unicode_payload(payload)
+        elif value.startswith(b"\x00" * 8):
+            text = value[8:].decode("utf-8", errors="replace")
+        else:
+            text = self._decode_exif_text_bytes(value)
+
+        text = text.strip("\0 ")
+        return text or None
+
+    def _decode_exif_unicode_payload(self, payload: bytes) -> str:
+        """Decode the non-standard-but-common UNICODE UserComment payload."""
+        if payload.startswith(b"\xff\xfe") or payload.startswith(b"\xfe\xff"):
+            return payload.decode("utf-16", errors="replace")
+        if len(payload) >= 2 and payload[1:2] == b"\x00":
+            return payload.decode("utf-16-le", errors="replace")
+        return payload.decode("utf-16-be", errors="replace")
+
+    def _decode_exif_text_bytes(self, value: bytes) -> str:
+        """Decode generic EXIF text bytes, including Windows XP* UTF-16LE tags."""
+        if value.startswith(b"\xff\xfe") or value.startswith(b"\xfe\xff"):
+            return value.decode("utf-16", errors="replace")
+        if len(value) >= 4 and value[1::2].count(0) >= max(1, len(value) // 4):
+            return value.decode("utf-16-le", errors="replace")
+        return value.decode("utf-8", errors="replace")
+
+    def _load_sidecar_metadata(self, image_path: str) -> Dict[str, Any]:
+        """Load small same-name sidecar metadata only after embedded parsing fails."""
+        metadata: Dict[str, Any] = {}
+        base_path = Path(image_path)
+        candidates = []
+        for extension in SIDECAR_EXTENSIONS:
+            candidates.append(Path(f"{image_path}{extension}"))
+            candidates.append(base_path.with_suffix(extension))
+
+        seen: Set[str] = set()
+        for candidate in candidates:
+            candidate_key = os.path.abspath(os.fspath(candidate))
+            if candidate_key in seen:
+                continue
+            seen.add(candidate_key)
+            if not self._sidecar_candidate_exists(candidate):
+                continue
+            loaded = self._load_one_sidecar(candidate)
+            if loaded:
+                metadata.update(loaded)
+
+        return metadata
+
+    def _sidecar_candidate_exists(self, sidecar_path: Path) -> bool:
+        """Check sidecar existence with a lightweight per-directory listing cache."""
+        try:
+            directory = sidecar_path.parent
+            stat_result = directory.stat()
+            cache_key = os.path.abspath(os.fspath(directory))
+            fingerprint = (int(stat_result.st_mtime_ns), int(stat_result.st_size))
+            cached = _sidecar_directory_cache.get(cache_key)
+            if cached is None or cached[0] != fingerprint:
+                sidecar_names: Set[str] = set()
+                candidate_name = sidecar_path.name
+                candidate_found = False
+                too_many_sidecars = False
+                for entry in os.scandir(directory):
+                    if not entry.is_file(follow_symlinks=False) or Path(entry.name).suffix.lower() not in SIDECAR_EXTENSIONS:
+                        continue
+                    if entry.name == candidate_name:
+                        candidate_found = True
+                    if not too_many_sidecars:
+                        sidecar_names.add(entry.name)
+                        if len(sidecar_names) >= _MAX_SIDECAR_DIRECTORY_CACHE_FILENAMES:
+                            too_many_sidecars = True
+                if len(_sidecar_directory_cache) >= _MAX_SIDECAR_DIRECTORY_CACHE_ENTRIES:
+                    _sidecar_directory_cache.clear()
+                if too_many_sidecars:
+                    _sidecar_directory_cache[cache_key] = (fingerprint, None)
+                    return candidate_found
+                _sidecar_directory_cache[cache_key] = (fingerprint, sidecar_names)
+            else:
+                sidecar_names = cached[1]
+            if sidecar_names is None:
+                return sidecar_path.is_file() and not sidecar_path.is_symlink()
+            return sidecar_path.name in sidecar_names
+        except OSError:
+            return False
+
+    def _load_one_sidecar(self, sidecar_path: Path) -> Dict[str, Any]:
+        """Load a supported sidecar if it is small and local to the image."""
+        try:
+            if not sidecar_path.is_file() or sidecar_path.is_symlink():
+                return {}
+            if sidecar_path.stat().st_size > _MAX_SIDECAR_BYTES:
+                return {}
+            text = sidecar_path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            return {}
+
+        text = text.strip()
+        if not text:
+            return {}
+
+        suffix = sidecar_path.suffix.lower()
+        if suffix == ".xmp":
+            metadata = self._extract_xmp_sd_metadata(text)
+            metadata["sidecar_path"] = os.fspath(sidecar_path)
+            return metadata
+        if suffix == ".json":
+            return self._parse_json_sidecar(text, sidecar_path)
+        if suffix == ".txt":
+            return self._parse_text_sidecar(text, sidecar_path)
+        return {}
+
+    def _parse_json_sidecar(self, text: str, sidecar_path: Path) -> Dict[str, Any]:
+        """Parse a JSON sidecar into known SD metadata fields."""
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return self._parse_text_sidecar(text, sidecar_path)
+
+        metadata: Dict[str, Any] = {"sidecar_path": os.fspath(sidecar_path)}
+        if isinstance(payload, dict):
+            if self._looks_like_comfyui_prompt_dict(payload):
+                metadata["prompt"] = json.dumps(payload, ensure_ascii=False)
+                return metadata
+            if "workflow" in payload:
+                metadata["workflow"] = json.dumps(payload.get("workflow"), ensure_ascii=False)
+            if "prompt" in payload and isinstance(payload.get("prompt"), dict) and self._looks_like_comfyui_prompt_dict(payload["prompt"]):
+                metadata["prompt"] = json.dumps(payload["prompt"], ensure_ascii=False)
+                return metadata
+
+            key_aliases = {
+                "prompt": "prompt",
+                "positive_prompt": "prompt",
+                "caption": "prompt",
+                "text": "prompt",
+                "negative_prompt": "negative_prompt",
+                "negative prompt": "negative_prompt",
+                "uc": "negative_prompt",
+                "model": "model",
+                "checkpoint": "checkpoint",
+                "ckpt": "checkpoint",
+                "loras": "loras",
+                "lora": "loras",
+                "steps": "steps",
+                "sampler": "sampler",
+                "seed": "seed",
+                "cfg_scale": "cfg_scale",
+                "cfg scale": "cfg_scale",
+                "size": "size",
+            }
+            for key, value in payload.items():
+                canonical_key = key_aliases.get(str(key).strip().lower(), str(key).strip())
+                if canonical_key:
+                    metadata[canonical_key] = value
+            return metadata
+
+        if isinstance(payload, list):
+            metadata["prompt"] = self._flatten_text_value(payload)
+            return {key: value for key, value in metadata.items() if value}
+
+        return self._parse_text_sidecar(str(payload), sidecar_path)
+
+    def _parse_text_sidecar(self, text: str, sidecar_path: Path) -> Dict[str, Any]:
+        """Parse a plain text sidecar as WebUI params or a caption prompt."""
+        metadata: Dict[str, Any] = {"sidecar_path": os.fspath(sidecar_path)}
+        if "Steps:" in text and "Sampler:" in text:
+            metadata["parameters"] = text
+        else:
+            metadata["prompt"] = text
+        return metadata
+
+    def _looks_like_comfyui_prompt_dict(self, payload: Any) -> bool:
+        """Return True for ComfyUI API prompt dictionaries."""
+        return isinstance(payload, dict) and any(
+            isinstance(value, dict) and "class_type" in value
+            for value in payload.values()
+        )
 
     def _flatten_text_value(self, value: Any) -> Optional[str]:
         """Flatten nested metadata values to a readable text string."""
@@ -3136,6 +3360,18 @@ class MetadataParser:
                 from PIL import ExifTags
                 for tag_id, value in exif.items():
                     tag_name = ExifTags.TAGS.get(tag_id, tag_id)
+                    if tag_name == "XPComment":
+                        decoded = self._decode_exif_user_comment(value)
+                        if decoded:
+                            metadata["XPComment"] = decoded
+                            if "Comment" not in metadata:
+                                metadata["Comment"] = decoded
+                        continue
+                    if tag_name in {"ImageDescription", "Software", "Model", "Make"} and isinstance(value, bytes):
+                        decoded = self._decode_exif_user_comment(value)
+                        if decoded:
+                            metadata[tag_name] = decoded
+                        continue
                     if isinstance(value, bytes):
                         try:
                             metadata[tag_name] = value.decode('utf-8', errors='replace')
@@ -3188,6 +3424,9 @@ class MetadataParser:
                     # Special handling for UserComment (tag 37510 / 0x9286)
                     if tag_id == 37510:
                         metadata["UserComment"] = value  # Keep raw bytes for parsing
+                        decoded = self._decode_exif_user_comment(value)
+                        if decoded:
+                            metadata["UserCommentText"] = decoded
                     elif isinstance(value, bytes):
                         try:
                             metadata[tag_name] = value.decode('utf-8', errors='replace')
@@ -3216,6 +3455,38 @@ class MetadataParser:
             return self._extract_sd_metadata_from_exif(img.getexif())
         except Exception as e:
             logger.debug("Error extracting JPEG SD metadata: %s", e)
+            return {}
+
+    def _extract_gif_comment_metadata(self, img: Image.Image) -> dict:
+        """Extract SD metadata from lightweight GIF comment fields."""
+        comment = getattr(img, "info", {}).get("comment")
+        if comment is None:
+            return {}
+        text = self._decode_exif_user_comment(comment)
+        if not text:
+            return {}
+        if "Steps:" in text and "Sampler:" in text:
+            return {"Comment": text, "parameters": text}
+        return {"Comment": text, "prompt": text}
+
+    def _extract_tiff_xmp(self, img: Image.Image) -> dict:
+        """Extract XMP packet text from TIFF tag 700 when present."""
+        try:
+            tag_v2 = getattr(img, "tag_v2", None)
+            if not tag_v2:
+                return {}
+            xmp_value = tag_v2.get(700)
+            if xmp_value is None:
+                return {}
+            if isinstance(xmp_value, bytes):
+                xmp_text = xmp_value[:_MAX_XMP_CHUNK_BYTES].decode("utf-8", errors="replace")
+            elif isinstance(xmp_value, str):
+                xmp_text = xmp_value[:_MAX_XMP_CHUNK_BYTES]
+            else:
+                xmp_text = str(xmp_value)[:_MAX_XMP_CHUNK_BYTES]
+            return self._extract_xmp_sd_metadata(xmp_text) if xmp_text.strip() else {}
+        except Exception as e:
+            logger.debug("Error extracting TIFF XMP: %s", e)
             return {}
 
     def _extract_sd_metadata_from_exif_bytes(self, exif_bytes: bytes) -> dict:
@@ -3250,19 +3521,10 @@ class MetadataParser:
             if ifd:
                 uc = ifd.get(0x9286)  # UserComment
                 if uc:
-                    text = None
-                    if isinstance(uc, bytes):
-                        for prefix in (b'ASCII\x00\x00\x00', b'UNICODE\x00', b'\x00' * 8):
-                            if uc.startswith(prefix):
-                                text = uc[len(prefix):].decode('utf-8', errors='replace')
-                                break
-                        if text is None:
-                            text = uc.decode('utf-8', errors='replace')
-                    elif isinstance(uc, str):
-                        text = uc
-
+                    text = self._decode_exif_user_comment(uc)
                     if text and text.strip():
                         text = text.strip()
+                        metadata.setdefault("UserCommentText", text)
                         if text.startswith('{'):
                             try:
                                 obj = json.loads(text)
@@ -3279,6 +3541,102 @@ class MetadataParser:
             logger.debug("Error extracting JPEG SD metadata: %s", e)
         return metadata
 
+    def _extract_xmp_sd_metadata(self, xmp_text: str) -> dict:
+        """Extract SD prompt metadata from a decoded XMP packet."""
+        metadata: Dict[str, Any] = {"xmp": xmp_text}
+
+        parameter_patterns = (
+            r"<[^>]*(?:parameters|Parameter|UserComment)[^>]*>(.*?)</[^>]+>",
+            r"(?:sd:)?parameters=[\"'](.*?)[\"']",
+        )
+        for pattern in parameter_patterns:
+            match = re.search(pattern, xmp_text, re.DOTALL | re.IGNORECASE)
+            if match:
+                metadata["parameters"] = self._decode_xmp_text_value(match.group(1))
+                break
+        if "parameters" not in metadata and "Steps:" in xmp_text and "Sampler:" in xmp_text:
+            metadata["parameters"] = self._decode_xmp_text_value(xmp_text)
+
+        prompt_patterns = (
+            r"<[^>]*(?:prompt|Prompt)[^>]*>(.*?)</[^>]+>",
+            r"(?:sd:)?prompt=[\"'](.*?)[\"']",
+        )
+        for pattern in prompt_patterns:
+            match = re.search(pattern, xmp_text, re.DOTALL | re.IGNORECASE)
+            if not match:
+                continue
+            prompt_value = self._decode_xmp_text_value(match.group(1))
+            if prompt_value.strip().startswith("{"):
+                metadata["prompt"] = prompt_value
+                break
+
+        if "prompt" not in metadata and "prompt" in xmp_text.lower():
+            json_start = xmp_text.find('{')
+            if json_start != -1:
+                json_end = xmp_text.rfind('}')
+                if json_end > json_start:
+                    potential_json = xmp_text[json_start:json_end + 1]
+                    try:
+                        json.loads(potential_json)
+                        metadata["prompt"] = potential_json
+                    except json.JSONDecodeError as e:
+                        logger.debug('Failed to parse XMP prompt JSON: %s', e)
+
+        return metadata
+
+    def _decode_xmp_text_value(self, value: str) -> str:
+        """Decode a text value copied out of XMP XML/attribute content."""
+        from html import unescape
+
+        return unescape(value).strip()
+
+    def _extract_jpeg_xmp(self, image_path: str) -> dict:
+        """Extract XMP metadata from JPEG APP1 segments."""
+        try:
+            with open(image_path, "rb") as jpeg_file:
+                if jpeg_file.read(2) != JPEG_SIGNATURE:
+                    return {}
+
+                while True:
+                    marker_prefix = jpeg_file.read(1)
+                    if not marker_prefix:
+                        break
+                    if marker_prefix != b"\xff":
+                        continue
+
+                    marker = jpeg_file.read(1)
+                    while marker == b"\xff":
+                        marker = jpeg_file.read(1)
+                    if not marker:
+                        break
+
+                    marker_code = marker[0]
+                    if marker_code in {0xD8, 0xD9} or 0xD0 <= marker_code <= 0xD7:
+                        continue
+                    if marker_code == 0xDA:
+                        break
+
+                    length_bytes = jpeg_file.read(2)
+                    if len(length_bytes) != 2:
+                        break
+                    segment_length = int.from_bytes(length_bytes, "big")
+                    payload_length = segment_length - 2
+                    if payload_length < 0 or payload_length > _MAX_JPEG_SEGMENT_BYTES:
+                        break
+
+                    payload = jpeg_file.read(payload_length)
+                    if len(payload) != payload_length:
+                        break
+                    if not payload.startswith(b"http://ns.adobe.com/xap/1.0/\x00"):
+                        continue
+
+                    xmp_content = payload[len(b"http://ns.adobe.com/xap/1.0/\x00"):]
+                    decoded_xmp = xmp_content.decode("utf-8", errors="replace")
+                    return self._extract_xmp_sd_metadata(decoded_xmp)
+        except Exception as e:
+            logger.debug("Error extracting JPEG XMP from %s: %s", image_path, e, exc_info=True)
+        return {}
+
     def _extract_webp_xmp(self, image_path: str) -> dict:
         """
         Extract XMP metadata from a WebP file manually by parsing chunks.
@@ -3287,42 +3645,34 @@ class MetadataParser:
         metadata = {}
         try:
             with open(image_path, 'rb') as f:
-                data = f.read()
+                if f.read(4) != b"RIFF":
+                    return metadata
+                f.seek(4, os.SEEK_CUR)
+                if f.read(4) != b"WEBP":
+                    return metadata
 
-                # Search for XMP chunk
-                xmp_pos = data.find(b'XMP ')
-                if xmp_pos != -1:
-                    # Size is 4 bytes after ID
-                    size = int.from_bytes(data[xmp_pos+4:xmp_pos+8], 'little')
-                    xmp_content = data[xmp_pos+8:xmp_pos+8+size]
+                while True:
+                    chunk_type = f.read(4)
+                    if len(chunk_type) != 4:
+                        break
+                    size_bytes = f.read(4)
+                    if len(size_bytes) != 4:
+                        break
+                    chunk_size = int.from_bytes(size_bytes, "little")
+                    padded_size = chunk_size + (chunk_size % 2)
+                    if chunk_type != b"XMP ":
+                        f.seek(padded_size, os.SEEK_CUR)
+                        continue
+                    if chunk_size > _MAX_XMP_CHUNK_BYTES:
+                        break
 
+                    xmp_content = f.read(chunk_size)
                     try:
                         decoded_xmp = xmp_content.decode('utf-8', errors='replace')
-                        metadata["xmp"] = decoded_xmp
-
-                        # Extract WebUI parameters from XMP
-                        if "parameters" not in metadata and "parameters" in decoded_xmp:
-                            match = re.search(r'parameters>(.*?)</', decoded_xmp, re.DOTALL)
-                            if match:
-                                metadata["parameters"] = match.group(1).strip()
-                            elif "Steps:" in decoded_xmp:
-                                metadata["parameters"] = decoded_xmp
-
-                        # Extract ComfyUI prompt from XMP
-                        if "prompt" not in metadata and "prompt" in decoded_xmp:
-                            json_start = decoded_xmp.find('{')
-                            if json_start != -1:
-                                json_end = decoded_xmp.rfind('}')
-                                if json_end > json_start:
-                                    potential_json = decoded_xmp[json_start:json_end+1]
-                                    try:
-                                        json.loads(potential_json)
-                                        metadata["prompt"] = potential_json
-                                    except json.JSONDecodeError as e:
-                                        logger.debug('Failed to parse XMP prompt JSON: %s', e)
-
+                        metadata.update(self._extract_xmp_sd_metadata(decoded_xmp))
                     except Exception as e:
                         logger.debug("Failed to decode WebP XMP: %s", e)
+                    break
 
         except Exception as e:
             logger.debug("Error extracting WebP XMP from %s: %s", image_path, e, exc_info=True)

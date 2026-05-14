@@ -25,7 +25,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple, Union
+from typing import Optional, List, Dict, Any, Tuple, Union, Iterator
 from contextlib import contextmanager
 import time
 import threading
@@ -68,6 +68,18 @@ _tags_cache_lock = threading.Lock()
 _tags_cache_data = None
 _tags_cache_timestamp = 0
 _TAGS_CACHE_TTL = 60  # seconds
+
+# ============== Facet Cache (generators) ==============
+_generators_cache_lock = threading.Lock()
+_generators_cache_data = None
+_generators_cache_timestamp = 0
+
+def _invalidate_facet_caches():
+    """Clear facet caches when images are added/removed/modified."""
+    global _generators_cache_data, _generators_cache_timestamp
+    with _generators_cache_lock:
+        _generators_cache_data = None
+        _generators_cache_timestamp = 0
 
 def _invalidate_tags_cache():
     """Clear the tags cache when tags are modified."""
@@ -764,6 +776,7 @@ def add_image(
         cursor = conn.cursor()
         image_id, write_status = _upsert_image_record(cursor, record)
         _invalidate_tags_cache()
+        _invalidate_facet_caches()
 
         if return_status:
             return image_id, write_status
@@ -1029,6 +1042,7 @@ def add_images_batch(image_records: List[Dict[str, Any]], return_statuses: bool 
             statuses[record["path"]] = status
 
         _invalidate_tags_cache()
+        _invalidate_facet_caches()
         if return_statuses:
             return {
                 **counts,
@@ -1193,6 +1207,7 @@ def delete_images_by_ids(image_ids: List[int]) -> int:
 
     if removed:
         _invalidate_tags_cache()
+        _invalidate_facet_caches()
 
     return removed
 
@@ -1212,6 +1227,7 @@ def delete_images_by_paths(paths: List[str]) -> int:
 
     if removed:
         _invalidate_tags_cache()
+        _invalidate_facet_caches()
 
     return removed
 
@@ -1426,6 +1442,7 @@ _IMAGE_COLUMNS_BARE = _format_image_column_list(_IMAGE_COLUMNS_BASE_FIELDS)
 
 _LIBRARY_ORDER_SQL_UNQUALIFIED = "COALESCE(library_order_time, created_at)"
 _LIBRARY_ORDER_SQL = "COALESCE(i.library_order_time, i.created_at)"
+_STABLE_RANDOM_ORDER_SQL = "((i.id * 1103515245 + 12345) & 2147483647)"
 
 
 def _build_base_query(sort_by: str, select_cols: str) -> str:
@@ -1461,7 +1478,7 @@ def _build_base_query(sort_by: str, select_cols: str) -> str:
                    END as rating_order
                    FROM images i"""
     else:
-        return f"SELECT DISTINCT {select_cols} FROM images i"
+        return f"SELECT {select_cols} FROM images i"
 
 
 def _apply_tag_filter(query: str, tags: Optional[List[str]], params: List[Any]) -> tuple:
@@ -1628,22 +1645,41 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
     if not search_query:
         return conditions, params
 
-    normalized_search = normalize_prompt_token(search_query)
-    checkpoint_search = checkpoint_identity_key(search_query) or search_query.lower()
+    raw_search = str(search_query or "").strip()
+    normalized_search = normalize_prompt_token(raw_search)
+    checkpoint_search = checkpoint_identity_key(raw_search) or raw_search.lower()
+    prompt_tokens = sorted(extract_prompt_tokens(raw_search) or [])
+    if not prompt_tokens and normalized_search:
+        prompt_tokens = [normalized_search]
+
+    token_conditions: List[str] = []
+    token_params: List[Any] = []
+    for token in prompt_tokens[:8]:
+        token_like = f"%{escape_like_pattern(token)}%"
+        token_conditions.append(
+            "EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
+            "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
+        )
+        token_params.append(token_like)
+
+    prompt_clause = " OR ".join(token_conditions)
+    if prompt_clause:
+        prompt_clause = f" OR ({prompt_clause})"
+
     conditions.append(
         "("
-        "REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\' "
-        "OR LOWER(i.filename) LIKE ? ESCAPE '\\' "
+        "LOWER(i.filename) LIKE ? ESCAPE '\\' "
         "OR LOWER(COALESCE(i.checkpoint_normalized, '')) LIKE ? ESCAPE '\\'"
+        f"{prompt_clause}"
         ")"
     )
     params.extend(
         [
-            f"%{escape_like_pattern(normalized_search)}%",
-            f"%{escape_like_pattern(search_query.lower())}%",
+            f"%{escape_like_pattern(raw_search.lower())}%",
             f"%{escape_like_pattern(checkpoint_search)}%",
         ]
     )
+    params.extend(token_params)
 
     return conditions, params
 
@@ -1667,7 +1703,12 @@ def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
 
     for term in prompt_terms:
         normalized_term = normalize_prompt_token(term)
-        conditions.append("REPLACE(LOWER(i.prompt), '_', ' ') LIKE ? ESCAPE '\\'")
+        if not normalized_term:
+            continue
+        conditions.append(
+            "EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
+            "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
+        )
         params.append(f"%{escape_like_pattern(normalized_term)}%")
 
     return conditions, params
@@ -1743,6 +1784,8 @@ def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
     if not artist:
         return query, conditions, params
 
+    if "SELECT DISTINCT" not in query:
+        query = query.replace("SELECT ", "SELECT DISTINCT ", 1)
     query += " INNER JOIN artist_predictions ap ON i.id = ap.image_id"
     conditions.append("ap.artist = ?")
     params.append(artist)
@@ -1750,26 +1793,54 @@ def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
     return query, conditions, params
 
 
-def _apply_image_ids_filter(conditions: List[str], params: List[Any],
-                            image_ids: Optional[List[int]]) -> tuple:
-    """Filter by specific image IDs.
+def _normalize_filter_id_list(values: Optional[List[int]]) -> List[int]:
+    if values is None:
+        return []
 
-    Args:
-        conditions: Current WHERE conditions list
-        params: Current parameter list
-        image_ids: List of image IDs to filter by
+    normalized: List[int] = []
+    seen: set[int] = set()
+    for value in values:
+        try:
+            image_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if image_id <= 0 or image_id in seen:
+            continue
+        seen.add(image_id)
+        normalized.append(image_id)
+    return normalized
 
-    Returns:
-        Tuple of (modified conditions, modified params)
-    """
-    if image_ids is None:
+
+def _apply_id_list_filter(
+    conditions: List[str],
+    params: List[Any],
+    image_ids: Optional[List[int]],
+    *,
+    include: bool,
+) -> tuple:
+    normalized_ids = _normalize_filter_id_list(image_ids)
+    if not normalized_ids:
+        if include and image_ids is not None:
+            conditions.append("0 = 1")
         return conditions, params
 
-    placeholders = ",".join("?" * len(image_ids))
-    conditions.append(f"i.id IN ({placeholders})")
-    params.extend(image_ids)
-
+    placeholders = ",".join("?" * len(normalized_ids))
+    operator = "IN" if include else "NOT IN"
+    conditions.append(f"i.id {operator} ({placeholders})")
+    params.extend(normalized_ids)
     return conditions, params
+
+
+def _apply_image_ids_filter(conditions: List[str], params: List[Any],
+                            image_ids: Optional[List[int]]) -> tuple:
+    """Apply image ID include filtering."""
+    return _apply_id_list_filter(conditions, params, image_ids, include=True)
+
+
+def _apply_excluded_image_ids_filter(conditions: List[str], params: List[Any],
+                                     excluded_image_ids: Optional[List[int]]) -> tuple:
+    """Apply image ID exclusion filtering."""
+    return _apply_id_list_filter(conditions, params, excluded_image_ids, include=False)
 
 
 def _apply_readable_filter(
@@ -1808,7 +1879,7 @@ def _get_order_clause(sort_by: str) -> str:
         "rating_desc": "rating_order DESC, i.id DESC",
         "character_count": "char_count DESC, i.id DESC",
         "character_count_asc": "char_count ASC, i.id ASC",
-        "random": "RANDOM()",
+        "random": f"{_STABLE_RANDOM_ORDER_SQL} ASC, i.id ASC",
         "file_size": "i.file_size DESC, i.id DESC",
         "file_size_asc": "i.file_size ASC, i.id ASC",
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",
@@ -1871,6 +1942,61 @@ def _fetch_post_filtered_page(
     if normalized_limit == 0:
         return collected[normalized_offset:]
     return collected[normalized_offset:normalized_offset + normalized_limit]
+
+
+def _fetch_post_filtered_ids(
+    conn,
+    base_query: str,
+    base_params: List[Any],
+    order_clause: str,
+    prompt_terms: Optional[List[str]],
+    loras: Optional[List[str]],
+    *,
+    post_offset: int = 0,
+    limit: Optional[int] = None,
+    fetch_size: int = 5000,
+) -> List[int]:
+    """Fetch exact post-filtered IDs without materializing full image rows."""
+    normalized_offset = max(0, int(post_offset or 0))
+    normalized_limit = None if limit is None else max(0, int(limit))
+    if normalized_limit == 0:
+        return []
+
+    target_count = None if normalized_limit is None else normalized_offset + normalized_limit
+    effective_fetch_size = max(1, int(fetch_size or 5000))
+    normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
+    normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
+
+    cursor = conn.cursor()
+    raw_offset = 0
+    matched_ids: List[int] = []
+
+    while True:
+        query = f"{base_query} ORDER BY {order_clause} LIMIT ? OFFSET ?"
+        params = list(base_params) + [effective_fetch_size, raw_offset]
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        if not rows:
+            break
+
+        for row in rows:
+            if _matches_exact_post_filters(
+                row["prompt"],
+                row["loras"],
+                normalized_prompt_terms,
+                normalized_loras,
+            ):
+                matched_ids.append(int(row["id"]))
+                if target_count is not None and len(matched_ids) >= target_count:
+                    return matched_ids[normalized_offset:]
+
+        if len(rows) < effective_fetch_size:
+            break
+        raw_offset += effective_fetch_size
+
+    if normalized_limit is None:
+        return matched_ids[normalized_offset:]
+    return matched_ids[normalized_offset:normalized_offset + normalized_limit]
 
 
 def _matches_exact_post_filters(
@@ -1940,6 +2066,7 @@ def get_images(
     aspect_ratio: Optional[str] = None,  # 'square', 'landscape', 'portrait'
     artist: Optional[str] = None,  # Artist filter
     image_ids: Optional[List[int]] = None,
+    excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
@@ -1995,8 +2122,9 @@ def get_images(
         # Apply tag filter (JOIN)
         query, params = _apply_tag_filter(query, tags, params)
 
-        # Apply image IDs filter
+        # Apply image ID include/exclude filters
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+        conditions, params = _apply_excluded_image_ids_filter(conditions, params, excluded_image_ids)
 
         # Exclude unreadable images from normal library results (unless include_unreadable=True)
         conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
@@ -2076,6 +2204,7 @@ def get_filtered_image_count(
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
+    excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
@@ -2112,8 +2241,9 @@ def get_filtered_image_count(
                 params.append(tag)
 
 
-        # Apply image IDs filter
+        # Apply image ID include/exclude filters
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+        conditions, params = _apply_excluded_image_ids_filter(conditions, params, excluded_image_ids)
 
         # Exclude unreadable images from normal library results (unless include_unreadable=True)
         conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
@@ -2173,6 +2303,7 @@ def get_filtered_image_ids(
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
+    excluded_image_ids: Optional[List[int]] = None,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
@@ -2205,9 +2336,7 @@ def get_filtered_image_ids(
     with get_db() as conn:
         cursor = conn.cursor()
 
-        # Determine if post-filtering is needed
         needs_post_filter = bool(prompt_terms) or bool(loras)
-
         select_cols = "i.id, i.prompt, i.loras" if needs_post_filter else "i.id"
         query = _build_base_query(sort_by, select_cols)
 
@@ -2217,8 +2346,9 @@ def get_filtered_image_ids(
         # Apply tag filter (JOIN)
         query, params = _apply_tag_filter(query, tags, params)
 
-        # Apply image IDs filter
+        # Apply image ID include/exclude filters
         conditions, params = _apply_image_ids_filter(conditions, params, image_ids)
+        conditions, params = _apply_excluded_image_ids_filter(conditions, params, excluded_image_ids)
 
         # Exclude unreadable images from normal library results (unless include_unreadable=True)
         conditions, params = _apply_readable_filter(conditions, params, include_unreadable)
@@ -2260,48 +2390,101 @@ def get_filtered_image_ids(
 
         # Get order clause
         order_clause = _get_order_clause(sort_by)
+
+        if needs_post_filter:
+            return _fetch_post_filtered_ids(
+                conn,
+                query,
+                params,
+                order_clause,
+                prompt_terms,
+                loras,
+                post_offset=normalized_offset,
+                limit=result_limit,
+                fetch_size=fetch_chunk_size,
+            )
+
         query += f" ORDER BY {order_clause}"
 
-        if not needs_post_filter:
-            if result_limit is not None:
-                query += " LIMIT ? OFFSET ?"
-                params.extend([result_limit, normalized_offset])
-            elif normalized_offset > 0:
-                query += " LIMIT -1 OFFSET ?"
-                params.append(normalized_offset)
+        if result_limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            params.extend([result_limit, normalized_offset])
+        elif normalized_offset > 0:
+            query += " LIMIT -1 OFFSET ?"
+            params.append(normalized_offset)
 
         cursor.execute(query, params)
 
         ids: List[int] = []
         chunk_size = max(1, int(fetch_chunk_size))
-        normalized_prompt_terms = [normalize_prompt_token(t) for t in (prompt_terms or [])]
-        normalized_loras = [normalize_lora_name(l) for l in (loras or [])]
-        matched_count = 0
-
         while True:
             rows = cursor.fetchmany(chunk_size)
             if not rows:
                 break
-            if needs_post_filter:
-                for row in rows:
-                    row_id = int(row["id"])
-                    if _matches_exact_post_filters(
-                        row["prompt"],
-                        row["loras"],
-                        normalized_prompt_terms,
-                        normalized_loras,
-                    ):
-                        if matched_count >= normalized_offset:
-                            ids.append(row_id)
-                            if result_limit is not None and len(ids) >= result_limit:
-                                return ids
-                        matched_count += 1
-            else:
-                ids.extend(int(row["id"]) for row in rows)
-                if result_limit is not None and len(ids) >= result_limit:
-                    return ids[:result_limit]
+            ids.extend(int(row["id"]) for row in rows)
+            if result_limit is not None and len(ids) >= result_limit:
+                return ids[:result_limit]
 
         return ids
+
+
+def iter_filtered_image_id_chunks(
+    *,
+    chunk_size: int = 2000,
+    generators: Optional[List[str]] = None,
+    tags: Optional[List[str]] = None,
+    ratings: Optional[List[str]] = None,
+    checkpoints: Optional[List[str]] = None,
+    loras: Optional[List[str]] = None,
+    search_query: Optional[str] = None,
+    sort_by: str = "newest",
+    min_width: Optional[int] = None,
+    max_width: Optional[int] = None,
+    min_height: Optional[int] = None,
+    max_height: Optional[int] = None,
+    prompt_terms: Optional[List[str]] = None,
+    aspect_ratio: Optional[str] = None,
+    artist: Optional[str] = None,
+    image_ids: Optional[List[int]] = None,
+    excluded_image_ids: Optional[List[int]] = None,
+    min_aesthetic: Optional[float] = None,
+    max_aesthetic: Optional[float] = None,
+    include_unreadable: bool = False,
+) -> Iterator[List[int]]:
+    """Yield filtered image IDs in bounded chunks without a giant ID list."""
+    normalized_chunk_size = max(1, int(chunk_size or 2000))
+    offset = 0
+    while True:
+        chunk = get_filtered_image_ids(
+            generators=generators,
+            tags=tags,
+            ratings=ratings,
+            checkpoints=checkpoints,
+            loras=loras,
+            search_query=search_query,
+            sort_by=sort_by,
+            min_width=min_width,
+            max_width=max_width,
+            min_height=min_height,
+            max_height=max_height,
+            prompt_terms=prompt_terms,
+            aspect_ratio=aspect_ratio,
+            artist=artist,
+            image_ids=image_ids,
+            excluded_image_ids=excluded_image_ids,
+            min_aesthetic=min_aesthetic,
+            max_aesthetic=max_aesthetic,
+            include_unreadable=include_unreadable,
+            fetch_chunk_size=normalized_chunk_size,
+            offset=offset,
+            limit=normalized_chunk_size,
+        )
+        if not chunk:
+            break
+        yield chunk
+        if len(chunk) < normalized_chunk_size:
+            break
+        offset += len(chunk)
 
 
 def get_images_paginated(
@@ -2481,7 +2664,8 @@ def get_images_paginated(
         # Get total count for the filter combination
         # Performance optimization: skip expensive COUNT query when not needed
         # Cursor pagination doesn't need total count for navigation
-        if skip_count:
+        effective_skip_count = skip_count or (cursor_id is not None)
+        if effective_skip_count:
             total_count = -1  # Indicate count was skipped
         else:
             total_count = _get_filtered_count(
@@ -3016,17 +3200,26 @@ def get_all_loras(*, limit: Optional[int] = None, search_query: Optional[str] = 
 
 
 def get_all_generators() -> List[Dict[str, Any]]:
-    """Get all generators with their counts."""
+    """Get all generators with their counts (cached with 60s TTL)."""
+    global _generators_cache_data, _generators_cache_timestamp
+    now = time.time()
+    with _generators_cache_lock:
+        if _generators_cache_data is not None and (now - _generators_cache_timestamp) < _TAGS_CACHE_TTL:
+            return _generators_cache_data
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT generator, COUNT(*) as count 
-            FROM images 
+            SELECT generator, COUNT(*) as count
+            FROM images
             WHERE COALESCE(is_readable, 1) = 1
-            GROUP BY generator 
+            GROUP BY generator
             ORDER BY count DESC
         """)
-        return _rows_to_dicts(cursor.fetchall())
+        result = _rows_to_dicts(cursor.fetchall())
+    with _generators_cache_lock:
+        _generators_cache_data = result
+        _generators_cache_timestamp = time.time()
+    return result
 
 
 def get_metadata_status_counts() -> Dict[str, int]:
@@ -3046,6 +3239,255 @@ def get_metadata_status_counts() -> Dict[str, int]:
             status = str(row["status"] or "complete").strip().lower() or "complete"
             counts[status] = int(row["count"] or 0)
         return counts
+
+
+def _library_health_percent(value: float, total: int) -> float:
+    if total <= 0:
+        return 0.0
+    return round((float(value) / float(total)) * 100.0, 2)
+
+
+def get_library_health_report(*, sample_limit: int = 8) -> Dict[str, Any]:
+    """Return a read-only quality audit for the indexed image library."""
+    bounded_sample_limit = max(1, min(int(sample_limit or 8), 25))
+
+    with get_db() as conn:
+        cursor = conn.cursor()
+        summary_row = cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 0 THEN 1 ELSE 0 END) AS unreadable,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 THEN 1 ELSE 0 END) AS readable,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (prompt IS NULL OR TRIM(prompt) = '') THEN 1 ELSE 0 END) AS missing_prompt,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (negative_prompt IS NULL OR TRIM(negative_prompt) = '') THEN 1 ELSE 0 END) AS missing_negative_prompt,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (checkpoint_normalized IS NULL OR TRIM(checkpoint_normalized) = '') THEN 1 ELSE 0 END) AS missing_checkpoint,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (width IS NULL OR height IS NULL OR width <= 0 OR height <= 0) THEN 1 ELSE 0 END) AS missing_dimensions,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (file_size IS NULL OR file_size <= 0) THEN 1 ELSE 0 END) AS missing_file_size,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND tagged_at IS NULL THEN 1 ELSE 0 END) AS untagged,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND embedding IS NULL THEN 1 ELSE 0 END) AS missing_embedding,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND aesthetic_score IS NULL THEN 1 ELSE 0 END) AS missing_aesthetic,
+                SUM(CASE WHEN LOWER(COALESCE(metadata_status, 'complete')) = 'pending' THEN 1 ELSE 0 END) AS metadata_pending,
+                SUM(CASE WHEN LOWER(COALESCE(metadata_status, 'complete')) = 'error' THEN 1 ELSE 0 END) AS metadata_error,
+                SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND generator = 'unknown' THEN 1 ELSE 0 END) AS unknown_generator
+            FROM images
+            """
+        ).fetchone()
+
+        total = int(summary_row["total"] or 0) if summary_row else 0
+        readable = int(summary_row["readable"] or 0) if summary_row else 0
+
+        issue_counts: Dict[str, int] = {
+            "unreadable": int(summary_row["unreadable"] or 0) if summary_row else 0,
+            "missing_prompt": int(summary_row["missing_prompt"] or 0) if summary_row else 0,
+            "missing_negative_prompt": int(summary_row["missing_negative_prompt"] or 0) if summary_row else 0,
+            "missing_checkpoint": int(summary_row["missing_checkpoint"] or 0) if summary_row else 0,
+            "missing_dimensions": int(summary_row["missing_dimensions"] or 0) if summary_row else 0,
+            "missing_file_size": int(summary_row["missing_file_size"] or 0) if summary_row else 0,
+            "untagged": int(summary_row["untagged"] or 0) if summary_row else 0,
+            "missing_embedding": int(summary_row["missing_embedding"] or 0) if summary_row else 0,
+            "missing_aesthetic": int(summary_row["missing_aesthetic"] or 0) if summary_row else 0,
+            "metadata_pending": int(summary_row["metadata_pending"] or 0) if summary_row else 0,
+            "metadata_error": int(summary_row["metadata_error"] or 0) if summary_row else 0,
+            "unknown_generator": int(summary_row["unknown_generator"] or 0) if summary_row else 0,
+        }
+
+        duplicate_filename_rows = cursor.execute(
+            """
+            SELECT filename, COUNT(*) AS count, SUM(COALESCE(file_size, 0)) AS total_size
+            FROM images
+            WHERE filename IS NOT NULL AND TRIM(filename) != ''
+            GROUP BY LOWER(filename)
+            HAVING COUNT(*) > 1
+            ORDER BY count DESC, filename COLLATE NOCASE ASC
+            LIMIT ?
+            """,
+            (bounded_sample_limit,),
+        ).fetchall()
+        duplicate_filenames = [dict(row) for row in duplicate_filename_rows]
+
+        duplicate_group_row = cursor.execute(
+            """
+            SELECT COUNT(*) AS groups_count, COALESCE(SUM(count), 0) AS image_count
+            FROM (
+                SELECT COUNT(*) AS count
+                FROM images
+                WHERE filename IS NOT NULL AND TRIM(filename) != ''
+                GROUP BY LOWER(filename)
+                HAVING COUNT(*) > 1
+            ) grouped
+            """
+        ).fetchone()
+        duplicate_filename_groups = int(duplicate_group_row["groups_count"] or 0) if duplicate_group_row else 0
+        duplicate_filename_images = int(duplicate_group_row["image_count"] or 0) if duplicate_group_row else 0
+
+        oversized_rows = cursor.execute(
+            """
+            SELECT id, filename, path, file_size, width, height, generator, checkpoint_normalized
+            FROM images
+            WHERE COALESCE(is_readable, 1) = 1 AND COALESCE(file_size, 0) > 0
+            ORDER BY file_size DESC
+            LIMIT ?
+            """,
+            (bounded_sample_limit,),
+        ).fetchall()
+        largest_images = [dict(row) for row in oversized_rows]
+
+        folder_rows = cursor.execute(
+            """
+            SELECT folder,
+                   COUNT(*) AS count,
+                   SUM(COALESCE(file_size, 0)) AS total_size,
+                   SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND (prompt IS NULL OR TRIM(prompt) = '') THEN 1 ELSE 0 END) AS missing_prompt,
+                   SUM(CASE WHEN COALESCE(is_readable, 1) = 1 AND tagged_at IS NULL THEN 1 ELSE 0 END) AS untagged,
+                   SUM(CASE WHEN COALESCE(is_readable, 1) = 0 THEN 1 ELSE 0 END) AS unreadable
+            FROM (
+                SELECT *,
+                       CASE
+                           WHEN filename IS NULL OR TRIM(filename) = '' THEN ''
+                           WHEN LENGTH(REPLACE(path, '\\', '/')) <= LENGTH(filename) THEN ''
+                           WHEN LOWER(SUBSTR(REPLACE(path, '\\', '/'), -LENGTH(filename))) != LOWER(filename) THEN ''
+                           ELSE RTRIM(SUBSTR(REPLACE(path, '\\', '/'), 1, LENGTH(REPLACE(path, '\\', '/')) - LENGTH(filename)), '/')
+                       END AS folder
+                FROM images
+            ) foldered
+            GROUP BY folder
+            ORDER BY count DESC, folder COLLATE NOCASE ASC
+            LIMIT ?
+            """,
+            (bounded_sample_limit,),
+        ).fetchall()
+        top_folders = [dict(row) for row in folder_rows]
+
+        issue_sample_rows = cursor.execute(
+            """
+            SELECT id, filename, path, generator, metadata_status, read_error,
+                   prompt, checkpoint_normalized, width, height, file_size, tagged_at
+            FROM images
+            WHERE COALESCE(is_readable, 1) = 0
+               OR LOWER(COALESCE(metadata_status, 'complete')) IN ('pending', 'error')
+               OR (COALESCE(is_readable, 1) = 1 AND (prompt IS NULL OR TRIM(prompt) = ''))
+               OR (COALESCE(is_readable, 1) = 1 AND (checkpoint_normalized IS NULL OR TRIM(checkpoint_normalized) = ''))
+               OR (COALESCE(is_readable, 1) = 1 AND (width IS NULL OR height IS NULL OR width <= 0 OR height <= 0))
+               OR (COALESCE(is_readable, 1) = 1 AND tagged_at IS NULL)
+            ORDER BY
+                CASE
+                    WHEN COALESCE(is_readable, 1) = 0 THEN 0
+                    WHEN LOWER(COALESCE(metadata_status, 'complete')) = 'error' THEN 1
+                    WHEN LOWER(COALESCE(metadata_status, 'complete')) = 'pending' THEN 2
+                    WHEN prompt IS NULL OR TRIM(prompt) = '' THEN 3
+                    WHEN checkpoint_normalized IS NULL OR TRIM(checkpoint_normalized) = '' THEN 4
+                    WHEN width IS NULL OR height IS NULL OR width <= 0 OR height <= 0 THEN 5
+                    WHEN tagged_at IS NULL THEN 6
+                    ELSE 7
+                END,
+                id ASC
+            LIMIT ?
+            """,
+            (bounded_sample_limit,),
+        ).fetchall()
+        issue_samples = [dict(row) for row in issue_sample_rows]
+
+    metadata_ready = max(readable - issue_counts["missing_prompt"] - issue_counts["missing_dimensions"], 0)
+    actionable_count = (
+        issue_counts["unreadable"]
+        + issue_counts["missing_prompt"]
+        + issue_counts["missing_checkpoint"]
+        + issue_counts["missing_dimensions"]
+        + issue_counts["untagged"]
+        + duplicate_filename_images
+    )
+    quality_score = 100.0
+    if total > 0:
+        weighted_penalty = (
+            issue_counts["unreadable"] * 2.0
+            + issue_counts["metadata_error"] * 2.0
+            + issue_counts["missing_prompt"] * 1.4
+            + issue_counts["missing_dimensions"] * 1.3
+            + issue_counts["missing_checkpoint"] * 0.8
+            + issue_counts["unknown_generator"] * 0.6
+            + min(issue_counts["untagged"], total) * 0.5
+            + min(duplicate_filename_images, total) * 0.5
+        )
+        average_penalty = weighted_penalty / float(total)
+        quality_score = max(0.0, round(100.0 - min(90.0, average_penalty * 22.0), 1))
+
+    return {
+        "summary": {
+            "total_images": total,
+            "readable_images": readable,
+            "metadata_ready": metadata_ready,
+            "metadata_ready_percent": _library_health_percent(metadata_ready, readable),
+            "tagged_percent": _library_health_percent(readable - issue_counts["untagged"], readable),
+            "embedding_percent": _library_health_percent(readable - issue_counts["missing_embedding"], readable),
+            "aesthetic_percent": _library_health_percent(readable - issue_counts["missing_aesthetic"], readable),
+            "quality_score": quality_score,
+            "actionable_count": actionable_count,
+        },
+        "issue_counts": issue_counts,
+        "duplicate_filenames": {
+            "groups": duplicate_filename_groups,
+            "images": duplicate_filename_images,
+            "samples": duplicate_filenames,
+        },
+        "largest_images": largest_images,
+        "top_folders": top_folders,
+        "issue_samples": issue_samples,
+        "recommendations": _build_library_health_recommendations(
+            total=total,
+            issue_counts=issue_counts,
+            duplicate_filename_images=duplicate_filename_images,
+        ),
+    }
+
+
+def _build_library_health_recommendations(
+    *,
+    total: int,
+    issue_counts: Dict[str, int],
+    duplicate_filename_images: int,
+) -> List[Dict[str, Any]]:
+    recommendations: List[Dict[str, Any]] = []
+    if total <= 0:
+        return recommendations
+
+    if issue_counts.get("metadata_pending", 0) > 0:
+        recommendations.append({
+            "kind": "metadata_pending",
+            "severity": "info",
+            "count": issue_counts["metadata_pending"],
+        })
+    if issue_counts.get("unreadable", 0) > 0 or issue_counts.get("metadata_error", 0) > 0:
+        recommendations.append({
+            "kind": "reparse_or_reconnect",
+            "severity": "warning",
+            "count": issue_counts.get("unreadable", 0) + issue_counts.get("metadata_error", 0),
+        })
+    if issue_counts.get("missing_prompt", 0) > 0:
+        recommendations.append({
+            "kind": "missing_prompt",
+            "severity": "warning" if _library_health_percent(issue_counts["missing_prompt"], total) >= 10 else "info",
+            "count": issue_counts["missing_prompt"],
+        })
+    if issue_counts.get("missing_checkpoint", 0) > 0:
+        recommendations.append({
+            "kind": "missing_checkpoint",
+            "severity": "info",
+            "count": issue_counts["missing_checkpoint"],
+        })
+    if issue_counts.get("untagged", 0) > 0:
+        recommendations.append({
+            "kind": "untagged",
+            "severity": "info",
+            "count": issue_counts["untagged"],
+        })
+    if duplicate_filename_images > 0:
+        recommendations.append({
+            "kind": "duplicate_filenames",
+            "severity": "info",
+            "count": duplicate_filename_images,
+        })
+    return recommendations
 
 
 def get_all_checkpoints(
@@ -3127,6 +3569,50 @@ def get_untagged_image_ids() -> List[int]:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
         return [row[0] for row in cursor.fetchall()]
+
+
+def count_all_image_ids() -> int:
+    """Count readable image IDs without materializing them."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM images WHERE COALESCE(is_readable, 1) = 1"
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
+
+
+def count_untagged_image_ids() -> int:
+    """Count readable untagged image IDs without materializing them."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1"
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
+
+
+def iter_all_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
+    """Yield readable image IDs in database order using cursor.fetchmany()."""
+    normalized_chunk_size = max(1, int(chunk_size or 1000))
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM images WHERE COALESCE(is_readable, 1) = 1 ORDER BY id")
+        while True:
+            rows = cursor.fetchmany(normalized_chunk_size)
+            if not rows:
+                break
+            yield [int(row[0]) for row in rows]
+
+
+def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]:
+    """Yield readable untagged image IDs in database order using cursor.fetchmany()."""
+    normalized_chunk_size = max(1, int(chunk_size or 1000))
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM images WHERE tagged_at IS NULL AND COALESCE(is_readable, 1) = 1 ORDER BY id")
+        while True:
+            rows = cursor.fetchmany(normalized_chunk_size)
+            if not rows:
+                break
+            yield [int(row[0]) for row in rows]
 
 
 def update_image_path(image_id: int, new_path: str):
@@ -3451,6 +3937,7 @@ def delete_image(image_id: int):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM images WHERE id = ?", (image_id,))
     _invalidate_tags_cache()
+    _invalidate_facet_caches()
 
 
 def get_image_count() -> int:

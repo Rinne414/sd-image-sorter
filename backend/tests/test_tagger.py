@@ -93,6 +93,27 @@ def test_process_probs_applies_general_and_character_thresholds_strictly(monkeyp
     assert "char_below" not in {item["tag"] for item in result["all_tags"]}
 
 
+def test_tag_uses_call_specific_thresholds(monkeypatch, tmp_path):
+    image_path = tmp_path / "single-threshold.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    tagger = _make_score_tagger(monkeypatch, threshold=0.5, character_threshold=0.9)
+    tagger._loaded = True
+    tagger.general_tags = [(0, "general_mid")]
+    tagger.character_tags = [(1, "character_mid")]
+    tagger.rating_tags = []
+    monkeypatch.setattr(tagger, "_preprocess", lambda _image: np.zeros((448, 448, 3), dtype=np.float32))
+    monkeypatch.setattr(tagger, "_run_inference", lambda _input_data: np.array([[0.4, 0.7]], dtype=np.float32))
+
+    default_result = tagger.tag(str(image_path))
+    override_result = tagger.tag(str(image_path), threshold=0.3, character_threshold=0.6)
+
+    assert default_result["general_tags"] == []
+    assert default_result["character_tags"] == []
+    assert [item["tag"] for item in override_result["general_tags"]] == ["general_mid"]
+    assert [item["tag"] for item in override_result["character_tags"]] == ["character_mid"]
+
+
 def test_process_probs_ignores_invalid_probability_scores(monkeypatch):
     tagger = _make_score_tagger(monkeypatch, threshold=0.5, character_threshold=0.8)
     tagger.general_tags = [(0, "valid_general"), (1, "invalid_logit"), (2, "nan_general")]
@@ -141,7 +162,7 @@ class _CpuOnlyOrtModule(_FakeOrtModule):
 
 
 def test_load_falls_back_to_cpu_when_cuda_session_creation_fails(monkeypatch):
-    """GPU session init failure should transparently fall back to CPU safe mode."""
+    """GPU session init failure should transparently fall back to CPU."""
     monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
 
@@ -210,7 +231,7 @@ class _RuntimeFallbackOrtModule(_FakeOrtModule):
 
 
 def test_tag_falls_back_to_cpu_when_gpu_inference_fails(monkeypatch, tmp_path):
-    """A mid-run GPU failure should rebuild the session in CPU Safe Mode and retry once."""
+    """A mid-run GPU failure should rebuild the session on CPU and retry once."""
     monkeypatch.setattr(tagger_module, "ort", _RuntimeFallbackOrtModule)
     monkeypatch.setattr(tagger_module, "hf_hub", object())
 
@@ -293,6 +314,35 @@ def test_tag_batch_uses_true_multi_image_inference(monkeypatch, tmp_path):
     assert len(results) == 3
     assert all(result["general_tags"][0]["tag"] == "balanced_tag" for result in results)
     assert getattr(tagger.session, "last_input_shape", None) == (3, 448, 448, 3)
+
+
+def test_tag_batch_uses_call_specific_threshold_for_true_batches(monkeypatch, tmp_path):
+    monkeypatch.setattr(tagger_module, "ort", _BatchOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+
+    paths = []
+    for index in range(2):
+        image_path = tmp_path / f"batch-threshold-{index}.png"
+        Image.new("RGB", (64, 64), color="white").save(image_path)
+        paths.append(str(image_path))
+
+    tagger = tagger_module.WD14Tagger(model_name="wd-swinv2-tagger-v3", threshold=0.9, use_gpu=False)
+    monkeypatch.setattr(tagger, "_get_model_paths", lambda: ("dummy.onnx", "dummy.csv"))
+
+    def fake_load_tags(_tags_path: str) -> None:
+        tagger.tags = ["balanced_tag"]
+        tagger.general_tags = [(0, "balanced_tag")]
+        tagger.character_tags = []
+        tagger.rating_tags = []
+        tagger.rating_indices = {}
+
+    monkeypatch.setattr(tagger, "_load_tags", fake_load_tags)
+
+    default_results = tagger.tag_batch(paths)
+    override_results = tagger.tag_batch(paths, threshold=0.75)
+
+    assert all(result["general_tags"] == [] for result in default_results)
+    assert all(result["general_tags"][0]["tag"] == "balanced_tag" for result in override_results)
 
 
 class _AdaptiveGpuBatchSession:
@@ -715,6 +765,43 @@ def test_custom_profile_aliases_resolve_to_real_model_profiles(monkeypatch):
     assert tagger_module.WD14Tagger._resolve_model_profile("wd14-compatible", "model.onnx") == "wd-swinv2-tagger-v3"
     assert tagger_module.WD14Tagger._resolve_model_profile("camie-tagger-v2", "model.onnx") == "camie-tagger-v2"
     assert tagger_module.WD14Tagger._resolve_model_profile("pixai-tagger-v0.9", "model.onnx") == "pixai-tagger-v0.9"
+
+
+def test_get_tagger_reuse_keeps_request_thresholds_isolated(monkeypatch, tmp_path):
+    image_path = tmp_path / "singleton-threshold.png"
+    Image.new("RGB", (64, 64), color="white").save(image_path)
+
+    monkeypatch.setattr(tagger_module, "ort", _FakeOrtModule)
+    monkeypatch.setattr(tagger_module, "hf_hub", object())
+    monkeypatch.setattr(tagger_module, "_tagger", None)
+    monkeypatch.setattr(tagger_module, "_current_settings", {})
+
+    first = tagger_module.get_tagger(
+        model_name="wd-swinv2-tagger-v3",
+        threshold=0.8,
+        character_threshold=0.9,
+        use_gpu=False,
+    )
+    shared = first._tagger
+    shared._loaded = True
+    shared.general_tags = [(0, "general_mid")]
+    shared.character_tags = [(1, "character_mid")]
+    shared.rating_tags = []
+    monkeypatch.setattr(shared, "_preprocess", lambda _image: np.zeros((448, 448, 3), dtype=np.float32))
+    monkeypatch.setattr(shared, "_run_inference", lambda _input_data: np.array([[0.6, 0.7]], dtype=np.float32))
+
+    second = tagger_module.get_tagger(
+        model_name="wd-swinv2-tagger-v3",
+        threshold=0.5,
+        character_threshold=0.6,
+        use_gpu=False,
+    )
+
+    assert second._tagger is shared
+    assert first.tag(str(image_path))["general_tags"] == []
+    assert first.tag(str(image_path))["character_tags"] == []
+    assert [item["tag"] for item in second.tag(str(image_path))["general_tags"]] == ["general_mid"]
+    assert [item["tag"] for item in second.tag(str(image_path))["character_tags"]] == ["character_mid"]
 
 
 def test_custom_wd14_profile_does_not_follow_mutable_default_model(monkeypatch):

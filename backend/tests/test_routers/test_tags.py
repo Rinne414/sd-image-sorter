@@ -597,7 +597,7 @@ class TestTaggingPipeline:
         assert models_by_name["wd-eva02-large-tagger-v3"]["memory"] == "High"
 
     def test_build_runtime_plan_keeps_max_quality_model_on_adaptive_gpu_when_requested(self):
-        """Max Quality should now use adaptive GPU throughput instead of a forced CPU lock."""
+        """Max Quality should now use adaptive GPU throughput instead of a forced CPU default."""
         from services.tagging_service import TaggingService, TagRequest
 
         service = TaggingService()

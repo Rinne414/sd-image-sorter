@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-05-04
+**Updated:** 2026-05-14
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -67,6 +67,34 @@ Use this structure for future entries:
 - Validation:
 
 ## Current Records
+
+### ADR-AI-20260514-01: Tagger hardware clamps should preserve real throughput on capable machines
+- Status: active
+- Area: tagging workflow / hardware safety / performance
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  WD14 ONNX tagger recommendations should use aggressive-but-bounded true batching on capable hardware: high-VRAM GPUs may recommend chunks above 32, heavy WD14-family models should not be capped at 12 on 16-24 GB cards, and high-RAM CPU fallback should not be stuck at tiny queue chunks. Runtime clamps, adaptive GPU backoff, memory-pressure shrink, session refresh, worker isolation, custom-model conservatism, and ToriiGate chunk 1 remain the safety contract.
+- Why:
+  The product explicitly targets huge libraries, including ~200,000-image collections. The user reported that tagger crashes were primarily from RAM/VRAM not being released after long runs, not from chunk 12 vs larger chunks. Keeping recommended chunks too small wastes capable hardware and can turn normal large-library tagging into multi-hour waiting while the existing adaptive safeguards still protect real OOM conditions.
+- Do not "improve" this by:
+  Reverting high-end WD14 GPU recommendations back to 12/16/32, treating automatic clamps as a reason to make every run slow, raising custom ONNX defaults without proof, or increasing ToriiGate/VLM chunk size without a separate VLM-specific design.
+- Allowed evolution:
+  Add smarter per-model benchmarking, learned stable chunk persistence, VRAM-reservation-aware scheduling, explicit "max throughput" presets, or more granular GPU/vendor tables if they keep low-headroom machines protected and keep large-library workflows fast.
+- Evidence:
+  `hardware_monitor.recommend_tagger_config()` now recommends larger GPU/CPU chunks by hardware capacity while still downshifting when free VRAM is actually tight. `TaggingService` allows WD14 true batches up to 64, while custom ONNX remains capped at 8 and ToriiGate remains fixed at 1. Frontend chunk choices expose 48 and 64 so backend recommendations are selectable.
+- Last verified:
+  2026-05-14 against current workspace tests for hardware recommendation and tagging runtime planning.
+- Related files:
+  `backend/hardware_monitor.py`
+  `backend/services/tagging_service.py`
+  `frontend/js/app.js`
+  `frontend/index.html`
+  `backend/tests/test_hardware_monitor.py`
+  `backend/tests/test_tagging_service.py`
+- Supersedes:
+  None; refines ADR-AI-20260427-12 and ADR-AI-20260501-02.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_hardware_monitor.py`; targeted runtime-plan tests in `backend/tests/test_tagging_service.py`.
 
 ### ADR-AI-20260501-01: Sidebar action panels should not create nested scrollbars when the sidebar can own scrolling
 - Status: active
@@ -2560,3 +2588,140 @@ Use this structure for future entries:
   Current files: `frontend/index.html`, `frontend/js/app.js`, `frontend/js/censor-edit.js`, `frontend/js/prompt-lab.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/optional_dependencies.py`, `backend/tests/test_optional_dependencies.py`, `tests/e2e/specs/smoke.spec.ts`, `CHANGELOG.md`, `release-notes.md`, `docs/RELEASE_NOTES_v3.1.5.md`.
 - Validation:
   Targeted checks should cover Prompt Lab affix dedupe, export selected-scope copy, batch export selected-scope copy and payload, visible censor active YOLO filename, optional dependency lock mapping, release build launcher import probe, and full CI before publishing.
+
+### ADR-AI-20260513-111: WD14 model reuse must keep tag thresholds request-scoped
+
+- Status: accepted
+- Area: AI tagging / concurrency / model lifecycle
+- Context:
+  WD14 ONNX models are expensive to load, so the runtime keeps a singleton tagger for the same model/path/backend settings. Previous threshold handling mutated `tagger.threshold` and `tagger.character_threshold` on the shared instance when callers requested different confidence thresholds. That made concurrent or near-concurrent calls race through shared mutable threshold state. Removing the mutation without another request-scoped path made reused single-image/convenience calls silently keep the first loaded thresholds.
+- Decision:
+  Keep model/session reuse keyed only by heavy runtime settings, but carry general and character thresholds as per-call configuration. `get_tagger()` returns a lightweight configured proxy over the shared loaded `WD14Tagger`; `tag()` / `tag_batch()` accept optional thresholds and pass them into `_process_probs()` for every inference path, including true-batch and fallback single-image loops. Background batch tagging may still force reload for worker isolation, but threshold correctness must not depend on reload.
+- Why:
+  Thresholds change result interpretation, not the model weights or ONNX session. Reloading a 500MB+ model just to change thresholds is wasteful, while mutating shared threshold fields is unsafe. A request-scoped proxy preserves reuse performance, prevents threshold races, and keeps old convenience semantics like `get_tagger(threshold=x).tag(path)` correct.
+- Do not regress:
+  Do not put `threshold` or `character_threshold` back into shared mutable singleton state as the primary request mechanism. Do not require model reloads only to change thresholds. If new tagger inference paths are added, they must pass request thresholds to `_process_probs()` or an equivalent request-scoped scorer.
+- Evidence:
+  Current files: `backend/tagger.py`, `backend/tests/test_tagger.py`.
+
+### ADR-AI-20260513-112: WD14 Prepare owns Windows ONNX GPU runtime repair
+
+- Status: accepted
+- Area: Feature Setup / WD14 tagging / Windows runtime packaging
+- Context:
+  Windows portable lightweight startup intentionally installs `backend/requirements-core.txt`, which uses CPU `onnxruntime` on Windows and skips the heavyweight ONNX GPU repair path. That keeps first launch small, but it means a user can open WD14 tagging, see only `CPUExecutionProvider`, and fall back to CPU even on a GPU machine. Before this decision, the WD14 Model Manager Prepare action only downloaded model files with `use_gpu=False`; it did not repair `onnxruntime-gpu`, `onnxruntime-directml`, CUDA, or cuDNN packages.
+- Decision:
+  WD14 Prepare / Recheck now runs the Windows ONNX Runtime repair path before importing tagger code, then downloads / validates the requested WD14 model files. Windows repair installs or downgrades ONNX runtime packages to release-pinned specs (for v3.1.6, `onnxruntime-gpu==1.21.0` for NVIDIA and `onnxruntime-directml==1.21.0` for AMD/Intel) instead of letting pip pull a newer incompatible runtime. The DirectML pin lives in `repair_onnxruntime.py` because installing it from `requirements.txt` would conflict with NVIDIA users. Repair must also probe the imported `onnxruntime` module, not just distribution metadata, because a broken environment can report `onnxruntime-gpu==1.21.0` while importing a namespace package with no `get_available_providers`. If repair changes ONNX runtime packages, the Prepare result asks for an app restart before GPU tagging. The Feature Setup copy now lists WD14 under Prepare rather than claiming no extra runtime setup.
+- Why:
+  Lightweight startup is still correct, but GPU repair must be reachable from the user-visible WD14 preparation flow. Running repair before importing `tagger` avoids locking the old ONNX DLLs in the current process, and pinning the repair install prevents resolver drift such as `onnxruntime-gpu 1.26.0` breaking the shipped app runtime.
+- Do not regress:
+  Do not move WD14 GPU repair back behind `SD_IMAGE_SORTER_INSTALL_FULL_AI` only. Do not import `tagger` before repair in the WD14 Prepare path. Do not use unpinned `pip install onnxruntime-gpu` / `onnxruntime-directml` in repair code. Do not describe WD14 as fully ready after model-file download on Windows unless the GPU runtime repair path is also available or explicitly marked CPU-only.
+- Evidence:
+  Current files: `backend/services/model_service.py`, `backend/repair_onnxruntime.py`, `frontend/js/app.js`, `frontend/js/lang/en.js`, `frontend/js/lang/zh-CN.js`, `backend/tests/test_model_service.py`, `backend/tests/test_frontend_contract.py`, `backend/tests/test_repair_onnxruntime.py`, `CHANGELOG.md`, `docs/RELEASE_NOTES_v3.1.6.md`.
+- Validation:
+  `backend/venv/Scripts/python.exe -m pytest backend/tests/test_model_service.py backend/tests/test_frontend_contract.py backend/tests/test_tagger.py -q` (`71 passed`).
+
+### ADR-AI-20260514-113: Windows ONNX repair is eager only for supported hardware
+
+- Status: accepted
+- Area: Windows portable startup / ONNX Runtime / WD14 tagging / public release safety
+- Context:
+  v3.1.6 release validation found a mismatch between intended and actual ONNX behavior. The generated Windows portable launcher runs `repair_onnxruntime.py --auto` after installing the lightweight core runtime. That is good for supported GPU machines because WD14 CPU fallback can be painfully slow and can push lower-RAM systems into crashes, but the repair script's CPU-only path also targeted `onnxruntime-gpu` when no GPU vendor was detected. That could make CPU-only, VM, RDP, or driver-broken machines pay for an unsupported GPU package during first start.
+- Decision:
+  Keep Windows portable startup ONNX repair enabled, but gate package swaps on confident hardware detection. CPU-only `onnxruntime` is upgraded to `onnxruntime-gpu==1.21.0` only for detected NVIDIA hardware, upgraded to `onnxruntime-directml==1.21.0` only for detected AMD/Intel hardware, and left as CPU runtime when no supported GPU vendor is detected. The repair result now tracks whether a pip-changing action actually occurred, so a no-op CPU keep does not falsely ask users to restart. WD14 Prepare / Recheck still runs the same repair path for users who reach setup from inside the app.
+- Why:
+  Public downloads must work beyond the maintainer's machine. Supported GPU users should not discover WD14 through a slow/crashy CPU path, while unsupported hardware should not download heavy or useless GPU runtimes. The launcher has the only reliable pre-import window for ONNX DLL changes, so startup repair is acceptable only when hardware detection justifies it.
+- Do not regress:
+  Do not install `onnxruntime-gpu` or `onnxruntime-directml` when `gpu_vendor_primary` is missing or unknown. Do not mark a no-op CPU keep as `repaired`. Do not move Windows WD14 repair behind manual environment variables only. Keep release notes explicit that NVIDIA first start can be slow because CUDA/cuDNN packages are large.
+- Evidence:
+  Current files: `backend/repair_onnxruntime.py`, `backend/tests/test_repair_onnxruntime.py`, `CHANGELOG.md`, `release-notes.md`, `docs/RELEASE_NOTES_v3.1.6.md`, `docs/AI_PRINCIPLES.md`.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_repair_onnxruntime.py backend/tests/test_model_service.py::test_prepare_wd14_repairs_windows_onnx_runtime backend/tests/test_model_service.py::test_prepare_wd14_warns_when_windows_onnx_repair_fails` (`11 passed`).
+
+### ADR-AI-20260514-114: Image metadata harvesting stays broad but bounded
+
+- Status: accepted
+- Area: metadata scanning / JPEG, TIFF, GIF, sidecar compatibility / scan performance
+- Context:
+  v3.1.6 pre-release testing found that `.jpg` / `.jpeg` images can carry Stable Diffusion prompts and generation parameters. The scan allowlist already included JPEG files, but parser coverage was mostly incidental: ASCII EXIF `UserComment` worked, while common `UNICODE` UserComment payloads and APP1 XMP packets could be missed or decoded as garbage. The broader product goal is to recover as much SD metadata as possible without turning Gallery scan into a slow full-file forensic pass. If unchanged historical JPEG rows stayed marked `metadata_status='complete'`, ordinary rescans would also skip them forever unless users knew to force reparse.
+- Decision:
+  JPEG/JPG files are treated as first-class SD metadata containers. The parser decodes EXIF UserComment through a shared helper, including ASCII, UNICODE UTF-16 payloads, empty-prefix payloads, and generic UTF-8/UTF-16 text bytes; JPEG APP1 XMP packets are scanned for WebUI/Forge parameter blocks and ComfyUI prompt JSON. TIFF/TIF is now part of the image scan allowlist and can provide EXIF/ImageDescription/XMP metadata. GIF comment metadata is harvested when present. Small same-name sidecars (`image.ext.txt`, `image.txt`, `image.ext.json`, `image.json`, `image.ext.xmp`, `image.xmp`) are loaded only after embedded metadata fails, so exported/training captions can populate prompt fields without making every image pay extra IO. `PARSED_METADATA_VERSION` is bumped, and the unchanged-file scan skip still forces only `.jpg` / `.jpeg` rows parsed by older or missing parser versions to reparse on normal folder scan.
+- Why:
+  Users should not need to know whether their SD prompt was saved into PNG chunks, EXIF, XMP, GIF comments, TIFF fields, or a training sidecar. The performance contract matters just as much: only metadata/header structures are read, WebP XMP is read by RIFF chunk instead of whole-file loading, sidecars have a 256 KB cap, directory listing cache, and 50k-name huge-directory cache fuse, and limiting automatic version reparsing to JPEG avoids a punishing full metadata reparse of existing PNG/WebP/TIFF libraries just because metadata harvesting got broader.
+- Do not regress:
+  Keep `.jpg`, `.jpeg`, `.tif`, and `.tiff` in the image scan allowlist. Do not decode EXIF `UNICODE` UserComment as UTF-8. Do not require `force_reparse` for old JPEG rows after parser-version upgrades. Do not make every parser-version bump reparse all unchanged PNG/WebP/TIFF rows unless the upgrade actually affects those formats. Do not read large sidecars or whole WebP files during scan-time metadata extraction. Keep sidecar parsing fallback-only so embedded metadata remains the source of truth when present.
+- Evidence:
+  Current files: `backend/metadata_parser.py`, `backend/image_manager.py`, `backend/config.py`, `backend/services/image_service.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_image_manager.py`, `CHANGELOG.md`, `release-notes.md`.
+- Validation:
+  `python3 -m py_compile backend/metadata_parser.py backend/image_manager.py backend/config.py backend/services/image_service.py`; `cd backend && python3 -m pytest -s tests/test_metadata_parser.py tests/test_metadata_parser_errors.py tests/test_image_manager.py tests/test_config_env.py -q` (`129 passed`).
+
+## ADR-2026-05-14: Library Health is advisory and read-only
+
+- Status: accepted
+- Evidence tier: Tier 1 — implemented in current code and covered by router contract tests
+- Context:
+  A comparison with `zanllp/infinite-image-browsing` showed a useful product gap: creators need a library-level management surface before file organization, especially for metadata coverage, duplicate filenames, unreadable records, and archive/export risks. Our app already has scan, tagging, sorting, similarity, and export flows, but did not expose these risks in one beginner-friendly place.
+- Decision:
+  Add a `GET /api/library-health` endpoint and a `Library Health` / `库体检` UI view as a read-only audit. It aggregates existing SQLite records only. It must not move, delete, rewrite, re-import, generate thumbnails, invoke models, or silently repair files.
+- Product semantics:
+  - `quality_score` is a user-facing health indicator, not durable business data.
+  - duplicate-filename warnings mean flat archive/export risk; they do not claim image-content duplication.
+  - recommendations are next-action guidance. Users remain in control and must choose re-import, re-parse, tagging, or sorting workflows explicitly.
+- Why not automatic cleanup:
+  File movement, flattening, deletion, and overwrite behavior are high-risk local workflows. This repo prioritizes predictable beginner-safe UX over clever automatic archive changes.
+- Related files:
+  - `backend/database.py`
+  - `backend/services/sorting_service.py`
+  - `backend/routers/sorting.py`
+  - `frontend/index.html`
+  - `frontend/js/library-health.js`
+  - `frontend/css/styles.css`
+  - `docs/API.md`
+  - `.plans/sd-image-sorter-release/docs/api-contracts.md`
+
+## ADR-2026-05-14: Large filtered selections stay token-scoped
+
+- Status: accepted
+- Evidence tier: Tier 1 — implemented in current frontend/backend code and covered by router/resource-safety tests
+- Context:
+  A 200k-image filtered Gallery selection exposed several crash paths: the browser could resolve every matching ID into one giant array, destructive actions could POST the giant array back to FastAPI/Pydantic, and sidecar export could fetch all images/tags into large maps before writing files. Those behaviors made "Select all filtered results" technically truthful but unsafe at the scale this app explicitly supports.
+- Decision:
+  Filtered-result selection is represented by an immediate `selection_token` plus a total estimate/count whenever the user chooses all matching results. Frontend state must keep the token scope and must not materialize the full ID set just to delete, remove, or export. `excludedImageIds` is allowed only as a small explicit-exclusion list for inverted filtered selection after manual toggles. Backend delete/remove snapshots token IDs server-side in bounded chunks before mutating the database/files, and sidecar export reads image/tag data chunk-by-chunk while writing output.
+- Product semantics:
+  - `visible` and `loaded` selection remain frontend scopes.
+  - filtered selection means backend filter scope, not the currently loaded thumbnail page.
+  - token mode is stateless and immediate; it is not a durable resumable job snapshot.
+  - prompt/LoRA matching keeps exact post-filter semantics even when SQL uses token indexes as a prefilter.
+- Why:
+  The product must remain viable for very large local SD libraries without quietly weakening selection behavior. Token scope preserves user intent while avoiding browser memory spikes, huge JSON payloads, and SQL maps for hundreds of thousands of IDs.
+- Do not regress:
+  Do not reintroduce `new Set(allFilteredIds)` or full-ID JSON payloads for filtered delete/remove/export. Do not use `excludedImageIds` as an inverted giant include-list. Do not make `selection-token` support `sortBy=random` unless ordering is seed-stable. Do not replace exact prompt-term semantics with substring-only token prefilters.
+- Evidence:
+  Current files: `frontend/js/app.js`, `frontend/js/gallery.js`, `frontend/js/stores/selection-store.js`, `backend/routers/images.py`, `backend/services/image_service.py`, `backend/services/tag_export_service.py`, `backend/services/tagging_service.py`, `backend/database.py`, `docs/API.md`, `.plans/sd-image-sorter-release/docs/api-contracts.md`, `backend/tests/test_routers/test_images.py`, `backend/tests/test_resource_safety.py`.
+
+## ADR-2026-05-14: Large-library dashboard and scan paths are bounded by default
+
+- Status: accepted
+- Evidence tier: Tier 1 — implemented in current backend code and tests
+- Context:
+  For 200k-image libraries, startup dashboard stats and folder scan startup were doing work whose cost scaled with the whole library before the user saw useful progress. `/api/stats` could return every unique tag/checkpoint/LoRA, and scan could walk the folder tree once to count totals before walking it again to import. On network drives or huge prompt/tag vocabularies this made the app feel frozen and could keep large arrays resident in browser/backend memory.
+- Decision:
+  `/api/stats` is a bounded dashboard summary: counts plus top-N facets only. Full tag/checkpoint/LoRA browsing belongs to searchable/paginated analytics or Library-tab endpoints. Folder scan defaults to single-pass streaming progress; exact up-front totals are not part of the default scan contract and any future precise-ETA mode must be explicit.
+- Product semantics:
+  - dashboard facet arrays are not exhaustive library dictionaries.
+  - scan progress can begin with discovered/imported counters rather than a perfect total.
+  - users should see useful work start quickly even when exact ETA is unavailable.
+- Why:
+  Beginner-friendly UX is not "freeze first, be exact later." Large local libraries need bounded first paint, bounded JSON, and immediate progress more than perfect initial totals.
+- Do not regress:
+  Do not make `/api/stats` return unbounded tags/checkpoints/LoRAs. Do not add an unconditional pre-count directory pass to scan. Do not make Library facet UIs assume stats arrays are exhaustive. Do not hide the distinction between provisional scan/discovered progress and exact totals.
+- Evidence:
+  Current files: `backend/services/sorting_service.py`, `backend/image_manager.py`, `backend/routers/sorting.py`, `frontend/js/app.js`, `docs/API.md`, `.plans/sd-image-sorter-release/docs/api-contracts.md`, `backend/tests/test_image_manager.py`, `backend/tests/test_routers/test_sorting.py`.
+
+## ADR-2026-05-14: Windows ONNX runtime repair must not resolve shared dependencies freely
+
+- Status: accepted
+- Context: A fresh v3.1.6 Windows portable launch installed `requirements-core.txt` first, then repaired CPU-only `onnxruntime` to `onnxruntime-gpu==1.21.0`. Installing the GPU wheel before removing the CPU wheel let the CPU uninstall damage the shared `onnxruntime` import package, causing a second force reinstall. The GPU install also resolved dependencies freely and upgraded shared pins such as `numpy==1.26.4` to a newer unpinned NumPy.
+- Decision: Runtime swaps now uninstall the conflicting ONNX package before installing the target runtime, install target ONNX runtimes with `--no-deps`, and install CUDA/cuDNN extras under a pip-safe constraints file generated from `requirements-core.txt` by stripping extras-only syntax such as `uvicorn[standard]`. This preserves the locked core runtime while still allowing NVIDIA CUDA DLL packages to be added.
+- Consequences: First launch on NVIDIA still downloads the large CUDA/cuDNN payload when GPU repair is needed, but it should not reinstall ONNX Runtime twice or drift already-pinned shared dependencies. Future runtime repair paths must keep this no-deps/constraints pattern unless the lock strategy changes.
+

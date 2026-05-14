@@ -13,6 +13,8 @@ function getGalleryAppContext() {
         selectionMode: false,
         selectionScope: 'visible',
         selectionFilterKey: null,
+        selectionToken: null,
+        selectionTotal: 0,
         viewMode: 'grid'
     };
     const cloneSelectionState = app.cloneSelectionState || ((selectionState) => ({
@@ -20,6 +22,8 @@ function getGalleryAppContext() {
         selectedIds: new Set(Array.from(selectionState?.selectedIds || [])),
         scope: selectionState?.scope || selectionState?.selectionScope || 'visible',
         filterKey: selectionState?.filterKey || selectionState?.selectionFilterKey || null,
+        selectionToken: selectionState?.selectionToken || null,
+        selectionTotal: Number(selectionState?.selectionTotal || 0) || 0,
     }));
     const setSelectionState = app.setSelectionState || ((nextSelection) => {
         const nextState = cloneSelectionState(nextSelection);
@@ -27,6 +31,8 @@ function getGalleryAppContext() {
         appState.selectedIds = nextState.selectedIds;
         appState.selectionScope = nextState.scope;
         appState.selectionFilterKey = nextState.filterKey || null;
+        appState.selectionToken = nextState.selectionToken || null;
+        appState.selectionTotal = Number(nextState.selectionTotal || 0) || 0;
         return nextState;
     });
     const updateSelectionState = app.updateSelectionState || ((updater) => {
@@ -35,6 +41,8 @@ function getGalleryAppContext() {
             selectedIds: appState.selectedIds,
             scope: appState.selectionScope,
             filterKey: appState.selectionFilterKey,
+            selectionToken: appState.selectionToken,
+            selectionTotal: appState.selectionTotal,
         });
         const nextState = typeof updater === 'function'
             ? (updater(draft) ?? draft)
@@ -49,7 +57,9 @@ function getGalleryAppContext() {
         updateSelectionUI: app.updateSelectionUI || window.updateSelectionUI,
         showModal: app.showModal || window.showModal,
         formatSize: app.formatSize || window.formatSize,
-        showToast: app.showToast || window.showToast
+        showToast: app.showToast || window.showToast,
+        getSelectedGalleryCount: app.getSelectedGalleryCount,
+        isFilteredSelectionActiveForCurrentFilters: app.isFilteredSelectionActiveForCurrentFilters
     };
 }
 
@@ -74,6 +84,19 @@ function selectionBaseForScope(selection, nextScope, { additive = true } = {}) {
     }
 
     return new Set(selection?.selectedIds || []);
+}
+
+function isGalleryImageSelected(AppState, imageId) {
+    const app = window.App || {};
+    const numericId = Number(imageId);
+    const idIsExcluded = AppState.selectedIds.has(numericId) || AppState.selectedIds.has(String(imageId));
+    if (AppState.selectionScope === 'filtered' && AppState.selectionToken) {
+        const tokenStillValid = typeof app.isFilteredSelectionActiveForCurrentFilters === 'function'
+            ? app.isFilteredSelectionActiveForCurrentFilters()
+            : true;
+        return tokenStillValid && !idIsExcluded;
+    }
+    return idIsExcluded;
 }
 
 /**
@@ -841,7 +864,7 @@ const Gallery = {
         if (isLarge) {
             item.classList.add('large-card');
         }
-        if (AppState.selectedIds.has(image.id)) {
+        if (isGalleryImageSelected(AppState, image.id)) {
             item.classList.add('selected');
         }
         item.dataset.id = image.id;
@@ -850,7 +873,7 @@ const Gallery = {
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
         item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
-        item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
+        item.setAttribute('aria-selected', isGalleryImageSelected(AppState, image.id) ? 'true' : 'false');
 
         item.innerHTML = this._buildGalleryItemMarkup(
             image,
@@ -1221,7 +1244,7 @@ const Gallery = {
         if (isLarge) {
             item.classList.add('large-card');
         }
-        if (AppState.selectedIds.has(image.id)) {
+        if (isGalleryImageSelected(AppState, image.id)) {
             item.classList.add('selected');
         }
         item.dataset.id = image.id;
@@ -1232,7 +1255,7 @@ const Gallery = {
         item.setAttribute('tabindex', '0');
         item.setAttribute('role', 'gridcell');
         item.setAttribute('aria-label', `${image.filename || 'Image'} - ${generatorLabel}`);
-        item.setAttribute('aria-selected', AppState.selectedIds.has(image.id) ? 'true' : 'false');
+        item.setAttribute('aria-selected', isGalleryImageSelected(AppState, image.id) ? 'true' : 'false');
         item.innerHTML = this._buildGalleryItemMarkup(
             image,
             resolvedViewMode,
@@ -1299,9 +1322,12 @@ const Gallery = {
     },
 
     _emitSelectionChanged(AppState) {
+        const { getSelectedGalleryCount } = getGalleryAppContext();
         const detail = {
             selectionMode: Boolean(AppState.selectionMode),
-            selectedCount: AppState.selectedIds.size,
+            selectedCount: typeof getSelectedGalleryCount === 'function'
+                ? getSelectedGalleryCount()
+                : AppState.selectedIds.size,
             selectionScope: AppState.selectionScope || 'visible',
         };
         window.dispatchEvent(new CustomEvent('selection-state-changed', { detail }));
@@ -1337,6 +1363,8 @@ const Gallery = {
             selection.selectedIds = nextIds;
             selection.scope = 'loaded';
             selection.filterKey = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
         this.lastSelectedIndex = endIndex;
         this._finalizeSelectionChange(AppState, updateSelectionUI);
@@ -1366,6 +1394,8 @@ const Gallery = {
             selection.selectedIds = nextIds;
             selection.scope = 'visible';
             selection.filterKey = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
@@ -1385,6 +1415,8 @@ const Gallery = {
             selection.selectedIds = nextIds;
             selection.scope = 'visible';
             selection.filterKey = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
         this._finalizeSelectionChange(AppState, updateSelectionUI);
     },
@@ -1395,6 +1427,8 @@ const Gallery = {
             selection.selectedIds = new Set();
             selection.scope = 'visible';
             selection.filterKey = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
         this.lastSelectedIndex = null;
         this._finalizeSelectionChange(AppState, updateSelectionUI);
@@ -1416,6 +1450,8 @@ const Gallery = {
             selection.selectedIds = nextIds;
             selection.scope = 'visible';
             selection.filterKey = null;
+            selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
 
         // Update DOM element if it exists in the current view
@@ -1443,7 +1479,7 @@ const Gallery = {
         const { AppState, updateSelectionUI } = getGalleryAppContext();
         document.querySelectorAll('.gallery-item').forEach((item) => {
             const imageId = item.dataset.id;
-            const isSelected = AppState.selectedIds.has(Number(imageId)) || AppState.selectedIds.has(imageId);
+            const isSelected = isGalleryImageSelected(AppState, imageId);
             item.classList.toggle('selected', isSelected);
             item.setAttribute('aria-selected', isSelected ? 'true' : 'false');
         });
@@ -1476,6 +1512,7 @@ const Gallery = {
             selection.scope = 'visible';
             selection.filterKey = null;
             selection.selectionToken = null;
+            selection.selectionTotal = 0;
         });
 
         app.resetSelectionDataCache?.();

@@ -360,21 +360,29 @@ def recommend_tagger_config(
         if safety_tier != "heavy":
             return batch_size_value
 
-        usable_vram_mb = available_vram_mb if available_vram_mb is not None else vram_mb
-        if usable_vram_mb is None:
-            usable_vram_mb = vram_mb
+        capacity_vram_mb = vram_mb
+        if capacity_vram_mb is None:
+            capacity_vram_mb = available_vram_mb
 
-        if usable_vram_mb is None or usable_vram_mb < 4000:
+        if available_vram_mb is not None:
+            if available_vram_mb < 2500:
+                return min(batch_size_value, 2)
+            if available_vram_mb < 4000:
+                return min(batch_size_value, 4)
+            if available_vram_mb < 8000:
+                return min(batch_size_value, 8)
+
+        if capacity_vram_mb is None or capacity_vram_mb < 4000:
             return min(batch_size_value, 2)
-        if usable_vram_mb < 8000:
-            return min(batch_size_value, 4)
-        if usable_vram_mb < 12000:
-            return min(batch_size_value, 6)
-        if usable_vram_mb < 16000:
+        if capacity_vram_mb < 8000:
             return min(batch_size_value, 8)
-        if usable_vram_mb < 24000:
-            return min(batch_size_value, 12)
-        return min(batch_size_value, 16)
+        if capacity_vram_mb < 12000:
+            return min(batch_size_value, 16)
+        if capacity_vram_mb < 16000:
+            return min(batch_size_value, 24)
+        if capacity_vram_mb < 24000:
+            return min(batch_size_value, 32)
+        return min(batch_size_value, 48)
 
     def apply_cpu_model_cap(batch_size_value: int) -> int:
         if is_custom_model:
@@ -393,10 +401,10 @@ def recommend_tagger_config(
         if available_ram_gb < 12:
             return min(batch_size_value, 4)
         if available_ram_gb < 20:
-            return min(batch_size_value, 6)
-        if available_ram_gb < 32:
             return min(batch_size_value, 8)
-        return min(batch_size_value, 10)
+        if available_ram_gb < 32:
+            return min(batch_size_value, 16)
+        return min(batch_size_value, 24)
 
     if use_gpu and vram_mb is not None:
         if available_vram_mb is not None and available_vram_mb < 2500:
@@ -404,29 +412,29 @@ def recommend_tagger_config(
         elif vram_mb < 4000:
             batch_size = 4
         elif vram_mb < 8000:
-            batch_size = 8
-        elif vram_mb < 12000:
             batch_size = 12
-        elif vram_mb < 16000:
-            batch_size = 16
-        elif vram_mb < 24000:
+        elif vram_mb < 12000:
             batch_size = 24
-        else:
+        elif vram_mb < 16000:
             batch_size = 32
+        elif vram_mb < 24000:
+            batch_size = 48
+        else:
+            batch_size = 64
         batch_size = max(1, apply_gpu_model_cap(batch_size))
     else:
-        # CPU / fallback runtimes: still keep a safety margin, but avoid tiny defaults on
-        # modern 16-32GB desktops where users expect faster throughput.
+        # CPU / fallback runtimes: keep memory-pressure clamps, but do not waste
+        # modern 32-64GB desktops with tiny queue chunks during huge library runs.
         if available_ram_gb < 8:
             batch_size = 4
         elif available_ram_gb < 12:
             batch_size = 6
         elif available_ram_gb < 20:
-            batch_size = 10
+            batch_size = 12
         elif available_ram_gb < 32:
-            batch_size = 14
+            batch_size = 24
         else:
-            batch_size = 18
+            batch_size = 32
 
         total_ram_gb = system_info.get("total_ram_gb") or available_ram_gb
         if total_ram_gb >= 24 and available_ram_gb >= 4:

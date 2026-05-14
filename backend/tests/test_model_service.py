@@ -64,6 +64,74 @@ def test_model_inventory_is_built_without_router_imports(monkeypatch):
     assert all("status" in item and "download_supported" in item for item in inventory)
 
 
+def test_prepare_wd14_repairs_windows_onnx_runtime(monkeypatch):
+    repair_calls = []
+
+    class FakeWD14Tagger:
+        def __init__(self, model_name, use_gpu=False):
+            self.model_name = model_name
+            self.use_gpu = use_gpu
+
+        def _get_model_paths(self):
+            return ("C:/models/wd14/model.onnx", "C:/models/wd14/selected_tags.csv")
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(sys.modules, "tagger", SimpleNamespace(DEFAULT_MODEL="wd-swinv2-tagger-v3", WD14Tagger=FakeWD14Tagger))
+    monkeypatch.setitem(
+        sys.modules,
+        "repair_onnxruntime",
+        SimpleNamespace(
+            repair_windows_onnxruntime=lambda stream_pip=False: repair_calls.append(stream_pip) or {
+                "repaired": True,
+                "actions": ["Installed onnxruntime-gpu CUDA runtime"],
+                "providers_after_repair": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+                "gpu_vendor_primary": "nvidia",
+                "target_runtime": "onnxruntime-gpu",
+            }
+        ),
+    )
+
+    result = model_service.ModelService().prepare_model("wd14", variant="wd-swinv2-tagger-v3")
+
+    assert repair_calls == [True]
+    assert result["status"] == "ok"
+    assert result["restart_recommended"] is True
+    assert result["runtime_repair"]["ok"] is True
+    assert result["runtime_repair"]["providers_after_repair"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_prepare_wd14_warns_when_windows_onnx_repair_fails(monkeypatch):
+    class FakeWD14Tagger:
+        def __init__(self, model_name, use_gpu=False):
+            self.model_name = model_name
+            self.use_gpu = use_gpu
+
+        def _get_model_paths(self):
+            return ("C:/models/wd14/model.onnx", "C:/models/wd14/selected_tags.csv")
+
+    monkeypatch.setattr(model_service.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(sys.modules, "tagger", SimpleNamespace(DEFAULT_MODEL="wd-swinv2-tagger-v3", WD14Tagger=FakeWD14Tagger))
+    monkeypatch.setitem(
+        sys.modules,
+        "repair_onnxruntime",
+        SimpleNamespace(
+            repair_windows_onnxruntime=lambda stream_pip=False: {
+                "repaired": False,
+                "actions": ["CPU-only runtime remained installed"],
+                "providers_after_repair": ["CPUExecutionProvider"],
+                "gpu_vendor_primary": "nvidia",
+                "target_runtime": "onnxruntime-gpu",
+            }
+        ),
+    )
+
+    result = model_service.ModelService().prepare_model("wd14")
+
+    assert result["status"] == "warning"
+    assert result["runtime_repair"]["ok"] is False
+    assert "may stay on CPU" in result["message"]
+
+
 def test_download_privacy_yolo_bundle_extracts_safe_zip(monkeypatch, tmp_path):
     target_dir = tmp_path / "models" / "yolo"
     zip_payload = _zip_payload({"nested/model.onnx": b"onnx"})

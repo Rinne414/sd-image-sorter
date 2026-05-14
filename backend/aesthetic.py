@@ -57,7 +57,7 @@ def _select_device(*, use_gpu: bool = True) -> str:
         return "cpu"
     if not _cuda_has_headroom(torch, _MIN_AESTHETIC_CUDA_FREE_MB):
         logger.warning(
-            "Aesthetic predictor skipped GPU because free VRAM is below %d MB. Using CPU Safe Mode.",
+            "Aesthetic predictor skipped GPU because free VRAM is below %d MB. Using CPU.",
             _MIN_AESTHETIC_CUDA_FREE_MB,
         )
         return "cpu"
@@ -186,7 +186,7 @@ def predict_score(image_path: str) -> Optional[float]:
                 if _device != "cuda" or not _is_cuda_oom(exc):
                     raise
                 logger.warning(
-                    "Aesthetic GPU inference ran out of memory. Unloading GPU model and retrying once on CPU Safe Mode: %s",
+                    "Aesthetic GPU inference ran out of memory. Unloading GPU model and retrying once on CPU: %s",
                     exc,
                 )
                 _force_cpu_after_gpu_failure = True
