@@ -159,7 +159,7 @@ function createDefaultFilterState() {
         return window.FilterStore.createDefaultFilterState();
     }
     return {
-        generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+        generators: ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
         tags: [],
         checkpoints: [],
@@ -3879,7 +3879,7 @@ function initEventListeners() {
             if (gen === 'all') {
                 // Reset to show all generators
                 updateAppFilters((filters) => {
-                    filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+                    filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
                 });
             } else {
                 // Filter by single generator
@@ -4374,6 +4374,11 @@ function initMobileNavigation() {
         openTagsLibrary();
     });
 
+    $('#mobile-btn-model-manager')?.addEventListener('click', () => {
+        closeMobileMenu();
+        openModelManager();
+    });
+
     // Mobile filter toggle (fixed button)
     const mobileFilterToggle = $('#mobile-filter-toggle');
     mobileFilterToggle?.addEventListener('click', () => {
@@ -4531,7 +4536,7 @@ function updateMobileFilterBadge() {
     let filterCount = 0;
 
     // Check generators (if not all selected)
-    const allGenerators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+    const allGenerators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
     if (AppState.filters.generators.length !== allGenerators.length) {
         filterCount++;
     }
@@ -6320,7 +6325,7 @@ async function loadStats() {
         const countAll = $('#count-all');
         if (countAll) countAll.textContent = reportedTotal;
 
-        ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
+        ['nai', 'comfyui', 'forge', 'webui', 'others', 'unknown'].forEach(gen => {
             const countEl = $(`#count-${gen}`);
             if (countEl) {
                 const count = genCounts[gen] || 0;
@@ -8019,7 +8024,7 @@ function clearFilters() {
         cb.checked = true;
     });
     updateAppFilters((filters) => {
-        filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+        filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
         filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
         filters.tags = [];
         filters.search = '';

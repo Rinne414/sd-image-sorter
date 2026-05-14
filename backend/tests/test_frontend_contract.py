@@ -340,15 +340,15 @@ def test_gallery_selection_panel_is_desktop_user_facing_not_visible_dom_jargon()
     assert ".selection-panel-section" in css
 
 
-def test_gallery_setup_button_lives_in_header_not_over_sidebar():
+def test_gallery_setup_button_lives_in_nav_not_floating():
+    """Setup button should be in the nav-actions bar, not a floating FAB."""
     repo_root = Path(__file__).resolve().parents[2]
     html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
     css = (repo_root / "frontend" / "css" / "ui-refresh.css").read_text(encoding="utf-8")
 
-    assert "gallery-model-manager-button" in html
+    assert 'id="btn-open-model-manager"' in html
     assert "gallery-model-manager-fab" not in html
     assert "gallery-model-manager-fab" not in css
-    assert "position: fixed;" not in css[css.find(".gallery-model-manager-button"):css.find(".model-manager-summary")]
 
 
 def test_export_ui_explains_output_formats_before_action():

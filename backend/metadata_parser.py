@@ -47,7 +47,8 @@ class MetadataParser:
         "nai": "NovelAI",
         "webui": "WebUI",
         "forge": "Forge",
-        "unknown": "Unknown"
+        "unknown": "Unknown",
+        "others": "Others"
     }
 
     # Node class_types that contain text prompts in ComfyUI
@@ -156,7 +157,7 @@ class MetadataParser:
 
         Returns:
             {
-                "generator": str,  # comfyui, nai, webui, forge, unknown
+                "generator": str,  # comfyui, nai, webui, forge, others, unknown
                 "prompt": str or None,
                 "negative_prompt": str or None,
                 "checkpoint": str or None,
@@ -1350,6 +1351,8 @@ class MetadataParser:
                 checkpoint=base["checkpoint"],
                 loras=base["loras"],
             )
+            if base["generator"] == "unknown":
+                base["generator"] = "others"
             return base
 
         # === Check Software tag for generator identification ===
@@ -1372,6 +1375,10 @@ class MetadataParser:
             if "comfyui" in software:
                 base["generator"] = "comfyui"
                 return base
+
+        # Has metadata but unrecognized generator → "others"
+        if base["generator"] == "unknown" and any((base.get("prompt"), base.get("negative_prompt"), base.get("checkpoint"), base.get("loras"))):
+            base["generator"] = "others"
 
         return base
 

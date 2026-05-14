@@ -1,7 +1,7 @@
 (function initFilterStore(global) {
     function createDefaultFilterState() {
         return {
-            generators: ['comfyui', 'nai', 'webui', 'forge', 'unknown'],
+            generators: ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'],
             ratings: ['general', 'sensitive', 'questionable', 'explicit'],
             tags: [],
             checkpoints: [],

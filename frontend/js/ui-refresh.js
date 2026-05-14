@@ -135,6 +135,7 @@
             this._setCountButton('#generator-tabs .gen-tab[data-gen="forge"]', 'generator.forge');
             this._setCountButton('#generator-tabs .gen-tab[data-gen="webui"]', 'generator.webui');
             this._setCountButton('#generator-tabs .gen-tab[data-gen="unknown"]', 'generator.unknown');
+            this._setCountButton('#generator-tabs .gen-tab[data-gen="others"]', 'generator.others');
 
             this._setOptionText('#gallery-sort', {
                 newest: 'sort.newest',
@@ -439,6 +440,7 @@
                 'generator.nai',
                 'generator.webui',
                 'generator.forge',
+                'generator.others',
                 'generator.unknown'
             ]);
             this._setText('#dimensions-heading', 'filter.dimensions');
