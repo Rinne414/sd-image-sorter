@@ -72,6 +72,29 @@ def test_write_portable_launcher_uses_clean_crlf_endings(tmp_path):
     assert launcher_bytes.endswith(b"pause\r\n")
 
 
+def test_portable_launcher_runs_onnx_repair_unconditionally(tmp_path):
+    """Regression guard (v3.1.3): repair_onnxruntime.py must NOT be gated behind FULL_AI."""
+    release_builder = load_release_builder()
+    launcher_path = release_builder.write_portable_launcher(tmp_path)
+    content = launcher_path.read_text(encoding="utf-8")
+
+    assert "repair_onnxruntime.py --auto" in content
+    onnx_pos = content.index("repair_onnxruntime.py --auto")
+    torch_pos = content.index("repair_torch_runtime.py --auto")
+    assert onnx_pos < torch_pos, "ONNX repair must run before torch repair"
+
+    # The ONNX repair must not be nested inside the FULL_AI conditional
+    preceding = content[:onnx_pos]
+    last_full_ai = preceding.rfind("SD_IMAGE_SORTER_INSTALL_FULL_AI")
+    if last_full_ai != -1:
+        between = preceding[last_full_ai:onnx_pos]
+        open_parens = between.count("(")
+        close_parens = between.count(")")
+        assert close_parens >= open_parens, (
+            "repair_onnxruntime.py appears inside a FULL_AI conditional block"
+        )
+
+
 def test_release_skip_rules_drop_hidden_and_docs_files():
     release_builder = load_release_builder()
 

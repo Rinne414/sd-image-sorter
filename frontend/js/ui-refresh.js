@@ -341,7 +341,7 @@
             this._setText('#custom-tags-group .helper-text', 'modal.tagTagsCsvHelper');
             this._setCheckboxTexts('#tag-modal', ['modal.tagRetagAll', 'modal.tagUseGpu']);
             // Do NOT reset #tag-gpu-help here. Runtime state in app.js owns this dynamic copy.
-            // MutationObserver refreshes must not clobber CPU Safe Mode / GPU fallback semantics.
+            // MutationObserver refreshes must not clobber CPU/GPU runtime fallback semantics.
             // Do NOT reset #tag-progress-text here while tagging is live.
             // The app removes data-i18n during active runs so progress polling
             // can own this field without MutationObserver/i18n clobbering it.

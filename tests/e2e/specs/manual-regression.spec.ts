@@ -474,6 +474,16 @@ with sqlite3.connect(db_path) as conn:
                 """,
                 (str(target_path), filename, prompt, width, height, file_size, file_size, source_mtime_ns),
             )
+
+        cur.execute("SELECT id FROM images WHERE filename = ?", (filename,))
+        row = cur.fetchone()
+        if row:
+            image_id = row[0]
+            cur.execute("DELETE FROM image_prompt_tokens WHERE image_id = ?", (image_id,))
+            cur.execute(
+                "INSERT OR IGNORE INTO image_prompt_tokens (image_id, token) VALUES (?, ?)",
+                (image_id, prompt.lower().replace('_', ' ').strip()),
+            )
     conn.commit()
 `
 
@@ -1475,7 +1485,7 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
   await expect.poll(async () => {
     initialRuntimeSummary = (await page.locator('#tag-runtime-summary').textContent()) || ''
     return initialRuntimeSummary
-  }, { timeout: 15000 }).toMatch(/GPU|CPU Safe Mode/)
+  }, { timeout: 15000 }).toMatch(/GPU|CPU/)
 
   await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
   await expect(page.locator('#tag-gpu-help')).not.toContainText(/GPU Preferred|provider/i)
@@ -1497,9 +1507,9 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
   })
   await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
 
-  await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode/)
+  await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU/)
   await expect(page.locator('#tag-model-help')).not.toContainText(/GPU Preferred|provider/i)
-  await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode/)
+  await expect(page.locator('#tag-gpu-help')).toContainText(/CPU/)
 
   let gpuRecommendation: number | null = null
   await expect.poll(async () => {
@@ -1519,10 +1529,10 @@ test('tagger custom ONNX copy should stay coherent and localized on the real bac
   await expect.poll(async () => {
     reenabledRuntimeSummary = (await page.locator('#tag-runtime-summary').textContent()) || ''
     return reenabledRuntimeSummary
-  }, { timeout: 15000 }).toMatch(/GPU|CPU Safe Mode/)
-  if (/CPU Safe Mode/.test(reenabledRuntimeSummary)) {
+  }, { timeout: 15000 }).toMatch(/GPU|CPU/)
+  if (/CPU/.test(reenabledRuntimeSummary) && !/GPU/.test(reenabledRuntimeSummary)) {
     await expect(page.locator('#tag-runtime-detail')).toContainText(/CPU|CUDAExecutionProvider|ONNX/i)
-    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode|CPU/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU/i)
   } else {
     await expect(page.locator('#tag-runtime-summary')).toContainText(/GPU/)
   }

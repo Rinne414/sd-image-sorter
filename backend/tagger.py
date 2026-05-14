@@ -485,7 +485,7 @@ class WD14Tagger:
         self._supports_true_batch = not isinstance(batch_dim, int) or batch_dim > 1
 
     def _run_inference(self, input_data: np.ndarray, *, allow_gpu_fallback: bool = True) -> np.ndarray:
-        """Run inference and optionally retry once in CPU Safe Mode if CUDA becomes unstable."""
+        """Run inference and optionally retry once on CPU if the GPU provider fails."""
         assert self.session is not None
         input_name = self._input_name or self.session.get_inputs()[0].name
         try:
@@ -559,22 +559,29 @@ class WD14Tagger:
 
         return np.clip(values, 0.0, 1.0)
 
-    def _process_probs(self, probs: np.ndarray) -> Dict[str, Any]:
+    def _process_probs(
+        self,
+        probs: np.ndarray,
+        threshold: Optional[float] = None,
+        character_threshold: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """Convert raw model scores into the public result payload."""
+        general_thresh = threshold if threshold is not None else self.threshold
+        char_thresh = character_threshold if character_threshold is not None else self.character_threshold
         probs = self._normalize_output_probs(probs)
         result = self._build_empty_result()
 
         for tag_id, tag_name in self.general_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
-                if conf >= self.threshold:
+                if conf >= general_thresh:
                     result["general_tags"].append({"tag": tag_name, "confidence": conf})
                     result["all_tags"].append({"tag": tag_name, "confidence": conf})
 
         for tag_id, tag_name in self.character_tags:
             if tag_id < len(probs):
                 conf = float(probs[tag_id])
-                if conf >= self.character_threshold:
+                if conf >= char_thresh:
                     result["character_tags"].append({"tag": tag_name, "confidence": conf})
                     result["all_tags"].append({"tag": tag_name, "confidence": conf})
 
@@ -687,7 +694,7 @@ class WD14Tagger:
         except RuntimeError as e:
             if session_uses_gpu:
                 logger.warning(
-                    "Failed to initialize %s on GPU, retrying with CPU Safe Mode: %s",
+                    "Failed to initialize %s on GPU, retrying on CPU: %s",
                     self.model_name,
                     e,
                 )
@@ -716,12 +723,12 @@ class WD14Tagger:
         return 'CUDAExecutionProvider' in current or 'DmlExecutionProvider' in current
 
     def _fallback_to_cpu_session(self, error: Exception) -> None:
-        """Rebuild the active ONNX session in CPU Safe Mode."""
+        """Rebuild the active ONNX session on CPU."""
         if not self._resolved_model_path or not self._resolved_tags_path:
-            raise RuntimeError("Cannot switch tagger to CPU Safe Mode before model paths are resolved.") from error
+            raise RuntimeError("Cannot switch tagger to CPU before model paths are resolved.") from error
 
         logger.warning(
-            "GPU inference failed for %s, switching to CPU Safe Mode: %s",
+            "GPU inference failed for %s, switching to CPU: %s",
             self.model_name,
             error,
         )
@@ -746,6 +753,8 @@ class WD14Tagger:
         initial_chunk_size: Optional[int] = None,
         min_chunk_size: int = 1,
         retry_cooldown_seconds: float = 0.15,
+        threshold: Optional[float] = None,
+        character_threshold: Optional[float] = None,
     ) -> Tuple[List[Optional[Dict[str, Any]]], Dict[str, Any]]:
         """Run batched inference with adaptive backoff before giving up on GPU."""
         results: List[Optional[Dict[str, Any]]] = [None] * len(image_paths)
@@ -782,7 +791,11 @@ class WD14Tagger:
                 batch_input = np.stack(current_inputs, axis=0)
                 output = self._run_inference(batch_input, allow_gpu_fallback=False)
                 for output_index, source_index in enumerate(current_indices):
-                    results[source_index] = self._process_probs(output[output_index])
+                    results[source_index] = self._process_probs(
+                        output[output_index],
+                        threshold=threshold,
+                        character_threshold=character_threshold,
+                    )
                 self._finalize_processed_images(len(current_indices))
                 if self._session_uses_gpu():
                     self._learned_stable_gpu_batch_size = max(
@@ -875,7 +888,11 @@ class WD14Tagger:
                     try:
                         single_input = np.expand_dims(current_inputs[prepared_index], axis=0)
                         output = self._run_inference(single_input)
-                        results[source_index] = self._process_probs(output[0])
+                        results[source_index] = self._process_probs(
+                            output[0],
+                            threshold=threshold,
+                            character_threshold=character_threshold,
+                        )
                         self._finalize_processed_images(1)
                         del single_input
                         del output
@@ -1003,7 +1020,13 @@ class WD14Tagger:
             img_array = np.transpose(img_array, (2, 0, 1))
         return img_array
     
-    def tag(self, image_path: str) -> Dict[str, Any]:
+    def tag(
+        self,
+        image_path: str,
+        *,
+        threshold: Optional[float] = None,
+        character_threshold: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """
         Tag a single image.
         
@@ -1026,7 +1049,11 @@ class WD14Tagger:
 
             output = self._run_inference(input_data)
             probs = output[0]
-            result = self._process_probs(probs)
+            result = self._process_probs(
+                probs,
+                threshold=threshold,
+                character_threshold=character_threshold,
+            )
 
             del input_data
             del output
@@ -1079,6 +1106,8 @@ class WD14Tagger:
         *,
         preferred_batch_size: Optional[int] = ...,
         min_batch_size: int = ...,
+        threshold: Optional[float] = ...,
+        character_threshold: Optional[float] = ...,
         return_runtime_info: Literal[False] = ...,
     ) -> List[Dict[str, Any]]: ...
 
@@ -1089,6 +1118,8 @@ class WD14Tagger:
         *,
         preferred_batch_size: Optional[int] = ...,
         min_batch_size: int = ...,
+        threshold: Optional[float] = ...,
+        character_threshold: Optional[float] = ...,
         return_runtime_info: Literal[True],
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]: ...
 
@@ -1098,6 +1129,8 @@ class WD14Tagger:
         *,
         preferred_batch_size: Optional[int] = None,
         min_batch_size: int = 1,
+        threshold: Optional[float] = None,
+        character_threshold: Optional[float] = None,
         return_runtime_info: bool = False,
     ) -> Any:
         """Tag multiple images using adaptive true multi-image inference when supported."""
@@ -1140,6 +1173,8 @@ class WD14Tagger:
                             image_paths,
                             initial_chunk_size=len(prepared_inputs),
                             min_chunk_size=min_batch_size,
+                            threshold=threshold,
+                            character_threshold=character_threshold,
                         )
                         self._merge_runtime_info(runtime_info, chunk_info)
                         for index, result in enumerate(adaptive_results):
@@ -1161,7 +1196,11 @@ class WD14Tagger:
                             try:
                                 single_input = np.expand_dims(prepared_inputs[prepared_index], axis=0)
                                 output = self._run_inference(single_input)
-                                results[source_index] = self._process_probs(output[0])
+                                results[source_index] = self._process_probs(
+                                    output[0],
+                                    threshold=threshold,
+                                    character_threshold=character_threshold,
+                                )
                                 self._finalize_processed_images(1)
                                 del single_input
                                 del output
@@ -1184,6 +1223,36 @@ class WD14Tagger:
 _tagger = None
 _current_settings = {}
 _tagger_lock = threading.Lock()
+
+
+class _ConfiguredTaggerProxy:
+    """Attach request-specific thresholds to a shared loaded tagger instance."""
+
+    def __init__(
+        self,
+        tagger: WD14Tagger,
+        *,
+        threshold: float,
+        character_threshold: float,
+    ):
+        self._tagger = tagger
+        self._threshold = threshold
+        self._character_threshold = character_threshold
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._tagger, name)
+
+    def tag(self, image_path: str) -> Dict[str, Any]:
+        return self._tagger.tag(
+            image_path,
+            threshold=self._threshold,
+            character_threshold=self._character_threshold,
+        )
+
+    def tag_batch(self, image_paths: List[str], **kwargs: Any) -> Any:
+        kwargs.setdefault("threshold", self._threshold)
+        kwargs.setdefault("character_threshold", self._character_threshold)
+        return self._tagger.tag_batch(image_paths, **kwargs)
 
 def get_tagger(
     model_name: str = DEFAULT_MODEL,
@@ -1216,12 +1285,11 @@ def get_tagger(
                 use_gpu=use_gpu
             )
             _current_settings = new_settings
-        else:
-            # Just update thresholds
-            _tagger.threshold = threshold
-            _tagger.character_threshold = character_threshold
-
-        return _tagger
+        return _ConfiguredTaggerProxy(
+            _tagger,
+            threshold=threshold,
+            character_threshold=character_threshold,
+        )
 
 
 def get_available_models() -> List[str]:

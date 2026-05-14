@@ -52,7 +52,7 @@ def test_nvidia_smi_overrides_wmi_4gb_cap():
 
 
 def test_rtx_3090_recommendation_uses_aggressive_batch():
-    """With 24 GB VRAM visible, batch size should be 32, not 8."""
+    """With 24 GB VRAM visible, batch size should be 64, not a toy-sized chunk."""
     info = {
         "gpu_name": "NVIDIA GeForce RTX 3090",
         "gpu_vram_total_mb": 24576,
@@ -66,7 +66,7 @@ def test_rtx_3090_recommendation_uses_aggressive_batch():
         ],
     }
     rec = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3")
-    assert rec["recommended_batch_size"] == 32
+    assert rec["recommended_batch_size"] == 64
     assert rec["recommended_use_gpu"] is True
     assert rec["risk_level"] == "low"
 
@@ -86,8 +86,8 @@ def test_capped_vram_still_recommends_small_batch():
         ],
     }
     rec = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3")
-    # 4 GB reports batch_size=8 per the threshold (4000 <= vram < 8000).
-    assert rec["recommended_batch_size"] == 8
+    # 4 GB reports a small-but-not-crippled chunk; adaptive backoff still catches real OOM.
+    assert rec["recommended_batch_size"] == 12
 
 
 def test_heavy_models_are_capped_below_balanced_models_on_same_gpu():
@@ -107,9 +107,91 @@ def test_heavy_models_are_capped_below_balanced_models_on_same_gpu():
     balanced = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3")
     heavy = recommend_tagger_config(info, model_name="wd-eva02-large-tagger-v3")
 
-    assert balanced["recommended_batch_size"] == 32
-    assert heavy["recommended_batch_size"] == 12
+    assert balanced["recommended_batch_size"] == 64
+    assert heavy["recommended_batch_size"] == 48
     assert heavy["runtime_safety_tier"] == "heavy"
+
+
+def test_heavy_models_use_real_throughput_on_midrange_gpus():
+    """A 16 GB card should not be stuck at chunk 12 for long WD14 runs."""
+    info = {
+        "gpu_name": "NVIDIA GeForce RTX 4080 Laptop GPU",
+        "gpu_vram_total_mb": 16384,
+        "gpu_vram_available_mb": 14500,
+        "torch_cuda_available": False,
+        "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "total_ram_gb": 32,
+        "available_ram_gb": 18,
+        "gpu_devices": [
+            {"name": "NVIDIA GeForce RTX 4080 Laptop GPU", "vendor": "nvidia", "vram_total_mb": 16384}
+        ],
+    }
+
+    balanced = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3")
+    heavy = recommend_tagger_config(info, model_name="wd-eva02-large-tagger-v3")
+
+    assert balanced["recommended_batch_size"] == 48
+    assert heavy["recommended_batch_size"] == 32
+
+
+def test_heavy_models_still_downshift_when_free_vram_is_actually_tight():
+    info = {
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_vram_total_mb": 24576,
+        "gpu_vram_available_mb": 3500,
+        "torch_cuda_available": False,
+        "onnx_providers": ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        "total_ram_gb": 64,
+        "available_ram_gb": 40,
+        "gpu_devices": [
+            {"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia", "vram_total_mb": 24576}
+        ],
+    }
+
+    rec = recommend_tagger_config(info, model_name="wd-eva02-large-tagger-v3")
+
+    assert rec["recommended_batch_size"] == 4
+
+
+def test_cpu_high_ram_recommendation_is_not_artificially_tiny():
+    info = {
+        "gpu_name": None,
+        "gpu_vram_total_mb": None,
+        "gpu_vram_available_mb": None,
+        "torch_cuda_available": False,
+        "onnx_providers": ["CPUExecutionProvider"],
+        "total_ram_gb": 64,
+        "available_ram_gb": 40,
+        "gpu_devices": [],
+    }
+
+    balanced = recommend_tagger_config(info, model_name="wd-swinv2-tagger-v3", use_gpu=False)
+    heavy = recommend_tagger_config(info, model_name="wd-eva02-large-tagger-v3", use_gpu=False)
+
+    assert balanced["recommended_batch_size"] == 32
+    assert heavy["recommended_batch_size"] == 24
+    assert balanced["recommended_cpu_chunk_size"] == 32
+    assert heavy["recommended_cpu_chunk_size"] == 24
+
+
+def test_toriigate_stays_fixed_chunk_one_even_on_large_gpus():
+    info = {
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "gpu_vram_total_mb": 24576,
+        "gpu_vram_available_mb": 22000,
+        "torch_cuda_available": True,
+        "onnx_providers": ["CPUExecutionProvider"],
+        "total_ram_gb": 64,
+        "available_ram_gb": 40,
+        "gpu_devices": [
+            {"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia", "vram_total_mb": 24576}
+        ],
+    }
+
+    rec = recommend_tagger_config(info, model_name="toriigate-0.5", use_gpu=True)
+
+    assert rec["recommended_batch_size"] == 1
+    assert rec["runtime_safety_tier"] == "vlm"
 
 
 def test_custom_model_gpu_recommendation_stays_conservative_on_large_gpus():

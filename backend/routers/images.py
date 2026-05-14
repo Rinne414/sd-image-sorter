@@ -35,8 +35,17 @@ PARSE_IMAGE_UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 class DeleteSelectedImagesRequest(BaseModel):
-    image_ids: List[int] = Field(..., min_length=1)
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
     confirm_delete_files: bool = False
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self):
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
 
 
 class RemoveSelectedImagesRequest(BaseModel):
@@ -44,7 +53,16 @@ class RemoveSelectedImagesRequest(BaseModel):
     # Internal SQLite IN(...) lookups already chunk at 500. 5M covers any
     # realistic personal library; the previous 50k ceiling was rejecting
     # real users with larger collections.
-    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self):
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
 
 
 class ReconnectMissingFilesRequest(BaseModel):
@@ -91,6 +109,7 @@ class SelectionIdsRequest(BaseModel):
 
 class SelectionTokenRequest(SelectionIdsRequest):
     chunkSize: int = Field(default=2000, ge=1, le=10000)
+    excludedImageIds: List[int] = Field(default_factory=list, max_length=10000)
 
 
 class SelectionIdsResponse(BaseModel):
@@ -410,6 +429,7 @@ async def create_selection_token(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        excluded_image_ids=request.excludedImageIds,
         chunk_size=request.chunkSize,
     )
 
@@ -593,7 +613,9 @@ async def delete_selected_images(
             detail="Deleting image files requires explicit confirmation",
         )
 
-    return service.delete_selected_image_files(request.image_ids)
+    if request.selection_token:
+        return service.delete_selected_image_files_by_token(request.selection_token)
+    return service.delete_selected_image_files(request.image_ids or [])
 
 
 @router.post(
@@ -610,7 +632,9 @@ async def remove_selected_images(
     service: ImageService = Depends(get_image_service),
 ):
     """Remove selected images from the gallery index without touching files."""
-    return service.remove_selected_images_from_gallery(request.image_ids)
+    if request.selection_token:
+        return service.remove_selected_images_from_gallery_by_token(request.selection_token)
+    return service.remove_selected_images_from_gallery(request.image_ids or [])
 
 
 @router.post(

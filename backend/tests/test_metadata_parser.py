@@ -41,6 +41,41 @@ def _write_comfyui_prompt_png(tmp_path: Path, filename: str, workflow: dict, col
     return img_path
 
 
+def _build_exif_user_comment(comment: str, *, unicode_payload: bool = False) -> bytes:
+    """Build a tiny EXIF block with ExifIFD/UserComment for JPEG tests."""
+    if unicode_payload:
+        comment_bytes = b"UNICODE\x00" + comment.encode("utf-16")
+    else:
+        comment_bytes = b"ASCII\x00\x00\x00" + comment.encode("utf-8")
+
+    tiff_header = b"II" + struct.pack("<H", 42) + struct.pack("<I", 8)
+    exif_ifd_offset = 8 + 2 + 12 + 4
+    ifd0 = (
+        struct.pack("<H", 1)
+        + struct.pack("<HHI", 0x8769, 4, 1)
+        + struct.pack("<I", exif_ifd_offset)
+        + struct.pack("<I", 0)
+    )
+    user_comment_offset = exif_ifd_offset + 2 + 12 + 4
+    exif_ifd = (
+        struct.pack("<H", 1)
+        + struct.pack("<HHI", 0x9286, 7, len(comment_bytes))
+        + struct.pack("<I", user_comment_offset)
+        + struct.pack("<I", 0)
+        + comment_bytes
+    )
+    return b"Exif\x00\x00" + tiff_header + ifd0 + exif_ifd
+
+
+def _insert_jpeg_xmp_packet(image_path: Path, xmp_text: str) -> None:
+    """Insert a standard APP1 XMP segment into a JPEG fixture."""
+    payload = b"http://ns.adobe.com/xap/1.0/\x00" + xmp_text.encode("utf-8")
+    segment = b"\xff\xe1" + struct.pack(">H", len(payload) + 2) + payload
+    data = image_path.read_bytes()
+    assert data.startswith(b"\xff\xd8")
+    image_path.write_bytes(data[:2] + segment + data[2:])
+
+
 class TestMetadataParserBase:
     """Base tests for MetadataParser."""
 
@@ -1715,6 +1750,180 @@ class TestEdgeCases:
 
         assert result["width"] == 512
         assert result["height"] == 512
+
+    def test_parse_jpeg_webui_usercomment_unicode(self, tmp_path: Path):
+        """JPG EXIF UserComment can contain A1111/WebUI parameters in UNICODE form."""
+        from PIL import Image
+
+        img_path = tmp_path / "webui-usercomment.jpg"
+        parameters = (
+            "masterpiece, detailed lighting\n"
+            "Negative prompt: low quality, blurry\n"
+            "Steps: 24, Sampler: Euler a, CFG scale: 7, Seed: 42, Size: 512x512, "
+            "Model: jpeg_model.safetensors, Lora hashes: \"jpeg_style: abc123\""
+        )
+
+        Image.new("RGB", (512, 512), color="blue").save(
+            img_path,
+            "JPEG",
+            exif=_build_exif_user_comment(parameters, unicode_payload=True),
+        )
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["prompt"] == "masterpiece, detailed lighting"
+        assert result["negative_prompt"] == "low quality, blurry"
+        assert result["checkpoint"] == "jpeg_model.safetensors"
+        assert result["loras"] == ["jpeg_style"]
+
+    def test_parse_jpeg_webui_xmp_parameters(self, tmp_path: Path):
+        """JPG APP1 XMP packets can also hold SD parameter blocks."""
+        from PIL import Image
+
+        img_path = tmp_path / "webui-xmp.jpg"
+        parameters = (
+            "cinematic portrait\n"
+            "Negative prompt: washed out\n"
+            "Steps: 18, Sampler: DPM++ 2M, CFG scale: 6, Seed: 9, Size: 640x768, "
+            "Model: xmp_model.safetensors"
+        )
+        xmp = (
+            '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+            '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            '<rdf:Description xmlns:sd="https://github.com/AUTOMATIC1111/stable-diffusion-webui/">'
+            f'<sd:parameters>{parameters}</sd:parameters>'
+            '</rdf:Description></rdf:RDF></x:xmpmeta>'
+        )
+
+        Image.new("RGB", (640, 768), color="navy").save(img_path, "JPEG")
+        _insert_jpeg_xmp_packet(img_path, xmp)
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["prompt"] == "cinematic portrait"
+        assert result["negative_prompt"] == "washed out"
+        assert result["checkpoint"] == "xmp_model.safetensors"
+
+    def test_parse_webui_parameters_from_same_name_txt_sidecar(self, tmp_path: Path):
+        """When embedded metadata is absent, small same-name txt sidecars are parsed."""
+        from PIL import Image
+
+        img_path = tmp_path / "sidecar.jpg"
+        parameters = (
+            "sidecar prompt\n"
+            "Negative prompt: sidecar negative\n"
+            "Steps: 22, Sampler: Euler a, CFG scale: 7, Seed: 12, Size: 512x512, "
+            "Model: sidecar_model.safetensors"
+        )
+        Image.new("RGB", (512, 512), color="white").save(img_path, "JPEG")
+        (tmp_path / "sidecar.jpg.txt").write_text(parameters, encoding="utf-8")
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["prompt"] == "sidecar prompt"
+        assert result["negative_prompt"] == "sidecar negative"
+        assert result["checkpoint"] == "sidecar_model.safetensors"
+
+    def test_parse_prompt_from_json_sidecar(self, tmp_path: Path):
+        """JSON sidecars can provide explicit prompt fields without image metadata."""
+        from PIL import Image
+
+        img_path = tmp_path / "caption.webp"
+        Image.new("RGB", (320, 240), color="green").save(img_path, "WEBP")
+        (tmp_path / "caption.json").write_text(
+            json.dumps({
+                "prompt": "json prompt",
+                "negative_prompt": "json negative",
+                "checkpoint": "json_model.safetensors",
+                "loras": ["json_lora"],
+                "seed": 123,
+            }),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "unknown"
+        assert result["prompt"] == "json prompt"
+        assert result["negative_prompt"] == "json negative"
+        assert result["checkpoint"] == "json_model.safetensors"
+        assert result["loras"] == ["json_lora"]
+
+    def test_parse_gif_comment_parameters(self, tmp_path: Path):
+        """GIF comment extension metadata should be harvested when present."""
+        from PIL import Image
+
+        img_path = tmp_path / "comment.gif"
+        parameters = (
+            "gif prompt\n"
+            "Negative prompt: gif negative\n"
+            "Steps: 12, Sampler: Euler, CFG scale: 5, Seed: 77, Size: 64x64, "
+            "Model: gif_model.safetensors"
+        )
+        Image.new("P", (64, 64), color=0).save(img_path, "GIF", comment=parameters.encode("utf-8"))
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["prompt"] == "gif prompt"
+        assert result["negative_prompt"] == "gif negative"
+        assert result["checkpoint"] == "gif_model.safetensors"
+
+    def test_parse_tiff_imagedescription_parameters(self, tmp_path: Path):
+        """TIFF ImageDescription can hold WebUI-style parameters."""
+        from PIL import Image
+        from PIL.TiffImagePlugin import ImageFileDirectory_v2
+
+        img_path = tmp_path / "params.tiff"
+        parameters = (
+            "tiff prompt\n"
+            "Negative prompt: tiff negative\n"
+            "Steps: 30, Sampler: DPM++ 2M, CFG scale: 6, Seed: 88, Size: 128x128, "
+            "Model: tiff_model.safetensors"
+        )
+        ifd = ImageFileDirectory_v2()
+        ifd[270] = parameters
+        Image.new("RGB", (128, 128), color="yellow").save(img_path, "TIFF", tiffinfo=ifd)
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "webui"
+        assert result["prompt"] == "tiff prompt"
+        assert result["negative_prompt"] == "tiff negative"
+        assert result["checkpoint"] == "tiff_model.safetensors"
+
+    def test_large_sidecar_is_ignored_for_scan_safety(self, tmp_path: Path):
+        """Oversized sidecars should not be read into scan workers."""
+        from PIL import Image
+
+        img_path = tmp_path / "large-sidecar.jpg"
+        Image.new("RGB", (64, 64), color="white").save(img_path, "JPEG")
+        (tmp_path / "large-sidecar.jpg.txt").write_text("x" * (256 * 1024 + 1), encoding="utf-8")
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "unknown"
+        assert result["prompt"] is None
+
+    def test_huge_sidecar_directory_cache_does_not_keep_filename_set(self, tmp_path: Path, monkeypatch):
+        """Huge sidecar directories should not leave a massive filename set in memory."""
+        from PIL import Image
+
+        image_path = tmp_path / "huge-dir.jpg"
+        sidecar_path = tmp_path / "huge-dir.jpg.txt"
+        Image.new("RGB", (64, 64), color="white").save(image_path, "JPEG")
+        sidecar_path.write_text("cached prompt", encoding="utf-8")
+
+        metadata_parser_module._sidecar_directory_cache.clear()
+        monkeypatch.setattr(metadata_parser_module, "_MAX_SIDECAR_DIRECTORY_CACHE_FILENAMES", 1)
+
+        result = parse_image(str(image_path))
+
+        assert result["prompt"] == "cached prompt"
+        assert any(value[1] is None for value in metadata_parser_module._sidecar_directory_cache.values())
 
     def test_parse_webp(self, tmp_path: Path):
         """WebP images should be handled."""

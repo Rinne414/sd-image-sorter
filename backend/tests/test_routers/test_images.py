@@ -444,6 +444,50 @@ class TestSelectionIds:
         assert first.json()["has_more"] is True
         assert second.json()["image_ids"] == expected_ids[2:4]
 
+    def test_selection_token_can_exclude_small_explicit_selection(self, test_client, test_db_with_images):
+        """Token mode should preserve filtered-invert semantics without materializing every ID."""
+        excluded_id = test_db_with_images["image_ids"][0]
+
+        response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "chunkSize": 10,
+            "excludedImageIds": [excluded_id],
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total_estimate"] == len(test_db_with_images["image_ids"]) - 1
+
+        chunk = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 0, "limit": 10},
+        )
+
+        assert chunk.status_code == 200
+        ids = chunk.json()["image_ids"]
+        assert excluded_id not in ids
+        assert len(ids) == len(test_db_with_images["image_ids"]) - 1
+
+    def test_export_selection_data_token_respects_excluded_ids(self, test_client, test_db_with_images):
+        """Token export preview should use the token scope, including excluded IDs."""
+        excluded_id = test_db_with_images["image_ids"][0]
+        token_response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "name_asc",
+            "excludedImageIds": [excluded_id],
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 0,
+            "limit": 10,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == len(test_db_with_images["image_ids"]) - 1
+        assert excluded_id not in [image["id"] for image in data["images"]]
+
     def test_selection_query_token_marks_prompt_total_as_estimate(self, test_client, test_db_with_images):
         """Prompt terms can still require post-filtering, so token totals must be honest."""
         response = test_client.post("/api/images/selection-token", json={

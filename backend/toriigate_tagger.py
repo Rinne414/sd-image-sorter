@@ -575,7 +575,7 @@ class ToriiGateTagger:
         except Exception as exc:
             logger.error("ToriiGate failed on %s: %s", image_path, exc)
             if self.use_gpu:
-                logger.warning("ToriiGate switching to CPU Safe Mode after failure.")
+                logger.warning("ToriiGate switching to CPU after GPU failure.")
                 self.use_gpu = False
                 self.device = "cpu"
                 self._recreate_session()

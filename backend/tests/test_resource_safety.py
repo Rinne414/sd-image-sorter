@@ -155,7 +155,15 @@ def test_tagger_batch_preprocesses_only_runtime_chunks(monkeypatch, tmp_path: Pa
 
     max_live_inputs = 0
 
-    def fake_run_true_batch(prepared_inputs, prepared_indices, paths, *, initial_chunk_size=None, min_chunk_size=1):
+    def fake_run_true_batch(
+        prepared_inputs,
+        prepared_indices,
+        paths,
+        *,
+        initial_chunk_size=None,
+        min_chunk_size=1,
+        **_threshold_kwargs,
+    ):
         nonlocal max_live_inputs
         max_live_inputs = max(max_live_inputs, len(prepared_inputs))
         results = [None] * len(paths)
@@ -202,7 +210,15 @@ def test_tagger_batch_uses_updated_runtime_chunk_for_next_preprocess_window(monk
 
     prepared_window_sizes: List[int] = []
 
-    def fake_run_true_batch(prepared_inputs, prepared_indices, paths, *, initial_chunk_size=None, min_chunk_size=1):
+    def fake_run_true_batch(
+        prepared_inputs,
+        prepared_indices,
+        paths,
+        *,
+        initial_chunk_size=None,
+        min_chunk_size=1,
+        **_threshold_kwargs,
+    ):
         prepared_window_sizes.append(len(prepared_inputs))
         if len(prepared_inputs) == 4:
             tagger._learned_stable_gpu_batch_size = 2
@@ -361,3 +377,48 @@ def test_censor_mask_ref_applies_crop_without_full_image_alpha(monkeypatch, tmp_
     )
 
     assert calls == [((4, 4), (1, 1, 5, 5), "mosaic")]
+
+
+def test_tag_export_batch_reads_images_and_tags_per_chunk(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from services import tag_export_service
+
+    image_calls = []
+    tag_calls = []
+
+    def fake_get_images_by_ids(image_ids):
+        image_calls.append(list(image_ids))
+        return {
+            image_id: {
+                "id": image_id,
+                "filename": f"image-{image_id}.png",
+                "prompt": f"prompt {image_id}",
+            }
+            for image_id in image_ids
+        }
+
+    def fake_get_image_tags_map(image_ids):
+        tag_calls.append(list(image_ids))
+        return {image_id: [{"tag": f"tag_{image_id}"}] for image_id in image_ids}
+
+    monkeypatch.setattr(tag_export_service.db, "get_images_by_ids", fake_get_images_by_ids)
+    monkeypatch.setattr(tag_export_service.db, "get_image_tags_map", fake_get_image_tags_map)
+
+    request = SimpleNamespace(
+        image_ids=[1, 2, 3, 4],
+        output_folder=str(tmp_path),
+        blacklist=[],
+        prefix="",
+        content_mode="tags",
+        overwrite_policy="unique",
+    )
+
+    result = tag_export_service.export_tags_batch_request(
+        request,
+        id_chunks=iter([[1, 2], [3, 4]]),
+        total=4,
+    )
+
+    assert result["exported"] == 4
+    assert image_calls == [[1, 2], [3, 4]]
+    assert tag_calls == [[1, 2], [3, 4]]

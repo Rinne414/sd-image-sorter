@@ -33,6 +33,7 @@
             scope: 'visible',
             filterKey: null,
             selectionToken: null,
+            selectionTotal: 0,
         };
     }
 
@@ -45,12 +46,16 @@
         const selectionToken = scope === 'filtered' && typeof source.selectionToken === 'string' && source.selectionToken
             ? source.selectionToken
             : null;
+        const selectionTotal = scope === 'filtered'
+            ? Math.max(0, Number(source.selectionTotal || 0) || 0)
+            : 0;
         return {
             selectionMode: Boolean(source.selectionMode),
             selectedIds: cloneSelectedIds(source.selectedIds),
             scope,
             filterKey,
             selectionToken,
+            selectionTotal,
         };
     }
 

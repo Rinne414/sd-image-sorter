@@ -5,6 +5,34 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.6] - 2026-05-13
+
+### Fixed / 修复
+- **Tagger threshold race condition**: concurrent tagging requests no longer corrupt each other's confidence thresholds.
+  - **标签器阈值竞态条件**：并发标签请求不再互相覆盖置信度阈值。
+- **Graceful shutdown on update**: update apply now uses SIGINT instead of os._exit(0), allowing proper cleanup of DB connections and pending writes.
+  - **更新时优雅关闭**：更新应用现在使用 SIGINT 而非 os._exit(0)，确保数据库连接和待写入数据正确清理。
+- **Similarity progress race**: embedding progress dict is now updated under its lock, preventing partial reads.
+  - **相似度进度竞态**：嵌入进度字典现在在锁内更新，防止读取到不完整状态。
+- **Censor resize listener leak**: resize handler is now debounced (150ms) and removed when leaving censor view.
+  - **打码编辑器 resize 泄漏**：resize 处理器现在有 150ms 防抖，离开打码视图时移除。
+- **JPEG prompt metadata scanning**: `.jpg` / `.jpeg` images are now parsed for SD metadata in EXIF `UserComment` and APP1 XMP, including UTF-16 `UNICODE` UserComment blocks. Existing JPEG rows parsed by older parser versions will reparse on normal folder scan.
+  - **JPEG 提示词元数据扫描**：现在会从 `.jpg` / `.jpeg` 的 EXIF `UserComment` 和 APP1 XMP 里解析 SD 元数据，包括 UTF-16 `UNICODE` UserComment。旧解析版本扫过的 JPEG 行会在普通文件夹扫描时自动重扫。
+- **Broader bounded metadata harvesting**: TIFF/TIF images, GIF comments, WebP XMP chunks, and small same-name `.txt` / `.json` / `.xmp` sidecars can now feed Gallery metadata when embedded fields are missing. Sidecars are size-capped and fallback-only to avoid slowing normal scans.
+  - **更广但有边界的元数据收集**：TIFF/TIF、GIF comment、WebP XMP chunk，以及小体积同名 `.txt` / `.json` / `.xmp` sidecar 现在可以在图片内嵌字段缺失时补充 Gallery 元数据。Sidecar 有大小限制且只作兜底，避免拖慢普通扫描。
+
+### Improved / 优化
+- **Pagination performance**: COUNT query automatically skipped on cursor-paginated pages (saves 200-500ms per page on large libraries).
+  - **翻页性能**：游标翻页时自动跳过 COUNT 查询（大图库每页节省 200-500ms）。
+- **Query efficiency**: removed unnecessary SELECT DISTINCT on non-JOIN queries (10-30% faster for simple filters).
+  - **查询效率**：非 JOIN 查询移除不必要的 SELECT DISTINCT（简单过滤快 10-30%）。
+- **Generator facet cache**: get_all_generators() now cached with 60s TTL (saves 10-50ms per gallery load).
+  - **生成器缓存**：get_all_generators() 现在有 60 秒 TTL 缓存（每次加载图库节省 10-50ms）。
+- **Prompt Lab memory**: image picker no longer loads entire library into memory; uses server-side search with 200-image initial page.
+  - **Prompt Lab 内存**：图片选择器不再将整个图库加载到内存；使用服务端搜索，初始只加载 200 张。
+- **WD14 GPU runtime repair**: Windows portable startup and WD14 Prepare / Recheck now run ONNX Runtime repair before tagger code loads. Supported NVIDIA hardware is repaired to `onnxruntime-gpu==1.21.0` plus CUDA/cuDNN runtime DLLs; AMD/Intel hardware is repaired to `onnxruntime-directml==1.21.0`; CPU-only or undetected hardware keeps the small CPU runtime. Repair also downgrades incompatible newer installs, force-reinstalls the pinned runtime when the `onnxruntime` import surface is corrupt, and uses no-deps/pip-safe locked constraints so first launch does not reinstall GPU runtime twice or drift shared pins such as NumPy.
+  - **WD14 GPU 运行库修复**：Windows 便携版启动、WD14 Prepare / Recheck 现在都会在 tagger 代码加载前运行 ONNX Runtime 修复。检测到 NVIDIA 时修复到 `onnxruntime-gpu==1.21.0` 并补 CUDA/cuDNN runtime DLL；检测到 AMD/Intel 时修复到 `onnxruntime-directml==1.21.0`；纯 CPU 或未可靠检测到 GPU 时保留轻量 CPU runtime。修复也会把不兼容的新版本降回发布 pin，在 `onnxruntime` 导入表面损坏时强制重装发布 pin，并用 no-deps/锁定 constraints 避免首启重复重装 GPU runtime 或把 NumPy 等共享依赖漂到未锁版本。
+
 ## [3.1.5] - 2026-05-12
 
 ### Changed / 改进

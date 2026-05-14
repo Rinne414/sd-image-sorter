@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import threading
 import time
 
@@ -43,7 +44,7 @@ def _schedule_process_exit(delay_seconds: float = 1.0) -> None:
 
     def _exit_worker() -> None:
         time.sleep(max(0.1, delay_seconds))
-        os._exit(0)
+        os.kill(os.getpid(), signal.SIGINT)
 
     threading.Thread(target=_exit_worker, daemon=True).start()
 

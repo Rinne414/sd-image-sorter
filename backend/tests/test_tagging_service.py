@@ -27,14 +27,14 @@ def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
     request = TagRequest(
         model_name="wd-swinv2-tagger-v3",
         use_gpu=True,
-        batch_size=32,
+        batch_size=64,
     )
 
     with patch("hardware_monitor.get_system_info", return_value={}), patch(
         "hardware_monitor.recommend_tagger_config",
         return_value={
-            "recommended_batch_size": 32,
-            "recommended_cpu_chunk_size": 12,
+            "recommended_batch_size": 64,
+            "recommended_cpu_chunk_size": 32,
             "recommended_session_refresh_interval": 180,
         },
     ):
@@ -42,9 +42,9 @@ def test_runtime_plan_applies_requested_chunk_size_for_regular_gpu_models():
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
-    assert runtime_plan["fetch_batch_size"] == 32
-    assert runtime_plan["commit_interval"] == min(32, 10)
-    assert runtime_plan["gc_interval"] == min(32, 8)
+    assert runtime_plan["fetch_batch_size"] == 64
+    assert runtime_plan["commit_interval"] == min(64, 10)
+    assert runtime_plan["gc_interval"] == min(64, 8)
 
 
 def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
@@ -52,14 +52,14 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
     request = TagRequest(
         model_name="wd-eva02-large-tagger-v3",
         use_gpu=True,
-        batch_size=32,
+        batch_size=64,
     )
 
     with patch("hardware_monitor.get_system_info", return_value={}), patch(
         "hardware_monitor.recommend_tagger_config",
         return_value={
-            "recommended_batch_size": 12,
-            "recommended_cpu_chunk_size": 12,
+            "recommended_batch_size": 48,
+            "recommended_cpu_chunk_size": 24,
             "recommended_session_refresh_interval": 180,
         },
     ):
@@ -67,9 +67,9 @@ def test_runtime_plan_clamps_requested_chunk_size_for_supported_gpu_range():
 
     assert runtime_plan["effective_use_gpu"] is True
     assert runtime_plan["gpu_locked"] is False
-    assert runtime_plan["fetch_batch_size"] == 12
-    assert runtime_plan["commit_interval"] == min(12, 10)
-    assert runtime_plan["gc_interval"] == min(12, 8)
+    assert runtime_plan["fetch_batch_size"] == 48
+    assert runtime_plan["commit_interval"] == min(48, 10)
+    assert runtime_plan["gc_interval"] == min(48, 8)
 
 
 def test_runtime_adjustment_message_reports_gpu_backoff_and_cpu_fallback():
@@ -85,7 +85,7 @@ def test_runtime_adjustment_message_reports_gpu_backoff_and_cpu_fallback():
     )
 
     assert "GPU batch 32->16" in message
-    assert "GPU batch 1->CPU Safe Mode" in message
+    assert "GPU batch 1->CPU fallback" in message
     assert "continued on CPU" in message
 
 
@@ -335,7 +335,7 @@ def test_runtime_plan_uses_custom_camie_profile_for_local_onnx(tmp_path: Path):
 
     assert plan["model_name"] == "camie-tagger-v2"
     assert plan["fetch_batch_size"] <= 64
-    assert "Custom ONNX model on CPU Safe Mode" in plan["startup_notice"]
+    assert "Custom ONNX model on CPU" in plan["startup_notice"]
 
 
 def test_runtime_plan_uses_custom_pixai_profile_for_local_onnx(tmp_path: Path):

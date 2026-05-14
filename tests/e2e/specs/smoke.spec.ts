@@ -1411,7 +1411,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-provider-chip')).toBeVisible()
     await expect(page.locator('#tag-runtime-chunk-chip')).toBeVisible()
     await expect(page.locator('#tag-batch-recommendation')).toContainText(/Recommended (chunk|batch) size|chunkHelp/i)
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended (chunk|batch)|CPU Safe Mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/Recommended (chunk|batch)|CPU mode|adaptive GPU mode|fast path|tagger\.runtime|tagger\.chunkHelp/i)
   })
 
   test('should keep adaptive-throughput tagger models in adaptive runtime mode by default', async ({ page }) => {
@@ -1637,7 +1637,7 @@ test.describe('Smoke Tests', () => {
     await page.locator('#tag-runtime-advanced summary').click()
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await expect(page.locator('#tag-use-gpu')).toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/Uncheck to use CPU only|GPU override is active|Automatic hardware limits|CPU Safe Mode|gpuHelpCustomCpu|gpuHelpRiskyOverride/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/Uncheck to use CPU only|GPU override is active|GPU mode is active|Automatic hardware limits|CPU mode|gpuHelpCustomCpu|gpuHelpRiskyOverride/i)
     await expect(page.locator('#tag-batch-recommendation')).toContainText('8')
 
     await page.locator('#btn-start-tag').click()
@@ -1769,7 +1769,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#bg-tag-progress')).toBeHidden({ timeout: 10000 })
   })
 
-  test('should keep a custom tagger run in CPU Safe Mode when GPU stays off', async ({ page }) => {
+  test('should keep a custom tagger run on CPU when GPU stays off', async ({ page }) => {
     let capturedPayload: Record<string, unknown> | null = null
 
     await page.route('**/api/system-info', async (route) => {
@@ -1836,13 +1836,13 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#tag-runtime-advanced')).toHaveAttribute('open', '')
     await page.locator('label:has(#tag-use-gpu) .checkbox-custom').click()
     await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
-    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU Safe Mode|gpuHelpCustomCpu/i)
+    await expect(page.locator('#tag-gpu-help')).toContainText(/CPU mode|gpuHelpCustomCpu/i)
 
     await page.locator('#btn-start-tag').click()
     await expect(page.locator('#confirm-modal.visible')).toHaveCount(0)
 
     await expect.poll(() => capturedPayload, {
-      message: 'Expected the tag start payload for custom CPU Safe Mode',
+      message: 'Expected the tag start payload for custom CPU mode',
     }).not.toBeNull()
 
     expect(capturedPayload).toMatchObject({
@@ -1982,7 +1982,7 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#btn-select-visible')).toHaveCount(0)
   })
 
-  test('filtered selection should resolve all matching ids and survive same-filter reloads', async ({ page }) => {
+  test('filtered selection should keep token scope and survive same-filter reloads', async ({ page }) => {
     const loadedImages = [
       buildMockGalleryImage(11, { filename: 'filtered-1.png', prompt: 'filtered one' }),
       buildMockGalleryImage(22, { filename: 'filtered-2.png', prompt: 'filtered two' }),
@@ -2087,14 +2087,18 @@ test.describe('Smoke Tests', () => {
     await page.locator('#btn-select-all').click()
 
     await expect.poll(() => selectionTokenRequests).toBe(1)
-    await expect.poll(() => selectionChunkOffsets).toEqual([0, 2])
+    await expect.poll(() => selectionChunkOffsets).toEqual([])
     expect(legacySelectionIdsRequests).toBe(0)
-    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken)).toBe('filtered-selection-token')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionTotal)).toBe(4)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-count')).toContainText('4 items selected')
     await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
     await page.evaluate(() => window.App.loadImages())
-    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(4)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionToken)).toBe('filtered-selection-token')
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectionTotal)).toBe(4)
+    await expect.poll(() => page.evaluate(() => window.App.AppState.selectedIds.size)).toBe(0)
     await expect(page.locator('#selection-scope-summary')).toContainText('all current filter matches')
 
     await page.locator('#btn-export-selected').click()

@@ -14,14 +14,18 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 
 from fastapi import HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 import database as db
 from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from services.state_compat import MutableStateProxy
-from services.tag_export_service import export_tags_batch_request
+from services.tag_export_service import (
+    count_selection_token_ids,
+    export_tags_batch_request,
+    iter_selection_token_id_chunks,
+)
 from utils.source_paths import resolve_existing_indexed_image_path
 from utils.path_validation import normalize_user_path, validate_file_path
 
@@ -67,7 +71,7 @@ PATH_MAX_LENGTH = 4096
 # rejecting realistic personal SD libraries.
 BATCH_EXPORT_LIMIT = 5_000_000
 VALID_SORT_OPTIONS = ["frequency", "alphabetical"]
-TRUE_BATCH_MODEL_MAX = 32
+TRUE_BATCH_MODEL_MAX = 64
 CPU_CHUNK_MAX = 64
 CUSTOM_ONNX_GPU_START_CHUNK_MAX = 8
 CUSTOM_ONNX_CPU_START_CHUNK_MAX = 8
@@ -76,15 +80,15 @@ TORIIGATE_LOAD_HEARTBEAT_SECONDS = 5.0
 
 TAGGER_MODEL_HINTS = {
     "wd-eva02-large-tagger-v3": {
-        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of a fixed conservative lock.",
+        "summary": "Most accurate overall. The app now drives it with adaptive runtime limits instead of forcing CPU by default.",
         "speed": "Slow",
         "memory": "High",
         "best_for": "Max Quality / final library cleanup",
-        "safe_mode_note": "Adaptive runtime keeps GPU throughput high first, while automatic hardware clamps still cap the true batch size for long runs.",
+        "safe_mode_note": "Adaptive runtime keeps GPU throughput first, while automatic hardware clamps still cap the true batch size for long runs.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
-        "runtime_note": "Adaptive max-throughput runtime. Highest quality without a fixed CPU lock.",
+        "runtime_note": "Adaptive max-throughput runtime. Highest quality without a forced CPU default.",
         "quality_score": 5,
         "speed_score": 3,
         "stability_score": 3,
@@ -95,7 +99,7 @@ TAGGER_MODEL_HINTS = {
         "memory": "Medium",
         "best_for": "Recommended general use",
         "recommended": True,
-        "safe_mode_note": "Usually fine on average PCs. Safe Mode is optional.",
+        "safe_mode_note": "Uses GPU by default. Switch to CPU manually only when troubleshooting.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "quality_score": 4,
@@ -119,7 +123,7 @@ TAGGER_MODEL_HINTS = {
         "speed": "Fast",
         "memory": "Low",
         "best_for": "Weak machines / fastest pass",
-        "safe_mode_note": "Best pick for weak machines. CPU Safe Mode works well here.",
+        "safe_mode_note": "Best pick for weak machines. CPU works, but it is slower.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "quality_score": 2,
@@ -131,7 +135,7 @@ TAGGER_MODEL_HINTS = {
         "speed": "Medium",
         "memory": "Medium-high",
         "best_for": "Better accuracy without going full EVA02",
-        "safe_mode_note": "Use Safe Mode if you notice freezes during model load.",
+        "safe_mode_note": "Switch to CPU manually only when troubleshooting model load.",
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "quality_score": 4,
@@ -174,7 +178,7 @@ TAGGER_MODEL_HINTS = {
         "gpu_default": True,
         "gpu_confirmation_required": False,
         "gpu_locked": False,
-        "runtime_note": "Runs through the dedicated Transformers VLM backend instead of the WD14 ONNX runtime. GPU is strongly recommended, and the app still clamps chunk size to the safe range.",
+        "runtime_note": "Runs through the dedicated Transformers VLM backend instead of the WD14 ONNX runtime. GPU is strongly recommended, and the app keeps chunk size fixed to 1.",
         "quality_score": 5,
         "speed_score": 1,
         "stability_score": 2,
@@ -196,7 +200,7 @@ def _format_runtime_adjustment_message(runtime_info: Dict[str, Any]) -> str:
         if mode == "gpu_backoff":
             parts.append(f"GPU batch {from_size}->{to_size}")
         elif mode == "cpu_fallback":
-            parts.append(f"GPU batch {from_size}->CPU Safe Mode")
+            parts.append(f"GPU batch {from_size}->CPU fallback")
 
     final_chunk_size = runtime_info.get("final_chunk_size")
     if runtime_info.get("used_cpu_fallback"):
@@ -223,6 +227,28 @@ def _iter_rescaling_batches(all_ids, get_batch_size):
         batch_ids = all_ids[batch_start:batch_start + batch_size]
         if not batch_ids:
             break
+        yield batch_start, batch_ids
+        batch_start += len(batch_ids)
+
+
+def _iter_rescaling_chunk_source(id_chunks, get_batch_size):
+    """Yield dynamically sized batches from a chunk iterator without materializing all IDs."""
+    carry: List[int] = []
+    batch_start = 0
+    for id_chunk in id_chunks:
+        carry.extend(id_chunk)
+        while carry:
+            batch_size = max(1, int(get_batch_size()))
+            if len(carry) < batch_size:
+                break
+            batch_ids = carry[:batch_size]
+            del carry[:batch_size]
+            yield batch_start, batch_ids
+            batch_start += len(batch_ids)
+    while carry:
+        batch_size = max(1, int(get_batch_size()))
+        batch_ids = carry[:batch_size]
+        del carry[:batch_size]
         yield batch_start, batch_ids
         batch_start += len(batch_ids)
 
@@ -358,7 +384,7 @@ def _tagging_worker_main(
         providers = [str(item).lower() for item in (system_info.get("onnx_providers") or [])]
         if not any(provider in providers for provider in ["cudaexecutionprovider", "dmlexecutionprovider", "tensorrtexecutionprovider"]):
             return "The ONNX runtime has no GPU provider on this machine."
-        return "The GPU provider failed, so the run continued in CPU Safe Mode."
+        return "The GPU provider failed, so the run continued on CPU."
 
     def send(
         status: str,
@@ -457,7 +483,7 @@ def _tagging_worker_main(
         elif effective_use_gpu:
             runtime_backend_reason = infer_runtime_reason()
         else:
-            runtime_backend_reason = "CPU Safe Mode was requested for this run."
+            runtime_backend_reason = "CPU mode was requested for this run."
 
         if startup_notice:
             send("running", startup_notice)
@@ -466,7 +492,7 @@ def _tagging_worker_main(
             gpu_fallback_announced = True
             send(
                 "running",
-                f"GPU load failed. Continuing in CPU Safe Mode instead. Reason: {runtime_backend_reason}",
+                f"GPU load failed. Continuing on CPU instead. Reason: {runtime_backend_reason}",
             )
 
         if cancel_event.is_set():
@@ -481,12 +507,21 @@ def _tagging_worker_main(
             # `get_images_by_ids` already chunks IN(...) at 500.
             existing_ids = set(worker_db.get_images_by_ids(list(request.image_ids)).keys())
             all_ids = [img_id for img_id in request.image_ids if img_id in existing_ids]
+            id_batches = _iter_rescaling_batches(all_ids, lambda: batch_size)
+            total = len(all_ids)
         elif request.retag_all:
-            all_ids = worker_db.get_all_image_ids()
+            total = worker_db.count_all_image_ids()
+            id_batches = _iter_rescaling_chunk_source(
+                worker_db.iter_all_image_id_chunks(max(batch_size, 1000)),
+                lambda: batch_size,
+            )
         else:
-            all_ids = worker_db.get_untagged_image_ids()
+            total = worker_db.count_untagged_image_ids()
+            id_batches = _iter_rescaling_chunk_source(
+                worker_db.iter_untagged_image_id_chunks(max(batch_size, 1000)),
+                lambda: batch_size,
+            )
 
-        total = len(all_ids)
         send("running", f"Model loaded. Tagging {total} images...", current=0, total_override=total)
         tagging_start_time = time.time()
         tags_batch: List[Dict[str, Any]] = []
@@ -495,7 +530,7 @@ def _tagging_worker_main(
         # take effect on the very next iteration. A plain range(0, total, batch_size)
         # would capture the step at creation and skip images whenever the chunk
         # shrank mid-run.
-        for batch_start, batch_ids in _iter_rescaling_batches(all_ids, lambda: batch_size):
+        for batch_start, batch_ids in id_batches:
             if cancel_event.is_set():
                 break
 
@@ -608,15 +643,15 @@ def _tagging_worker_main(
 
                     if runtime_info.get("used_cpu_fallback"):
                         runtime_backend_actual = "cpu"
-                        runtime_backend_reason = "GPU inference became unstable, so the run continued on CPU Safe Mode."
+                        runtime_backend_reason = "GPU inference failed, so the run continued on CPU."
 
                     if effective_use_gpu and not gpu_fallback_announced and not getattr(tagger, "use_gpu", False):
                         gpu_fallback_announced = True
                         runtime_backend_actual = "cpu"
-                        runtime_backend_reason = "GPU inference became unstable, so the run continued on CPU Safe Mode."
+                        runtime_backend_reason = "GPU inference failed, so the run continued on CPU."
                         send(
                             "running",
-                            f"GPU became unstable during inference. Continuing in CPU Safe Mode... Reason: {runtime_backend_reason}",
+                            f"GPU inference failed. Continuing on CPU... Reason: {runtime_backend_reason}",
                         )
 
                     for img, result in zip(existing_images, batch_results):
@@ -715,12 +750,21 @@ class TagImportRequest(BaseModel):
 
 class BatchTagExportRequest(BaseModel):
     """Request model for batch sidecar export."""
-    image_ids: List[int] = Field(..., min_length=1, max_length=BATCH_EXPORT_LIMIT)
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=BATCH_EXPORT_LIMIT)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
     output_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     blacklist: Optional[List[str]] = Field(default=[], max_length=500)
     prefix: Optional[str] = Field(default="", max_length=256)
     content_mode: str = Field(default="tags", max_length=32)
     overwrite_policy: str = Field(default="unique", max_length=16)
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self):
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
 
 
 class TaggingService:
@@ -889,7 +933,7 @@ class TaggingService:
                 "memory": TAGGER_MODEL_HINTS.get(name, {}).get("memory", "Unknown"),
                 "best_for": TAGGER_MODEL_HINTS.get(name, {}).get("best_for", "General use"),
                 "recommended": TAGGER_MODEL_HINTS.get(name, {}).get("recommended", False),
-                "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Use Safe Mode if your PC becomes unstable."),
+                "safe_mode_note": TAGGER_MODEL_HINTS.get(name, {}).get("safe_mode_note", "Switch to CPU only when troubleshooting runtime issues."),
                 "gpu_default": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_default", True),
                 "gpu_confirmation_required": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_confirmation_required", False),
                 "gpu_locked": TAGGER_MODEL_HINTS.get(name, {}).get("gpu_locked", False),
@@ -1266,7 +1310,7 @@ class TaggingService:
             custom_runtime_notice = (
                 "Custom ONNX model on GPU. Automatic hardware clamps stay active, but the app starts from a conservative runtime chunk until this model proves stable."
                 if effective_use_gpu
-                else "Custom ONNX model on CPU Safe Mode. Start here, then try GPU only after one stable run."
+                else "Custom ONNX model on CPU. Switch GPU back on when you want acceleration."
             )
 
         if runtime_backend == "toriigate":
@@ -1275,7 +1319,7 @@ class TaggingService:
                 session_refresh_interval = 0
                 startup_notice = (
                     "ToriiGate runs through the multimodal caption backend. "
-                    "GPU is strongly recommended, and runtime chunk size is fixed to 1 in Safe Mode to avoid VRAM spikes."
+                    "GPU is strongly recommended, and runtime chunk size is fixed to 1 to limit VRAM usage."
                 )
             else:
                 fetch_batch_size = 1
@@ -1580,7 +1624,12 @@ class TaggingService:
 
     def export_tags_batch(self, request: BatchTagExportRequest) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        result = export_tags_batch_request(request)
+        id_chunks = None
+        total = None
+        if request.selection_token:
+            id_chunks = iter_selection_token_id_chunks(request.selection_token)
+            total = count_selection_token_ids(request.selection_token)
+        result = export_tags_batch_request(request, id_chunks=id_chunks, total=total)
         error_count = int(result.get("error_count", 0) or 0)
         exported = int(result.get("exported", 0) or 0)
         skipped = int(result.get("skipped", 0) or 0)
@@ -1597,7 +1646,7 @@ class TaggingService:
             "error_count": error_count,
             "error_messages": result.get("error_messages", []),
             "skipped": skipped,
-            "total": result.get("total", len(request.image_ids)),
+            "total": result.get("total", len(request.image_ids or [])),
             "content_mode": result.get("content_mode", request.content_mode),
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
         }

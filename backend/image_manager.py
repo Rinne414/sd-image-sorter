@@ -28,7 +28,7 @@ from database import (
 )
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_storage import compact_existing_metadata_json, compact_metadata_json
-from metadata_parser import parse_image
+from metadata_parser import PARSED_METADATA_VERSION, parse_image
 from exceptions import ScanError, ScanCancelledError, FileOperationError, ImageNotFoundError
 from utils.path_validation import validate_folder_path
 from utils.source_paths import normalize_indexed_image_path, resolve_existing_indexed_image_path
@@ -193,6 +193,8 @@ def _is_unchanged_scan_hit(existing: Optional[Dict[str, Any]], stat_result: os.s
         return False
     if _needs_content_fingerprint_backfill(existing):
         return False
+    if _needs_metadata_parser_upgrade(existing):
+        return False
     return _source_fingerprint_matches(existing, stat_result)
 
 
@@ -214,6 +216,43 @@ def _needs_content_fingerprint_backfill(existing: Optional[Dict[str, Any]]) -> b
     if not _has_cached_derived_state(existing):
         return False
     return not bool(existing.get("content_fingerprint"))
+
+
+def _stored_parsed_metadata_version(existing: Optional[Dict[str, Any]]) -> Optional[int]:
+    """Return the parser version stored in the compact metadata payload."""
+    if not existing:
+        return None
+    metadata_json = existing.get("metadata_json")
+    if isinstance(metadata_json, bytes):
+        metadata_json = metadata_json.decode("utf-8", errors="replace")
+    if isinstance(metadata_json, str):
+        try:
+            metadata = json.loads(metadata_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+    elif isinstance(metadata_json, dict):
+        metadata = metadata_json
+    else:
+        return None
+
+    parsed = metadata.get("_parsed") if isinstance(metadata, dict) else None
+    if not isinstance(parsed, dict):
+        return None
+
+    try:
+        return int(parsed.get("version"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _needs_metadata_parser_upgrade(existing: Optional[Dict[str, Any]]) -> bool:
+    """Return True when an unchanged JPEG row was parsed by an older parser."""
+    source_path = str((existing or {}).get("path") or (existing or {}).get("filename") or "")
+    if Path(source_path).suffix.lower() not in {".jpg", ".jpeg"}:
+        return False
+
+    stored_version = _stored_parsed_metadata_version(existing)
+    return stored_version is None or stored_version < PARSED_METADATA_VERSION
 
 
 def _should_compute_content_fingerprint(existing: Optional[Dict[str, Any]]) -> bool:
@@ -474,6 +513,7 @@ def scan_folder(
     cleanup_missing: bool = False,
     quick_import: bool = True,
     metadata_workers: int = DEFAULT_METADATA_WORKERS,
+    precise_total: bool = False,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -513,9 +553,9 @@ def scan_folder(
         "library_ready": False,
     }
     
-    # Count image files first. Users need a real denominator before an ETA can be useful.
-    # The count pass only walks filenames/stats; metadata parsing still happens in the
-    # import pipeline below.
+    # Default to a single-pass scan. Large/network folders should start importing
+    # immediately instead of walking the full tree once just to get an ETA.
+    # Callers that really need a precise denominator can opt into precise_total.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
@@ -1002,9 +1042,10 @@ def scan_folder(
 
     executor: Optional[Any] = None
     try:
-        result["counted"] = _count_images_for_total()
-        result["total"] = result["counted"]
-        result["total_final"] = True
+        if precise_total:
+            result["counted"] = _count_images_for_total()
+            result["total"] = result["counted"]
+            result["total_final"] = True
 
         try:
             # Pipeline: placeholder import and metadata backfill overlap.
@@ -1019,6 +1060,9 @@ def scan_folder(
                     image_path = image_entry["path"]
                     cached_stat = image_entry.get("stat")
                     processed_count += 1
+                    if not precise_total:
+                        result["counted"] = processed_count
+                        result["total"] = processed_count
                     filename = os.path.basename(image_path)
                     progress_details: Dict[str, Any] = {"errors": result["errors"], "last_error": None}
                     try:

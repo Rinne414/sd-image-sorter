@@ -200,20 +200,24 @@ class AestheticService:
 
         with db.get_db() as conn:
             query = "SELECT id, path FROM images" if force else "SELECT id, path FROM images WHERE aesthetic_score IS NULL"
-            target_rows = conn.execute(f"{query} ORDER BY id").fetchall()
-            total = len(target_rows)
+            count_query = "SELECT COUNT(*) FROM images" if force else "SELECT COUNT(*) FROM images WHERE aesthetic_score IS NULL"
+            count_row = conn.execute(count_query).fetchone()
+            total = int(count_row[0] or 0) if count_row else 0
             emit({"total": total})
 
             pending_commits = 0
             errors = 0
             completed = 0
 
-            for chunk_start in range(0, total, fetch_chunk):
+            cursor = conn.execute(f"{query} ORDER BY id")
+            while True:
                 if self._cancel_requested:
                     logger.info("Aesthetic scoring cancelled at %d/%d", completed, total)
                     break
 
-                chunk_rows = target_rows[chunk_start:chunk_start + fetch_chunk]
+                chunk_rows = cursor.fetchmany(fetch_chunk)
+                if not chunk_rows:
+                    break
 
                 for row in chunk_rows:
                     if self._cancel_requested:

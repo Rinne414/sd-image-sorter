@@ -127,6 +127,10 @@
                         <span class="tab-icon" aria-hidden="true">📁</span>
                         <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                     </button>
+                    <button class="nav-tab" id="nav-tab-health" data-view="health" role="tab" aria-selected="false" aria-controls="view-health">
+                        <span class="tab-icon" aria-hidden="true">🧭</span>
+                        <span class="tab-text" data-i18n="nav.health">Library Health</span>
+                    </button>
                     <span class="nav-divider" aria-hidden="true"></span>
                     <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
                         <span class="tab-icon" aria-hidden="true">🔍</span>
@@ -167,6 +171,10 @@
                         <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
                             <span class="mobile-nav-icon" aria-hidden="true">📁</span>
                             <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="health" aria-label="Library Health view">
+                            <span class="mobile-nav-icon" aria-hidden="true">🧭</span>
+                            <span class="mobile-nav-text" data-i18n="nav.health">Library Health</span>
                         </button>
                         <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
@@ -564,6 +572,97 @@
                         <div class="spinner" aria-hidden="true"></div>
                         <span data-i18n="gallery.loading">Loading images...</span>
                     </div>
+                </div>
+            </section>
+
+            <!-- Library Health View -->
+            <section id="view-health" class="view health-view" role="tabpanel" aria-labelledby="nav-tab-health">
+                <div class="health-shell">
+                    <header class="health-hero">
+                        <div>
+                            <p class="health-eyebrow" data-i18n="health.eyebrow">Reference-inspired library audit</p>
+                            <h2 data-i18n="health.title">Library Health</h2>
+                            <p data-i18n="health.subtitle">Check metadata coverage, duplicate filenames, unreadable files, and archive readiness before sorting or publishing datasets.</p>
+                        </div>
+                        <div class="health-hero-actions">
+                            <button class="btn btn-ghost" id="btn-health-open-scan">📂 <span data-i18n="health.importMore">Import More</span></button>
+                            <button class="btn btn-primary" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
+                        </div>
+                    </header>
+
+                    <div class="health-status-card" id="health-status-card">
+                        <div class="health-score-ring" id="health-score-ring" style="--score: 0">
+                            <strong id="health-score-value">—</strong>
+                            <span data-i18n="health.score">Score</span>
+                        </div>
+                        <div class="health-status-copy">
+                            <h3 id="health-status-title" data-i18n="health.loadingTitle">Checking your library...</h3>
+                            <p id="health-status-detail" data-i18n="health.loadingDetail">This is read-only. No files will be moved, deleted, or rewritten.</p>
+                        </div>
+                    </div>
+
+                    <div class="health-kpi-grid" aria-label="Library health metrics">
+                        <article class="health-kpi-card">
+                            <span data-i18n="health.totalImages">Images</span>
+                            <strong id="health-total-images">—</strong>
+                        </article>
+                        <article class="health-kpi-card">
+                            <span data-i18n="health.metadataReady">Metadata Ready</span>
+                            <strong id="health-metadata-ready">—</strong>
+                        </article>
+                        <article class="health-kpi-card">
+                            <span data-i18n="health.tagCoverage">Tag Coverage</span>
+                            <strong id="health-tag-coverage">—</strong>
+                        </article>
+                        <article class="health-kpi-card">
+                            <span data-i18n="health.actionableIssues">Actionable</span>
+                            <strong id="health-actionable">—</strong>
+                        </article>
+                    </div>
+
+                    <div class="health-grid-two">
+                        <section class="health-panel">
+                            <div class="health-panel-header">
+                                <h3 data-i18n="health.issueBreakdown">Issue Breakdown</h3>
+                                <span data-i18n="health.issueHint">Prioritized for safe cleanup</span>
+                            </div>
+                            <div class="health-issue-list" id="health-issue-list"></div>
+                        </section>
+
+                        <section class="health-panel">
+                            <div class="health-panel-header">
+                                <h3 data-i18n="health.recommendations">Next Best Actions</h3>
+                                <span data-i18n="health.readOnlyHint">Audit only, you stay in control</span>
+                            </div>
+                            <div class="health-recommendations" id="health-recommendations"></div>
+                        </section>
+                    </div>
+
+                    <div class="health-grid-two">
+                        <section class="health-panel">
+                            <div class="health-panel-header">
+                                <h3 data-i18n="health.duplicateFilenames">Duplicate Filenames</h3>
+                                <span id="health-duplicate-summary">—</span>
+                            </div>
+                            <div class="health-table" id="health-duplicate-list"></div>
+                        </section>
+
+                        <section class="health-panel">
+                            <div class="health-panel-header">
+                                <h3 data-i18n="health.topFolders">Largest Import Folders</h3>
+                                <span data-i18n="health.topFoldersHint">Good archive planning signal</span>
+                            </div>
+                            <div class="health-table" id="health-folder-list"></div>
+                        </section>
+                    </div>
+
+                    <section class="health-panel">
+                        <div class="health-panel-header">
+                            <h3 data-i18n="health.samples">Files Needing Attention</h3>
+                            <span data-i18n="health.samplesHint">Open the Reader or re-import to inspect details</span>
+                        </div>
+                        <div class="health-table health-sample-table" id="health-sample-list"></div>
+                    </section>
                 </div>
             </section>
 
@@ -2828,6 +2927,8 @@
                                             <option value="18">18</option>
                                             <option value="24">24</option>
                                             <option value="32">32</option>
+                                            <option value="48">48</option>
+                                            <option value="64">64</option>
                                         </select>
                                         <small class="helper-text" id="tag-batch-help">This is the real WD14 batch size.</small>
                                     </div>
@@ -3527,6 +3628,7 @@
     <script src="/static/js/obfuscate-engine.js"></script>
     <script src="/static/js/image-obfuscate.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
+    <script src="/static/js/library-health.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */

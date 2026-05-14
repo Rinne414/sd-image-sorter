@@ -300,24 +300,25 @@ class SimilarityIndex:
             self._progress["running"] = True
             self._cancel_requested = False
 
-        self._progress = {
-            "running": True,
-            "total": 0,
-            "processed": 0,
-            "embedded": 0,
-            "errors": 0,
-            "skipped": 0,
-            "unreadable": 0,
-            "failed": 0,
-            "message": "Preparing embedding job...",
-            "step": "preparing",
-            "current_item": None,
-            "recent_issues": [],
-            "started_at": time.time(),
-            "updated_at": time.time(),
-            "current_batch": 0,
-            "total_batches": 0,
-        }
+        with self._progress_lock:
+            self._progress = {
+                "running": True,
+                "total": 0,
+                "processed": 0,
+                "embedded": 0,
+                "errors": 0,
+                "skipped": 0,
+                "unreadable": 0,
+                "failed": 0,
+                "message": "Preparing embedding job...",
+                "step": "preparing",
+                "current_item": None,
+                "recent_issues": [],
+                "started_at": time.time(),
+                "updated_at": time.time(),
+                "current_batch": 0,
+                "total_batches": 0,
+            }
 
         try:
             with self.db.get_db() as conn:

@@ -438,3 +438,12 @@ async def get_stats(
 ):
     """Get database statistics."""
     return service.get_stats()
+
+
+@router.get("/library-health")
+async def get_library_health(
+    sample_limit: int = Query(default=8, ge=1, le=25, description="Maximum number of sample rows per library-health section"),
+    service: SortingService = Depends(get_sorting_service),
+):
+    """Get read-only library quality, metadata, duplicate-name, and archive-readiness signals."""
+    return service.get_library_health(sample_limit=sample_limit)

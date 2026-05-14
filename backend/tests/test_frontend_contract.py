@@ -149,6 +149,36 @@ def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
     assert "renderManualSortResumeBanner(null, { visible: true })" not in source
     assert "previousResumeSnapshot" in source
 
+
+
+def test_tagger_ui_does_not_market_cpu_as_safe_mode():
+    repo_root = Path(__file__).resolve().parents[2]
+    checked_files = [
+        repo_root / "frontend" / "js" / "app.js",
+        repo_root / "frontend" / "js" / "lang" / "en.js",
+        repo_root / "frontend" / "js" / "lang" / "zh-CN.js",
+        repo_root / "backend" / "services" / "tagging_service.py",
+        repo_root / "backend" / "tagger.py",
+        repo_root / "backend" / "toriigate_tagger.py",
+    ]
+    forbidden_phrases = [
+        "CPU " + "Safe " + "Mode",
+        "Safe " + "Mode",
+        "较慢" + "但" + "更" + "稳",
+        "避免" + "崩溃",
+        "stable " + "CPU " + "run",
+    ]
+    violations: list[str] = []
+
+    for file_path in checked_files:
+        source = file_path.read_text(encoding="utf-8")
+        for phrase in forbidden_phrases:
+            if phrase in source:
+                relative_path = file_path.relative_to(repo_root).as_posix()
+                violations.append(f"{relative_path}: contains {phrase!r}")
+
+    assert not violations, "Tagger UI/runtime wording must not market CPU as safer.\n" + "\n".join(violations)
+
 def test_manual_sort_start_uses_json_body_not_query_string_filters():
     repo_root = Path(__file__).resolve().parents[2]
     source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
@@ -430,6 +460,8 @@ def test_feature_setup_explains_lightweight_startup_and_cache_limit():
 
     assert "model-manager-summary" in html
     assert "renderFeatureAvailabilityNotice" in source
+    assert "features.prepare.wd14" in source
+    assert "features.ready.wd14" not in source
     assert "thumbnail-cache-limit-input" in source
     assert "saveDiskSettings" in source
     assert "requestCoreRuntimeRebuild" in source

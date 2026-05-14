@@ -280,22 +280,37 @@ class VirtualList {
         const previousLength = this.items.length;
         this.items = [...this.items, ...newItems];
 
-        if (!this.isVirtualEnabled) {
-            // Just append to DOM
-            const fragment = document.createDocumentFragment();
-            newItems.forEach((item, i) => {
-                const index = previousLength + i;
-                const element = this._createItemElement(index, item);
-                fragment.appendChild(element);
-            });
-            this.container.appendChild(fragment);
+        const shouldEnableVirtual = this.config.forceVirtual || this.items.length >= this.config.threshold;
+        if (!this.isVirtualEnabled && shouldEnableVirtual) {
+            this.setItems(this.items);
             return;
         }
 
-        // Recalculate layout
-        this._recalculateLayout();
+        if (!this.isVirtualEnabled) {
+            const fragment = document.createDocumentFragment();
+            const renderedElements = [];
+            newItems.forEach((item, i) => {
+                const index = previousLength + i;
+                const element = this.renderItem(index, item);
+                if (element) {
+                    element.dataset.virtualIndex = index;
+                    fragment.appendChild(element);
+                    renderedElements.push(element);
+                }
+            });
+            this.container.appendChild(fragment);
+            this._notifyItemsRendered(renderedElements);
+            return;
+        }
 
-        // Check if new items are in visible range
+        if (this.itemWidth <= 0 || this.itemHeight <= 0 || this.columns <= 0) {
+            this._recalculateLayout();
+        } else {
+            const totalRows = Math.ceil(this.items.length / this.columns);
+            this.totalHeight = Math.max(0, totalRows * (this.itemHeight + this.config.rowGap) - this.config.rowGap);
+            this.container.style.minHeight = `${this.totalHeight}px`;
+        }
+
         this._updateVisibleItems();
     }
 
@@ -333,28 +348,32 @@ class VirtualList {
     }
 
     /**
-     * Build cache of item positions for quick lookups
+     * Get layout data for an item index without materializing a full cache.
+     * @param {number} index
+     * @returns {Object|null}
+     */
+    _getLayoutForIndex(index) {
+        if (index < 0 || index >= this.items.length || this.columns <= 0) return null;
+
+        const row = Math.floor(index / this.columns);
+        const col = index % this.columns;
+
+        return {
+            index,
+            row,
+            col,
+            top: row * (this.itemHeight + this.config.rowGap),
+            left: col * (this.itemWidth + this.config.columnGap),
+            width: this.itemWidth,
+            height: this.itemHeight,
+        };
+    }
+
+    /**
+     * Keep the old method name for compatibility without storing O(n) layout objects.
      */
     _buildLayoutCache() {
-        this.layoutCache = [];
-
-        for (let i = 0; i < this.items.length; i++) {
-            const row = Math.floor(i / this.columns);
-            const col = i % this.columns;
-
-            const top = row * (this.itemHeight + this.config.rowGap);
-            const left = col * (this.itemWidth + this.config.columnGap);
-
-            this.layoutCache.push({
-                index: i,
-                row,
-                col,
-                top,
-                left,
-                width: this.itemWidth,
-                height: this.itemHeight,
-            });
-        }
+        this.layoutCache = null;
     }
 
     /**
@@ -434,13 +453,15 @@ class VirtualList {
 
             if (!this.renderedElements.has(key)) {
                 const element = this._createItemElement(i, this.items[i]);
-                this.renderedElements.set(key, {
-                    element,
-                    index: i,
-                    data: this.items[i],
-                });
-                fragment.appendChild(element);
-                newElements.push(element);
+                if (element) {
+                    this.renderedElements.set(key, {
+                        element,
+                        index: i,
+                        data: this.items[i],
+                    });
+                    fragment.appendChild(element);
+                    newElements.push(element);
+                }
             }
         }
 
@@ -454,7 +475,7 @@ class VirtualList {
      * Create a single item element with positioning
      */
     _createItemElement(index, data) {
-        const layout = this.layoutCache[index];
+        const layout = this._getLayoutForIndex(index);
         if (!layout) return null;
 
         const element = this.renderItem(index, data);
@@ -525,7 +546,7 @@ class VirtualList {
             itemData.data = newData;
 
             // Apply positioning
-            const layout = this.layoutCache[itemData.index];
+            const layout = this._getLayoutForIndex(itemData.index);
             if (layout) {
                 newElement.style.position = 'absolute';
                 newElement.style.top = `${layout.top}px`;
@@ -568,7 +589,7 @@ class VirtualList {
     scrollToItem(index) {
         if (index < 0 || index >= this.items.length) return;
 
-        const layout = this.layoutCache[index];
+        const layout = this._getLayoutForIndex(index);
         if (!layout) return;
 
         this.scrollContainer.scrollTop = layout.top;
@@ -684,7 +705,7 @@ class VirtualList {
      * @returns {Object|null}
      */
     getLayoutForIndex(index) {
-        return this.layoutCache?.[index] || null;
+        return this._getLayoutForIndex(index);
     }
 
     /**
@@ -925,6 +946,16 @@ class WaterfallVirtualList extends VirtualList {
         this.layoutCache = this.itemPositions;
 
         this._updateVisibleItems();
+    }
+
+
+    /**
+     * Get waterfall layout data for an item index.
+     * @param {number} index
+     * @returns {Object|null}
+     */
+    _getLayoutForIndex(index) {
+        return this.itemPositions?.[index] || null;
     }
 
     /**

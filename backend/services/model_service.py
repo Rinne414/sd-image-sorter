@@ -82,6 +82,32 @@ def _with_dependency_result(result: Dict[str, Any], install_result: DependencyIn
     }
 
 
+def _repair_wd14_onnxruntime_if_possible() -> Dict[str, Any]:
+    if platform.system() != "Windows":
+        return {"attempted": False, "ok": True, "reason": "non_windows"}
+
+    try:
+        from repair_onnxruntime import repair_windows_onnxruntime
+
+        result = repair_windows_onnxruntime(stream_pip=True)
+        providers = [str(provider) for provider in (result.get("providers_after_repair") or [])]
+        has_gpu_provider = "CUDAExecutionProvider" in providers or "DmlExecutionProvider" in providers
+        vendor = str(result.get("gpu_vendor_primary") or "").lower()
+        gpu_expected = vendor in {"nvidia", "amd", "intel"}
+        return {
+            "attempted": True,
+            "ok": bool(has_gpu_provider or not gpu_expected),
+            "repaired": bool(result.get("repaired")),
+            "actions": list(result.get("actions") or []),
+            "providers_after_repair": providers,
+            "gpu_vendor_primary": result.get("gpu_vendor_primary"),
+            "target_runtime": result.get("target_runtime"),
+        }
+    except Exception as exc:
+        _model_logger.warning("WD14 ONNX Runtime GPU repair failed: %s", exc)
+        return {"attempted": True, "ok": False, "error": str(exc)}
+
+
 def _dependency_restart_result(model_id: str, install_result: DependencyInstallResult) -> Optional[Dict[str, Any]]:
     if not install_result.installed_packages:
         return None
@@ -557,6 +583,11 @@ class ModelService:
                 "download_supported": True,
                 "variants": [item["name"] for item in health["wd14"]["installed_models"]],
                 "installed_variants": installed_wd14,
+                "setup_steps": [
+                    "Click Prepare / Download to download the selected WD14 model files if missing.",
+                    "On Windows, the same action also repairs ONNX GPU packages so CUDA/DirectML can appear.",
+                    "Restart SD Image Sorter if the Prepare result says ONNX Runtime was repaired.",
+                ],
             },
             {
                 "id": "toriigate",
@@ -831,17 +862,33 @@ class ModelService:
         normalized_model_id = model_id.strip().lower()
 
         if normalized_model_id == "wd14":
+            runtime_repair = _repair_wd14_onnxruntime_if_possible()
+
             from tagger import DEFAULT_MODEL, WD14Tagger
 
             model_name = variant or DEFAULT_MODEL
             tagger = WD14Tagger(model_name=model_name, use_gpu=False)
             model_path, tags_path = tagger._get_model_paths()
-            return {
+            result = {
                 "status": "ok",
                 "model_id": normalized_model_id,
                 "message": f"WD14 model '{model_name}' is ready.",
                 "paths": {"model_path": model_path, "tags_path": tags_path},
+                "runtime_repair": runtime_repair,
             }
+            if runtime_repair.get("attempted") and not runtime_repair.get("ok"):
+                result["status"] = "warning"
+                result["message"] = (
+                    f"WD14 model '{model_name}' is ready, but ONNX GPU runtime repair did not finish. "
+                    "Tagging may stay on CPU until the runtime is repaired."
+                )
+            elif runtime_repair.get("repaired"):
+                result["restart_recommended"] = True
+                result["message"] = (
+                    f"WD14 model '{model_name}' is ready. ONNX GPU runtime was repaired; "
+                    "restart the app before using GPU tagging."
+                )
+            return result
 
 
         if normalized_model_id == "toriigate":

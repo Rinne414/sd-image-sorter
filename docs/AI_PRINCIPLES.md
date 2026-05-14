@@ -230,6 +230,7 @@ Keep these rules aligned unless the user explicitly changes product direction:
 
 - do not copy recoverable raw image metadata into the SQLite index just because it is easy
 - do not install GB-scale model runtimes on first launch for features the user may never use
+- Windows ONNX Runtime GPU repair is the narrow exception: supported NVIDIA/AMD/Intel hardware may prepare the matching WD14 runtime before tagger use because unsafe CPU fallback can be unacceptably slow or memory-heavy; CPU-only or unrecognized hardware must stay on the lightweight CPU runtime
 - do not silently remove heavy features; move them behind clear Prepare / Download actions
 - if a running backend installs Python packages on demand, tell the user to restart before trusting that feature
 - never install optional AI Python packages into system Python by default; require app-owned runtime (`backend/venv` or generated `run-portable.bat` embedded Python), an active virtualenv, or an explicit developer override

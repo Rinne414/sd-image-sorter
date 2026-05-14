@@ -8,6 +8,7 @@ import os
 import json
 import platform
 import string
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -25,7 +26,11 @@ from image_manager import scan_folder, move_image, copy_image, parse_metadata_jo
 from database import add_images_batch
 from metadata_parser import verify_image_readable
 from services.state_compat import MutableStateProxy
-from services.tag_export_service import export_tags_batch_request
+from services.tag_export_service import (
+    count_selection_token_ids,
+    export_tags_batch_request,
+    iter_selection_token_id_chunks,
+)
 from utils.path_validation import normalize_user_path, validate_folder_path
 from utils.source_paths import resolve_existing_indexed_image_path
 
@@ -42,6 +47,8 @@ DIMENSION_MAX = 100000
 PATH_MAX_LENGTH = 4096
 FOLDER_KEY_MAX_LENGTH = 100
 BATCH_MOVE_FETCH_CHUNK = 500
+STATS_FACET_LIMIT = 50
+ANALYTICS_DEFAULT_LIMIT = 500
 SEARCH_MAX_LENGTH = 1000
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
@@ -294,6 +301,31 @@ class SortingService:
                 detail=f"Invalid operation. Must be one of: {', '.join(VALID_FILE_OPERATIONS)}",
             )
         return normalized
+
+    @staticmethod
+    def _write_id_snapshot(id_chunks) -> str:
+        """Write matching IDs to a temp file before mutating their rows."""
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            for batch_ids in id_chunks:
+                for image_id in batch_ids:
+                    handle.write(f"{int(image_id)}\n")
+            return handle.name
+
+    @staticmethod
+    def _iter_id_snapshot_file(snapshot_path: str, chunk_size: int):
+        batch: List[int] = []
+        with open(snapshot_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    image_id = int(line.strip())
+                except ValueError:
+                    continue
+                batch.append(image_id)
+                if len(batch) >= chunk_size:
+                    yield batch
+                    batch = []
+        if batch:
+            yield batch
 
     def _get_sort_history_counts(self, history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, int]:
         """Summarize move/skip counts from the current manual-sort history."""
@@ -1346,24 +1378,6 @@ class SortingService:
 
         def run_batch_move():
             try:
-                image_ids = db.get_filtered_image_ids(
-                    generators=generators,
-                    tags=tags,
-                    ratings=ratings,
-                    checkpoints=checkpoints,
-                    loras=loras,
-                    search_query=search_query,
-                    prompt_terms=prompts,
-                    artist=artist,
-                    min_width=request.min_width,
-                    max_width=request.max_width,
-                    min_height=request.min_height,
-                    max_height=request.max_height,
-                    aspect_ratio=request.aspect_ratio,
-                    min_aesthetic=request.min_aesthetic,
-                    max_aesthetic=request.max_aesthetic,
-                )
-
                 # Note: previously this called ``_filter_readable_image_ids``
                 # before the loop, which did a full pixel decode of every
                 # image up front via ``verify_image_readable``. For large
@@ -1373,26 +1387,6 @@ class SortingService:
                 # inner loop so progress advances as the worker walks the
                 # list (a byte-level move would otherwise silently copy
                 # truncated/corrupt PNGs to the destination).
-
-                if not image_ids:
-                    self._set_batch_move_progress_if_current(
-                        run_id,
-                        {
-                            "status": "done",
-                            "step": "done",
-                            "current": 0,
-                            "total": 0,
-                            "message": "No images match the filters",
-                            "errors": 0,
-                            "moved": 0,
-                            "current_item": None,
-                            "recent_errors": [],
-                            "operation": operation,
-                            "started_at": time.time(),
-                            "updated_at": time.time(),
-                        }
-                    )
-                    return
 
                 os.makedirs(destination_folder, exist_ok=True)
 
@@ -1424,75 +1418,113 @@ class SortingService:
                         }
                     )
 
-                for chunk_start in range(0, len(image_ids), BATCH_MOVE_FETCH_CHUNK):
-                    if cancel_event.is_set():
-                        _write_cancelled_state()
-                        return
-
-                    batch_ids = image_ids[chunk_start:chunk_start + BATCH_MOVE_FETCH_CHUNK]
-                    image_map = db.get_images_by_ids(batch_ids)
-
-                    for image_id in batch_ids:
+                snapshot_path = self._write_id_snapshot(db.iter_filtered_image_id_chunks(
+                    chunk_size=BATCH_MOVE_FETCH_CHUNK,
+                    generators=generators,
+                    tags=tags,
+                    ratings=ratings,
+                    checkpoints=checkpoints,
+                    loras=loras,
+                    search_query=search_query,
+                    prompt_terms=prompts,
+                    artist=artist,
+                    min_width=request.min_width,
+                    max_width=request.max_width,
+                    min_height=request.min_height,
+                    max_height=request.max_height,
+                    aspect_ratio=request.aspect_ratio,
+                    min_aesthetic=request.min_aesthetic,
+                    max_aesthetic=request.max_aesthetic,
+                ))
+                saw_any_ids = False
+                try:
+                    snapshot_batches = self._iter_id_snapshot_file(snapshot_path, BATCH_MOVE_FETCH_CHUNK)
+                    for batch_ids in snapshot_batches:
                         if cancel_event.is_set():
                             _write_cancelled_state()
                             return
 
-                        image = image_map.get(image_id)
-                        if not image:
-                            processed += 1
-                            errors.append({"image_id": image_id, "filename": f"id-{image_id}", "error": "Image row not found"})
-                            continue
+                        saw_any_ids = True
+                        image_map = db.get_images_by_ids(batch_ids)
 
-                        filename = image.get("filename", "image")
-                        error_message = None
+                        for image_id in batch_ids:
+                            if cancel_event.is_set():
+                                _write_cancelled_state()
+                                return
 
-                        source_path = self._resolve_image_path(image.get("path") or "")
-                        if not source_path:
-                            error_message = "Image file not found"
-                        else:
-                            # Per-image readability check (was previously done
-                            # up front in ``_filter_readable_image_ids`` which
-                            # blocked the worker for minutes before any
-                            # progress was emitted). A byte-level move would
-                            # otherwise silently copy truncated/corrupt PNGs
-                            # to the destination, so we still need the decode
-                            # — we just amortise it per-image so progress
-                            # advances as the worker walks the list.
-                            readable, read_error = verify_image_readable(source_path)
-                            if not readable:
-                                error_message = read_error or "Unreadable image"
-                                db.mark_image_unreadable(image["id"], error_message)
+                            image = image_map.get(image_id)
+                            if not image:
+                                processed += 1
+                                errors.append({"image_id": image_id, "filename": f"id-{image_id}", "error": "Image row not found"})
+                                continue
+
+                            filename = image.get("filename", "image")
+                            error_message = None
+
+                            source_path = self._resolve_image_path(image.get("path") or "")
+                            if not source_path:
+                                error_message = "Image file not found"
                             else:
-                                try:
-                                    self._apply_file_operation(
-                                        operation=operation,
-                                        image_id=image["id"],
-                                        destination_folder=destination_folder,
-                                        source_path=source_path,
-                                        source_row=image,
-                                    )
-                                    moved += 1
-                                except Exception as e:
-                                    error_message = str(e)
+                                readable, read_error = verify_image_readable(source_path)
+                                if not readable:
+                                    error_message = read_error or "Unreadable image"
+                                    db.mark_image_unreadable(image["id"], error_message)
+                                else:
+                                    try:
+                                        self._apply_file_operation(
+                                            operation=operation,
+                                            image_id=image["id"],
+                                            destination_folder=destination_folder,
+                                            source_path=source_path,
+                                            source_row=image,
+                                        )
+                                        moved += 1
+                                    except Exception as e:
+                                        error_message = str(e)
 
-                        if error_message:
-                            errors.append({"image_id": image_id, "filename": filename, "error": error_message})
+                            if error_message:
+                                errors.append({"image_id": image_id, "filename": filename, "error": error_message})
 
-                        processed += 1
-                        if not self._update_batch_move_progress_if_current(
-                            run_id,
-                            step="moving",
-                            current=processed,
-                            total=total_count,
-                            errors=len(errors),
-                            moved=moved,
-                            message=f"Processed {filename} ({processed}/{total_count})",
-                            current_item=filename,
-                            recent_errors=errors[-3:],
-                            operation=operation,
-                            updated_at=time.time(),
-                        ):
-                            return
+                            processed += 1
+                            if not self._update_batch_move_progress_if_current(
+                                run_id,
+                                step="moving",
+                                current=processed,
+                                total=total_count,
+                                errors=len(errors),
+                                moved=moved,
+                                message=f"Processed {filename} ({processed}/{total_count})",
+                                current_item=filename,
+                                recent_errors=errors[-3:],
+                                operation=operation,
+                                updated_at=time.time(),
+                            ):
+                                return
+                finally:
+                    try:
+                        os.unlink(snapshot_path)
+                    except OSError:
+                        logger.debug("Failed to remove batch move snapshot temp file: %s", snapshot_path)
+
+                if not saw_any_ids:
+                    self._set_batch_move_progress_if_current(
+                        run_id,
+                        {
+                            "status": "done",
+                            "step": "done",
+                            "current": 0,
+                            "total": 0,
+                            "message": "No images match the filters",
+                            "errors": 0,
+                            "moved": 0,
+                            "current_item": None,
+                            "recent_errors": [],
+                            "operation": operation,
+                            "started_at": time.time(),
+                            "updated_at": time.time(),
+                        }
+                    )
+                    return
 
                 completed_verb = "Copied" if operation == "copy" else "Moved"
                 self._set_batch_move_progress_if_current(
@@ -2082,6 +2114,8 @@ class SortingService:
         if normalized_facet in {"tag", "tags"}:
             return {"top_tags": db.search_tags(search_query, limit=limit).get("tags", [])}
 
+        effective_limit = ANALYTICS_DEFAULT_LIMIT if limit is None else limit
+
         with db.get_db() as conn:
             cursor = conn.cursor()
 
@@ -2091,21 +2125,21 @@ class SortingService:
                 FROM image_loras
                 GROUP BY lora_name
                 ORDER BY count DESC
-            """)
+                LIMIT ?
+            """, (effective_limit,))
             loras = [dict(row) for row in cursor.fetchall()]
 
-            # No artificial limit on tags
-            tags = db.get_all_tags()
+            tags = db.search_tags(None, limit=effective_limit).get("tags", [])
 
         return {
-            "checkpoints": db.get_all_checkpoints(),
+            "checkpoints": db.get_all_checkpoints(limit=effective_limit),
             "loras": loras,
             "top_tags": tags
         }
 
     def get_stats(self) -> Dict[str, Any]:
         """Get database statistics."""
-        analytics_data = self.get_analytics()
+        analytics_data = self.get_analytics(limit=STATS_FACET_LIMIT)
         metadata_status = db.get_metadata_status_counts()
         metadata_pending = int(metadata_status.get("pending", 0) or 0)
         scan_progress = self.get_scan_progress()
@@ -2124,6 +2158,10 @@ class SortingService:
             "app_version": APP_VERSION,
             "github_url": GITHUB_REPOSITORY_URL,
         }
+
+    def get_library_health(self, sample_limit: int = 8) -> Dict[str, Any]:
+        """Get a read-only library quality and archive-readiness report."""
+        return db.get_library_health_report(sample_limit=sample_limit)
 
     def resolve_drop(self, folder_name: str, filenames: List[str], dropped_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Resolve browser-dropped folder name or filenames to a real filesystem path."""
@@ -2293,7 +2331,13 @@ class SortingService:
 
     def export_tags_batch(self, request) -> Dict[str, Any]:
         """Export tags for each image to individual .txt files."""
-        result = export_tags_batch_request(request)
+        id_chunks = None
+        total = None
+        selection_token = getattr(request, "selection_token", None)
+        if selection_token:
+            id_chunks = iter_selection_token_id_chunks(selection_token)
+            total = count_selection_token_ids(selection_token)
+        result = export_tags_batch_request(request, id_chunks=id_chunks, total=total)
         return {
             "status": "ok",
             "exported": result["exported"],

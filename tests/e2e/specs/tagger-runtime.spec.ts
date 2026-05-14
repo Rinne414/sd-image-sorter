@@ -20,7 +20,7 @@ async function openTagRuntimeAdvanced(page) {
 }
 
 test.describe('Tagger Runtime UI', () => {
-  test('custom model follows the recommended GPU preference and still allows a CPU Safe Mode override', async ({ page }) => {
+  test('custom model defaults to GPU and still allows a CPU override', async ({ page }) => {
     await page.route('**/api/system-info', async (route) => {
       await route.fulfill({
         status: 200,
@@ -66,7 +66,7 @@ test.describe('Tagger Runtime UI', () => {
       input.dispatchEvent(new Event('change', { bubbles: true }))
     })
     await expect(page.locator('#tag-use-gpu')).not.toBeChecked()
-    await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU Safe Mode|Custom model/i)
+    await expect(page.locator('#tag-runtime-summary')).toContainText(/CPU mode|Custom model/i)
   })
 
   test('similarity progress keeps 5/5 completion text for the legacy progress shape', async ({ page }) => {

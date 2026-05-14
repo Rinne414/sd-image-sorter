@@ -34,6 +34,8 @@ _cache_lock = threading.Lock()
 _last_size_cleanup_ts = 0.0
 _approx_cache_size_bytes: Optional[int] = None
 SIZE_CLEANUP_INTERVAL_SECONDS = 60
+FORCE_CLEANUP_SCAN_LIMIT = 20000
+FORCE_CLEANUP_DELETE_LIMIT = 2000
 
 
 def _ensure_cache_dir() -> Path:
@@ -100,6 +102,28 @@ def _scan_cache_files_limited(*, max_files: int = 10000, max_seconds: float = 0.
     return file_count, total_size, True
 
 
+def _iter_cache_files_limited(*, max_files: int, max_seconds: float = 0.5) -> tuple[list[tuple[Path, int, float]], bool]:
+    if not CACHE_DIR.exists():
+        return [], True
+    files: list[tuple[Path, int, float]] = []
+    deadline = time.monotonic() + max_seconds
+    try:
+        for cache_file in CACHE_DIR.iterdir():
+            if len(files) >= max_files or time.monotonic() > deadline:
+                return files, False
+            if not cache_file.is_file() or cache_file.suffix != ".webp":
+                continue
+            try:
+                stat = cache_file.stat()
+            except OSError:
+                continue
+            files.append((cache_file, stat.st_size, stat.st_mtime))
+    except OSError as exc:
+        logger.debug("Limited thumbnail cache cleanup scan failed under %s: %s", CACHE_DIR, exc)
+        return files, False
+    return files, True
+
+
 def enforce_cache_size_limit(*, force: bool = False, added_bytes: int = 0) -> dict:
     """Trim thumbnail cache to the configured max size.
 
@@ -156,7 +180,11 @@ def enforce_cache_size_limit(*, force: bool = False, added_bytes: int = 0) -> di
         }
 
     with _cache_lock:
-        files = _iter_cache_files()
+        if force:
+            files, scan_complete = _iter_cache_files_limited(max_files=FORCE_CLEANUP_SCAN_LIMIT)
+        else:
+            files = _iter_cache_files()
+            scan_complete = True
         total_size = sum(size for _, size, _ in files)
         deleted_count = 0
         freed_bytes = 0
@@ -169,6 +197,8 @@ def enforce_cache_size_limit(*, force: bool = False, added_bytes: int = 0) -> di
             victims = []
 
         for cache_file, size, _mtime in victims:
+            if force and deleted_count >= FORCE_CLEANUP_DELETE_LIMIT:
+                break
             if max_bytes > 0 and total_size <= max_bytes:
                 break
             try:
@@ -181,13 +211,14 @@ def enforce_cache_size_limit(*, force: bool = False, added_bytes: int = 0) -> di
             total_size = max(0, total_size - size)
 
     _last_size_cleanup_ts = now
-    _approx_cache_size_bytes = total_size
+    _approx_cache_size_bytes = total_size if scan_complete else None
     return {
         "deleted_count": deleted_count,
         "freed_bytes": freed_bytes,
-        "total_size_bytes": total_size,
+        "total_size_bytes": total_size if scan_complete else None,
         "max_size_bytes": max_bytes,
         "skipped": False,
+        "partial": not scan_complete,
     }
 
 

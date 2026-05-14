@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.1.5
+**Version:** 3.1.6
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -191,7 +191,7 @@ This is the compatibility endpoint for callers that need one complete response. 
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 
-Request body is the same filter payload as `selection-ids`, plus optional `chunkSize` (`1..10000`, default `2000`).
+Request body is the same filter payload as `selection-ids`, plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
 
 Response:
 
@@ -206,6 +206,7 @@ Response:
 
 Notes:
 - `sortBy=random` is rejected because stateless offset chunks would re-randomize and duplicate/skip images.
+- `excludedImageIds` is intended for small explicit exclusions after an inverted filtered selection; it must not become a giant client-side ID payload.
 - `exact_total=false` means prompt post-filtering may still remove SQL false positives.
 - The token is not a result-set snapshot; clients should fetch chunks immediately in one UI operation.
 
@@ -261,10 +262,31 @@ Rules:
 #### POST /api/images/delete-selected
 Delete selected image files with per-item partial-failure reporting. This is destructive and requires `confirm_delete_files: true`.
 
+Request body accepts either explicit IDs or a filtered-selection token:
+
+```json
+{
+  "image_ids": [1, 2, 3],
+  "confirm_delete_files": true
+}
+```
+
+```json
+{
+  "selection_token": "opaque-token",
+  "confirm_delete_files": true
+}
+```
+
+Rules:
+- Provide either `image_ids` or `selection_token`, not both.
+- Token mode snapshots matching IDs server-side into a temporary bounded stream before mutating rows/files, so deletion does not skip records as the filtered set shrinks.
+- Response includes `deleted`, `missing_ids`, `failed`, `errors`, and `permanent_delete: true`.
+
 #### POST /api/images/remove-selected
 Remove selected image rows from the gallery index without deleting the backing files from disk.
 
-Request body:
+Request body accepts either explicit IDs or a filtered-selection token:
 
 ```json
 {
@@ -272,7 +294,47 @@ Request body:
 }
 ```
 
-Response includes `removed`, `missing_ids`, and `permanent_delete: false`. Re-scanning the source folder can add the files back.
+```json
+{
+  "selection_token": "opaque-token"
+}
+```
+
+Rules:
+- Provide either `image_ids` or `selection_token`, not both.
+- Token mode snapshots matching IDs server-side into a temporary bounded stream before removing rows, so the operation does not depend on a browser-materialized 200k-ID array.
+- Response includes `removed`, `missing_ids`, and `permanent_delete: false`. Re-scanning the source folder can add the files back.
+
+#### POST /api/tags/export-batch
+Write same-name sidecar `.txt` exports for explicit IDs or a filtered-selection token.
+
+Request body accepts either explicit IDs or a filtered-selection token plus the export options:
+
+```json
+{
+  "image_ids": [1, 2, 3],
+  "output_folder": "L:/exports/tags",
+  "blacklist": [],
+  "prefix": "",
+  "content_mode": "tags",
+  "overwrite_policy": "unique"
+}
+```
+
+```json
+{
+  "selection_token": "opaque-token",
+  "output_folder": "L:/exports/tags",
+  "blacklist": [],
+  "prefix": "",
+  "content_mode": "tags",
+  "overwrite_policy": "unique"
+}
+```
+
+Rules:
+- Provide either `image_ids` or `selection_token`, not both.
+- Backend reads images and tags in chunks while writing files; clients should prefer token mode for large filtered exports.
 
 #### POST /api/images/reconnect-missing/start
 Start a background search for gallery records whose original files no longer exist. The search scans `search_folder`, optionally recursively, and reconnects matching records to found files by updating the library path only. It does not move, copy, delete, or edit image files.
@@ -392,7 +454,7 @@ Clean up duplicate rating tags in existing database.
 Validate folder path.
 
 #### POST /api/scan
-Start folder scan.
+Start folder scan. The default scan path is single-pass streaming: progress reports discovered/imported work as it walks the directory and does not pre-count the entire folder tree before import. Exact up-front totals are intentionally not part of the default request contract for large or network-backed libraries.
 
 #### GET /api/scan/progress
 Get scan progress.
@@ -444,7 +506,7 @@ Clear all image records.
 Get analytics. Optional query params: `facet=checkpoints|loras|tags`, `q=<text>`, `limit=<n>` return a searched facet subset; search runs across the full indexed facet before applying `limit`.
 
 #### GET /api/stats
-Get database stats.
+Get database stats. This endpoint is a bounded dashboard summary: `top_tags`, `checkpoints`, and `loras` are capped top-N facet arrays for initial UI hydration, not exhaustive library dictionaries. Full Library-tab facet browsing should use the paginated/searchable analytics endpoints instead of assuming `/api/stats` contains every unique tag/model in a huge library.
 
 Response includes generator facets and metadata-resolution state:
 
@@ -462,6 +524,42 @@ Response includes generator facets and metadata-resolution state:
 ```
 
 `metadata_pending > 0`, or `scan_status` running/cancelling while `scan_library_ready` is false, means generator bucket counts are provisional. Clients must label WebUI/Forge/etc. counts as resolving instead of presenting zeroes as final.
+
+#### GET /api/library-health
+Get a read-only library quality and archive-readiness audit. This endpoint never moves, deletes, rewrites, or scans image files; it only aggregates indexed database records.
+
+Query params:
+
+- `sample_limit` — optional integer `1..25`, default `8`; caps sample rows per section.
+
+Response includes:
+
+```json
+{
+  "summary": {
+    "total_images": 5000,
+    "metadata_ready_percent": 93.4,
+    "tagged_percent": 88.1,
+    "quality_score": 84.5,
+    "actionable_count": 320
+  },
+  "issue_counts": {
+    "missing_prompt": 120,
+    "untagged": 240,
+    "unreadable": 3
+  },
+  "duplicate_filenames": {
+    "groups": 12,
+    "images": 28,
+    "samples": [{"filename": "00001.png", "count": 3}]
+  },
+  "top_folders": [],
+  "issue_samples": [],
+  "recommendations": []
+}
+```
+
+Clients should present this as guidance, not as an automatic cleanup operation. Use it to decide whether to re-import, re-parse, tag, or avoid flattening archives with duplicate filenames.
 
 #### GET /api/system-info
 Get local hardware summary and tagger runtime recommendation.
