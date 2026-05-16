@@ -1,6 +1,6 @@
 # AI Principles For This Repo
 
-**Updated:** 2026-05-08
+**Updated:** 2026-05-16
 **Purpose:** Give future AI agents a local decision framework so they do not overwrite deliberate product choices with generic "best practice" cleanup.
 
 ## Why This Exists
@@ -322,6 +322,39 @@ If a decision touches schema semantics, saved sessions, path identity, file over
 ### 10. If uncertain, preserve behavior first
 
 When context is incomplete, preserving known working behavior is usually safer than "improving" it.
+
+### 11. Do not silently flip user-visible defaults during "stability" / "hardening" passes
+
+This is the rule that v3.1.0 hardening and v3.1.6 stability prep both broke.
+
+User-visible defaults — anything that controls the UX during a normal scan, tag, sort, or import flow — must NOT be flipped as part of a multi-file refactor commit unless:
+
+1. The flip is the explicit point of the commit, named in the commit message, and
+2. There is an ADR in `docs/AI_DECISION_LOG.md` stating the trade-off, and
+3. There is a regression test that pins the new default with a comment explaining why.
+
+The two flips that prompted this rule:
+
+- `image_manager.scan_folder(precise_total=...)` flipped `True → False` in commit `8f04f67` ("Prepare v3.1.6 release stability fixes"). User-visible effect: scan progress lost its precise total denominator, ETA disappeared, the heartbeat showed `processed=14800/?` for the entire scan. Documented and re-locked by ADR-2026-05-16 "Default scan back to count-first".
+- `metadata_parser._load_png_metadata_fast` started raising `Invalid PNG signature` in commit `3cb1ce4` ("release: prepare v3.1.0 hardening"). User-visible effect: JPEG / WEBP / GIF files saved with `.png` extension (extremely common from Civitai, Discord, browsers) were reported as unreadable and hidden from the gallery, even though the same files render fine in every viewer. Documented and re-locked by ADR-2026-05-16 "Default scan back to count-first" (the JPEG-as-PNG fallback ships in the same commit).
+
+If a future agent is tempted to "tighten" or "modernize" a default that affects what the user sees during normal use:
+
+- Read this principle.
+- Read the ADR that locked the current default.
+- Read the regression test.
+- If you still want to change it, propose the change in chat first and get explicit user approval. Do not bury it in a "release prep" or "hardening" commit.
+
+The list of currently-locked user-visible defaults — flipping any of these requires the three-part justification above:
+
+| Default | Location | Locked by |
+|---|---|---|
+| `scan_folder(precise_total=True)` | `backend/image_manager.py` | ADR-2026-05-16 + `test_scan_folder_default_uses_count_first_then_import` |
+| `_load_image_metadata` falls through to Pillow on bad PNG signature | `backend/metadata_parser.py` | ADR-2026-05-16 + `test_parse_jpeg_with_png_extension_falls_through_to_pillow` |
+| `quick_import=True` for default scans | `backend/image_manager.py` | preserves library-ready-during-scan UX |
+| `cleanup_missing=False` for default scans | `backend/image_manager.py` | safety: do not auto-delete rows on a transient drive-unmounted scan |
+| `force_reparse=False` for default scans | `backend/image_manager.py` | safety: do not invalidate everyone's cached metadata on every scan |
+| `include_unreadable=False` in DB queries | `backend/database.py` | hides corrupt rows from the normal gallery view |
 
 ## Historical Repo-Specific Principles
 
