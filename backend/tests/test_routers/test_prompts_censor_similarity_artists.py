@@ -1900,6 +1900,33 @@ class TestArtistsRouterValidation:
         model_ids = {item["id"] for item in data["models"]}
         assert {"wd14", "clip", "artist", "censor-legacy", "censor-nudenet", "sam3"}.issubset(model_ids)
 
+    def test_bulk_bundle_endpoint_excludes_wenaka_and_toriigate(self, test_client):
+        """The "Download all recommended models" button intentionally
+        skips Wenaka Privacy YOLO (opt-in) and ToriiGate (5 GB
+        alternative tagger). The default WD14 variant is selected
+        instead of all WD14 models."""
+        response = test_client.get("/api/models/bulk-bundle")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "items" in data
+        item_ids = {item["id"] for item in data["items"]}
+        # Must be present
+        assert {"wd14", "censor-nudenet", "clip", "aesthetic", "artist", "sam3"}.issubset(item_ids)
+        # Must NOT be present (per user spec)
+        assert "censor-legacy" not in item_ids
+        assert "toriigate" not in item_ids
+        # WD14 entry pins the default variant
+        wd14 = next(it for it in data["items"] if it["id"] == "wd14")
+        assert wd14["variant"] == "wd-swinv2-tagger-v3"
+        # Excluded list documents the rationale
+        excluded_ids = {e["id"] for e in data.get("excluded", [])}
+        assert {"censor-legacy", "toriigate"}.issubset(excluded_ids)
+        # Total bytes reported
+        assert isinstance(data.get("pending_total_bytes"), int)
+        assert isinstance(data.get("all_total_bytes"), int)
+        assert data["all_total_bytes"] > 0
+
 
 class TestDerivedWriterPathResolution:
     def test_aesthetic_service_resolves_windows_indexed_path_before_scoring(self, test_db, tmp_path, monkeypatch):

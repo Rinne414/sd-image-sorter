@@ -1,7 +1,18 @@
 (function initFilterStore(global) {
+    // Mirrors backend/metadata_parser.py::MetadataParser.GENERATORS keys
+    // and frontend/js/app.js::ALL_GENERATORS. Stay in sync when adding
+    // a new generator.
+    const DEFAULT_FILTER_GENERATORS = Object.freeze([
+        'comfyui', 'nai', 'webui', 'forge', 'unknown',
+        // Bundled under the gallery "Others" tab. Each is still
+        // individually filterable via Filter Criteria.
+        'others', 'fooocus', 'reforge', 'easy-diffusion', 'invokeai',
+        'swarmui', 'drawthings', 'gemini', 'gpt-image',
+    ]);
+
     function createDefaultFilterState() {
         return {
-            generators: ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'],
+            generators: [...DEFAULT_FILTER_GENERATORS],
             ratings: ['general', 'sensitive', 'questionable', 'explicit'],
             tags: [],
             checkpoints: [],
@@ -90,5 +101,6 @@
         create,
         createDefaultFilterState,
         cloneState,
+        DEFAULT_FILTER_GENERATORS,
     };
 })(window);

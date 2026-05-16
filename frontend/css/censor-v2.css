@@ -891,7 +891,19 @@
 
 .censor-apply-filters-btn {
     width: 100%;
-    padding: 8px 10px;
+    min-width: 0;
+    min-height: 32px;
+    padding: 6px 8px;
+    gap: 4px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.censor-apply-filters-btn span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .censor-filter-preview {

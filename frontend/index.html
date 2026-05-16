@@ -127,10 +127,6 @@
                         <span class="tab-icon" aria-hidden="true">📁</span>
                         <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                     </button>
-                    <button class="nav-tab" id="nav-tab-health" data-view="health" role="tab" aria-selected="false" aria-controls="view-health">
-                        <span class="tab-icon" aria-hidden="true">🧭</span>
-                        <span class="tab-text" data-i18n="nav.health">Library Health</span>
-                    </button>
                     <span class="nav-divider" aria-hidden="true"></span>
                     <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
                         <span class="tab-icon" aria-hidden="true">🔍</span>
@@ -171,10 +167,6 @@
                         <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
                             <span class="mobile-nav-icon" aria-hidden="true">📁</span>
                             <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
-                        </button>
-                        <button class="mobile-nav-item" data-view="health" aria-label="Library Health view">
-                            <span class="mobile-nav-icon" aria-hidden="true">🧭</span>
-                            <span class="mobile-nav-text" data-i18n="nav.health">Library Health</span>
                         </button>
                         <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
@@ -219,25 +211,20 @@
                 </div>
             </div>
             <div class="nav-actions">
-                <button id="btn-open-model-manager" class="btn btn-ghost" type="button" aria-label="Open model manager" data-i18n-aria="models.title">
+                <button id="btn-open-model-manager" class="btn btn-ghost btn-icon-only" type="button" title="Model & environment setup" aria-label="Open model manager" data-i18n-title="models.managerTooltip" data-i18n-aria="models.title">
                     <span aria-hidden="true">🧰</span>
-                    <span data-i18n="models.manager">Setup</span>
                 </button>
-                <button id="btn-tags-library" class="btn btn-ghost" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.library" data-i18n-aria="action.library">
+                <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
                     <span aria-hidden="true">📚</span>
-                    <span data-i18n="action.library">Library</span>
                 </button>
-                <button id="btn-language-toggle" class="btn btn-ghost btn-language" title="Switch language" aria-label="Switch language" data-i18n-aria="lang.switchLabel">
+                <button id="btn-language-toggle" class="btn btn-ghost btn-icon-only btn-language" title="Switch language" aria-label="Switch language" data-i18n-title="lang.switchTooltip" data-i18n-aria="lang.switchLabel">
                     <span aria-hidden="true">🌐</span>
-                    <span data-i18n="lang.toggle">中文</span>
                 </button>
-                <button id="btn-app-update" class="btn btn-ghost" title="Check for application updates" aria-label="Check for application updates">
+                <button id="btn-app-update" class="btn btn-ghost btn-icon-only" title="Check for application updates" aria-label="Check for application updates" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true">⬆️</span>
-                    <span data-i18n="update.check">Check Updates</span>
                 </button>
-                <button id="btn-help" class="btn-help" title="Open guide for current tab" aria-label="Open guide for current tab">
+                <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-title="guide.tooltip">
                     <span aria-hidden="true">❓</span>
-                    <span data-i18n="guide.label">Guide</span>
                 </button>
                 <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder">
                     <span aria-hidden="true">📂</span>
@@ -256,8 +243,8 @@
                 <div class="bg-tag-progress-fill" id="bg-tag-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-tag-progress-text">Tagging...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle">⏹ <span data-i18n="tagger.bgStop">Stop</span></button>
-            <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger modal" data-i18n-title="tagger.bgDetailsTitle"><span data-i18n="tagger.bgDetails">Details</span></button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-tag-cancel" title="Stop tagging" data-i18n-title="tagger.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn" id="bg-tag-open" title="Open tagger details" data-i18n-title="tagger.bgDetailsTitle">📋</button>
         </div>
 
         <!-- Background Scan Progress Bar (visible when scanning runs in background) -->
@@ -266,8 +253,8 @@
                 <div class="bg-tag-progress-fill bg-scan-progress-fill" id="bg-scan-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-scan-progress-text">Importing images...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-scan-cancel" title="Stop scan" data-i18n-title="scan.bgStopTitle">⏹ <span data-i18n="scan.bgStop">Stop</span></button>
-            <button class="bg-tag-progress-btn bg-scan-open-btn" id="bg-scan-open" title="Open scan details" data-i18n-title="scan.bgDetailsTitle"><span data-i18n="scan.bgDetails">Details</span></button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn bg-scan-stop-btn" id="bg-scan-cancel" title="Stop scan" data-i18n-title="scan.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn bg-scan-open-btn" id="bg-scan-open" title="Open scan details" data-i18n-title="scan.bgDetailsTitle">📋</button>
         </div>
 
         <!-- Background Missing-File Reconnect Progress Bar -->
@@ -276,8 +263,8 @@
                 <div class="bg-tag-progress-fill bg-reconnect-progress-fill" id="bg-reconnect-progress-fill"></div>
             </div>
             <span class="bg-tag-progress-text" id="bg-reconnect-progress-text">Finding moved files...</span>
-            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle">⏹ <span data-i18n="reconnect.bgStop">Stop</span></button>
-            <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open find moved files" data-i18n-title="reconnect.bgDetailsTitle"><span data-i18n="reconnect.bgDetails">Details</span></button>
+            <button class="bg-tag-progress-btn bg-tag-stop-btn" id="bg-reconnect-cancel" title="Stop finding moved files" data-i18n-title="reconnect.bgStopTitle">⏹</button>
+            <button class="bg-tag-progress-btn" id="bg-reconnect-open" title="Open find moved files" data-i18n-title="reconnect.bgDetailsTitle">📋</button>
         </div>
 
         <!-- Main Content Area -->
@@ -290,9 +277,8 @@
                             <span aria-hidden="true">◀</span>
                         </button>
                         <h3 class="sidebar-title" id="filter-sidebar-title" data-i18n="filter.title" style="flex: 1; margin: 0;">Filters</h3>
-                        <button id="btn-open-filters" class="btn btn-primary btn-small" aria-label="Open filter editor">
+                        <button id="btn-open-filters" class="btn btn-primary btn-small btn-icon-only" title="Open filter editor" aria-label="Open filter editor" data-i18n-title="gallery.editFiltersTooltip">
                             <span aria-hidden="true">🔍</span>
-                            <span data-i18n="gallery.editFilters">Edit Filters</span>
                         </button>
                     </div>
 
@@ -410,6 +396,22 @@
                 </button>
 
                 <div class="gallery-container">
+                    <div class="gallery-banner gallery-banner-warning" id="gallery-unreadable-banner" role="status" aria-live="polite" hidden>
+                        <span class="gallery-banner-icon" aria-hidden="true">⚠️</span>
+                        <div class="gallery-banner-copy">
+                            <strong class="gallery-banner-title" id="gallery-unreadable-banner-title"></strong>
+                            <span class="gallery-banner-detail" id="gallery-unreadable-banner-detail" data-i18n="reconnect.banner.detail">This usually means the files were moved, renamed, or are on an unplugged drive. Use Find Moved Files to re-link them — it only updates gallery records.</span>
+                        </div>
+                        <div class="gallery-banner-actions">
+                            <button type="button" class="btn btn-primary btn-small" id="gallery-unreadable-banner-cta">
+                                <span aria-hidden="true">🔎</span>
+                                <span data-i18n="reconnect.banner.cta">Find Moved Files</span>
+                            </button>
+                            <button type="button" class="btn btn-ghost btn-small" id="gallery-unreadable-banner-dismiss" aria-label="Hide banner" data-i18n-aria="reconnect.banner.dismiss">
+                                <span aria-hidden="true">✕</span>
+                            </button>
+                        </div>
+                    </div>
                     <div class="gallery-header">
                         <div class="gallery-header-left">
                             <!-- Mobile Filter Toggle (shown in header on mobile) -->
@@ -418,23 +420,12 @@
                                 <span data-i18n="gallery.filters">Filters</span>
                             </button>
                             <span class="image-count" id="image-count" aria-live="polite">0</span>
-                            <button id="btn-random" class="btn btn-ghost btn-small" title="Random Image" aria-label="Show random image" data-i18n-title="gallery.random" data-i18n-aria="gallery.random">
+                            <button id="btn-random" class="btn btn-ghost btn-small btn-icon-only" title="Show a random image from current filter" aria-label="Show random image" data-i18n-title="gallery.randomTooltip" data-i18n-aria="gallery.random">
                                 <span aria-hidden="true">🎲</span>
-                                <span data-i18n="gallery.random">Random</span>
                             </button>
-                            <button id="btn-reconnect-missing" class="btn btn-ghost btn-small" title="Find moved image files" aria-label="Find moved image files" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
+                            <button id="btn-reconnect-missing" class="btn btn-ghost btn-small btn-icon-only" title="Re-link images that were moved or renamed outside the app" aria-label="Find moved image files" data-i18n-title="reconnect.openTitle" data-i18n-aria="reconnect.openTitle">
                                 <span aria-hidden="true">🔎</span>
-                                <span data-i18n="reconnect.openButton">Find Missing</span>
                             </button>
-                            <button id="btn-score-aesthetic" class="btn btn-ghost btn-small" title="Score aesthetics" aria-label="Score aesthetics" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
-                                <span aria-hidden="true">✨</span>
-                                <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
-                            </button>
-                            <button id="btn-cancel-aesthetic" class="btn btn-ghost btn-small danger" style="display:none" title="Stop aesthetic scoring" aria-label="Stop aesthetic scoring">
-                                <span aria-hidden="true">■</span>
-                                <span data-i18n="gallery.cancelAesthetic">Stop</span>
-                            </button>
-                            <span class="header-status-chip" id="aesthetic-status-chip" aria-live="polite" style="display:none"></span>
                             <span class="header-status-chip is-info metadata-status-chip" id="metadata-status-chip" aria-live="polite" style="display:none"></span>
                             <div class="divider-v" aria-hidden="true"></div>
                             <div class="generator-tabs" id="generator-tabs" role="tablist" aria-label="Filter by generator">
@@ -474,9 +465,8 @@
                                 <span aria-hidden="true">▥</span>
                             </button>
                             <div class="divider-v" aria-hidden="true"></div>
-                            <button id="btn-clear-db" class="btn btn-ghost btn-small danger gallery-clear-button" type="button" aria-label="Clear gallery database">
+                            <button id="btn-clear-db" class="btn btn-ghost btn-small btn-icon-only danger gallery-clear-button" type="button" title="Remove all images from the current library (files stay on disk)" aria-label="Clear gallery database" data-i18n-title="action.clearGalleryTooltip">
                                 <span aria-hidden="true">🗑️</span>
-                                <span data-i18n="action.clearGallery">Clear Gallery</span>
                             </button>
                         </div>
 
@@ -577,97 +567,6 @@
                         <div class="spinner" aria-hidden="true"></div>
                         <span data-i18n="gallery.loading">Loading images...</span>
                     </div>
-                </div>
-            </section>
-
-            <!-- Library Health View -->
-            <section id="view-health" class="view health-view" role="tabpanel" aria-labelledby="nav-tab-health">
-                <div class="health-shell">
-                    <header class="health-hero">
-                        <div>
-                            <p class="health-eyebrow" data-i18n="health.eyebrow">Reference-inspired library audit</p>
-                            <h2 data-i18n="health.title">Library Health</h2>
-                            <p data-i18n="health.subtitle">Check metadata coverage, duplicate filenames, unreadable files, and archive readiness before sorting or publishing datasets.</p>
-                        </div>
-                        <div class="health-hero-actions">
-                            <button class="btn btn-ghost" id="btn-health-open-scan">📂 <span data-i18n="health.importMore">Import More</span></button>
-                            <button class="btn btn-primary" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
-                        </div>
-                    </header>
-
-                    <div class="health-status-card" id="health-status-card">
-                        <div class="health-score-ring" id="health-score-ring" style="--score: 0">
-                            <strong id="health-score-value">—</strong>
-                            <span data-i18n="health.score">Score</span>
-                        </div>
-                        <div class="health-status-copy">
-                            <h3 id="health-status-title" data-i18n="health.loadingTitle">Checking your library...</h3>
-                            <p id="health-status-detail" data-i18n="health.loadingDetail">This is read-only. No files will be moved, deleted, or rewritten.</p>
-                        </div>
-                    </div>
-
-                    <div class="health-kpi-grid" aria-label="Library health metrics">
-                        <article class="health-kpi-card">
-                            <span data-i18n="health.totalImages">Images</span>
-                            <strong id="health-total-images">—</strong>
-                        </article>
-                        <article class="health-kpi-card">
-                            <span data-i18n="health.metadataReady">Metadata Ready</span>
-                            <strong id="health-metadata-ready">—</strong>
-                        </article>
-                        <article class="health-kpi-card">
-                            <span data-i18n="health.tagCoverage">Tag Coverage</span>
-                            <strong id="health-tag-coverage">—</strong>
-                        </article>
-                        <article class="health-kpi-card">
-                            <span data-i18n="health.actionableIssues">Actionable</span>
-                            <strong id="health-actionable">—</strong>
-                        </article>
-                    </div>
-
-                    <div class="health-grid-two">
-                        <section class="health-panel">
-                            <div class="health-panel-header">
-                                <h3 data-i18n="health.issueBreakdown">Issue Breakdown</h3>
-                                <span data-i18n="health.issueHint">Prioritized for safe cleanup</span>
-                            </div>
-                            <div class="health-issue-list" id="health-issue-list"></div>
-                        </section>
-
-                        <section class="health-panel">
-                            <div class="health-panel-header">
-                                <h3 data-i18n="health.recommendations">Next Best Actions</h3>
-                                <span data-i18n="health.readOnlyHint">Audit only, you stay in control</span>
-                            </div>
-                            <div class="health-recommendations" id="health-recommendations"></div>
-                        </section>
-                    </div>
-
-                    <div class="health-grid-two">
-                        <section class="health-panel">
-                            <div class="health-panel-header">
-                                <h3 data-i18n="health.duplicateFilenames">Duplicate Filenames</h3>
-                                <span id="health-duplicate-summary">—</span>
-                            </div>
-                            <div class="health-table" id="health-duplicate-list"></div>
-                        </section>
-
-                        <section class="health-panel">
-                            <div class="health-panel-header">
-                                <h3 data-i18n="health.topFolders">Largest Import Folders</h3>
-                                <span data-i18n="health.topFoldersHint">Good archive planning signal</span>
-                            </div>
-                            <div class="health-table" id="health-folder-list"></div>
-                        </section>
-                    </div>
-
-                    <section class="health-panel">
-                        <div class="health-panel-header">
-                            <h3 data-i18n="health.samples">Files Needing Attention</h3>
-                            <span data-i18n="health.samplesHint">Open the Reader or re-import to inspect details</span>
-                        </div>
-                        <div class="health-table health-sample-table" id="health-sample-list"></div>
-                    </section>
                 </div>
             </section>
 
@@ -1272,7 +1171,7 @@
                                 </label>
                             </div>
                             <div class="helper-text" id="manual-sort-operation-help" data-i18n="manual.actionModeMoveHelp">Moves the original files into the sort folders.</div>
-                            <div class="helper-text" id="manual-sort-execution-mode" data-i18n="manual.executionMode">Action mode: Move originals</div>
+                            <div class="helper-text" id="manual-sort-execution-mode">Action mode: Move originals</div>
                         </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
@@ -2498,6 +2397,13 @@
                     </div>
                 </div>
                 <div class="model-manager-summary" id="model-manager-summary"></div>
+                <div class="model-manager-bulk-actions" id="model-manager-bulk-actions">
+                    <button class="btn btn-primary btn-bulk-download" id="btn-bulk-download-models" type="button" data-i18n="models.bulkDownload" data-i18n-title="models.bulkDownloadTitle" title="Download all recommended models in one go (skips Wenaka Privacy YOLO and ToriiGate; uses default WD14 only)">
+                        <span aria-hidden="true">⬇️</span>
+                        <span data-i18n="models.bulkDownload">Download all recommended models</span>
+                    </button>
+                    <span class="model-manager-bulk-help" data-i18n="models.bulkDownloadHelp">Pulls every Setup-required model the app uses (default WD14 tagger, NudeNet, CLIP, Aesthetic, Artist ID, SAM3). Skips the Wenaka Privacy YOLO and the heavy ToriiGate alternative tagger. You will see disk-space estimate before anything starts.</span>
+                </div>
                 <div class="model-manager-grid" id="model-manager-grid"></div>
                 <section class="disk-usage-section" id="disk-usage-section" aria-labelledby="disk-usage-title">
                     <header class="disk-usage-header">
@@ -2508,6 +2414,100 @@
                         <div class="disk-usage-loading" data-i18n="disk.loading">Reading disk usage…</div>
                     </div>
                 </section>
+
+                <details class="audit-section" id="audit-section">
+                    <summary class="audit-summary">
+                        <span class="audit-summary-title" data-i18n="audit.title">Dataset Audit</span>
+                        <span class="audit-summary-badge" data-i18n="audit.advancedBadge">advanced</span>
+                        <span class="audit-summary-help" data-i18n="audit.summaryHelp">For training or bulk archive workflows. Skip if you only browse and tag.</span>
+                    </summary>
+                    <div class="health-shell">
+                        <header class="health-hero audit-hero">
+                            <div>
+                                <p class="health-eyebrow" data-i18n="audit.eyebrow">Read-only library audit</p>
+                                <p data-i18n="audit.subtitle">Check metadata coverage, duplicate filenames, and unreadable files before publishing a dataset or flattening archives.</p>
+                            </div>
+                            <div class="health-hero-actions">
+                                <button class="btn btn-primary btn-small" id="btn-health-refresh">↻ <span data-i18n="health.refresh">Refresh Audit</span></button>
+                            </div>
+                        </header>
+
+                        <div class="health-status-card" id="health-status-card">
+                            <div class="health-score-ring" id="health-score-ring" style="--score: 0">
+                                <strong id="health-score-value">—</strong>
+                                <span data-i18n="health.score">Health Score</span>
+                            </div>
+                            <div class="health-status-copy">
+                                <h3 id="health-status-title" data-i18n="health.loadingTitle">Checking your library...</h3>
+                                <p id="health-status-detail" data-i18n="health.loadingDetail">This is read-only. No files will be moved, deleted, or rewritten.</p>
+                                <p class="health-score-help" data-i18n="health.scoreHelp">Score combines metadata coverage, tag coverage, duplicate filenames, and unreadable files. A low score is normal if you only use SD Image Sorter for browsing.</p>
+                            </div>
+                        </div>
+
+                        <div class="health-kpi-grid" aria-label="Library health metrics">
+                            <article class="health-kpi-card">
+                                <span data-i18n="health.totalImages">Images</span>
+                                <strong id="health-total-images">—</strong>
+                            </article>
+                            <article class="health-kpi-card">
+                                <span data-i18n="health.metadataReady">Metadata Ready</span>
+                                <strong id="health-metadata-ready">—</strong>
+                            </article>
+                            <article class="health-kpi-card">
+                                <span data-i18n="health.tagCoverage">Tag Coverage</span>
+                                <strong id="health-tag-coverage">—</strong>
+                            </article>
+                            <article class="health-kpi-card">
+                                <span data-i18n="health.actionableIssues">Actionable</span>
+                                <strong id="health-actionable">—</strong>
+                            </article>
+                        </div>
+
+                        <div class="health-grid-two">
+                            <section class="health-panel">
+                                <div class="health-panel-header">
+                                    <h3 data-i18n="health.issueBreakdown">Issue Breakdown</h3>
+                                    <span data-i18n="health.issueHint">Prioritized for safe cleanup</span>
+                                </div>
+                                <div class="health-issue-list" id="health-issue-list"></div>
+                            </section>
+
+                            <section class="health-panel">
+                                <div class="health-panel-header">
+                                    <h3 data-i18n="health.recommendations">Next Best Actions</h3>
+                                    <span data-i18n="health.readOnlyHint">Audit only, you stay in control</span>
+                                </div>
+                                <div class="health-recommendations" id="health-recommendations"></div>
+                            </section>
+                        </div>
+
+                        <div class="health-grid-two">
+                            <section class="health-panel">
+                                <div class="health-panel-header">
+                                    <h3 data-i18n="health.duplicateFilenames">Duplicate Filenames</h3>
+                                    <span id="health-duplicate-summary">—</span>
+                                </div>
+                                <div class="health-table" id="health-duplicate-list"></div>
+                            </section>
+
+                            <section class="health-panel">
+                                <div class="health-panel-header">
+                                    <h3 data-i18n="health.topFolders">Largest Import Folders</h3>
+                                    <span data-i18n="health.topFoldersHint">Good archive planning signal</span>
+                                </div>
+                                <div class="health-table" id="health-folder-list"></div>
+                            </section>
+                        </div>
+
+                        <section class="health-panel">
+                            <div class="health-panel-header">
+                                <h3 data-i18n="health.samples">Files Needing Attention</h3>
+                                <span data-i18n="health.samplesHint">Open the Reader or re-import to inspect details</span>
+                            </div>
+                            <div class="health-table health-sample-table" id="health-sample-list"></div>
+                        </section>
+                    </div>
+                </details>
             </div>
         </div>
 
@@ -2559,6 +2559,21 @@
                         <span class="meta-item" id="modal-checkpoint-item" style="display:none"><strong>Checkpoint:</strong> <span id="modal-checkpoint">-</span></span>
                         <span class="meta-item" id="modal-aesthetic-item" style="display:none"><strong>Aesthetic:</strong> <span id="modal-aesthetic-score">-</span></span>
                         <span id="modal-img2img-badge" class="img2img-badge" style="display:none">img2img</span>
+                    </div>
+
+                    <!--
+                        Closed-source AI provider hint. Shown when generator
+                        is `gemini` or `gpt-image`. We currently identify these
+                        images via metadata only (EXIF Software/Make/Description
+                        + C2PA Content Credentials byte scan). The invisible
+                        in-pixel watermark (SynthID for Gemini, OpenAI's
+                        perceptual signal for gpt-image) is NOT checked yet.
+                        See TECHNICAL_DEBT_NOTES.md → "Pixel-watermark detection
+                        for Gemini/gpt-image".
+                    -->
+                    <div class="modal-ai-provider-note" id="modal-ai-provider-note" style="display:none" role="note" aria-live="polite">
+                        <span class="modal-ai-provider-icon" aria-hidden="true">ℹ️</span>
+                        <span class="modal-ai-provider-text" id="modal-ai-provider-text" data-i18n="modal.aiProviderNote.gemini">Identified via Content Credentials / EXIF metadata. Google's invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.</span>
                     </div>
 
                     <div class="modal-color-distribution modal-section" id="modal-color-distribution" style="display:none">
@@ -2947,6 +2962,25 @@
                     </div>
                 </details>
 
+                <div class="tagger-utility-strip" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions">
+                    <div class="tagger-aesthetic-tool">
+                        <div class="tagger-aesthetic-copy">
+                            <span class="tagger-aesthetic-title" data-i18n="tagger.aestheticToolTitle">Aesthetic scoring</span>
+                            <span class="tagger-aesthetic-status is-warning" id="aesthetic-status-chip" aria-live="polite" style="display:none" data-i18n="gallery.aestheticUnavailableShort">Aesthetic unavailable</span>
+                        </div>
+                        <div class="tagger-aesthetic-actions">
+                            <button class="btn btn-ghost" id="btn-score-aesthetic" title="Score aesthetics" aria-label="Score aesthetics" aria-describedby="aesthetic-status-chip" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
+                                <span aria-hidden="true">✨</span>
+                                <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
+                            </button>
+                            <button class="btn btn-ghost danger" id="btn-cancel-aesthetic" style="display:none" title="Stop aesthetic scoring" aria-label="Stop aesthetic scoring" data-i18n-title="gallery.cancelAestheticTitle" data-i18n-aria="gallery.cancelAestheticTitle">
+                                <span aria-hidden="true">■</span>
+                                <span data-i18n="gallery.cancelAesthetic">Stop</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="progress-container" id="tag-progress-container" style="display: none;">
                     <div class="progress-bar">
                         <div class="progress-fill" id="tag-progress-fill"></div>
@@ -3154,7 +3188,7 @@
                 </div>
 
                 <div class="filter-modal-stat-grid" aria-label="Current filter counts">
-                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.generators">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">5/5</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.generators">Generators</span><strong class="filter-stat-value" id="filter-modal-count-generators">14/14</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.ratings">Ratings</span><strong class="filter-stat-value" id="filter-modal-count-ratings">4/4</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.tags">Tags</span><strong class="filter-stat-value" id="filter-modal-count-tags">0</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.prompts">Prompts</span><strong class="filter-stat-value" id="filter-modal-count-prompts">0</strong></div>
@@ -3182,6 +3216,14 @@
                                     <label class="checkbox-label"><input type="checkbox" value="nai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">NovelAI</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="webui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">WebUI</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="forge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Forge</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="reforge" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">reForge</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="fooocus" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Fooocus</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="invokeai" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">InvokeAI</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="swarmui" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">SwarmUI</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="easy-diffusion" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Easy Diffusion</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="drawthings" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Draw Things</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="gemini" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Gemini</span></label>
+                                    <label class="checkbox-label"><input type="checkbox" value="gpt-image" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">gpt-image</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="unknown" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Unknown</span></label>
                                     <label class="checkbox-label"><input type="checkbox" value="others" checked><span class="checkbox-custom" aria-hidden="true"></span><span class="checkbox-text">Others</span></label>
                                 </div>
@@ -3635,6 +3677,7 @@
     <script src="/static/js/image-obfuscate.js"></script>
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/library-health.js"></script>
+    <script src="/static/js/unreadable-banner.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */

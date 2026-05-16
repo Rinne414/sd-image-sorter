@@ -2153,3 +2153,377 @@ class TestPromptNodesExtraction:
         prompt_nodes = result["metadata"]["_parsed"].get("prompt_nodes")
         if prompt_nodes:
             assert len(prompt_nodes) >= 1
+
+
+class TestAlternateGenerators:
+    """Tests for alternate / less-common generator detection.
+
+    Covers Fooocus, reForge, Easy Diffusion, InvokeAI, SwarmUI, Draw Things,
+    and the closed-source AI providers (Gemini / gpt-image) that a 3.2.x
+    onward release should surface in the gallery instead of dumping into
+    a flat "unknown" bucket.
+    """
+
+    @staticmethod
+    def _write_png(tmp_path: Path, name: str, text_chunks: dict, mode: str = "RGB") -> Path:
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        img_path = tmp_path / name
+        info = PngInfo()
+        for key, value in text_chunks.items():
+            info.add_text(key, value if isinstance(value, str) else json.dumps(value))
+        Image.new(mode, (32, 32), color="white").save(img_path, pnginfo=info)
+        return img_path
+
+    def test_fooocus_comment_json(self, tmp_path: Path):
+        """Fooocus PNGs put a JSON dict in the `Comment` text chunk with
+        Title-Case keys distinct from NovelAI's lower-case shape."""
+        comment = json.dumps({
+            "Prompt": "a fooocus prompt",
+            "Negative Prompt": "blurry",
+            "Sampler": "dpmpp_2m_sde_gpu",
+            "Performance": "Speed",
+            "Base Model": "juggernautXL_v8.safetensors",
+            "Resolution": "(1024, 1024)",
+            "Sharpness": 2.0,
+        })
+        img_path = self._write_png(
+            tmp_path,
+            "fooocus.png",
+            {"Comment": comment, "fooocus_scheme": "fooocus"},
+        )
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "fooocus"
+        assert result["prompt"] == "a fooocus prompt"
+        assert result["negative_prompt"] == "blurry"
+        assert result["checkpoint"] == "juggernautXL_v8.safetensors"
+
+    def test_reforge_parameters_version(self, tmp_path: Path):
+        """sd-webui-reForge writes a `Version: f0.0.X+v...-reforge` tag in
+        the `parameters` chunk; the WebUI family detector should classify
+        it as `reforge`, not vanilla `forge` or `webui`."""
+        params = (
+            "best quality, masterpiece\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1, "
+            "Size: 512x512, Model: model.safetensors, "
+            "Version: f0.0.17v1.8.0rc-latest-1212-reforge"
+        )
+        img_path = self._write_png(tmp_path, "reforge.png", {"parameters": params})
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "reforge"
+        assert result["prompt"] == "best quality, masterpiece"
+        assert result["negative_prompt"] == "low quality"
+
+    def test_invokeai_v3_metadata(self, tmp_path: Path):
+        """InvokeAI v3 writes the `invokeai_metadata` PNG text chunk
+        containing positive/negative prompts and a `model` dict."""
+        meta = {
+            "positive_prompt": "an invoke prompt",
+            "negative_prompt": "ugly",
+            "model": {"model_name": "sdxl_base", "base": "sdxl"},
+            "steps": 30,
+            "cfg_scale": 7.5,
+            "seed": 42,
+            "scheduler": "euler_a",
+        }
+        img_path = self._write_png(
+            tmp_path, "invokeai.png", {"invokeai_metadata": json.dumps(meta)}
+        )
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "invokeai"
+        assert result["prompt"] == "an invoke prompt"
+        assert result["negative_prompt"] == "ugly"
+        assert result["checkpoint"] == "sdxl_base"
+
+    def test_swarmui_sui_image_params(self, tmp_path: Path):
+        """SwarmUI / StableSwarmUI stores `sui_image_params` JSON inside
+        the PNG `parameters` chunk."""
+        params = json.dumps({"sui_image_params": {
+            "prompt": "swarm prompt",
+            "negativeprompt": "swarm neg",
+            "model": "swarmModel.safetensors",
+            "steps": 20,
+            "cfgscale": 7,
+            "seed": 12345,
+        }})
+        img_path = self._write_png(tmp_path, "swarmui.png", {"parameters": params})
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "swarmui"
+        assert result["prompt"] == "swarm prompt"
+        assert result["negative_prompt"] == "swarm neg"
+        assert result["checkpoint"] == "swarmModel.safetensors"
+
+    def test_easy_diffusion_text_chunks(self, tmp_path: Path):
+        """Easy Diffusion writes direct `prompt`/`negative_prompt` text
+        chunks plus its own `use_*_model` keys. The `use_*_model` markers
+        are required so we don't steal generic JSON sidecars."""
+        img_path = self._write_png(tmp_path, "easyd.png", {
+            "prompt": "easy d prompt",
+            "negative_prompt": "easy neg",
+            "use_stable_diffusion_model": "easymodel.safetensors",
+            "sampler_name": "euler_a",
+            "num_inference_steps": "20",
+        })
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "easy-diffusion"
+        assert result["prompt"] == "easy d prompt"
+        assert result["negative_prompt"] == "easy neg"
+
+    def test_easy_diffusion_does_not_hijack_generic_sidecar(self, tmp_path: Path):
+        """A bare `prompt`/`negative_prompt` JSON sidecar (no
+        Easy-Diffusion-specific markers) must still classify as
+        `others`, NOT easy-diffusion."""
+        from PIL import Image
+
+        img_path = tmp_path / "caption.webp"
+        Image.new("RGB", (320, 240), color="green").save(img_path, "WEBP")
+        (tmp_path / "caption.json").write_text(
+            json.dumps({
+                "prompt": "json prompt",
+                "negative_prompt": "json negative",
+                "checkpoint": "json_model.safetensors",
+            }),
+            encoding="utf-8",
+        )
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "others"
+        assert result["prompt"] == "json prompt"
+
+    def test_drawthings_xmp_user_comment(self, tmp_path: Path):
+        """Draw Things stores its JSON inside an XMP exif:UserComment
+        rdf:Alt list."""
+        xmp = (
+            '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+            '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            '<rdf:Description rdf:about="" '
+            'xmlns:exif="http://ns.adobe.com/exif/1.0/">'
+            '<exif:UserComment><rdf:Alt><rdf:li xml:lang="x-default">'
+            + json.dumps({
+                "c": "drawthings prompt",
+                "uc": "drawthings neg",
+                "model": "model.safetensors",
+                "sampler": "dpmpp_2m",
+                "steps": 25,
+                "seed": 99,
+            })
+            + '</rdf:li></rdf:Alt></exif:UserComment>'
+            '</rdf:Description></rdf:RDF></x:xmpmeta>'
+        )
+        img_path = self._write_png(tmp_path, "drawthings.png", {"XML:com.adobe.xmp": xmp})
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "drawthings"
+        assert result["prompt"] == "drawthings prompt"
+        assert result["negative_prompt"] == "drawthings neg"
+
+    def test_gemini_software_tag(self, tmp_path: Path):
+        """Gemini-generated images carry a Software/Make tag that
+        identifies them. We surface the Description (often the prompt
+        used) so the user sees something useful."""
+        img_path = self._write_png(tmp_path, "gemini.png", {
+            "Software": "Gemini",
+            "Description": "a beautiful sunset",
+        })
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "gemini"
+        assert result["prompt"] == "a beautiful sunset"
+
+    def test_nano_banana_software_tag(self, tmp_path: Path):
+        """`Nano Banana` (Gemini 2.5 Flash Image codename) should also
+        classify as gemini."""
+        img_path = self._write_png(tmp_path, "nano.png", {
+            "Software": "Made with Google AI (nano-banana)",
+        })
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "gemini"
+
+    def test_fooocus_real_lowercase_shape(self, tmp_path: Path):
+        """Real Fooocus output (per lllyasviel/Fooocus private_logger.py)
+        uses LOWERCASE `prompt`/`negative_prompt` JSON keys and
+        sibling `base_model`/`performance`/`metadata_scheme` fields,
+        unlike NovelAI which uses `prompt`+`uc`. Must NOT be
+        misclassified as NAI."""
+        comment = json.dumps({
+            "prompt": "1girl, beautiful",
+            "negative_prompt": "blurry",
+            "performance": "Speed",
+            "steps": 30,
+            "sampler": "dpmpp_2m_sde_gpu",
+            "scheduler": "karras",
+            "seed": 12345,
+            "width": 1024,
+            "height": 1024,
+            "base_model": "juggernautXL_v8.safetensors",
+            "version": "Fooocus v2.5.0",
+            "metadata_scheme": "fooocus",
+        })
+        img_path = self._write_png(tmp_path, "fooocus_real.png", {
+            "Comment": comment,
+            "fooocus_scheme": "fooocus",
+        })
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "fooocus", f"got {result['generator']}, expected fooocus"
+        assert result["prompt"] == "1girl, beautiful"
+        assert result["negative_prompt"] == "blurry"
+        assert result["checkpoint"] == "juggernautXL_v8.safetensors"
+
+    def test_fooocus_real_shape_no_scheme_chunk(self, tmp_path: Path):
+        """Even without the `fooocus_scheme` PNG chunk, the JSON key
+        shape (lowercase prompt + negative_prompt + base_model/etc.)
+        must still classify as Fooocus rather than fall through to
+        NovelAI's `prompt` matcher."""
+        comment = json.dumps({
+            "prompt": "1girl",
+            "negative_prompt": "blurry",
+            "performance": "Speed",
+            "base_model": "model.safetensors",
+            "steps": 30,
+            "sampler": "dpmpp_2m_sde_gpu",
+            "seed": 12345,
+        })
+        img_path = self._write_png(tmp_path, "fooocus_no_scheme.png", {"Comment": comment})
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "fooocus", f"got {result['generator']}, expected fooocus"
+
+    def test_nai_still_wins_when_uc_present(self, tmp_path: Path):
+        """A NovelAI Comment chunk (`prompt`+`uc`+`v4_prompt`) must
+        still classify as NAI even though it ALSO has a `prompt` key
+        — the disambiguator must not steal it for Fooocus."""
+        comment = json.dumps({
+            "prompt": "nai prompt",
+            "uc": "nai negative",
+            "v4_prompt": {"prompt": "v4", "caption": "..."},
+            "steps": 28,
+            "sampler": "k_euler_ancestral",
+        })
+        img_path = self._write_png(tmp_path, "nai_v4.png", {"Comment": comment})
+
+        result = parse_image(str(img_path))
+
+        assert result["generator"] == "nai", f"got {result['generator']}, expected nai"
+
+    def test_gpt_image_software_tag(self, tmp_path: Path):
+        """OpenAI gpt-image / ChatGPT / DALL-E images expose their
+        provider via Software/Make EXIF tags or C2PA claim_generator."""
+        for software in ("OpenAI gpt-image-1", "ChatGPT", "DALL-E 3"):
+            img_path = self._write_png(tmp_path, f"gpt-{software}.png", {
+                "Software": software,
+            })
+            result = parse_image(str(img_path))
+            assert result["generator"] == "gpt-image", (software, result["generator"])
+
+    def test_c2pa_byte_signature_gpt_image(self, tmp_path: Path):
+        """When the metadata Software/Make tags are stripped but the
+        C2PA manifest remains, the byte-signature fallback should still
+        identify the provider. We synthesize a small manifest-shaped
+        binary blob (`c2pa` anchor + provider name) and append it as a
+        non-standard PNG chunk, then confirm the parser picks it up."""
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+        import struct
+        import zlib
+
+        img_path = tmp_path / "gpt-c2pa.png"
+        info = PngInfo()
+        # No Software / Make / Description — the front-of-file bytes must
+        # be the only signal.
+        Image.new("RGB", (256, 256), color="white").save(img_path, pnginfo=info)
+
+        # Inject a fake C2PA-shaped chunk near the file header. Real
+        # OpenAI images carry a `caBX` JUMBF chunk right after IHDR; we
+        # mimic that by inserting after the PNG signature & IHDR.
+        data = img_path.read_bytes()
+        # PNG signature is 8 bytes + IHDR length (4) + 'IHDR' (4) + data (13) + CRC (4) = 33 bytes
+        insert_at = 8 + 4 + 4 + 13 + 4
+        # Build a fake `caBX` chunk containing both anchor and signature.
+        payload = (
+            b"\x00\x00\x00\x00jumbfc2pa\x00"
+            b"claim_generator\x00gpt-image-1.0/openai\x00"
+            b"\x00" * 200  # padding to push file size above 32 KiB threshold
+        )
+        # Minimum file size threshold is 32 KiB — pad payload accordingly.
+        payload = payload.ljust(40 * 1024, b"\x00")
+        chunk_type = b"caBX"
+        crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+        chunk = struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", crc)
+        new_data = data[:insert_at] + chunk + data[insert_at:]
+        img_path.write_bytes(new_data)
+
+        result = parse_image(str(img_path))
+        assert result["generator"] == "gpt-image", result["generator"]
+
+    def test_c2pa_byte_signature_gemini(self, tmp_path: Path):
+        """Same as the gpt-image C2PA test, for Gemini / Imagen / Google AI."""
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+        import struct
+        import zlib
+
+        img_path = tmp_path / "gemini-c2pa.png"
+        Image.new("RGB", (256, 256), color="white").save(img_path, pnginfo=PngInfo())
+
+        data = img_path.read_bytes()
+        insert_at = 8 + 4 + 4 + 13 + 4
+        payload = (
+            b"\x00\x00\x00\x00jumbfc2pa\x00"
+            b"claim_generator\x00google-imagen-3.0\x00"
+        )
+        payload = payload.ljust(40 * 1024, b"\x00")
+        chunk_type = b"caBX"
+        crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+        chunk = struct.pack(">I", len(payload)) + chunk_type + payload + struct.pack(">I", crc)
+        new_data = data[:insert_at] + chunk + data[insert_at:]
+        img_path.write_bytes(new_data)
+
+        result = parse_image(str(img_path))
+        assert result["generator"] == "gemini", result["generator"]
+
+    def test_c2pa_byte_scan_requires_anchor(self, tmp_path: Path):
+        """A regular SD image whose PROMPT happens to mention 'OpenAI'
+        must NOT be misclassified as gpt-image. The C2PA scan only
+        triggers when an actual manifest anchor (`c2pa`/`jumbf`/
+        `claim_generator`) is present in the file."""
+        from PIL import Image
+        from PIL.PngImagePlugin import PngInfo
+
+        img_path = tmp_path / "openai-prompt-only.png"
+        info = PngInfo()
+        info.add_text("parameters", (
+            "by openai-style artist, beautiful illustration\n"
+            "Negative prompt: low quality\n"
+            "Steps: 20, Sampler: Euler a, CFG scale: 7, Seed: 1, "
+            "Size: 512x512, Model: m.safetensors"
+        ))
+        Image.new("RGB", (512, 512), color="white").save(img_path, pnginfo=info)
+        # Pad the file past the C2PA scan minimum so the anchor check
+        # actually has bytes to consider.
+        with open(img_path, "ab") as fh:
+            fh.write(b"\x00" * (40 * 1024))
+
+        result = parse_image(str(img_path))
+        # The user mentioned 'openai' inside the prompt but NO anchor —
+        # detection must stay at webui (the actual generator).
+        assert result["generator"] == "webui", result["generator"]
