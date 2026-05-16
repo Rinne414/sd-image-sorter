@@ -4,6 +4,10 @@ This release polishes the navigation layout, separates the global Setup utility 
 
 這版改善了主介面排版，把全域用的 Setup 入口與只影響當前 gallery 的破壞性 Clear Gallery 按鈕分開，新增真正的 "Others" 分類，掃描進度恢復到一開始就能看到精確總數和 ETA，批量導出 sidecar 多了"存到每張圖所在的資料夾"模式（適合圖庫分散在多個子資料夾），並修正了 JPEG 用 `.png` 副檔名時被誤判為損壞的問題。
 
+> **If you are upgrading from v3.1.5**: this release also rolls in everything that was prepared for v3.1.6 (which was never published as a standalone release). See the "From v3.1.6 (folded into this release)" section near the bottom for the additional fixes and performance improvements you are getting.
+>
+> **如果您是从 v3.1.5 升级**：本版本同時把當初為 v3.1.6 準備但從未單獨發布的全部內容捲入了。請看下方「From v3.1.6（已合進本版）」區塊以查看附帶的修正與效能改進。
+
 ---
 
 ## Added / 新增
@@ -58,6 +62,51 @@ This release polishes the navigation layout, separates the global Setup utility 
 
 - **Windows portable zip pre-installs the GPU runtime**: As with v3.1.6, NVIDIA `onnxruntime-gpu==1.21.0` plus the matching CUDA 12 runtime wheels are already shipped inside the Windows portable zip's embedded `python\Lib\site-packages`. Supported NVIDIA machines do not have to re-download CUDA / cuDNN on first launch; AMD/Intel and CPU-only paths still go through the same hardware-gated repair as v3.1.6.
   - **Windows portable zip 已預裝 NVIDIA GPU runtime**：如同 v3.1.6，NVIDIA `onnxruntime-gpu==1.21.0` 與對應的 CUDA 12 runtime wheel 已經內建在 Windows portable zip 的 `python\Lib\site-packages` 裡。被支援的 NVIDIA 機器第一次啟動不會再重新下載 CUDA / cuDNN；AMD / Intel 與純 CPU 機器仍然走 v3.1.6 已經導入的硬體 gating 修復路徑。
+
+---
+
+## From v3.1.6 (folded into this release) / 自 v3.1.6 合進本版
+
+The v3.1.6 stability prep was never published as a standalone release; everything below ships in v3.2.0 alongside the items above. If you are upgrading from v3.1.5 you get all of this too.
+
+v3.1.6 的穩定性準備從未作為獨立版本發布；下面這些改動全部隨 v3.2.0 一起發布。如果您從 v3.1.5 升級，這些都會一起到位。
+
+### Fixed in v3.1.6 / v3.1.6 修復
+
+- **Tagger threshold race condition**: concurrent tagging requests no longer corrupt each other's confidence thresholds.
+  - **標籤器閾值競態**：併發 tagging 請求不再互相覆蓋彼此的 confidence threshold。
+
+- **Graceful shutdown on update apply**: `update apply` now uses SIGINT instead of `os._exit(0)`, allowing proper cleanup of database connections and pending writes before the old process exits.
+  - **更新時優雅關閉**：套用更新時改用 SIGINT 取代 `os._exit(0)`，DB 連線與未寫入的資料能在舊程序退出前完成收尾。
+
+- **Similarity progress race**: the embedding-progress dict is now updated inside its lock, preventing partial reads where progress percent and current/total disagreed.
+  - **相似度進度競態**：嵌入進度字典現在在鎖內更新，避免百分比和 current/total 不一致的中間態被讀到。
+
+- **Censor resize listener leak**: the canvas resize handler is now debounced (150 ms) and removed when leaving the censor view, so repeatedly opening/closing the editor no longer accumulates listeners.
+  - **打碼編輯器 resize 泄漏**：canvas resize handler 現在有 150ms 防抖，離開打碼視圖時會移除，反覆進出編輯器不再累積監聽器。
+
+- **JPEG prompt metadata scanning**: `.jpg` / `.jpeg` images are now parsed for SD metadata in EXIF `UserComment` and APP1 XMP, including UTF-16 `UNICODE` UserComment blocks. JPEG rows imported by older parser versions will reparse on the next normal folder scan.
+  - **JPEG 提示詞元資料掃描**：`.jpg` / `.jpeg` 現在會從 EXIF `UserComment` 和 APP1 XMP（包括 UTF-16 `UNICODE` UserComment）裡解析 SD 元資料。舊版解析過的 JPEG 行會在普通資料夾掃描時自動重掃。
+
+- **Broader bounded metadata harvesting**: TIFF / TIF, GIF comment chunks, WebP XMP, and small same-name `.txt` / `.json` / `.xmp` sidecars now feed Gallery metadata when the embedded fields are missing. Sidecars are size-capped and treated as fallback-only so they do not slow normal scans.
+  - **更廣但有上限的 metadata 收集**：TIFF / TIF、GIF comment chunk、WebP XMP，以及小體積的同名 `.txt` / `.json` / `.xmp` sidecar，現在會在內嵌欄位缺失時補充 Gallery metadata。Sidecar 有大小限制且只作 fallback，不會拖慢一般掃描。
+
+### Improved in v3.1.6 / v3.1.6 優化
+
+- **Gallery pagination performance**: the `COUNT(*)` query is automatically skipped on cursor-paginated pages, saving 200–500 ms per page on large libraries.
+  - **圖庫翻頁效能**：游標翻頁時自動略過 `COUNT(*)`，大型圖庫每頁省 200–500ms。
+
+- **Query efficiency**: removed unnecessary `SELECT DISTINCT` on non-JOIN queries — 10–30 % faster for simple filter operations.
+  - **查詢效率**：非 JOIN 查詢移除多餘的 `SELECT DISTINCT`，簡單篩選快 10–30%。
+
+- **Generator facet cache**: `get_all_generators()` is now cached with a 60-second TTL, saving 10–50 ms per gallery load.
+  - **Generator facet 快取**：`get_all_generators()` 現在有 60 秒 TTL 的快取，每次圖庫載入省 10–50ms。
+
+- **Prompt Lab memory**: the image picker no longer loads the entire library into memory; it uses server-side search with a 200-image initial page, so opening Prompt Lab on a 100 K-image library no longer balloons the browser tab.
+  - **Prompt Lab 記憶體**：圖片選擇器不再把整個圖庫載入記憶體，改用伺服器端搜尋並先載 200 張，10 萬張圖也不會把瀏覽器分頁吃爆。
+
+- **WD14 GPU runtime repair (NVIDIA / AMD / Intel / CPU)**: Windows portable startup and WD14 Prepare / Recheck now run an ONNX Runtime repair pass before the tagger code loads. Supported NVIDIA hardware is repaired to `onnxruntime-gpu==1.21.0` plus matching CUDA / cuDNN runtime DLLs; AMD / Intel hardware is repaired to `onnxruntime-directml==1.21.0`; CPU-only or undetected hardware keeps the lightweight CPU runtime. The repair downgrades incompatible newer installs, force-reinstalls the pinned runtime when the `onnxruntime` import surface is corrupt, and uses `--no-deps` plus locked constraints so first launch does not reinstall the GPU runtime twice or drift shared pins like NumPy. (v3.2.0 builds on this with the fresh-portable Step 0 case + the CUDA-torch silent-CPU-fallback fix described above.)
+  - **WD14 GPU 運行庫修復（NVIDIA / AMD / Intel / CPU）**：Windows 便攜版啟動以及 WD14 Prepare / Recheck 都會在 tagger 代碼載入前執行 ONNX Runtime 修復。NVIDIA 修到 `onnxruntime-gpu==1.21.0` 加 CUDA / cuDNN 運行庫；AMD / Intel 修到 `onnxruntime-directml==1.21.0`；純 CPU 或無法可靠偵測時保留輕量 CPU runtime。修復會把不相容的新版本降回 pin，在 `onnxruntime` import 表面損壞時強制重裝 pin，並用 `--no-deps` + 鎖定 constraints 避免首啟重裝兩次或讓 NumPy 等共享 pin 漂走。（v3.2.0 在這之上補了首次解壓 portable 的 Step 0 case 與 CUDA-torch 靜默回退 CPU wheel 的修復，見上方。）
 
 ---
 
