@@ -268,16 +268,20 @@ class TestScan:
         )
 
         phases = [event["details"].get("phase") for event in events]
-        assert "counting" not in phases
-        assert "counted" not in phases
+        # Default scan now does count-first → counted → importing so the
+        # heartbeat shows a real ``current/total`` from the first import
+        # event. (See ``image_manager.scan_folder`` ``precise_total``
+        # default in tests/test_image_manager.py.)
+        assert "counting" in phases
+        assert "counted" in phases
         assert "importing" in phases
 
         import_events = [event for event in events if event["details"].get("phase") == "importing"]
         assert import_events
-        assert import_events[0]["current"] == 1
-        assert import_events[0]["total"] == 1
-        assert import_events[0]["details"]["import_total"] == 1
-        assert import_events[0]["details"]["total_final"] is False
+        # First importing event sees the precise count as the total.
+        assert import_events[0]["total"] == 3
+        assert import_events[0]["details"]["import_total"] == 3
+        assert import_events[0]["details"]["total_final"] is True
         assert result["total"] == 3
         assert result["total_final"] is True
 

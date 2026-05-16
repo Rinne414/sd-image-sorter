@@ -513,7 +513,7 @@ def scan_folder(
     cleanup_missing: bool = False,
     quick_import: bool = True,
     metadata_workers: int = DEFAULT_METADATA_WORKERS,
-    precise_total: bool = False,
+    precise_total: bool = True,
 ) -> Dict[str, Any]:
     """
     Scan a folder for images and add them to the database.
@@ -553,9 +553,15 @@ def scan_folder(
         "library_ready": False,
     }
     
-    # Default to a single-pass scan. Large/network folders should start importing
-    # immediately instead of walking the full tree once just to get an ETA.
-    # Callers that really need a precise denominator can opt into precise_total.
+    # Default to a precise count-first scan so the user sees a real
+    # ``current/total`` and can estimate ETA from the first heartbeat.
+    # The walk-the-tree-once cost is small on local SSDs (a few seconds
+    # for ~50k files) and dwarfed by the import + metadata-parse phase,
+    # so the UX win of "Found 48,062 images. Importing 1234/48062…" is
+    # worth the upfront pass for the typical user. Callers that scan
+    # massive network shares where the count walk itself takes minutes
+    # can opt out with ``precise_total=False`` to start importing
+    # immediately at the cost of a "?" total in heartbeats.
     folder = Path(folder_path)
     if folder.is_symlink():
         raise ScanError("Refusing to scan symlinked folders", path=folder_path)
