@@ -7370,8 +7370,18 @@ input[type="radio"],
     width: 118px;
     height: 118px;
     border-radius: 50%;
-    display: grid;
-    place-items: center;
+    /* Stack the number and label as a clean column inside the donut hole.
+       The previous "display: grid; place-items: center" approach plus
+       per-child ``margin-top`` hacks (8px on strong, 52px on span) ended
+       up pushing the label OUT of the inner dark circle and onto the
+       conic-gradient ring, where it became unreadable. Flex column with
+       a small gap keeps both elements centered together inside the
+       98x98 donut hole created by ::before. */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     position: relative;
     background: conic-gradient(var(--accent-secondary) calc(var(--score) * 1%), rgba(184, 215, 233, 0.12) 0);
 }
@@ -7391,18 +7401,25 @@ input[type="radio"],
 }
 
 .health-score-ring strong {
-    margin-top: 8px;
     color: var(--text-primary);
-    font-size: 2.3rem;
+    /* Tuned so a 3-digit score (e.g. ``100``) still fits cleanly inside
+       the 98px donut hole without crowding the rim. */
+    font-size: 1.75rem;
     line-height: 1;
+    margin: 0;
 }
 
 .health-score-ring span {
-    margin-top: 52px;
     color: var(--text-muted);
-    font-size: 0.72rem;
+    /* Smaller than the previous 0.72rem so the uppercase ``Health Score``
+       label fits inside the 98px donut hole on every locale. */
+    font-size: 0.62rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
+    margin: 0;
+    text-align: center;
+    max-width: 88px;
+    line-height: 1.15;
 }
 
 .health-status-copy h3 {

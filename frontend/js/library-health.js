@@ -308,6 +308,24 @@
             refreshButton.dataset.healthBound = '1';
             refreshButton.addEventListener('click', refresh);
         }
+        // Keep the audit hero (eyebrow + subtitle) on screen the moment
+        // the user expands the Dataset Audit details. Without this, the
+        // <details> element opens at its current scroll position and the
+        // first ~50px of the audit-hero — including the "Read-only
+        // library audit" eyebrow — sits above the modal-content scroll
+        // top, looking like the layout is broken.
+        var auditSection = $('#audit-section');
+        if (auditSection && auditSection.dataset.healthScrollBound !== '1') {
+            auditSection.dataset.healthScrollBound = '1';
+            auditSection.addEventListener('toggle', function () {
+                if (!auditSection.open) return;
+                try {
+                    auditSection.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                } catch (_e) {
+                    auditSection.scrollIntoView();
+                }
+            });
+        }
     }
 
     function init() {
