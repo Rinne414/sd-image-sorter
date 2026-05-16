@@ -331,16 +331,49 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
             _FALLBACK_TORCH_VERSION,
         )
         torch_version = _FALLBACK_TORCH_VERSION
-    packages = [f"torch=={torch_version}"]
-    if torchvision_version:
-        packages.append(f"torchvision=={torchvision_version}")
-    # Keep numpy below sam3's upper bound during the force-reinstall cascade.
-    packages.append(_NUMPY_SAM3_CONSTRAINT)
 
     cuda_version = _parse_cuda_version(str(state.get("nvidia_cuda_version") or ""))
     fallback_index = _resolve_pypi_fallback_index()
+
+    # numpy lives on PyPI (not on download.pytorch.org). Install it once, up
+    # front, with the SAM3-friendly upper bound. Doing this OUTSIDE the
+    # CUDA-index pip call lets us drop --extra-index-url from the torch step,
+    # which previously let pip silently fall back to PyPI's CPU torch wheel
+    # whenever the CUDA index hit a transient network error (IncompleteRead,
+    # DNS failure, etc.). With +cuXXX local versions plus a single index, a
+    # broken CUDA host now produces a clean "could not find" error instead of
+    # leaving the user with CPU torch and no diagnostic.
+    try:
+        _run_pip(
+            [
+                "install",
+                "--no-warn-script-location",
+                "--index-url",
+                fallback_index,
+                _NUMPY_SAM3_CONSTRAINT,
+            ],
+            stream=stream_pip,
+        )
+    except Exception as exc:
+        _record_action(
+            actions,
+            f"numpy<2.0 pre-install failed (continuing): {exc}",
+            stream_pip=stream_pip,
+        )
+
     last_error: Optional[BaseException] = None
     for label, index_url, _runtime_version in _cuda_index_candidates(cuda_version):
+        # Pin the explicit local-version label (e.g. ``2.12.0+cu126``) so pip
+        # cannot silently fall back to a CPU wheel from PyPI when the CUDA
+        # index is briefly unreachable. The CPU wheel on PyPI is published as
+        # plain ``2.12.0`` with no local-version suffix and does not match.
+        torch_pinned = f"torch=={torch_version}+{label}"
+        torchvision_pinned: Optional[str] = None
+        if torchvision_version:
+            torchvision_pinned = f"torchvision=={torchvision_version}+{label}"
+        packages = [torch_pinned]
+        if torchvision_pinned:
+            packages.append(torchvision_pinned)
         _record_action(
             actions,
             f"Installing CUDA PyTorch from {label} for NVIDIA GPU: {', '.join(packages)}",
@@ -356,8 +389,6 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
                     "--no-warn-script-location",
                     "--index-url",
                     index_url,
-                    "--extra-index-url",
-                    fallback_index,
                     *packages,
                 ],
                 stream=stream_pip,

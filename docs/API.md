@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.1.6
+**Version:** 3.2.0
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -580,6 +580,35 @@ Set the download mirror preference (auto, hf-mirror, modelscope).
 
 #### GET /api/models/download-progress
 Get active model download progress (bytes downloaded, total size).
+
+#### GET /api/models/bulk-bundle
+Inventory of models that the "Download all recommended models" button covers.
+
+Returns each model with its current ready/missing status and estimated
+download size, plus the total bytes the button would fetch if pressed
+right now. The frontend uses this to render the confirmation dialog
+showing how much disk space is needed before bulk download.
+
+Response shape:
+
+```json
+{
+  "items": [
+    {
+      "id": "wd14",
+      "label": "WD14 Tagger (default swinv2-tagger-v3)",
+      "size_bytes": 467664896,
+      "status": "ready",
+      "name": "WD14 Tagger",
+      "group": "tagger",
+      "variant": "wd-swinv2-tagger-v3"
+    }
+  ],
+  "pending_total_bytes": 7807402393,
+  "ready_count": 1,
+  "pending_count": 5
+}
+```
 
 #### POST /api/models/prepare
 Prepare or download a model/runtime.

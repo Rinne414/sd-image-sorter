@@ -309,6 +309,49 @@ def repair_windows_onnxruntime(*, stream_pip: bool = False) -> Dict[str, Any]:
     pinned_dml_version = _release_runtime_version("onnxruntime-directml")
     cuda_runtime_needs_refresh = False
 
+    # Step 0: nothing installed at all (fresh portable extract on Windows).
+    # `requirements-core.txt` does not pin onnxruntime on Windows because we
+    # need to choose the variant based on detected GPU vendor — but the
+    # historical Step 1/2/3/4 logic only handled cases where AT LEAST one
+    # variant was already installed. Without this branch, fresh portables
+    # silently skip the install and the first WD14 / NudeNet / CLIP attempt
+    # fails with `No module named 'onnxruntime'`.
+    if not cpu_version and not gpu_version and not dml_version:
+        # When CIM didn't detect a usable GPU vendor (VM, RDP, headless
+        # CI, broken WMI), fall back to CPU runtime — small, always
+        # works, and the user can opt into a GPU runtime later via
+        # Feature Setup.
+        chosen_spec: str
+        if primary_vendor in ("nvidia", "amd", "intel"):
+            chosen_spec = target_runtime_spec
+            chosen_runtime = target_runtime
+        else:
+            chosen_spec = _runtime_install_spec("onnxruntime")
+            chosen_runtime = "onnxruntime"
+        _record_action(
+            actions,
+            f"No onnxruntime variant installed on Windows. Installing {chosen_spec} "
+            f"(detected vendor: {primary_vendor or 'none'}).",
+            stream_pip=stream_pip,
+        )
+        _run_pip(
+            [
+                "install",
+                "--no-warn-script-location",
+                *_core_requirements_constraint_args(),
+                chosen_spec,
+            ],
+            stream=stream_pip,
+        )
+        did_repair = True
+        if chosen_runtime == "onnxruntime":
+            cpu_version = _version("onnxruntime")
+        elif chosen_runtime == "onnxruntime-gpu":
+            gpu_version = pinned_gpu_version or _version("onnxruntime-gpu")
+            cuda_runtime_needs_refresh = True
+        elif chosen_runtime == "onnxruntime-directml":
+            dml_version = pinned_dml_version or _version("onnxruntime-directml")
+
     # Step 1: remove the CPU-only `onnxruntime` package when it coexists with
     # a GPU runtime. The CPU package's DLLs override the GPU ones and silently
     # disable acceleration.

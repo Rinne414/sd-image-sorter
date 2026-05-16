@@ -406,3 +406,79 @@ def test_repair_reinstalls_pinned_directml_runtime_when_import_surface_is_broken
     assert not any("cuda,cudnn" in " ".join(call[0]) for call in pip_calls)
     assert result["repaired"] is True
     assert result["providers_after_repair"] == ["DmlExecutionProvider", "CPUExecutionProvider"]
+
+
+
+def test_repair_installs_runtime_when_nothing_present_with_nvidia_vendor(monkeypatch):
+    """Regression for the v3.2.0 fresh-portable bug: a Windows machine
+    with no onnxruntime variant installed at all (CPU=None, GPU=None,
+    DML=None) used to fall through every existing case and report
+    "No repair needed", leaving WD14/NudeNet/CLIP unable to import
+    onnxruntime on first model download."""
+    install_state = {
+        "platform": "Windows",
+        "python": repair_onnxruntime.sys.executable,
+        "onnxruntime_version": None,
+        "onnxruntime_gpu_version": None,
+        "onnxruntime_directml_version": None,
+        "has_conflict": False,
+        "has_gpu_package": False,
+        "has_dml_package": False,
+        "gpu_vendor_primary": "nvidia",
+        "gpu_vendors_detected": ["nvidia"],
+        "gpu_devices": [{"name": "NVIDIA GeForce RTX 4090", "vendor": "nvidia"}],
+    }
+    pip_calls = []
+
+    def fake_version(dist_name: str):
+        return {"onnxruntime-gpu": "1.21.0"}.get(dist_name)
+
+    def fake_run_pip(args, *, stream=False):
+        pip_calls.append(list(args))
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(repair_onnxruntime, "get_install_state", lambda: dict(install_state))
+    monkeypatch.setattr(repair_onnxruntime, "_version", fake_version)
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(repair_onnxruntime, "_probe_ort_providers", lambda: ["CUDAExecutionProvider"])
+
+    result = repair_onnxruntime.repair_windows_onnxruntime(stream_pip=False)
+
+    assert result["repaired"] is True
+    # First action installed the GPU runtime spec via the constraint-aware install path
+    install_calls = [c for c in pip_calls if c and c[0] == "install"]
+    assert any("onnxruntime-gpu" in arg for c in install_calls for arg in c)
+
+
+def test_repair_falls_back_to_cpu_runtime_when_nothing_present_and_no_gpu_detected(monkeypatch):
+    """Regression: VM / RDP / headless CI machines without a
+    detectable GPU vendor must still get the CPU runtime so the app
+    can boot."""
+    install_state = {
+        "platform": "Windows",
+        "python": repair_onnxruntime.sys.executable,
+        "onnxruntime_version": None,
+        "onnxruntime_gpu_version": None,
+        "onnxruntime_directml_version": None,
+        "has_conflict": False,
+        "has_gpu_package": False,
+        "has_dml_package": False,
+        "gpu_vendor_primary": None,
+        "gpu_vendors_detected": [],
+        "gpu_devices": [],
+    }
+    pip_calls = []
+    monkeypatch.setattr(repair_onnxruntime, "get_install_state", lambda: dict(install_state))
+    monkeypatch.setattr(repair_onnxruntime, "_version", lambda d: "1.21.0" if d == "onnxruntime" else None)
+    monkeypatch.setattr(repair_onnxruntime, "_run_pip", lambda args, *, stream=False: pip_calls.append(list(args)) or subprocess.CompletedProcess(args, 0))
+    monkeypatch.setattr(repair_onnxruntime, "_probe_ort_providers", lambda: ["CPUExecutionProvider"])
+
+    result = repair_onnxruntime.repair_windows_onnxruntime(stream_pip=False)
+
+    assert result["repaired"] is True
+    # Asked for CPU-only `onnxruntime` (not the GPU/DML packages)
+    install_calls = [c for c in pip_calls if c and c[0] == "install"]
+    flat = " ".join(arg for c in install_calls for arg in c)
+    assert "onnxruntime==" in flat or "onnxruntime>=" in flat
+    assert "onnxruntime-gpu" not in flat
+    assert "onnxruntime-directml" not in flat

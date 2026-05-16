@@ -111,6 +111,22 @@ tests/e2e/node_modules/
 tests/e2e/test-results/
 tests/e2e/.pw-out/
 
+# Loose test screenshots that sometimes get dropped at the repo root by
+# ad-hoc playwright runs. Keep them out of git AND the release builder.
+# Real product screenshots live under docs/screenshots/.
+/e2e-*.png
+/e2e-*.jpg
+/e2e-*.jpeg
+/e2e-*.webp
+/playwright-*.png
+/playwright-*.jpg
+/playwright-*.jpeg
+/playwright-*.webp
+/screenshot-*.png
+/screenshot-*.jpg
+/test-*.png
+/test-*.jpg
+
 # Reference files (binaries, external tools)
 reference/
 
