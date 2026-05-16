@@ -50,6 +50,29 @@ function normalizeAspectRatioFilter(value) {
     return VALID_ASPECT_RATIO_FILTERS.has(text) ? text : '';
 }
 
+// Generators that show as their own top-level tab in the gallery header.
+// Keep this small and intentional — the goal is to spend the limited
+// horizontal space only on the generators most users actually have in bulk.
+const PRIMARY_GENERATORS = ['comfyui', 'nai', 'webui', 'forge', 'unknown'];
+
+// Generators that are bundled under the "Others" top-level tab. Each
+// is still filterable individually via the Filter Criteria modal — this
+// list only controls what `data-gen="others"` resolves to. Stay in sync
+// with backend/metadata_parser.py::MetadataParser.OTHERS_BUNDLE.
+const OTHERS_GENERATOR_BUNDLE = [
+    'others',
+    'fooocus',
+    'reforge',
+    'easy-diffusion',
+    'invokeai',
+    'swarmui',
+    'drawthings',
+    'gemini',
+    'gpt-image'
+];
+
+const ALL_GENERATORS = [...PRIMARY_GENERATORS, ...OTHERS_GENERATOR_BUNDLE];
+
 function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
     const normalized = String(generator || 'unknown').trim().toLowerCase();
     const keyMap = {
@@ -58,6 +81,15 @@ function formatGeneratorLabel(generator, fallbackUnknown = 'Unknown') {
         comfyui: 'generator.comfyui',
         forge: 'generator.forge',
         webui: 'generator.webui',
+        reforge: 'generator.reforge',
+        fooocus: 'generator.fooocus',
+        'easy-diffusion': 'generator.easyDiffusion',
+        invokeai: 'generator.invokeai',
+        swarmui: 'generator.swarmui',
+        drawthings: 'generator.drawthings',
+        gemini: 'generator.gemini',
+        'gpt-image': 'generator.gptImage',
+        others: 'generator.others',
         unknown: 'generator.unknown'
     };
     const translationKey = keyMap[normalized];
@@ -159,7 +191,7 @@ function createDefaultFilterState() {
         return window.FilterStore.createDefaultFilterState();
     }
     return {
-        generators: ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'],
+        generators: [...ALL_GENERATORS],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
         tags: [],
         checkpoints: [],
@@ -970,6 +1002,10 @@ const API = {
         });
     },
 
+    async getModelBulkBundle() {
+        return this.get('/api/models/bulk-bundle');
+    },
+
     async getUpdateStatus(force = false) {
         return this.get(`/api/updates/status?force=${force ? 'true' : 'false'}`);
     },
@@ -1637,11 +1673,15 @@ function setUpdateButtonState(status = AppState.update.status, checking = false)
         button.disabled = Boolean(checking);
         button.title = title;
         button.setAttribute('aria-label', title);
-        const textNode = button.querySelector('span:last-child');
-        if (textNode) {
-            textNode.textContent = label;
+        if (!button.classList.contains('btn-icon-only')) {
+            const textNode = button.querySelector('span:last-child');
+            if (textNode) {
+                textNode.textContent = label;
+            }
         }
     });
+
+    window.requestAnimationFrame?.(() => updateNavigationOverflowState());
 }
 
 async function refreshUpdateStatus({ force = false, silent = false } = {}) {
@@ -3348,12 +3388,11 @@ function switchView(viewName) {
                 _onGalleryScroll();
             }
         });
+        // Re-check whether unreadable rows exist when returning to gallery.
+        // Cached for 60s inside UnreadableBanner so this is cheap.
+        window.UnreadableBanner?.refresh?.(false);
     } else if (viewName === 'similar') {
         if (typeof window.initSimilar === 'function') window.initSimilar();
-    } else if (viewName === 'health') {
-        if (window.LibraryHealth && typeof window.LibraryHealth.init === 'function') {
-            window.LibraryHealth.init();
-        }
     } else if (viewName === 'promptlab') {
         if (typeof window.initPromptLab === 'function') window.initPromptLab();
     } else if (viewName === 'artist') {
@@ -3879,7 +3918,14 @@ function initEventListeners() {
             if (gen === 'all') {
                 // Reset to show all generators
                 updateAppFilters((filters) => {
-                    filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
+                    filters.generators = [...ALL_GENERATORS];
+                });
+            } else if (gen === 'others') {
+                // Bundle of less common generators — Fooocus, reForge,
+                // Gemini, gpt-image, etc. Each is still individually
+                // filterable via the Filter Criteria modal.
+                updateAppFilters((filters) => {
+                    filters.generators = [...OTHERS_GENERATOR_BUNDLE];
                 });
             } else {
                 // Filter by single generator
@@ -3890,7 +3936,13 @@ function initEventListeners() {
 
             // Update filter modal checkboxes to stay in sync
             $$('#modal-generator-filters input').forEach(cb => {
-                cb.checked = gen === 'all' || cb.value === gen;
+                if (gen === 'all') {
+                    cb.checked = true;
+                } else if (gen === 'others') {
+                    cb.checked = OTHERS_GENERATOR_BUNDLE.includes(cb.value);
+                } else {
+                    cb.checked = cb.value === gen;
+                }
             });
 
             updateFilterSummary();
@@ -3920,7 +3972,7 @@ function initEventListeners() {
                 // so they don't think the data is gone.
                 showToast(appT('gallery.aestheticViewExistingOnly', 'Showing your {count} existing aesthetic scores. New scoring is unavailable until the predictor is reinstalled.', { count: _aestheticStatus.scored_count }), 'info');
             } else if (_aestheticStatus.scored_count === 0) {
-                showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Click the ⭐ button in the toolbar to score your images first.'), 'info');
+                showToast(appT('gallery.aestheticNeedScoring', 'No images have been scored yet. Open AI Tag Images and run Score Aesthetic first.'), 'info');
             }
         }
         updateSortReverseButton();
@@ -4536,7 +4588,7 @@ function updateMobileFilterBadge() {
     let filterCount = 0;
 
     // Check generators (if not all selected)
-    const allGenerators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
+    const allGenerators = [...ALL_GENERATORS];
     if (AppState.filters.generators.length !== allGenerators.length) {
         filterCount++;
     }
@@ -5012,6 +5064,7 @@ async function pollReconnectProgress(retryCount = 0) {
             _hideBgReconnectProgress();
             _setReconnectRunningUi(false);
             _refreshScanDrivenViews(true, { refreshGallery: true });
+            window.UnreadableBanner?.refresh(true);
             return;
         }
 
@@ -5019,6 +5072,7 @@ async function pollReconnectProgress(retryCount = 0) {
             showToast(progress.message || appT('reconnect.cancelled', 'Search stopped'), 'info');
             _hideBgReconnectProgress();
             _setReconnectRunningUi(false);
+            window.UnreadableBanner?.refresh(true);
             return;
         }
 
@@ -5289,6 +5343,13 @@ function _refreshScanDrivenViews(force = false, options = {}) {
         }
     }
     loadStats();
+    // Library state changed (scan / reconnect / clear). Drop any cached
+    // unreadable count so the banner reflects the new reality next time
+    // gallery is the active view.
+    window.UnreadableBanner?.invalidate?.();
+    if (AppState.currentView === 'gallery') {
+        window.UnreadableBanner?.refresh?.(true);
+    }
 }
 
 function getScanProgressMetrics(progress) {
@@ -5725,7 +5786,11 @@ async function pollScanProgress(retryCount = 0) {
                 }, 500);
             }
         } else if (progress.status === 'cancelled') {
-            showToast(progress.message || appT('scan.cancelled', 'Scan cancelled'), 'info');
+            const cancelCount = Number(progress.processed ?? progress.current ?? 0);
+            const cancelMsg = cancelCount > 0
+                ? appT('scan.cancelledAfterCount', 'Import cancelled after {count} scanned.').replace('{count}', String(cancelCount))
+                : appT('scan.cancelled', 'Import cancelled');
+            showToast(cancelMsg, 'info');
             $('#scan-progress-container').style.display = 'none';
             $('#btn-start-scan').disabled = false;
             setScanCancelButtonState('idle');
@@ -6325,7 +6390,7 @@ async function loadStats() {
         const countAll = $('#count-all');
         if (countAll) countAll.textContent = reportedTotal;
 
-        ['nai', 'comfyui', 'forge', 'webui', 'others', 'unknown'].forEach(gen => {
+        ['nai', 'comfyui', 'forge', 'webui', 'unknown'].forEach(gen => {
             const countEl = $(`#count-${gen}`);
             if (countEl) {
                 const count = genCounts[gen] || 0;
@@ -6335,6 +6400,21 @@ async function loadStats() {
                     : '';
             }
         });
+
+        // The "Others" tab bundles every uncommon generator (Fooocus,
+        // reForge, Gemini, gpt-image, ...) — its count must reflect the
+        // sum so the badge matches the gallery once the user clicks it.
+        const othersCount = OTHERS_GENERATOR_BUNDLE.reduce(
+            (sum, gen) => sum + (genCounts[gen] || 0),
+            0
+        );
+        const countOthersEl = $('#count-others');
+        if (countOthersEl) {
+            countOthersEl.textContent = countsResolving && othersCount === 0 ? '…' : String(othersCount);
+            countOthersEl.title = countsResolving
+                ? appT('gallery.metadataResolvingTitle', 'Generator counts are still resolving while metadata is being read or scan import is still running.')
+                : '';
+        }
 
         const metadataChip = $('#metadata-status-chip');
         if (metadataChip) {
@@ -6396,7 +6476,7 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     const button = $('#btn-score-aesthetic');
     const cancelBtn = $('#btn-cancel-aesthetic');
     const chip = $('#aesthetic-status-chip');
-    if (!button || !chip) return;
+    if (!button) return;
 
     const t = (key, fallback, params) => {
         const translated = window.I18n?.t?.(key, params);
@@ -6408,10 +6488,14 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     if (!_aestheticStatus.available) {
         button.disabled = true;
         button.title = _aestheticStatus.message || t('gallery.aestheticUnavailable', 'Aesthetic scoring is unavailable');
-        chip.style.display = 'inline-flex';
-        chip.className = 'header-status-chip is-warning';
-        chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
+        button.setAttribute('aria-label', button.title);
         if (cancelBtn) cancelBtn.style.display = 'none';
+        if (chip) {
+            chip.style.display = 'inline-flex';
+            chip.className = 'tagger-aesthetic-status is-warning';
+            chip.textContent = t('gallery.aestheticUnavailableShort', 'Aesthetic unavailable');
+            chip.title = button.title;
+        }
         return;
     }
 
@@ -6419,16 +6503,21 @@ function updateAestheticUi({ running = false, completed = 0, total = 0 } = {}) {
     button.title = running
         ? t('gallery.aestheticRunning', 'Scoring aesthetics...')
         : t('gallery.scoreAesthetic', 'Score Aesthetic');
+    button.setAttribute('aria-label', button.title);
 
-    if (running) {
+    if (running && chip) {
         chip.style.display = 'inline-flex';
-        chip.className = 'header-status-chip is-info';
+        chip.className = 'tagger-aesthetic-status is-info';
         chip.textContent = t('gallery.aestheticProgress', '{completed}/{total} scored', {
             completed,
             total: Math.max(total, completed),
         });
-    } else {
-        chip.style.display = 'none';
+        chip.title = chip.textContent;
+    } else if (chip) {
+        chip.style.display = 'inline-flex';
+        chip.className = 'tagger-aesthetic-status is-safe';
+        chip.textContent = t('gallery.aestheticReady', 'Aesthetic ready');
+        chip.title = chip.textContent;
     }
 }
 
@@ -6460,7 +6549,7 @@ async function refreshAestheticStatus() {
                 aestheticOption.textContent = appT('sort.aestheticDisabled', 'Aesthetic Score (unavailable)');
             } else if (_aestheticStatus.scored_count === 0) {
                 aestheticOption.disabled = false;
-                aestheticOption.textContent = appT('sort.aestheticNoScores', 'Aesthetic Score (no scores yet - click ⭐ to score)');
+                aestheticOption.textContent = appT('sort.aestheticNoScores', 'Aesthetic Score (no scores yet - score from AI Tag)');
             } else {
                 aestheticOption.disabled = false;
                 aestheticOption.textContent = appT('sort.aesthetic', 'Aesthetic Score') +
@@ -8024,7 +8113,7 @@ function clearFilters() {
         cb.checked = true;
     });
     updateAppFilters((filters) => {
-        filters.generators = ['comfyui', 'nai', 'webui', 'forge', 'others', 'unknown'];
+        filters.generators = [...ALL_GENERATORS];
         filters.ratings = ['general', 'sensitive', 'questionable', 'explicit'];
         filters.tags = [];
         filters.search = '';
@@ -8343,6 +8432,17 @@ async function saveDiskSettings() {
 }
 
 
+function bindDatasetAuditLazyInit() {
+    const details = document.getElementById('audit-section');
+    if (!details || details.dataset.auditBound === '1') return;
+    details.dataset.auditBound = '1';
+    details.addEventListener('toggle', () => {
+        if (details.open && window.LibraryHealth && typeof window.LibraryHealth.init === 'function') {
+            window.LibraryHealth.init();
+        }
+    });
+}
+
 async function openModelManager() {
     const summaryEl = $('#model-manager-summary');
     const gridEl = $('#model-manager-grid');
@@ -8355,6 +8455,11 @@ async function openModelManager() {
     // Disk usage loads independently so a slow model probe doesn't block it.
     loadDiskUsage();
 
+    // Lazily initialize Dataset Audit only when the user expands it. Its data
+    // call is heavier than disk usage, so we do not want it to fire on every
+    // Setup open.
+    bindDatasetAuditLazyInit();
+
     try {
         const result = await API.getModelStatus();
         renderModelManager(result.models || []);
@@ -8362,6 +8467,233 @@ async function openModelManager() {
         if (summaryEl) {
             summaryEl.innerHTML = `<div class="model-manager-stat"><strong>${escapeHtml(appT('models.failedTitle', 'Load failed'))}</strong><span>${escapeHtml(error.message || appT('models.failedBody', 'Could not read local feature status right now.'))}</span></div>`;
         }
+    }
+
+    // Wire the "Download all" button. Idempotent — re-binding on each
+    // openModelManager() call is fine because the previous handler was
+    // removed when the DOM survived (the button is static markup).
+    const bulkBtn = $('#btn-bulk-download-models');
+    if (bulkBtn && !bulkBtn.dataset.bulkBound) {
+        bulkBtn.dataset.bulkBound = '1';
+        bulkBtn.addEventListener('click', () => {
+            promptBulkDownloadModels().catch((err) => {
+                console.error('Bulk download flow failed', err);
+                showToast(formatUserError(err, appT('models.bulkFailed', 'Bulk download failed')), 'error');
+            });
+        });
+    }
+}
+
+function _formatBulkBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(0)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+async function promptBulkDownloadModels() {
+    let bundle;
+    try {
+        bundle = await API.getModelBulkBundle();
+    } catch (err) {
+        showToast(formatUserError(err, appT('models.bulkFetchFailed', 'Could not load the bulk download list. Please restart the app and try again.')), 'error');
+        return;
+    }
+
+    const items = Array.isArray(bundle?.items) ? bundle.items : [];
+    if (items.length === 0) {
+        showToast(appT('models.bulkEmpty', 'No models are configured for bulk download.'), 'warning');
+        return;
+    }
+    const pendingItems = items.filter((it) => it.status !== 'ready');
+    if (pendingItems.length === 0) {
+        showToast(appT('models.bulkAllReady', 'All recommended models are already downloaded.'), 'success');
+        return;
+    }
+    const pendingTotalBytes = Number(bundle.pending_total_bytes) || pendingItems.reduce((s, it) => s + (Number(it.size_bytes) || 0), 0);
+
+    // Build the confirmation HTML. We can't use showConfirm() directly
+    // because it only takes plain text — we want a checklist with sizes.
+    const listHtml = items.map((it) => {
+        const isReady = it.status === 'ready';
+        const cls = isReady ? 'is-ready' : 'is-pending';
+        const sizeText = _formatBulkBytes(it.size_bytes);
+        const pillText = isReady
+            ? appT('models.bulkAlreadyReady', 'already ready')
+            : appT('models.bulkWillDownload', 'will download');
+        const safeLabel = escapeHtml(it.label || it.name || it.id);
+        return `
+            <div class="bulk-download-row ${cls}">
+                <span class="bulk-download-name">${safeLabel}</span>
+                <span class="bulk-download-pill">${escapeHtml(pillText)}</span>
+                <span class="bulk-download-size">~${escapeHtml(sizeText)}</span>
+            </div>
+        `;
+    }).join('');
+
+    const totalText = _formatBulkBytes(pendingTotalBytes);
+    const excludedItems = Array.isArray(bundle.excluded) ? bundle.excluded : [];
+    const excludedHtml = excludedItems.length ? `
+        <p class="model-card-hint" style="margin-top:8px;">
+            ${escapeHtml(appT('models.bulkExcludedNote', 'Skipped:'))} ${
+                excludedItems.map(e => escapeHtml(e.id)).join(', ')
+            }
+        </p>
+    ` : '';
+
+    const bodyHtml = `
+        <p>${escapeHtml(appT(
+            'models.bulkConfirmIntro',
+            'About to download {count} model(s). Estimated disk space needed: {size}.',
+            { count: pendingItems.length, size: totalText }
+        ))}</p>
+        <div class="bulk-download-list" role="list">${listHtml}</div>
+        <div class="bulk-download-summary">
+            <span>${escapeHtml(appT('models.bulkConfirmTotalLabel', 'Total to download'))}</span>
+            <span>${escapeHtml(totalText)}</span>
+        </div>
+        ${excludedHtml}
+        <p class="model-card-hint" style="margin-top:10px;">${escapeHtml(appT(
+            'models.bulkConfirmNote',
+            'Sizes are estimates. Some models also install Python packages on first run; restart the app if the progress text mentions a Python install. Downloads run sequentially and you can close this dialog to leave them running in the background.'
+        ))}</p>
+    `;
+
+    // Re-use the existing #confirm-modal but inject HTML message. Bypass
+    // showConfirm()'s plain-text content path — its lock means we have
+    // to set message innerHTML manually after it opens.
+    showConfirm(
+        appT('models.bulkConfirmTitle', 'Are you sure? Download all recommended models'),
+        '',
+        async () => {
+            unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
+            await runBulkDownload(pendingItems);
+        },
+        () => {
+            // Cancel: restore the OK button to its default "Yes" text so
+            // the next showConfirm() user gets the right wording.
+            unlockDynamicI18nText('#btn-confirm-ok', 'modal.yes', 'Yes, proceed');
+            const messageEl = document.getElementById('confirm-message');
+            if (messageEl) {
+                messageEl.style.maxHeight = '';
+                messageEl.style.overflowY = '';
+                messageEl.style.textAlign = '';
+            }
+        }
+    );
+
+    const messageEl = document.getElementById('confirm-message');
+    if (messageEl) {
+        messageEl.innerHTML = bodyHtml;
+        messageEl.style.maxHeight = '60vh';
+        messageEl.style.overflowY = 'auto';
+        messageEl.style.textAlign = 'left';
+    }
+    // Lock the OK button text so the global i18n auto-retranslate
+    // (which honours data-i18n="modal.yes") doesn't overwrite our
+    // dynamic "Download N model(s) (~X GB)" label.
+    lockDynamicI18nText('#btn-confirm-ok', 'modal.yes');
+    const okBtn = document.getElementById('btn-confirm-ok');
+    if (okBtn) {
+        okBtn.textContent = appT('models.bulkConfirmOk', 'Download {count} model(s) (~{size})', {
+            count: pendingItems.length,
+            size: totalText,
+        });
+    }
+}
+
+async function runBulkDownload(items) {
+    const button = $('#btn-bulk-download-models');
+    const originalLabel = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+    }
+
+    const total = items.length;
+    let completed = 0;
+    const failures = [];
+
+    for (const item of items) {
+        if (button) {
+            button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
+                'models.bulkProgress',
+                'Downloading {index}/{total}: {name}',
+                { index: completed + 1, total, name: item.name || item.id }
+            ))}</span>`;
+        }
+
+        try {
+            await API.prepareModel(item.id, {
+                variant: item.variant || null,
+            });
+        } catch (err) {
+            failures.push({ id: item.id, message: err?.message || String(err) });
+            continue;
+        }
+
+        // Poll progress until this model finishes (or another one starts).
+        // Re-uses the existing /api/models/download-progress endpoint that
+        // the per-card prepare buttons drive.
+        let finished = false;
+        let safetyTicks = 0;
+        while (!finished) {
+            await new Promise(r => setTimeout(r, 1500));
+            safetyTicks += 1;
+            // Hard guard: 1 hour absolute cap per model so the loop can
+            // never deadlock if the backend never reports `prepare_result`.
+            if (safetyTicks > 2400) {
+                failures.push({ id: item.id, message: 'timeout waiting for prepare_result' });
+                break;
+            }
+            try {
+                const p = await API.get('/api/models/download-progress');
+                const pr = p?.prepare_result;
+                if (pr && !pr.active && pr.model_id === item.id && pr.status) {
+                    finished = true;
+                    if (pr.status !== 'done' && pr.status !== 'ready' && pr.status !== 'warning') {
+                        failures.push({ id: item.id, message: pr.message || pr.error || pr.status });
+                    }
+                    break;
+                }
+                if (button && p?.active && p.total > 0) {
+                    const pct = Math.round((p.downloaded / p.total) * 100);
+                    button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
+                        'models.bulkProgressDetail',
+                        '{index}/{total}: {name} {pct}%',
+                        { index: completed + 1, total, name: item.name || item.id, pct }
+                    ))}</span>`;
+                }
+            } catch (err) {
+                // Network blip — just retry the poll.
+            }
+        }
+        completed += 1;
+    }
+
+    // Refresh model status to reflect the new "ready" rows.
+    try {
+        const refreshed = await API.getModelStatus();
+        renderModelManager(refreshed.models || []);
+    } catch (err) {
+        // Non-fatal — the user can re-open the modal.
+    }
+
+    if (button) {
+        button.disabled = false;
+        button.innerHTML = originalLabel
+            || `<span aria-hidden="true">⬇️</span> <span>${escapeHtml(appT('models.bulkDownload', 'Download all recommended models'))}</span>`;
+    }
+
+    if (failures.length === 0) {
+        showToast(appT('models.bulkDoneAll', 'Downloaded all {count} model(s) successfully.', { count: total }), 'success');
+    } else {
+        const okCount = total - failures.length;
+        const failedIds = failures.map(f => f.id).join(', ');
+        showToast(appT(
+            'models.bulkDoneMixed',
+            'Downloaded {ok}/{total}. Failed: {failed}. Open each model card to retry the failed ones.',
+            { ok: okCount, total, failed: failedIds }
+        ), 'warning');
     }
 }
 

@@ -897,3 +897,33 @@ Quality bar:
   Before adding more token-scoped bulk actions, before advertising multi-hundred-thousand-image export as a polished workflow, or when users report long-running export/delete requests timing out.
 - Deferred because:
   The release-blocking issue was unbounded browser/backend memory and giant JSON payloads. The current implementation fixes that root cause while preserving existing API compatibility; a full background-job framework is larger release work.
+
+
+
+### Debt-23: Pixel-watermark detection for Gemini / gpt-image is metadata-only
+
+- Status: deferred / opt-in candidate
+- Where: `backend/metadata_parser.py::MetadataParser._maybe_detect_ai_provider` and the corresponding ADR-2026-05-16 (C2PA byte-signature fallback)
+- Symptom (current behaviour): we identify Gemini and gpt-image images via metadata only — EXIF Software/Make/Description tag matching plus a 512 KiB front-of-file C2PA byte scan looking for `c2pa`/`jumbf`/`claim_generator` anchors plus provider-name strings. We do NOT verify the actual invisible watermarks in the pixel data. The image-detail modal carries a hint string (`modal.aiProviderNote.gemini`, `modal.aiProviderNote.gptImage`) so the user is aware of this gap when they look at one of these images.
+- Why this matters: an image that has been re-saved by a hosting platform with all metadata stripped (EXIF cleared AND C2PA manifest dropped) currently classifies as `unknown`, even when the original Gemini SynthID watermark is still encoded in the pixels. This affects a small but non-zero fraction of Gemini images that go through Twitter/Discord/Pixiv re-encoding paths.
+- What's available externally:
+  - `aloshdenny/reverse-SynthID` (3.8k stars on GitHub as of 2026-05-16) — pure FFT spectral analysis approach. Reports ~90% detection accuracy on Gemini outputs at supported resolutions (1024×1024, 1536×2816). Includes `RobustSynthIDExtractor.detect_from_v4_codebook(image_rgb, codebook, model='nano-banana-pro-preview')`. License: research-only ("Do not use these tools to misrepresent AI-generated content as human-created.").
+  - `facebook/watermark-anything` (ICLR 2025, MIT license) — generic watermark detector, not SynthID-specific.
+  - `prithivMLmods/Watermark-Detection-SigLIP2` — SigLIP2-based generic watermark detector on HuggingFace.
+  - `google-deepmind/synthid-text` — Google's official SynthID, but TEXT only.
+  - For OpenAI gpt-image / DALL-E: no public reverse-engineered detector exists for OpenAI's pixel-level signal as of the ADR date. C2PA Content Credentials are still the only public provenance signal.
+- Why we deferred:
+  - Cost: ~100–300 ms per image FFT + codebook lookup vs ~2 ms for the current C2PA byte-scan. On a 70k-image library that's ~hours added to a full re-scan.
+  - Disk: codebook artifact is ~220 MB and is resolution-dependent. Other resolutions degrade in accuracy.
+  - License: "research only" disclaimer the user inherits would need explicit consent.
+  - False-positive risk: ~10% on Gemini-supported resolutions. On the user's primary library type (Stable Diffusion / ComfyUI / NovelAI), spectral patterns can collide and mislabel legitimate SD images as Gemini.
+  - Marginal benefit: the current C2PA byte-scan already caught real Gemini and real ChatGPT images in `L:\Pictures\AAA Reference\undid` (the `0E404B43...png` file is one verified example with `claim_generator_info.name: "OpenAI Media Service API"` near a `c2pa` anchor at offset 57). Adding pixel-detection only helps the smaller "C2PA also stripped" subset.
+  - No corresponding open-source detector for OpenAI gpt-image, so any pixel-level work would only solve half the problem.
+- Plan when revisited:
+  1. Add a separate Setup card for "Gemini watermark detector (research, advanced)" that downloads the reverse-SynthID codebook and installs the `torch.fft` requirements. Default off.
+  2. Wire it into the parser as a LAST fallback after C2PA byte-scan, behind a per-scan `enable_pixel_watermark_detection` flag stored in user settings.
+  3. Resolution gate: only run when image dimensions match a profile in the codebook; otherwise skip.
+  4. Confidence threshold: require `confidence > 0.85` (well above the 0.91 / 0.02 split in the reverse-SynthID benchmark) to label, otherwise leave as `unknown` to avoid false positives on SD images.
+  5. Re-evaluate every 6 months — the field is moving fast (Watermark-Anything, SigLIP2, etc.), and a more permissive / resolution-agnostic / SD-safe detector may ship.
+- Don't do silently: any future integration must keep the modal hint visible (`modal.aiProviderNote.*`) at least until the detector is on by default — users should always know whether the label came from metadata or from the pixel detector. A future ADR should record the activation state.
+

@@ -96,6 +96,67 @@ async def get_models_status(service: ModelService = Depends(get_model_service)):
     return service.get_status()
 
 
+# Models the "Download all" button in Feature Setup will fetch.
+# Intentionally excludes:
+#   - censor-legacy (Wenaka2004 Privacy YOLO) — user opt-in only
+#   - toriigate (~5 GB heavy alternative tagger; default WD14 covers tagging)
+# WD14 is downloaded with the default variant only (`wd-swinv2-tagger-v3`),
+# not the full tagger family.
+# Sizes are best-effort estimates (compressed download size) sourced from
+# README.md "模型体积" table. Tweak alongside that table when models change.
+BULK_MODEL_BUNDLE: list = [
+    {"id": "wd14", "variant": "wd-swinv2-tagger-v3", "size_bytes": 446 * 1024 * 1024, "label": "WD14 Tagger (default: wd-swinv2-tagger-v3)"},
+    {"id": "censor-nudenet", "size_bytes": 12 * 1024 * 1024, "label": "NudeNet 320n"},
+    {"id": "clip", "size_bytes": 335 * 1024 * 1024, "label": "CLIP ViT-B/32 (similarity search)"},
+    {"id": "aesthetic", "size_bytes": 400 * 1024 * 1024, "label": "Aesthetic predictor (CLIP ViT-L/14 + LAION head)"},
+    {"id": "artist", "size_bytes": int(2.8 * 1024 * 1024 * 1024), "label": "Kaloscope 2.0 (Artist ID)"},
+    {"id": "sam3", "size_bytes": int(3.3 * 1024 * 1024 * 1024), "label": "SAM 3 (text-guided segmentation)"},
+]
+
+
+@router.get("/bulk-bundle")
+async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
+    """Inventory of models the "Download all" button covers.
+
+    Returns each item with its current ready/missing status and an
+    estimated download size, plus the total bytes the button would
+    fetch if pressed right now (only "missing" entries contribute to
+    the total). The frontend uses this to render the confirmation
+    dialog showing how much disk space is needed.
+    """
+    inventory = service.build_model_inventory()
+    by_id = {entry["id"]: entry for entry in inventory}
+
+    items = []
+    pending_total = 0
+    for spec in BULK_MODEL_BUNDLE:
+        entry = by_id.get(spec["id"])
+        status = (entry or {}).get("status", "missing")
+        is_ready = status == "ready"
+        item = {
+            "id": spec["id"],
+            "label": spec["label"],
+            "size_bytes": int(spec["size_bytes"]),
+            "status": "ready" if is_ready else "missing",
+            "name": (entry or {}).get("name") or spec["id"],
+            "group": (entry or {}).get("group") or "",
+            "variant": spec.get("variant"),
+        }
+        items.append(item)
+        if not is_ready:
+            pending_total += int(spec["size_bytes"])
+
+    return {
+        "items": items,
+        "pending_total_bytes": pending_total,
+        "all_total_bytes": sum(int(s["size_bytes"]) for s in BULK_MODEL_BUNDLE),
+        "excluded": [
+            {"id": "censor-legacy", "reason": "Privacy YOLO (Wenaka2004) is opt-in for content-safety reasons."},
+            {"id": "toriigate", "reason": "ToriiGate VLM is a ~5 GB alternative tagger; the default WD14 already covers tagging."},
+        ],
+    }
+
+
 def _run_prepare_blocking(service: ModelService, model_id: str, source: Optional[str], variant: Optional[str]) -> None:
     try:
         result = service.prepare_model(model_id, source=source, variant=variant)

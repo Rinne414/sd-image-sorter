@@ -61,6 +61,12 @@
         _setButton: function (selector, key, icon, titleKey) {
             var el = document.querySelector(selector);
             if (!el) return;
+            // Respect the dynamic-text lock used by callers that need to
+            // override a button's label at runtime (e.g. the bulk-download
+            // confirmation OK button shows "Download N model(s) (~X GB)"
+            // and must NOT be reset to the static "modal.yes" key while
+            // the dialog is open).
+            if (el.dataset && el.dataset.i18nLocked === '1') return;
             var label = this._escape(this._t(key));
             var iconHtml = icon ? '<span aria-hidden="true">' + this._escape(icon) + '</span>' : '';
             el.innerHTML = iconHtml + '<span class="ui-label">' + label + '</span>';
@@ -435,13 +441,22 @@
             this._setButton('#btn-open-library-from-filter', 'filter.browseLibrary', '📚', 'filter.browseLibrary');
             this._setText('#filter-modal-title', 'filter.filterImages');
             this._setText('#generator-filters-heading', 'filter.generators');
+            // Order MUST match index.html #modal-generator-filters checkbox order.
             this._setCheckboxTexts('#modal-generator-filters', [
                 'generator.comfyui',
                 'generator.nai',
                 'generator.webui',
                 'generator.forge',
-                'generator.others',
-                'generator.unknown'
+                'generator.reforge',
+                'generator.fooocus',
+                'generator.invokeai',
+                'generator.swarmui',
+                'generator.easyDiffusion',
+                'generator.drawthings',
+                'generator.gemini',
+                'generator.gptImage',
+                'generator.unknown',
+                'generator.others'
             ]);
             this._setText('#dimensions-heading', 'filter.dimensions');
             this._setPlaceholder('#filter-min-width', 'filter.widthMin');
@@ -471,11 +486,11 @@
 
         _translateCommonState: function () {
             this._setText('#global-loading-msg', 'common.loading');
-            this._setAttr('#btn-help', 'title', 'guide.title');
-            this._setAttr('#btn-help', 'aria-label', 'guide.title');
-            this._setAttr('#mobile-btn-language', 'title', 'lang.switchTitle');
+            this._setAttr('#btn-help', 'title', 'guide.tooltip');
+            this._setAttr('#btn-help', 'aria-label', 'guide.tooltip');
+            this._setAttr('#mobile-btn-language', 'title', 'lang.switchTooltip');
             this._setAttr('#mobile-btn-language', 'aria-label', 'lang.switchLabel');
-            this._setAttr('#btn-language-toggle', 'title', 'lang.switchTitle');
+            this._setAttr('#btn-language-toggle', 'title', 'lang.switchTooltip');
             this._setAttr('#btn-language-toggle', 'aria-label', 'lang.switchLabel');
         },
 
@@ -540,11 +555,13 @@
             var buttons = document.querySelectorAll('#btn-language-toggle, #mobile-btn-language');
             for (var i = 0; i < buttons.length; i++) {
                 var button = buttons[i];
-                var label = button.querySelector('span:last-child');
-                if (label) {
-                    label.textContent = this._t('lang.toggle');
+                if (!button.classList.contains('btn-icon-only')) {
+                    var label = button.querySelector('span:last-child');
+                    if (label) {
+                        label.textContent = this._t('lang.toggle');
+                    }
                 }
-                button.title = this._t('lang.switchTitle');
+                button.title = this._t('lang.switchTooltip') || this._t('lang.switchTitle');
                 button.setAttribute('aria-label', this._t('lang.switchLabel'));
             }
         },

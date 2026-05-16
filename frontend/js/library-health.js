@@ -308,27 +308,21 @@
             refreshButton.dataset.healthBound = '1';
             refreshButton.addEventListener('click', refresh);
         }
-
-        var scanButton = $('#btn-health-open-scan');
-        if (scanButton && scanButton.dataset.healthBound !== '1') {
-            scanButton.dataset.healthBound = '1';
-            scanButton.addEventListener('click', function () {
-                if (window.App && typeof window.App.showModal === 'function') {
-                    window.App.showModal('scan-modal');
-                }
-            });
-        }
     }
 
     function init() {
-        if (!$('#view-health')) return;
+        if (!$('#audit-section') && !$('#health-score-ring')) return;
         bind();
         if (!state.loaded) refresh();
         state.initialized = true;
     }
 
     document.addEventListener('languageChanged', function () {
-        if (state.data && $('#view-health.active')) render(state.data);
+        var auditOpen = (function () {
+            var el = $('#audit-section');
+            return el && el.tagName === 'DETAILS' ? el.open : false;
+        })();
+        if (state.data && auditOpen) render(state.data);
     });
 
     window.LibraryHealth = {

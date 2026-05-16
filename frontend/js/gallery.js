@@ -145,6 +145,15 @@ const DEFAULT_GENERATOR_COLORS = {
     nai: '#f97316',
     webui: '#3b82f6',
     forge: '#8b5cf6',
+    reforge: '#a855f7',
+    fooocus: '#ec4899',
+    'easy-diffusion': '#14b8a6',
+    invokeai: '#0ea5e9',
+    swarmui: '#facc15',
+    drawthings: '#f472b6',
+    gemini: '#fbbf24',
+    'gpt-image': '#10b981',
+    others: '#94a3b8',
     unknown: '#64748b'
 };
 
@@ -202,6 +211,55 @@ const Gallery = {
         const normalized = this._normalizeGenerator(generator);
         element.dataset.generatorValue = normalized;
         element.textContent = this._formatGeneratorLabel(normalized);
+    },
+
+    /**
+     * Show or hide the "metadata-only detection" hint shown for
+     * closed-source AI providers (Gemini / gpt-image) where we
+     * identified the source via Content Credentials / EXIF rather
+     * than the in-pixel invisible watermark. The note keeps the user
+     * aware that we have NOT verified Google's SynthID or OpenAI's
+     * pixel signal directly. Stay in sync with
+     * backend/metadata_parser.py::MetadataParser._maybe_detect_ai_provider.
+     */
+    _updateAiProviderNote(generator) {
+        const note = document.getElementById('modal-ai-provider-note');
+        if (!note) return;
+        const text = document.getElementById('modal-ai-provider-text');
+        const id = String(generator || '').trim().toLowerCase();
+        if (id === 'gemini') {
+            if (text) {
+                text.setAttribute('data-i18n', 'modal.aiProviderNote.gemini');
+                text.textContent = this._t(
+                    'modal.aiProviderNote.gemini',
+                    null,
+                    'Identified via Content Credentials / EXIF metadata. Google\'s invisible SynthID watermark embedded in the pixels themselves is not yet checked by this app — planned for a future opt-in detector.'
+                );
+            }
+            note.style.display = '';
+            note.dataset.provider = 'gemini';
+            return;
+        }
+        if (id === 'gpt-image') {
+            if (text) {
+                // Swap the data-i18n attribute so the global i18n
+                // re-translate cycle (which honours data-i18n on every
+                // child element) updates the gpt-image text instead of
+                // resetting it to the gemini key the HTML markup ships
+                // with.
+                text.setAttribute('data-i18n', 'modal.aiProviderNote.gptImage');
+                text.textContent = this._t(
+                    'modal.aiProviderNote.gptImage',
+                    null,
+                    'Identified via Content Credentials / EXIF metadata. OpenAI\'s invisible in-pixel watermark is not yet checked by this app and currently has no public open-source detector.'
+                );
+            }
+            note.style.display = '';
+            note.dataset.provider = 'gpt-image';
+            return;
+        }
+        note.style.display = 'none';
+        delete note.dataset.provider;
     },
 
     refreshLocalizedContent() {
@@ -2782,6 +2840,13 @@ ${String(value)}`)
                 ? this._formatGeneratorLabel(summaryGenerator)
                 : '-';
         }
+        // Show the "we only check metadata, not the invisible pixel
+        // watermark" note for closed-source AI providers (Gemini /
+        // gpt-image). Hide for everything else. Stay in sync with
+        // backend/metadata_parser.py — when a new closed-AI provider
+        // gets a metadata-only detector but no in-pixel detector,
+        // add it here so the user is aware.
+        this._updateAiProviderNote(summaryImage?.generator);
         $('#modal-size').textContent = summaryImage ? `${summaryImage.width || '?'}×${summaryImage.height || '?'} • ${formatSize(summaryImage.file_size || 0)}` : '-';
         $('#modal-prompt-text').textContent = summaryImage?.prompt || this._t('modal.loadingPrompt', null, 'Loading prompt…');
         $('#modal-negative-text').textContent = this._t('modal.loadingNegative', null, 'Loading…');

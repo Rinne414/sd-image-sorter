@@ -262,8 +262,76 @@ body::after {
 }
 
 .nav-actions {
-    gap: 10px;
+    gap: 6px;
     align-items: center;
+}
+
+.nav-actions .btn,
+.nav-actions .btn-help {
+    flex: 0 1 auto;
+    max-width: 168px;
+    min-height: 38px;
+    white-space: nowrap;
+    padding: 7px 14px;
+    font-size: 13px;
+}
+
+.btn-icon-only {
+    min-width: 38px;
+    max-width: 44px;
+    padding: 6px 10px;
+    justify-content: center;
+}
+
+.btn-icon-only span[aria-hidden] {
+    font-size: 16px;
+}
+
+.nav-actions .btn-icon-only {
+    min-width: 38px;
+    max-width: 42px;
+    padding: 7px 10px;
+}
+
+.gallery-header-left .btn-icon-only,
+.view-options .btn-icon-only {
+    min-width: 32px;
+    max-width: 36px;
+    min-height: 30px;
+    padding: 4px 8px;
+}
+
+/* Truncate the LABEL span on text+icon buttons in the navbar so a
+ * longer translation (Chinese, German, ...) doesn't push the layout.
+ * Carefully exclude icon-only buttons: their `span:last-child` IS the
+ * emoji glyph, and overflow:hidden + text-overflow:ellipsis was
+ * cropping the emoji by ~24px once the navbar got tight. The fix
+ * targets non-icon-only buttons specifically so emoji-glyph spans
+ * keep their natural width. */
+.nav-actions .btn:not(.btn-icon-only) span:last-child,
+.nav-actions .btn-help:not(.btn-icon-only) span:last-child,
+.mobile-nav-actions .btn:not(.btn-icon-only) span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Icon-only buttons: never clip the emoji glyph. The tab-icon /
+ * mobile-nav-icon spans inherit `inline-block` width from their
+ * font-size, so giving them `overflow: visible` keeps them whole even
+ * when the parent button has a tight max-width. */
+.btn-icon-only span[aria-hidden],
+.btn-icon-only span:not(.checkbox-text):not(.checkbox-custom) {
+    overflow: visible;
+    text-overflow: clip;
+    flex: 0 0 auto;
+}
+
+.gallery-header-left .btn {
+    max-width: 160px;
+    min-height: 32px;
+    white-space: nowrap;
 }
 
 .nav-bar.nav-actions-compact .nav-tabs {
@@ -271,25 +339,7 @@ body::after {
 }
 
 .nav-bar.nav-actions-compact .nav-actions {
-    gap: 6px;
-}
-
-.nav-bar.nav-actions-compact #btn-open-model-manager,
-.nav-bar.nav-actions-compact #btn-tags-library,
-.nav-bar.nav-actions-compact #btn-language-toggle,
-.nav-bar.nav-actions-compact #btn-app-update,
-.nav-bar.nav-actions-compact #btn-help {
-    min-width: 44px;
-    padding-inline: 12px;
-    justify-content: center;
-}
-
-.nav-bar.nav-actions-compact #btn-open-model-manager span:last-child,
-.nav-bar.nav-actions-compact #btn-tags-library span:last-child,
-.nav-bar.nav-actions-compact #btn-language-toggle span:last-child,
-.nav-bar.nav-actions-compact #btn-app-update span:last-child,
-.nav-bar.nav-actions-compact #btn-help span:last-child {
-    display: none;
+    gap: 4px;
 }
 
 .nav-actions > *,
@@ -312,6 +362,10 @@ body::after {
 
 .btn,
 .btn-help {
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+    min-height: 40px;
     border-radius: 14px;
     border: 1px solid rgba(191, 219, 254, 0.12);
     font-weight: 700;
@@ -319,6 +373,35 @@ body::after {
     white-space: normal;
     box-shadow: none;
     transition: background 160ms ease, box-shadow 160ms ease, transform 100ms ease, opacity 100ms ease, border-color 160ms ease;
+}
+
+.btn.btn-small {
+    min-height: 32px;
+}
+
+.btn > span:not([aria-hidden]),
+.btn-help > span:not([aria-hidden]) {
+    min-width: 0;
+}
+
+.modal-actions {
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.modal-actions .btn,
+.filter-modal-actions .btn,
+.update-popup-actions .btn {
+    white-space: nowrap;
+}
+
+.modal-actions .btn span:last-child,
+.filter-modal-actions .btn span:last-child,
+.update-popup-actions .btn span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Active/pressed feedback for all buttons */
@@ -762,6 +845,11 @@ textarea:focus,
     overflow: hidden;
 }
 
+.tag-runtime-advanced:not([open]) > .tag-runtime-advanced-body,
+.guided-advanced-panel:not([open]) > .guided-advanced-body {
+    display: none;
+}
+
 .tag-runtime-advanced[open],
 .guided-advanced-panel[open] {
     background: rgba(255, 255, 255, 0.05);
@@ -1184,12 +1272,14 @@ textarea:focus,
 }
 
 .gallery-container {
+    min-width: 0;
     padding: 18px 18px 22px;
 }
 
 .gallery-header {
     align-items: flex-start;
     gap: 14px;
+    min-width: 0;
     padding: 14px 16px;
     margin-bottom: 16px;
     background: rgba(255, 255, 255, 0.04);
@@ -1243,6 +1333,73 @@ textarea:focus,
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.92), rgba(20, 184, 166, 0.72));
     border-color: transparent;
     color: #fff;
+}
+
+@media (min-width: 1800px) {
+    .gallery-header {
+        align-items: center;
+        flex-wrap: nowrap;
+        overflow: visible;
+    }
+
+    .gallery-header-left,
+    .view-options {
+        flex-wrap: nowrap;
+    }
+
+    .gallery-header-left {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .gallery-header-left .image-count,
+    .gallery-header-left .btn {
+        flex: 0 0 auto;
+    }
+
+    .gallery-header-left .divider-v {
+        flex: 0 0 auto;
+    }
+
+    .generator-tabs {
+        flex: 1 1 auto;
+        flex-wrap: nowrap;
+        min-width: 0;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: none;
+    }
+
+    .generator-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .gen-tab {
+        flex: 0 0 auto;
+    }
+
+    .view-options {
+        flex: 0 0 auto;
+    }
+
+    #btn-reconnect-missing,
+    .gallery-clear-button,
+    .gallery-header > .guide-btn {
+        aspect-ratio: 1;
+        flex: 0 0 42px;
+        inline-size: 42px;
+        min-inline-size: 42px;
+        max-inline-size: 42px;
+        justify-content: center;
+        overflow: hidden;
+        padding-inline: 0;
+    }
+
+    #btn-reconnect-missing span:not([aria-hidden]),
+    .gallery-clear-button span:not([aria-hidden]),
+    .gallery-header > .guide-btn span:last-child {
+        display: none;
+    }
 }
 
 .gallery-clear-button {
@@ -1318,6 +1475,94 @@ textarea:focus,
 }
 .feature-availability-card li + li {
     margin-top: 4px;
+}
+
+.model-manager-bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.10), rgba(20, 184, 166, 0.06));
+}
+
+.model-manager-bulk-actions .btn-bulk-download {
+    flex: 0 0 auto;
+    min-height: 38px;
+}
+
+.model-manager-bulk-actions .btn-bulk-download:disabled {
+    opacity: 0.65;
+    cursor: progress;
+}
+
+.model-manager-bulk-help {
+    flex: 1 1 240px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.bulk-download-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 12px 0;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 12.5px;
+}
+
+.bulk-download-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.bulk-download-row.is-ready {
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.bulk-download-row .bulk-download-name {
+    flex: 1 1 auto;
+    word-break: break-word;
+}
+
+.bulk-download-row .bulk-download-size {
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.bulk-download-row .bulk-download-pill {
+    flex: 0 0 auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.18);
+    color: #86efac;
+}
+
+.bulk-download-row.is-pending .bulk-download-pill {
+    background: rgba(245, 158, 11, 0.20);
+    color: #fcd34d;
+}
+
+.bulk-download-summary {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-weight: 600;
 }
 
 .model-manager-grid {
@@ -3430,6 +3675,37 @@ textarea:focus,
     min-width: 0;
 }
 
+/* Closed-source AI provider hint (Gemini / gpt-image).
+ * Reminds the user that we only checked the embedded metadata
+ * (EXIF + C2PA), not the invisible in-pixel watermark (SynthID).
+ * Sits right under the .modal-meta row so it's visible without
+ * scrolling but unobtrusive. Color-coded amber so it reads as
+ * "FYI", not as an error. */
+.modal-ai-provider-note {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin: 4px 0 12px;
+    padding: 8px 12px;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+.modal-ai-provider-note .modal-ai-provider-icon {
+    flex: 0 0 auto;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.modal-ai-provider-note .modal-ai-provider-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 #modal-prompt-text,
 #modal-negative-text {
     white-space: pre-wrap;
@@ -4188,6 +4464,120 @@ html.lang-zh #view-censor .queue-action-btn span {
     max-width: 72ch;
 }
 
+#tag-modal .tagger-utility-strip {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 14px 0 12px;
+}
+
+#tag-modal .tagger-aesthetic-tool {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(191, 219, 254, 0.1);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+#tag-modal .tagger-aesthetic-copy {
+    display: flex;
+    flex: 1 1 320px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+#tag-modal .tagger-aesthetic-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+#tag-modal .tagger-aesthetic-status {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(100%, 360px);
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid rgba(191, 219, 254, 0.12);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.045);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#tag-modal .tagger-aesthetic-status.is-safe {
+    color: #bbf7d0;
+    border-color: rgba(34, 197, 94, 0.28);
+    background: rgba(34, 197, 94, 0.09);
+}
+
+#tag-modal .tagger-aesthetic-status.is-warning {
+    color: #fde68a;
+    border-color: rgba(245, 158, 11, 0.28);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+#tag-modal .tagger-aesthetic-status.is-info {
+    color: #bfdbfe;
+    border-color: rgba(59, 130, 246, 0.28);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+#tag-modal .tagger-aesthetic-actions {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+#tag-modal .tagger-aesthetic-actions .btn {
+    max-width: 190px;
+    min-height: 36px;
+    padding: 8px 12px;
+    white-space: nowrap;
+}
+
+#tag-modal .tagger-aesthetic-actions .btn span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+    #tag-modal .tagger-aesthetic-tool {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    #tag-modal .tagger-aesthetic-copy {
+        flex: 0 1 auto;
+    }
+
+    #tag-modal .tagger-aesthetic-actions {
+        justify-content: stretch;
+    }
+
+    #tag-modal .tagger-aesthetic-actions .btn {
+        flex: 1 1 150px;
+        max-width: none;
+    }
+}
+
 #scan-modal .modal-content {
     max-height: 80vh;
 }
@@ -4285,6 +4675,17 @@ html.lang-zh #view-censor .queue-action-btn span {
 .tag-runtime-advanced-hint,
 .guided-advanced-hint {
     flex: 0 1 280px;
+}
+
+#tag-modal .tag-runtime-advanced-hint,
+#tag-modal .guided-advanced-hint {
+    flex-basis: auto;
+    min-width: 0;
+}
+
+#tag-modal .tag-runtime-advanced-summary,
+#tag-modal .guided-advanced-summary {
+    min-height: 48px;
 }
 
 .selection-panel {
@@ -5718,4 +6119,217 @@ html.lang-zh #view-censor .queue-action-btn span {
     display: flex;
     gap: 8px;
     margin-top: 10px;
+}
+
+
+/* ==========================================================================
+   v3.2.0+ — Library Health (now Dataset Audit) advanced affordance
+   Adds an "advanced" badge to the Library Health nav tab and shrinks visual
+   weight so new users do not mistake it for a daily-use tab.
+   ========================================================================== */
+.nav-tab.is-advanced {
+    opacity: 0.78;
+}
+.nav-tab.is-advanced:hover,
+.nav-tab.is-advanced.active {
+    opacity: 1;
+}
+.nav-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-primary, #f59e0b);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    line-height: 1.4;
+}
+.mobile-nav-item.is-advanced {
+    opacity: 0.85;
+}
+.mobile-nav-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-primary, #f59e0b);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    line-height: 1.4;
+}
+
+/* Dataset Audit hero — audience hint and score-help copy */
+.health-audience {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--text-muted, #98aabf);
+    line-height: 1.55;
+    max-width: 640px;
+}
+.health-score-help {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-muted, #98aabf);
+    line-height: 1.55;
+    max-width: 560px;
+}
+
+/* ==========================================================================
+   v3.2.0+ — Gallery banner for unreadable / moved files
+   Lives inside .gallery-container so it does not interfere with the
+   view-gallery flex layout (filter sidebar + main content). Stays hidden
+   unless the backend reports unreadable image rows.
+   ========================================================================== */
+.gallery-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin: 0 0 14px 0;
+    padding: 14px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.10), rgba(251, 113, 133, 0.08));
+    backdrop-filter: blur(6px);
+    box-shadow: 0 8px 22px rgba(2, 6, 23, 0.25);
+}
+.gallery-banner[hidden] {
+    display: none !important;
+}
+.gallery-banner-icon {
+    flex: 0 0 auto;
+    font-size: 22px;
+    line-height: 1.2;
+    margin-top: 1px;
+}
+.gallery-banner-copy {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+.gallery-banner-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary, #f8fbff);
+    line-height: 1.4;
+}
+.gallery-banner-detail {
+    font-size: 13px;
+    color: var(--text-secondary, #d4e3f1);
+    line-height: 1.55;
+}
+.gallery-banner-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+@media (max-width: 768px) {
+    .gallery-banner {
+        flex-direction: column;
+    }
+    .gallery-banner-actions {
+        align-self: stretch;
+        justify-content: flex-end;
+    }
+}
+
+
+/* ==========================================================================
+   v3.2.0+ — Dataset Audit, lives inside Setup modal as a collapsible
+   advanced section. Closed by default so new users do not get scared by
+   a low health score for normal browse/tag use.
+   ========================================================================== */
+.audit-section {
+    margin-top: 24px;
+    padding: 0;
+    border: 1px solid var(--glass-border, rgba(191, 219, 254, 0.12));
+    border-radius: 14px;
+    background: rgba(13, 22, 37, 0.4);
+    overflow: hidden;
+}
+.audit-section[open] {
+    background: rgba(13, 22, 37, 0.6);
+}
+.audit-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.18s ease;
+}
+.audit-summary::-webkit-details-marker {
+    display: none;
+}
+.audit-summary::before {
+    content: '▸';
+    display: inline-block;
+    color: var(--text-muted, #98aabf);
+    transform-origin: 50% 50%;
+    transition: transform 0.18s ease;
+}
+.audit-section[open] > .audit-summary::before {
+    transform: rotate(90deg);
+}
+.audit-summary:hover {
+    background: rgba(245, 158, 11, 0.04);
+}
+.audit-summary-title {
+    font-weight: 600;
+    color: var(--text-primary, #f8fbff);
+    font-size: 14px;
+}
+.audit-summary-badge {
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-primary, #f59e0b);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    line-height: 1.4;
+}
+.audit-summary-help {
+    flex: 1 1 auto;
+    color: var(--text-muted, #98aabf);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.audit-section[open] .health-shell {
+    padding: 0 18px 18px 18px;
+}
+/* Audit hero is already inside a modal — drop the page-style padding */
+.audit-hero {
+    padding: 0;
+    margin-top: 8px;
+    margin-bottom: 14px;
+}
+.audit-hero h2 {
+    display: none;
+}
+.audit-hero .health-eyebrow {
+    margin-bottom: 4px;
+}
+@media (max-width: 768px) {
+    .audit-summary-help {
+        flex-basis: 100%;
+        order: 99;
+    }
 }

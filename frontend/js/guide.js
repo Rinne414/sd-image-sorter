@@ -493,16 +493,15 @@
 .guide-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    justify-content: center;
     margin-left: auto;
-    padding: 8px 14px;
+    padding: 6px 10px;
+    min-width: 32px;
     border-radius: 999px;
     border: 1px solid rgba(45, 212, 191, 0.28);
     background: rgba(45, 212, 191, 0.08);
     color: #dffff9;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-size: 14px;
     cursor: pointer;
     transition: all 160ms ease;
 }
@@ -764,7 +763,9 @@
             button.type = 'button';
             button.className = `guide-btn${pulse ? ' guide-btn--pulse' : ''}`;
             button.dataset.guideTab = tabName;
-            button.innerHTML = `<span aria-hidden="true">❔</span><span>${this._escape(this._copy().button)}</span>`;
+            button.title = this._copy().button;
+            button.setAttribute('aria-label', this._copy().button);
+            button.innerHTML = `<span aria-hidden="true">❔</span>`;
             button.addEventListener('click', () => this.show(tabName));
             return button;
         },
@@ -801,8 +802,9 @@
 
         _refreshButtons() {
             const label = this._copy().button;
-            document.querySelectorAll('.guide-btn span:last-child').forEach((node) => {
-                node.textContent = label;
+            document.querySelectorAll('.guide-btn').forEach((button) => {
+                button.title = label;
+                button.setAttribute('aria-label', label);
             });
 
             if (this._openTab && this._modalEl?.classList.contains('visible')) {
