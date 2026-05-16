@@ -752,7 +752,13 @@ class BatchTagExportRequest(BaseModel):
     """Request model for batch sidecar export."""
     image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=BATCH_EXPORT_LIMIT)
     selection_token: Optional[str] = Field(default=None, min_length=1)
-    output_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
+    # ``output_folder`` is required when ``output_mode == "folder"``. When
+    # ``output_mode == "beside_image"`` the field is ignored, so the schema
+    # allows an empty string and the service-level validator only enforces
+    # the path on the folder branch. Default is empty so callers do not have
+    # to send a fake path when they pick beside_image.
+    output_folder: str = Field(default="", max_length=PATH_MAX_LENGTH)
+    output_mode: str = Field(default="folder", max_length=24)
     blacklist: Optional[List[str]] = Field(default=[], max_length=500)
     prefix: Optional[str] = Field(default="", max_length=256)
     content_mode: str = Field(default="tags", max_length=32)
@@ -1649,6 +1655,7 @@ class TaggingService:
             "total": result.get("total", len(request.image_ids or [])),
             "content_mode": result.get("content_mode", request.content_mode),
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
+            "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
         }
 
     def fix_rating_tags(self) -> Dict[str, Any]:

@@ -1186,6 +1186,7 @@ const API = {
     async exportTagsBatch(imageIds, outputFolder, blacklist = [], prefix = '', contentMode = 'tags', overwritePolicy = 'unique', options = {}) {
         const payload = {
             output_folder: outputFolder,
+            output_mode: options.outputMode || 'folder',
             blacklist: blacklist,
             prefix: prefix,
             content_mode: contentMode,
@@ -4300,6 +4301,9 @@ function initEventListeners() {
     $('#btn-start-batch-export')?.addEventListener('click', executeBatchExport);
     $('#batch-export-content-mode')?.addEventListener('change', (event) => {
         updateBatchExportContentDescription(event.target.value);
+    });
+    document.querySelectorAll('input[name="batch-export-output-mode"]').forEach((input) => {
+        input.addEventListener('change', syncBatchExportOutputModeUi);
     });
 
     // --- Import Tags (from Tag Modal) ---
@@ -7866,9 +7870,27 @@ function showBatchExportModal() {
         contentModeSelect.value = 'caption_merged';
     }
     updateBatchExportContentDescription(contentModeSelect?.value || 'caption_merged');
+    syncBatchExportOutputModeUi();
     $('#batch-export-progress').style.display = 'none';
     $('#btn-start-batch-export').disabled = false;
     showModal('batch-export-modal');
+}
+
+function syncBatchExportOutputModeUi() {
+    // The "Save next to each image" option ignores Output Folder, so disable
+    // the input + helper text when that mode is selected. Disabled inputs
+    // visually reinforce that the field is not used and skip required-field
+    // validation when the user clicks Export.
+    const folderRadio = document.querySelector('input[name="batch-export-output-mode"][value="folder"]');
+    const folderGroup = $('#batch-export-folder-group');
+    const folderInput = $('#batch-export-folder');
+    const isFolderMode = !!(folderRadio && folderRadio.checked);
+    if (folderInput) {
+        folderInput.disabled = !isFolderMode;
+    }
+    if (folderGroup) {
+        folderGroup.classList.toggle('is-disabled', !isFolderMode);
+    }
 }
 
 function getExportDataCacheKey(imageIds) {
@@ -8016,8 +8038,10 @@ async function loadSelectionPreviewData(ids, limit = EXPORT_PREVIEW_MAX_IMAGES) 
 
 
 async function executeBatchExport() {
+    const outputModeRadio = document.querySelector('input[name="batch-export-output-mode"]:checked');
+    const outputMode = outputModeRadio?.value === 'folder' ? 'folder' : 'beside_image';
     const outputFolder = $('#batch-export-folder')?.value?.trim() || '';
-    if (!outputFolder) {
+    if (outputMode === 'folder' && !outputFolder) {
         showToast(appT('export.outputFolderRequired', 'Please enter an output folder'), 'error');
         return;
     }
@@ -8042,7 +8066,7 @@ async function executeBatchExport() {
     if (startBtn) startBtn.disabled = true;
 
     try {
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken });
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken, outputMode });
 
         $('#batch-export-progress-fill').style.width = '100%';
 
