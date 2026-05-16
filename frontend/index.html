@@ -3099,8 +3099,23 @@
                 <small class="helper-text" data-i18n="batchExport.scopeHelp">This only writes files for the images selected in Gallery.</small>
 
                 <div class="form-group">
+                    <label data-i18n="batchExport.outputDestination">Where to save sidecar files</label>
+                    <div class="segmented-control" role="radiogroup" aria-label="Sidecar output destination">
+                        <label class="segmented-option">
+                            <input type="radio" name="batch-export-output-mode" value="beside_image" checked>
+                            <span data-i18n="batchExport.outputModeBesideImage">Save next to each image</span>
+                        </label>
+                        <label class="segmented-option">
+                            <input type="radio" name="batch-export-output-mode" value="folder">
+                            <span data-i18n="batchExport.outputModeFolder">Save to one folder</span>
+                        </label>
+                    </div>
+                    <small class="helper-text" data-i18n="batchExport.outputModeBesideImageHelper">Writes each .txt / .json into the same folder as the source image. Best when your library spans many subfolders or feeds a per-folder training tool.</small>
+                </div>
+
+                <div class="form-group" id="batch-export-folder-group">
                     <label data-i18n="batchExport.outputFolder">Output Folder</label>
-                    <input type="text" id="batch-export-folder" class="input-field" placeholder="D:\\exported_tags">
+                    <input type="text" id="batch-export-folder" class="input-field" placeholder="D:\\exported_tags" disabled>
                     <small class="helper-text" data-i18n="batchExport.outputFolderHelper">Creates one same-name sidecar per image. LoRA caption mode writes .txt; JSON mode writes .json.</small>
                 </div>
 

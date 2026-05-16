@@ -1253,3 +1253,130 @@ class TestEdgeCases:
 
         # Should return validation error (422) or bad request (400)
         assert response.status_code in [400, 422]
+
+
+
+    def test_export_batch_beside_image_writes_into_each_source_folder(self, test_client, test_db, tmp_path: Path):
+        """Regression test: ``output_mode=beside_image`` writes the sidecar
+        next to each source image, not into a flat output folder.
+
+        User report: "the images are from the subfolder, if only a output
+        folder location, the subfolder are not supporting." This new mode
+        preserves the source folder structure by writing each .txt / .json
+        into the same directory as its corresponding image.
+        """
+        import database as db
+        from PIL import Image
+
+        sub_a = tmp_path / "set_a"
+        sub_b = tmp_path / "deep" / "set_b"
+        sub_a.mkdir()
+        sub_b.mkdir(parents=True)
+
+        img_a = sub_a / "alpha.png"
+        img_b = sub_b / "beta.png"
+        Image.new("RGB", (32, 32), color="green").save(img_a)
+        Image.new("RGB", (32, 32), color="purple").save(img_b)
+
+        a_id = db.add_image(path=str(img_a), filename="alpha.png")
+        b_id = db.add_image(path=str(img_b), filename="beta.png")
+        db.add_tags(a_id, [{"tag": "alpha_tag", "confidence": 0.9}])
+        db.add_tags(b_id, [{"tag": "beta_tag", "confidence": 0.9}])
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [a_id, b_id],
+                # output_folder intentionally omitted to confirm the
+                # backend does not require it in beside_image mode.
+                "output_mode": "beside_image",
+                "content_mode": "tags",
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["exported"] == 2, data
+        assert data.get("output_mode") == "beside_image"
+
+        # Each sidecar must land in the source folder, not a flat output dir.
+        sidecar_a = sub_a / "alpha.txt"
+        sidecar_b = sub_b / "beta.txt"
+        assert sidecar_a.exists(), f"missing {sidecar_a}"
+        assert sidecar_b.exists(), f"missing {sidecar_b}"
+        assert sidecar_a.read_text(encoding="utf-8") == "alpha_tag"
+        assert sidecar_b.read_text(encoding="utf-8") == "beta_tag"
+
+        # And tmp_path itself must NOT have collected sidecars at the top
+        # level — that would be the legacy flat behaviour leaking through.
+        assert not (tmp_path / "alpha.txt").exists()
+        assert not (tmp_path / "beta.txt").exists()
+
+    def test_export_batch_beside_image_skips_rows_with_missing_source_folder(self, test_client, test_db, tmp_path: Path):
+        """In beside_image mode, a row whose source folder no longer exists
+        should be reported as an error (not a crash) and other rows must
+        still succeed.
+        """
+        import database as db
+        import shutil
+        from PIL import Image
+
+        good_dir = tmp_path / "good"
+        gone_dir = tmp_path / "gone"
+        good_dir.mkdir()
+        gone_dir.mkdir()
+
+        good_img = good_dir / "good.png"
+        gone_img = gone_dir / "gone.png"
+        Image.new("RGB", (32, 32)).save(good_img)
+        Image.new("RGB", (32, 32)).save(gone_img)
+
+        good_id = db.add_image(path=str(good_img), filename="good.png")
+        gone_id = db.add_image(path=str(gone_img), filename="gone.png")
+        db.add_tags(good_id, [{"tag": "good", "confidence": 0.9}])
+        db.add_tags(gone_id, [{"tag": "gone", "confidence": 0.9}])
+
+        # Remove the source folder out from under the export — simulating a
+        # file that was moved/deleted between scan and export.
+        shutil.rmtree(gone_dir)
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [good_id, gone_id],
+                "output_mode": "beside_image",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exported"] == 1
+        assert data["error_count"] == 1
+        assert (good_dir / "good.txt").exists()
+        # The error message should clearly identify which image failed.
+        assert any("gone" in str(msg).lower() or str(gone_id) in str(msg) for msg in data["error_messages"])
+
+    def test_export_batch_invalid_output_mode_rejected(self, test_client, test_db, tmp_path: Path):
+        """Unknown output_mode values must surface as a 400 error.
+
+        Locks the contract: only "folder" and "beside_image" are valid.
+        """
+        import database as db
+        from PIL import Image
+
+        img = tmp_path / "some.png"
+        Image.new("RGB", (32, 32)).save(img)
+        image_id = db.add_image(path=str(img), filename="some.png")
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_mode": "totally-invented",
+                "output_folder": str(tmp_path),
+            },
+        )
+
+        assert response.status_code == 400
+        body_text = response.text.lower()
+        assert "output_mode" in body_text or "totally-invented" in body_text

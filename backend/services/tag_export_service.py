@@ -40,6 +40,14 @@ VALID_CONTENT_MODES = {
     "json",
 }
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
+# ``folder``       — write all sidecars into the user-supplied ``output_folder``
+#                    (legacy default; flat output regardless of source layout).
+# ``beside_image`` — write each sidecar to the directory of its source image,
+#                    so a library spread across many subfolders keeps its
+#                    structure intact and per-image training tools that look
+#                    for ``foo.png`` + ``foo.txt`` in the same directory keep
+#                    working without extra plumbing.
+VALID_OUTPUT_MODES = {"folder", "beside_image"}
 EXPORT_DB_CHUNK_SIZE = 500
 SELECTION_TOKEN_VERSION = 2
 
@@ -344,10 +352,23 @@ def export_tags_batch_request(
     progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     """Export selected image metadata to sidecar files."""
-    output_folder = normalize_user_path(str(request.output_folder or ""))
-    is_valid, error = validate_folder_path(output_folder, allow_create=True)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+    output_mode = str(getattr(request, "output_mode", "folder") or "folder").strip().lower()
+    if output_mode not in VALID_OUTPUT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid output_mode: {output_mode}")
+
+    # ``output_folder`` is only required for the legacy ``folder`` mode. In
+    # ``beside_image`` mode we write each sidecar next to its source image, so
+    # the field is ignored. Validating it would force the user to type a fake
+    # path just to satisfy the schema.
+    if output_mode == "folder":
+        output_folder = normalize_user_path(str(request.output_folder or ""))
+        is_valid, error = validate_folder_path(output_folder, allow_create=True)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid output folder")
+        output_folder_ready = os.path.isdir(output_folder)
+    else:
+        output_folder = ""
+        output_folder_ready = True  # nothing to create up front in beside_image mode
 
     blacklist = {str(tag or "").strip().lower() for tag in (request.blacklist or []) if str(tag or "").strip()}
     prefix = str(request.prefix or "")
@@ -363,7 +384,6 @@ def export_tags_batch_request(
     error_count = 0
     error_messages: List[str] = []
     used_output_paths = set()
-    output_folder_ready = os.path.isdir(output_folder)
 
     if id_chunks is None:
         id_chunks = _iter_id_list_chunks(getattr(request, "image_ids", []) or [], EXPORT_DB_CHUNK_SIZE)
@@ -393,12 +413,39 @@ def export_tags_batch_request(
                     blacklist=blacklist,
                     prefix=prefix,
                 )
-                output_path = _allocate_output_path(output_folder, image, content_mode, overwrite_policy, used_output_paths)
+                # In ``beside_image`` mode each image lands in its own
+                # source directory. We do NOT auto-create directories on
+                # this path: if the source folder no longer exists (file
+                # was moved/deleted out from under us), fail this row
+                # with a clear error rather than silently materialising
+                # an empty folder somewhere unexpected.
+                if output_mode == "beside_image":
+                    image_path = str(image.get("path") or "").strip()
+                    if not image_path:
+                        error_count += 1
+                        error_messages.append(
+                            f"Image {image_id} has no source path on record; "
+                            "cannot write sidecar beside the image."
+                        )
+                        continue
+                    image_dir = os.path.dirname(image_path)
+                    if not image_dir or not os.path.isdir(image_dir):
+                        error_count += 1
+                        error_messages.append(
+                            f"Source folder for image {image_id} not found "
+                            f"({image_dir!r}); skipping sidecar."
+                        )
+                        continue
+                    target_folder = image_dir
+                else:
+                    target_folder = output_folder
+
+                output_path = _allocate_output_path(target_folder, image, content_mode, overwrite_policy, used_output_paths)
                 if output_path is None:
                     skipped += 1
                     continue
 
-                if not output_folder_ready:
+                if output_mode == "folder" and not output_folder_ready:
                     try:
                         os.makedirs(output_folder, exist_ok=True)
                     except OSError as exc:
@@ -424,4 +471,5 @@ def export_tags_batch_request(
         "total": total_count,
         "content_mode": content_mode,
         "overwrite_policy": overwrite_policy,
+        "output_mode": output_mode,
     }

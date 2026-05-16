@@ -313,7 +313,8 @@ Request body accepts either explicit IDs or a filtered-selection token plus the 
 ```json
 {
   "image_ids": [1, 2, 3],
-  "output_folder": "L:/exports/tags",
+  "output_mode": "beside_image",
+  "output_folder": "",
   "blacklist": [],
   "prefix": "",
   "content_mode": "tags",
@@ -324,6 +325,7 @@ Request body accepts either explicit IDs or a filtered-selection token plus the 
 ```json
 {
   "selection_token": "opaque-token",
+  "output_mode": "folder",
   "output_folder": "L:/exports/tags",
   "blacklist": [],
   "prefix": "",
@@ -334,6 +336,11 @@ Request body accepts either explicit IDs or a filtered-selection token plus the 
 
 Rules:
 - Provide either `image_ids` or `selection_token`, not both.
+- `output_mode` selects where the sidecars land:
+  - `"folder"` — write every sidecar into the supplied `output_folder`. The folder is created if missing. Use when collecting captions for a single training set.
+  - `"beside_image"` — write each sidecar into the same directory as its source image. `output_folder` is ignored. Use when the library spans multiple subfolders or feeds a per-folder training tool that expects `foo.png` + `foo.txt` to sit together. Rows whose source folder no longer exists are reported in `error_messages` and other rows still succeed.
+- The default for `output_mode` is `"folder"` for backwards compatibility with existing API clients.
+- Response includes the chosen `output_mode` so the UI can confirm which path was taken.
 - Backend reads images and tags in chunks while writing files; clients should prefer token mode for large filtered exports.
 
 #### POST /api/images/reconnect-missing/start
