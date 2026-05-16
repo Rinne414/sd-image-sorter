@@ -2891,3 +2891,36 @@ Use this structure for future entries:
 
   `python -m pytest backend/tests/test_repair_torch_runtime.py -v`. All 10 tests must pass. The new test asserts both halves of the fix: (a) torch requirement carries `+cuXXX`, and (b) pip args do NOT include `--extra-index-url`.
 
+
+
+
+## ADR-2026-05-16: Default scan back to count-first ("precise_total=True"), keep streaming as opt-out
+
+- Decision
+
+  `image_manager.scan_folder` default for `precise_total` is now `True`. The scanner walks the folder once to discover the total file count, emits ``counting → counted → importing`` progress phases, then runs the import + metadata pipeline with a real `current/total` denominator. Callers that legitimately need to skip the count walk (e.g. network-share scans where the walk itself takes minutes) opt out with `precise_total=False`.
+
+- Why this matters
+
+  In a previous iteration the default was flipped to `False` ("single-pass scan") with the rationale that "Large/network folders should start importing immediately instead of walking the full tree once just to get an ETA." That's correct in the abstract, but it broke the typical-user UX: a 48 K-file library on a local SSD takes ~80 s to scan; the count walk alone takes ~1–2 s. Skipping the count means heartbeats show `processed=14 800/?` for the entire 80 s — there's no ETA, no apparent finish line, the progress bar can't fill, and several seconds of confusion at the start because the user has no idea whether 14 800 is 10 % or 90 % of the work.
+
+  User report (2026-05-16): "Why the gallery scanning changed?? The old design is a double scanning with first very quick to estimate the time and the images numbers, and then it can show the estimate time and the whole number, why this functions changed?"
+
+  The single-pass default optimised for the rare worst case (huge or slow medium) at the cost of the typical-case UX. The trade-off is wrong because:
+  1. Walking 48 K entries via `os.scandir` on a local SSD is ~1 s. Even a 1 M-entry library is ~10–20 s. The cost is small.
+  2. The metadata-parse phase dominates total scan time by 1–2 orders of magnitude, so the count walk barely shifts overall completion.
+  3. With no `total`, the progress UI cannot show ETA, percent complete, or remaining time. That's a real loss of information, not a cosmetic difference.
+
+  For the rare case of multi-million-file network shares where the walk itself is slow, `precise_total=False` is still available as an explicit opt-out. The new default just stops penalising the 99 % to optimise for the 1 %.
+
+- Sibling work
+
+  Coupled with the metadata-parser fix in the same commit: when the PNG fast-path fails with `Invalid PNG signature`, fall through to Pillow's content-sniff path. This is what handles JPEG / WEBP / GIF files saved with `.png` extension — common in real libraries because Civitai, Discord, browsers, etc. rename images during upload/download. Both fixes target the same user complaint about the v3.2.0 scanner UX.
+
+- Files changed
+
+  `backend/image_manager.py`, `backend/metadata_parser.py`, `backend/tests/test_image_manager.py`, `backend/tests/test_metadata_parser.py`, `backend/tests/test_routers/test_sorting.py`.
+
+- How to verify
+
+  `python -m pytest backend/tests/test_image_manager.py -k scan_folder backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_jpeg_with_png_extension_falls_through_to_pillow backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_fast_path_still_rejects_genuinely_truncated_png`. All 26 tests must pass.

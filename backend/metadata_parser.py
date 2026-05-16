@@ -262,9 +262,35 @@ class MetadataParser:
         return result
 
     def _load_image_metadata(self, image_path: str) -> Dict[str, Any]:
-        """Load dimensions and raw metadata with format-specific fast paths."""
+        """Load dimensions and raw metadata with format-specific fast paths.
+
+        The PNG fast-path is byte-strict: it checks the PNG magic
+        signature (89 50 4E 47 0D 0A 1A 0A) and rejects anything else.
+        That is correct for genuinely corrupt PNGs, but in practice a
+        sizable chunk of SD libraries contain JPEG (or WEBP / GIF)
+        files that were renamed to ``.png`` by content-management tools
+        — Civitai, Discord, browsers, etc. Browsers and Windows
+        Explorer render them fine because they sniff format from
+        content; our previous behaviour rejected them as
+        ``Invalid PNG signature`` and reported them as unreadable
+        files in the scan summary, even though Pillow can parse them
+        without issue.
+
+        Strategy: if the PNG fast-path raises ``Invalid PNG
+        signature``, fall through to the Pillow path. Pillow detects
+        format from content magic bytes regardless of file extension,
+        so a .png-extension JPEG is parsed as JPEG. Other PNG-shape
+        errors (truncated chunks, bad IEND, …) still bubble up as
+        legitimate parse failures.
+        """
         if os.path.splitext(image_path)[1].lower() == ".png":
-            return self._load_png_metadata_fast(image_path)
+            try:
+                return self._load_png_metadata_fast(image_path)
+            except ValueError as exc:
+                if "Invalid PNG signature" not in str(exc):
+                    raise
+                # File extension said PNG, content sniff says otherwise.
+                # Pillow handles JPEG/WEBP/GIF content with .png extension.
 
         return self._load_image_metadata_via_pillow(image_path)
 

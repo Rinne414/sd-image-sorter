@@ -150,6 +150,61 @@ class TestMetadataParserBase:
         assert result["height"] == 96
         assert open_calls["count"] == 1
 
+    def test_parse_jpeg_with_png_extension_falls_through_to_pillow(self, tmp_path: Path):
+        """JPEG content with .png extension must parse, not error.
+
+        Real-world libraries are full of JPEG/WEBP files renamed to
+        .png by Civitai, Discord, browsers, and assorted content-
+        management tools. Browsers and Windows Explorer render them
+        fine because they sniff format from the magic bytes, but the
+        previous parser version trusted the extension and raised
+        ``Invalid PNG signature`` on the first 8 bytes — leaving these
+        files reported as unreadable in the scan summary even though
+        Pillow can parse them without issue.
+
+        This test pins the new behaviour: when the .png fast path
+        rejects the file because the magic bytes are not PNG, we fall
+        through to Pillow, which detects format from content and
+        parses the JPEG normally.
+        """
+        from PIL import Image
+
+        img_path = tmp_path / "actually-jpeg.png"  # JPEG content, .png extension
+        Image.new("RGB", (200, 150), color=(180, 90, 90)).save(img_path, format="JPEG")
+
+        # Sanity: confirm the file actually has JPEG magic bytes despite
+        # the .png extension. If this assertion fails the test setup is
+        # wrong, not the parser.
+        with open(img_path, "rb") as fh:
+            assert fh.read(3) == b"\xff\xd8\xff"
+
+        result = parse_image(str(img_path))
+
+        # Width / height come from Pillow's content-sniff path.
+        assert result["width"] == 200
+        assert result["height"] == 150
+        # The file is readable; file_size is non-zero. The "Invalid PNG
+        # signature" error path would have produced an unreadable record.
+        assert result["file_size"] > 0
+        assert "metadata" in result
+
+    def test_parse_png_fast_path_still_rejects_genuinely_truncated_png(self, tmp_path: Path):
+        """The fallback must NOT mask genuine PNG corruption.
+
+        A truncated PNG (valid magic bytes, broken chunk tail) should
+        surface as a parse failure, not silently fall back to Pillow
+        which might also fail with a less actionable message. We
+        verify that PNG-shape errors other than "Invalid PNG
+        signature" still propagate.
+        """
+        img_path = tmp_path / "truncated.png"
+        img_path.write_bytes(metadata_parser_module.PNG_SIGNATURE + b"\x00\x00\x00\x10")  # length but no chunk type/data
+
+        # ParseError or ValueError is acceptable; the point is that
+        # truncated PNGs do not silently succeed.
+        with pytest.raises(Exception):
+            metadata_parser_module.MetadataParser()._load_image_metadata(str(img_path))
+
     def test_parse_png_fast_path_skips_large_image_data_chunks(self, tmp_path: Path, monkeypatch):
         """PNG metadata scanning should not read IDAT image payloads into memory."""
         img_path = tmp_path / "large-idat-after-text.png"

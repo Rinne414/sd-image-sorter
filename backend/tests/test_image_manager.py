@@ -153,7 +153,23 @@ def test_add_copied_image_with_state_rolls_back_partial_database_rows(test_db, t
     assert db.get_image_by_path(str(copied_path)) is None
 
 
-def test_scan_folder_default_streams_import_without_counting_pass(test_db, tmp_path: Path):
+def test_scan_folder_default_uses_count_first_then_import(test_db, tmp_path: Path):
+    """Default scan should walk the folder once for a precise total, then import.
+
+    The UX contract: the first heartbeat of a fresh scan must say
+    ``Counting images...`` so the user knows the app is working and an
+    accurate denominator is on the way. Once the count is done, every
+    subsequent heartbeat shows ``current / total`` — letting the user
+    estimate ETA. Switching to streaming-only mode (skipping the
+    counting phase) hides that information and makes the progress UI
+    feel broken on large libraries.
+
+    Callers that legitimately need to skip the count walk (e.g. a
+    network share where walking the tree itself takes minutes) can
+    opt out with ``precise_total=False``; that path is exercised by
+    ``test_scan_folder_precise_total_false_streams_without_counting``
+    below.
+    """
     for index in range(2):
         Image.new("RGB", (64, 64), color="white").save(tmp_path / f"sample-{index}.png")
 
@@ -174,6 +190,54 @@ def test_scan_folder_default_streams_import_without_counting_pass(test_db, tmp_p
     assert result["total"] == 2
     assert progress_events
     phases = [event["details"].get("phase") for event in progress_events]
+    # Default contract: counting → counted → importing.
+    assert "counting" in phases, (
+        "Default scan must include a counting phase so the heartbeat "
+        "shows current/total. If this assertion fires, ``precise_total`` "
+        "default may have been flipped back to False."
+    )
+    assert "counted" in phases
+    assert "importing" in phases
+
+    first_import = next(event for event in progress_events if event["details"].get("phase") == "importing")
+    # During the import phase, total must reflect the precise count.
+    assert first_import["total"] == 2
+    assert first_import["filename"]
+    assert first_import["details"].get("total_final") is True
+
+
+def test_scan_folder_precise_total_false_streams_without_counting(test_db, tmp_path: Path):
+    """Opt-out path: ``precise_total=False`` skips the counting walk.
+
+    Some callers (release artefact verification, network-share scans
+    where the tree-walk itself is slow) want to start importing
+    immediately at the cost of a ``?`` denominator in heartbeats.
+    This test pins that path so the opt-out keeps working.
+    """
+    for index in range(2):
+        Image.new("RGB", (64, 64), color="white").save(tmp_path / f"stream-{index}.png")
+
+    progress_events = []
+
+    def progress_callback(current, total, filename, details=None):
+        progress_events.append(
+            {
+                "current": current,
+                "total": total,
+                "filename": filename,
+                "details": details or {},
+            }
+        )
+
+    result = scan_folder(
+        str(tmp_path),
+        recursive=False,
+        progress_callback=progress_callback,
+        precise_total=False,
+    )
+
+    assert result["total"] == 2
+    phases = [event["details"].get("phase") for event in progress_events]
     assert "counting" not in phases
     assert "counted" not in phases
     assert "importing" in phases
@@ -181,7 +245,6 @@ def test_scan_folder_default_streams_import_without_counting_pass(test_db, tmp_p
     first_import = next(event for event in progress_events if event["details"].get("phase") == "importing")
     assert first_import["current"] == 1
     assert first_import["total"] == 1
-    assert first_import["filename"]
     assert first_import["details"].get("total_final") is False
 
 
