@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-05-14
+**Updated:** 2026-05-16
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -67,6 +67,82 @@ Use this structure for future entries:
 - Validation:
 
 ## Current Records
+
+### ADR-AI-20260515-03: Gallery header stays single-row on 1920px desktop
+- Status: active
+- Area: frontend UX / responsive layout
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  On wide desktop viewports such as `1920x1080`, keep the Gallery header controls in a single row without overlap, text clipping, or page-level horizontal overflow. Frequent controls such as image count, Random, generator tabs, sort, and view mode should remain readable. Lower-frequency header actions such as Find Missing, Clear Current Library, and the contextual Guide may become icon-only buttons with preserved `title`/`aria-label`.
+- Why:
+  With the Gallery sidebar open, a `1920x1080` viewport leaves about 1520px for the Gallery header. Letting `.gallery-header-left` or `.generator-tabs` wrap makes the header look like two bars and wastes vertical workspace. The user explicitly asked for the Gallery bar to be one line at `1920x1080`.
+- Do not "improve" this by:
+  Re-enabling wrapping for the wide-desktop Gallery header, letting generator tabs dictate the full header width, letting controls overlap, or allowing fixed action buttons such as `Random` to shrink until their text clips.
+- Allowed evolution:
+  Add an overflow menu, shorter generator labels, a richer tab scroller, or different icon choices if it preserves the one-row wide-desktop header and passes overlap/overflow checks in English and zh-CN.
+- Evidence:
+  Current CSS gives `.gallery-container` and `.gallery-header` `min-width: 0`, keeps the `min-width: 1800px` Gallery header row non-wrapping, prevents fixed left-side buttons from shrinking, makes lower-frequency header actions icon-only in that wide-row mode, and lets `.generator-tabs` take the remaining space without covering the right-side controls.
+- Last verified:
+  2026-05-15 with Playwright DOM/screenshot checks at `1920x1080` in English and zh-CN.
+- Related files:
+  `frontend/css/ui-refresh.css`
+  `frontend/js/guide.js`
+- Supersedes:
+  None
+- Validation:
+  Playwright local render check on `http://127.0.0.1:18487` confirmed no failures for single-row height, page horizontal scroll, generator/view/Guide overlap, controls outside viewport, non-tabs text overflow, and console errors at `1920x1080` in English and zh-CN. Static checks: `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `node --check frontend/js/guide.js`; `git diff --check -- frontend/css/ui-refresh.css frontend/js/guide.js docs/AI_DECISION_LOG.md`.
+
+### ADR-AI-20260515-02: Contextual action buttons may use compact scope labels when the panel already names the action
+- Status: active
+- Area: frontend UX / bilingual layout
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  Keep the Censor filter apply buttons inside the Filters panel as compact scope labels: `Current`, `Selected`, `All` in English and `当前`, `已选`, `全部` in zh-CN. The surrounding Filters panel and button styling already provide the action context, so each small grid button does not need to repeat "Apply to".
+- Why:
+  In the three-column Censor side panel, longer bilingual labels such as `Apply to Current` / `应用到当前图片` can wrap and make one row of buttons taller than neighboring controls on common desktop sizes such as `1366x768` and `1280x720`. Compact contextual labels keep the button group aligned without hiding controls or creating uneven heights.
+- Do not "improve" this by:
+  Expanding these three labels back to full imperative phrases just for explicitness unless the control is moved out of the Filters panel or the layout is redesigned to give each action enough width.
+- Allowed evolution:
+  Add tooltips, aria labels, or a wider/stacked responsive layout if more explicit wording is needed, as long as English and zh-CN remain visually stable across common desktop and mobile viewports.
+- Evidence:
+  `#view-censor .censor-filter-apply-group` is a three-column action group inside the Filters card. Current CSS constrains `.censor-apply-filters-btn` and its text span to one line with ellipsis, while i18n uses compact scope labels.
+- Last verified:
+  2026-05-15 with Playwright layout audit at `1920x1080`, `1600x900`, `1536x864`, `1440x900`, `1366x768`, `1280x720`, and `390x844` in English and zh-CN.
+- Related files:
+  `frontend/css/censor-v2.css`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+- Supersedes:
+  None
+- Validation:
+  `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `git diff --check -- frontend/js/lang/en.js frontend/js/lang/zh-CN.js frontend/css/censor-v2.css`; Playwright common-resolution button audit on local server `http://127.0.0.1:18487`.
+
+### ADR-AI-20260515-01: Aesthetic scoring belongs with AI tagging controls, not the Gallery toolbar
+- Status: active
+- Area: frontend UX / bilingual layout
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  Keep the low-frequency `Score Aesthetic` action and its unavailable/running/ready status inside the AI Auto Tagging modal as a compact AI utility strip. The Gallery header should keep high-frequency browsing controls such as filters, random image, missing-file recovery, generator tabs, sorting, view modes, and clear-library actions, but should not permanently reserve toolbar space for aesthetic scoring.
+- Why:
+  Aesthetic scoring is a heavy local-AI preparation/scoring workflow, not a frequent Gallery browsing action. Leaving it in the Gallery top bar made the header noisy, consumed horizontal space on 1366px and smaller desktop layouts, and worsened bilingual button pressure.
+- Do not "improve" this by:
+  Moving `Score Aesthetic`, `Stop`, or `Aesthetic unavailable` back into the Gallery header just because aesthetic score is a Gallery sort/filter dimension.
+- Allowed evolution:
+  Add an AI tools popover, model manager shortcut, or clearer readiness guidance if it stays progressively disclosed and does not crowd the Gallery work surface.
+- Evidence:
+  Current markup places `#btn-score-aesthetic`, `#btn-cancel-aesthetic`, and `#aesthetic-status-chip` under `#tag-modal .tagger-utility-strip`, while the Gallery header no longer contains those controls. Bilingual CSS keeps the strip compact on desktop and mobile.
+- Last verified:
+  2026-05-15 with Playwright layout audit at `1920x1080`, `1600x900`, `1536x864`, `1440x900`, `1366x768`, `1280x720`, and `390x844` in English and zh-CN.
+- Related files:
+  `frontend/index.html`
+  `frontend/js/app.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `frontend/css/ui-refresh.css`
+- Supersedes:
+  None
+- Validation:
+  `node --check frontend/js/app.js`; `node --check frontend/js/lang/en.js`; `node --check frontend/js/lang/zh-CN.js`; `git diff --check -- frontend/index.html frontend/js/app.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js frontend/css/ui-refresh.css`; Playwright common-resolution button audit on local server `http://127.0.0.1:18487`.
 
 ### ADR-AI-20260514-01: Tagger hardware clamps should preserve real throughput on capable machines
 - Status: active
@@ -2724,4 +2800,94 @@ Use this structure for future entries:
 - Context: A fresh v3.1.6 Windows portable launch installed `requirements-core.txt` first, then repaired CPU-only `onnxruntime` to `onnxruntime-gpu==1.21.0`. Installing the GPU wheel before removing the CPU wheel let the CPU uninstall damage the shared `onnxruntime` import package, causing a second force reinstall. The GPU install also resolved dependencies freely and upgraded shared pins such as `numpy==1.26.4` to a newer unpinned NumPy.
 - Decision: Runtime swaps now uninstall the conflicting ONNX package before installing the target runtime, install target ONNX runtimes with `--no-deps`, and install CUDA/cuDNN extras under a pip-safe constraints file generated from `requirements-core.txt` by stripping extras-only syntax such as `uvicorn[standard]`. This preserves the locked core runtime while still allowing NVIDIA CUDA DLL packages to be added.
 - Consequences: First launch on NVIDIA still downloads the large CUDA/cuDNN payload when GPU repair is needed, but it should not reinstall ONNX Runtime twice or drift already-pinned shared dependencies. Future runtime repair paths must keep this no-deps/constraints pattern unless the lock strategy changes.
+
+
+
+## ADR-2026-05-16: Alternate-generator metadata detection (Fooocus / reForge / Gemini / gpt-image / Easy Diffusion / InvokeAI / SwarmUI / Draw Things)
+
+- Status: accepted
+- Context: Before v3.2.x the parser recognized only ComfyUI / NovelAI / WebUI / Forge. Anything else with usable metadata fell through to a generic `_parse_explicit_saved_metadata` fallback (which only understands plain `prompt`/`negative_prompt` keys) and was tagged `others` with most fields empty. PNGs from Fooocus (capitalised JSON keys in `Comment`), reForge (`Version: ...-reforge` in `parameters`), Easy Diffusion (`negative_prompt` chunk + `use_*_model` keys), InvokeAI (`invokeai_metadata`/`sd-metadata`/`Dream`), SwarmUI (`sui_image_params` JSON), Draw Things (XMP `exif:UserComment`), Gemini (Software=Gemini / nano-banana), and OpenAI gpt-image (Software=OpenAI/ChatGPT/DALL-E) all looked like "others" with no prompt visible.
+- Decision: Added dedicated detectors in `backend/metadata_parser.py` (`_maybe_parse_fooocus`, `_maybe_parse_swarmui`, `_maybe_parse_invokeai`, `_maybe_parse_drawthings`, `_maybe_parse_easy_diffusion`) that run BEFORE the generic `_parse_explicit_saved_metadata` fallback so they can claim metadata that would otherwise be flattened to `others`. `_detect_webui_family_generator` now distinguishes `reforge` from vanilla `forge`. A new `_maybe_detect_ai_provider` runs after the Software-tag NAI/ComfyUI checks and surfaces `gemini` / `gpt-image` based on Software/Source/Make/Description fields with case-insensitive regexes (`gemini|imagen|nano-banana|google ai`, `gpt-image|chatgpt|openai|dall-e`). `MetadataParser.GENERATORS` now has 14 entries; `MetadataParser.OTHERS_BUNDLE` records the 9 IDs the gallery groups under the "Others" tab so the frontend can stay in sync.
+- Easy Diffusion safeguard: the EasyDiffusion detector REQUIRES at least one of `use_stable_diffusion_model`, `use_lora_model`, `sampler_name`, `num_inference_steps`, `guidance_scale`, etc. before claiming an image. Plain `prompt`+`negative_prompt` JSON sidecars (no Easy-Diffusion-specific markers) intentionally still classify as `others` so we don't hijack arbitrary user-written sidecar files. Test `test_easy_diffusion_does_not_hijack_generic_sidecar` enforces this.
+- Frontend: Top-level gallery tab bar stays at 5 primary generators (`comfyui` / `nai` / `webui` / `forge` / `unknown`) plus an `others` bundle tab. Clicking "Others" sets `filters.generators = OTHERS_GENERATOR_BUNDLE` (9 IDs). The Filter Criteria modal now lists all 14 generators as individual checkboxes so users can isolate "only Fooocus" or "only Gemini". Tab badge for "Others" sums `OTHERS_GENERATOR_BUNDLE.reduce(genCounts)` so it matches the gallery once the user clicks.
+- Performance: Detector chain adds 0.13–0.30 ms/image worst case (verified with `.tmp/bench_parser.py`, 500 iters per fixture). No fast-path flag added because the cost is in-memory regex/dict access on metadata that was already loaded for the WebUI/NAI/ComfyUI checks; file IO is unchanged.
+- Consequences: New generator IDs are stored verbatim in `images.generator` (no enum constraint, no migration needed). Adding another rare generator means: (1) extend `MetadataParser.GENERATORS` and `OTHERS_BUNDLE`; (2) add a `_maybe_parse_*` detector and wire it into the dispatch loop in `_detect_and_parse`; (3) add the value to `frontend/js/app.js::OTHERS_GENERATOR_BUNDLE`, `gallery.js::DEFAULT_GENERATOR_COLORS`, `virtual-gallery.js::GENERATOR_COLORS`, `stores/filter-store.js::DEFAULT_FILTER_GENERATORS`; (4) add an `i18n` key in `lang/en.js` + `lang/zh-CN.js` and a checkbox to `index.html#modal-generator-filters`; (5) update the index-keyed `_setCheckboxTexts('#modal-generator-filters', [...])` list in `ui-refresh.js::_translateGallery` (this list is order-sensitive; adding a row in the middle without updating it causes label/value mismatches in zh-CN — exactly the bug found and fixed during this change).
+
+## ADR-2026-05-16: Icon-only navbar buttons must keep the emoji glyph un-clipped
+
+- Status: accepted
+- Context: A long-standing rule in `frontend/css/ui-refresh.css` truncates the LABEL span of nav-action buttons (`.nav-actions .btn span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }`) so a longer Chinese / German translation cannot push the navbar layout. For text+icon buttons that worked correctly because `:last-child` was the text span. For icon-only buttons (Setup 🧰, Library 📚, Language 🌐, Update ⬆️, Help ❓) the same selector matched the EMOJI span — its sole child — and clipped it by ~24px. The visual symptom was most obvious in Chinese because nav-tab labels are wider in that locale and the layout was tighter.
+- Decision: Scope the truncation rule to non-icon-only buttons (`.nav-actions .btn:not(.btn-icon-only) span:last-child`) and add an explicit "do not clip" rule for `.btn-icon-only span[aria-hidden]`: `overflow: visible; text-overflow: clip; flex: 0 0 auto;`. The truncation rule still protects against the original long-translation overflow on text+icon buttons (Import Images / AI Tag Images).
+- Consequences: Future icon-only navbar buttons must use the `.btn-icon-only` class to inherit the un-clipped emoji rule. Adding a new icon-only button without that class would re-introduce the clipping. The Playwright sweep at `.tmp/zh_sweep.js` checks for `scrollWidth > clientWidth` overflow on every button across all 7 views; running it after CSS changes detects regressions immediately (it dropped from 35 incidents/run to 0 after the fix).
+
+
+## ADR-2026-05-16: Fooocus disambiguation must beat NovelAI Comment block (real-shape lesson)
+
+- Status: accepted, supersedes the synthetic-test assumptions in the alt-generator detection ADR above
+- Context: My initial Fooocus tests used capitalised JSON keys (`Prompt`, `Negative Prompt`, `Base Model`) inferred from product docs. Actual upstream lllyasviel/Fooocus output (per `Fooocus/modules/private_logger.py`) writes a `Comment` PNG chunk with **lowercase** keys: `prompt`, `negative_prompt`, `base_model`, `performance`, `sampler`, `steps`, `seed`, `width`, `height`, `version`, `metadata_scheme`. The existing NovelAI block in `_detect_and_parse` only checks `"prompt" in comment_data or "uc" in comment_data`, so every real Fooocus image was being misclassified as `nai` with no negative prompt or checkpoint extracted. The synthetic test fixtures didn't catch this because they used the (non-shipping) capitalised shape. Cross-verified against `L:\Antigravitiy code\clone\sd-prompt-reader\sd_prompt_reader\format\fooocus.py` which reads `data_json.get("prompt")` / `data_json.get("negative_prompt")`.
+- Decision: Two changes, both in `backend/metadata_parser.py`:
+  - In `_detect_and_parse`, before running the NAI Comment branch, peek at `comment_data` for Fooocus-distinctive sibling keys (`base_model` / `performance` / `metadata_scheme` ∈ {fooocus,a1111} / `version` containing "Fooocus" / `negative_prompt` without `uc`) and delegate to `_maybe_parse_fooocus`. If Fooocus claims it, return immediately.
+  - In `_maybe_parse_fooocus`, allow lowercase `prompt`+`negative_prompt` JSON to trigger detection when at least one Fooocus sibling key (`base_model`, `performance`, `sampler`, `steps`, `seed`, `metadata_scheme`, `sharpness`, `guidance_scale`) is also present. Without that sibling-key gate the detector would also catch raw NAI Comments (which carry only `prompt`+`uc`+`v4_prompt`).
+- Tests: `test_fooocus_real_lowercase_shape`, `test_fooocus_real_shape_no_scheme_chunk`, and `test_nai_still_wins_when_uc_present` lock the behaviour. Real-image sampling on `L:\Pictures\AAA Reference` (156 random images) shows comfyui 26 / forge 20 / nai 21 / webui 6 / unknown 82 — i.e. NAI still detected at expected rate, no false shift to Fooocus.
+- Consequences: When adding another Comment-based generator in future, the Fooocus disambiguator must either be extended or replaced by a generic "alt-Comment" dispatcher. The lesson: **never invent a JSON shape from product copy; always read the upstream emitter source code**. Reference parsers used during this work: `L:\Antigravitiy code\clone\sd-prompt-reader` and `L:\Antigravitiy code\clone\infinite-image-browsing\scripts\iib\parsers`.
+
+## ADR-2026-05-16: C2PA byte-signature fallback for closed AI providers
+
+- Status: accepted, refines the AI-provider detection in the alt-generator ADR
+- Context: Plain Software/Make/Description tag detection is unreliable for closed-source AI providers because hosting platforms (Twitter, Discord, Pixiv, ...) often strip the EXIF tag while keeping the C2PA / "Content Credentials" manifest intact. The C2PA manifest is stored in PNG `caBX` chunks (JUMBF) or JPEG APP11 segments, with cleartext UTF-8 strings like `claim_generator_info` containing the provider name. Real-image sampling on `L:\Pictures\AAA Reference\undid` found `0E404B43F9DE4A3C6E642B62E44E4BD5.png` — a stripped ChatGPT image whose only signal was a C2PA manifest with `name: "OpenAI Media Service API"` near a `c2pa` anchor at offset 57.
+- Decision: Add `_scan_c2pa_byte_signatures(image_path, file_size)` that opens the file, reads up to 512 KiB, requires at least one C2PA anchor (`c2pa`, `jumbf`, `claim_generator`, `contentcredentials`, `content credentials`) to be present, then matches a known provider marker (`gpt-image`/`chatgpt`/`openai` for OpenAI, `gemini`/`imagen`/`google ai`/`nano-banana`/`deepmind` for Google) inside the same blob. Wired as the LAST fallback in `_maybe_detect_ai_provider` so it only runs when EXIF-tag matching failed.
+- Anchor-required guard: prevents false positives where an image's prompt mentions "openai-style" — without the anchor, the byte scan returns None. Tested by `test_c2pa_byte_scan_requires_anchor`.
+- Why not c2pa-python? The full library validates cryptographic signatures and parses CBOR — heavy dependency for "label the image so the user can find it". The byte scan covers the user's stated need (find these images in the gallery, not prove provenance). If signature validation becomes a requirement later, drop in `c2pa-python` behind a feature flag and keep the byte-scan as the cheap pre-filter.
+- Performance: bounded to 512 KiB of IO per image; only triggered when no other detector matched. Real-image scan of 156 reference images: full parse pipeline avg 4.13 ms / p95 12.2 ms / p99 29.3 ms; max 109 ms is dominated by Pillow opening a 32 MB PNG, not the C2PA scan.
+- Tests: `test_c2pa_byte_signature_gpt_image`, `test_c2pa_byte_signature_gemini`, and `test_c2pa_byte_scan_requires_anchor` lock the behaviour. The first two synthesise a fake `caBX` chunk near the file header; the third verifies that prompts mentioning provider names without an anchor stay classified as their actual generator (webui, etc.).
+
+
+## ADR-2026-05-16: Pixel-watermark detection for Gemini / gpt-image is METADATA-ONLY for now (correction)
+
+- Status: accepted, partially supersedes the "C2PA byte-signature fallback" ADR above (clarifies what we DO NOT detect)
+- Context: An earlier draft of these ADRs implied that detecting Google's SynthID invisible pixel watermark would require Google's proprietary model, and similarly that OpenAI's pixel signal was undetectable. After the user pointed at `https://github.com/aloshdenny/reverse-SynthID` (3.8k stars), I re-checked the public landscape:
+  - **Gemini SynthID**: a public 90%-accurate detector EXISTS (`aloshdenny/reverse-SynthID`'s `RobustSynthIDExtractor`, FFT spectral analysis, no Google models needed). Other generic watermark detectors also exist: `facebook/watermark-anything` (ICLR 2025, MIT), `prithivMLmods/Watermark-Detection-SigLIP2`. So my original phrasing "needs Google's proprietary model" was wrong.
+  - **OpenAI gpt-image**: no public open-source pixel-level detector found (verified via web search on 2026-05-16). C2PA Content Credentials remain the only public provenance signal.
+- Decision: Keep current behaviour (metadata-only detection: EXIF Software/Make/Description + 512 KiB C2PA byte-scan with anchor-required guard) as the **default**, and explicitly NOT integrate `reverse-SynthID` in this release. Reasoning:
+  - Cost: ~100–300 ms / image vs ~2 ms for the byte-scan. On a 70k-image library this adds hours to a re-scan.
+  - License: `reverse-SynthID` is research-only; users would need explicit consent before bundling it.
+  - Resolution gate: detector only ships codebooks for 1024×1024 and 1536×2816; arbitrary resolutions degrade. The user library is resolution-mixed.
+  - False-positive risk on Stable Diffusion: ~10% inaccuracy on Gemini at supported resolutions, and the spectral patterns can collide with SD-image artifacts on a library that's 99% SD outputs.
+  - Marginal value: the C2PA byte-scan already catches every Gemini / gpt-image sample in `L:\Pictures\AAA Reference\undid` we've tested. Pixel-detection only adds value when both EXIF and C2PA are stripped — a small subset.
+  - Asymmetry: a Gemini detector exists, but no public OpenAI detector does. Shipping pixel-detection for one provider but not the other gives the user inconsistent confidence levels per generator.
+- User-visible disclosure: the image-detail modal now shows an inline note for `gemini` and `gpt-image` images (`modal.aiProviderNote.gemini`, `modal.aiProviderNote.gptImage`) explaining we identified the source via metadata, NOT via the in-pixel watermark. The strings are localised in en + zh-CN. The note is amber-styled (FYI, not error) and sits right under the modal-meta row.
+- TODO: tracked as `Debt-23` in `TECHNICAL_DEBT_NOTES.md` with the integration plan (opt-in Setup card, resolution gate, confidence threshold ≥ 0.85, must keep the modal hint visible at least until the detector is on by default). Re-evaluate in 6 months — the watermark-detection landscape is moving fast.
+- TODO marker also placed in `backend/metadata_parser.py::MetadataParser._maybe_detect_ai_provider` docstring so anyone touching that function sees the gap and the candidate library before reinventing it.
+- Lesson: I overstated "no detector exists" without searching. The user pushed back with a concrete link. Do a real web/GitHub/HuggingFace search before stating a capability is impossible — the field changes fast and 2024–2026 has been a watermarking research explosion.
+
+
+
+## ADR-2026-05-16: SAM3 prepare must pin `+cuXXX` torch and drop `--extra-index-url` to survive flaky CUDA-index downloads (release blocker)
+
+- Decision
+
+  `backend/repair_torch_runtime.py:_install_cuda_torch` now pins the explicit local-version label on torch and torchvision (`torch==X.Y.Z+cu128`, etc.) and uses ONLY the cu-specific `--index-url` (no `--extra-index-url`). The numpy ABI constraint (`numpy<2.0`) is installed in a separate up-front pip call from PyPI. New regression test `test_cuda_install_pins_local_version_label_so_pypi_cannot_satisfy` locks the behaviour.
+
+- Why this matters
+
+  In the live fresh-portable verification on 2026-05-16, the user's first SAM3 prepare hit a transient `IncompleteRead` on download.pytorch.org's cu126 wheel (2.2 GB read, 400 MB short), then a DNS lookup miss during the cu121 retry. The pre-fix code combined `--index-url cu121 --extra-index-url https://pypi.org/simple` with a plain `torch==2.12.0` requirement. PyPI publishes the CPU wheel as exactly `2.12.0` (no local-version suffix), so pip happily satisfied the requirement from PyPI and reported success — but `torch.version.cuda` was empty afterwards and SAM3 refused to load with the error "this app's Python has CPU-only PyTorch; SAM3 needs a CUDA-enabled Torch build." The user had no clear path forward and would need to manually pip install CUDA torch — exactly the kind of "real bug masked by a workaround" pattern the user explicitly told us to avoid.
+
+  The fix has three layers:
+  1. `+cuXXX` local-version pin makes the requirement unsatisfiable on PyPI (PyPI's `2.12.0` is not `2.12.0+cu128` per PEP 440).
+  2. Dropping `--extra-index-url` removes PyPI from the resolver entirely for the torch step. With `--no-deps`, no transitive deps need PyPI either.
+  3. `numpy<2.0` is installed in a separate pip call against PyPI. numpy doesn't live on download.pytorch.org, so it has to come from PyPI — but moving it out of the cu-index call keeps that call single-source.
+
+  Result: a transient CUDA-index error now produces a clean "could not find" pip error (which our retry-cascade can catch and try the next CUDA version), instead of a silent CPU install that corrupts SAM3 readiness.
+
+- Sibling work
+
+  This is the CUDA-torch counterpart of the ONNX Runtime "Step 0" fix from earlier the same day (`repair_onnxruntime.py`). Both bugs share the pattern: the repair script returned success after a no-op or wrong-target install, leaving downstream model loading broken with a confusing message. Both are now covered by regression tests.
+
+- Files changed
+
+  `backend/repair_torch_runtime.py`, `backend/tests/test_repair_torch_runtime.py`, `CHANGELOG.md`, `docs/API.md` (separate fix: documented `GET /api/models/bulk-bundle` endpoint that was added with the bulk-download feature but missed the docs sync).
+
+- How to verify
+
+  `python -m pytest backend/tests/test_repair_torch_runtime.py -v`. All 10 tests must pass. The new test asserts both halves of the fix: (a) torch requirement carries `+cuXXX`, and (b) pip args do NOT include `--extra-index-url`.
 

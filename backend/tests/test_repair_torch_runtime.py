@@ -78,29 +78,42 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
     result = repair_torch_runtime.repair_windows_torch_runtime()
 
     assert result["repaired"] is True
-    assert any("torch==2.11.0" in call for call in pip_calls[0])
-    assert "--index-url" in pip_calls[0]
-    assert "https://download.pytorch.org/whl/cu128" in pip_calls[0]
+    # pip_calls layout after the pinned-CUDA fix:
+    #   [0] numpy<2.0 from PyPI (pre-install, kept outside the cu-index call)
+    #   [1] torch==X.Y.Z+cuXXX from the cu-specific index (no extra-index-url)
+    #   [2] SAM3 runtime (transformers, safetensors, …) from PyPI
+    assert "numpy<2.0" in pip_calls[0]
+    assert pip_calls[1] is not pip_calls[0]
+    assert any("torch==2.11.0+cu128" in call for call in pip_calls[1]), (
+        "CUDA torch must be pinned with the +cuXXX local-version label so "
+        "pip cannot silently fall back to PyPI's CPU torch wheel when the "
+        "CUDA index has a transient network glitch."
+    )
+    assert "--index-url" in pip_calls[1]
+    assert "https://download.pytorch.org/whl/cu128" in pip_calls[1]
+    # Regression guard: the CUDA install must NOT use --extra-index-url.
+    # Pre-fix, ``--extra-index-url https://pypi.org/simple`` let pip pick
+    # the CPU ``torch==2.11.0`` wheel from PyPI whenever the CUDA index
+    # download was interrupted. Now the cu-specific index is the ONLY
+    # source, and the +cuXXX local-version label guarantees no PyPI wheel
+    # could match anyway.
+    assert "--extra-index-url" not in pip_calls[1], (
+        "CUDA torch install must NOT use --extra-index-url. Combined with "
+        "an ``IncompleteRead`` on download.pytorch.org, that previously "
+        "let pip silently fall back to PyPI's CPU torch wheel."
+    )
     # Regression guard: without ``--no-deps``, torch's force-reinstall
     # cascades through sympy, jinja2, markupsafe, setuptools, pillow, etc.
     # — uninstalling and reinstalling each in place. That's pure noise on
     # first launch and confuses users into thinking the install is broken.
-    assert "--no-deps" in pip_calls[0], (
+    assert "--no-deps" in pip_calls[1], (
         "CUDA torch reinstall must use --no-deps so torch's transitive "
         "dependencies are not uninstalled and reinstalled needlessly."
     )
-    # Tripwire: if ``--no-deps`` is ever dropped, this constraint still
-    # keeps pip from upgrading numpy across the 2.0 ABI break. ``numpy<2.4``
-    # is too loose because pip resolves it to 2.3.x.
-    assert "numpy<2.0" in pip_calls[0], (
-        "CUDA torch install must pin numpy below the 2.0 ABI break to "
-        "preserve the numpy 1.x wheels the rest of the install set was "
-        "built against."
-    )
-    assert "transformers>=5.6.0" in pip_calls[1]
-    assert "safetensors" in pip_calls[1]
-    assert "sam3==0.1.3" not in pip_calls[1]
-    assert "decord" not in pip_calls[1]
+    assert "transformers>=5.6.0" in pip_calls[2]
+    assert "safetensors" in pip_calls[2]
+    assert "sam3==0.1.3" not in pip_calls[2]
+    assert "decord" not in pip_calls[2]
 
 
 def test_cuda_install_uses_fresh_subprocess_probe_after_pip_reinstall(monkeypatch):
@@ -136,11 +149,163 @@ def test_cuda_install_uses_fresh_subprocess_probe_after_pip_reinstall(monkeypatc
     )
 
     assert installed is True
-    assert len(pip_calls) == 1, "A valid CUDA wheel should stop the fallback loop after one download."
-    assert "https://download.pytorch.org/whl/cu128" in pip_calls[0]
+    # pip_calls[0] is the numpy<2.0 pre-install from PyPI (kept outside
+    # the CUDA-index loop so the cu-index call stays single-source).
+    # pip_calls[1] is the cu128 torch install. The fallback loop should
+    # stop after that first successful CUDA install — never advancing to
+    # cu126/cu124/cu121.
+    assert len(pip_calls) == 2, (
+        "A valid CUDA wheel should stop the fallback loop after one download. "
+        "Expected: numpy pre-install + 1 torch install = 2 pip calls."
+    )
+    assert "https://download.pytorch.org/whl/cu128" in pip_calls[1]
+
+
+def test_cuda_install_pins_local_version_label_so_pypi_cannot_satisfy(monkeypatch):
+    """Regression test: prevent silent fallback to PyPI's CPU torch wheel.
+
+    The original ``_install_cuda_torch`` passed
+    ``--extra-index-url https://pypi.org/simple`` plus a plain
+    ``torch==2.11.0`` requirement. When the CUDA index briefly failed
+    (``IncompleteRead``, DNS lookup miss, etc.), pip would happily
+    satisfy ``torch==2.11.0`` from PyPI's CPU wheel — pip would then
+    report a successful install, but ``torch.version.cuda`` was empty
+    and SAM3 refused to load.
+
+    The fix pins the explicit local-version label
+    (``torch==2.11.0+cu128``). PyPI's CPU wheel is published without
+    any local-version suffix and therefore cannot match — pip is
+    forced to either fetch from the cu-specific index or fail loudly.
+
+    This test asserts both halves of the fix:
+      1. The torch requirement carries a ``+cuXXX`` local-version tag.
+      2. The pip command does NOT include ``--extra-index-url``.
+    """
+    pip_calls = []
+    actions: list = []
+
+    def fake_run_pip(args, stream=False):
+        pip_calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: {"torch_version": "2.11.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
+    )
+
+    repair_torch_runtime._install_cuda_torch(
+        actions,
+        {
+            "torch_version": "2.11.0+cpu",
+            "torchvision_version": "0.26.0",
+            "nvidia_cuda_version": "12.8",
+        },
+        stream_pip=False,
+    )
+
+    # pip_calls[0] == numpy<2.0 from PyPI (pre-install)
+    # pip_calls[1] == cu128 torch install
+    assert len(pip_calls) >= 2, f"Expected numpy + torch install, got: {pip_calls}"
+    torch_call = pip_calls[1]
+
+    # The torch wheel must be pinned to +cuXXX so PyPI can never satisfy it.
+    pinned_torch = [a for a in torch_call if a.startswith("torch==")]
+    assert pinned_torch, f"No torch== requirement in: {torch_call}"
+    assert any("+cu" in a for a in pinned_torch), (
+        f"torch requirement {pinned_torch} is missing the +cuXXX local-version "
+        "label. Without it, pip can silently fall back to PyPI's CPU torch "
+        "wheel when the CUDA index has a transient network glitch, leaving "
+        "the user with a working install that fails SAM3 with a confusing "
+        "'torch.version.cuda is empty' error."
+    )
+
+    # The torch install must NOT include --extra-index-url; with --no-deps
+    # we don't need PyPI as a fallback, and including it re-opens the
+    # silent-CPU-fallback footgun even with the pinned local version.
+    assert "--extra-index-url" not in torch_call, (
+        f"--extra-index-url found in torch install args: {torch_call}. "
+        "Even with the +cuXXX pin, including PyPI as an extra index "
+        "weakens the guarantee. Numpy is now installed in a separate "
+        "pip call (pip_calls[0]) so the torch step needs only the "
+        "single cu-specific --index-url."
+    )
 
 
 def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
+    """Regression test: prevent silent fallback to PyPI's CPU torch wheel.
+
+    The original ``_install_cuda_torch`` passed
+    ``--extra-index-url https://pypi.org/simple`` plus a plain
+    ``torch==2.11.0`` requirement. When the CUDA index briefly failed
+    (``IncompleteRead``, DNS lookup miss, etc.), pip would happily
+    satisfy ``torch==2.11.0`` from PyPI's CPU wheel — pip would then
+    report a successful install, but ``torch.version.cuda`` was empty
+    and SAM3 refused to load.
+
+    The fix pins the explicit local-version label
+    (``torch==2.11.0+cu128``). PyPI's CPU wheel is published without
+    any local-version suffix and therefore cannot match — pip is
+    forced to either fetch from the cu-specific index or fail loudly.
+
+    This test asserts both halves of the fix:
+      1. The torch requirement carries a ``+cuXXX`` local-version tag.
+      2. The pip command does NOT include ``--extra-index-url``.
+    """
+    pip_calls = []
+    actions = []
+
+    def fake_run_pip(args, stream=False):
+        pip_calls.append(args)
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(repair_torch_runtime, "_run_pip", fake_run_pip)
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_torch_probe_subprocess",
+        lambda: {"torch_version": "2.11.0+cu128", "torch_cuda_build": "12.8", "torch_cuda_available": True, "torch_probe_error": None},
+    )
+
+    repair_torch_runtime._install_cuda_torch(
+        actions,
+        {
+            "torch_version": "2.11.0+cpu",
+            "torchvision_version": "0.26.0",
+            "nvidia_cuda_version": "12.8",
+        },
+        stream_pip=False,
+    )
+
+    # pip_calls[0] == numpy<2.0 from PyPI (pre-install)
+    # pip_calls[1] == cu128 torch install
+    assert len(pip_calls) >= 2, f"Expected numpy + torch install, got: {pip_calls}"
+    torch_call = pip_calls[1]
+
+    # The torch wheel must be pinned to +cuXXX so PyPI can never satisfy it.
+    pinned_torch = [a for a in torch_call if a.startswith("torch==")]
+    assert pinned_torch, f"No torch== requirement in: {torch_call}"
+    assert any("+cu" in a for a in pinned_torch), (
+        f"torch requirement {pinned_torch} is missing the +cuXXX local-version "
+        "label. Without it, pip can silently fall back to PyPI's CPU torch "
+        "wheel when the CUDA index has a transient network glitch, leaving "
+        "the user with a working install that fails SAM3 with a confusing "
+        "'torch.version.cuda is empty' error."
+    )
+
+    # The torch install must NOT include --extra-index-url; with --no-deps
+    # we don't need PyPI as a fallback, and including it re-opens the
+    # silent-CPU-fallback footgun even with the pinned local version.
+    assert "--extra-index-url" not in torch_call, (
+        f"--extra-index-url found in torch install args: {torch_call}. "
+        "Even with the +cuXXX pin, including PyPI as an extra index "
+        "weakens the guarantee. Numpy is now installed in a separate "
+        "pip call (pip_calls[0]) so the torch step needs only the "
+        "single cu-specific --index-url."
+    )
+
+
+
     pip_calls = []
     probe_results = iter(
         [
@@ -166,7 +331,8 @@ def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
     assert result["torch_version"] == "2.11.0+cu128"
     assert result["torch_cuda_build"] == "12.8"
     assert result["torch_cuda_available"] is True
-    assert len(pip_calls) == 1
+    # numpy<2.0 pre-install + cu128 torch install = 2 pip calls.
+    assert len(pip_calls) == 2
 
 
 def test_sys_path_bootstrap_handles_embedded_python_layout(tmp_path):

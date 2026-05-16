@@ -285,6 +285,18 @@ def should_skip_path(relative_path: Path) -> bool:
         return True
     if relative_path.parts and relative_path.parts[0] == "models" and rel not in DOC_FILES:
         return True
+    # Repo root is for launcher scripts and core docs only — never images.
+    # Real product screenshots live under docs/screenshots/. Loose images
+    # at the root almost always come from ad-hoc playwright/E2E runs that
+    # forgot a tmp directory; bundling them into the public release is
+    # both a privacy and a "what is this random test screenshot doing in
+    # my download" concern. Block them defensively even if a future
+    # contributor accidentally tracks one.
+    if (
+        len(relative_path.parts) == 1
+        and relative_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+    ):
+        return True
     return False
 
 

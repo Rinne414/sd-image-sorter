@@ -112,6 +112,45 @@ def test_release_skip_rules_drop_hidden_and_docs_files():
     assert release_builder.should_skip_path(Path("README.md")) is False
 
 
+def test_release_skip_rules_drop_loose_root_level_images():
+    """Regression test: stray test screenshots at the repo root must not ship.
+
+    In v3.2.0 release prep, two ad-hoc playwright runs left
+    ``e2e-gallery-final.png`` and ``e2e-manual-sort-bug.png`` at the
+    repo root. Neither matched any existing exclusion rule, so they
+    got bundled into the public windows-portable.zip / linux.tar.gz /
+    app-patch.zip. That's both a privacy concern (random screenshot
+    of the developer's gallery shipping to every user) and a "what is
+    this random PNG doing in my download" concern.
+
+    The fix is a defensive root-level image filter in
+    ``should_skip_path``: any image suffix at the top of the tree is
+    skipped. Real product screenshots live under ``docs/screenshots/``
+    and the build script doesn't ship those anyway, so this rule has
+    no false positives.
+    """
+    release_builder = load_release_builder()
+
+    # Loose root-level images must be skipped, regardless of name.
+    assert release_builder.should_skip_path(Path("e2e-gallery-final.png")) is True
+    assert release_builder.should_skip_path(Path("e2e-manual-sort-bug.png")) is True
+    assert release_builder.should_skip_path(Path("playwright-trace.png")) is True
+    assert release_builder.should_skip_path(Path("screenshot.jpg")) is True
+    assert release_builder.should_skip_path(Path("test.webp")) is True
+    assert release_builder.should_skip_path(Path("RANDOM.gif")) is True
+
+    # Images under subdirectories must still be allowed (the docs/ tree
+    # is excluded elsewhere; here we just confirm the new rule does
+    # not over-match).
+    assert release_builder.should_skip_path(Path("frontend") / "static" / "logo.png") is False
+    assert release_builder.should_skip_path(Path("models") / "yolo" / "preview.png") is True  # excluded by models rule, not the new one
+    # Sanity: legit launcher and doc files at the repo root are still allowed.
+    assert release_builder.should_skip_path(Path("README.md")) is False
+    assert release_builder.should_skip_path(Path("LICENSE")) is False
+    assert release_builder.should_skip_path(Path("run.bat")) is False
+    assert release_builder.should_skip_path(Path("run.sh")) is False
+
+
 def test_release_copy_project_prunes_excluded_directory_trees(monkeypatch, tmp_path):
     release_builder = load_release_builder()
     fake_root = tmp_path / "repo"
