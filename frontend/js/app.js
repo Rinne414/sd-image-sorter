@@ -1142,7 +1142,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'move', artist = null, replaceExisting = false) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false) {
         return this.post('/api/sort/start', {
             generators,
             tags,
@@ -1160,7 +1160,9 @@ const API = {
             min_aesthetic: aesthetic?.min ?? null,
             max_aesthetic: aesthetic?.max ?? null,
             folders,
-            operation_mode: operationMode || 'move',
+            // Default to copy (non-destructive) when no explicit mode is
+            // passed. Locked by Principle #11 in docs/AI_PRINCIPLES.md.
+            operation_mode: operationMode || 'copy',
             replace_existing: Boolean(replaceExisting),
         });
     },
