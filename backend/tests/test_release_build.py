@@ -691,6 +691,120 @@ def test_frontend_i18n_and_censor_css_keep_safety_contracts():
         assert hardcoded_accent not in css_text
     assert "var(--censor-accent" in censor_css
 
+def test_autosep_and_manual_sort_default_to_copy_for_safety():
+    """Regression test: locked defaults from AI_PRINCIPLES.md Principle #11.
+
+    The Auto-Separate and Manual Sort file-action mode must default to
+    ``copy`` (non-destructive) so first-time users do not move thousands
+    of files in a single click before they understand the workflow.
+
+    The user can still switch to ``move`` per session via the radio
+    buttons, and their last choice is persisted to localStorage so
+    power users only flip once. But the *out-of-box default* must be
+    copy.
+
+    This test pins both halves:
+      1. The HTML radios in index.html ship with ``checked`` on the
+         ``copy`` value (not ``move``) for all three radio groups:
+         autosep-operation-mode-main, autosep-operation-mode-settings,
+         manual-sort-operation.
+      2. The JS fallbacks in autosep.js / manual-sort.js / app.js
+         resolve to ``copy`` when localStorage has no saved value
+         (or when the saved value is corrupt/unrecognized).
+
+    If a future agent flips any of these back to ``move``, this test
+    must fail loudly. See ``docs/AI_PRINCIPLES.md`` Principle #11 and
+    ``docs/AI_DECISION_LOG.md`` ADR-2026-05-16-copy-default for the
+    full reasoning.
+    """
+    import re
+
+    index_html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    autosep_js = (ROOT / "frontend" / "js" / "autosep.js").read_text(encoding="utf-8")
+    manual_sort_js = (ROOT / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")
+    app_js = (ROOT / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    # ---- HTML radios ----
+    # For each radio group, find both the move and copy radio tags and
+    # assert the copy one carries ``checked`` while the move one does not.
+    for group in ("autosep-operation-mode-main", "autosep-operation-mode-settings", "manual-sort-operation"):
+        move_pattern = re.compile(
+            rf'<input type="radio" name="{re.escape(group)}" value="move"[^>]*>',
+            re.IGNORECASE,
+        )
+        copy_pattern = re.compile(
+            rf'<input type="radio" name="{re.escape(group)}" value="copy"[^>]*>',
+            re.IGNORECASE,
+        )
+        move_match = move_pattern.search(index_html)
+        copy_match = copy_pattern.search(index_html)
+        assert move_match is not None, f"Could not find move radio for {group}"
+        assert copy_match is not None, f"Could not find copy radio for {group}"
+        assert "checked" not in move_match.group(0).lower(), (
+            f"Radio group {group}: 'move' must NOT carry the ``checked`` "
+            f"attribute. Locked by AI_PRINCIPLES.md Principle #11. "
+            f"Found: {move_match.group(0)!r}"
+        )
+        assert "checked" in copy_match.group(0).lower(), (
+            f"Radio group {group}: 'copy' MUST carry the ``checked`` "
+            f"attribute. Locked by AI_PRINCIPLES.md Principle #11. "
+            f"Found: {copy_match.group(0)!r}"
+        )
+
+    # ---- HTML helper text under manual-sort radios ----
+    # Helper text + status line should reflect ``copy`` as the initial
+    # state. JS overrides on user toggle, but the static HTML the user
+    # sees on first paint must match the new default.
+    assert 'data-i18n="manual.actionModeCopyHelp"' in index_html
+    assert 'data-i18n="manual.actionModeMoveHelp"' not in index_html
+    assert "Action mode: Copy and keep originals" in index_html
+    assert "Action mode: Move originals" not in index_html
+
+    # ---- autosep.js DEFAULT_AUTOSEP_SETTINGS.operationMode ----
+    autosep_default_match = re.search(
+        r"DEFAULT_AUTOSEP_SETTINGS\s*=\s*\{[^}]*?operationMode\s*:\s*'([^']+)'",
+        autosep_js,
+        re.DOTALL,
+    )
+    assert autosep_default_match is not None, (
+        "Could not find DEFAULT_AUTOSEP_SETTINGS.operationMode in autosep.js"
+    )
+    assert autosep_default_match.group(1) == "copy", (
+        f"DEFAULT_AUTOSEP_SETTINGS.operationMode must be 'copy', got "
+        f"{autosep_default_match.group(1)!r}. Locked by AI_PRINCIPLES.md "
+        f"Principle #11."
+    )
+
+    # ---- autosep.js normalizeAutoSepOperationMode ----
+    # The fallback for an unrecognized stored value must be 'copy', NOT
+    # 'move'. A corrupt localStorage entry must never silently flip to
+    # the destructive path.
+    assert "return mode === 'move' ? 'move' : 'copy'" in autosep_js, (
+        "autosep.js normalizeAutoSepOperationMode must fall back to "
+        "'copy' for unrecognized values. Locked by Principle #11."
+    )
+
+    # ---- manual-sort.js localStorage fallback + normalize ----
+    assert "localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'copy'" in manual_sort_js, (
+        "manual-sort.js localStorage fallback must be 'copy'. "
+        "Locked by Principle #11."
+    )
+    assert "return mode === 'move' ? 'move' : 'copy'" in manual_sort_js, (
+        "manual-sort.js normalizeManualSortOperationMode must fall back to "
+        "'copy' for unrecognized values. Locked by Principle #11."
+    )
+
+    # ---- app.js startSortSession parameter default ----
+    assert "operationMode = 'copy'" in app_js, (
+        "app.js startSortSession's operationMode parameter default must "
+        "be 'copy'. Locked by Principle #11."
+    )
+    assert "operation_mode: operationMode || 'copy'" in app_js, (
+        "app.js startSortSession's operation_mode body field must fall "
+        "back to 'copy'. Locked by Principle #11."
+    )
+
+
 def test_model_manager_sam3_setup_copy_matches_lazy_prepare_policy():
     model_service = (ROOT / "backend" / "services" / "model_service.py").read_text(encoding="utf-8")
 

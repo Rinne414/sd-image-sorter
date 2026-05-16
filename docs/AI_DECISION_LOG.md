@@ -2924,3 +2924,39 @@ Use this structure for future entries:
 - How to verify
 
   `python -m pytest backend/tests/test_image_manager.py -k scan_folder backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_jpeg_with_png_extension_falls_through_to_pillow backend/tests/test_metadata_parser.py::TestMetadataParserBase::test_parse_png_fast_path_still_rejects_genuinely_truncated_png`. All 26 tests must pass.
+
+
+
+## ADR-2026-05-16-copy-default: Auto-Separate and Manual Sort default to "copy", not "move"
+
+- Decision
+
+  The Auto-Separate (`autosep.js`) and Manual Sort (`manual-sort.js`) file-action mode defaults to `copy` (non-destructive) for any user without a saved preference. Locations:
+
+  - `frontend/index.html`: the three radio groups (`autosep-operation-mode-main`, `autosep-operation-mode-settings`, `manual-sort-operation`) ship with `value="copy"` carrying the `checked` attribute.
+  - `frontend/js/autosep.js`: `DEFAULT_AUTOSEP_SETTINGS.operationMode = 'copy'` and `normalizeAutoSepOperationMode` falls back to `'copy'` for unrecognized values.
+  - `frontend/js/manual-sort.js`: the localStorage fallback and `normalizeManualSortOperationMode` both fall back to `'copy'`.
+  - `frontend/js/app.js`: `startSortSession`'s `operationMode` parameter default + the request body's `operation_mode` fallback are both `'copy'`.
+  - The "Action mode: …" status line and helper text under the manual-sort radios reflect copy as the initial state before JS runs.
+
+  The user can still switch to `move` per session via the radio buttons. Their last choice is persisted to localStorage so power users only flip once.
+
+- Why this matters
+
+  Auto-Separate and Manual Sort can move thousands of files in a single click. A user who clicks "Start" before reading the radio labels — or before noticing the radios at all — could destructively move their entire library into the wrong folders.
+
+  User instruction (2026-05-16): "yes, change to copy as default. then mark those default value to the related document to avoid further another ai to change them without asking or considering."
+
+  The sort tools' purpose is sorting, but the safer-by-default principle for batch destructive operations matters more than the "moves are the point" argument. Power users move once, then their localStorage choice sticks. New users get the safe path until they actively choose otherwise.
+
+- Sibling work
+
+  This decision is logged in the table at the bottom of `docs/AI_PRINCIPLES.md` Principle #11 alongside the other locked defaults. Any future agent attempting to flip these back to `move` will need to satisfy the three-part justification (named-commit + ADR + regression test), per Principle #11.
+
+- Files changed
+
+  `frontend/index.html`, `frontend/js/autosep.js`, `frontend/js/manual-sort.js`, `frontend/js/app.js`, `docs/AI_PRINCIPLES.md` (table updated).
+
+- How to verify
+
+  Manual: open the gallery, expand Auto-Separate, confirm the "Copy and keep originals" radio is selected. Open Manual Sort, confirm same. Behavioural test: ``node .tmp/test_default_operation_mode.js`` (created in the same commit) loads the page in headless Chromium and asserts the checked radio for each of the three groups is the copy variant.

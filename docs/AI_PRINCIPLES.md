@@ -355,6 +355,9 @@ The list of currently-locked user-visible defaults — flipping any of these req
 | `cleanup_missing=False` for default scans | `backend/image_manager.py` | safety: do not auto-delete rows on a transient drive-unmounted scan |
 | `force_reparse=False` for default scans | `backend/image_manager.py` | safety: do not invalidate everyone's cached metadata on every scan |
 | `include_unreadable=False` in DB queries | `backend/database.py` | hides corrupt rows from the normal gallery view |
+| Auto-Separate default operation = `copy` | `frontend/index.html` (autosep-operation-mode-main / -settings radios) + `frontend/js/autosep.js` (`DEFAULT_AUTOSEP_SETTINGS.operationMode`, `normalizeAutoSepOperationMode`) | ADR-2026-05-16-copy-default + `test_autosep_default_is_copy_for_new_users` (frontend e2e). Default to non-destructive copy so first-time users do not move thousands of files before they understand the workflow. The UI still shows both radios; users can switch to move per run. |
+| Manual Sort default operation = `copy` | `frontend/index.html` (manual-sort-operation radio) + `frontend/js/manual-sort.js` (`normalizeManualSortOperationMode`, localStorage fallback in `init`) + `frontend/js/app.js` (`startSortSession` parameter default + body field) | ADR-2026-05-16-copy-default + `test_manual_sort_default_is_copy_for_new_users` (frontend e2e). Same reasoning as Auto-Separate. |
+| `confirmBeforeMove=true` (Auto-Separate) | `frontend/js/autosep.js` (`DEFAULT_AUTOSEP_SETTINGS.confirmBeforeMove`) | safety: ask before mass move/copy so the user can sanity-check the file count |
 
 ## Historical Repo-Specific Principles
 

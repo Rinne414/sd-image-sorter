@@ -17,7 +17,10 @@ const DEFAULT_AUTOSEP_SETTINGS = {
     rememberDestination: true,
     autoPreview: false,
     confirmBeforeMove: true,
-    operationMode: 'move',
+    // Default to ``copy`` so first-time users do not destructively move files
+    // before they understand the workflow. Locked by Principle #11 in
+    // docs/AI_PRINCIPLES.md and the corresponding ADR.
+    operationMode: 'copy',
 };
 
 const AutoSepState = {
@@ -44,7 +47,11 @@ function tKey(key, enText, zhText = enText) {
 }
 
 function normalizeAutoSepOperationMode(mode) {
-    return mode === 'copy' ? 'copy' : 'move';
+    // Default to 'copy' when the stored value is unrecognized so a
+    // corrupt localStorage entry can never flip a brand-new user into
+    // the destructive 'move' path. Locked by Principle #11 in
+    // docs/AI_PRINCIPLES.md.
+    return mode === 'move' ? 'move' : 'copy';
 }
 
 function getAutoSepOperationMode() {

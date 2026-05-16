@@ -76,7 +76,11 @@ function formatManualSortI18n(key, fallback, replacements = {}) {
 }
 
 function normalizeManualSortOperationMode(mode) {
-    return mode === 'copy' ? 'copy' : 'move';
+    // Default to 'copy' when the stored value is unrecognized so a corrupt
+    // localStorage entry can never flip a brand-new user into the
+    // destructive 'move' path. Locked by Principle #11 in
+    // docs/AI_PRINCIPLES.md.
+    return mode === 'move' ? 'move' : 'copy';
 }
 
 function getManualSortOperationMode() {
@@ -456,7 +460,9 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
     banner.style.display = 'flex';
     ManualSortState.resumeBannerSessionSnapshot = {
         remaining: Number(session?.remaining || 0),
-        operation_mode: session?.operation_mode || 'move',
+        // Resumed sessions keep whatever mode they were started with;
+        // default for a brand-new session is 'copy' (Principle #11).
+        operation_mode: session?.operation_mode || 'copy',
         folders: { ...(session?.folders || {}) },
     };
 
@@ -469,7 +475,7 @@ function renderManualSortResumeBanner(session, { visible = true } = {}) {
 
     const operationEl = banner.querySelector('.resume-operation');
     if (operationEl) {
-        const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'move');
+        const modeLabel = getManualSortOperationLabel(session?.operation_mode || 'copy');
         operationEl.textContent = formatManualSortI18n(
             'manual.resumeOperationMode',
             'Saved session action mode: {mode}',
@@ -495,7 +501,7 @@ async function initManualSort() {
     const $$ = (sel) => document.querySelectorAll(sel);
     loadManualSortFilters();
     loadManualSortScopeMeta();
-    setManualSortOperationMode(localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'move', {
+    setManualSortOperationMode(localStorage.getItem(MANUAL_SORT_OPERATION_MODE_KEY) || 'copy', {
         persist: false,
         updateUi: true,
     });

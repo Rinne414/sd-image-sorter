@@ -957,11 +957,11 @@
                             </div>
                             <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
                                 <label class="segmented-option">
-                                    <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode checked>
+                                    <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode>
                                     <span data-i18n="autosep.operationModeMove">Move originals</span>
                                 </label>
                                 <label class="segmented-option">
-                                    <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode>
+                                    <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode checked>
                                     <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
                                 </label>
                             </div>
@@ -1036,11 +1036,11 @@
                         <label data-i18n="autosep.operationModeTitle">File Action Mode</label>
                         <div class="segmented-control" role="radiogroup" aria-label="Auto-Separate action mode">
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode-settings" value="move" data-autosep-operation-mode checked>
+                                <input type="radio" name="autosep-operation-mode-settings" value="move" data-autosep-operation-mode>
                                 <span data-i18n="autosep.operationModeMove">Move originals</span>
                             </label>
                             <label class="segmented-option">
-                                <input type="radio" name="autosep-operation-mode-settings" value="copy" data-autosep-operation-mode>
+                                <input type="radio" name="autosep-operation-mode-settings" value="copy" data-autosep-operation-mode checked>
                                 <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
                             </label>
                         </div>
@@ -1162,16 +1162,16 @@
                             </div>
                             <div class="segmented-control" role="radiogroup" aria-label="Manual sort action mode">
                                 <label class="segmented-option">
-                                    <input type="radio" name="manual-sort-operation" value="move" checked>
+                                    <input type="radio" name="manual-sort-operation" value="move">
                                     <span data-i18n="manual.actionModeMove">Move originals</span>
                                 </label>
                                 <label class="segmented-option">
-                                    <input type="radio" name="manual-sort-operation" value="copy">
+                                    <input type="radio" name="manual-sort-operation" value="copy" checked>
                                     <span data-i18n="manual.actionModeCopy">Copy and keep originals</span>
                                 </label>
                             </div>
-                            <div class="helper-text" id="manual-sort-operation-help" data-i18n="manual.actionModeMoveHelp">Moves the original files into the sort folders.</div>
-                            <div class="helper-text" id="manual-sort-execution-mode">Action mode: Move originals</div>
+                            <div class="helper-text" id="manual-sort-operation-help" data-i18n="manual.actionModeCopyHelp">Copies into the sort folders and keeps the originals in place. Safer when date-based library order matters.</div>
+                            <div class="helper-text" id="manual-sort-execution-mode">Action mode: Copy and keep originals</div>
                         </div>
                         <button class="btn btn-primary btn-large btn-glow" id="btn-start-sorting">
                             🎮 <span data-i18n="manual.startSorting">Start Sorting</span>
