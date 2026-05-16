@@ -6320,12 +6320,39 @@ html.lang-zh #view-censor .queue-action-btn span {
     padding: 0;
     margin-top: 8px;
     margin-bottom: 14px;
+    /* The hero has only an eyebrow + subtitle (no <h2>) — keep the
+       layout simple. The previous "align-items: flex-end" inherited
+       from .health-hero made the subtitle baseline align with the
+       button, which pushed the eyebrow off the top of the modal-
+       content scroll area on narrow viewports. Top-aligning keeps
+       the eyebrow visible the moment the section is opened. */
+    align-items: flex-start;
 }
 .audit-hero h2 {
     display: none;
 }
 .audit-hero .health-eyebrow {
-    margin-bottom: 4px;
+    /* The eyebrow IS the title for the audit hero (h2 is hidden).
+       Make it visually distinct from the surrounding small caps so
+       it does not look like body copy a user can ignore. */
+    margin: 0 0 6px;
+    color: var(--text-primary, #f8fbff);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+}
+.audit-hero p:not(.health-eyebrow) {
+    margin: 0;
+    color: var(--text-secondary, #b8d7e9);
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+.audit-hero .health-hero-actions {
+    /* Keep the Refresh Audit button aligned to the top alongside the
+       new top-aligned eyebrow + subtitle so the hero reads as a tidy
+       single row rather than an awkward bottom-anchored button. */
+    align-self: flex-start;
 }
 @media (max-width: 768px) {
     .audit-summary-help {
