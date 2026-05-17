@@ -407,6 +407,15 @@ def export_tags_batch_request(
     if overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {overwrite_policy}")
 
+    # v3.2.1: template_options for content_mode='template'
+    template_options = getattr(request, "template_options", None)
+    if template_options is not None and not isinstance(template_options, dict):
+        # pydantic may pass a model — convert to dict
+        if hasattr(template_options, "model_dump"):
+            template_options = template_options.model_dump()
+        else:
+            template_options = None
+
     exported = 0
     skipped = 0
     error_count = 0
@@ -440,6 +449,7 @@ def export_tags_batch_request(
                     content_mode=content_mode,
                     blacklist=blacklist,
                     prefix=prefix,
+                    template_options=template_options,
                 )
                 # In ``beside_image`` mode each image lands in its own
                 # source directory. We do NOT auto-create directories on
