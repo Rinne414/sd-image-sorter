@@ -1346,6 +1346,10 @@ VALID_SORT_OPTIONS = {
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
     "random", "file_size", "file_size_asc", "aesthetic", "aesthetic_asc",
+    # v3.2.1 color sorts
+    "brightness", "brightness_asc",
+    "saturation", "saturation_asc",
+    "brightness_skew", "brightness_skew_asc",
 }
 
 # Canonical column lists for image queries.
@@ -1768,6 +1772,31 @@ def _apply_aesthetic_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_color_filter(conditions: List[str], params: List[Any],
+                        brightness_min: Optional[float] = None,
+                        brightness_max: Optional[float] = None,
+                        color_temperature: Optional[str] = None,
+                        brightness_distribution: Optional[str] = None) -> tuple:
+    """Apply v3.2.1 color-based filters (brightness range, temperature, distribution shape)."""
+    if brightness_min is not None:
+        conditions.append("i.avg_brightness IS NOT NULL AND i.avg_brightness >= ?")
+        params.append(float(brightness_min))
+    if brightness_max is not None:
+        conditions.append("i.avg_brightness IS NOT NULL AND i.avg_brightness <= ?")
+        params.append(float(brightness_max))
+    if color_temperature:
+        valid = {"warm", "cool", "neutral"}
+        if color_temperature.lower() in valid:
+            conditions.append("i.color_temperature = ?")
+            params.append(color_temperature.lower())
+    if brightness_distribution:
+        valid_dist = {"left_heavy", "right_heavy", "middle_heavy", "edge_heavy", "balanced"}
+        if brightness_distribution.lower() in valid_dist:
+            conditions.append("i.brightness_distribution = ?")
+            params.append(brightness_distribution.lower())
+    return conditions, params
+
+
 def _apply_artist_filter(query: str, conditions: List[str], params: List[Any],
                          artist: Optional[str]) -> tuple:
     """Apply artist filter by joining with artist_predictions table.
@@ -1884,6 +1913,13 @@ def _get_order_clause(sort_by: str) -> str:
         "file_size_asc": "i.file_size ASC, i.id ASC",
         "aesthetic": "COALESCE(i.aesthetic_score, 0) DESC, i.id DESC",
         "aesthetic_asc": "COALESCE(i.aesthetic_score, 0) ASC, i.id ASC",
+        # v3.2.1 color sorts
+        "brightness": "COALESCE(i.avg_brightness, -1) DESC, i.id DESC",
+        "brightness_asc": "COALESCE(i.avg_brightness, 999) ASC, i.id ASC",
+        "saturation": "COALESCE(i.color_saturation, -1) DESC, i.id DESC",
+        "saturation_asc": "COALESCE(i.color_saturation, 999) ASC, i.id ASC",
+        "brightness_skew": "COALESCE(i.brightness_skew, -999) DESC, i.id DESC",
+        "brightness_skew_asc": "COALESCE(i.brightness_skew, 999) ASC, i.id ASC",
     }
     return sort_options.get(sort_by, f"{_LIBRARY_ORDER_SQL} DESC, i.id DESC")
 
@@ -2070,6 +2106,11 @@ def get_images(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -2158,6 +2199,12 @@ def get_images(
             conditions, params, min_aesthetic, max_aesthetic
         )
 
+        # Apply v3.2.1 color filters
+        conditions, params = _apply_color_filter(
+            conditions, params,
+            brightness_min, brightness_max, color_temperature, brightness_distribution,
+        )
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -2208,6 +2255,11 @@ def get_filtered_image_count(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
 ) -> int:
     """Get count of images matching filters without loading image data.
 
@@ -2276,6 +2328,12 @@ def get_filtered_image_count(
             conditions, params, min_aesthetic, max_aesthetic
         )
 
+        # Apply v3.2.1 color filters
+        conditions, params = _apply_color_filter(
+            conditions, params,
+            brightness_min, brightness_max, color_temperature, brightness_distribution,
+        )
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -2311,6 +2369,11 @@ def get_filtered_image_ids(
     max_results: Optional[int] = None,
     offset: int = 0,
     limit: Optional[int] = None,
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -2379,6 +2442,12 @@ def get_filtered_image_ids(
 
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
+        )
+
+        # Apply v3.2.1 color filters
+        conditions, params = _apply_color_filter(
+            conditions, params,
+            brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
 
         # Apply artist filter (JOIN)
@@ -2510,6 +2579,11 @@ def get_images_paginated(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -2589,6 +2663,12 @@ def get_images_paginated(
         # Apply aesthetic score filters
         conditions, params = _apply_aesthetic_filter(
             conditions, params, min_aesthetic, max_aesthetic
+        )
+
+        # Apply v3.2.1 color filters
+        conditions, params = _apply_color_filter(
+            conditions, params,
+            brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
 
         # Apply artist filter (JOIN)
@@ -2774,6 +2854,65 @@ def get_image_by_id(image_id: int) -> Optional[Dict[str, Any]]:
         )
         row = cursor.fetchone()
         return _row_to_dict(row) if row else None
+
+
+def update_image_caption(image_id: int, caption: str) -> None:
+    """Update the ai_caption field for an image."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE images SET ai_caption = ? WHERE id = ?",
+            (caption, image_id),
+        )
+
+
+def update_image_colors(image_id: int, color_data: Dict[str, Any]) -> None:
+    """Update color analysis columns for an image (v3.2.1).
+
+    color_data should match the keys returned by color_analyzer.analyze_image_colors():
+      dominant_colors, avg_brightness, color_temperature, color_saturation,
+      brightness_histogram, brightness_skew, brightness_distribution.
+    """
+    if not color_data:
+        return
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE images
+            SET dominant_colors = ?,
+                avg_brightness = ?,
+                color_temperature = ?,
+                color_saturation = ?,
+                brightness_histogram = ?,
+                brightness_skew = ?,
+                brightness_distribution = ?
+            WHERE id = ?
+            """,
+            (
+                color_data.get("dominant_colors"),
+                color_data.get("avg_brightness"),
+                color_data.get("color_temperature"),
+                color_data.get("color_saturation"),
+                color_data.get("brightness_histogram"),
+                color_data.get("brightness_skew"),
+                color_data.get("brightness_distribution"),
+                image_id,
+            ),
+        )
+
+
+def get_images_missing_color_data(limit: int = 100) -> List[Dict[str, Any]]:
+    """Find images that haven't had color analysis run yet (for lazy backfill)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, path FROM images
+            WHERE avg_brightness IS NULL AND is_readable = 1
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        return [{"id": row[0], "path": row[1]} for row in cursor.fetchall()]
 
 
 def get_image_by_path(path: str) -> Optional[Dict[str, Any]]:

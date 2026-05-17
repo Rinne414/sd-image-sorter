@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/static/css/image-obfuscate.css">
     <link rel="stylesheet" href="/static/css/new-views.css">
     <link rel="stylesheet" href="/static/css/ui-refresh.css">
+    <link rel="stylesheet" href="/static/css/vlm.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -2965,6 +2966,32 @@
                 <div class="tagger-utility-strip" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions">
                     <div class="tagger-aesthetic-tool">
                         <div class="tagger-aesthetic-copy">
+                            <span class="tagger-aesthetic-title">VLM Captioning</span>
+                        </div>
+                        <div class="tagger-aesthetic-actions">
+                            <button class="btn btn-ghost" id="btn-vlm-settings" title="VLM Caption Settings">
+                                <span aria-hidden="true">🧠</span>
+                                <span>VLM Settings</span>
+                            </button>
+                            <button class="btn btn-ghost" id="btn-vlm-start" title="Start VLM captioning on selected images">
+                                <span aria-hidden="true">▶</span>
+                                <span>Caption</span>
+                            </button>
+                            <button class="btn btn-ghost danger" id="btn-vlm-cancel" style="display:none" title="Stop VLM captioning">
+                                <span aria-hidden="true">■</span>
+                                <span>Stop</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="vlm-progress-container" style="display:none" class="progress-container">
+                        <div class="progress-bar"><div class="progress-fill" id="vlm-progress-fill"></div></div>
+                        <span class="progress-text" id="vlm-progress-text">Starting...</span>
+                    </div>
+                    <div id="vlm-batch-status" class="vlm-status" style="display:none"></div>
+                    <div id="vlm-error-list" style="display:none" class="vlm-error-list"></div>
+
+                    <div class="tagger-aesthetic-tool">
+                        <div class="tagger-aesthetic-copy">
                             <span class="tagger-aesthetic-title" data-i18n="tagger.aestheticToolTitle">Aesthetic scoring</span>
                             <span class="tagger-aesthetic-status is-warning" id="aesthetic-status-chip" aria-live="polite" style="display:none" data-i18n="gallery.aestheticUnavailableShort">Aesthetic unavailable</span>
                         </div>
@@ -3693,6 +3720,7 @@
     <script src="/static/js/virtual-gallery.js"></script>
     <script src="/static/js/library-health.js"></script>
     <script src="/static/js/unreadable-banner.js"></script>
+    <script src="/static/js/vlm-caption.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
@@ -3720,6 +3748,108 @@
         });
     };
     </script>
+
+    <!-- VLM Settings Modal -->
+    <div class="modal" id="vlm-settings-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-large">
+            <button class="modal-close">✕</button>
+            <h3>🧠 VLM Captioning Settings</h3>
+            <p class="modal-description">Configure Vision Language Model for natural language captioning.</p>
+
+            <div class="form-group">
+                <label for="vlm-provider">Provider</label>
+                <select id="vlm-provider" class="input-field">
+                    <option value="openai_compat">OpenAI Compatible (Ollama, vLLM, LMStudio, OpenRouter)</option>
+                    <option value="anthropic">Anthropic Claude</option>
+                    <option value="gemini">Google Gemini</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="vlm-endpoint">Endpoint URL</label>
+                <input type="text" id="vlm-endpoint" class="input-field" placeholder="http://localhost:11434/v1">
+                <small class="helper-text">Ollama: http://localhost:11434/v1 · Gemini: leave blank for default</small>
+            </div>
+
+            <div class="form-group">
+                <label for="vlm-api-key">API Key (optional for local)</label>
+                <input type="password" id="vlm-api-key" class="input-field" placeholder="sk-... or leave blank for Ollama">
+            </div>
+
+            <div class="form-group">
+                <label for="vlm-model">Model Name</label>
+                <input type="text" id="vlm-model" class="input-field" placeholder="qwen2.5-vl:7b">
+                <small class="helper-text">Type model name directly, or click "Fetch" to see available models.</small>
+                <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px">Fetch Available Models</button>
+                <div id="vlm-model-list-status" class="vlm-status" style="display:none"></div>
+                <div id="vlm-model-list" class="vlm-model-list"></div>
+            </div>
+
+            <details class="form-group">
+                <summary>Prompt Configuration</summary>
+                <div style="padding-top:8px">
+                    <div class="form-group">
+                        <label for="vlm-preset-select">Preset</label>
+                        <select id="vlm-preset-select" class="input-field">
+                            <option value="">— Select a preset —</option>
+                            <option value="lora_training">LoRA Training (General)</option>
+                            <option value="anima_flux">Anima / FLUX (Detailed NL)</option>
+                            <option value="short_caption">Short Caption</option>
+                            <option value="character_lora">Character LoRA Training</option>
+                            <option value="nsfw_relaxed">NSFW-Tolerant (Local Models)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-system-prompt">System Prompt</label>
+                        <textarea id="vlm-system-prompt" class="input-field" rows="3" placeholder="You are an image captioning expert..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-user-prompt">User Prompt</label>
+                        <textarea id="vlm-user-prompt" class="input-field" rows="4" placeholder="Describe this image..."></textarea>
+                        <small class="helper-text">Use {tags} placeholder to insert danbooru tags from the local tagger.</small>
+                    </div>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="vlm-include-tags" checked> Include danbooru tags as context</label>
+                    </div>
+                </div>
+            </details>
+
+            <details class="form-group">
+                <summary>Advanced Settings</summary>
+                <div style="padding-top:8px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px">
+                    <div class="form-group">
+                        <label for="vlm-max-retries">Max Retries</label>
+                        <input type="number" id="vlm-max-retries" class="input-field" value="3" min="0" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-timeout">Timeout (sec)</label>
+                        <input type="number" id="vlm-timeout" class="input-field" value="60" min="10" max="300">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-concurrent">Concurrent</label>
+                        <input type="number" id="vlm-concurrent" class="input-field" value="2" min="1" max="8">
+                    </div>
+                </div>
+            </details>
+
+            <details class="form-group">
+                <summary>Local Models (Ollama)</summary>
+                <div id="vlm-local-models" style="padding-top:8px">
+                    <p class="helper-text">Loading...</p>
+                </div>
+            </details>
+
+            <div id="vlm-status" class="vlm-status" style="display:none"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="btn-vlm-test">Test Connection</button>
+                <div style="flex:1"></div>
+                <button class="btn btn-primary" id="btn-vlm-save-settings">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>
