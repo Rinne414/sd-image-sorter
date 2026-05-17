@@ -162,7 +162,21 @@ class OllamaManager:
 
     @staticmethod
     def is_ollama_installed() -> bool:
-        return shutil.which("ollama") is not None
+        # Check PATH first
+        if shutil.which("ollama") is not None:
+            return True
+        # Check common Windows install locations (Ollama installer puts it here
+        # by default but doesn't always update PATH for the current session)
+        if platform.system() == "Windows":
+            import os
+            candidates = [
+                os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"),
+                os.path.join(os.environ.get("PROGRAMFILES", ""), "Ollama", "ollama.exe"),
+            ]
+            for c in candidates:
+                if c and os.path.isfile(c):
+                    return True
+        return False
 
     @staticmethod
     def get_install_instructions() -> str:
@@ -174,15 +188,35 @@ class OllamaManager:
         return "Run: curl -fsSL https://ollama.com/install.sh | sh"
 
     @staticmethod
+    def _resolve_ollama_exe() -> Optional[str]:
+        """Find the ollama executable. Returns absolute path or None."""
+        # PATH first
+        path_exe = shutil.which("ollama")
+        if path_exe:
+            return path_exe
+        # Windows-specific install locations
+        if platform.system() == "Windows":
+            import os as _os
+            candidates = [
+                _os.path.join(_os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe"),
+                _os.path.join(_os.environ.get("PROGRAMFILES", ""), "Ollama", "ollama.exe"),
+            ]
+            for c in candidates:
+                if c and _os.path.isfile(c):
+                    return c
+        return None
+
+    @staticmethod
     async def start_ollama() -> Dict[str, Any]:
         """Attempt to start Ollama service."""
-        if not OllamaManager.is_ollama_installed():
+        ollama_exe = OllamaManager._resolve_ollama_exe()
+        if not ollama_exe:
             return {"status": "error", "error": "Ollama not installed", "instructions": OllamaManager.get_install_instructions()}
         try:
             if platform.system() == "Windows":
-                subprocess.Popen(["ollama", "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.Popen([ollama_exe, "serve"], creationflags=subprocess.CREATE_NO_WINDOW)
             else:
-                subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.Popen([ollama_exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             await asyncio.sleep(2)
             return {"status": "ok"}
         except Exception as e:
