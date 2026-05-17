@@ -368,6 +368,27 @@ async def get_images(
         le=10,
         description="Maximum aesthetic score (0-10)",
     ),
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=255,
+        description="Minimum average brightness (0-255). Set after running /api/colors/analyze.",
+    ),
+    brightness_max: Optional[float] = Query(
+        default=None,
+        ge=0,
+        le=255,
+        description="Maximum average brightness (0-255).",
+    ),
+    color_temperature: Optional[str] = Query(
+        default=None,
+        description="Filter by color temperature: warm | cool | neutral",
+    ),
+    brightness_distribution: Optional[str] = Query(
+        default=None,
+        description="Filter by brightness distribution shape: left_heavy | right_heavy | middle_heavy | edge_heavy | balanced",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -391,6 +412,10 @@ async def get_images(
         aspect_ratio=aspect_ratio,
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
+        brightness_min=brightness_min,
+        brightness_max=brightness_max,
+        color_temperature=color_temperature,
+        brightness_distribution=brightness_distribution,
     )
 
 

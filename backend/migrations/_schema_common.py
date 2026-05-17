@@ -230,6 +230,14 @@ LEGACY_IMAGE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("content_fingerprint", "TEXT"),
     ("library_order_time", "DATETIME"),
     ("source_file_mtime", "DATETIME"),
+    # v3.2.1 color analysis columns
+    ("dominant_colors", "TEXT"),
+    ("avg_brightness", "REAL"),
+    ("color_temperature", "TEXT"),
+    ("color_saturation", "REAL"),
+    ("brightness_histogram", "TEXT"),
+    ("brightness_skew", "REAL"),
+    ("brightness_distribution", "TEXT"),
 )
 
 

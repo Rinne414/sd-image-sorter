@@ -38,6 +38,10 @@ VALID_CONTENT_MODES = {
     "caption_tags",
     "caption_merged",
     "json",
+    # v3.2.1 additions
+    "nl_caption",      # Pure natural language caption (ai_caption only)
+    "prompt_nl",       # Original prompt + NL caption
+    "template",        # Uses export_template_engine with preset/template options
 }
 VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
 # ``folder``       — write all sidecars into the user-supplied ``output_folder``
@@ -253,8 +257,14 @@ def build_sidecar_content(
     content_mode: str = "tags",
     blacklist: Optional[set[str]] = None,
     prefix: str = "",
+    template_options: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Build export content for one image according to a Pro SD workflow mode."""
+    """Build export content for one image according to a Pro SD workflow mode.
+
+    For content_mode='template', template_options is required and may contain:
+      preset_id, template_override, trigger, blacklist, replace_rules, max_tags,
+      append, quality_override, safety_override, rating_override.
+    """
     mode = str(content_mode or "tags").strip().lower()
     if mode not in VALID_CONTENT_MODES:
         raise HTTPException(status_code=400, detail=f"Invalid content_mode: {content_mode}")
@@ -280,6 +290,24 @@ def build_sidecar_content(
         return _join_caption_parts([prefix, caption, *filtered_tags])
     if mode == "caption_merged":
         return _join_caption_parts([prefix, caption, prompt, *filtered_tags])
+    if mode == "nl_caption":
+        # Pure natural language caption only
+        return _join_caption_parts([prefix, caption]) if prefix else caption
+    if mode == "prompt_nl":
+        # Original prompt + NL caption (separated by newline for clarity)
+        parts = []
+        if prefix:
+            parts.append(prefix)
+        if prompt:
+            parts.append(prompt)
+        if caption:
+            parts.append(caption)
+        return "\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+    if mode == "template":
+        # Use the export template engine
+        from services.export_template_engine import build_export_caption
+        opts = dict(template_options or {})
+        return build_export_caption(image, tags, **opts)
     if mode == "json":
         payload = {
             "id": image.get("id"),

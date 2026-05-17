@@ -195,7 +195,11 @@ VALID_SORT_OPTIONS = [
     "prompt_length", "prompt_length_asc", "tag_count", "tag_count_asc",
     "rating", "rating_desc", "character_count", "character_count_asc",
     "aesthetic", "aesthetic_asc",
-    "random", "file_size", "file_size_asc"
+    "random", "file_size", "file_size_asc",
+    # v3.2.1 color sorts
+    "brightness", "brightness_asc",
+    "saturation", "saturation_asc",
+    "brightness_skew", "brightness_skew_asc",
 ]
 JPEG_LIMITATION_WARNING = "JPEG metadata support is limited; use PNG for the most reliable SD prompt preservation."
 WEBP_LIMITATION_WARNING = "WebP metadata support depends on the viewer; use PNG if another tool fails to read the saved prompt."
@@ -1200,6 +1204,11 @@ class ImageService:
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
         excluded_image_ids: Optional[List[int]] = None,
+        # v3.2.1 color filters
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1285,6 +1294,10 @@ class ImageService:
                     aspect_ratio=aspect_ratio,
                     min_aesthetic=min_aesthetic,
                     max_aesthetic=max_aesthetic,
+                    brightness_min=brightness_min,
+                    brightness_max=brightness_max,
+                    color_temperature=color_temperature,
+                    brightness_distribution=brightness_distribution,
                     skip_count=total >= 0,
                 )
                 if total < 0:
@@ -1402,6 +1415,11 @@ class ImageService:
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
         excluded_image_ids: Optional[List[int]] = None,
+        # v3.2.1 color filters
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
