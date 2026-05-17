@@ -29,7 +29,7 @@ const VLMCaption = {
 
         // Close modal
         document.getElementById('vlm-settings-modal')?.querySelector('.modal-close')?.addEventListener('click', () => {
-            document.getElementById('vlm-settings-modal').classList.remove('active');
+            document.getElementById('vlm-settings-modal').classList.remove('visible');
         });
     },
 
@@ -44,7 +44,7 @@ const VLMCaption = {
         const modal = document.getElementById('vlm-settings-modal');
         if (!modal) return;
         this.populateSettingsForm();
-        modal.classList.add('active');
+        modal.classList.add('visible');
         this.loadRecommendedModels();
     },
 
