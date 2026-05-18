@@ -26,8 +26,8 @@ _logger = logging.getLogger(__name__)
 
 # In-memory progress mirror for the most recent /prepare invocation.
 # NOTE: this state is process-local. The app is designed to run as a single
-# uvicorn worker (see CLAUDE.md). Running multiple workers will fragment this
-# dict across processes and the UI will see inconsistent results.
+# uvicorn worker. Running multiple workers will fragment this dict across
+# processes and the UI will see inconsistent results.
 def _empty_prepare_result() -> Dict[str, Any]:
     # Rich-error fields (manual_steps, external_url, target_dir, provider,
     # error_type) are populated when ExternalAuthRequiredError /
