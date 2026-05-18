@@ -420,3 +420,6 @@ const VLMCaption = {
 
 // Self-init
 document.addEventListener('DOMContentLoaded', () => VLMCaption.init());
+
+// Expose globally so other modules (e.g., v321-ui) can call methods like openSettingsModal()
+window.VLMCaption = VLMCaption;

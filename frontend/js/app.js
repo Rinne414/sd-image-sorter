@@ -6037,6 +6037,14 @@ async function loadTaggerModels() {
             return `<option value="${escapeHtml(name)}" title="${escapeHtml(title)}"${disabledAttr}>${escapeHtml(name)}${recommended}${disabled}</option>`;
         });
         options.push('<option value="custom">Custom Local Model...</option>');
+        // v3.2.1: add VLM (Natural Language) backend as a primary tagger choice
+        const vlmGroupLabel = (window.I18n?.t?.('modal.tagGroupVlm') || 'VLM Captioning (Natural Language)');
+        const vlmOptionLabel = (window.I18n?.t?.('modal.tagModelVlm') || '🧠 VLM (Cloud API or Local Ollama)');
+        options.push(
+            `<optgroup label="${escapeHtml(vlmGroupLabel)}">` +
+            `<option value="vlm">${escapeHtml(vlmOptionLabel)}</option>` +
+            '</optgroup>'
+        );
 
         select.innerHTML = options.join('');
         select.value = currentValue === 'custom' || models.some((model) => model.name === currentValue)

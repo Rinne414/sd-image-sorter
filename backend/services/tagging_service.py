@@ -765,6 +765,8 @@ class BatchTagExportRequest(BaseModel):
     overwrite_policy: str = Field(default="unique", max_length=16)
     # v3.2.1: options for template content mode (preset_id, template_override, trigger, etc.)
     template_options: Optional[Dict[str, Any]] = Field(default=None)
+    # v3.2.1: per-image caption overrides {image_id: caption_text} from live-preview edits
+    image_overrides: Optional[Dict[int, str]] = Field(default=None)
 
     @model_validator(mode="after")
     def require_ids_or_selection_token(self):
