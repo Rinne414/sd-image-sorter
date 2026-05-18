@@ -2990,20 +2990,20 @@
                 <div class="tagger-utility-strip" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions">
                     <div class="tagger-aesthetic-tool" id="vlm-utility-tool">
                         <div class="tagger-aesthetic-copy">
-                            <span class="tagger-aesthetic-title">VLM Captioning</span>
+                            <span class="tagger-aesthetic-title" data-i18n="vlm.utilityTitle">VLM Captioning</span>
                         </div>
                         <div class="tagger-aesthetic-actions">
-                            <button class="btn btn-ghost" id="btn-vlm-settings" title="VLM Caption Settings">
+                            <button class="btn btn-ghost" id="btn-vlm-settings" data-i18n-title="vlm.utilitySettingsTitle" title="VLM Caption Settings">
                                 <span aria-hidden="true">🧠</span>
-                                <span>VLM Settings</span>
+                                <span data-i18n="vlm.openSettings">VLM Settings</span>
                             </button>
-                            <button class="btn btn-ghost" id="btn-vlm-start" title="Start VLM captioning on selected images">
+                            <button class="btn btn-ghost" id="btn-vlm-start" data-i18n-title="vlm.utilityStartTitle" title="Start VLM captioning on selected images">
                                 <span aria-hidden="true">▶</span>
-                                <span>Caption</span>
+                                <span data-i18n="vlm.utilityStart">Caption</span>
                             </button>
-                            <button class="btn btn-ghost danger" id="btn-vlm-cancel" style="display:none" title="Stop VLM captioning">
+                            <button class="btn btn-ghost danger" id="btn-vlm-cancel" style="display:none" data-i18n-title="vlm.utilityStopTitle" title="Stop VLM captioning">
                                 <span aria-hidden="true">■</span>
-                                <span>Stop</span>
+                                <span data-i18n="vlm.utilityStop">Stop</span>
                             </button>
                         </div>
                     </div>
@@ -3143,7 +3143,7 @@
         <!-- Batch Tag Export Modal -->
         <div class="modal" id="batch-export-modal">
             <div class="modal-backdrop"></div>
-            <div class="modal-content modal-medium">
+            <div class="modal-content modal-large batch-export-shell">
                 <button class="modal-close" id="btn-close-batch-export">✕</button>
                 <h3 data-i18n="batchExport.title">📝 Same-name .txt Captions</h3>
                 <p class="modal-description" id="batch-export-count">This batch export includes only 0 selected images.</p>
@@ -3192,8 +3192,9 @@
                     <div class="export-format-preview" id="batch-export-content-description" aria-live="polite"></div>
                 </div>
 
-                <!-- v3.2.1: LoRA template section, shown only when content_mode='template' -->
-                <div class="lora-template-section" id="lora-template-section" style="display:none">
+                <!-- v3.2.1: LoRA template + Live preview, shown only when content_mode='template' -->
+                <div class="batch-export-grid" id="batch-export-grid" style="display:none">
+                    <div class="lora-template-section" id="lora-template-section">
                     <div class="form-group">
                         <label data-i18n="batchExport.loraPreset">LoRA Training Preset</label>
                         <div class="lora-preset-grid" id="lora-preset-grid"></div>
@@ -3201,19 +3202,19 @@
                     </div>
                     <div class="form-group">
                         <label for="lora-trigger-word" data-i18n="batchExport.loraTrigger">Trigger word (LoRA name)</label>
-                        <input type="text" id="lora-trigger-word" class="input-field" placeholder="my_lora, anima_style">
+                        <input type="text" id="lora-trigger-word" class="input-field" placeholder="my_lora, anima_style" data-i18n-placeholder="batchExport.loraTriggerPlaceholder">
                     </div>
                     <details class="form-group">
                         <summary data-i18n="batchExport.loraAdvanced">Advanced template options</summary>
                         <div style="padding-top:8px">
                             <div class="form-group">
                                 <label for="lora-template-override" data-i18n="batchExport.loraTemplate">Custom template (overrides preset)</label>
-                                <input type="text" id="lora-template-override" class="input-field" placeholder="{trigger}, {tags:filtered}, {append}">
+                                <input type="text" id="lora-template-override" class="input-field" placeholder="{trigger}, {tags:filtered}, {append}" data-i18n-placeholder="batchExport.loraTemplatePlaceholder">
                                 <small class="helper-text" data-i18n="batchExport.loraTemplateHelper">Variables: {trigger} {tags} {tags:N} {tags:filtered} {nl_caption} {prompt} {rating} {count} {characters} {general} {quality} {safety} {append}</small>
                             </div>
                             <div class="form-group">
                                 <label for="lora-replace-rules" data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</label>
-                                <textarea id="lora-replace-rules" class="input-field" rows="2" placeholder="school_uniform-&gt;serafuku"></textarea>
+                                <textarea id="lora-replace-rules" class="input-field" rows="2" placeholder="school_uniform-&gt;serafuku" data-i18n-placeholder="batchExport.loraReplacePlaceholder"></textarea>
                             </div>
                             <div class="form-group">
                                 <label for="lora-max-tags" data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</label>
@@ -3221,25 +3222,23 @@
                             </div>
                             <div class="form-group">
                                 <label for="lora-append-text" data-i18n="batchExport.loraAppend">Append (extra tags after main)</label>
-                                <input type="text" id="lora-append-text" class="input-field" placeholder="masterpiece, best_quality">
+                                <input type="text" id="lora-append-text" class="input-field" placeholder="masterpiece, best_quality" data-i18n-placeholder="batchExport.loraAppendPlaceholder">
                             </div>
                         </div>
                     </details>
-                </div>
-
-                <!-- v3.2.1: Live preview section -->
-                <details class="form-group" id="export-preview-group">
-                    <summary>
-                        <span data-i18n="batchExport.livePreview">Live preview</span>
-                        <small class="helper-text" data-i18n="batchExport.livePreviewHelper">(first 5 selected images, click to expand)</small>
-                    </summary>
-                    <div style="padding-top:8px">
-                        <button class="btn btn-small btn-ghost" id="btn-refresh-preview" type="button">
-                            <span data-i18n="batchExport.refreshPreview">🔄 Refresh preview</span>
-                        </button>
-                        <div class="export-preview-list" id="export-preview-list" style="display:none"></div>
                     </div>
-                </details>
+
+                    <div class="export-preview-pane" id="export-preview-group">
+                        <div class="export-preview-header">
+                            <strong data-i18n="batchExport.livePreview">Live preview</strong>
+                            <span class="helper-text" data-i18n="batchExport.livePreviewHelper">(first 5 selected images)</span>
+                            <button class="btn btn-small btn-ghost" id="btn-refresh-preview" type="button">
+                                <span data-i18n="batchExport.refreshPreview">🔄 Refresh</span>
+                            </button>
+                        </div>
+                        <div class="export-preview-list" id="export-preview-list"></div>
+                    </div>
+                </div>
 
                 <div class="form-group">
                     <label for="batch-export-overwrite" data-i18n="batchExport.overwritePolicy">Existing .txt / .json files</label>

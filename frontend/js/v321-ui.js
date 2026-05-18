@@ -117,8 +117,8 @@ const V321Integration = {
 
     async bindExportPresetUI() {
         const contentSelect = document.getElementById('batch-export-content-mode');
-        const templateSection = document.getElementById('lora-template-section');
-        if (!contentSelect || !templateSection) return;
+        const grid = document.getElementById('batch-export-grid');
+        if (!contentSelect || !grid) return;
 
         // Load presets
         try {
@@ -132,7 +132,7 @@ const V321Integration = {
 
         const updateVis = () => {
             const mode = contentSelect.value;
-            templateSection.style.display = mode === 'template' ? 'block' : 'none';
+            grid.style.display = mode === 'template' ? 'grid' : 'none';
             // Refresh preview when content mode changes
             this.refreshPreview();
         };
@@ -244,7 +244,7 @@ const V321Integration = {
         const ids = this.getPreviewImageIds();
         if (!ids.length) {
             list.style.display = 'block';
-            list.innerHTML = '<p style="padding:12px;text-align:center;color:#9ca3af">No images selected. Select images in Gallery first.</p>';
+            list.innerHTML = '<p style="padding:12px;text-align:center;color:var(--text-muted)">No images selected. Select images in Gallery first.</p>';
             return;
         }
 
@@ -261,7 +261,7 @@ const V321Integration = {
         };
 
         list.style.display = 'block';
-        list.innerHTML = '<p style="padding:8px;color:#9ca3af">Rendering preview…</p>';
+        list.innerHTML = '<p style="padding:8px;color:var(--text-muted)">Rendering preview…</p>';
 
         try {
             const r = await fetch('/api/tags/export-preview', {
@@ -270,7 +270,7 @@ const V321Integration = {
                 body: JSON.stringify({ image_ids: ids, ...opts }),
             });
             if (!r.ok) {
-                list.innerHTML = `<p style="padding:8px;color:#f87171">Preview failed: HTTP ${r.status}</p>`;
+                list.innerHTML = `<p style="padding:8px;color:var(--accent-danger)">Preview failed: HTTP ${r.status}</p>`;
                 return;
             }
             const data = await r.json();
@@ -280,7 +280,7 @@ const V321Integration = {
             }
             this.renderPreviewList(data.results || []);
         } catch (e) {
-            list.innerHTML = `<p style="padding:8px;color:#f87171">Preview error: ${e.message}</p>`;
+            list.innerHTML = `<p style="padding:8px;color:var(--accent-danger)">Preview error: ${e.message}</p>`;
         }
     },
 
