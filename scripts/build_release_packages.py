@@ -140,6 +140,8 @@ EXCLUDED_FILES = {
     "docs/architecture.md",
     "docs/API.md",
     "run-portable.bat",
+    "v3-2-1.md",
+    "v3_audit_prompt.md",
 }
 
 ALLOWED_HIDDEN_FILES = {
