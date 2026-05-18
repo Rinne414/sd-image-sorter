@@ -2817,14 +2817,38 @@
                 <div class="form-group">
                     <label for="tag-model-select" id="tag-model-select-label" data-i18n="modal.tagModel">Model</label>
                     <select id="tag-model-select" class="input-field" aria-describedby="tag-model-select-label">
-                        <option value="wd-swinv2-tagger-v3" selected>wd-swinv2-tagger-v3</option>
-                        <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
-                        <option value="wd-vit-tagger-v3">wd-vit-tagger-v3</option>
-                        <option value="wd-vit-large-tagger-v3">wd-vit-large-tagger-v3</option>
-                        <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3</option>
-                        <option value="custom" data-i18n="modal.tagCustomModel">Custom Local Model...</option>
+                        <optgroup label="Local Tagger (Danbooru tags)" data-i18n-label="modal.tagGroupLocal">
+                            <option value="wd-swinv2-tagger-v3" selected>wd-swinv2-tagger-v3</option>
+                            <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
+                            <option value="wd-vit-tagger-v3">wd-vit-tagger-v3</option>
+                            <option value="wd-vit-large-tagger-v3">wd-vit-large-tagger-v3</option>
+                            <option value="wd-eva02-large-tagger-v3">wd-eva02-large-tagger-v3</option>
+                            <option value="custom" data-i18n="modal.tagCustomModel">Custom Local Model...</option>
+                        </optgroup>
+                        <optgroup label="VLM Captioning (Natural Language)" data-i18n-label="modal.tagGroupVlm">
+                            <option value="vlm">🧠 VLM (Cloud API or Local Ollama)</option>
+                        </optgroup>
                     </select>
                     <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good if you are not sure.</small>
+                </div>
+
+                <!-- VLM mode banner (shown when VLM model is selected) -->
+                <div class="vlm-mode-banner" id="vlm-mode-banner" style="display:none">
+                    <div class="vlm-banner-header">
+                        <span class="vlm-banner-icon" aria-hidden="true">🧠</span>
+                        <strong data-i18n="vlm.bannerTitle">Natural Language Captioning Mode</strong>
+                    </div>
+                    <p class="vlm-banner-text" data-i18n="vlm.bannerText">
+                        VLM (Vision Language Model) generates natural-language captions or danbooru tags
+                        via cloud API (OpenAI / Anthropic / Gemini / OpenRouter) or local Ollama.
+                        Configure provider, model, and prompts in VLM Settings.
+                    </p>
+                    <div class="vlm-banner-actions">
+                        <button class="btn btn-primary" id="btn-vlm-banner-settings">
+                            <span aria-hidden="true">⚙️</span> <span data-i18n="vlm.openSettings">VLM Settings</span>
+                        </button>
+                        <span class="vlm-banner-current" id="vlm-banner-current">Not configured</span>
+                    </div>
                 </div>
 
                 <div class="tagger-model-panel" id="tagger-model-panel" role="status" aria-live="polite">
@@ -2964,7 +2988,7 @@
                 </details>
 
                 <div class="tagger-utility-strip" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions">
-                    <div class="tagger-aesthetic-tool">
+                    <div class="tagger-aesthetic-tool" id="vlm-utility-tool">
                         <div class="tagger-aesthetic-copy">
                             <span class="tagger-aesthetic-title">VLM Captioning</span>
                         </div>
@@ -3156,6 +3180,10 @@
                         <option value="negative" data-i18n="batchExport.modeNegative">Negative prompt</option>
                         <option value="prompt_negative" data-i18n="batchExport.modePromptNegative">Prompt + Negative</option>
                         <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + Tags</option>
+                        <option value="" disabled data-i18n="batchExport.groupNl">v3.2.1 Natural Language</option>
+                        <option value="nl_caption" data-i18n="batchExport.modeNlCaption">Natural language caption only</option>
+                        <option value="prompt_nl" data-i18n="batchExport.modePromptNl">Prompt + Natural language caption</option>
+                        <option value="template" data-i18n="batchExport.modeTemplate">🎯 LoRA Training Template (Anima/IL/FLUX/...)</option>
                         <option value="" disabled data-i18n="batchExport.groupAdvanced">Advanced formats</option>
                         <option value="a1111" data-i18n="batchExport.modeA1111">A1111 / Forge block</option>
                         <option value="json" data-i18n="batchExport.modeJson">JSON</option>
@@ -3163,6 +3191,55 @@
                     <small class="helper-text" data-i18n="batchExport.contentModeHelper">Default LoRA caption = optional Class Token + AI caption + Prompt + Tags, one line per image.</small>
                     <div class="export-format-preview" id="batch-export-content-description" aria-live="polite"></div>
                 </div>
+
+                <!-- v3.2.1: LoRA template section, shown only when content_mode='template' -->
+                <div class="lora-template-section" id="lora-template-section" style="display:none">
+                    <div class="form-group">
+                        <label data-i18n="batchExport.loraPreset">LoRA Training Preset</label>
+                        <div class="lora-preset-grid" id="lora-preset-grid"></div>
+                        <small class="helper-text" id="lora-preset-description" data-i18n="batchExport.loraPresetHelper">Pick the format your base model expects.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="lora-trigger-word" data-i18n="batchExport.loraTrigger">Trigger word (LoRA name)</label>
+                        <input type="text" id="lora-trigger-word" class="input-field" placeholder="my_lora, anima_style">
+                    </div>
+                    <details class="form-group">
+                        <summary data-i18n="batchExport.loraAdvanced">Advanced template options</summary>
+                        <div style="padding-top:8px">
+                            <div class="form-group">
+                                <label for="lora-template-override" data-i18n="batchExport.loraTemplate">Custom template (overrides preset)</label>
+                                <input type="text" id="lora-template-override" class="input-field" placeholder="{trigger}, {tags:filtered}, {append}">
+                                <small class="helper-text" data-i18n="batchExport.loraTemplateHelper">Variables: {trigger} {tags} {tags:N} {tags:filtered} {nl_caption} {prompt} {rating} {count} {characters} {general} {quality} {safety} {append}</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="lora-replace-rules" data-i18n="batchExport.loraReplace">Tag replacements (one per line: from-&gt;to)</label>
+                                <textarea id="lora-replace-rules" class="input-field" rows="2" placeholder="school_uniform-&gt;serafuku"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="lora-max-tags" data-i18n="batchExport.loraMaxTags">Max tags (0 = unlimited)</label>
+                                <input type="number" id="lora-max-tags" class="input-field" value="0" min="0" max="200">
+                            </div>
+                            <div class="form-group">
+                                <label for="lora-append-text" data-i18n="batchExport.loraAppend">Append (extra tags after main)</label>
+                                <input type="text" id="lora-append-text" class="input-field" placeholder="masterpiece, best_quality">
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <!-- v3.2.1: Live preview section -->
+                <details class="form-group" id="export-preview-group">
+                    <summary>
+                        <span data-i18n="batchExport.livePreview">Live preview</span>
+                        <small class="helper-text" data-i18n="batchExport.livePreviewHelper">(first 5 selected images, click to expand)</small>
+                    </summary>
+                    <div style="padding-top:8px">
+                        <button class="btn btn-small btn-ghost" id="btn-refresh-preview" type="button">
+                            <span data-i18n="batchExport.refreshPreview">🔄 Refresh preview</span>
+                        </button>
+                        <div class="export-preview-list" id="export-preview-list" style="display:none"></div>
+                    </div>
+                </details>
 
                 <div class="form-group">
                     <label for="batch-export-overwrite" data-i18n="batchExport.overwritePolicy">Existing .txt / .json files</label>
@@ -3721,6 +3798,7 @@
     <script src="/static/js/library-health.js"></script>
     <script src="/static/js/unreadable-banner.js"></script>
     <script src="/static/js/vlm-caption.js"></script>
+    <script src="/static/js/v321-ui.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */

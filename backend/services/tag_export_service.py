@@ -416,6 +416,16 @@ def export_tags_batch_request(
         else:
             template_options = None
 
+    # v3.2.1: image_overrides — per-image manually-edited caption that bypasses the engine
+    image_overrides_raw = getattr(request, "image_overrides", None) or {}
+    image_overrides: Dict[int, str] = {}
+    if isinstance(image_overrides_raw, dict):
+        for k, v in image_overrides_raw.items():
+            try:
+                image_overrides[int(k)] = str(v or "")
+            except (TypeError, ValueError):
+                continue
+
     exported = 0
     skipped = 0
     error_count = 0
@@ -443,14 +453,18 @@ def export_tags_batch_request(
                     continue
 
                 tags = tags_map.get(image_id, [])
-                file_content = build_sidecar_content(
-                    image,
-                    tags,
-                    content_mode=content_mode,
-                    blacklist=blacklist,
-                    prefix=prefix,
-                    template_options=template_options,
-                )
+                # v3.2.1: if user provided a manual override for this image, use it verbatim
+                if image_id in image_overrides:
+                    file_content = image_overrides[image_id]
+                else:
+                    file_content = build_sidecar_content(
+                        image,
+                        tags,
+                        content_mode=content_mode,
+                        blacklist=blacklist,
+                        prefix=prefix,
+                        template_options=template_options,
+                    )
                 # In ``beside_image`` mode each image lands in its own
                 # source directory. We do NOT auto-create directories on
                 # this path: if the source folder no longer exists (file
