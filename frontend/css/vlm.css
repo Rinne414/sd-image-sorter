@@ -36,93 +36,166 @@
 
 
 /* === v3.2.1 UI: VLM banner, LoRA presets, export preview === */
+/* Uses design tokens defined in styles.css to match the rest of the app. */
+
+/* Wider modal-large export shell so the LoRA + preview grid breathes */
+.batch-export-shell { max-width: 1100px; }
+
+/* 2-column responsive grid: settings on left, live preview on right */
+.batch-export-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 16px;
+    margin: 12px 0;
+    align-items: start;
+}
+@media (max-width: 880px) {
+    .batch-export-grid { grid-template-columns: 1fr; }
+}
+.batch-export-grid > * {
+    min-width: 0;  /* prevent flex/grid blowout */
+}
+
+.export-preview-pane {
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+.export-preview-header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.export-preview-header strong { color: var(--text-primary); }
+.export-preview-header .helper-text { flex: 1; }
 
 .vlm-mode-banner {
     margin: 12px 0;
     padding: 14px 16px;
-    border-radius: 10px;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.10), rgba(59, 130, 246, 0.10));
-    border: 1px solid rgba(139, 92, 246, 0.35);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(
+        135deg,
+        rgba(var(--accent-primary-rgb), 0.10),
+        rgba(var(--accent-secondary-rgb), 0.08)
+    );
+    border: 1px solid var(--border-color);
 }
 .vlm-banner-header {
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
-    color: #c4b5fd;
+    color: var(--accent-primary);
+    font-weight: 600;
 }
 .vlm-banner-icon { font-size: 1.2rem; }
 .vlm-banner-text {
-    margin: 4px 0 12px; font-size: 0.85rem; line-height: 1.5;
-    color: var(--text-secondary, #9ca3af);
+    margin: 4px 0 12px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
 }
 .vlm-banner-actions {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
 .vlm-banner-current {
-    font-size: 0.8rem; color: var(--text-secondary, #9ca3af); font-style: italic;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
 }
 
 .lora-template-section {
     margin: 12px 0;
-    padding: 12px;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
 }
 .lora-preset-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 6px; margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
 }
 .lora-preset-chip {
-    padding: 8px 10px; border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-    cursor: pointer; text-align: center; font-size: 0.85rem;
-    transition: all 0.15s;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.85rem;
+    font-family: inherit;
+    transition: var(--transition-fast);
 }
-.lora-preset-chip:hover { background: rgba(255, 255, 255, 0.1); }
+.lora-preset-chip:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-glow);
+    color: var(--text-primary);
+}
 .lora-preset-chip.active {
-    background: rgba(139, 92, 246, 0.20); border-color: rgba(139, 92, 246, 0.6);
-    color: #c4b5fd;
+    background: rgba(var(--accent-primary-rgb), 0.18);
+    border-color: var(--accent-primary);
+    color: var(--accent-contrast);
+    box-shadow: 0 0 0 1px rgba(var(--accent-primary-rgb), 0.35);
 }
 
 .export-preview-list {
     margin-top: 10px;
-    max-height: 400px;
+    max-height: 420px;
     overflow-y: auto;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 6px;
 }
 .export-preview-row {
-    display: flex; gap: 10px; padding: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex; gap: 12px; padding: 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    margin-bottom: 6px;
 }
-.export-preview-row:last-child { border-bottom: none; }
+.export-preview-row:last-child { margin-bottom: 0; }
 .export-preview-thumb {
     width: 80px; height: 80px; flex-shrink: 0;
-    object-fit: cover; border-radius: 4px;
-    background: #222;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card-solid);
+    border: 1px solid var(--border-color);
 }
 .export-preview-content {
-    flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+    flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0;
 }
 .export-preview-filename {
-    font-size: 0.75rem; color: var(--text-secondary, #9ca3af);
+    font-size: 0.75rem;
+    color: var(--text-muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .export-preview-textarea {
     flex: 1; min-height: 60px;
-    background: rgba(0, 0, 0, 0.3); color: #e5e7eb;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px; padding: 6px 8px;
-    font-family: ui-monospace, monospace; font-size: 0.8rem;
+    background: var(--bg-card-solid);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
     resize: vertical;
+    transition: var(--transition-fast);
+}
+.export-preview-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), 0.18);
 }
 .export-preview-textarea.edited {
-    border-color: rgba(59, 130, 246, 0.6);
-    background: rgba(59, 130, 246, 0.05);
+    border-color: var(--accent-secondary);
+    background: rgba(var(--accent-secondary-rgb), 0.05);
 }
 .export-preview-edited-badge {
     font-size: 0.7rem;
-    padding: 2px 6px; border-radius: 3px;
-    background: rgba(59, 130, 246, 0.15); color: #60a5fa;
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    background: rgba(var(--accent-secondary-rgb), 0.15);
+    color: var(--accent-secondary);
     align-self: flex-start;
 }
