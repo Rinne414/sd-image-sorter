@@ -3831,98 +3831,100 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-large">
             <button class="modal-close">✕</button>
-            <h3>🧠 VLM Captioning Settings</h3>
-            <p class="modal-description">Configure Vision Language Model for natural language captioning.</p>
+            <h3 data-i18n="vlmSettings.title">🧠 VLM Captioning Settings</h3>
+            <p class="modal-description" data-i18n="vlmSettings.description">Configure Vision Language Model for natural language captioning.</p>
 
             <div class="form-group">
-                <label for="vlm-provider">Provider</label>
+                <label for="vlm-provider" data-i18n="vlmSettings.provider">Provider</label>
                 <select id="vlm-provider" class="input-field">
-                    <option value="openai_compat">OpenAI Compatible (Ollama, vLLM, LMStudio, OpenRouter)</option>
-                    <option value="anthropic">Anthropic Claude</option>
-                    <option value="gemini">Google Gemini</option>
+                    <option value="openai_compat" data-i18n="vlmSettings.providerOpenAI">OpenAI Compatible (Ollama, vLLM, LMStudio, OpenRouter)</option>
+                    <option value="anthropic" data-i18n="vlmSettings.providerAnthropic">Anthropic Claude</option>
+                    <option value="gemini" data-i18n="vlmSettings.providerGemini">Google Gemini</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="vlm-endpoint">Endpoint URL</label>
+                <label for="vlm-endpoint" data-i18n="vlmSettings.endpoint">Endpoint URL</label>
                 <input type="text" id="vlm-endpoint" class="input-field" placeholder="http://localhost:11434/v1">
-                <small class="helper-text">Ollama: http://localhost:11434/v1 · Gemini: leave blank for default</small>
+                <small class="helper-text" data-i18n="vlmSettings.endpointHelper">Ollama: http://localhost:11434/v1 · Gemini: leave blank for default</small>
             </div>
 
             <div class="form-group">
-                <label for="vlm-api-key">API Key (optional for local)</label>
-                <input type="password" id="vlm-api-key" class="input-field" placeholder="sk-... or leave blank for Ollama">
+                <label for="vlm-api-key" data-i18n="vlmSettings.apiKey">API Key (optional for local)</label>
+                <input type="password" id="vlm-api-key" class="input-field" placeholder="sk-..." data-i18n-placeholder="vlmSettings.apiKeyPlaceholder">
             </div>
 
             <div class="form-group">
-                <label for="vlm-model">Model Name</label>
+                <label for="vlm-model" data-i18n="vlmSettings.model">Model Name</label>
                 <input type="text" id="vlm-model" class="input-field" placeholder="qwen2.5-vl:7b">
-                <small class="helper-text">Type model name directly, or click "Fetch" to see available models.</small>
-                <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px">Fetch Available Models</button>
+                <small class="helper-text" data-i18n="vlmSettings.modelHelper">Type model name directly, or click "Fetch" to see available models.</small>
+                <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px" data-i18n="vlmSettings.fetchModels">Fetch Available Models</button>
                 <div id="vlm-model-list-status" class="vlm-status" style="display:none"></div>
                 <div id="vlm-model-list" class="vlm-model-list"></div>
             </div>
 
             <details class="form-group">
-                <summary>Prompt Configuration</summary>
+                <summary data-i18n="vlmSettings.promptConfig">Prompt Configuration</summary>
                 <div style="padding-top:8px">
                     <div class="form-group">
-                        <label for="vlm-preset-select">Preset</label>
+                        <label for="vlm-preset-select" data-i18n="vlmSettings.preset">Preset</label>
                         <select id="vlm-preset-select" class="input-field">
-                            <option value="">— Select a preset —</option>
-                            <option value="lora_training">LoRA Training (General)</option>
-                            <option value="anima_flux">Anima / FLUX (Detailed NL)</option>
-                            <option value="short_caption">Short Caption</option>
-                            <option value="character_lora">Character LoRA Training</option>
-                            <option value="nsfw_relaxed">NSFW-Tolerant (Local Models)</option>
+                            <option value="" data-i18n="vlmSettings.presetSelect">— Select a preset —</option>
+                            <option value="lora_training" data-i18n="vlmSettings.presetLora">LoRA Training (General)</option>
+                            <option value="anima_flux" data-i18n="vlmSettings.presetAnimaFlux">Anima / FLUX (Detailed NL)</option>
+                            <option value="short_caption" data-i18n="vlmSettings.presetShort">Short Caption</option>
+                            <option value="character_lora" data-i18n="vlmSettings.presetCharacterLora">Character LoRA Training</option>
+                            <option value="nsfw_relaxed" data-i18n="vlmSettings.presetNsfw">NSFW-Tolerant (Local Models)</option>
+                            <option value="vlm_danbooru" data-i18n="vlmSettings.presetDanbooru">Danbooru Tags (VLM as tagger)</option>
+                            <option value="vlm_hybrid" data-i18n="vlmSettings.presetHybrid">Hybrid (NL + Tags)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="vlm-system-prompt">System Prompt</label>
-                        <textarea id="vlm-system-prompt" class="input-field" rows="3" placeholder="You are an image captioning expert..."></textarea>
+                        <label for="vlm-system-prompt" data-i18n="vlmSettings.systemPrompt">System Prompt</label>
+                        <textarea id="vlm-system-prompt" class="input-field" rows="3" placeholder="You are an image captioning expert..." data-i18n-placeholder="vlmSettings.systemPromptPlaceholder"></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="vlm-user-prompt">User Prompt</label>
-                        <textarea id="vlm-user-prompt" class="input-field" rows="4" placeholder="Describe this image..."></textarea>
-                        <small class="helper-text">Use {tags} placeholder to insert danbooru tags from the local tagger.</small>
+                        <label for="vlm-user-prompt" data-i18n="vlmSettings.userPrompt">User Prompt</label>
+                        <textarea id="vlm-user-prompt" class="input-field" rows="4" placeholder="Describe this image..." data-i18n-placeholder="vlmSettings.userPromptPlaceholder"></textarea>
+                        <small class="helper-text" data-i18n="vlmSettings.userPromptHelper">Use {tags} placeholder to insert danbooru tags from the local tagger.</small>
                     </div>
                     <div class="form-group">
-                        <label><input type="checkbox" id="vlm-include-tags" checked> Include danbooru tags as context</label>
+                        <label><input type="checkbox" id="vlm-include-tags" checked> <span data-i18n="vlmSettings.includeTags">Include danbooru tags as context</span></label>
                     </div>
                 </div>
             </details>
 
             <details class="form-group">
-                <summary>Advanced Settings</summary>
+                <summary data-i18n="vlmSettings.advanced">Advanced Settings</summary>
                 <div style="padding-top:8px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px">
                     <div class="form-group">
-                        <label for="vlm-max-retries">Max Retries</label>
+                        <label for="vlm-max-retries" data-i18n="vlmSettings.maxRetries">Max Retries</label>
                         <input type="number" id="vlm-max-retries" class="input-field" value="3" min="0" max="10">
                     </div>
                     <div class="form-group">
-                        <label for="vlm-timeout">Timeout (sec)</label>
+                        <label for="vlm-timeout" data-i18n="vlmSettings.timeout">Timeout (sec)</label>
                         <input type="number" id="vlm-timeout" class="input-field" value="60" min="10" max="300">
                     </div>
                     <div class="form-group">
-                        <label for="vlm-concurrent">Concurrent</label>
+                        <label for="vlm-concurrent" data-i18n="vlmSettings.concurrent">Concurrent</label>
                         <input type="number" id="vlm-concurrent" class="input-field" value="2" min="1" max="8">
                     </div>
                 </div>
             </details>
 
             <details class="form-group">
-                <summary>Local Models (Ollama)</summary>
+                <summary data-i18n="vlmSettings.localModels">Local Models (Ollama)</summary>
                 <div id="vlm-local-models" style="padding-top:8px">
-                    <p class="helper-text">Loading...</p>
+                    <p class="helper-text" data-i18n="vlmSettings.loading">Loading...</p>
                 </div>
             </details>
 
             <div id="vlm-status" class="vlm-status" style="display:none"></div>
 
             <div class="modal-actions">
-                <button class="btn btn-ghost" id="btn-vlm-test">Test Connection</button>
+                <button class="btn btn-ghost" id="btn-vlm-test" data-i18n="vlmSettings.testConnection">Test Connection</button>
                 <div style="flex:1"></div>
-                <button class="btn btn-primary" id="btn-vlm-save-settings">Save Settings</button>
+                <button class="btn btn-primary" id="btn-vlm-save-settings" data-i18n="vlmSettings.save">Save Settings</button>
             </div>
         </div>
     </div>
