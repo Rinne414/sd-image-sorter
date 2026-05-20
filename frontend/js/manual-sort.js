@@ -1343,7 +1343,6 @@ async function performMove(folderKey, fast = false) {
     }
 }
 
-async function performSkip() {
 async function performSkip(fast = false) {
     const { $, API, showToast } = window.App;
 
