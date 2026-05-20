@@ -1261,3 +1261,120 @@
     0%, 100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.0); }
     50%      { box-shadow: 0 0 0 8px rgba(45, 212, 191, 0.30); }
 }
+
+
+/* === v3.2.1 task #33: dedicated full-screen Caption Editor modal ============
+   The inline batch-export preview is great when the user is fine-tuning final
+   settings, but it lives inside an already-busy modal-large dialog. Power
+   users wanting a BooruDatasetTagManager-style editing session need real
+   horizontal real estate, so this opens a near-fullscreen window that hosts
+   the same 3-column workbench (queue / editor / tools) at much larger size.
+   The previous inline pane keeps its state and is shown again on close. */
+
+#caption-editor-modal .modal-content.caption-editor-shell {
+    width: min(1600px, calc(100vw - 32px));
+    max-width: 1600px;
+    height: calc(100vh - 32px);
+    max-height: calc(100vh - 32px);
+    padding: 16px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+}
+
+.caption-editor-topbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.caption-editor-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.caption-editor-title-block h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.caption-editor-subtitle {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.caption-editor-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.caption-editor-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.caption-editor-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Within the dedicated editor we want the workbench to actually fill the
+   available height instead of being capped at 56vh like the inline pane. */
+.export-preview-workbench.export-preview-workbench--full {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    /* Let the editor column grow much wider than the inline pane allows. */
+    grid-template-columns: minmax(220px, 0.7fr) minmax(420px, 2fr) minmax(280px, 1fr);
+}
+
+.caption-editor-list .export-preview-save-note {
+    margin-bottom: 10px;
+}
+
+@media (max-width: 1080px) {
+    #caption-editor-modal .modal-content.caption-editor-shell {
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+        padding: 12px 12px 14px;
+    }
+
+    .export-preview-workbench.export-preview-workbench--full {
+        grid-template-columns: minmax(180px, 0.85fr) minmax(0, 1.6fr);
+    }
+
+    .export-preview-workbench.export-preview-workbench--full .export-preview-tools {
+        grid-column: 1 / -1;
+        max-height: 240px;
+    }
+}
+
+@media (max-width: 760px) {
+    .caption-editor-topbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .caption-editor-topbar-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .export-preview-workbench.export-preview-workbench--full {
+        grid-template-columns: 1fr;
+    }
+}
