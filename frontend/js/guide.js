@@ -444,7 +444,8 @@
     };
 
     const TAB_ANCHORS = {
-        gallery: '#view-gallery .gallery-header',
+        // gallery: nav-bar #btn-help already covers gallery view (avoid duplicate ❓/❔ buttons)
+        gallery: null,
         autosep: null,
         manual: null,
         censor: '#view-censor .censor-toolbar-v2',

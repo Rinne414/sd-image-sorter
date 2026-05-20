@@ -74,6 +74,60 @@
     }
 }
 
+/* ---- Filter modal inline banner (v3.2.1 task #26) -------------------- */
+
+.filter-color-backfill-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 12px;
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md, 12px);
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.08),
+        rgba(255, 255, 255, 0.04)
+    );
+    border: 1px dashed rgba(245, 158, 11, 0.36);
+}
+
+.filter-color-backfill-banner[hidden] { display: none; }
+
+.filter-color-backfill-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(245, 158, 11, 0.18);
+    font-size: 1.1rem;
+}
+
+.filter-color-backfill-copy {
+    min-width: 0;
+}
+
+.filter-color-backfill-copy strong {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    margin-bottom: 2px;
+}
+
+.filter-color-backfill-hint {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    margin: 0;
+}
+
+#btn-filter-color-backfill-start {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 /* ---- Nav chip --------------------------------------------------------- */
 
 .nav-color-chip {

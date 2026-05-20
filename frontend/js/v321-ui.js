@@ -176,7 +176,7 @@ const V321Integration = {
 
     /** Switch the active tab. Updates dropdown filter, panel visibility, status text. */
     setTaggerTab(tab) {
-        if (!['local', 'nl', 'aesthetic'].includes(tab)) {
+        if (!['local', 'nl', 'aesthetic', 'color'].includes(tab)) {
             tab = 'local';
         }
         this.activeTaggerTab = tab;
@@ -204,6 +204,7 @@ const V321Integration = {
                 local: 'tagger.tabLocalDesc',
                 nl: 'tagger.tabNlDesc',
                 aesthetic: 'tagger.tabAestheticDesc',
+                color: 'tagger.tabColorDesc',
             };
             desc.setAttribute('data-i18n', map[tab]);
             desc.textContent = i18n(map[tab], '');
@@ -214,6 +215,7 @@ const V321Integration = {
                 local: ['modal.tagDescription', 'Pick a supported tagger model and generate tags for images.'],
                 nl: ['tagger.modalDescNl', 'Choose a natural-language backend and caption selected images.'],
                 aesthetic: ['tagger.modalDescAesthetic', 'Score selected images with the local aesthetic model.'],
+                color: ['tagger.modalDescColor', 'Run local color analysis to enable color sorts and filters.'],
             };
             const [key, fallback] = map[tab] || map.local;
             modalDesc.setAttribute('data-i18n', key);
@@ -237,6 +239,9 @@ const V321Integration = {
         }
         if (tab === 'aesthetic') {
             this._refreshAestheticTab();
+        }
+        if (tab === 'color') {
+            this._refreshColorTab();
         }
         try { window.VLMCaption?.syncWorkflowVisibility?.(); } catch (_e) {}
     },
@@ -721,6 +726,77 @@ const V321Integration = {
         }
         if (setupBtn) setupBtn.style.display = isReady ? 'none' : '';
         if (startBtn) startBtn.disabled = !isReady;
+    },
+
+    /** v3.2.1 task #26: Color analysis tab — show counts and wire start/cancel. */
+    async _refreshColorTab() {
+        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const titleEl = document.getElementById('tagger-color-status-title');
+        const countsEl = document.getElementById('tagger-color-status-counts');
+        const startBtn = document.getElementById('btn-tagger-color-start');
+        const cancelBtn = document.getElementById('btn-tagger-color-cancel');
+
+        let totalImages = 0;
+        let missingCount = 0;
+        let running = false;
+        try {
+            const [missingRes, progressRes] = await Promise.all([
+                fetch('/api/colors/missing-count', { cache: 'no-store' }),
+                fetch('/api/colors/progress', { cache: 'no-store' }),
+            ]);
+            if (missingRes.ok) {
+                const data = await missingRes.json();
+                missingCount = Number(data?.missing) || 0;
+                totalImages = Number(data?.total) || 0;
+            }
+            if (progressRes.ok) {
+                const data = await progressRes.json();
+                running = Boolean(data?.running);
+            }
+        } catch (_e) {
+            // Non-fatal — leave counts at 0.
+        }
+
+        if (titleEl) {
+            const titleKey = missingCount > 0 ? 'tagger.colorMissing' : 'tagger.colorReady';
+            const titleFallback = missingCount > 0
+                ? `${missingCount.toLocaleString()} images need color analysis.`
+                : 'All analyzed — color sorts and filters are ready.';
+            titleEl.setAttribute('data-i18n', titleKey);
+            titleEl.textContent = i18n(titleKey, '') || titleFallback;
+        }
+
+        if (countsEl) {
+            if (totalImages > 0) {
+                const analyzed = Math.max(totalImages - missingCount, 0);
+                const lang = window.I18n?.getLang?.() === 'zh-CN' ? 'zh-CN' : 'en';
+                countsEl.textContent = lang === 'zh-CN'
+                    ? `已分析 ${analyzed.toLocaleString()} / ${totalImages.toLocaleString()}（剩余 ${missingCount.toLocaleString()}）`
+                    : `Analyzed ${analyzed.toLocaleString()} of ${totalImages.toLocaleString()} (${missingCount.toLocaleString()} remaining)`;
+            } else {
+                countsEl.textContent = '';
+            }
+        }
+
+        if (startBtn) {
+            startBtn.disabled = running || missingCount === 0;
+            startBtn.onclick = async () => {
+                if (window.ColorBackfill?.startAnalysis) {
+                    await window.ColorBackfill.startAnalysis();
+                    // Refresh tab UI after kickoff so cancel button surfaces.
+                    setTimeout(() => this._refreshColorTab(), 600);
+                }
+            };
+        }
+        if (cancelBtn) {
+            cancelBtn.style.display = running ? '' : 'none';
+            cancelBtn.onclick = async () => {
+                if (window.ColorBackfill?.cancelAnalysis) {
+                    await window.ColorBackfill.cancelAnalysis();
+                    setTimeout(() => this._refreshColorTab(), 600);
+                }
+            };
+        }
     },
 
     /** Add a temporary highlight to a model card so the user sees where to click. */

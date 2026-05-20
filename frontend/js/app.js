@@ -8422,6 +8422,10 @@ async function openFilterModal(options = {}) {
     }
 
     showModal('filter-modal');
+
+    // v3.2.1 task #26: notify modules that the filter modal was just opened so
+    // ColorBackfill (and future addons) can refresh their inline banners.
+    try { window.dispatchEvent(new CustomEvent('filterModalOpened')); } catch (_e) {}
 }
 
 function renderModalActiveTags() {

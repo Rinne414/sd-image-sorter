@@ -148,6 +148,18 @@ reference/
 /color_backfill_banner.png
 /mass_tag_confirm.png
 /mass_tag_editor.png
+/gallery-*.png
+/censor-*.png
+/reader-*.png
+/sort-*.png
+/nav-*.png
+/tagger-*.png
+/guide-*.png
+/real-*.png
+/verify-*.png
+/full-*.png
+/gallery-snapshot.md
+/nav-snapshot.md
 
 # Node.js (E2E testing infrastructure, root level)
 node_modules/

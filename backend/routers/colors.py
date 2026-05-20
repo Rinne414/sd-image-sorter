@@ -92,8 +92,11 @@ async def cancel_analysis():
 
 @router.get("/missing-count")
 async def missing_count():
-    """How many images still need color analysis."""
-    return {"missing": db.count_images_missing_color_data()}
+    """How many images still need color analysis; also includes total readable count."""
+    return {
+        "missing": db.count_images_missing_color_data(),
+        "total": db.count_all_image_ids(),
+    }
 
 
 @router.post("/analyze-single/{image_id}")
