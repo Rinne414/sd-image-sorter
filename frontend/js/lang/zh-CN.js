@@ -1418,6 +1418,13 @@ window.I18nLang_zhCN = {
     'selection.copyVerb': '复制',
     'selection.exportTagsToFiles': '同名 .txt...',
     'selection.censorEdit': '马赛克编辑',
+    // v3.2.1 task #34: 新「色彩分析」常用动作
+    'selection.analyzeColors': '色彩分析',
+    'selection.analyzeColorsConfirmTitle': '对所选图片运行色彩分析？',
+    'selection.analyzeColorsConfirmBody': '即将对 {count} 张图运行色彩分析。本地运行，期间可继续使用应用。',
+    'selection.analyzeColorsConfirmBodyCapped': '将分析所选 {total} 张中的前 {cap} 张。完成后再次点击可继续处理剩余的。',
+    'selection.analyzeColorsStarted': '色彩分析已对 {count} 张图启动。',
+    'selection.analyzeColorsFailed': '启动色彩分析失败',
     'selection.deselectAll': '清空',
     'selection.removeFromGallery': '从图库移除',
     'selection.removeConfirmTitle': '从图库移除已选图片？',

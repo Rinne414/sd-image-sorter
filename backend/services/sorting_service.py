@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from fastapi import HTTPException, BackgroundTasks, Query
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from app_info import APP_VERSION, GITHUB_REPOSITORY_URL
 from config import MANUAL_SORT_SESSION_FILE, read_float_env
@@ -95,12 +95,18 @@ class ValidatePathRequest(BaseModel):
 
 
 class MoveRequest(BaseModel):
-    """Request model for image move operations."""
+    """Request model for image move operations.
+
+    v3.2.1: Accepts EITHER `image_ids` (explicit list) OR `selection_token`
+    (filtered scope). The token form lets the UI pass "Select All Filtered"
+    without first expanding tens of thousands of IDs client-side.
+    """
     # Per-image work is sequential and the inner DB read uses
     # ``db.get_images_by_ids`` which already chunks IN(...) at 500. The
     # ceiling only caps request payload memory; 5M covers any realistic
     # personal library (the previous 50k ceiling rejected real users).
-    image_ids: List[int] = Field(..., min_length=1, max_length=5_000_000)
+    image_ids: Optional[List[int]] = Field(default=None, min_length=1, max_length=5_000_000)
+    selection_token: Optional[str] = Field(default=None, min_length=1)
     destination_folder: str = Field(..., max_length=PATH_MAX_LENGTH)
     operation: str = Field(default="move")
 
@@ -110,6 +116,14 @@ class MoveRequest(BaseModel):
         if v not in VALID_FILE_OPERATIONS:
             raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
+
+    @model_validator(mode="after")
+    def require_ids_or_selection_token(self) -> "MoveRequest":
+        if self.image_ids is None and not self.selection_token:
+            raise ValueError("Either image_ids or selection_token is required")
+        if self.image_ids is not None and self.selection_token:
+            raise ValueError("Provide either image_ids or selection_token, not both")
+        return self
 
 
 class SortFilterRequest(BaseModel):
@@ -1253,6 +1267,25 @@ class SortingService:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid destination folder")
 
+        # v3.2.1 task #34: when caller passed a selection_token (Select All
+        # Filtered scope), expand it to a concrete id list before reusing the
+        # existing per-image flow. We instantiate ImageService directly to
+        # avoid an import cycle with main.py; the helper is a stateless decoder
+        # over db (no shared per-instance state matters here).
+        if request.selection_token:
+            from services.image_service import ImageService
+            decoder = ImageService()
+            image_ids: List[int] = []
+            for chunk in decoder._iter_selection_token_snapshot_chunks(
+                request.selection_token, chunk_size=500
+            ):
+                image_ids.extend(chunk)
+        else:
+            image_ids = request.image_ids or []
+
+        if not image_ids:
+            return {"results": []}
+
         # Batch fetch all images in a single query (N+1 fix). The
         # readability check is done *inside* the loop instead of up front:
         # the previous call to ``_filter_readable_image_ids`` ran a full
@@ -1262,11 +1295,11 @@ class SortingService:
         # byte-level move would otherwise cheerfully copy truncated/corrupt
         # PNGs to the destination — so we still need the decode, just
         # spread across the iteration so each result lands as it happens.
-        images_map = db.get_images_by_ids(request.image_ids)
+        images_map = db.get_images_by_ids(image_ids)
         destination_ready = os.path.isdir(destination_folder)
 
         results = []
-        for image_id in request.image_ids:
+        for image_id in image_ids:
             image = images_map.get(image_id)
             source_path = self._resolve_image_path(image.get("path") or "") if image else None
             if not image or not source_path:

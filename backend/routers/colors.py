@@ -37,6 +37,7 @@ _state: Dict[str, Any] = {
 
 class AnalyzeRequest(BaseModel):
     image_ids: Optional[List[int]] = None  # None = all images missing data
+    selection_token: Optional[str] = None  # v3.2.1: alternative to image_ids for filtered selections
     limit: int = Field(default=5000, ge=1, le=50000)  # Cap to prevent runaway analysis
 
 
@@ -58,6 +59,20 @@ async def start_analysis(request: AnalyzeRequest):
         # Resolve target image list
         if request.image_ids is not None:
             target_ids = list(request.image_ids)[:request.limit]
+        elif request.selection_token:
+            # v3.2.1: expand selection token into a concrete id list. Keep it
+            # capped at `limit` so the cancel + progress UI don't run for
+            # hours on huge filtered sets.
+            from services.image_service import ImageService
+            decoder = ImageService()
+            target_ids = []
+            for chunk in decoder._iter_selection_token_snapshot_chunks(
+                request.selection_token, chunk_size=500
+            ):
+                remaining = request.limit - len(target_ids)
+                if remaining <= 0:
+                    break
+                target_ids.extend(chunk[:remaining])
         else:
             missing = db.get_images_missing_color_data(limit=request.limit)
             target_ids = [m["id"] for m in missing]
