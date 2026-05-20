@@ -161,6 +161,15 @@ reference/
 /gallery-snapshot.md
 /nav-snapshot.md
 
+# Local Kiro / Claude Code chat session exports (kiro-cli `/chat save` and
+# Claude Code's `.claude/...txt` continuation dumps end up here when users
+# save them at the repo root). Never commit, package, or push these.
+/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json
+/*-session-export*.json
+/kiro-session-*.json
+/chat-session-*.json
+/.claude/*.txt
+
 # Node.js (E2E testing infrastructure, root level)
 node_modules/
 package.json
