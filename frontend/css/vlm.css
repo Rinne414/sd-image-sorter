@@ -1378,3 +1378,452 @@
         grid-template-columns: 1fr;
     }
 }
+
+
+
+/* === v3.2.1 task #35: Auto-Separate 3-pane workbench ============================
+   Replaces the previous top-down single-column form with a left/center/right
+   layout that mirrors the Caption Editor design language (commit ee60020).
+
+   Goals:
+   - Filters, preview and action are visible at the same time on >=1440px so
+     users do not have to scroll to see what they will run.
+   - Saved configs and the scope-status card collapse to <details> cards in the
+     left pane to keep the visual rhythm.
+   - At <=1366px the action pane drops to a sticky bottom bar so the preview
+     and filter editor get the full available width.
+   - At <=760px the layout stacks single-column. */
+
+#view-autosep .autosep-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 20px 24px;
+    /* Allow the center preview pane to breathe on wide screens. */
+    width: 100%;
+    max-width: 1700px;
+    margin: 0 auto;
+    /* Cap the shell to viewport so the right pane's "Run" CTA stays visible
+       even when the filter pane has many summary rows. The ~150px subtraction
+       accounts for the top nav bar + sorting sub-tabs + outer padding. */
+    height: calc(100vh - 150px);
+    min-height: 560px;
+    overflow: hidden;
+}
+
+.autosep-shell-body {
+    /* Take the remaining shell height so panes scroll independently. */
+    flex: 1 1 auto;
+    /* The 3-pane grid. minmax() ensures the preview pane gets the most space
+       while filter and action stay readable. */
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(420px, 1.7fr) minmax(280px, 0.95fr);
+    gap: 14px;
+    align-items: stretch;
+    min-height: 0;
+}
+
+.autosep-shell-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.autosep-shell-title-block h2.panel-title {
+    margin: 0 0 2px;
+    font-size: 20px;
+}
+
+.autosep-shell-title-block .panel-description {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.autosep-shell-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* The pane sits inside the shell-body grid. */
+.autosep-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.autosep-pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.autosep-pane-head strong {
+    font-size: 13px;
+    letter-spacing: 0.02em;
+}
+
+.autosep-pane-head-spacer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.autosep-pane-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+    overflow-y: auto;
+    /* Pane bodies grow to fill the shell height. */
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.autosep-pane-helper {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* === Left pane: filter editor === */
+
+.autosep-pane-filter .autosep-pane-body {
+    gap: 12px;
+}
+
+.autosep-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    overflow: hidden;
+    /* The pane body is a flex column with overflow-y:auto. Without an explicit
+       flex-shrink:0 each card gets compressed by the flex algorithm to fit
+       inside the pane body, which collapses the card-head to a few pixels and
+       hides its content under overflow:hidden. */
+    flex-shrink: 0;
+}
+
+.autosep-card > .autosep-card-head {
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-primary);
+    min-height: 38px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.autosep-card > .autosep-card-head > * {
+    flex-shrink: 0;
+}
+
+.autosep-card-summary-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.autosep-card-configs .autosep-config-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 12px 12px;
+}
+
+.autosep-card-configs .autosep-config-controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.autosep-card-configs .autosep-config-summary {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* Scope card: visually distinct from configs to communicate it's about
+   live filter sync state, not a saved-template list. */
+.autosep-card-scope {
+    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.32);
+}
+
+.autosep-card-scope > .autosep-card-head {
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.06);
+}
+
+.autosep-scope-summary-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.autosep-card-scope .scope-status-badge {
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.autosep-card-scope .scope-status-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.autosep-scope-detail-block {
+    padding: 0 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.autosep-card-scope .scope-status-detail {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.autosep-card-scope .scope-status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Filter summary list: vertical stacking with right-aligned values for scan-ability */
+.autosep-filter-list.filter-summary-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.autosep-filter-list .summary-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.autosep-filter-list .summary-item strong {
+    color: var(--text-muted);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.autosep-filter-list .summary-item > span:not(:first-child) {
+    color: var(--text-primary);
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* === Center pane: preview === */
+
+.autosep-pane-preview .autosep-pane-head {
+    /* Preview has stat + button on the right; widen the gap so they don't crowd the title */
+    gap: 12px;
+}
+
+.autosep-preview-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1;
+}
+
+.autosep-preview-stat .stat-number {
+    font-weight: 800;
+    font-size: 16px;
+}
+
+.autosep-preview-stat .stat-label {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.autosep-pane-preview-body .autosep-preview-list {
+    flex: 1 1 auto;
+    min-height: 220px;
+}
+
+.autosep-pane-preview-body .autosep-preview-empty,
+.autosep-pane-preview-body .autosep-preview-hint {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+/* === Right pane: action sidebar === */
+
+.autosep-pane-action-body {
+    gap: 16px;
+}
+
+.autosep-action-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.autosep-action-block .autosep-action-block-label {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 13px;
+    margin: 0;
+}
+
+.autosep-pane-action-body .folder-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.autosep-pane-action-body .folder-input-group .input-field {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.autosep-pane-action-body .autosep-settings-summary {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.autosep-pane-action-body .autosep-action-settings {
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    background: var(--bg-elevated);
+}
+
+.autosep-pane-action-body .autosep-operation-control {
+    width: 100%;
+}
+
+.autosep-pane-action-body .autosep-inline-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.autosep-action-cta {
+    width: 100%;
+    margin-top: auto;
+    /* The big "Run" button sticks at the bottom of the right pane */
+    padding: 12px 16px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+/* === Responsive: laptop fallback (1080-1280) ===
+   Two columns (filter + preview), action becomes a sticky bottom bar across
+   the full shell width.
+   Note: 1366px stays in 3-column mode because most SD users on laptops
+   have 1366 displays and we want them to see all 3 panes by default. */
+@media (max-width: 1280px) {
+    #view-autosep .autosep-shell {
+        padding: 14px 16px 100px;
+        /* Reserve space at the bottom for the sticky action bar */
+    }
+
+    .autosep-shell-body {
+        grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.6fr);
+        grid-template-areas:
+            "filter preview"
+            "action action";
+    }
+
+    .autosep-pane-filter   { grid-area: filter; }
+    .autosep-pane-preview  { grid-area: preview; }
+    .autosep-pane-action   {
+        grid-area: action;
+        position: sticky;
+        bottom: 8px;
+        z-index: 5;
+        background: var(--bg-card);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.32);
+    }
+
+    .autosep-pane-action-body {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 14px;
+    }
+
+    .autosep-pane-action-body .autosep-action-block {
+        flex: 1 1 220px;
+        min-width: 0;
+    }
+
+    .autosep-action-cta {
+        flex: 1 1 200px;
+        margin-top: 0;
+        align-self: stretch;
+        max-width: 280px;
+    }
+}
+
+/* === Responsive: narrow (<=760) === */
+@media (max-width: 760px) {
+    #view-autosep .autosep-shell {
+        padding: 12px 12px 12px;
+    }
+
+    .autosep-shell-body {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "filter"
+            "preview"
+            "action";
+    }
+
+    .autosep-pane-action {
+        position: static;
+        box-shadow: none;
+    }
+
+    .autosep-pane-action-body {
+        flex-direction: column;
+    }
+
+    .autosep-action-cta {
+        max-width: none;
+    }
+
+    .autosep-pane-body {
+        max-height: 60vh;
+    }
+}
