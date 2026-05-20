@@ -293,6 +293,24 @@ body::after {
     padding: 7px 10px;
 }
 
+/* v3.2.1 task #29: subtle vertical divider grouping nav-action buttons */
+.nav-actions-divider {
+    display: inline-block;
+    width: 1px;
+    height: 22px;
+    background: rgba(191, 219, 254, 0.16);
+    margin: 0 4px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 1500px) {
+    /* On laptops the divider hides because most icon buttons are also hidden,
+       which would leave a visible divider against nothing. */
+    .nav-actions-divider {
+        display: none;
+    }
+}
+
 .gallery-header-left .btn-icon-only,
 .view-options .btn-icon-only {
     min-width: 32px;
@@ -1739,6 +1757,103 @@ textarea:focus,
 .autosep-preview-empty {
     max-width: 720px;
     margin-inline: auto;
+}
+
+/*
+ * v3.2.1 task #30: empty-gallery onboarding panel.
+ * Numbered steps that point users at key UI areas (Import / Tag / Setup).
+ * Stays inside the existing .empty-state-card frame; widens for the longer
+ * step list on tall viewports.
+ */
+.empty-state-onboarding {
+    max-width: 880px;
+}
+
+.onboarding-steps {
+    list-style: none;
+    margin: 22px auto 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    text-align: left;
+}
+
+.onboarding-step {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 10px 12px;
+    align-items: start;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(191, 219, 254, 0.10);
+    border-radius: 14px;
+    transition: border-color 180ms ease, background 180ms ease;
+}
+
+.onboarding-step:hover {
+    border-color: rgba(245, 158, 11, 0.32);
+    background: rgba(245, 158, 11, 0.06);
+}
+
+.onboarding-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: rgba(245, 158, 11, 0.18);
+    color: #fcd28b;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.onboarding-step-icon {
+    font-size: 1.15rem;
+    align-self: center;
+}
+
+.onboarding-step-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.onboarding-step-copy strong {
+    color: var(--text-primary, #f5f7fa);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.onboarding-step-copy span {
+    color: var(--text-secondary, rgba(229, 231, 235, 0.72));
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+
+.onboarding-step-copy em {
+    color: #fcd28b;
+    font-style: normal;
+    font-weight: 600;
+    background: rgba(245, 158, 11, 0.10);
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.onboarding-tip {
+    margin: 18px auto 0;
+    color: var(--text-secondary, rgba(229, 231, 235, 0.72));
+    font-size: 12px;
+}
+
+.onboarding-tip em {
+    color: #fcd28b;
+    font-style: normal;
+    font-weight: 600;
 }
 
 .autosep-preview-empty--no-filters {

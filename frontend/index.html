@@ -218,18 +218,29 @@
                 </div>
             </div>
             <div class="nav-actions">
+                <!-- Group 1: Config & meta (least frequent) -->
                 <button id="btn-open-model-manager" class="btn btn-ghost btn-icon-only" type="button" title="Model & environment setup" aria-label="Open model manager" data-i18n-title="models.managerTooltip" data-i18n-aria="models.title">
                     <span aria-hidden="true">🧰</span>
-                </button>
-                <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
-                    <span aria-hidden="true">📚</span>
                 </button>
                 <button id="btn-language-toggle" class="btn btn-ghost btn-icon-only btn-language" title="Switch language" aria-label="Switch language" data-i18n-title="lang.switchTooltip" data-i18n-aria="lang.switchLabel">
                     <span aria-hidden="true">🌐</span>
                 </button>
-                <button id="btn-app-update" class="btn btn-ghost btn-icon-only" title="Check for application updates" aria-label="Check for application updates" data-i18n-title="update.checkTitle">
+                <button id="btn-refresh-ui" class="btn btn-ghost btn-icon-only" type="button" title="Hard refresh: clear cache and reload UI (gallery / DB / settings preserved)" aria-label="Hard refresh UI" data-i18n-title="refresh.uiTooltip">
+                    <span aria-hidden="true">🔄</span>
+                </button>
+                <button id="btn-app-update" class="btn btn-ghost btn-icon-only" type="button" title="Check for application updates" aria-label="Check for application updates" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true">⬆️</span>
                 </button>
+                <span class="nav-actions-divider" aria-hidden="true"></span>
+                <!-- Group 2: Content tools (frequent) -->
+                <button id="btn-tags-library" class="btn btn-ghost btn-icon-only" title="Browse all tags and prompts" aria-label="Open tags and prompts library" data-i18n-title="action.libraryTooltip" data-i18n-aria="action.library">
+                    <span aria-hidden="true">📚</span>
+                </button>
+                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor — bulk find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
+                    <span aria-hidden="true">🧹</span>
+                </button>
+                <span class="nav-actions-divider" aria-hidden="true"></span>
+                <!-- Group 3: Help + status (status hidden when idle) -->
                 <button id="nav-color-progress" class="btn btn-ghost btn-icon-only nav-color-chip" type="button" hidden title="Color analysis progress" aria-label="Color analysis progress" data-i18n-title="color.progressTooltip">
                     <span aria-hidden="true">🎨</span>
                     <span class="nav-color-chip-label" id="nav-color-progress-label">0%</span>
@@ -237,12 +248,8 @@
                 <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-title="guide.tooltip">
                     <span aria-hidden="true">❓</span>
                 </button>
-                <button id="btn-refresh-ui" class="btn btn-ghost btn-icon-only" type="button" title="Hard refresh: clear cache and reload UI (gallery / DB / settings preserved)" aria-label="Hard refresh UI" data-i18n-title="refresh.uiTooltip">
-                    <span aria-hidden="true">🔄</span>
-                </button>
-                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor — bulk find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
-                    <span aria-hidden="true">🧹</span>
-                </button>
+                <span class="nav-actions-divider" aria-hidden="true"></span>
+                <!-- Group 4: Primary CTAs (rightmost) -->
                 <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder">
                     <span aria-hidden="true">📂</span>
                     <span data-i18n="action.scan">Import Images</span>
@@ -582,7 +589,7 @@
                         </div>
                     </div>
                     <div id="gallery-empty-state" style="display:none" role="status">
-                        <div class="empty-state-card">
+                        <div class="empty-state-card empty-state-onboarding">
                             <span class="empty-icon">🖼️</span>
                             <h3 data-i18n="gallery.noImages">No images yet</h3>
                             <p data-i18n="gallery.scanPrompt">Import an image folder to start browsing, filtering, and organizing your images</p>
@@ -591,6 +598,42 @@
                                     <span aria-hidden="true">📂</span> <span data-i18n="action.scanFolder">Import Images</span>
                                 </button>
                             </div>
+                            <!-- v3.2.1 task #30: numbered onboarding steps that point to key UI areas. -->
+                            <ol class="onboarding-steps" aria-label="Getting started">
+                                <li class="onboarding-step">
+                                    <span class="onboarding-step-num">1</span>
+                                    <span aria-hidden="true" class="onboarding-step-icon">📂</span>
+                                    <div class="onboarding-step-copy">
+                                        <strong data-i18n="onboarding.step1Title">Import a folder</strong>
+                                        <span data-i18n="onboarding.step1Hint">Click <em>Import Images</em> in the top-right to scan a folder of SD images. Metadata, prompts, models, and LoRAs are extracted automatically.</span>
+                                    </div>
+                                </li>
+                                <li class="onboarding-step">
+                                    <span class="onboarding-step-num">2</span>
+                                    <span aria-hidden="true" class="onboarding-step-icon">🏷️</span>
+                                    <div class="onboarding-step-copy">
+                                        <strong data-i18n="onboarding.step2Title">AI-tag images</strong>
+                                        <span data-i18n="onboarding.step2Hint">Click <em>Tag Images</em> to auto-tag with WD14 / Camie / PixAI. The 4 tabs in the modal cover local taggers, NL captions, aesthetic score, and color analysis.</span>
+                                    </div>
+                                </li>
+                                <li class="onboarding-step">
+                                    <span class="onboarding-step-num">3</span>
+                                    <span aria-hidden="true" class="onboarding-step-icon">🧰</span>
+                                    <div class="onboarding-step-copy">
+                                        <strong data-i18n="onboarding.step3Title">Open Setup once</strong>
+                                        <span data-i18n="onboarding.step3Hint">Click the <em>🧰</em> wrench in the top-right to download AI models you need (similarity, aesthetic, censor, artist ID). Each model is opt-in.</span>
+                                    </div>
+                                </li>
+                                <li class="onboarding-step">
+                                    <span class="onboarding-step-num">4</span>
+                                    <span aria-hidden="true" class="onboarding-step-icon">🧭</span>
+                                    <div class="onboarding-step-copy">
+                                        <strong data-i18n="onboarding.step4Title">Explore the tabs</strong>
+                                        <span data-i18n="onboarding.step4Hint">Use the top-left tabs to switch between Reader, Sort (WASD manual), Censor, Similar, Prompt Lab, Artist ID, and Image Obfuscate.</span>
+                                    </div>
+                                </li>
+                            </ol>
+                            <p class="onboarding-tip" data-i18n="onboarding.tipHelp">Tip: click the <em>❓</em> in the top-right at any time for a context-aware guide.</p>
                         </div>
                     </div>
                     <div class="gallery-load-more" id="gallery-load-more" style="display:none">
