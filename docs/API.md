@@ -1,6 +1,6 @@
 # SD Image Sorter API Documentation
 
-**Version:** 3.2.0
+**Version:** 3.2.1
 **Base URL:** `http://127.0.0.1:8487` (default; configurable via `SD_IMAGE_SORTER_PORT`)
 **Interactive Docs:** `http://127.0.0.1:8487/docs` (Swagger UI, same port as runtime)
 
@@ -118,7 +118,7 @@ Retrieve images with filters and cursor pagination.
 | `loras` | string | - | Comma-separated LoRA names |
 | `search` | string | - | Free-text prompt / filename search |
 | `artist` | string | - | Artist name filter |
-| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc` |
+| `sort_by` | string | `newest` | `newest`, `oldest`, `name_asc`, `name_desc`, `generator`, `generator_desc`, `prompt_length`, `prompt_length_asc`, `tag_count`, `tag_count_asc`, `rating`, `rating_desc`, `character_count`, `character_count_asc`, `random`, `file_size`, `file_size_asc`, `aesthetic`, `aesthetic_asc`, `brightness`, `brightness_asc`, `saturation`, `saturation_asc`, `brightness_skew`, `brightness_skew_asc` |
 | `limit` | int | 100 | Max images per page |
 | `cursor` | string | - | Opaque cursor token from the previous page; pass it back unchanged |
 | `min_width` | int | - | Minimum width in pixels |
@@ -126,7 +126,12 @@ Retrieve images with filters and cursor pagination.
 | `min_height` | int | - | Minimum height in pixels |
 | `max_height` | int | - | Maximum height in pixels |
 | `prompts` | string | - | Comma-separated prompt terms (AND logic) |
+| `prompt_match_mode` | string | `exact` | `exact` keeps normalized prompt-token matching; `contains` matches substring text in the normalized full prompt, including variants like `takamatsu_tomori(...)` |
 | `aspect_ratio` | string | - | `square`, `landscape`, `portrait` |
+| `brightness_min` | float | - | Minimum average brightness, `0..255`; requires color analysis data |
+| `brightness_max` | float | - | Maximum average brightness, `0..255`; requires color analysis data |
+| `color_temperature` | string | - | `warm`, `cool`, `neutral`; requires color analysis data |
+| `brightness_distribution` | string | - | `left_heavy`, `right_heavy`, `middle_heavy`, `edge_heavy`, `balanced`; requires color analysis data |
 
 Example response:
 
@@ -191,7 +196,7 @@ This is the compatibility endpoint for callers that need one complete response. 
 #### POST /api/images/selection-token
 Create a stateless token for chunked filtered-selection ID retrieval.
 
-Request body is the same filter payload as `selection-ids`, plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
+Request body is the same filter payload as `selection-ids`, including color fields (`brightnessMin`, `brightnessMax`, `colorTemperature`, `brightnessDistribution`), plus optional `chunkSize` (`1..10000`, default `2000`) and `excludedImageIds` (`0..10000`) for inverted filtered-selection scopes.
 
 Response:
 
@@ -208,6 +213,7 @@ Notes:
 - `sortBy=random` is rejected because stateless offset chunks would re-randomize and duplicate/skip images.
 - `excludedImageIds` is intended for small explicit exclusions after an inverted filtered selection; it must not become a giant client-side ID payload.
 - `exact_total=false` means prompt post-filtering may still remove SQL false positives.
+- Filter payloads accept `promptMatchMode` (`exact` or `contains`, default `exact`). `contains` is useful for free-form prompt variants such as `takamatsu_tomori(bang dream!)`.
 - The token is not a result-set snapshot; clients should fetch chunks immediately in one UI operation.
 
 #### GET /api/images/selection-chunk
@@ -477,7 +483,7 @@ Reset stuck scan progress.
 Move or copy selected images. Request body includes `image_ids`, `destination_folder`, and optional `operation` (`move` or `copy`, default `move`).
 
 #### POST /api/batch-move
-Move all images matching filters.
+Move all images matching filters. JSON filter payloads accept `prompt_match_mode` (`exact` or `contains`, default `exact`) alongside `prompts`.
 
 #### GET /api/batch-move/progress
 Get batch move progress.
@@ -489,7 +495,7 @@ Cooperatively cancel an in-flight batch move/copy. The worker checks the cancel 
 Reset stuck batch move progress.
 
 #### POST /api/sort/start
-Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
+Start manual sort session. Preferred clients send a JSON body with `generators`, `tags`, `ratings`, `checkpoints`, `loras`, `prompts`, `prompt_match_mode`, `artist`, `search`, size/aesthetic filters, `folders`, `operation_mode`, and `replace_existing`; this avoids URL/query-length limits for large filter scopes. Legacy query-string parameters remain supported, including `prompt_match_mode=exact|contains`. If an unfinished session exists, the default response is HTTP 409; pass `replace_existing=true` only after the user explicitly chooses to discard saved progress.
 
 #### GET /api/sort/current
 Get current sort image.
@@ -927,6 +933,105 @@ Schedule a safe lightweight Python environment rebuild for the next launcher sta
 
 #### POST /api/disk/cleanup
 Wipe the contents of whitelisted cache directories. Body: `{keys: ["tmp" | "pip_cache" | "thumbnails" | "cache"]}`. Strict whitelist enforced server-side; unknown keys are rejected. Returns `{cleaned: [{key, freed_bytes}], errors: [{key, error}]}` with partial-failure reporting.
+
+### Tags Library Bulk Operations
+
+Added in v3.2.1. Tag-Master-inspired bulk operations on the DB tags table. Every mutation accepts `dry_run=true` to preview affected counts and up to 5 sample before/after pairs before committing.
+
+#### GET /api/tags/bulk/state
+Report bulk-operation backend state (cancellable in-flight job, last completion summary, capability flags). Useful for the mass tag editor UI to gate destructive actions.
+
+#### POST /api/tags/bulk/find-replace
+Rename a tag across N images. Body: `{find, replace, scope, dry_run}`. Empty `replace` removes the tag. Returns `{affected_images, samples, committed}`.
+
+#### POST /api/tags/bulk/add
+Append tags to a selection. Body: `{image_ids|filter, tags: [{tag, confidence}], dedupe, dry_run}`. Existing tags are kept; the new confidence wins only when explicitly requested.
+
+#### POST /api/tags/bulk/remove
+Delete specified tags from a selection. Body: `{image_ids|filter, tags, case_sensitive, dry_run}`.
+
+#### POST /api/tags/bulk/cleanup
+Drop tags below a confidence threshold and deduplicate by case-insensitive tag name keeping the highest-confidence copy. Body: `{image_ids|filter, min_confidence, dedupe, dry_run}`.
+
+#### GET /api/tags/export-presets
+List built-in tag/caption export presets used by the LoRA training template engine (Anima Tags+NL, Anima Tags-only, Illustrious / Pony, NoobAI, FLUX, Kohya SD1.5, Custom).
+
+#### POST /api/tags/export-preview
+Render up to 20 sample caption files for a given preset without writing to disk. Body: `{image_ids, preset_id|template, options}`. Returns rendered captions keyed by image id plus the resolved template variables.
+
+### Color Analysis
+
+Added in v3.2.1. The color analyzer extracts dominant colors, brightness, saturation, temperature, and distribution shape; persisted in 7 indexed DB columns added by migration 010.
+
+#### GET /api/colors/missing-count
+How many indexed images still need color analysis (used to gate the "Analyze All" button).
+
+#### GET /api/colors/progress
+Live progress for a running batch backfill: `{state, total, completed, failed, current_path, started_at}`.
+
+#### POST /api/colors/analyze
+Start a batch color-analysis job. Body: `{image_ids?: int[], limit?: int}` where `image_ids` is optional and `limit` is `1..50000` (default `5000`). When `image_ids` is omitted, the backend analyzes images missing color data up to `limit`. Returns immediately with `{status, total}`; poll `/api/colors/progress`.
+
+#### POST /api/colors/analyze-single/{image_id}
+Compute color data for one image synchronously. Returns the persisted analysis payload (dominant colors, brightness, saturation, temperature, distribution).
+
+#### POST /api/colors/cancel
+Request a cooperative cancel of the running color-analysis job. Completed images are kept; in-flight work stops at the next image boundary.
+
+### VLM Captioning
+
+Added in v3.2.1. Multi-provider Vision Language Model captioning pipeline alongside WD14 / Camie / PixAI / ToriiGate taggers. See `vlm_providers/` for the provider implementations.
+
+#### GET /api/vlm/providers
+List supported VLM providers (`openai_compat`, `anthropic`, `gemini`, `vertex`) with capability flags.
+
+#### POST /api/vlm/detect-provider
+Auto-detect provider from a pasted endpoint URL. Body: `{endpoint}`. Returns the inferred `provider` key plus suggested defaults.
+
+#### GET /api/vlm/settings
+Return the saved VLM configuration (provider, endpoint, model, prompt preset, output format, concurrency, retries, proxy).
+
+#### POST /api/vlm/settings
+Persist the VLM configuration. Body: full settings payload (secrets handled server-side). Returns the saved settings minus secrets.
+
+#### POST /api/vlm/test
+Test the current VLM credentials and endpoint with a tiny probe image. Returns `{ok, latency_ms, sample_caption, error}`.
+
+#### POST /api/vlm/models
+List available models for the configured provider (calls provider's `models` API or falls back to a curated list).
+
+#### GET /api/vlm/presets
+List built-in system-prompt presets (general LoRA NL, Anima/FLUX detailed, single-sentence, character LoRA, NSFW-tolerant, danbooru, hybrid).
+
+#### POST /api/vlm/caption
+Caption a single image. Body: `{image_id, override_settings?}`. Returns `{caption, tokens_used, latency_ms}`.
+
+#### POST /api/vlm/caption-batch
+Start a concurrency-controlled batch caption job. Body: `{image_ids|filter, concurrency, retries, retry_delay, output_format, prompt_preset?}`.
+
+#### GET /api/vlm/caption-batch/progress
+Live progress for the running batch: `{state, total, completed, failed, tokens_used, current_image, started_at, errors: [{image_id, error, type}]}` (errors list capped at 50).
+
+#### GET /api/vlm/caption-batch/debug-chat
+Return recent sanitized VLM request/response debug events for the user-facing API Chat view. API keys, service-account JSON, image bytes, endpoint userinfo, query strings, and fragments are redacted.
+
+#### POST /api/vlm/caption-batch/cancel
+Cooperative cancel; completed captions persist, in-flight requests stop after the next response boundary.
+
+#### GET /api/vlm/local-models/recommended
+Return the curated list of one-click downloadable Ollama vision models (Gemma 3/4, Qwen 2.5/3 VL, MiniCPM-V) with size, minimum VRAM, and NSFW tolerance flags.
+
+#### POST /api/vlm/local-models/pull
+Trigger an Ollama `pull` for the selected model. Body: `{model_id}`. Returns a job acknowledgement; poll `/api/vlm/local-models/pull/progress`.
+
+#### GET /api/vlm/local-models/pull/progress
+Live progress for the running Ollama pull: `{state, model_id, total_bytes, completed_bytes, status, error}`.
+
+#### POST /api/vlm/local-models/delete
+Delete an installed Ollama model. Body: `{model_id}`. Returns the updated installed list.
+
+#### POST /api/vlm/local-models/start-ollama
+Auto-start the local Ollama server when it is installed but not running. Useful first-launch helper; returns `{started, already_running, error}`.
 
 ---
 

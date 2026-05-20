@@ -271,7 +271,6 @@ Use this structure for future confirmed-debt entries:
 - Deferred because:
   The current pass fixed the confirmed database lookup bottleneck and reduced scan-time gallery work without risking a broader image-serving scheduler change during release hardening.
 
-
 ### Debt-12: Trash / Recycle Bin behavior still needs real OS matrix validation
 - Status: open
 - Type: file lifecycle / operability / platform compatibility
@@ -926,4 +925,106 @@ Quality bar:
   4. Confidence threshold: require `confidence > 0.85` (well above the 0.91 / 0.02 split in the reverse-SynthID benchmark) to label, otherwise leave as `unknown` to avoid false positives on SD images.
   5. Re-evaluate every 6 months — the field is moving fast (Watermark-Anything, SigLIP2, etc.), and a more permissive / resolution-agnostic / SD-safe detector may ship.
 - Don't do silently: any future integration must keep the modal hint visible (`modal.aiProviderNote.*`) at least until the detector is on by default — users should always know whether the label came from metadata or from the pixel detector. A future ADR should record the activation state.
+
+
+### Debt-24: PyTorch CUDA / PyPI mirror auto-selection was referenced but never implemented
+
+- Status: resolved in v3.2.1
+- Type: dependency / first-launch UX / silent fallback
+- Impact: high
+- Resolution:
+  v3.2.1 adds `backend/mirror_selector.py` plus tests. `_resolve_pypi_fallback_index()` and the new `_resolve_torch_cuda_host()` in `repair_torch_runtime.py` now consume real mirror selection. The CUDA torch wheel install rewrites every `cuXXX` URL to the picked host instead of staying on `download.pytorch.org`.
+- Related files:
+  `backend/mirror_selector.py` (new, httpx-based, used by repair_torch_runtime),
+  `backend/mirror_probe_stdlib.py` (new, stdlib-only, used by run.bat / run.sh before pip install),
+  `backend/repair_torch_runtime.py` (`_resolve_torch_cuda_host`, `_cuda_index_candidates`),
+  `run.bat` and `run.sh` (probe before pip install, pass `--index-url`/`--extra-index-url`),
+  `backend/tests/test_mirror_selector.py` (15 tests),
+  `backend/tests/test_mirror_probe_stdlib.py` (10 tests),
+  `backend/tests/test_repair_torch_runtime.py` (2 new regression tests),
+  `backend/tests/conftest.py` (default `SD_IMAGE_SORTER_*_MIRROR=official` env so tests do not probe the network).
+- Observed problem:
+  `repair_torch_runtime.py:_resolve_pypi_fallback_index()` already had `import mirror_selector` + `mirror_selector.select_pypi_index(...)`, but `git log --all -S "select_pypi_index"` showed the module was never committed. Every call hit `ImportError`, the `except` branch used `logger.debug` (invisible at default INFO level), and the function silently returned `https://pypi.org/simple`. Worse: the CUDA torch wheel itself (`TORCH_CUDA_INDEXES` at lines 65–70) was hard-coded to `download.pytorch.org/whl/cuXXX` and never went through any mirror selection. And the very first pip install step in `run.bat` / `run.sh` (`pip install -r requirements.txt`, ~1.5 GB on Windows full-AI) had no mirror selection at all because the launcher could not yet import httpx. On a 2.5 GB CUDA wheel plus a 1.5 GB requirements bundle from mainland China, this meant ~hours vs ~minutes over Tuna / SJTU.
+- Why this was debt:
+  Code that looks like a feature ("we honour the same mirror selection as launcher_pip.py") but silently produces the worst-case behaviour because the supporting module never landed. The docstring and the `logger.debug` swallow combined to hide the gap from every reader, including the author and the test suite.
+- Better long-term shape (already in place):
+  Concurrent HEAD probe with 1.5 s timeout against the real PEP 503 path (`<base>/cu128/torch/` for CUDA, `<base>/pip/` for PyPI), on-disk cache at `data/state/mirror_cache.json` (30 min TTL), env override for power users, and a `clear_cache()` API for a future "refresh mirrors" UI button. Last candidate in each list is always the official host so a probe-storm or DNS failure cannot block the install. CUDA candidates are only SJTU + official — Tsinghua TUNA does not mirror pytorch-wheels and Aliyun's `/pytorch-wheels/cuXXX/` is a JS portal page pip cannot parse; both failed the verification done in the v3.2.1 session before being removed from the list.
+- Revisit trigger:
+  Add new candidate hosts only when at least two users report sustained 20+ MB/s on them; add a "refresh mirrors" button if the 30-minute cache turns out to be too sticky during travel / VPN switches.
+- Lesson:
+  Whenever a `try: import X` block has a `logger.debug` `except`, treat the module as "probably never existed" until proven by `git log -S` and `Glob`. The combination is structurally invisible.
+
+
+### Debt-25: `test_routers/test_images.py` contains duplicate test class names
+- Status: open
+- Type: test architecture debt
+- Impact: medium
+- Risk if ignored:
+  Python class rebinding can hide earlier router tests from pytest collection, so new coverage added to the first class may appear present in the file but never actually run.
+- Related files:
+  `backend/tests/test_routers/test_images.py`
+- Observed problem:
+  The file defines `TestExportSelectionData` twice. Pytest only collected the later class, so tests placed in the earlier class were silently skipped from collection.
+- Why this is debt:
+  Router regression coverage is easy to overestimate when duplicate class names shadow previous definitions.
+- Better long-term shape:
+  Rename or merge the duplicate classes and add a collection guard for duplicate top-level test class names.
+- Revisit trigger:
+  Revisit before adding more image-router export/selection tests or doing a router test cleanup pass.
+- Deferred because:
+  This task needed a focused prompt-filter semantics fix; the new collected coverage was added to the surviving class without restructuring the whole file.
+
+
+### Debt-26: Third-party model libraries only partially expose download progress and endpoint retries
+- Status: open
+- Type: model-download UX / third-party integration debt
+- Impact: medium
+- Risk if ignored:
+  The shared Download Source setting now reaches HuggingFace-hosted model downloads, including libraries such as FastEmbed and open_clip that normally read `HF_ENDPOINT`. However, those libraries still own their internal retry/progress behaviour. The UI may show coarse "working" state rather than per-file progress for FastEmbed/open_clip downloads, and a first chosen endpoint can fail inside the library before the app gets a chance to report a clean per-endpoint fallback message.
+- Related files:
+  `backend/model_download_sources.py`
+  `backend/similarity.py`
+  `backend/aesthetic.py`
+  `backend/tagger.py`
+  `backend/toriigate_tagger.py`
+  `backend/artist_identifier.py`
+  `backend/services/model_service.py`
+- Observed problem:
+  Direct app-managed downloads use `_direct_download_file()` and report `/api/models/download-progress`. Third-party loaders do not all expose hooks for per-file byte progress. FastEmbed also calls top-level `model_info` / `list_repo_tree`, so v3.2.1 patches those entry points to honor the selected endpoint, but this is compatibility glue rather than a full downloader abstraction.
+- Better long-term shape:
+  Wrap third-party model acquisition in app-owned download/caching code where practical: prefetch HuggingFace snapshots/file manifests with explicit endpoints and progress, then pass `local_files_only` / `specific_model_path` into FastEmbed/open_clip/Transformers. Keep Civitai, GitHub, and true ModelScope providers separate rather than forcing them through HF mirror semantics.
+- Revisit trigger:
+  Revisit when users report unclear model-download progress, when adding another HuggingFace-hosted model feature, or before advertising "Download all" as fully polished for slow networks.
+- Deferred because:
+  The release-blocking issue was incorrect provider selection. The current fix ensures the selected source is applied consistently; replacing third-party acquisition with app-owned snapshot management is a larger reliability/UX pass.
+
+
+## v3.2.2 Roadmap
+
+These are deferred from the v3.2.1 stability sweep and tracked for the next release. Each is a multi-PR effort and should NOT be bundled — separate sessions, separate review.
+
+### Roadmap-A: Real AI runtime scheduler (Debt-16)
+- Replace the coarse `exclusive_ai_runtime()` lock with a priority-aware job queue.
+- Per-job: name, priority, VRAM estimate, timeout, cancel handle.
+- Block new jobs when CUDA headroom is insufficient; surface running / queued state via `/api/system/ai-jobs` for a UI badge.
+- Allowlist test to fail when a new heavyweight model entry point bypasses the scheduler.
+- Touches: `backend/ai_runtime_guard.py`, every model-loading service (aesthetic, tagger, similarity, censor, nudenet, sam3, toriigate, artist), plus a tiny status router and a frontend badge.
+
+### Roadmap-B: ANN index for similarity search (Debt-17)
+- Replace the chunked linear scan in `backend/similarity.py` with `hnswlib` (or `sqlite-vec`) per-content-fingerprint index.
+- Persist under `data/state/similarity-index/`; build on demand or via a Prepare button.
+- Invalidate on `content_fingerprint` change through `derived_state_service`; fall back to the existing chunked scan when the index is missing / stale.
+- Target: stable search latency up to 200k images.
+- Touches: `backend/similarity.py`, `backend/services/similarity_service.py`, `backend/services/derived_state_service.py`, `backend/requirements*.txt`, `backend/migrations/` (one new migration), plus a build worker.
+
+### Roadmap-C: Missing-file repair review UI (Debt-14)
+- Paginated `/api/images/repair-candidates` endpoint returning ambiguous matches with `old_path` + N candidate `new_paths` + side-by-side metadata.
+- `POST /api/images/repair-confirm` to commit explicit per-row choice (pick / merge / drop).
+- New modal in `frontend/js/app.js` (or a dedicated `frontend/js/repair-review.js`) listing ambiguous rows with image preview.
+- Wires into the existing repair-missing flow as the second-stage step when the safe auto-reconnect refuses.
+
+### Sequencing rationale
+- **Roadmap-A first** — affects every AI feature's stability when concurrent jobs land. Smallest blast radius on existing data.
+- **Roadmap-B second** — pure performance win, only matters once libraries cross ~100k images. Needs a real schema migration.
+- **Roadmap-C last** — narrowest user impact (only triggers on folder-move with duplicate filenames), purely additive UI work.
 

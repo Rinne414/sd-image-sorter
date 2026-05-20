@@ -155,11 +155,11 @@
 
 ### Linux
 
-1. 下载 [sd-image-sorter-v3.2.0-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.0-linux.tar.gz)
+1. 下载 [sd-image-sorter-v3.2.1-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-linux.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.2.0-linux.tar.gz
+tar xzf sd-image-sorter-v3.2.1-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -471,7 +471,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.2.0-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.0-windows-portable.zip)
+1. Download [sd-image-sorter-v3.2.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -482,7 +482,7 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 #### Linux
 
 ```bash
-tar xzf sd-image-sorter-v3.2.0-linux.tar.gz
+tar xzf sd-image-sorter-v3.2.1-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh

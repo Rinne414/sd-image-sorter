@@ -1,6 +1,6 @@
 # AI Decision Log
 
-**Updated:** 2026-05-16
+**Updated:** 2026-05-19
 **Purpose:** Preserve deliberate local decisions so future AI agents do not silently undo them.
 
 ## How To Use This File
@@ -67,6 +67,213 @@ Use this structure for future entries:
 - Validation:
 
 ## Current Records
+
+### ADR-AI-20260519-07: VLM setup actions save first and expose live API debugging
+- Status: active
+- Area: frontend UX / backend workflow / debugging / release polish
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  VLM Settings actions that depend on provider configuration, especially "Fetch Available Models" and "Test Connection", must first save the current form values and then run the requested action. Users must not need to discover the separate footer Save button before those actions work. VLM runs launched from the Tagger Natural Language tab must show visible progress with success count, failed count, token count, current image, and API response state (`waiting`, `responded`, `error`, `cancelling`, `done`). The optional "API Chat" debug view may show recent sanitized request/response events in a chat-like timeline, including system/user prompt, tags, model, image filename, response text, errors, tokens, and latency, but must not expose API keys, service account content, image base64, or raw binary payloads.
+- Why:
+  The previous VLM settings flow silently used stale saved settings when users clicked Fetch/Test after editing the form, which made a normal workflow look broken. The v3.2.1 Tagger UI also hid VLM progress inside a hidden parent panel, so users could not tell whether the backend was working, waiting on the API, or failing. The debug chat is intentionally user-facing because seeing the exact prompt/response loop is useful for LoRA trainers tuning VLM prompts, but it must stay safe and compact.
+- Do not "improve" this by:
+  Requiring users to click Save before Fetch/Test, showing only a generic spinner without success/error/API response counts, hiding final VLM run summaries when the run finishes, removing the API Chat entry because it looks "developer-only", or logging/displaying API keys, service-account JSON, data URLs, base64 image content, or full oversized raw payloads.
+- Allowed evolution:
+  Add retry-by-message, copy prompt/response, token-cost estimates, per-image transcript download, provider-specific timing, richer filtering, or a persistent debug history if the default UI remains compact and all secrets/image bytes stay redacted.
+- Evidence:
+  `frontend/js/vlm-caption.js` collects current settings and saves them before `/api/vlm/models` and `/api/vlm/test`, immediately polls VLM batch progress, keeps the Tagger VLM progress panel visible for running/error/summary states, and renders the API Chat modal from sanitized debug events. `backend/routers/vlm.py` exposes VLM batch API status counters and `/api/vlm/caption-batch/debug-chat`, records sanitized request/response/error events, and never includes API keys or base64 payloads in debug events. Regression coverage asserts auto-save request ordering, visible success/error/API status progress, and sanitized API Chat content.
+- Last verified:
+  2026-05-19 with source-server Playwright interaction, backend router tests, and desktop/mobile visual checks.
+- Related files:
+  `backend/routers/vlm.py`
+  `backend/tests/test_routers/test_vlm.py`
+  `frontend/index.html`
+  `frontend/css/vlm.css`
+  `frontend/js/vlm-caption.js`
+  `frontend/js/v321-ui.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `tests/e2e/task4_tagger_tabs.spec.js`
+- Supersedes:
+  The earlier v3.2.1 VLM settings/progress behavior where Fetch/Test used only previously saved settings and VLM progress could be hidden by the Natural Language tab layout.
+- Validation:
+  `node --check frontend/js/vlm-caption.js frontend/js/v321-ui.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js tests/e2e/task4_tagger_tabs.spec.js`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_routers/test_vlm.py backend/tests/test_frontend_contract.py::test_v321_modules_read_runtime_selection_store_from_window_app -s`; `BASE_URL=http://127.0.0.1:8504 node tests/e2e/task4_tagger_tabs.spec.js`; desktop screenshots `/tmp/vlm-progress-desktop.png` and `/tmp/vlm-debug-chat-desktop.png`; mobile screenshots `/tmp/vlm-progress-mobile.png` and `/tmp/vlm-debug-chat-mobile.png`.
+
+### ADR-AI-20260519-06: Same-name export preview is a caption workbench, not a passive preview list
+- Status: active
+- Area: frontend UX / export workflow / release polish
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The Same-name `.txt` export "Live preview" is a dataset caption workbench. It uses a left image queue, a central current-image caption editor, and a right shared-tag/check/cleanup tool panel, following the workflow model of BooruDatasetTagManager: select an image, edit its caption/tags, inspect tags shared across the preview set, check whether captions are empty/duplicate/blacklist-hit heavy, and apply add/remove/cleanup operations to the current caption or all preview captions before export. Preview edits are temporary export data, not automatic saves; nothing is written to source images or the database until the user explicitly exports, copies, or downloads.
+- Why:
+  A plain preview list does not help users fix LoRA training captions before writing sidecars. Users need to remove boilerplate, add trigger/helper tags, and quickly normalize a batch of similar images while seeing which image each caption belongs to. BooruDatasetTagManager is useful because it treats caption review as an editor with queue/current/common-tag panels, not as a static text dump.
+- Do not "improve" this by:
+  Reverting the preview to a simple row list or one textarea, hiding per-image edited state, making tag tools depend only on visible button text, limiting the queue to an arbitrary tiny first-five sample when the preview API can render more, implying edits auto-save to the DB/source files, or letting edited preview captions apply only to clipboard/download while sidecar export ignores them.
+- Allowed evolution:
+  Add multi-select editing, autocomplete from a tag dictionary, translation columns, tag confidence display, paging beyond the first preview chunk, keyboard shortcuts, or richer exact/contains blacklist modes if the queue/current/shared-tag workbench model and export override semantics remain intact.
+- Evidence:
+  `frontend/js/v321-ui.js` renders the queue/current editor/shared-tag/check/cleanup workbench, previews up to 20 selected images, tracks edited captions, exposes stable tool button hooks, and injects/collects caption overrides for export. `frontend/css/vlm.css` keeps the tool buttons compact enough for desktop and mobile without text overflow. `frontend/js/app.js` passes `image_overrides` through the batch export API helper. `backend/services/tag_export_service.py` writes image overrides verbatim. Playwright coverage checks the workbench panels, current edit, cleanup tools, add-all edit, clipboard path, and blacklist payload alignment.
+- Last verified:
+  2026-05-19 with source-server Playwright interaction and desktop/mobile screenshot checks.
+- Related files:
+  `frontend/js/v321-ui.js`
+  `frontend/css/vlm.css`
+  `frontend/js/app.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `backend/services/tag_export_service.py`
+  `backend/tests/test_routers/test_tags.py`
+  `tests/e2e/task7_export_unified.spec.js`
+- Supersedes:
+  The earlier v3.2.1 live-preview implementation that behaved like a passive preview list.
+- Validation:
+  `node --check frontend/js/v321-ui.js frontend/js/app.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js tests/e2e/task7_export_unified.spec.js`; `BASE_URL=http://127.0.0.1:8504 node tests/e2e/task7_export_unified.spec.js`; `cd backend && python3 -m pytest tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_uses_image_overrides_for_preview_edits tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_caption_blacklist_filters_final_caption_tokens tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_template_uses_root_blacklist -q -s`; desktop screenshot `/tmp/sd-preview-workbench-shots/desktop-caption-workbench-v4.png`; mobile screenshot `/tmp/sd-preview-workbench-shots/mobile-caption-workbench-v4.png`.
+
+### ADR-AI-20260519-05: Export blacklist filters final training captions, not only stored tag rows
+- Status: active
+- Area: backend workflow / export semantics / frontend UX
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The Same-name `.txt` export blacklist is a final training-caption filter. For training-caption modes (`caption_tags`, `caption_merged`, `nl_caption`, `prompt_nl`) it must remove matching comma-separated tokens from AI captions, original prompts, and stored tags before writing sidecars. For template mode, the same modal-level blacklist must also filter preset defaults and template variables such as `{quality}`, `{safety}`, `{rating}`, `{count}`, `{trigger}`, `{nl_caption}`, `{prompt}`, `{negative}`, `{tags}`, `{tags:filtered}`, and `{append}`. The live preview, clipboard/download combined output, and real sidecar writer must share the same blacklist semantics.
+- Why:
+  Users use the export blacklist to remove training-caption boilerplate such as `newest`, `highres`, `normal quality`, `score_5`, `safe`, and `1girl`. Those strings can come from preset defaults, prompts, AI captions, rating/count variables, or tag rows. Filtering only stored tag rows makes preview/export misleading and leaves unwanted LoRA captions even when the UI says the blacklist was applied.
+- Do not "improve" this by:
+  Treating blacklist as tag-table-only cleanup, applying it only in the preview path, applying it only inside template options while ignoring the root `blacklist` payload field, letting preset defaults bypass the filter, or changing Anima preset defaults just to hide the bug. The defaults may remain, but blacklist must be authoritative when the user supplies it.
+- Allowed evolution:
+  Richer token matching, per-mode blacklist help text, regex mode, or exact/contains switches can be added if they remain explicit and keep preview, clipboard/download, and real sidecar export aligned.
+- Evidence:
+  `backend/services/tag_export_service.py` filters final caption/prompt tokens for non-template training-caption modes and merges the root request blacklist into template options. `backend/services/export_template_engine.py` filters preset defaults and template variables. `frontend/js/v321-ui.js` passes blacklist into preview and combined output. `frontend/js/app.js` passes template options explicitly for real template sidecar export.
+- Last verified:
+  2026-05-19 with targeted backend tests, fresh v3.2.1 package API export checks, and Playwright export modal checks.
+- Related files:
+  `backend/services/tag_export_service.py`
+  `backend/services/export_template_engine.py`
+  `backend/tests/test_export_template_engine.py`
+  `backend/tests/test_routers/test_tags.py`
+  `frontend/js/app.js`
+  `frontend/js/v321-ui.js`
+  `tests/e2e/task7_export_unified.spec.js`
+- Supersedes:
+  The earlier implicit behavior where the blacklist filtered only tag rows for some export paths.
+- Validation:
+  `cd backend && python3 -m pytest tests/test_export_template_engine.py tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_can_write_prompt_tag_caption_sidecars tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_caption_sidecars_normalize_multiline_parts_to_one_line tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_caption_blacklist_filters_final_caption_tokens tests/test_routers/test_tags.py::TestExportTagsBatch::test_export_batch_template_uses_root_blacklist tests/test_cache_bust.py -q -s`; rebuilt `sd-image-sorter-v3.2.1-linux.tar.gz`, launched a fresh package on port 8502, inserted five fixture images, verified `/api/tags/export-preview`, `caption_merged` sidecar export, and `template`/Anima sidecar export all removed `newest`, `highres`, `normal quality`, `score_5`, `safe`, and `1girl`; `BASE_URL=http://127.0.0.1:8502 node tests/e2e/task7_export_unified.spec.js`.
+
+### ADR-AI-20260519-04: Tagger modal uses task-specific cards instead of layered selects and duplicate action strips
+- Status: active
+- Area: frontend UX / release polish
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The AI Auto Tagging modal is a task switcher, not a raw model dropdown. The top-level tabs remain Local Tagger, Natural Language, and Aesthetic Score, but each tab must show only the controls needed for that task. Natural Language uses two in-app source cards for ToriiGate and VLM API; the native `#tag-model-select` stays hidden as the canonical integration value for existing JS/tests, not as a visible user control. VLM must not show a legacy banner plus a separate utility strip plus a footer start button at the same time. Idle progress bars must stay hidden until a real run starts.
+- Why:
+  Fresh package QA and user review found the previous v3.2.1 Tagger UI confusing: an OS-styled select menu broke the dark modal visually, and Natural Language exposed multiple overlapping concepts at once (tabs, source toggle, model dropdown, VLM banner, VLM utility strip, and footer action). That made the release look unfinished and user-unfriendly even when the backend path worked.
+- Do not "improve" this by:
+  Re-exposing the native model select in the main Tagger workflow, adding another visible VLM/ToriiGate selector beside the source cards, showing VLM Settings/Caption in both an inline strip and the modal footer, or letting `data-tagger-shows` reveal idle progress containers on tab switch.
+- Allowed evolution:
+  The card layout, icons, copy, and model metadata can be refined. A future command palette or advanced model drawer is fine if the primary modal still keeps one clear task path and one primary action per active source.
+- Evidence:
+  `frontend/js/v321-ui.js` renders visible source/model cards while keeping `#tag-model-select` hidden and synchronized. `frontend/css/vlm.css` hides the native select and styles task cards. `frontend/js/ui-refresh.js` delegates Tagger dynamic copy back to v3.2.1 integration so language refresh does not reset Natural Language labels. Playwright task checks assert that duplicate VLM strips, idle progress bars, and local import/export actions stay hidden on the Natural Language tab.
+- Last verified:
+  2026-05-19 with source-server Playwright screenshots and fresh v3.2.1 package Playwright screenshots.
+- Related files:
+  `frontend/index.html`
+  `frontend/css/vlm.css`
+  `frontend/js/v321-ui.js`
+  `frontend/js/ui-refresh.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `tests/e2e/task4_tagger_tabs.spec.js`
+  `tests/e2e/round2_real_api.spec.js`
+- Supersedes:
+  The earlier implicit v3.2.1 Tagger layout that exposed a native select and duplicate VLM action surfaces.
+- Validation:
+  `node --check frontend/js/v321-ui.js frontend/js/ui-refresh.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js tests/e2e/task4_tagger_tabs.spec.js tests/e2e/round2_real_api.spec.js`; `BASE_URL=http://127.0.0.1:8496 node tests/e2e/task4_tagger_tabs.spec.js`; `BASE_URL=http://127.0.0.1:8496 node tests/e2e/task5_setup_routing.spec.js`; rebuilt `sd-image-sorter-v3.2.1-linux.tar.gz`, launched a fresh package on port 8497, and captured `/tmp/sd-v321-fresh-package-design-qa/01-fresh-nl-toriigate.png` plus `/tmp/sd-v321-fresh-package-design-qa/02-fresh-nl-vlm.png`.
+
+### ADR-AI-20260519-03: Successful moves must survive stale missing-file gallery reads
+- Status: active
+- Area: backend workflow / path handling / data model
+- Evidence tier: Tier 1
+- Decision:
+  Moving an indexed image to a new path is authoritative once the file operation succeeds. If a concurrent Gallery read or thumbnail refresh observes the old path as missing, it must not leave the row unreadable when the current DB row now points to an existing moved file. `update_image_path()` clears stale missing-file unreadable state, and Gallery missing-file filtering re-reads the current row before marking an image missing.
+- Why:
+  Auto-Separate and batch move run in the background while the frontend may still refresh thumbnails or Gallery rows from a pre-move snapshot. Without this guard, a real moved file can disappear from normal Gallery queries because the stale old path gets persisted as `File not found on disk`.
+- Do not "improve" this by:
+  Marking missing files from a stale list snapshot without rechecking the current row, or changing `update_image_path()` back to a path-only update that preserves `not found` read errors after a successful move.
+- Allowed evolution:
+  A stronger shared file-mutation transaction or event model is fine if it preserves the invariant that successful move/copy state cannot be poisoned by stale old-path reads.
+- Evidence:
+  `backend/database.py::update_image_path` restores rows with missing/not-found read errors after a successful path update. `backend/services/image_service.py::_filter_and_mark_missing_images` re-reads the current row before marking a listed image unreadable.
+- Last verified:
+  2026-05-19 with targeted backend tests and the Auto-Separate Playwright regression.
+- Related files:
+  `backend/database.py`
+  `backend/services/image_service.py`
+  `backend/tests/test_database.py`
+  `backend/tests/test_routers/test_images.py`
+  `tests/e2e/specs/manual-regression.spec.ts`
+- Supersedes:
+  None
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest backend/tests/test_database.py -k "update_image_path" -q`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp python3 -m pytest backend/tests/test_routers/test_images.py -k "moved_row_missing or skips_missing_files" -q`; `cd tests/e2e && PW_REUSE_SERVER=0 PW_WEB_SERVER_PORT=19333 npx playwright test specs/manual-regression.spec.ts:1075 --project=chromium --workers=1`.
+
+### ADR-AI-20260519-02: Release packages must ship version-specific release notes
+- Status: active
+- Area: release packaging / user-facing docs
+- Evidence tier: Tier 1
+- Decision:
+  Public release archives must include `release-notes.md` copied from `docs/RELEASE_NOTES_v<version>.md` during packaging. The build should fail if that version-specific file is missing. `README.md` download and extraction examples must reference the current `APP_VERSION`, not an older artifact name.
+- Why:
+  Fresh-package QA found the v3.2.1 Linux tarball still shipping a root `release-notes.md` for v3.2.0, and README examples that pointed users at v3.2.0 package names. That directly misleads real users during the exact "download a fresh release package" path.
+- Do not "improve" this by:
+  Copying a stale root `release-notes.md` into packages, hand-editing package staging output after build, or allowing README examples to drift behind `backend/app_info.py`.
+- Allowed evolution:
+  The root `release-notes.md` can be removed or generated from the same source, but packages must continue to get version-specific notes and tests must guard that behavior.
+- Evidence:
+  `scripts/build_release_packages.py::write_release_notes` copies the matching version file into every package staging directory. `backend/tests/test_release_build.py` verifies README package names and the release-notes copy behavior.
+- Last verified:
+  2026-05-19 with release build tests, package integrity validation, and fresh tarball inspection.
+- Related files:
+  `scripts/build_release_packages.py`
+  `backend/tests/test_release_build.py`
+  `README.md`
+  `docs/RELEASE_NOTES_v3.2.1.md`
+- Supersedes:
+  The previous implicit behavior where the root `release-notes.md` was copied as-is.
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_release_build.py`; `python3 scripts/lazy_release_qa.py --artifact-root artifacts/release --version 3.2.1 --skip-server`.
+
+### ADR-AI-20260519-01: Prompt filters keep exact mode by default and expose contains mode
+- Status: active
+- Area: filter semantics / frontend UX / sorting workflow
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  Prompt-term filters support two user-selectable match modes. `exact` remains the default and matches normalized prompt tokens, preserving the old guard against accidental substring matches such as `hero` matching `superhero`. `contains` is opt-in and matches substring text inside the normalized full prompt, so a filter like `takamatsu_tomori` includes free-form variants such as `takamatsu_tomori(bang dream!)` and `takamatsu_tomori(bang dream!!!!!its mygo)`.
+- Why:
+  SD prompt writing is free-form. Character or subject tags are often annotated with parentheses, franchise names, or comments. Exact-only prompt filtering split those variants into separate piles during Auto-Separate and Manual Sort. But switching everything to substring matching would reintroduce overmatching bugs already guarded by exact post-filter tests.
+- Do not "improve" this by:
+  Making contains the silent default, removing exact post-filtering, treating prompt search mode as the same thing as free-text search, or wiring the mode only in Gallery while leaving Auto-Separate / Manual Sort / selection tokens on exact semantics.
+- Allowed evolution:
+  Add richer modes such as token-prefix, regex, or per-term modes if they remain explicit in the UI and carry through Gallery, filtered selection, export previews, Auto-Separate, and Manual Sort.
+- Evidence:
+  Backend query helpers accept `prompt_match_mode` / `promptMatchMode`; Gallery filter state persists `promptMatchMode`; Auto-Separate and Manual Sort copy the same filter contract and pass it to backend batch/sort calls. Regression tests cover exact default behavior, contains-mode parenthesized variants, selection token chunks, export preview paging, and Manual Sort forwarding.
+- Last verified:
+  2026-05-19 with targeted backend/router tests and frontend JS syntax checks.
+- Related files:
+  `backend/database.py`
+  `backend/routers/images.py`
+  `backend/routers/sorting.py`
+  `backend/services/image_service.py`
+  `backend/services/sorting_service.py`
+  `backend/services/tag_export_service.py`
+  `frontend/index.html`
+  `frontend/js/app.js`
+  `frontend/js/autosep.js`
+  `frontend/js/manual-sort.js`
+  `frontend/js/stores/filter-store.js`
+  `frontend/js/modules/utils/filters.js`
+- Supersedes:
+  None
+- Validation:
+  `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_database.py -k "prompt_filter_exact_mode or prompt_filter_contains_mode"`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_routers/test_images.py -k "prompt_contains_mode or token_prompt_contains or respects_prompt_contains_mode"`; `TMPDIR=/tmp TEMP=/tmp TMP=/tmp PYTHONPATH=backend python3 -m pytest -q backend/tests/test_routers/test_sorting.py -k "prompt_match_mode"`; `node --check frontend/js/app.js frontend/js/autosep.js frontend/js/manual-sort.js frontend/js/stores/filter-store.js frontend/js/modules/utils/filters.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js`.
 
 ### ADR-AI-20260515-03: Gallery header stays single-row on 1920px desktop
 - Status: active
@@ -2960,3 +3167,33 @@ Use this structure for future entries:
 - How to verify
 
   Manual: open the gallery, expand Auto-Separate, confirm the "Copy and keep originals" radio is selected. Open Manual Sort, confirm same. Behavioural test: ``node .tmp/test_default_operation_mode.js`` (created in the same commit) loads the page in headless Chromium and asserts the checked radio for each of the three groups is the copy variant.
+
+
+## ADR-2026-05-20: v3.2.1 LoRA export, VLM retry/debug, and model download source semantics
+
+- Status: accepted
+- Context:
+  A user found that the "LoRA Training Template" export path had not been tested, the export modal was visually cramped, the blacklist did not apply reliably to final export captions, and VLM tagging progress lost useful success/error/API status. The same release also added a Download Source selector, but only dependency/PyTorch mirror paths were consistently covered; model downloads still had separate code paths for WD14, ToriiGate, CLIP/FastEmbed, Aesthetic/OpenCLIP, Artist/Kaloscope, SAM3, Civitai, and GitHub-hosted small files.
+- Decision:
+  Same-name batch export now has an explicit `Tags + Natural Language caption` mode (`tags_nl`): prefix, filtered tags, then the VLM/natural-language caption, with no original SD prompt. `Prompt + Natural Language caption` remains the mode that includes the original prompt. LoRA Training Template preview must be tested through the real selection-panel entry and real backend-scanned images, not by injecting fake `.gallery-item` DOM.
+- VLM UI contract:
+  VLM progress/status belongs only to the Natural Language + VLM API source workflow. It must show success count, error count, token count, API status/latency/error, and keep failed image IDs so a Retry Failed button can rerun only those images. The API chat/debug modal is a user-visible inspection tool; it must show sanitized request/response content without leaking API keys.
+- Download source contract:
+  The Download Source setting is not decorative. HuggingFace-hosted models must use the shared endpoint order from `backend/model_download_sources.py`: `auto` = explicit `HF_ENDPOINT` if any, then official HF, then hf-mirror; `hf-mirror` = hf-mirror first; `modelscope` = use real ModelScope only when a compatible ModelScope repo exists, otherwise hf-mirror first with a clear fallback. This now covers WD14, ToriiGate, Artist/Kaloscope runtime use, CLIP/FastEmbed, and Aesthetic/OpenCLIP. Direct providers that are not HuggingFace-compatible stay direct: Civitai Privacy YOLO, GitHub LSNet runtime / LAION linear head, and SAM3's ModelScope checkpoint path.
+- Tests:
+  `tests/e2e/task7_export_unified.spec.js` is the release guard for LoRA Training Template and export preview: it creates real PNGs, scans them through `/api/scan`, imports tags + `ai_caption`, opens the modal from the real selected-gallery action, checks `tags_nl`, blacklist/cleanup, Add All overrides, clipboard path, and viewport containment. `tests/e2e/task4_tagger_tabs.spec.js` guards VLM source auto-save, progress/API status, API Chat, and Retry Failed. Backend tests in `test_mirror_selector.py`, `test_model_service.py`, and `test_artist_identifier_runtime.py` lock shared model download-source semantics.
+- Do not regress:
+  Do not add a new model downloader that reads only raw `HF_ENDPOINT` or hard-codes `huggingface.co` when it is a HuggingFace-hosted model. Do not test export UI by fake DOM injection when the bug class depends on real backend data and selection state. Do not let VLM progress messages follow every tagger tab/source.
+
+
+## ADR-2026-05-20: Color filters are a full Gallery contract, and VLM debug endpoints are redacted URLs
+
+- Status: accepted
+- Context:
+  The v3.2.1 release notes advertised color-based Gallery filtering and sorting, but the shipped stack only partially wired it: cursor pagination passed color filters, while offset pagination, selection tokens, selected-result exports, and frontend filter controls did not. The same review found VLM debug chat already hid keys and image bytes but still exposed endpoint userinfo/query/fragment, which can contain bearer tokens on OpenAI-compatible gateways.
+- Decision:
+  Color filters are first-class Gallery filters, not API-only experimental fields. They must travel through `GET /api/images`, `POST /api/images/selection-token`, `GET /api/images/selection-chunk`, selection-based export/delete/remove paths, saved filter state, and scoped Auto-Separate / Manual Sort filter copies. The frontend must expose brightness range, color temperature, brightness distribution, and color sort options directly in the existing filter/sort surfaces. VLM API Chat may show the endpoint scheme/host/path for debugging, but userinfo, query string, and fragment must be redacted.
+- Do not regress:
+  Do not add a new Gallery filter field without updating list retrieval, filtered selection token contracts, frontend saved state, summary formatting, and docs together. Do not expose full VLM endpoint URLs in debug events; treat query strings and fragments as secret-bearing.
+- Tests:
+  Backend tests cover color filters through offset pagination and selection tokens, VLM debug endpoint redaction, corrupt VLM concurrency setting normalization, color-analysis path resolution, and the router/service boundary for export preview. Frontend validation must include a real browser click through the filter modal so the color params are observed on `/api/images`.

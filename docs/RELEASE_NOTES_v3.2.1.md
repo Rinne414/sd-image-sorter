@@ -2,7 +2,7 @@
 
 **Released**: 2026-05-18
 
-This release is the biggest behind-the-scenes upgrade since v3.0: the Tagger sidebar now opens up to **any** vision-language model (cloud or local), the export pipeline gets a real LoRA-training template engine, and the gallery learns to filter and sort by **color** — not just metadata.
+This release is the biggest behind-the-scenes upgrade since v3.0: the Tagger sidebar now opens up to **any** vision-language model (cloud or local), the export pipeline gets a real LoRA-training template engine, the gallery learns to filter and sort by **color** — not just metadata, and the **frontend UX got a final pre-release polish pass** (i18n cache-bust, 3-tab tagger, unified export with per-image preview/edit, ❓ Help reachable on every viewport).
 
 ---
 
@@ -14,6 +14,7 @@ This release is the biggest behind-the-scenes upgrade since v3.0: the Tagger sid
 - **Export template engine** with 7 LoRA training presets (Anima, IL/Pony, NoobAI, FLUX, Kohya, Custom).
 - **Color-based filter & sort** in the gallery (brightness, saturation, color temperature, distribution shape).
 - **Mass tag editor** (Tag-Master inspired) with dry-run previews.
+- **UX polish (pre-release)**: i18n cache-bust on every JS/CSS URL so a normal F5 refreshes language packs, 3-tab Tagger modal (Local / Natural Language / Aesthetic), unified Export modal with always-on per-image preview/edit + "Copy combined to clipboard" / "Download single file", Model Manager card buttons readable in zh-CN at 1366×768, ❓ Help button always reachable (incl. ≤768px hamburger menu), and gallery auto-refreshes after tagging or VLM batch finishes.
 
 ---
 
@@ -111,9 +112,7 @@ The export system now supports 7 LoRA training presets, each tuned for a specifi
 
 **New content modes**: `nl_caption` (natural language only), `prompt_nl` (original prompt + NL caption), `template` (uses the engine).
 
-**Live preview API**: `POST /api/tags/export-preview` renders captions for up to 20 sample images at once so users can see what they'll get before committing.
-
-> The frontend export modal redesign with per-image edit + thumbnail will follow in a UI polish release. The backend API is stable in v3.2.1, so external scripts and the existing batch export already work with the new presets.
+**Live preview API + UI**: `POST /api/tags/export-preview` renders captions for up to 20 sample images at once. The batch-export modal now uses it for the always-visible preview pane, thumbnail rows, per-image edits, and combined clipboard/download output.
 
 ### 6. Color-based gallery filter and sort
 
@@ -134,6 +133,8 @@ Indexes on brightness, temperature, distribution, and skew for fast filtering.
 
 **New filter parameters** in `/api/images`: `brightness_min`, `brightness_max`, `color_temperature`, `brightness_distribution`.
 
+The Gallery filter modal includes a Colors panel for brightness range, color temperature, and brightness-distribution shape, and the Gallery sort menu exposes Brightest, Most Saturated, and Brightness Spread with the existing reverse-sort toggle.
+
 **Histogram shape classification** distinguishes:
 - `edge_heavy` → line art, sketches, B&W comics (high contrast, both ends of histogram)
 - `middle_heavy` → typical photos, anime cels
@@ -143,9 +144,7 @@ Indexes on brightness, temperature, distribution, and skew for fast filtering.
 
 **Performance**: ~5-15ms per image on a 64×64 thumbnail. Negligible vs metadata parsing.
 
-**Backfill for existing libraries**: `POST /api/colors/analyze` runs batch color analysis on images that don't have data yet. Concurrency-controlled, cancelable, progress polling. Use `/api/colors/missing-count` to see how many images need analysis.
-
-> Frontend filter pills and a "color UI" panel will follow in a UI polish release.
+**Backfill for existing libraries**: `POST /api/colors/analyze` runs batch color analysis on images that don't have data yet. Cancelable, progress polling. Use `/api/colors/missing-count` to see how many images need analysis.
 
 ### 7. Mass tag editor (Tag-Master inspired)
 
@@ -224,7 +223,6 @@ Useful for cleaning up WD14 mistakes across an entire library, normalizing tag v
 
 ## Known Limitations
 
-- Frontend UI for the new export template engine (per-image edit, thumbnail preview) is a follow-up — backend APIs are stable.
-- Frontend UI for color filter pills and mass tag editor is a follow-up — backend APIs are stable.
+- Color filter pills and mass tag editor UI are follow-up polish items; backend APIs are stable.
 - Color extraction is currently opt-in for existing libraries (not auto-run on every gallery open). Trigger via `/api/colors/analyze` once.
 - VLM proxy / Vertex auth UI in the settings modal lives under "Advanced Settings" — not surfaced by default.
