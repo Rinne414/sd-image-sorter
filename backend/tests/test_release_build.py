@@ -252,6 +252,23 @@ def test_release_public_docs_versions_follow_app_info():
         changelog_text,
         re.MULTILINE,
     )
+    assert "sd-image-sorter-v3.2.0-" not in readme_text
+    assert f"tar xzf sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
+
+
+def test_release_packages_use_version_specific_release_notes(tmp_path):
+    release_builder = load_release_builder()
+    app_version = _read_app_version()
+
+    notes_path = ROOT / "docs" / f"RELEASE_NOTES_v{app_version}.md"
+    assert notes_path.exists()
+
+    copied_path = release_builder.write_release_notes(tmp_path, app_version)
+    copied_text = copied_path.read_text(encoding="utf-8")
+
+    assert copied_path.name == "release-notes.md"
+    assert copied_text == notes_path.read_text(encoding="utf-8")
+    assert f"v{app_version}" in copied_text
 
 
 def test_release_bootstrap_downloads_are_pinned_to_immutable_sources():
@@ -600,10 +617,23 @@ def test_launchers_reject_python_older_than_runtime_lock():
     assert "Python 3.12" in run_bat
     assert "LSS 12" in run_bat
     assert "Python 3.9" not in run_bat
-    assert "backend/launcher_pip.py install setuptools wheel" in run_sh
+    # Mirror probe (v3.2.1) inserts ``--index-url`` / ``--extra-index-url``
+    # flags between ``launcher_pip.py install`` and the package arguments, so
+    # the original single-substring match is split into two checks.
+    assert "backend/launcher_pip.py install" in run_sh
+    assert "setuptools wheel" in run_sh
     assert 'INSTALL_REQUIREMENTS="backend/requirements-core.txt"' in run_sh
     assert 'SD_IMAGE_SORTER_INSTALL_FULL_AI' in run_sh
-    assert 'backend/launcher_pip.py install --no-build-isolation -r "${INSTALL_REQUIREMENTS}"' in run_sh
+    assert "--no-build-isolation" in run_sh
+    assert '-r "${INSTALL_REQUIREMENTS}"' in run_sh
+    # Mirror probe contract — both launchers must probe before installing and
+    # pass the picked URL with an official fallback so a slow path to
+    # pypi.org's Fastly CDN cannot dominate the ~1.5 GB requirements install.
+    assert "backend/mirror_probe_stdlib.py" in run_sh
+    assert '--index-url "${PIP_INDEX_URL}"' in run_sh
+    assert "--extra-index-url https://pypi.org/simple" in run_sh
+    assert "backend\\mirror_probe_stdlib.py" in run_bat
+    assert "--index-url \"!PIP_INDEX_URL!\"" in run_bat
     assert "macOS is not supported by this release package" in run_sh
     assert "--index-url https://download.pytorch.org/whl/cpu torch==2.11.0 torchvision==0.26.0" in run_sh
     assert "requirements-linux-runtime.txt" in run_sh
@@ -615,8 +645,10 @@ def test_launchers_reject_python_older_than_runtime_lock():
     assert 'VENV_REBUILD_MARKER="${STATE_DIR}/rebuild-core-venv.json"' in run_sh
     assert 'rm -rf "backend/venv"' in run_sh
     assert 'rm -f "backend/.requirements_hash"' in run_sh
-    assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install setuptools wheel" in run_bat
-    assert 'backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install --no-build-isolation -r "!INSTALL_REQUIREMENTS!"' in run_bat
+    assert "backend\\venv\\Scripts\\python.exe backend\\launcher_pip.py install" in run_bat
+    assert "setuptools wheel" in run_bat
+    assert "--no-build-isolation" in run_bat
+    assert '-r "!INSTALL_REQUIREMENTS!"' in run_bat
     assert 'VENV_REBUILD_MARKER=%STATE_DIR%\\rebuild-core-venv.json' in run_bat
     assert 'rmdir /s /q "backend\\venv"' in run_bat
     assert 'del "backend\\.requirements_hash"' in run_bat

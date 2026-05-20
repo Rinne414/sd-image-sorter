@@ -142,6 +142,18 @@ if (filteredState.filterKey !== 'active-filter' || filteredState.selectionToken 
     subprocess.run(["node", "-e", script], check=True)
 
 
+def test_v321_modules_read_runtime_selection_store_from_window_app():
+    repo_root = Path(__file__).resolve().parents[2]
+    v321_source = (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8")
+    vlm_source = (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(encoding="utf-8")
+
+    combined_source = v321_source + "\n" + vlm_source
+    assert "window.SelectionStore?.getSelectedIds" not in combined_source
+    assert "window.SelectionStore.getSelectedIds" not in combined_source
+    assert "window.App?.SelectionStore?.getState?.()" in combined_source
+    assert "const chunkSize = 20;" in v321_source
+
+
 def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
     repo_root = Path(__file__).resolve().parents[2]
     source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")

@@ -79,3 +79,58 @@ def test_download_and_extract_github_zip_rejects_oversized_zip(monkeypatch, tmp_
         artist_identifier._download_and_extract_github_zip("https://example.test/runtime.zip", target_dir)
 
     assert not (target_dir / "lsnet_model" / "__init__.py").exists()
+
+
+def test_prepare_artist_assets_prefers_modelscope_when_configured(monkeypatch, tmp_path: Path):
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    checkpoint = tmp_path / "ms" / "best_checkpoint.pth"
+    mapping = tmp_path / "ms" / "class_mapping.csv"
+    checkpoint.parent.mkdir()
+    checkpoint.write_bytes(b"ckpt")
+    mapping.write_text("class\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(artist_identifier, "_resolve_lsnet_runtime_path", lambda: str(runtime_dir))
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "owner/kaloscope")
+    monkeypatch.setattr(
+        artist_identifier,
+        "_ensure_kaloscope_modelscope_files",
+        lambda: calls.append("modelscope") or (str(checkpoint), str(mapping)),
+    )
+    monkeypatch.setattr(
+        artist_identifier,
+        "_ensure_kaloscope_hf_files",
+        lambda: (_ for _ in ()).throw(AssertionError("HF fallback should not be first when ModelScope is configured")),
+    )
+
+    result = artist_identifier.prepare_artist_assets("modelscope")
+
+    assert calls == ["modelscope"]
+    assert result["source"] == "modelscope"
+    assert result["checkpoint_path"] == str(checkpoint)
+
+
+def test_prepare_artist_assets_modelscope_without_repo_uses_hf_endpoint_order(monkeypatch, tmp_path: Path):
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    checkpoint = tmp_path / "hf" / "best_checkpoint.pth"
+    mapping = tmp_path / "hf" / "class_mapping.csv"
+    checkpoint.parent.mkdir()
+    checkpoint.write_bytes(b"ckpt")
+    mapping.write_text("class\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(artist_identifier, "_resolve_lsnet_runtime_path", lambda: str(runtime_dir))
+    monkeypatch.setattr(artist_identifier, "ARTIST_MODELSCOPE_MODEL_ID", "")
+    monkeypatch.setattr(
+        artist_identifier,
+        "_ensure_kaloscope_hf_files",
+        lambda: calls.append("huggingface") or (str(checkpoint), str(mapping)),
+    )
+
+    result = artist_identifier.prepare_artist_assets("modelscope")
+
+    assert calls == ["huggingface"]
+    assert result["source"] == "huggingface"
+    assert result["checkpoint_path"] == str(checkpoint)

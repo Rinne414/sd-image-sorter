@@ -1206,8 +1206,206 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         content = (output_dir / "multiline_caption.txt").read_text(encoding="utf-8")
-        assert content == "portrait soft smile, best quality cinematic light, solo, cinematic light"
+        assert content == "portrait soft smile, best quality cinematic light, cinematic light"
         assert "\n" not in content
+
+    def test_export_batch_tags_nl_mode_excludes_original_prompt(self, test_client, test_db, tmp_path: Path):
+        """Tags + Natural Language caption is a training-caption mode without original Prompt text."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "tags_nl_caption.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="original prompt should not appear, newest",
+            metadata_json="{}",
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("a blue-haired girl smiling", image_id))
+        db.add_tags(image_id, [
+            {"tag": "blue_hair", "confidence": 0.95},
+            {"tag": "smile", "confidence": 0.9},
+            {"tag": "safe", "confidence": 0.8},
+        ])
+
+        output_dir = tmp_path / "tags_nl_caption_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags_nl",
+                "prefix": "tomori_lora",
+                "blacklist": ["safe", "newest"],
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "tags_nl_caption.txt").read_text(encoding="utf-8")
+        assert content == "tomori_lora, blue_hair, smile, a blue-haired girl smiling"
+        assert "original prompt should not appear" not in content
+        assert "newest" not in content
+        assert "safe" not in content
+
+    def test_export_batch_caption_blacklist_filters_final_caption_tokens(self, test_client, test_db, tmp_path: Path):
+        """Training caption blacklist applies to caption/prompt tokens, not only stored tag rows."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "blacklist_caption.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="newest, highres, normal quality, soft light, 1girl",
+            metadata_json="{}",
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("safe, close-up portrait", image_id))
+        db.add_tags(image_id, [
+            {"tag": "score_5", "confidence": 0.95},
+            {"tag": "blue_eyes", "confidence": 0.9},
+        ])
+
+        output_dir = tmp_path / "blacklist_caption_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "caption_merged",
+                "blacklist": ["newest", "highres", "normal quality", "score_5", "safe", "1girl"],
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "blacklist_caption.txt").read_text(encoding="utf-8")
+        assert content == "close-up portrait, soft light, blue_eyes"
+        for blocked in ["newest", "highres", "normal quality", "score_5", "safe", "1girl"]:
+            assert blocked not in content
+
+    def test_export_batch_template_uses_root_blacklist(self, test_client, test_db, tmp_path: Path):
+        """Template sidecar export must honor the same blacklist field as other modes."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "template_blacklist.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="newest, highres, normal quality, soft light, 1girl",
+            metadata_json="{}",
+        )
+        with db.get_db() as conn:
+            conn.execute("UPDATE images SET ai_caption = ? WHERE id = ?", ("safe, close-up portrait", image_id))
+        db.add_tags(image_id, [
+            {"tag": "score_5", "confidence": 0.95},
+            {"tag": "1girl", "confidence": 0.9},
+            {"tag": "blue_eyes", "confidence": 0.8},
+        ])
+
+        output_dir = tmp_path / "template_blacklist_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "template",
+                "blacklist": ["newest", "highres", "normal quality", "score_5", "safe", "1girl"],
+                "template_options": {
+                    "preset_id": "anima",
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "template_blacklist.txt").read_text(encoding="utf-8")
+        assert content == "close-up portrait, blue eyes"
+        for blocked in ["newest", "highres", "normal quality", "score_5", "safe", "1girl"]:
+            assert blocked not in content
+
+    def test_export_preview_uses_service_boundary(self, test_client, test_db, tmp_path: Path):
+        """Template preview should render through TaggingService, not router-owned DB logic."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "template_preview.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="masterpiece, 1girl, blue eyes",
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [
+            {"tag": "1girl", "confidence": 0.9},
+            {"tag": "blue_eyes", "confidence": 0.8},
+        ])
+
+        response = test_client.post("/api/tags/export-preview", json={
+            "image_ids": [image_id],
+            "preset_id": "anima",
+            "blacklist": ["masterpiece"],
+        })
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["results"][0]["image_id"] == image_id
+        assert payload["results"][0]["filename"] == img_path.name
+        assert payload["results"][0]["error"] is None
+        assert "masterpiece" not in payload["results"][0]["rendered"]
+
+    def test_export_batch_uses_image_overrides_for_preview_edits(self, test_client, test_db, tmp_path: Path):
+        """Live-preview caption edits must be the exact content written by sidecar export."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "preview_override.png"
+        Image.new("RGB", (64, 64), color="white").save(img_path)
+
+        image_id = db.add_image(
+            path=str(img_path),
+            filename=img_path.name,
+            prompt="newest, original prompt",
+            metadata_json="{}",
+        )
+        db.add_tags(image_id, [
+            {"tag": "old_tag", "confidence": 0.9},
+        ])
+
+        output_dir = tmp_path / "preview_override_out"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "caption_merged",
+                "blacklist": ["newest"],
+                "image_overrides": {
+                    str(image_id): "manual_preview_caption, qa_global_tag",
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        content = (output_dir / "preview_override.txt").read_text(encoding="utf-8")
+        assert content == "manual_preview_caption, qa_global_tag"
+        assert "old_tag" not in content
+        assert "original prompt" not in content
 
 
 class TestEdgeCases:

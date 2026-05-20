@@ -14,6 +14,39 @@ def test_cuda_index_candidates_follow_driver_cap():
     assert repair_torch_runtime._cuda_index_candidates(None)[0][0] == "cu128"
 
 
+def test_cuda_index_candidates_rewrite_host_when_mirror_selected(monkeypatch):
+    """If mirror_selector picks tuna/sjtu, the cuXXX URLs must use that host
+    instead of download.pytorch.org. Tests the wiring that makes Chinese
+    users see 60 MB/s instead of 1 MB/s on the 2.5 GB CUDA torch wheel.
+    """
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_resolve_torch_cuda_host",
+        lambda: "https://mirrors.tuna.tsinghua.edu.cn/pytorch-wheels",
+    )
+    candidates = repair_torch_runtime._cuda_index_candidates((12, 8))
+    assert candidates[0][0] == "cu128"
+    assert candidates[0][1] == "https://mirrors.tuna.tsinghua.edu.cn/pytorch-wheels/cu128"
+    labels = [c[0] for c in candidates]
+    urls = [c[1] for c in candidates]
+    for label, url in zip(labels, urls):
+        assert url == f"https://mirrors.tuna.tsinghua.edu.cn/pytorch-wheels/{label}"
+
+
+def test_cuda_index_candidates_official_host_keeps_pinned_urls_untouched(monkeypatch):
+    """When mirror_selector returns the official host (no mirror chosen),
+    the original TORCH_CUDA_INDEXES entries must be returned as-is so the
+    existing fallback-loop tests cannot regress.
+    """
+    monkeypatch.setattr(
+        repair_torch_runtime,
+        "_resolve_torch_cuda_host",
+        lambda: "https://download.pytorch.org/whl",
+    )
+    candidates = repair_torch_runtime._cuda_index_candidates(None)
+    assert candidates == list(repair_torch_runtime.TORCH_CUDA_INDEXES)
+
+
 def test_non_windows_does_not_run_pip(monkeypatch):
     pip_calls = []
     monkeypatch.setattr(repair_torch_runtime.platform, "system", lambda: "Linux")

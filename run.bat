@@ -199,8 +199,23 @@ if !NEED_INSTALL! EQU 0 (
 )
 
 if !NEED_INSTALL! EQU 1 (
+    REM -- Probe the fastest reachable PyPI mirror BEFORE installing.
+    REM    Uses stdlib only because httpx is not available yet.
+    REM    Saves 10-25 minutes on the ~1.5 GB requirements.txt download for
+    REM    users behind slow paths to pypi.org's Fastly CDN.
+    set "PIP_INDEX_URL=https://pypi.org/simple"
+    set "MIRROR_PROBE_OUT=!TMP_DIR!\pip-index-url-!RANDOM!.tmp"
+    "!PYTHON_CMD!" backend\mirror_probe_stdlib.py > "!MIRROR_PROBE_OUT!" 2>nul
+    if exist "!MIRROR_PROBE_OUT!" (
+        set /p PIP_INDEX_URL=<"!MIRROR_PROBE_OUT!"
+        del "!MIRROR_PROBE_OUT!" >nul 2>&1
+    )
+    if not defined PIP_INDEX_URL set "PIP_INDEX_URL=https://pypi.org/simple"
+    echo [Info] PyPI mirror selected: !PIP_INDEX_URL!
+    echo.
+
     echo [INFO] Preparing Python build tools for source-only packages...
-    backend\venv\Scripts\python.exe backend\launcher_pip.py install setuptools wheel
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install --index-url "!PIP_INDEX_URL!" --extra-index-url https://pypi.org/simple setuptools wheel
     if errorlevel 1 (
         echo [ERROR] Failed to install Python build tools.
         pause
@@ -212,7 +227,7 @@ if !NEED_INSTALL! EQU 1 (
     ) else (
         echo       Full AI mode may take 10-20 minutes and download large GPU/runtime packages.
     )
-    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation -r "!INSTALL_REQUIREMENTS!"
+    backend\venv\Scripts\python.exe backend\launcher_pip.py install --no-build-isolation --index-url "!PIP_INDEX_URL!" --extra-index-url https://pypi.org/simple -r "!INSTALL_REQUIREMENTS!"
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies.
         pause

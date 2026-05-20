@@ -1077,6 +1077,25 @@ class TestSortSession:
         kwargs = mock_ids.call_args.kwargs
         assert kwargs["search_query"] == "manual_test_autosep_token_20260405"
 
+    def test_start_sort_session_forwards_prompt_match_mode_from_json_body(self, test_client, tmp_path: Path):
+        """Manual Sort should use the same prompt match mode as the filter modal."""
+        folder = tmp_path / "manual-sort-prompt-mode"
+        with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:
+            response = test_client.post(
+                "/api/sort/start",
+                json={
+                    "prompts": ["takamatsu_tomori"],
+                    "prompt_match_mode": "contains",
+                    "folders": {"w": str(folder)},
+                    "operation_mode": "copy",
+                },
+            )
+
+        assert response.status_code == 200
+        kwargs = mock_ids.call_args.kwargs
+        assert kwargs["prompt_terms"] == ["takamatsu_tomori"]
+        assert kwargs["prompt_match_mode"] == "contains"
+
     def test_start_sort_session_forwards_artist_filter(self, test_client):
         """Manual sort should pass the normalized artist filter into the ID query."""
         with patch("services.sorting_service.db.get_filtered_image_ids", return_value=[]) as mock_ids:

@@ -514,6 +514,41 @@ class TestImageCRUD:
         image = db.get_image_by_id(image_id)
         assert "new_path.png" in image["path"]
 
+    def test_update_image_path_restores_stale_missing_read_error(self, test_db):
+        """A successful move should clear stale missing-file state."""
+        image_id = db.add_image(
+            path="/test/old_path.png",
+            filename="old_path.png",
+            prompt="move race",
+        )
+        db.mark_image_unreadable(image_id, "File not found on disk")
+
+        db.update_image_path(image_id, "/test/new_path.png")
+
+        image = db.get_image_by_id(image_id)
+        assert image["path"] == "/test/new_path.png"
+        assert image["filename"] == "new_path.png"
+        assert image["is_readable"] == 1
+        assert image["read_error"] is None
+        assert image["metadata_status"] == "complete"
+
+    def test_update_image_path_preserves_non_missing_read_error(self, test_db):
+        """Path updates should not hide genuine decode or permission errors."""
+        image_id = db.add_image(
+            path="/test/old_path.png",
+            filename="old_path.png",
+            prompt="move race",
+        )
+        db.mark_image_unreadable(image_id, "Unsupported image format")
+
+        db.update_image_path(image_id, "/test/new_path.png")
+
+        image = db.get_image_by_id(image_id)
+        assert image["path"] == "/test/new_path.png"
+        assert image["is_readable"] == 0
+        assert image["read_error"] == "Unsupported image format"
+        assert image["metadata_status"] == "error"
+
     def test_add_image_reuses_existing_row_for_windows_path_variants(self, test_db):
         """Same Windows file should not duplicate rows across slash/case variants."""
         import sqlite3
@@ -1272,6 +1307,94 @@ class TestImageFiltering:
         assert images[0]["id"] == image_id
         assert "embedding" not in images[0]
         json.dumps(images)
+
+    def test_prompt_filter_exact_mode_excludes_parenthesized_variants_by_default(self, test_db):
+        """Exact prompt filters keep token semantics unless the caller opts into contains matching."""
+        exact_id = db.add_image(
+            path="/test/prompt_exact_plain.png",
+            filename="prompt_exact_plain.png",
+            prompt="takamatsu_tomori, 1girl",
+        )
+        db.add_image(
+            path="/test/prompt_exact_parenthesized.png",
+            filename="prompt_exact_parenthesized.png",
+            prompt="takamatsu_tomori(bang dream!), 1girl",
+        )
+        db.add_image(
+            path="/test/prompt_exact_substring.png",
+            filename="prompt_exact_substring.png",
+            prompt="not_takamatsu_tomori, 1girl",
+        )
+
+        images = db.get_images(prompt_terms=["takamatsu_tomori"], sort_by="oldest")
+
+        assert [image["id"] for image in images] == [exact_id]
+
+    def test_prompt_filter_contains_mode_includes_parenthesized_variants(self, test_db):
+        """Contains prompt mode should catch free-form character variants with suffix notes."""
+        expected_ids = [
+            db.add_image(
+                path="/test/prompt_contains_plain.png",
+                filename="prompt_contains_plain.png",
+                prompt="takamatsu_tomori, 1girl",
+            ),
+            db.add_image(
+                path="/test/prompt_contains_series.png",
+                filename="prompt_contains_series.png",
+                prompt="takamatsu_tomori(bang dream), 1girl",
+            ),
+            db.add_image(
+                path="/test/prompt_contains_excited.png",
+                filename="prompt_contains_excited.png",
+                prompt="takamatsu_tomori(bang dream!!!!!its mygo), 1girl",
+            ),
+        ]
+        db.add_image(
+            path="/test/prompt_contains_other.png",
+            filename="prompt_contains_other.png",
+            prompt="shiina_taki, 1girl",
+        )
+
+        images = db.get_images(
+            prompt_terms=["takamatsu_tomori"],
+            prompt_match_mode="contains",
+            sort_by="oldest",
+        )
+
+        assert [image["id"] for image in images] == expected_ids
+
+    def test_prompt_filter_contains_mode_paginates_and_ids_without_exact_post_filter(self, test_db):
+        """Contains mode should not use exact post-filter offsets that drop substring matches."""
+        expected_ids = []
+        for value in [
+            "takamatsu_tomori",
+            "takamatsu_tomori(bang dream!)",
+            "takamatsu_tomori(bang dream!!!!!its mygo)",
+        ]:
+            expected_ids.append(
+                db.add_image(
+                    path=f"/test/prompt_contains_page_{len(expected_ids)}.png",
+                    filename=f"prompt_contains_page_{len(expected_ids)}.png",
+                    prompt=f"{value}, 1girl",
+                )
+            )
+
+        first_page = db.get_images_paginated(
+            prompt_terms=["takamatsu_tomori"],
+            prompt_match_mode="contains",
+            sort_by="oldest",
+            limit=2,
+            skip_count=True,
+        )
+        ids = db.get_filtered_image_ids(
+            prompt_terms=["takamatsu_tomori"],
+            prompt_match_mode="contains",
+            sort_by="oldest",
+        )
+
+        assert [image["id"] for image in first_page["images"]] == expected_ids[:2]
+        assert first_page["has_more"] is True
+        assert ids == expected_ids
 
     def test_get_images_paginated_post_filter_scans_beyond_false_positive_window(self, test_db):
         """Post-filter pagination must keep scanning until it finds the true next matches."""

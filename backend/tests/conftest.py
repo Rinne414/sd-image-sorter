@@ -23,6 +23,11 @@ from fastapi.testclient import TestClient
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR", "thread")
+# Force the mirror selector to skip network probes during tests by selecting
+# the official endpoints. test_mirror_selector.py overrides this per-test
+# via monkeypatch when it needs to exercise the probe path.
+os.environ.setdefault("SD_IMAGE_SORTER_PYPI_MIRROR", "official")
+os.environ.setdefault("SD_IMAGE_SORTER_TORCH_CUDA_MIRROR", "official")
 
 
 # ============================================================================
