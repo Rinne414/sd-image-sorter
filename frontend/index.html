@@ -940,130 +940,160 @@
                 </div>
 
                 <!-- Auto-Separate sub-section -->
+            <!-- v3.2.1 task #35: 3-pane workbench redesign — left filter editor,
+                 center preview grid, right action sidebar. Reuses every original
+                 element ID (autosep-destination, btn-execute-autosep, autosep-preview-list,
+                 etc.) so autosep.js keeps working unchanged in this commit. -->
             <div id="view-autosep">
-                <div class="autosep-container">
-                    <div class="autosep-panel">
-                        <div class="autosep-header-row">
-                            <div>
-                                <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
-                                <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.
-                                </p>
-                            </div>
+                <div class="autosep-shell">
+                    <header class="autosep-shell-header">
+                        <div class="autosep-shell-title-block">
+                            <h2 class="panel-title" data-i18n="autosep.title">Auto-Separate Images</h2>
+                            <p class="panel-description" data-i18n="autosep.description">Move images matching your filters to a new folder automatically.</p>
+                        </div>
+                        <div class="autosep-shell-header-actions">
                             <button class="btn btn-ghost btn-small" id="btn-autosep-settings" type="button">⚙️ <span data-i18n="common.settings">Settings</span></button>
                         </div>
+                    </header>
 
-                        <div class="filter-section">
-                            <div class="filter-header-compact">
-                                <h4 data-i18n="autosep.savedConfigs">Saved Configs</h4>
-                                <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
+                    <div class="autosep-shell-body">
+                        <!-- LEFT pane: Filter editor + saved configs + scope status -->
+                        <section class="autosep-pane autosep-pane-filter" aria-labelledby="autosep-pane-filter-title">
+                            <div class="autosep-pane-head">
+                                <strong id="autosep-pane-filter-title" data-i18n="autosep.workbench.filterPaneTitle">Filters</strong>
+                                <button class="btn btn-ghost btn-small" id="btn-autosep-filters" type="button" title="Open the full filter editor in a modal" data-i18n-title="autosep.workbench.filterModalTooltip">
+                                    <span>🔍</span><span data-i18n="gallery.editFilters">Edit Filters</span>
+                                </button>
                             </div>
-                            <div class="autosep-config-controls">
-                                <select id="autosep-config-select" class="input-field"></select>
-                                <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
-                                <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save Current</button>
-                                <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig">Rename</button>
-                                <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
-                            </div>
-                            <div class="autosep-config-summary" id="autosep-config-summary"></div>
-                        </div>
-
-                        <div class="filter-section">
-                            <div class="filter-header-compact">
-                                <h4 data-i18n="filter.criteria">Filter Criteria</h4>
-                                <button class="btn btn-primary btn-small" id="btn-autosep-filters"><span>🔍</span>
-                                    <span data-i18n="gallery.editFilters">Edit Filters</span></button>
-                            </div>
-                            <div class="helper-text" id="autosep-scope-note" data-i18n="autosep.scopeNote">Auto-Separate uses the filters shown below. Later Gallery filter changes are not copied automatically.</div>
-                            <div class="scope-status-card" id="autosep-scope-status">
-                                <div class="scope-status-header">
-                                    <span class="scope-status-badge" id="autosep-scope-badge">Auto-Separate will use these saved filters</span>
-                                    <span class="scope-status-meta" id="autosep-scope-meta">Copied from Gallery: --</span>
+                            <div class="autosep-pane-body">
+                                <!-- Saved configs as a small card so it doesn't dominate the pane.
+                                     Note: kept as a regular <div> rather than <details> after the
+                                     <summary> + flex CSS was rendering empty in Chromium. The
+                                     collapse-on-click behaviour was a nice-to-have, not a contract. -->
+                                <div class="autosep-card autosep-card-configs" id="autosep-configs-card">
+                                    <div class="autosep-card-head">
+                                        <span class="autosep-card-summary-text" data-i18n="autosep.savedConfigs">Saved Configs</span>
+                                        <button class="btn btn-ghost btn-small" id="btn-autosep-new-config" type="button">＋ <span data-i18n="autosep.newConfig">New</span></button>
+                                    </div>
+                                    <div class="autosep-config-controls">
+                                        <select id="autosep-config-select" class="input-field"></select>
+                                        <div class="autosep-config-controls-row">
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
+                                            <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save Current</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig">Rename</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
+                                        </div>
+                                        <div class="autosep-config-summary" id="autosep-config-summary"></div>
+                                    </div>
                                 </div>
-                                <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will still use the filters shown here.</div>
-                                <div class="scope-status-actions">
-                                    <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Copy Current Gallery Filters</button>
-                                    <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Copy Gallery Filters Again</button>
-                                    <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Use These Saved Filters</button>
+
+                                <!-- Scope status: keep all 3 button IDs visible inline. The 3 distinct
+                                     intents (use saved / copy from gallery / resync) remain reachable
+                                     so the locked ADR contract holds. -->
+                                <div class="autosep-card autosep-card-scope" id="autosep-scope-status">
+                                    <div class="autosep-card-head autosep-scope-head">
+                                        <div class="autosep-scope-summary-content">
+                                            <span class="scope-status-badge" id="autosep-scope-badge">Auto-Separate will use these saved filters</span>
+                                            <span class="scope-status-meta" id="autosep-scope-meta">Copied from Gallery: --</span>
+                                        </div>
+                                    </div>
+                                    <div class="autosep-scope-detail-block">
+                                        <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will still use the filters shown here.</div>
+                                        <div class="scope-status-actions">
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Copy Current Gallery Filters</button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Copy Gallery Filters Again</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Use These Saved Filters</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="helper-text autosep-pane-helper" id="autosep-scope-note" data-i18n="autosep.scopeNote">Auto-Separate uses the filters shown below. Later Gallery filter changes are not copied automatically.</p>
+
+                                <!-- Filter summary remains as the single source of truth for what will be matched.
+                                     We move it from a horizontal strip to a vertical readable list inside the pane. -->
+                                <div class="autosep-filter-list filter-summary-compact" id="autosep-filter-summary">
+                                    <span class="summary-item"><strong>Generators:</strong> <span id="autosep-summary-generators" data-i18n="common.all">All</span></span>
+                                    <span class="summary-item"><strong>Tags:</strong> <span id="autosep-summary-tags" data-i18n="common.none">None</span></span>
+                                    <span class="summary-item"><strong>Ratings:</strong> <span id="autosep-summary-ratings" data-i18n="common.all">All</span></span>
+                                    <span class="summary-item"><strong>Checkpoints:</strong> <span id="autosep-summary-checkpoints" data-i18n="common.none">None</span></span>
+                                    <span class="summary-item"><strong>Loras:</strong> <span id="autosep-summary-loras" data-i18n="common.none">None</span></span>
+                                    <span class="summary-item"><strong>Prompts:</strong> <span id="autosep-summary-prompts" data-i18n="common.none">None</span></span>
+                                    <span class="summary-item"><strong>Search:</strong> <span id="autosep-summary-search" data-i18n="common.none">None</span></span>
+                                    <span class="summary-item"><strong>Dimensions:</strong> <span id="autosep-summary-dimensions">Any</span></span>
                                 </div>
                             </div>
-                            <div class="filter-summary-compact" id="autosep-filter-summary">
-                                <span class="summary-item"><strong>Generators:</strong> <span
-                                        id="autosep-summary-generators" data-i18n="common.all">All</span></span>
-                                <span class="summary-item"><strong>Tags:</strong> <span
-                                        id="autosep-summary-tags" data-i18n="common.none">None</span></span>
-                                <span class="summary-item"><strong>Ratings:</strong> <span
-                                        id="autosep-summary-ratings" data-i18n="common.all">All</span></span>
-                                <span class="summary-item"><strong>Checkpoints:</strong> <span
-                                        id="autosep-summary-checkpoints" data-i18n="common.none">None</span></span>
-                                <span class="summary-item"><strong>Loras:</strong> <span
-                                        id="autosep-summary-loras" data-i18n="common.none">None</span></span>
-                                <span class="summary-item"><strong>Prompts:</strong> <span
-                                        id="autosep-summary-prompts" data-i18n="common.none">None</span></span>
-                                <span class="summary-item"><strong>Search:</strong> <span
-                                        id="autosep-summary-search" data-i18n="common.none">None</span></span>
-                                <span class="summary-item"><strong>Dimensions:</strong> <span
-                                        id="autosep-summary-dimensions">Any</span></span>
-                            </div>
-                        </div>
+                        </section>
 
-                        <div class="filter-section">
-                            <h4 data-i18n="autosep.destination">Destination Folder</h4>
-                            <div class="folder-input-group">
-                                <input type="text" id="autosep-destination" class="input-field"
-                                    placeholder="D:\sorted\my-folder">
-                                <button class="btn btn-secondary" id="btn-browse-destination">Browse</button>
+                        <!-- CENTER pane: Preview grid (the main visual focus, gets the most space) -->
+                        <section class="autosep-pane autosep-pane-preview" aria-labelledby="autosep-pane-preview-title">
+                            <div class="autosep-pane-head">
+                                <strong id="autosep-pane-preview-title" data-i18n="autosep.workbench.previewPaneTitle">Preview</strong>
+                                <span class="autosep-pane-head-spacer">
+                                    <span class="autosep-preview-stat" id="autosep-preview">
+                                        <span class="stat-number">0</span>
+                                        <span class="stat-label" data-i18n="common.images">images</span>
+                                    </span>
+                                    <button class="btn btn-secondary btn-small" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
+                                </span>
                             </div>
-                            <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
-                        </div>
+                            <div class="autosep-pane-body autosep-pane-preview-body">
+                                <p class="helper-text autosep-pane-helper" id="autosep-preview-scope-summary">Preview uses the Auto-Separate filters shown here, not the live Gallery filters.</p>
+                                <div class="autosep-preview-list" id="autosep-preview-list">
+                                    <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
+                                </div>
+                                <p class="autosep-preview-hint helper-text" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</p>
+                            </div>
+                        </section>
 
-                        <div class="preview-section">
-                            <h4 data-i18n="autosep.preview">Preview</h4>
-                            <div class="preview-stats" id="autosep-preview">
-                                <span class="stat-number">0</span>
-                                <span class="stat-label" data-i18n="common.images">images</span>
-                            </div>
-                            <div class="autosep-preview-list" id="autosep-preview-list">
-                                <div class="autosep-preview-empty" data-i18n="autosep.previewEmpty">Click "Preview Results" to review matching images before moving them.</div>
-                            </div>
-                            <div class="helper-text" id="autosep-preview-scope-summary">Preview uses the Auto-Separate filters shown here, not the live Gallery filters.</div>
-                            <div class="autosep-preview-hint" data-i18n="autosep.previewHint">Preview now shows every match found by the current filters.</div>
-                            <button class="btn btn-secondary" id="btn-preview-autosep" data-i18n="autosep.previewBtn">Preview Results</button>
-                        </div>
-
-                        <div class="autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
-                            <div class="autosep-action-settings-header">
-                                <h4 id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</h4>
+                        <!-- RIGHT pane: Destination + action mode + run CTA -->
+                        <section class="autosep-pane autosep-pane-action" aria-labelledby="autosep-pane-action-title">
+                            <div class="autosep-pane-head">
+                                <strong id="autosep-pane-action-title" data-i18n="autosep.workbench.actionPaneTitle">Action</strong>
                                 <span class="autosep-action-settings-badge" data-i18n="autosep.actionSettingsBadge">Visible before you run</span>
                             </div>
-                            <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
-                                <label class="segmented-option">
-                                    <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode>
-                                    <span data-i18n="autosep.operationModeMove">Move originals</span>
-                                </label>
-                                <label class="segmented-option">
-                                    <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode checked>
-                                    <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
-                                </label>
-                            </div>
-                            <div class="autosep-inline-options">
-                                <label class="checkbox-label autosep-inline-option">
-                                    <input type="checkbox" id="autosep-confirm-move-main" data-autosep-setting="confirmBeforeMove" checked>
-                                    <span class="checkbox-custom" aria-hidden="true"></span>
-                                    <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
-                                </label>
-                                <label class="checkbox-label autosep-inline-option">
-                                    <input type="checkbox" id="autosep-remember-destination-main" data-autosep-setting="rememberDestination" checked>
-                                    <span class="checkbox-custom" aria-hidden="true"></span>
-                                    <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
-                                </label>
-                            </div>
-                            <small class="helper-text" data-i18n="autosep.actionModeHelp">Move changes the library location. Copy keeps originals untouched.</small>
-                        </div>
+                            <div class="autosep-pane-body autosep-pane-action-body">
+                                <div class="autosep-action-block">
+                                    <label class="autosep-action-block-label" data-i18n="autosep.destination">Destination Folder</label>
+                                    <div class="folder-input-group">
+                                        <input type="text" id="autosep-destination" class="input-field" placeholder="D:\sorted\my-folder">
+                                        <button class="btn btn-secondary" id="btn-browse-destination">Browse</button>
+                                    </div>
+                                    <div class="autosep-settings-summary" id="autosep-settings-summary"></div>
+                                </div>
 
-                        <button class="btn btn-primary btn-large" id="btn-execute-autosep">
-                            <span>📁</span>
-                            <span data-i18n="autosep.moveBtn">Move Images</span>
-                        </button>
+                                <div class="autosep-action-block autosep-action-settings" id="autosep-action-mode-panel" aria-labelledby="autosep-action-settings-title">
+                                    <label class="autosep-action-block-label" id="autosep-action-settings-title" data-i18n="autosep.actionSettingsTitle">File Action</label>
+                                    <div class="segmented-control autosep-operation-control" role="radiogroup" aria-label="Auto-Separate action mode">
+                                        <label class="segmented-option">
+                                            <input type="radio" name="autosep-operation-mode-main" value="move" data-autosep-operation-mode>
+                                            <span data-i18n="autosep.operationModeMove">Move originals</span>
+                                        </label>
+                                        <label class="segmented-option">
+                                            <input type="radio" name="autosep-operation-mode-main" value="copy" data-autosep-operation-mode checked>
+                                            <span data-i18n="autosep.operationModeCopy">Copy and keep originals</span>
+                                        </label>
+                                    </div>
+                                    <div class="autosep-inline-options">
+                                        <label class="checkbox-label autosep-inline-option">
+                                            <input type="checkbox" id="autosep-confirm-move-main" data-autosep-setting="confirmBeforeMove" checked>
+                                            <span class="checkbox-custom" aria-hidden="true"></span>
+                                            <span class="checkbox-text" data-i18n="autosep.confirmMove">Ask before starting</span>
+                                        </label>
+                                        <label class="checkbox-label autosep-inline-option">
+                                            <input type="checkbox" id="autosep-remember-destination-main" data-autosep-setting="rememberDestination" checked>
+                                            <span class="checkbox-custom" aria-hidden="true"></span>
+                                            <span class="checkbox-text" data-i18n="autosep.rememberDestination">Remember destination folder</span>
+                                        </label>
+                                    </div>
+                                    <small class="helper-text" data-i18n="autosep.actionModeHelp">Move changes the library location. Copy keeps originals untouched.</small>
+                                </div>
+
+                                <button class="btn btn-primary btn-large autosep-action-cta" id="btn-execute-autosep">
+                                    <span>📁</span>
+                                    <span data-i18n="autosep.moveBtn">Move Images</span>
+                                </button>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
