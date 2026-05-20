@@ -1252,20 +1252,25 @@ function handleSortKeypress(e) {
 
     e.preventDefault();
 
+    // v3.2.1 task #36: when the OS auto-repeat fires (key held down) we skip
+    // the 300 ms fly-away animation so long-press feels Ctrl+Z fast instead of
+    // gated by animation duration.
+    const fast = Boolean(e.repeat);
+
     if (action === 'undo') {
         undoLastAction();
     } else if (action === 'redo') {
         redoLastAction();
     } else if (action === 'skip') {
-        performSkip();
+        performSkip(fast);
     } else if (action === 'exit') {
         exitSorting();
     } else {
-        performMove(action);
+        performMove(action, fast);
     }
 }
 
-async function performMove(folderKey) {
+async function performMove(folderKey, fast = false) {
     const { $, API, showToast } = window.App;
     const operationVerb = getManualSortOperationVerb();
 
@@ -1285,18 +1290,23 @@ async function performMove(folderKey) {
         // Animate folder highlight
         const folderEl = $(`.sort-folder[data-key="${folderKey}"]`);
         folderEl?.classList.add('active');
-        setTimeout(() => folderEl?.classList.remove('active'), 300);
+        setTimeout(() => folderEl?.classList.remove('active'), fast ? 120 : 300);
 
-        // Animate image flying away
+        // Animate image flying away (skipped on key auto-repeat)
         const direction = DIRECTION_MAP[folderKey];
         const imgWrapper = $('.current-image-wrapper');
-        imgWrapper.classList.add(`fly-${direction}`);
+        if (!fast) {
+            imgWrapper.classList.add(`fly-${direction}`);
+        }
 
         // Play sound
         window.AudioManager?.play('move', folderKey);
 
-        // Wait for animation
-        await sleep(300);
+        // Wait for animation. On long-press auto-repeat we skip the wait so
+        // each action only blocks on the API roundtrip.
+        if (!fast) {
+            await sleep(300);
+        }
 
         // Send action to server
         const result = await API.sortAction('move', folderKey);
@@ -1334,6 +1344,7 @@ async function performMove(folderKey) {
 }
 
 async function performSkip() {
+async function performSkip(fast = false) {
     const { $, API, showToast } = window.App;
 
     // Prevent race condition from rapid keypresses
@@ -1341,9 +1352,11 @@ async function performSkip() {
     ManualSortState.isProcessing = true;
 
     try {
-        // Animate skip
+        // Animate skip (skipped on key auto-repeat)
         const imgWrapper = $('.current-image-wrapper');
-        imgWrapper.classList.add('skip');
+        if (!fast) {
+            imgWrapper.classList.add('skip');
+        }
 
         // Play skip sound
         window.AudioManager?.play('skip');
@@ -1352,7 +1365,9 @@ async function performSkip() {
         ManualSortState.combo = 0;
         updateComboDisplay();
 
-        await sleep(300);
+        if (!fast) {
+            await sleep(300);
+        }
 
         const result = await API.sortAction('skip');
         if (result.error) {

@@ -179,6 +179,17 @@
             this.pollTimer = setInterval(() => this.refreshProgress(), POLL_INTERVAL_MS);
         },
 
+        // v3.2.1 task #34: external entry point used when another flow (e.g.
+        // the "Analyze Colors" common action) kicks off analysis directly.
+        // Forces wasRunning=true so the next idle tick fires the Done banner,
+        // surfaces the toast immediately, and triggers a fresh poll.
+        notifyAnalysisStarted() {
+            this.wasRunning = true;
+            this.openToast();
+            this.refreshProgress();
+            this.startPolling();
+        },
+
         stopPolling() {
             if (this.pollTimer) {
                 clearInterval(this.pollTimer);

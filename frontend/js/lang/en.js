@@ -1244,6 +1244,13 @@ window.I18nLang_en = {
     'selection.copyVerb': 'Copy',
     'selection.exportTagsToFiles': 'Same-name .txt...',
     'selection.censorEdit': 'Censor',
+    // v3.2.1 task #34: new "Analyze Colors" common action
+    'selection.analyzeColors': 'Analyze Colors',
+    'selection.analyzeColorsConfirmTitle': 'Run color analysis on selection?',
+    'selection.analyzeColorsConfirmBody': 'Color analysis will run on {count} selected image(s). It runs locally and you can keep using the app.',
+    'selection.analyzeColorsConfirmBodyCapped': 'Color analysis will run on the first {cap} of {total} selected images. Run again to process the rest.',
+    'selection.analyzeColorsStarted': 'Color analysis started for {count} image(s).',
+    'selection.analyzeColorsFailed': 'Failed to start color analysis',
     'selection.deselectAll': 'Clear',
     'selection.removeFromGallery': 'Remove from Gallery',
     'selection.removeConfirmTitle': 'Remove selected images from gallery?',
