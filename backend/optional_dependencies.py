@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+import logging
+import platform
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
@@ -202,16 +204,41 @@ def _assert_safe_install_target(packages: Sequence[str]) -> None:
     )
 
 
-def install_packages(packages: Sequence[str]) -> None:
+_log = logging.getLogger(__name__)
+
+_WINDOWS_DLL_LOCK_MARKERS = ("WinError 5", "Access is denied", "存取被拒")
+
+
+def install_packages(packages: Sequence[str]) -> bool:
+    """Install packages via pip. Returns True if a DLL-lock fallback was used."""
     if not packages:
-        return
+        return False
     _assert_safe_install_target(packages)
-    subprocess.run(
-        [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *packages],
-        check=True,
-        text=True,
-    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *packages],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "") + (exc.stdout or "")
+        if platform.system() == "Windows" and any(m in stderr for m in _WINDOWS_DLL_LOCK_MARKERS):
+            _log.warning(
+                "pip install hit a locked DLL (another model loaded the same native library). "
+                "Retrying with --no-deps to install the pure-Python portion..."
+            )
+            subprocess.run(
+                [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--no-deps", *packages],
+                check=True,
+                text=True,
+            )
+            importlib.invalidate_caches()
+            return True
+        else:
+            raise
     importlib.invalidate_caches()
+    return False
 
 
 def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
@@ -221,10 +248,10 @@ def ensure_imports(module_names: Iterable[str]) -> DependencyInstallResult:
         locked_package = _lock_package_spec(package_spec)
         if _needs_install(module_name, package_spec) and locked_package not in packages:
             packages.append(locked_package)
-    install_packages(packages)
+    dll_locked = install_packages(packages)
     return DependencyInstallResult(
         installed_packages=tuple(packages),
-        restart_recommended=bool(packages),
+        restart_recommended=bool(packages) or dll_locked,
     )
 
 
@@ -240,10 +267,10 @@ def ensure_group(group: str) -> DependencyInstallResult:
         if _needs_install(module_name, package) and locked_package not in packages_to_install:
             packages_to_install.append(locked_package)
 
-    install_packages(packages_to_install)
+    dll_locked = install_packages(packages_to_install)
     return DependencyInstallResult(
         installed_packages=tuple(packages_to_install),
-        restart_recommended=bool(packages_to_install),
+        restart_recommended=bool(packages_to_install) or dll_locked,
     )
 
 
