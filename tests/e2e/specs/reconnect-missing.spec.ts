@@ -122,6 +122,14 @@ async function getImagesByFilename(request: any) {
 
 test('find moved images reconnects a file through the real gallery UI', async ({ page, request }) => {
   test.setTimeout(120000)
+  // The 🎲 random / 🔎 reconnect-missing buttons are hidden in the gallery
+  // header at < 1500px to free up toolbar space on laptop widths
+  // (commit 60ccb1773497877cf5dd9c458423710e59d26c25). Default Playwright
+  // 'Desktop Chrome' viewport is 1280×720, which is below that threshold,
+  // so this test must explicitly opt into a wider viewport to exercise the
+  // desktop primary entry-point. Mobile users still reach reconnect from the
+  // hamburger menu, but that path is covered separately.
+  await page.setViewportSize({ width: 1600, height: 900 })
   await resetReconnectFixture()
 
   await openMainPage(page)
