@@ -137,6 +137,18 @@ reference/
 .claude/
 .worktrees/
 
+# Kiro CLI per-user state (steering rules under .kiro/steering/ ARE committed
+# on purpose; only personal/local agent + session state is ignored)
+.kiro/agents/
+.kiro/sessions/
+.kiro/cache/
+
+# Local dev screenshots / probe artifacts dropped at repo root
+/batch_export_modal.png
+/color_backfill_banner.png
+/mass_tag_confirm.png
+/mass_tag_editor.png
+
 # Node.js (E2E testing infrastructure, root level)
 node_modules/
 package.json
