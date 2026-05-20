@@ -40,6 +40,7 @@ VALID_CONTENT_MODES = {
     "json",
     # v3.2.1 additions
     "nl_caption",      # Pure natural language caption (ai_caption only)
+    "tags_nl",         # Tags + natural language caption, without original prompt
     "prompt_nl",       # Original prompt + NL caption
     "template",        # Uses export_template_engine with preset/template options
 }
@@ -54,6 +55,8 @@ VALID_OVERWRITE_POLICIES = {"unique", "overwrite", "skip"}
 VALID_OUTPUT_MODES = {"folder", "beside_image"}
 EXPORT_DB_CHUNK_SIZE = 500
 SELECTION_TOKEN_VERSION = 2
+PROMPT_MATCH_MODE_EXACT = "exact"
+PROMPT_MATCH_MODE_CONTAINS = "contains"
 
 
 def _normalize_export_image_ids(image_ids: Iterable[Any]) -> List[int]:
@@ -124,6 +127,7 @@ def iter_selection_token_id_chunks(selection_token: str, chunk_size: int = EXPOR
         min_height=filters.get("minHeight"),
         max_height=filters.get("maxHeight"),
         prompt_terms=filters.get("prompts") or None,
+        prompt_match_mode=filters.get("promptMatchMode") or filters.get("prompt_match_mode") or PROMPT_MATCH_MODE_EXACT,
         aspect_ratio=filters.get("aspectRatio"),
         artist=filters.get("artist"),
         min_aesthetic=filters.get("minAesthetic"),
@@ -146,6 +150,7 @@ def count_selection_token_ids(selection_token: str) -> int:
         min_height=filters.get("minHeight"),
         max_height=filters.get("maxHeight"),
         prompt_terms=filters.get("prompts") or None,
+        prompt_match_mode=filters.get("promptMatchMode") or filters.get("prompt_match_mode") or PROMPT_MATCH_MODE_EXACT,
         aspect_ratio=filters.get("aspectRatio"),
         artist=filters.get("artist"),
         min_aesthetic=filters.get("minAesthetic"),
@@ -250,6 +255,47 @@ def _join_caption_parts(parts: List[str]) -> str:
     return ", ".join(output)
 
 
+def _filter_text_caption_tokens(value: str, blacklist: set[str]) -> List[str]:
+    blocked = {" ".join(str(tag or "").split()).strip().lower() for tag in blacklist if str(tag or "").strip()}
+    if not blocked:
+        normalized = " ".join(str(value or "").split()).strip(",")
+        return [normalized] if normalized else []
+
+    output: List[str] = []
+    for token in str(value or "").replace("\n", " ").split(","):
+        normalized = " ".join(token.split()).strip(",")
+        if not normalized:
+            continue
+        if normalized.lower() in blocked:
+            continue
+        output.append(normalized)
+    return output
+
+
+def _merge_template_blacklist_options(template_options: Optional[Dict[str, Any]], blacklist: set[str]) -> Dict[str, Any]:
+    """Keep the export-modal blacklist authoritative for template sidecars too."""
+    opts = dict(template_options or {})
+    merged: List[str] = []
+    seen: set[str] = set()
+    sources = [opts.get("blacklist") or [], blacklist or set()]
+    for source in sources:
+        if isinstance(source, (str, bytes)):
+            items = [source]
+        else:
+            items = source
+        for raw_item in items:
+            item = str(raw_item or "").strip()
+            if not item:
+                continue
+            key = " ".join(item.split()).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    opts["blacklist"] = merged
+    return opts
+
+
 def build_sidecar_content(
     image: Dict[str, Any],
     tags: List[Dict[str, Any]],
@@ -287,26 +333,32 @@ def build_sidecar_content(
     if mode == "a1111":
         return build_a1111_parameters_text(image)
     if mode == "caption_tags":
-        return _join_caption_parts([prefix, caption, *filtered_tags])
+        return _join_caption_parts([prefix, *_filter_text_caption_tokens(caption, blacklist), *filtered_tags])
     if mode == "caption_merged":
-        return _join_caption_parts([prefix, caption, prompt, *filtered_tags])
+        return _join_caption_parts([
+            prefix,
+            *_filter_text_caption_tokens(caption, blacklist),
+            *_filter_text_caption_tokens(prompt, blacklist),
+            *filtered_tags,
+        ])
     if mode == "nl_caption":
         # Pure natural language caption only
-        return _join_caption_parts([prefix, caption]) if prefix else caption
+        return _join_caption_parts([prefix, *_filter_text_caption_tokens(caption, blacklist)])
+    if mode == "tags_nl":
+        # Training-caption mode: local tags first, then natural-language caption; original prompt is excluded.
+        return _join_caption_parts([prefix, *filtered_tags, *_filter_text_caption_tokens(caption, blacklist)])
     if mode == "prompt_nl":
         # Original prompt + NL caption (separated by newline for clarity)
         parts = []
         if prefix:
             parts.append(prefix)
-        if prompt:
-            parts.append(prompt)
-        if caption:
-            parts.append(caption)
+        parts.extend(_filter_text_caption_tokens(prompt, blacklist))
+        parts.extend(_filter_text_caption_tokens(caption, blacklist))
         return "\n".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
     if mode == "template":
         # Use the export template engine
         from services.export_template_engine import build_export_caption
-        opts = dict(template_options or {})
+        opts = _merge_template_blacklist_options(template_options, blacklist)
         return build_export_caption(image, tags, **opts)
     if mode == "json":
         payload = {
@@ -525,3 +577,51 @@ def export_tags_batch_request(
         "overwrite_policy": overwrite_policy,
         "output_mode": output_mode,
     }
+
+
+def render_export_preview(request: Any) -> Dict[str, Any]:
+    """Render template-engine previews for a small image set without writing sidecars."""
+    image_ids = _normalize_export_image_ids(getattr(request, "image_ids", []) or [])
+    if len(image_ids) > 20:
+        raise HTTPException(status_code=400, detail="Preview limited to 20 images at a time")
+
+    from services.export_template_engine import build_export_caption
+
+    images_map = db.get_images_by_ids(image_ids)
+    tags_map = db.get_image_tags_map(image_ids)
+    results: List[Dict[str, Any]] = []
+
+    for image_id in image_ids:
+        image = images_map.get(image_id)
+        if not image:
+            results.append({"image_id": image_id, "error": "not_found", "rendered": ""})
+            continue
+
+        try:
+            rendered = build_export_caption(
+                image,
+                tags_map.get(image_id, []) or [],
+                preset_id=getattr(request, "preset_id", "custom"),
+                template_override=getattr(request, "template_override", None),
+                trigger=getattr(request, "trigger", ""),
+                blacklist=getattr(request, "blacklist", []) or [],
+                replace_rules=getattr(request, "replace_rules", {}) or {},
+                max_tags=int(getattr(request, "max_tags", 0) or 0),
+                append=getattr(request, "append", []) or [],
+                quality_override=getattr(request, "quality_override", None),
+                safety_override=getattr(request, "safety_override", None),
+                rating_override=getattr(request, "rating_override", None),
+            )
+        except Exception as exc:
+            results.append({"image_id": image_id, "error": str(exc), "rendered": ""})
+            continue
+
+        results.append({
+            "image_id": image_id,
+            "filename": image.get("filename") or "",
+            "thumbnail_path": image.get("path") or "",
+            "rendered": rendered,
+            "error": None,
+        })
+
+    return {"results": results}

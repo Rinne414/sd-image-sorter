@@ -252,14 +252,42 @@ def _detect_nvidia_cuda_version() -> Optional[Tuple[int, int]]:
     return None
 
 
+def _resolve_torch_cuda_host() -> str:
+    """Return the base URL for PyTorch CUDA wheels.
+
+    Calls ``mirror_selector`` to pick the fastest of tuna / sjtu / official.
+    A Chinese user typically sees tuna or sjtu sustain 20–80 MB/s while
+    Fastly's ``download.pytorch.org`` drops to ~1 MB/s, so over a 2.5 GB
+    CUDA wheel the difference is an hour vs a minute. The selector caches
+    its answer for 30 minutes; on any failure we fall through to the
+    official host so a broken cache cannot block the repair.
+    """
+    try:
+        import mirror_selector
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        selection = mirror_selector.select_torch_cuda_host(data_dir=data_dir)
+        if selection.index_url:
+            return selection.index_url.rstrip("/")
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        logger.debug("torch cuda mirror selection skipped: %s", exc)
+    return "https://download.pytorch.org/whl"
+
+
 def _cuda_index_candidates(max_cuda: Optional[Tuple[int, int]]) -> List[Tuple[str, str, Tuple[int, int]]]:
     configured = os.environ.get("SD_IMAGE_SORTER_TORCH_CUDA_INDEX_URL")
     if configured:
         return [("custom", configured.strip(), (99, 99))]
+
     if not max_cuda:
-        return list(TORCH_CUDA_INDEXES)
-    compatible = [candidate for candidate in TORCH_CUDA_INDEXES if candidate[2] <= max_cuda]
-    return compatible or [TORCH_CUDA_INDEXES[-1]]
+        base = list(TORCH_CUDA_INDEXES)
+    else:
+        compatible = [candidate for candidate in TORCH_CUDA_INDEXES if candidate[2] <= max_cuda]
+        base = compatible or [TORCH_CUDA_INDEXES[-1]]
+
+    host = _resolve_torch_cuda_host()
+    if host == "https://download.pytorch.org/whl":
+        return base
+    return [(label, f"{host}/{label}", runtime_version) for label, _orig_url, runtime_version in base]
 
 
 def _resolve_pypi_fallback_index() -> str:

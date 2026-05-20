@@ -55,6 +55,11 @@ from metadata_storage import compact_existing_metadata_json, compact_metadata_js
 logger = logging.getLogger(__name__)
 
 
+PROMPT_MATCH_MODE_EXACT = "exact"
+PROMPT_MATCH_MODE_CONTAINS = "contains"
+VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
+
+
 def _adapt_datetime_for_sqlite(value: datetime) -> str:
     """Serialize datetimes explicitly; Python 3.12 deprecates sqlite3's default adapter."""
     return value.isoformat(sep=" ")
@@ -242,6 +247,12 @@ def normalize_prompt_token(token: str) -> str:
     Example: "Best_quality" = "best quality" = "BeStQualITY" -> "best quality"
     """
     return token.lower().replace('_', ' ').strip()
+
+
+def normalize_prompt_match_mode(mode: Optional[str]) -> str:
+    """Normalize prompt filter matching mode, preserving exact matching as the default."""
+    normalized = str(mode or PROMPT_MATCH_MODE_EXACT).strip().lower()
+    return normalized if normalized in VALID_PROMPT_MATCH_MODES else PROMPT_MATCH_MODE_EXACT
 
 
 def escape_like_pattern(value: str) -> str:
@@ -1257,7 +1268,14 @@ def mark_pending_images_metadata_error(image_ids: List[int], read_error: str) ->
 
 
 def add_tags(image_id: int, tags: List[Dict[str, Any]], content_fingerprint: Optional[str] = None) -> None:
-    """Add tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
+    """REPLACE all tags for an image. Each tag dict should have 'tag' and optionally 'confidence'.
+
+    .. warning::
+        The name is historical. This is a **DELETE + INSERT** operation — every
+        existing tag row for ``image_id`` is removed before ``tags`` is inserted.
+        To append a single tag, fetch the existing list first, append in memory,
+        and pass the merged list. See ``backend/routers/tags_bulk.py`` for the
+        canonical merge pattern used by bulk add / remove / cleanup operations.
 
     Uses executemany for batch insert performance.
     """
@@ -1382,6 +1400,14 @@ _IMAGE_COLUMNS_BASE_FIELDS = (
     "tagged_at",
     "ai_caption",
     "aesthetic_score",
+    # Color analysis (migration 010, v3.2.1). All nullable until backfill.
+    "dominant_colors",
+    "avg_brightness",
+    "color_temperature",
+    "color_saturation",
+    "brightness_histogram",
+    "brightness_skew",
+    "brightness_distribution",
 )
 _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "id",
@@ -1407,6 +1433,12 @@ _IMAGE_COLUMNS_WITH_PROMPT_FIELDS = (
     "created_at",
     "tagged_at",
     "aesthetic_score",
+    # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.
+    "dominant_colors",
+    "avg_brightness",
+    "color_temperature",
+    "color_saturation",
+    "brightness_distribution",
 )
 _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "id",
@@ -1430,6 +1462,12 @@ _IMAGE_COLUMNS_LIGHTWEIGHT_FIELDS = (
     "created_at",
     "tagged_at",
     "aesthetic_score",
+    # Color summary for gallery list (v3.2.1). Histogram/skew skipped to keep row light.
+    "dominant_colors",
+    "avg_brightness",
+    "color_temperature",
+    "color_saturation",
+    "brightness_distribution",
 )
 
 
@@ -1689,7 +1727,8 @@ def _apply_search_filter(conditions: List[str], params: List[Any],
 
 
 def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
-                               prompt_terms: Optional[List[str]]) -> tuple:
+                               prompt_terms: Optional[List[str]],
+                               prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT) -> tuple:
     """Apply multi-prompt filter (AND logic - prompt must contain ALL terms).
 
     Uses substring matching (LIKE %term%) with normalization.
@@ -1705,15 +1744,20 @@ def _apply_prompt_terms_filter(conditions: List[str], params: List[Any],
     if not prompt_terms:
         return conditions, params
 
+    match_mode = normalize_prompt_match_mode(prompt_match_mode)
     for term in prompt_terms:
         normalized_term = normalize_prompt_token(term)
         if not normalized_term:
             continue
-        conditions.append(
-            "EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
-            "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
-        )
-        params.append(f"%{escape_like_pattern(normalized_term)}%")
+        if match_mode == PROMPT_MATCH_MODE_CONTAINS:
+            conditions.append("LOWER(REPLACE(COALESCE(i.prompt, ''), '_', ' ')) LIKE ? ESCAPE '\\'")
+            params.append(f"%{escape_like_pattern(normalized_term)}%")
+        else:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM image_prompt_tokens ipt "
+                "WHERE ipt.image_id = i.id AND ipt.token LIKE ? ESCAPE '\\')"
+            )
+            params.append(f"%{escape_like_pattern(normalized_term)}%")
 
     return conditions, params
 
@@ -1937,6 +1981,7 @@ def _fetch_post_filtered_page(
     prompt_terms: Optional[List[str]],
     loras: Optional[List[str]],
     *,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     post_offset: int = 0,
     limit: int,
     fetch_size: Optional[int] = None,
@@ -1966,7 +2011,14 @@ def _fetch_post_filtered_page(
         if not rows:
             break
 
-        batch = _post_filter_results(_rows_to_dicts(rows), prompt_terms, loras, 0, 0)
+        batch = _post_filter_results(
+            _rows_to_dicts(rows),
+            prompt_terms,
+            loras,
+            0,
+            0,
+            prompt_match_mode=prompt_match_mode,
+        )
         collected.extend(batch)
         if target_count is not None and len(collected) >= target_count:
             break
@@ -1988,6 +2040,7 @@ def _fetch_post_filtered_ids(
     prompt_terms: Optional[List[str]],
     loras: Optional[List[str]],
     *,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     post_offset: int = 0,
     limit: Optional[int] = None,
     fetch_size: int = 5000,
@@ -2021,6 +2074,7 @@ def _fetch_post_filtered_ids(
                 row["loras"],
                 normalized_prompt_terms,
                 normalized_loras,
+                prompt_match_mode=prompt_match_mode,
             ):
                 matched_ids.append(int(row["id"]))
                 if target_count is not None and len(matched_ids) >= target_count:
@@ -2040,12 +2094,19 @@ def _matches_exact_post_filters(
     lora_text: Optional[str],
     normalized_prompt_terms: List[str],
     normalized_loras: List[str],
+    *,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
 ) -> bool:
     """Apply the exact prompt/LORA matching semantics used by post-filter paths."""
     if normalized_prompt_terms:
-        image_tokens = extract_prompt_tokens(prompt or "")
-        if not all(term in image_tokens for term in normalized_prompt_terms):
-            return False
+        if normalize_prompt_match_mode(prompt_match_mode) == PROMPT_MATCH_MODE_CONTAINS:
+            normalized_prompt = normalize_prompt_token(prompt or "")
+            if not all(term in normalized_prompt for term in normalized_prompt_terms):
+                return False
+        else:
+            image_tokens = extract_prompt_tokens(prompt or "")
+            if not all(term in image_tokens for term in normalized_prompt_terms):
+                return False
 
     if normalized_loras:
         image_loras = extract_lora_names(lora_text or "", prompt or "")
@@ -2059,7 +2120,9 @@ def _post_filter_results(results: List[Dict[str, Any]],
                          prompt_terms: Optional[List[str]],
                          loras: Optional[List[str]],
                          offset: int,
-                         limit: int) -> List[Dict[str, Any]]:
+                         limit: int,
+                         *,
+                         prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT) -> List[Dict[str, Any]]:
     """Apply in-memory post-filtering for exact matching."""
     if not prompt_terms and not loras:
         return results[offset:offset + limit] if limit else results[offset:]
@@ -2075,6 +2138,7 @@ def _post_filter_results(results: List[Dict[str, Any]],
             img.get("loras"),
             normalized_prompt_terms,
             normalized_loras,
+            prompt_match_mode=prompt_match_mode,
         ):
             filtered_results.append(img)
 
@@ -2099,6 +2163,7 @@ def get_images(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,  # Multi-prompt filter (AND logic)
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     aspect_ratio: Optional[str] = None,  # 'square', 'landscape', 'portrait'
     artist: Optional[str] = None,  # Artist filter
     image_ids: Optional[List[int]] = None,
@@ -2143,7 +2208,9 @@ def get_images(
         cursor = conn.cursor()
 
         # Determine if post-filtering is needed (for exact matching)
-        needs_post_filter = bool(prompt_terms) or bool(loras)
+        normalized_prompt_match_mode = normalize_prompt_match_mode(prompt_match_mode)
+        needs_prompt_post_filter = bool(prompt_terms) and normalized_prompt_match_mode == PROMPT_MATCH_MODE_EXACT
+        needs_post_filter = needs_prompt_post_filter or bool(loras)
         # Include prompt fields when searching or post-filtering
         needs_prompt_fields = bool(search_query) or needs_post_filter
         if needs_post_filter:
@@ -2186,7 +2253,12 @@ def get_images(
         conditions, params = _apply_search_filter(conditions, params, search_query)
 
         # Apply prompt terms filter
-        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+        conditions, params = _apply_prompt_terms_filter(
+            conditions,
+            params,
+            prompt_terms,
+            normalized_prompt_match_mode,
+        )
 
         # Apply dimension filters
         conditions, params = _apply_dimension_filters(
@@ -2223,6 +2295,7 @@ def get_images(
                 order_clause,
                 prompt_terms,
                 loras,
+                prompt_match_mode=normalized_prompt_match_mode,
                 post_offset=offset,
                 limit=limit,
             )
@@ -2248,6 +2321,7 @@ def get_filtered_image_count(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
@@ -2316,7 +2390,12 @@ def get_filtered_image_count(
         conditions, params = _apply_search_filter(conditions, params, search_query)
 
         # Apply prompt terms filter
-        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+        conditions, params = _apply_prompt_terms_filter(
+            conditions,
+            params,
+            prompt_terms,
+            prompt_match_mode,
+        )
 
         # Apply dimension filters
         conditions, params = _apply_dimension_filters(
@@ -2358,6 +2437,7 @@ def get_filtered_image_ids(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
@@ -2399,7 +2479,9 @@ def get_filtered_image_ids(
     with get_db() as conn:
         cursor = conn.cursor()
 
-        needs_post_filter = bool(prompt_terms) or bool(loras)
+        normalized_prompt_match_mode = normalize_prompt_match_mode(prompt_match_mode)
+        needs_prompt_post_filter = bool(prompt_terms) and normalized_prompt_match_mode == PROMPT_MATCH_MODE_EXACT
+        needs_post_filter = needs_prompt_post_filter or bool(loras)
         select_cols = "i.id, i.prompt, i.loras" if needs_post_filter else "i.id"
         query = _build_base_query(sort_by, select_cols)
 
@@ -2432,7 +2514,12 @@ def get_filtered_image_ids(
         conditions, params = _apply_search_filter(conditions, params, search_query)
 
         # Apply prompt terms filter
-        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+        conditions, params = _apply_prompt_terms_filter(
+            conditions,
+            params,
+            prompt_terms,
+            normalized_prompt_match_mode,
+        )
 
         # Apply dimension filters
         conditions, params = _apply_dimension_filters(
@@ -2468,6 +2555,7 @@ def get_filtered_image_ids(
                 order_clause,
                 prompt_terms,
                 loras,
+                prompt_match_mode=normalized_prompt_match_mode,
                 post_offset=normalized_offset,
                 limit=result_limit,
                 fetch_size=fetch_chunk_size,
@@ -2512,6 +2600,7 @@ def iter_filtered_image_id_chunks(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     image_ids: Optional[List[int]] = None,
@@ -2519,6 +2608,11 @@ def iter_filtered_image_id_chunks(
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
     include_unreadable: bool = False,
+    # v3.2.1 color filters
+    brightness_min: Optional[float] = None,
+    brightness_max: Optional[float] = None,
+    color_temperature: Optional[str] = None,
+    brightness_distribution: Optional[str] = None,
 ) -> Iterator[List[int]]:
     """Yield filtered image IDs in bounded chunks without a giant ID list."""
     normalized_chunk_size = max(1, int(chunk_size or 2000))
@@ -2537,6 +2631,7 @@ def iter_filtered_image_id_chunks(
             min_height=min_height,
             max_height=max_height,
             prompt_terms=prompt_terms,
+            prompt_match_mode=prompt_match_mode,
             aspect_ratio=aspect_ratio,
             artist=artist,
             image_ids=image_ids,
@@ -2544,6 +2639,10 @@ def iter_filtered_image_id_chunks(
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
             include_unreadable=include_unreadable,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
             fetch_chunk_size=normalized_chunk_size,
             offset=offset,
             limit=normalized_chunk_size,
@@ -2573,6 +2672,7 @@ def get_images_paginated(
     min_height: Optional[int] = None,
     max_height: Optional[int] = None,
     prompt_terms: Optional[List[str]] = None,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
     aspect_ratio: Optional[str] = None,
     artist: Optional[str] = None,
     skip_count: bool = False,  # Option to skip expensive COUNT query
@@ -2620,7 +2720,9 @@ def get_images_paginated(
         cursor = conn.cursor()
 
         # Determine if post-filtering is needed
-        needs_post_filter = bool(prompt_terms) or bool(loras)
+        normalized_prompt_match_mode = normalize_prompt_match_mode(prompt_match_mode)
+        needs_prompt_post_filter = bool(prompt_terms) and normalized_prompt_match_mode == PROMPT_MATCH_MODE_EXACT
+        needs_post_filter = needs_prompt_post_filter or bool(loras)
         select_cols = _IMAGE_COLUMNS_FULL if needs_post_filter else _IMAGE_COLUMNS_LIGHTWEIGHT
 
         # Build base query with sorting subqueries
@@ -2652,7 +2754,12 @@ def get_images_paginated(
         conditions, params = _apply_search_filter(conditions, params, search_query)
 
         # Apply prompt terms filter
-        conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+        conditions, params = _apply_prompt_terms_filter(
+            conditions,
+            params,
+            prompt_terms,
+            normalized_prompt_match_mode,
+        )
 
         # Apply dimension filters
         conditions, params = _apply_dimension_filters(
@@ -2725,6 +2832,7 @@ def get_images_paginated(
                 order_clause,
                 prompt_terms,
                 loras,
+                prompt_match_mode=normalized_prompt_match_mode,
                 post_offset=0,
                 limit=limit + 1,
             )
@@ -2752,7 +2860,8 @@ def get_images_paginated(
                 conn, generators, tags, ratings, checkpoints, loras,
                 search_query, prompt_terms, artist, min_width, max_width,
                 min_height, max_height, aspect_ratio, include_unreadable,
-                min_aesthetic, max_aesthetic
+                min_aesthetic, max_aesthetic,
+                prompt_match_mode=normalized_prompt_match_mode,
             )
 
         # Determine next cursor from the last row returned in this page
@@ -2787,6 +2896,7 @@ def _get_filtered_count(
     include_unreadable: bool = False,
     min_aesthetic: Optional[float] = None,
     max_aesthetic: Optional[float] = None,
+    prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
 ) -> int:
     """Get total count for filtered images.
 
@@ -2820,7 +2930,12 @@ def _get_filtered_count(
     conditions, params = _apply_search_filter(conditions, params, search_query)
 
     # Apply prompt terms filter
-    conditions, params = _apply_prompt_terms_filter(conditions, params, prompt_terms)
+    conditions, params = _apply_prompt_terms_filter(
+        conditions,
+        params,
+        prompt_terms,
+        prompt_match_mode,
+    )
 
     # Apply dimension filters
     conditions, params = _apply_dimension_filters(
@@ -2913,6 +3028,17 @@ def get_images_missing_color_data(limit: int = 100) -> List[Dict[str, Any]]:
             (limit,),
         )
         return [{"id": row[0], "path": row[1]} for row in cursor.fetchall()]
+
+
+def count_images_missing_color_data() -> int:
+    """Count images still needing color analysis. Uses indexed column; constant memory."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM images WHERE avg_brightness IS NULL AND is_readable = 1"
+        )
+        row = cursor.fetchone()
+        return int(row[0] if row else 0)
 
 
 def get_image_by_path(path: str) -> Optional[Dict[str, Any]]:
@@ -3755,13 +3881,45 @@ def iter_untagged_image_id_chunks(chunk_size: int = 1000) -> Iterator[List[int]]
 
 
 def update_image_path(image_id: int, new_path: str):
-    """Update the path of an image (after moving)."""
+    """Update the path of an image after a successful move.
+
+    Gallery requests can race with a move between the filesystem rename and
+    this database update. If that stale read marked the old path as missing,
+    the successful move must restore the row so the image does not disappear.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
         normalized_path = _normalize_indexed_image_path(new_path)
         new_filename = os.path.basename(normalized_path)
         cursor.execute(
-            "UPDATE images SET path = ?, filename = ? WHERE id = ?",
+            """
+            UPDATE images
+            SET path = ?,
+                filename = ?,
+                is_readable = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN 1
+                    ELSE is_readable
+                END,
+                read_error = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN NULL
+                    ELSE read_error
+                END,
+                metadata_status = CASE
+                    WHEN TRIM(COALESCE(read_error, '')) = ''
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%not found%'
+                         OR LOWER(COALESCE(read_error, '')) LIKE '%missing%'
+                    THEN 'complete'
+                    ELSE COALESCE(metadata_status, 'complete')
+                END,
+                indexed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
             (normalized_path, new_filename, image_id)
         )
 

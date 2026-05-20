@@ -52,6 +52,7 @@ ANALYTICS_DEFAULT_LIMIT = 500
 SEARCH_MAX_LENGTH = 1000
 VALID_SORT_ACTIONS = ["move", "skip", "undo", "redo"]
 VALID_FILE_OPERATIONS = ["move", "copy"]
+VALID_PROMPT_MATCH_MODES = {"exact", "contains"}
 SCAN_LOG_HEARTBEAT_SECONDS = max(
     0.0,
     read_float_env("SD_IMAGE_SORTER_SCAN_LOG_HEARTBEAT_SECONDS", 15.0),
@@ -119,6 +120,7 @@ class SortFilterRequest(BaseModel):
     checkpoints: Optional[List[str]] = None
     loras: Optional[List[str]] = None
     prompts: Optional[List[str]] = None
+    prompt_match_mode: str = Field(default="exact")
     artist: Optional[str] = Field(default=None, max_length=500)
     search: Optional[str] = Field(default=None, max_length=SEARCH_MAX_LENGTH)
     min_width: Optional[int] = Field(default=None, ge=DIMENSION_MIN, le=DIMENSION_MAX)
@@ -137,6 +139,14 @@ class SortFilterRequest(BaseModel):
         if v not in VALID_ASPECT_RATIOS:
             raise ValueError(f"aspect_ratio must be one of: {', '.join(VALID_ASPECT_RATIOS)}")
         return v
+
+    @field_validator('prompt_match_mode')
+    @classmethod
+    def validate_prompt_match_mode(cls, v: str) -> str:
+        normalized = str(v or "exact").strip().lower()
+        if normalized not in VALID_PROMPT_MATCH_MODES:
+            raise ValueError("prompt_match_mode must be exact or contains")
+        return normalized
 
     @field_validator('max_width')
     @classmethod
@@ -1326,6 +1336,7 @@ class SortingService:
         checkpoints = request.checkpoints if request.checkpoints else None
         loras = request.loras if request.loras else None
         prompts = request.prompts if request.prompts else None
+        prompt_match_mode = request.prompt_match_mode
         artist = request.artist.strip() if request.artist else None
         search_query = request.search.strip() if request.search else None
 
@@ -1337,6 +1348,7 @@ class SortingService:
             loras=loras,
             search_query=search_query,
             prompt_terms=prompts,
+            prompt_match_mode=prompt_match_mode,
             artist=artist,
             min_width=request.min_width,
             max_width=request.max_width,
@@ -1427,6 +1439,7 @@ class SortingService:
                     loras=loras,
                     search_query=search_query,
                     prompt_terms=prompts,
+                    prompt_match_mode=prompt_match_mode,
                     artist=artist,
                     min_width=request.min_width,
                     max_width=request.max_width,
@@ -1599,6 +1612,7 @@ class SortingService:
         checkpoints: Optional[Any] = None,
         loras: Optional[Any] = None,
         prompts: Optional[Any] = None,
+        prompt_match_mode: str = "exact",
         artist: Optional[str] = None,
         search: Optional[str] = None,
         min_width: Optional[int] = None,
@@ -1636,6 +1650,9 @@ class SortingService:
             raise HTTPException(status_code=400, detail="min_height cannot be greater than max_height")
         if min_aesthetic is not None and max_aesthetic is not None and min_aesthetic > max_aesthetic:
             raise HTTPException(status_code=400, detail="min_aesthetic cannot be greater than max_aesthetic")
+        normalized_prompt_match_mode = str(prompt_match_mode or "exact").strip().lower()
+        if normalized_prompt_match_mode not in VALID_PROMPT_MATCH_MODES:
+            raise HTTPException(status_code=400, detail="prompt_match_mode must be exact or contains")
 
         gen_list = self._coerce_sort_filter_values(generators)
         tag_list = self._coerce_sort_filter_values(tags)
@@ -1654,6 +1671,7 @@ class SortingService:
             loras=lr_list,
             search_query=search_query,
             prompt_terms=prompt_list,
+            prompt_match_mode=normalized_prompt_match_mode,
             artist=artist_name,
             min_width=min_width,
             max_width=max_width,

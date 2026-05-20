@@ -45,6 +45,7 @@ from config import (
     ARTIST_KALOSCOPE_CLASS_MAPPING,
     get_artist_model_dir,
 )
+from model_download_sources import endpoint_label, get_hf_endpoint_order
 
 logger = logging.getLogger("sd-image-sorter.artist")
 
@@ -55,7 +56,6 @@ _processor = None
 _model_lock = threading.Lock()
 ARTIST_THRESHOLD_DEFAULT = 0.03
 _model_source = None
-HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 ARTIST_LSNET_RUNTIME_REVISION = "416d945e65b81ced93f1e762349d790ca92106b1"
 ARTIST_LSNET_RUNTIME_ZIP_URL = (
     f"https://github.com/spawner1145/comfyui-lsnet/archive/{ARTIST_LSNET_RUNTIME_REVISION}.zip"
@@ -107,38 +107,69 @@ def _get_artist_model_root() -> Path:
     return target
 
 
-def _candidate_hf_endpoints() -> List[str]:
-    candidates: List[str] = []
-    configured = str(os.environ.get("HF_ENDPOINT", "") or "").strip().rstrip("/")
-    if configured:
-        candidates.append(configured)
-    candidates.append("")
-    candidates.append(HF_MIRROR_ENDPOINT)
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
 
-    deduped: List[str] = []
-    seen = set()
-    for endpoint in candidates:
-        key = endpoint or "__default__"
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(endpoint)
-    return deduped
+
+def _materialize_existing_file(source: Path, dest: Path) -> bool:
+    if not source.exists() or dest.exists():
+        return dest.exists()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, dest)
+    except OSError:
+        shutil.copy2(source, dest)
+    return True
+
+
+def _copy_existing_tree(source: Path, dest: Path, marker_name: str) -> bool:
+    if not (source / marker_name).exists():
+        return False
+    if (dest / marker_name).exists():
+        return True
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(source, dest)
+    return True
+
+
+def _artist_override_url(filename: str) -> Optional[str]:
+    if filename == ARTIST_KALOSCOPE_CLASS_MAPPING:
+        return os.environ.get("SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL") or None
+    if filename == ARTIST_KALOSCOPE_CHECKPOINT:
+        return os.environ.get("SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL") or None
+    return None
+
+
+def _candidate_hf_endpoints() -> List[str]:
+    return get_hf_endpoint_order(model_name="Artist ID / Kaloscope")
 
 
 def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> str:
+    override_url = _artist_override_url(filename)
+    if override_url:
+        destination = Path(local_dir) / filename
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = destination.with_suffix(destination.suffix + ".tmp")
+        logger.info("Downloading %s from explicit artist override URL", filename)
+        try:
+            request = urllib.request.Request(override_url, headers={"User-Agent": "sd-image-sorter/3.2.1"})
+            with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            tmp_path.replace(destination)
+            return str(destination.resolve())
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+
     last_error: Optional[Exception] = None
     for endpoint in _candidate_hf_endpoints():
         try:
-            base_url = endpoint or "https://huggingface.co"
-            url = f"{base_url.rstrip('/')}/{repo_id}/resolve/main/{filename}"
+            url = f"{endpoint.rstrip('/')}/{repo_id}/resolve/main/{filename}"
             destination = Path(local_dir) / filename
             destination.parent.mkdir(parents=True, exist_ok=True)
             tmp_path = destination.with_suffix(destination.suffix + ".tmp")
-            if endpoint:
-                logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
-            else:
-                logger.info("Downloading %s from %s via HuggingFace", filename, repo_id)
+            logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint_label(endpoint))
             request = urllib.request.Request(url, headers={"User-Agent": "sd-image-sorter/3.1.1"})
             with urllib.request.urlopen(request, timeout=600) as src, tmp_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
@@ -146,7 +177,7 @@ def _hf_download_with_fallback(repo_id: str, filename: str, local_dir: str) -> s
             return str(destination.resolve())
         except Exception as exc:
             last_error = exc
-            logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+            logger.warning("Download failed for %s via %s: %s", filename, endpoint_label(endpoint), exc)
             try:
                 tmp_path.unlink(missing_ok=True)
             except Exception:
@@ -215,6 +246,11 @@ def _ensure_comfyui_lsnet_runtime() -> str:
     if (target_dir / "lsnet_model").exists():
         return str(target_dir)
 
+    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+        legacy_dir = _project_root() / "models" / "artist" / "comfyui-lsnet-runtime"
+        if _copy_existing_tree(legacy_dir, target_dir, "lsnet_model"):
+            return str(target_dir.resolve())
+
     logger.info("Downloading comfyui-lsnet runtime into %s", target_dir)
     _download_and_extract_github_zip(ARTIST_LSNET_RUNTIME_ZIP_URL, target_dir)
     return str(target_dir)
@@ -228,17 +264,26 @@ def _ensure_kaloscope_hf_files() -> Tuple[str, str]:
     if local_checkpoint.exists() and local_mapping.exists():
         return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
-    checkpoint_path = _hf_download_with_fallback(
-        ARTIST_HF_MODEL_ID,
-        ARTIST_KALOSCOPE_CHECKPOINT,
-        str(local_dir),
-    )
-    class_mapping_path = _hf_download_with_fallback(
-        ARTIST_HF_MODEL_ID,
-        ARTIST_KALOSCOPE_CLASS_MAPPING,
-        str(local_dir),
-    )
-    return checkpoint_path, class_mapping_path
+    if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
+        legacy_dir = _project_root() / "models" / "artist" / "kaloscope2.0"
+        _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CHECKPOINT, local_checkpoint)
+        _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CLASS_MAPPING, local_mapping)
+        if local_checkpoint.exists() and local_mapping.exists():
+            return str(local_checkpoint.resolve()), str(local_mapping.resolve())
+
+    if not local_checkpoint.exists():
+        _hf_download_with_fallback(
+            ARTIST_HF_MODEL_ID,
+            ARTIST_KALOSCOPE_CHECKPOINT,
+            str(local_dir),
+        )
+    if not local_mapping.exists():
+        _hf_download_with_fallback(
+            ARTIST_HF_MODEL_ID,
+            ARTIST_KALOSCOPE_CLASS_MAPPING,
+            str(local_dir),
+        )
+    return str(local_checkpoint.resolve()), str(local_mapping.resolve())
 
 
 def _ensure_kaloscope_modelscope_files() -> Tuple[str, str]:
@@ -292,8 +337,27 @@ def prepare_artist_assets(preferred_source: str = "auto") -> Dict[str, str]:
     source_order: List[str]
     preferred = str(preferred_source or "auto").strip().lower()
     if preferred == "modelscope":
-        logger.warning("ModelScope artist preparation is disabled; using direct HuggingFace HTTP instead.")
-    source_order = ["huggingface"]
+        if ARTIST_MODELSCOPE_MODEL_ID:
+            source_order = ["modelscope", "huggingface"]
+        else:
+            logger.warning(
+                "ModelScope artist source selected but no compatible ModelScope model id is configured; "
+                "using the shared HuggingFace endpoint order instead."
+            )
+            source_order = ["huggingface"]
+    elif preferred == "huggingface":
+        source_order = ["huggingface"]
+    else:
+        try:
+            from config import get_download_mirror
+
+            mirror = get_download_mirror()
+        except Exception:
+            mirror = "auto"
+        if mirror == "modelscope" and ARTIST_MODELSCOPE_MODEL_ID:
+            source_order = ["modelscope", "huggingface"]
+        else:
+            source_order = ["huggingface"]
 
     for source in source_order:
         try:

@@ -19,6 +19,7 @@ import threading
 import time
 import traceback
 import re
+import zlib
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from collections import defaultdict, deque
@@ -104,7 +105,7 @@ _PILImage.MAX_IMAGE_PIXELS = 178956970  # ~13400x13400, prevents decompression b
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 import database as db
@@ -424,6 +425,32 @@ if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
 
+# Regex used by GET / to add ``?v=APP_VERSION`` to /static/*.js and *.css URLs
+# in index.html. Matches src="/static/.../foo.js" and href="/static/.../foo.css"
+# but only when no query string is already present, so we never double-append.
+_STATIC_CACHE_BUST_RE = re.compile(r'((?:src|href)=")(/static/[^"?]+\.(?:js|css))(")')
+
+
+def _static_cache_bust_token(asset_path: str) -> str:
+    """Return a cache-bust token that changes for same-version repacks too."""
+    relative_path = asset_path.removeprefix("/static/").replace("/", os.sep)
+    full_path = os.path.join(frontend_path, relative_path)
+    try:
+        stat = os.stat(full_path)
+    except OSError:
+        return APP_VERSION
+    raw = f"{APP_VERSION}:{int(stat.st_mtime_ns)}:{stat.st_size}"
+    return f"{APP_VERSION}.{zlib.crc32(raw.encode('utf-8')) & 0xffffffff:08x}"
+
+
+def _inject_static_cache_busters(html: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        prefix, asset_path, suffix = match.groups()
+        return f'{prefix}{asset_path}?v={_static_cache_bust_token(asset_path)}{suffix}'
+
+    return _STATIC_CACHE_BUST_RE.sub(replace, html)
+
+
 # Include routers
 app.include_router(images.router)
 app.include_router(tags.router)
@@ -663,10 +690,28 @@ async def support_open_log():
 
 @app.get("/")
 async def root():
-    """Serve the main frontend page."""
+    """
+    Serve the main frontend page.
+
+    Injects ``?v=APP_VERSION`` cache-busters onto every ``/static/*.js`` and
+    ``/static/*.css`` reference in ``index.html``. This ensures that when a
+    user upgrades the app (e.g. v3.2.0 -> v3.2.1) the browser refetches the
+    JS/CSS bundles on a normal F5, instead of silently serving the old
+    cached language packs and breaking new i18n keys until the user does a
+    hard refresh (ctrl+shift+r). DB rows, scan progress, filters and
+    selections live in localStorage / SQLite so this is purely a transport
+    fix; no user data is touched.
+    """
     index_path = os.path.join(frontend_path, "index.html")
     if os.path.exists(index_path):
-        return FileResponse(index_path)
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                html = f.read()
+            html = _inject_static_cache_busters(html)
+            return HTMLResponse(content=html, status_code=200)
+        except OSError as exc:
+            logger.warning("Falling back to FileResponse for index.html: %s", exc)
+            return FileResponse(index_path)
     return {"message": "SD Image Sorter API", "docs": "/docs"}
 
 

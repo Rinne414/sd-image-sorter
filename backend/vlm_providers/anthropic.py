@@ -126,6 +126,37 @@ class AnthropicProvider(VLMProvider):
         tokens = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0)
         return {"caption": caption, "tokens": tokens}
 
+    async def _fetch_models(self) -> List[str]:
+        """Call Anthropic's /v1/models endpoint and return id strings.
+
+        Returns an empty list if the request fails for any reason. Anthropic
+        rotates model IDs (claude-3-5-sonnet-... → claude-3-7-sonnet-... →
+        claude-sonnet-4-...) so a hardcoded list goes stale within months.
+        Asking the API for the current list keeps the dropdown honest.
+        """
+        endpoint = self.config.endpoint.rstrip("/") or "https://api.anthropic.com"
+        headers = {"x-api-key": self.config.api_key, "anthropic-version": "2023-06-01"}
+        try:
+            async with make_async_client(self.config, timeout=10.0) as client:
+                resp = await client.get(endpoint + "/v1/models", headers=headers)
+        except Exception as e:
+            logger.debug("Anthropic /v1/models fetch failed: %s", e)
+            return []
+        if resp.status_code != 200:
+            return []
+        try:
+            data = resp.json()
+        except Exception:
+            return []
+        models: List[str] = []
+        for entry in data.get("data") or []:
+            if not isinstance(entry, dict):
+                continue
+            mid = entry.get("id")
+            if isinstance(mid, str) and mid.strip():
+                models.append(mid.strip())
+        return models
+
     async def test_connection(self) -> Dict[str, Any]:
         endpoint = self.config.endpoint.rstrip("/") or "https://api.anthropic.com"
         headers = {"x-api-key": self.config.api_key, "anthropic-version": "2023-06-01"}
@@ -133,7 +164,8 @@ class AnthropicProvider(VLMProvider):
             async with make_async_client(self.config, timeout=10.0) as client:
                 resp = await client.get(endpoint + "/v1/models", headers=headers)
             if resp.status_code == 200:
-                return {"status": "ok", "models": []}
+                models = await self._fetch_models()
+                return {"status": "ok", "models": models}
             if resp.status_code == 401:
                 return {"status": "error", "error": "Invalid API key", "error_type": "auth"}
             return {"status": "ok", "models": [], "note": "Key accepted"}
@@ -141,4 +173,7 @@ class AnthropicProvider(VLMProvider):
             return {"status": "error", "error": str(e), "error_type": "connection"}
 
     async def list_models(self) -> List[str]:
-        return ["claude-sonnet-4-6-20250514", "claude-haiku-4-5-20251001", "claude-opus-4-7-20250219"]
+        # Live query — never invent model IDs. Anthropic ships new
+        # model IDs every release; a hardcoded list goes stale inside
+        # months and shows the user options that 404 on first request.
+        return await self._fetch_models()

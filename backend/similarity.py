@@ -30,6 +30,7 @@ from config import (
 from image_fingerprint import compute_image_content_fingerprint
 from metadata_parser import verify_image_readable
 from model_health import get_clip_local_model_path
+from model_download_sources import apply_hf_endpoint_monkeypatch, endpoint_label, get_hf_endpoint_order
 from utils.source_paths import resolve_existing_indexed_image_path
 from ai_runtime_guard import exclusive_ai_runtime
 
@@ -131,6 +132,10 @@ def _get_embed_model():
                                 "specific_model_path": local_model_path,
                             }
                         )
+                    if not local_model_path:
+                        endpoint = get_hf_endpoint_order(model_name="CLIP Similarity")[0]
+                        apply_hf_endpoint_monkeypatch(endpoint, purpose="CLIP Similarity / FastEmbed")
+                        logger.info("FastEmbed CLIP will use %s unless a local cache is already valid.", endpoint_label(endpoint))
                     with exclusive_ai_runtime("clip-similarity-load"):
                         _embed_model = ImageEmbedding(
                             **model_kwargs,

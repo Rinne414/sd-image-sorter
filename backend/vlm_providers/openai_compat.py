@@ -25,19 +25,37 @@ from vlm_providers.base import (
 logger = logging.getLogger(__name__)
 
 NSFW_REFUSAL_MARKERS = [
+    # Self-referential refusals — these reliably signal "I won't do this".
     "i cannot",
     "i can't",
     "i'm unable",
     "i am unable",
-    "inappropriate",
-    "not appropriate",
+    "cannot process",
+    "cannot assist",
+    "unable to assist",
+    "i'm sorry, but i can",
+    "i am sorry, but i can",
+    "i won't",
+    "i will not",
+    # Policy / "violates" wording — strong signal.
     "violates",
     "content policy",
-    "cannot process",
-    "unable to assist",
-    "cannot assist",
-    "sorry, but",
-    "as an ai",
+    "against my guidelines",
+    "against the guidelines",
+    "against our policy",
+    # Decline wording targeted at sexual/explicit content.
+    "i can't describe",
+    "i cannot describe",
+    "i won't describe",
+    "decline to describe",
+    # NOTE: deliberately NOT triggering on bare phrases like
+    # "as an ai", "sorry, but", "inappropriate", "not appropriate".
+    # Real captions routinely contain these tokens (e.g. "an inappropriate
+    # outfit" in the caption, or "as an AI-generated piece" describing the
+    # image style). Earlier drafts of this list flagged those legitimate
+    # captions as nsfw_refused, which then either dropped the caption or
+    # spent retries fighting the model. Keep the list short and specific
+    # to the refusal-grammar shapes models actually emit when they refuse.
 ]
 
 

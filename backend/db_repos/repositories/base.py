@@ -64,6 +64,7 @@ class ImageFilters:
         loras: Filter by lora names (OR logic)
         search_query: Search in prompt text
         prompt_terms: Multi-prompt filter (AND logic)
+        prompt_match_mode: Prompt filter matching mode ("exact" or "contains")
         min_width: Minimum width constraint
         max_width: Maximum width constraint
         min_height: Minimum height constraint
@@ -80,6 +81,7 @@ class ImageFilters:
     loras: Optional[List[str]] = None
     search_query: Optional[str] = None
     prompt_terms: Optional[List[str]] = None
+    prompt_match_mode: str = "exact"
     min_width: Optional[int] = None
     max_width: Optional[int] = None
     min_height: Optional[int] = None

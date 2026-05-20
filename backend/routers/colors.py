@@ -14,10 +14,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import database as db
 from color_analyzer import analyze_image_colors
+from utils.source_paths import resolve_existing_indexed_image_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/colors", tags=["colors"])
@@ -36,7 +37,15 @@ _state: Dict[str, Any] = {
 
 class AnalyzeRequest(BaseModel):
     image_ids: Optional[List[int]] = None  # None = all images missing data
-    limit: int = 5000  # Cap to prevent runaway analysis
+    limit: int = Field(default=5000, ge=1, le=50000)  # Cap to prevent runaway analysis
+
+
+def _resolve_image_path(image: Dict[str, Any]) -> str:
+    image_path = str((image or {}).get("path") or "")
+    resolved_path = resolve_existing_indexed_image_path(image_path, backend_file=__file__)
+    if not resolved_path:
+        raise HTTPException(404, "Image file not found on disk")
+    return resolved_path
 
 
 @router.post("/analyze")
@@ -62,7 +71,7 @@ async def start_analysis(request: AnalyzeRequest):
             "current_image": "",
         })
 
-    asyncio.get_event_loop().create_task(_run_analysis(target_ids))
+    asyncio.create_task(_run_analysis(target_ids))
     return {"status": "started", "total": len(target_ids)}
 
 
@@ -84,8 +93,7 @@ async def cancel_analysis():
 @router.get("/missing-count")
 async def missing_count():
     """How many images still need color analysis."""
-    missing = db.get_images_missing_color_data(limit=1000000)
-    return {"missing": len(missing)}
+    return {"missing": db.count_images_missing_color_data()}
 
 
 @router.post("/analyze-single/{image_id}")
@@ -95,9 +103,7 @@ async def analyze_single(image_id: int):
     if not image:
         raise HTTPException(404, "Image not found")
 
-    image_path = image.get("path", "")
-    if not image_path or not Path(image_path).exists():
-        raise HTTPException(404, "Image file not found on disk")
+    image_path = _resolve_image_path(image)
 
     color_data = analyze_image_colors(image_path)
     if not color_data:
@@ -109,7 +115,7 @@ async def analyze_single(image_id: int):
 
 async def _run_analysis(image_ids: List[int]) -> None:
     """Run color analysis in a thread pool to avoid blocking event loop."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     for image_id in image_ids:
         with _state_lock:
@@ -123,17 +129,18 @@ async def _run_analysis(image_ids: List[int]) -> None:
                     _state["failed"] += 1
                 continue
 
-            image_path = image.get("path", "")
+            image_path = str(image.get("path") or "")
             with _state_lock:
                 _state["current_image"] = Path(image_path).name if image_path else ""
 
-            if not image_path or not Path(image_path).exists():
+            resolved_image_path = resolve_existing_indexed_image_path(image_path, backend_file=__file__)
+            if not resolved_image_path:
                 with _state_lock:
                     _state["failed"] += 1
                 continue
 
             # Run analysis in thread pool (CPU-bound)
-            color_data = await loop.run_in_executor(None, analyze_image_colors, image_path)
+            color_data = await loop.run_in_executor(None, analyze_image_colors, resolved_image_path)
 
             if color_data:
                 # DB write is fast, can run in main thread

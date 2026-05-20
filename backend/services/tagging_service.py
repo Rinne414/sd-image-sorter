@@ -25,6 +25,7 @@ from services.tag_export_service import (
     count_selection_token_ids,
     export_tags_batch_request,
     iter_selection_token_id_chunks,
+    render_export_preview,
 )
 from utils.source_paths import resolve_existing_indexed_image_path
 from utils.path_validation import normalize_user_path, validate_file_path
@@ -777,6 +778,21 @@ class BatchTagExportRequest(BaseModel):
         return self
 
 
+class ExportPreviewRequest(BaseModel):
+    """Request model for template live preview rendering."""
+    image_ids: List[int] = Field(default_factory=list, max_length=20)
+    preset_id: str = "custom"
+    template_override: Optional[str] = None
+    trigger: str = ""
+    blacklist: List[str] = Field(default_factory=list)
+    replace_rules: Dict[str, str] = Field(default_factory=dict)
+    max_tags: int = 0
+    append: List[str] = Field(default_factory=list)
+    quality_override: Optional[str] = None
+    safety_override: Optional[str] = None
+    rating_override: Optional[str] = None
+
+
 class TaggingService:
     """Service for AI tagging and tag management."""
 
@@ -1004,6 +1020,7 @@ class TaggingService:
 
             cursor.execute("""
                 SELECT i.id, i.path, i.filename, i.generator, i.checkpoint,
+                       i.ai_caption,
                        GROUP_CONCAT(t.tag || ':' || t.confidence, '|||') as tags
                 FROM images i
                 LEFT JOIN tags t ON i.id = t.image_id
@@ -1018,6 +1035,7 @@ class TaggingService:
                     "filename": row["filename"],
                     "generator": row["generator"],
                     "checkpoint": row["checkpoint"],
+                    "ai_caption": row["ai_caption"] or "",
                     "tags": []
                 }
 
@@ -1052,7 +1070,8 @@ class TaggingService:
                 path = img_data.get("path", "")
                 filename = img_data.get("filename", "")
                 tags = self._normalize_import_tags(img_data.get("tags", []))
-                if not tags:
+                ai_caption = str(img_data.get("ai_caption") or "").strip()
+                if not tags and not ai_caption:
                     continue
 
                 image_row = db.get_image_by_path(path) if path else None
@@ -1091,6 +1110,7 @@ class TaggingService:
                 batched_updates.append({
                     "image_id": image_id,
                     "tags": tags,
+                    "ai_caption": ai_caption,
                 })
                 scheduled_image_ids.add(image_id)
                 imported += 1
@@ -1661,6 +1681,10 @@ class TaggingService:
             "overwrite_policy": result.get("overwrite_policy", request.overwrite_policy),
             "output_mode": result.get("output_mode", getattr(request, "output_mode", "folder")),
         }
+
+    def export_preview(self, request: ExportPreviewRequest) -> Dict[str, Any]:
+        """Render export captions for the live preview modal."""
+        return render_export_preview(request)
 
     def fix_rating_tags(self) -> Dict[str, Any]:
         """Clean up duplicate rating tags in existing database."""
