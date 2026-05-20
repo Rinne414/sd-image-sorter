@@ -1002,6 +1002,98 @@ class TestExportTagsBatch:
         assert data["exported"] == 2
         assert (output_dir / "sample.txt").exists()
         assert len(list(output_dir.glob("sample*.txt"))) == 2
+        # LoRA training pipelines look for `<basename>.txt` paired with
+        # `<basename>.<image_ext>`. They do not recognize dual-extension
+        # sidecars like `sample.gif.txt` as captions for `sample.gif`.
+        # The collision-disambiguation fallback must therefore use a
+        # numeric suffix (`sample_1.txt`) rather than embedding the
+        # source extension in the sidecar name.
+        assert not (output_dir / "sample.jpg.txt").exists()
+        assert not (output_dir / "sample.gif.txt").exists()
+        # Exactly one of the two collision paths must be present.
+        # The order depends on which image_id was processed first, so we
+        # accept either `_1` suffix mapped to jpg or to gif.
+        assert (output_dir / "sample_1.txt").exists()
+
+    def test_export_batch_keeps_lora_friendly_sidecar_for_dotted_filenames(self, test_client, test_db, tmp_path: Path):
+        """Source images with extra dots in their stored filename (e.g. ``123.json``,
+        ``photo_v2.bak.png``) must produce LoRA-trainer-friendly sidecars.
+
+        The legacy collision fallback used ``{filename}{extension}`` which
+        wrote ``123.json.txt`` and ``photo_v2.bak.png.txt``. LoRA training
+        scripts pair captions with images by basename match, so those
+        dual-extension sidecars are silently ignored at training time and
+        the model never sees the captions. This regression test pins the
+        new behavior: the sidecar is always ``{basename}{extension}`` for
+        the first occurrence, and ``{basename}_N{extension}`` for any
+        basename collisions.
+        """
+        import database as db
+        from PIL import Image
+
+        # Three images with dotted filenames simulating the failure mode
+        # the user reported (``123.json.txt`` after a tag export).
+        img_a = tmp_path / "123.png"
+        img_b = tmp_path / "123.json"  # the offender from the bug report
+        img_c = tmp_path / "photo.bak.png"
+        Image.new("RGB", (32, 32), color="red").save(img_a)
+        Image.new("RGB", (32, 32), color="green").save(img_c)
+        # ``123.json`` is named with a non-image extension on purpose: in the
+        # original bug report the gallery had a ``.json`` row alongside the
+        # corresponding ``.png`` (likely from an over-permissive scan). The
+        # export filename allocator must still produce a LoRA-friendly
+        # sidecar regardless of the source extension. We write the same PNG
+        # bytes under a ``.json`` filename — PIL refuses to *save* under
+        # ``.json``, but we only need the filename to flow through the
+        # database into the export path.
+        png_bytes = img_a.read_bytes()
+        img_b.write_bytes(png_bytes)
+
+        id_a = db.add_image(path=str(img_a), filename="123.png")
+        id_b = db.add_image(path=str(img_b), filename="123.json")
+        id_c = db.add_image(path=str(img_c), filename="photo.bak.png")
+        db.add_tags(id_a, [{"tag": "tag_a", "confidence": 0.9}])
+        db.add_tags(id_b, [{"tag": "tag_b", "confidence": 0.9}])
+        db.add_tags(id_c, [{"tag": "tag_c", "confidence": 0.9}])
+
+        output_dir = tmp_path / "lora_dataset"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [id_a, id_b, id_c],
+                "output_folder": str(output_dir),
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["exported"] == 3
+
+        # The dual-extension filenames the bug used to produce.
+        assert not (output_dir / "123.json.txt").exists(), (
+            "Sidecar export regressed: '123.json.txt' is the LoRA-incompatible "
+            "filename pattern reported in the v3.2.1 bug report."
+        )
+        assert not (output_dir / "123.png.txt").exists()
+        assert not (output_dir / "photo.bak.png.txt").exists()
+        # 'photo.bak.png' splits to stem='photo.bak' (only the LAST extension
+        # is stripped) and the sidecar is therefore 'photo.bak.txt'. That is
+        # the LoRA-trainer-correct pairing because the trainer matches by
+        # basename: 'photo.bak.png' ↔ 'photo.bak.txt'. We assert the
+        # sidecar uses that stem rather than over-stripping to 'photo.txt'.
+        assert (output_dir / "photo.bak.txt").exists()
+        assert not (output_dir / "photo.txt").exists()
+
+        # The 3 exported files must all use the clean basename + counter pattern.
+        produced = sorted(p.name for p in output_dir.glob("*.txt"))
+        # 123.png stems to '123', 123.json also stems to '123' → collision
+        # between id_a and id_b. photo.bak.png stems to 'photo.bak' → no
+        # collision with the others.
+        assert "123.txt" in produced
+        assert "123_1.txt" in produced
+        assert "photo.bak.txt" in produced
+        assert len(produced) == 3
 
     def test_export_batch_sanitizes_sidecar_filename_from_bad_indexed_data(self, test_client, test_db, tmp_path: Path):
         """Sidecar export must never let a stored filename escape the chosen output folder."""
