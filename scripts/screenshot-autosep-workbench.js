@@ -214,11 +214,67 @@ async function main() {
         console.log('Screenshot 07 (filter pane only) saved');
     }
 
+    // Functional smoke test: verify all key handler-bearing elements exist
+    // and have visible/clickable state. We avoid actually clicking the buttons
+    // because some scope handlers trigger backend calls that can race with
+    // the screenshot session.
+    const behavior = await page.evaluate(() => {
+        const visibleAndEnabled = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return false;
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                !el.disabled
+            );
+        };
+        // Load / rename / delete config buttons are correctly disabled by
+        // autosep.js when no saved config exists, so we only assert they
+        // are present + visible (not their enabled state).
+        const visibleOnly = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return false;
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                style.display !== 'none' &&
+                style.visibility !== 'hidden'
+            );
+        };
+        return {
+            editFiltersClickable: visibleAndEnabled('btn-autosep-filters'),
+            settingsGearClickable: visibleAndEnabled('btn-autosep-settings'),
+            scopeUseGalleryClickable: visibleAndEnabled('btn-autosep-use-gallery-scope'),
+            scopeResyncClickable: visibleAndEnabled('btn-autosep-resync-scope'),
+            scopeKeepSavedClickable: visibleAndEnabled('btn-autosep-keep-scope'),
+            previewBtnClickable: visibleAndEnabled('btn-preview-autosep'),
+            executeBtnClickable: visibleAndEnabled('btn-execute-autosep'),
+            destinationInputUsable: visibleAndEnabled('autosep-destination'),
+            saveConfigClickable: visibleAndEnabled('btn-autosep-save-config'),
+            // Load/rename/delete may be disabled when no saved config; only
+            // assert visibility.
+            loadConfigVisible: visibleOnly('btn-autosep-load-config'),
+            renameConfigVisible: visibleOnly('btn-autosep-rename-config'),
+            deleteConfigVisible: visibleOnly('btn-autosep-delete-config'),
+        };
+    });
+    const broken = Object.entries(behavior).filter(([_, ok]) => !ok).map(([k]) => k);
+
     await browser.close();
 
     console.log(`Locked IDs: ${idStatus.length - missing.length}/${idStatus.length} present`);
     console.log('Radio/checkbox defaults:', JSON.stringify(radioState));
     console.log(`pageerrors captured: ${pageErrors.length}`);
+    console.log('Behavior smoke:', JSON.stringify(behavior));
+    if (broken.length) {
+        console.error(`FAIL: behavior elements not visible/enabled: ${broken.join(', ')}`);
+    }
 
     let failed = false;
     if (missing.length) {

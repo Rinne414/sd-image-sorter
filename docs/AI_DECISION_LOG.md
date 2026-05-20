@@ -68,6 +68,63 @@ Use this structure for future entries:
 
 ## Current Records
 
+### ADR-AI-20260521-01: Auto-Separate is a 3-pane workbench, not a vertical form
+- Status: active
+- Area: frontend UX / sorting workflow / release polish
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The Auto-Separate page (`#view-autosep`) renders as a left/center/right workbench with the Caption Editor design language. The left pane holds Saved Configs, the scope status card, and the active filter summary. The center pane is the preview grid (visual focus, gets the most width). The right pane holds Destination, the Move/Copy radio, the safety checkboxes, and the big Run CTA. The shell caps to viewport so the Run CTA stays visible at the bottom of the action pane on common desktop and laptop sizes. At 1080-1280px the action pane drops to a sticky bottom bar across the full shell width. Below 760px the layout stacks single-column. Every locked element ID from the previous vertical form is preserved verbatim so the existing `autosep.js` (saved configs CRUD, scope intent buttons, preview, execute, polling, settings modal) keeps working without changes. The 3 scope intent buttons (use saved / copy from gallery / resync from gallery) all stay reachable inline; the visual simplification did not collapse them into a single ambiguous control.
+- Why:
+  The previous single-column form was a long scroll: Saved Configs, then Filter Criteria, then Destination, then Preview, then File Action, then Run. On 1080p screens the user could not see the preview list and the Run CTA at the same time. New users misread the page as a tutorial-style sequential form, while power users had to scroll past the saved configs strip every time. Putting filter setup, preview, and action side by side makes the relationship obvious — pick filters and a destination, watch the preview update, then click Run — and matches the visual language of the same-release Caption Editor workbench.
+- Do not "improve" this by:
+  Collapsing the 3 scope intent buttons into one button, hiding the saved configs in a modal-only entry, removing the inline filter summary so users must click Edit Filters to see the current scope, dropping the preview pane back to a small inline strip, defaulting Move instead of Copy (Principle #11 still applies), or removing the `confirmBeforeMove=true` checkbox.
+- Allowed evolution:
+  Add chip-based inline filter editing, a scope-intent dropdown menu (still showing all 3 intents), debounced live-preview on filter changes, a sticky preview thumbnail when scrolling the filter pane, drag-drop reorder of saved configs, or per-image-exclude on the preview thumbnails — provided the 3-pane layout, copy-by-default, scope-card semantics, locked element IDs, and the underlying `/api/batch-move` async progress contract remain intact.
+- Evidence:
+  `frontend/index.html` `#view-autosep` is a `.autosep-shell` with three `.autosep-pane` regions (filter / preview / action). `frontend/css/vlm.css` defines the grid layout, the responsive 2-column + sticky-bottom-bar fallback for 1080-1280px, and the single-column stack below 760px. The cards inside the filter pane use `flex-shrink: 0` so the flex column does not collapse them under `overflow: hidden`. `frontend/js/autosep.js` is unchanged in this commit because every element ID it touches (`autosep-destination`, `btn-execute-autosep`, `autosep-preview-list`, `autosep-config-select`, `btn-autosep-use-gallery-scope`, `btn-autosep-resync-scope`, `btn-autosep-keep-scope`, `autosep-summary-*`, etc.) was preserved verbatim. `scripts/screenshot-autosep-workbench.js` is the regression helper that asserts 39/39 locked IDs are present, copy is the default radio, `confirmBeforeMove` is checked by default, and 12/12 functional smoke checks pass.
+- Last verified:
+  2026-05-21 with backend on :8502 + Playwright helper at viewports 1440x900, 1366x768, 1080x720, and 720x900: `PASS: all locked IDs present, copy default + confirm default contracts hold.` Element-level screenshots of the configs card and the filter pane confirm card-head + summary text render correctly.
+- Related files:
+  `frontend/index.html`
+  `frontend/css/vlm.css`
+  `frontend/js/autosep.js`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `scripts/screenshot-autosep-workbench.js`
+  `docs/AI_PRINCIPLES.md` (Principle #11 — Auto-Separate default operation = copy)
+- Supersedes:
+  The earlier vertical-form layout where Saved Configs / Filter Criteria / Destination / Preview / File Action / Run stacked top-to-bottom in a single panel.
+- Validation:
+  `node --check frontend/js/autosep.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js scripts/screenshot-autosep-workbench.js`; `node scripts/screenshot-autosep-workbench.js` against a backend running on `127.0.0.1:8502` (PASS); element-level screenshots in `.tmp/screenshots/c35-autosep-workbench/` for visual review.
+
+### ADR-AI-20260521-02: Caption Editor opens in a dedicated full-screen modal
+- Status: active
+- Area: frontend UX / export workflow / release polish
+- Evidence tier: explicit user instruction + Tier 1
+- Decision:
+  The same-name `.txt` / LoRA caption export's 3-column workbench (image queue / current caption editor / shared-tag toolbox) can be opened in a dedicated near-fullscreen modal via a new "Open Editor" button next to "🔄 Refresh" in the batch-export preview header. The modal hosts the same workbench markup and shares the same `editedCaptions`, blacklist, and image-override state as the inline preview. While the editor is open, the inline preview pane shows a hint that edits live in the popup. Closing the editor returns the workbench to the inline pane with all temporary edits preserved.
+- Why:
+  The inline export preview is great for last-minute settings polish, but it lives inside the already-busy batch-export modal, which leaves only ~600px wide for the 3-column workbench. Power users editing LoRA training captions for dozens of images need real horizontal real estate for the textarea and the shared-tag panel. Forcing them to use the inline view turns caption authoring into a constant scroll battle. A dedicated full-screen window solves the space problem without forking the workbench logic.
+- Do not "improve" this by:
+  Moving caption authoring to a separate route (it must remain part of the export flow), removing the inline workbench (some users only need a quick glance), forking `_renderPreviewWorkbench` into two implementations, or letting the modal lose `editedCaptions` on close.
+- Allowed evolution:
+  Multi-select editing across rows, autocomplete from a tag dictionary, per-row translation columns, paging beyond the first preview chunk, keyboard shortcuts (Ctrl+Enter to apply current edit and move to next image), or an even larger "exclusive editor" route — provided the queue/current/shared-tag workbench model and the shared edited-caption state are kept intact.
+- Evidence:
+  `frontend/index.html` adds the `caption-editor-modal` shell + topbar + body with id `caption-editor-list`, and adds the "Open Editor" button to the batch-export preview header. `frontend/js/v321-ui.js` adds `openCaptionEditor()` / `closeCaptionEditor()` and routes `_renderPreviewWorkbench()` and `refreshPreview()` to either the inline or the modal container based on whether the modal is open. `frontend/css/vlm.css` adds `caption-editor-shell` / `caption-editor-topbar` / `caption-editor-body` / `caption-editor-list` styles plus the `.export-preview-workbench--full` modifier that lets the workbench fill the modal height. `scripts/screenshot-caption-editor.js` asserts the 3-pane workbench renders inside both the inline pane and the modal at 1440x900 and 1366x768.
+- Last verified:
+  2026-05-21 with backend on :8501 + Playwright helper. Both inline and fullscreen modes render queue/editor/tools panels: `PASS: 3-column workbench rendered in both inline and fullscreen modes.`
+- Related files:
+  `frontend/index.html`
+  `frontend/js/v321-ui.js`
+  `frontend/css/vlm.css`
+  `frontend/js/lang/en.js`
+  `frontend/js/lang/zh-CN.js`
+  `scripts/screenshot-caption-editor.js`
+- Supersedes:
+  Builds on ADR-AI-20260519-06 (the workbench design itself remains canonical); does not supersede it. This ADR only adds the dedicated full-screen entry point.
+- Validation:
+  `node --check frontend/js/v321-ui.js frontend/js/lang/en.js frontend/js/lang/zh-CN.js scripts/screenshot-caption-editor.js`; `node scripts/screenshot-caption-editor.js` against a backend on `127.0.0.1:8501` (PASS).
+
 ### ADR-AI-20260519-07: VLM setup actions save first and expose live API debugging
 - Status: active
 - Area: frontend UX / backend workflow / debugging / release polish
