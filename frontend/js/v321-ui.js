@@ -1020,6 +1020,14 @@ const V321Integration = {
     bindLivePreview() {
         document.getElementById('btn-refresh-preview')?.addEventListener('click', () => this.refreshPreview());
 
+        // v3.2.1 task #33: open / close the dedicated full-screen Caption Editor modal
+        document.getElementById('btn-open-caption-editor')?.addEventListener('click', () => this.openCaptionEditor());
+        document.getElementById('btn-close-caption-editor')?.addEventListener('click', () => this.closeCaptionEditor());
+        document.getElementById('btn-caption-editor-done')?.addEventListener('click', () => this.closeCaptionEditor());
+        document.getElementById('btn-caption-editor-refresh')?.addEventListener('click', () => this.refreshPreview());
+        // Click outside the modal-content (on the backdrop) closes the editor.
+        document.querySelector('#caption-editor-modal .modal-backdrop')?.addEventListener('click', () => this.closeCaptionEditor());
+
         // Refresh when trigger / template changes
         const watchIds = ['lora-trigger-word', 'lora-template-override', 'lora-max-tags',
             'lora-append-text', 'batch-export-prefix', 'batch-export-blacklist'];
@@ -1033,6 +1041,34 @@ const V321Integration = {
                 });
             }
         }
+    },
+
+    /** v3.2.1 task #33: open the dedicated full-screen Caption Editor. */
+    async openCaptionEditor() {
+        const modal = document.getElementById('caption-editor-modal');
+        if (!modal) return;
+        modal.classList.add('visible');
+        modal.style.display = 'flex';
+        document.body.classList.add('modal-open');
+        // If the inline preview hasn't been generated yet, fetch first; otherwise re-render in big container.
+        if (!this.previewResults || !this.previewResults.length) {
+            await this.refreshPreview();
+        } else {
+            this._renderPreviewWorkbench();
+        }
+    },
+
+    /** v3.2.1 task #33: close the editor. Edits are kept in this.editedCaptions. */
+    closeCaptionEditor() {
+        const modal = document.getElementById('caption-editor-modal');
+        if (!modal) return;
+        modal.classList.remove('visible');
+        modal.style.display = '';
+        if (!document.querySelector('.modal.visible')) {
+            document.body.classList.remove('modal-open');
+        }
+        // Re-render workbench in the small inline pane so the user sees their edits there too.
+        this._renderPreviewWorkbench();
     },
 
     _getSelectionState() {
@@ -1099,7 +1135,10 @@ const V321Integration = {
     },
 
     async refreshPreview() {
-        const list = document.getElementById('export-preview-list');
+        // v3.2.1 task #33: target the editor modal's container if it's open
+        const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
+        const targetId = editorOpen ? 'caption-editor-list' : 'export-preview-list';
+        const list = document.getElementById(targetId);
         if (!list) return;
 
         const contentMode = document.getElementById('batch-export-content-mode')?.value;
@@ -1184,9 +1223,29 @@ const V321Integration = {
     },
 
     _renderPreviewWorkbench() {
-        const list = document.getElementById('export-preview-list');
+        // v3.2.1 task #33: when the dedicated Caption Editor modal is open we
+        // render the workbench INSIDE that modal instead of the small inline
+        // preview, so the editor textarea has plenty of room. The inline
+        // preview pane stays cleared while the editor is open to avoid
+        // confusing dual UIs.
+        const editorOpen = document.getElementById('caption-editor-modal')?.classList.contains('visible');
+        const targetId = editorOpen ? 'caption-editor-list' : 'export-preview-list';
+        const list = document.getElementById(targetId);
         if (!list) return;
         list.innerHTML = '';
+
+        // Also clear the OTHER container so we don't end up with duplicate stale workbenches.
+        const otherId = editorOpen ? 'export-preview-list' : 'caption-editor-list';
+        const otherList = document.getElementById(otherId);
+        if (otherList) {
+            if (editorOpen) {
+                // While editor is open, hint the user that edits live in the popup.
+                otherList.innerHTML = `<p style="padding:12px;text-align:center;color:var(--text-muted)">${this._i18n('batchExport.editorOpenHint', 'Editing in the Caption Editor window — close it to return.')}</p>`;
+            } else {
+                otherList.innerHTML = '';
+            }
+        }
+
         if (!this.previewResults.length) {
             list.innerHTML = '<p style="padding:12px;text-align:center;color:var(--text-muted)">No preview rows.</p>';
             return;
@@ -1194,6 +1253,9 @@ const V321Integration = {
 
         const workbench = document.createElement('div');
         workbench.className = 'export-preview-workbench';
+        if (editorOpen) {
+            workbench.classList.add('export-preview-workbench--full');
+        }
         workbench.append(
             this._buildPreviewQueue(),
             this._buildPreviewEditor(),

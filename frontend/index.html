@@ -3426,6 +3426,11 @@
                             <button class="btn btn-small btn-ghost" id="btn-refresh-preview" type="button">
                                 <span data-i18n="batchExport.refreshPreview">🔄 Refresh</span>
                             </button>
+                            <!-- v3.2.1 task #33: open the workbench in a dedicated full-screen window -->
+                            <button class="btn btn-small btn-secondary" id="btn-open-caption-editor" type="button" title="Open caption editor in a larger window" data-i18n-title="captionEditor.openTooltip">
+                                <span aria-hidden="true">⛶</span>
+                                <span data-i18n="captionEditor.openButton">Open Editor</span>
+                            </button>
                         </div>
                         <div class="export-preview-list" id="export-preview-list"></div>
                     </div>
@@ -3472,6 +3477,31 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" id="btn-cancel-batch-export" data-i18n="batchExport.cancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-start-batch-export" data-i18n="batchExport.exportFiles">Export Files</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- v3.2.1 task #33: Caption Editor full-screen modal (BooruDatasetTagManager-inspired layout) -->
+        <div class="modal" id="caption-editor-modal" role="dialog" aria-modal="true" aria-labelledby="caption-editor-title">
+            <div class="modal-backdrop" aria-hidden="true"></div>
+            <div class="modal-content caption-editor-shell">
+                <div class="caption-editor-topbar">
+                    <div class="caption-editor-title-block">
+                        <h3 id="caption-editor-title" data-i18n="captionEditor.title">📝 Caption Editor</h3>
+                        <span id="caption-editor-subtitle" class="caption-editor-subtitle" data-i18n="captionEditor.subtitle">Edits here are temporary — only used when you Export, Copy, or Download from this session.</span>
+                    </div>
+                    <div class="caption-editor-topbar-actions">
+                        <button class="btn btn-ghost btn-small" id="btn-caption-editor-refresh" type="button" title="Re-render captions from current settings">
+                            <span aria-hidden="true">🔄</span>
+                            <span data-i18n="batchExport.refreshPreview">Refresh</span>
+                        </button>
+                        <button class="btn btn-primary btn-small" id="btn-caption-editor-done" type="button" title="Close editor (your edits are kept)" data-i18n="captionEditor.done">Done</button>
+                        <button class="modal-close" id="btn-close-caption-editor" aria-label="Close caption editor">✕</button>
+                    </div>
+                </div>
+                <div class="caption-editor-body">
+                    <!-- The 3-column workbench (image queue / editor / batch tools) is rendered here. -->
+                    <div id="caption-editor-list" class="caption-editor-list"></div>
                 </div>
             </div>
         </div>
