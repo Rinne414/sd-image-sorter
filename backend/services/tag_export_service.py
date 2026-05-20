@@ -395,28 +395,32 @@ def _allocate_output_path(
     basename = os.path.splitext(filename)[0]
     if not basename:
         basename = f"image_{image.get('id') or 'unknown'}"
-    candidate_names = [f"{basename}{extension}", f"{filename}{extension}"]
-
-    for candidate_name in candidate_names:
-        candidate_path = os.path.join(output_folder, candidate_name)
-        if overwrite_policy == "overwrite":
-            if candidate_path not in used_output_paths:
-                return candidate_path
-        elif overwrite_policy == "skip":
-            if os.path.exists(candidate_path):
-                return None
-            if candidate_path not in used_output_paths:
-                return candidate_path
-        elif candidate_path not in used_output_paths and not os.path.exists(candidate_path):
-            return candidate_path
+    # The sidecar filename is always `{basename}{extension}` (e.g. `image_001.txt`).
+    # We deliberately do NOT fall back to `{filename}{extension}`
+    # (e.g. `image_001.json.txt`) when the basename is taken — that pattern
+    # produces the dual-extension `<orig_ext>.<sidecar_ext>` filenames
+    # (`123.json.txt`, `123.gif.txt`) that LoRA training pipelines do not
+    # recognize as caption sidecars. Instead we use a numeric suffix
+    # (`image_001_1.txt`, `image_001_2.txt`, ...) which every trainer
+    # accepts as the same image's caption when paired by basename match.
+    primary_path = os.path.join(output_folder, f"{basename}{extension}")
+    if overwrite_policy == "overwrite":
+        if primary_path not in used_output_paths:
+            return primary_path
+    elif overwrite_policy == "skip":
+        if os.path.exists(primary_path):
+            return None
+        if primary_path not in used_output_paths:
+            return primary_path
+    elif primary_path not in used_output_paths and not os.path.exists(primary_path):
+        return primary_path
 
     if overwrite_policy == "skip":
         return None
 
-    stem = filename
     counter = 1
     while counter <= 10000:
-        candidate_path = os.path.join(output_folder, f"{stem}_{counter}{extension}")
+        candidate_path = os.path.join(output_folder, f"{basename}_{counter}{extension}")
         if candidate_path not in used_output_paths and not os.path.exists(candidate_path):
             return candidate_path
         counter += 1
