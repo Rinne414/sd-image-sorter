@@ -999,6 +999,36 @@ Quality bar:
   The release-blocking issue was incorrect provider selection. The current fix ensures the selected source is applied consistently; replacing third-party acquisition with app-owned snapshot management is a larger reliability/UX pass.
 
 
+### Debt-27: Per-item exclude on tag / prompt / lora / checkpoint filters
+
+- Status: open — deferred to v3.2.2 (Roadmap-D)
+- Type: data model / UX contract / SQL filter layer
+- Impact: medium
+- Risk if ignored:
+  Users currently can only narrow the filter additively (must include tag X). They cannot say "include 1girl, exclude 1boy" without manually filtering the result. This is a frequent ask especially for NSFW / character-specific browsing.
+- Related files:
+  `backend/database.py` (5 call sites: get_images, get_filtered_image_ids, iter_filtered_image_id_chunks, get_image_count, get_images_paginated, _apply_tag_filter),
+  `backend/services/image_service.py` (selection_token contract decode/encode),
+  `backend/services/sorting_service.py` (BatchMoveRequest, MoveRequest),
+  `backend/routers/{images,sorting,tags_bulk,colors}.py` (request models),
+  `frontend/js/stores/filter-store.js`,
+  `frontend/js/app.js` (renderModalActiveTags, renderActiveItems, getFilters, signature key),
+  `frontend/css/ui-refresh.css` (chip exclude variant),
+  `frontend/js/lang/{en,zh-CN}.js`.
+- Observed problem:
+  v3.2.1 user explicitly requested per-item exclude after testing the build. They want chips on tags / prompts / loras to cycle include → exclude → remove with a clear visual marker, e.g. "1girl" stays green and "1boy" turns red strikethrough.
+- Why this is debt:
+  The current filter contract treats every chip array as a positive AND/OR list. Adding exclude requires either a parallel array of strings (excludeTags / excludePrompts / etc.) or migrating each entry to {value, mode: 'include'|'exclude'}. Both forms touch every filter call site, the selection_token contract, batch-move serialization, and the filter summary display. Half-done implementations (only tags but not prompts) confuse users more than no exclude at all because the UX cycle works on some chips and not others.
+- Better long-term shape:
+  Roadmap-D (v3.2.2): chip cycle UX + parallel exclude arrays at the data model + NOT EXISTS subquery per filter type at the SQL layer. The parallel-array form is preferred over `{value, mode}` because it preserves backward compatibility with every existing serializer and only adds optional fields.
+- Revisit trigger:
+  Open Roadmap-D as a dedicated session at the start of v3.2.2 planning. Estimated 300-500 lines, ~2 days with proper tests.
+- Deferred because:
+  - Touches 5+ files in the SQL filter layer alone; not safe to bundle with the v3.2.1 UX patch sweep.
+  - Half-baked partial implementation (e.g. tags only) would force a second migration in v3.2.2 anyway.
+  - Other v3.2.1 items (Move/Copy fix, Auto-Separate redesign, caption editor redesign, color tagger entry) are higher-impact for users who hit them today and the user is waiting on a testable build.
+
+
 ## v3.2.2 Roadmap
 
 These are deferred from the v3.2.1 stability sweep and tracked for the next release. Each is a multi-PR effort and should NOT be bundled — separate sessions, separate review.
@@ -1022,6 +1052,18 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 - `POST /api/images/repair-confirm` to commit explicit per-row choice (pick / merge / drop).
 - New modal in `frontend/js/app.js` (or a dedicated `frontend/js/repair-review.js`) listing ambiguous rows with image preview.
 - Wires into the existing repair-missing flow as the second-stage step when the safe auto-reconnect refuses.
+
+### Roadmap-D: Per-item exclude on tag / prompt / lora / checkpoint filters (Debt-27)
+- Add UI cycle on each filter chip: click once = include (default), click again = exclude (visual: red strikethrough or 🚫), click again = remove.
+- Backend: new `exclude_tags` / `exclude_prompts` / `exclude_loras` / `exclude_checkpoints` query params on `/api/images`, `/api/images/selection-token`, `/api/batch-move`, `/api/tags/bulk/*`. SQL: NOT EXISTS subquery per filter type.
+- Filter store: parallel `excludeTags` / `excludePrompts` / etc. arrays; cloneState + getState handle both directions; serializer maps to backend snake_case.
+- Filter summary shows "tags: 3 incl, 2 excl" instead of just count.
+- Touches: `backend/database.py` (5 call sites: get_images, get_filtered_image_ids, iter_filtered_image_id_chunks, get_image_count, get_images_paginated), `backend/services/image_service.py` (selection_token contract), `backend/services/sorting_service.py` (BatchMoveRequest), `backend/routers/{images,sorting,tags_bulk}.py`, `frontend/js/stores/filter-store.js`, `frontend/js/app.js` (renderModalActiveTags, renderActiveItems, getFilters), `frontend/css/ui-refresh.css`, `frontend/js/lang/{en,zh-CN}.js`. Estimated 300-500 lines, ~2 days with proper tests.
+- User explicitly asked for this in v3.2.1 ("add a 'exclude' function to tags, prompts, lora, color"). Deferred to v3.2.2 because:
+  1. It is the only task in the v3.2.1 batch that touches the SQL filter layer + selection_token contract together; getting it half-done (e.g. tags only) would force a second migration in v3.2.2 anyway.
+  2. The other v3.2.1 UX items (Move/Copy fix, Auto-Separate redesign, caption editor redesign, color tagger entry) are higher-impact for users who already hit them today.
+  3. A clean implementation needs dedicated test coverage (per-filter-type SQL correctness, exclude+include interaction, selection_token round-trip), better done as its own session.
+- Revisit trigger: start v3.2.2 release planning, or 3+ user reports asking for exclude before v3.2.2 ships.
 
 ### Sequencing rationale
 - **Roadmap-A first** — affects every AI feature's stability when concurrent jobs land. Smallest blast radius on existing data.
