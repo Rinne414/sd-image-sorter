@@ -1041,6 +1041,22 @@ const V321Integration = {
                 });
             }
         }
+
+        // v3.2.1 follow-up: refresh preview immediately when the user toggles
+        // the LoRA underscore checkbox so they can see the difference in real
+        // time. Also persist the choice so it survives modal close/reopen.
+        const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
+        if (normalizeCheckbox) {
+            try {
+                const stored = localStorage.getItem('batchExport.normalizeUnderscores');
+                if (stored === '0' || stored === 'false') normalizeCheckbox.checked = false;
+                else if (stored === '1' || stored === 'true') normalizeCheckbox.checked = true;
+            } catch (_) { /* localStorage unavailable, keep default */ }
+            normalizeCheckbox.addEventListener('change', () => {
+                try { localStorage.setItem('batchExport.normalizeUnderscores', normalizeCheckbox.checked ? '1' : '0'); } catch (_) { /* noop */ }
+                this.refreshPreview();
+            });
+        }
     },
 
     /** v3.2.1 task #33: open the dedicated full-screen Caption Editor. */
@@ -1191,14 +1207,31 @@ const V321Integration = {
     },
 
     _previewOptionsForContentMode(contentMode) {
+        // v3.2.1 follow-up: read the underscore checkbox once so both
+        // template and non-template preview paths agree with the actual
+        // export. The checkbox is the single source of truth for the
+        // LoRA-friendly underscore convention.
+        const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
+        const normalize = normalizeCheckbox ? normalizeCheckbox.checked : true;
+        const danbooruTagModes = new Set(['tags', 'caption_tags', 'caption_merged', 'tags_nl']);
+        const wantsNormalization = normalize && danbooruTagModes.has(contentMode);
+
         if (contentMode === 'template') {
-            return this.collectTemplateOptions();
+            const opts = this.collectTemplateOptions();
+            // For template mode the preset itself decides; only override
+            // when the user explicitly toggles the checkbox to FALSE
+            // (forces raw underscores for Pony / NoobAI workflows).
+            if (!normalize) {
+                opts.underscore_to_space_override = false;
+                opts.preserve_underscore_prefixes_override = ['score_'];
+            }
+            return opts;
         }
         const blacklistText = document.getElementById('batch-export-blacklist')?.value || '';
         const prefix = document.getElementById('batch-export-prefix')?.value || '';
         const blacklist = blacklistText.split(',').map(s => s.trim()).filter(Boolean);
         const template = this._fallbackTemplateForMode(contentMode);
-        return {
+        const opts = {
             preset_id: 'custom',
             template_override: prefix && (contentMode === 'caption_tags' || contentMode === 'caption_merged' || contentMode === 'nl_caption' || contentMode === 'tags_nl' || contentMode === 'prompt_nl')
                 ? `{trigger}, ${template}`
@@ -1209,6 +1242,14 @@ const V321Integration = {
             max_tags: 0,
             append: [],
         };
+        if (wantsNormalization) {
+            opts.underscore_to_space_override = true;
+            opts.preserve_underscore_prefixes_override = ['score_'];
+        } else if (!normalize && danbooruTagModes.has(contentMode)) {
+            opts.underscore_to_space_override = false;
+            opts.preserve_underscore_prefixes_override = ['score_'];
+        }
+        return opts;
     },
 
     renderPreviewList(results) {
@@ -1812,6 +1853,16 @@ const V321Integration = {
                     const overrides = self.collectEditedCaptionOverrides();
                     if (overrides) {
                         body.image_overrides = overrides;
+                    }
+
+                    // v3.2.1 follow-up: forward the LoRA underscore checkbox.
+                    // Default behavior (when the field is omitted) is the
+                    // backend per-mode default (ON for danbooru-tag modes,
+                    // OFF for prompt/NL/a1111). Only send a value when the
+                    // checkbox exists, so older callers stay on default.
+                    const normalizeCheckbox = document.getElementById('batch-export-normalize-underscores');
+                    if (normalizeCheckbox) {
+                        body.normalize_tag_underscores = !!normalizeCheckbox.checked;
                     }
 
                     options.body = JSON.stringify(body);

@@ -3494,6 +3494,20 @@
                                 placeholder="e.g., 1girl, solo, simple background"></textarea>
                             <small class="helper-text" data-i18n="batchExport.tagBlacklistHelper">Comma-separated tags to exclude from training-caption outputs.</small>
                         </div>
+
+                        <!-- v3.2.1 follow-up: LoRA-trainer underscore convention.
+                             Default ON: convert 'multiple_girls' → 'multiple girls'
+                             while preserving 'score_5' / 'score_9_up'. Pony /
+                             NoobAI / Kohya pipelines that prefer raw underscores
+                             can uncheck this per-export. -->
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="batch-export-normalize-underscores" checked>
+                                <span class="checkbox-custom" aria-hidden="true"></span>
+                                <span class="checkbox-text" data-i18n="batchExport.normalizeUnderscoresLabel">Convert tag underscores to spaces (preserve <code>score_*</code>)</span>
+                            </label>
+                            <small class="helper-text" data-i18n="batchExport.normalizeUnderscoresHelp">Default ON for LoRA training: <code>multiple_girls</code> → <code>multiple girls</code>; <code>score_5</code> / <code>score_9_up</code> stay intact. Untick if your trainer expects raw danbooru underscores (Pony / NoobAI / Kohya legacy).</small>
+                        </div>
                     </div>
                 </details>
 

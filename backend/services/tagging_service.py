@@ -768,6 +768,13 @@ class BatchTagExportRequest(BaseModel):
     template_options: Optional[Dict[str, Any]] = Field(default=None)
     # v3.2.1: per-image caption overrides {image_id: caption_text} from live-preview edits
     image_overrides: Optional[Dict[int, str]] = Field(default=None)
+    # v3.2.1 follow-up: convert danbooru-style tag underscores to spaces while
+    # preserving ``score_*`` prefixes (LoRA-trainer convention). ``None``
+    # (default) means "follow the per-content-mode default" — tag modes
+    # normalize, free-form text / prompt modes do not. ``True`` / ``False``
+    # is an explicit user override surfaced as a checkbox in the export
+    # modal.
+    normalize_tag_underscores: Optional[bool] = Field(default=None)
 
     @model_validator(mode="after")
     def require_ids_or_selection_token(self):
@@ -791,6 +798,11 @@ class ExportPreviewRequest(BaseModel):
     quality_override: Optional[str] = None
     safety_override: Optional[str] = None
     rating_override: Optional[str] = None
+    # v3.2.1 follow-up: forward the user's underscore-toggle to the live
+    # preview so the preview matches what the same-name .txt export will
+    # actually write. None = follow preset default.
+    underscore_to_space_override: Optional[bool] = None
+    preserve_underscore_prefixes_override: Optional[List[str]] = None
 
 
 class TaggingService:

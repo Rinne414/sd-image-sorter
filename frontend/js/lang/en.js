@@ -1374,6 +1374,8 @@ window.I18nLang_en = {
     'batchExport.tagPrefixHelper': 'Prepended only to training-caption outputs. Prompt, Tags, Negative, A1111, and JSON stay exact.',
     'batchExport.tagBlacklist': 'Tag Blacklist (optional)',
     'batchExport.tagBlacklistHelper': 'Comma-separated tags to exclude from training-caption outputs.',
+    'batchExport.normalizeUnderscoresLabel': 'Convert tag underscores to spaces (preserve <code>score_*</code>)',
+    'batchExport.normalizeUnderscoresHelp': 'Default ON for LoRA training: <code>multiple_girls</code> → <code>multiple girls</code>; <code>score_5</code> / <code>score_9_up</code> stay intact. Untick if your trainer expects raw danbooru underscores (Pony / NoobAI / Kohya legacy).',
     'batchExport.contentMode': 'File Content',
     'batchExport.contentModeHelper': 'Default LoRA caption = optional Class Token + AI caption + Prompt + Tags, one line per image.',
     'batchExport.groupCommon': 'Common',
