@@ -70,6 +70,11 @@ SELECTION_TOKEN_DEFAULT_CHUNK = 2000
 SELECTION_TOKEN_MAX_CHUNK = 10000
 SELECTION_TOKEN_MAX_EXCLUDED_IDS = 10000
 SELECTION_TOKEN_VERSION = 2
+PROMPT_MATCH_MODE_EXACT = "exact"
+PROMPT_MATCH_MODE_CONTAINS = "contains"
+VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
+VALID_COLOR_TEMPERATURES = {"warm", "cool", "neutral"}
+VALID_BRIGHTNESS_DISTRIBUTIONS = {"left_heavy", "right_heavy", "middle_heavy", "edge_heavy", "balanced"}
 SELECTION_TOKEN_RANDOM_SORT_ERROR = (
     "random sort cannot use the chunked selection token protocol; use selection-ids or a snapshot protocol"
 )
@@ -111,6 +116,14 @@ def _coerce_optional_string_filter(value: Any, field_name: str) -> Optional[str]
         raise _invalid_selection_token()
     text = str(value).strip()
     return text or None
+
+
+def _coerce_prompt_match_mode(value: Any) -> str:
+    mode = _coerce_optional_string_filter(value, "promptMatchMode") or PROMPT_MATCH_MODE_EXACT
+    mode = mode.lower()
+    if mode not in VALID_PROMPT_MATCH_MODES:
+        raise _invalid_selection_token()
+    return mode
 
 
 def _coerce_selection_id_list(value: Any, field_name: str, *, max_length: int) -> List[int]:
@@ -935,6 +948,10 @@ class ImageService:
         max_width: Optional[int],
         min_height: Optional[int],
         max_height: Optional[int],
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
     ) -> None:
         """Validate shared gallery filter constraints used by list and selection flows."""
         if sort_by not in VALID_SORT_OPTIONS:
@@ -959,6 +976,25 @@ class ImageService:
                 status_code=400,
                 detail="min_height cannot be greater than max_height"
             )
+        if brightness_min is not None and (brightness_min < 0 or brightness_min > 255):
+            raise HTTPException(status_code=400, detail="brightness_min must be between 0 and 255")
+        if brightness_max is not None and (brightness_max < 0 or brightness_max > 255):
+            raise HTTPException(status_code=400, detail="brightness_max must be between 0 and 255")
+        if brightness_min is not None and brightness_max is not None and brightness_min > brightness_max:
+            raise HTTPException(status_code=400, detail="brightness_min cannot be greater than brightness_max")
+        if color_temperature is not None and color_temperature.lower() not in VALID_COLOR_TEMPERATURES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid color_temperature value. Must be one of: {', '.join(sorted(VALID_COLOR_TEMPERATURES))}"
+            )
+        if brightness_distribution is not None and brightness_distribution.lower() not in VALID_BRIGHTNESS_DISTRIBUTIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid brightness_distribution value. Must be one of: "
+                    f"{', '.join(sorted(VALID_BRIGHTNESS_DISTRIBUTIONS))}"
+                )
+            )
 
     def _filter_and_mark_missing_images(self, images: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
         """Drop rows whose backing files no longer exist and persist that state in SQLite."""
@@ -972,6 +1008,14 @@ class ImageService:
             if resolved_path:
                 live_images.append(image)
                 continue
+
+            current_image = db.get_image_by_id(image_id) if image_id > 0 else None
+            if current_image:
+                current_path = str(current_image.get("path") or "")
+                current_resolved_path = resolve_existing_indexed_image_path(current_path, backend_file=__file__)
+                if current_resolved_path:
+                    live_images.append(current_image)
+                    continue
 
             missing_count += 1
             if image_id > 0:
@@ -1154,10 +1198,15 @@ class ImageService:
                     min_height=contract["minHeight"],
                     max_height=contract["maxHeight"],
                     prompt_terms=contract["prompts"],
+                    prompt_match_mode=contract["promptMatchMode"],
                     aspect_ratio=contract["aspectRatio"],
                     artist=contract["artist"],
                     min_aesthetic=contract["minAesthetic"],
                     max_aesthetic=contract["maxAesthetic"],
+                    brightness_min=contract["brightnessMin"],
+                    brightness_max=contract["brightnessMax"],
+                    color_temperature=contract["colorTemperature"],
+                    brightness_distribution=contract["brightnessDistribution"],
                 ):
                     for image_id in batch_ids:
                         handle.write(f"{int(image_id)}\n")
@@ -1200,6 +1249,7 @@ class ImageService:
         min_height: Optional[int] = None,
         max_height: Optional[int] = None,
         prompts: Optional[str] = None,
+        prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
@@ -1245,6 +1295,10 @@ class ImageService:
             max_width=max_width,
             min_height=min_height,
             max_height=max_height,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
         )
 
         gen_list = _sanitize_filter_values(generators)
@@ -1253,8 +1307,11 @@ class ImageService:
         cp_list = _sanitize_filter_values(checkpoints)
         lr_list = _sanitize_filter_values(loras)
         prompt_list = _sanitize_filter_values(prompts)
+        normalized_prompt_match_mode = _coerce_prompt_match_mode(prompt_match_mode)
         search = _sanitize_filter_value(search) if search else None
         artist = _sanitize_filter_value(artist) if artist else None
+        color_temperature = _sanitize_filter_value(color_temperature).lower() if color_temperature else None
+        brightness_distribution = _sanitize_filter_value(brightness_distribution).lower() if brightness_distribution else None
 
         cursor_payload = None
         if cursor:
@@ -1281,6 +1338,7 @@ class ImageService:
                     loras=lr_list,
                     search_query=search,
                     prompt_terms=prompt_list,
+                    prompt_match_mode=normalized_prompt_match_mode,
                     artist=artist,
                     sort_by=sort_by,
                     limit=fetch_limit,
@@ -1342,6 +1400,7 @@ class ImageService:
                 loras=lr_list,
                 search_query=search,
                 prompt_terms=prompt_list,
+                prompt_match_mode=normalized_prompt_match_mode,
                 artist=artist,
                 sort_by=sort_by,
                 limit=fetch_limit,
@@ -1353,6 +1412,10 @@ class ImageService:
                 aspect_ratio=aspect_ratio,
                 min_aesthetic=min_aesthetic,
                 max_aesthetic=max_aesthetic,
+                brightness_min=brightness_min,
+                brightness_max=brightness_max,
+                color_temperature=color_temperature,
+                brightness_distribution=brightness_distribution,
             )
             if not batch:
                 break
@@ -1377,6 +1440,7 @@ class ImageService:
             loras=lr_list,
             search_query=search,
             prompt_terms=prompt_list,
+            prompt_match_mode=normalized_prompt_match_mode,
             artist=artist,
             min_width=min_width,
             max_width=max_width,
@@ -1385,6 +1449,10 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
         )
 
         return {
@@ -1404,6 +1472,7 @@ class ImageService:
         checkpoints: Optional[List[str]] = None,
         loras: Optional[List[str]] = None,
         prompts: Optional[List[str]] = None,
+        prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
         artist: Optional[str] = None,
         search: Optional[str] = None,
         sort_by: str = "newest",
@@ -1432,6 +1501,13 @@ class ImageService:
         max_height = _coerce_optional_int_filter(max_height, "maxHeight")
         min_aesthetic = _coerce_optional_float_filter(min_aesthetic, "minAesthetic")
         max_aesthetic = _coerce_optional_float_filter(max_aesthetic, "maxAesthetic")
+        brightness_min = _coerce_optional_float_filter(brightness_min, "brightnessMin")
+        brightness_max = _coerce_optional_float_filter(brightness_max, "brightnessMax")
+        color_temperature = _coerce_optional_string_filter(color_temperature, "colorTemperature")
+        color_temperature = color_temperature.lower() if color_temperature else None
+        brightness_distribution = _coerce_optional_string_filter(brightness_distribution, "brightnessDistribution")
+        brightness_distribution = brightness_distribution.lower() if brightness_distribution else None
+        prompt_match_mode = _coerce_prompt_match_mode(prompt_match_mode)
         excluded_image_ids = _coerce_selection_id_list(
             excluded_image_ids,
             "excludedImageIds",
@@ -1445,6 +1521,10 @@ class ImageService:
             max_width=max_width,
             min_height=min_height,
             max_height=max_height,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
         )
         return {
             "generators": _sanitize_filter_values(generators) or [],
@@ -1453,6 +1533,7 @@ class ImageService:
             "checkpoints": _sanitize_filter_values(checkpoints) or [],
             "loras": _sanitize_filter_values(loras) or [],
             "prompts": _sanitize_filter_values(prompts) or [],
+            "promptMatchMode": prompt_match_mode,
             "artist": _sanitize_filter_value(artist) if artist else None,
             "search": _sanitize_filter_value(search) if search else "",
             "sortBy": sort_by or "newest",
@@ -1463,6 +1544,10 @@ class ImageService:
             "aspectRatio": aspect_ratio,
             "minAesthetic": min_aesthetic,
             "maxAesthetic": max_aesthetic,
+            "brightnessMin": brightness_min,
+            "brightnessMax": brightness_max,
+            "colorTemperature": color_temperature,
+            "brightnessDistribution": brightness_distribution,
             "excludedImageIds": excluded_image_ids,
         }
 
@@ -1486,10 +1571,15 @@ class ImageService:
             min_height=contract["minHeight"],
             max_height=contract["maxHeight"],
             prompt_terms=contract["prompts"],
+            prompt_match_mode=contract["promptMatchMode"],
             aspect_ratio=contract["aspectRatio"],
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            brightness_min=contract["brightnessMin"],
+            brightness_max=contract["brightnessMax"],
+            color_temperature=contract["colorTemperature"],
+            brightness_distribution=contract["brightnessDistribution"],
             excluded_image_ids=contract.get("excludedImageIds"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
             offset=offset,
@@ -1509,10 +1599,15 @@ class ImageService:
             min_height=contract["minHeight"],
             max_height=contract["maxHeight"],
             prompt_terms=contract["prompts"],
+            prompt_match_mode=contract["promptMatchMode"],
             aspect_ratio=contract["aspectRatio"],
             artist=contract["artist"],
             min_aesthetic=contract["minAesthetic"],
             max_aesthetic=contract["maxAesthetic"],
+            brightness_min=contract["brightnessMin"],
+            brightness_max=contract["brightnessMax"],
+            color_temperature=contract["colorTemperature"],
+            brightness_distribution=contract["brightnessDistribution"],
             excluded_image_ids=contract.get("excludedImageIds"),
         )
 
@@ -1550,6 +1645,7 @@ class ImageService:
                 checkpoints=filters.get("checkpoints"),
                 loras=filters.get("loras"),
                 prompts=filters.get("prompts"),
+                prompt_match_mode=filters.get("promptMatchMode") or filters.get("prompt_match_mode") or PROMPT_MATCH_MODE_EXACT,
                 artist=filters.get("artist"),
                 search=filters.get("search"),
                 sort_by=filters.get("sortBy") or "newest",
@@ -1560,6 +1656,10 @@ class ImageService:
                 aspect_ratio=filters.get("aspectRatio"),
                 min_aesthetic=filters.get("minAesthetic"),
                 max_aesthetic=filters.get("maxAesthetic"),
+                brightness_min=filters.get("brightnessMin"),
+                brightness_max=filters.get("brightnessMax"),
+                color_temperature=filters.get("colorTemperature"),
+                brightness_distribution=filters.get("brightnessDistribution"),
                 excluded_image_ids=filters.get("excludedImageIds"),
             )
         except HTTPException:
@@ -1578,7 +1678,7 @@ class ImageService:
         if contract["sortBy"] == "random":
             raise HTTPException(status_code=400, detail=SELECTION_TOKEN_RANDOM_SORT_ERROR)
         normalized_chunk = max(1, min(int(chunk_size or SELECTION_TOKEN_DEFAULT_CHUNK), SELECTION_TOKEN_MAX_CHUNK))
-        exact_total = not bool(contract["prompts"])
+        exact_total = not bool(contract["prompts"]) or contract["promptMatchMode"] == PROMPT_MATCH_MODE_CONTAINS
         return {
             "selection_token": self._encode_selection_token(contract),
             "total_estimate": self._selection_total_estimate(contract),
@@ -1617,6 +1717,7 @@ class ImageService:
         checkpoints: Optional[List[str]] = None,
         loras: Optional[List[str]] = None,
         prompts: Optional[List[str]] = None,
+        prompt_match_mode: str = PROMPT_MATCH_MODE_EXACT,
         artist: Optional[str] = None,
         search: Optional[str] = None,
         sort_by: str = "newest",
@@ -1627,6 +1728,10 @@ class ImageService:
         aspect_ratio: Optional[str] = None,
         min_aesthetic: Optional[float] = None,
         max_aesthetic: Optional[float] = None,
+        brightness_min: Optional[float] = None,
+        brightness_max: Optional[float] = None,
+        color_temperature: Optional[str] = None,
+        brightness_distribution: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Resolve the full filtered-result ID set in current gallery sort order."""
         contract = self._build_selection_filter_contract(
@@ -1636,6 +1741,7 @@ class ImageService:
             checkpoints=checkpoints,
             loras=loras,
             prompts=prompts,
+            prompt_match_mode=prompt_match_mode,
             artist=artist,
             search=search,
             sort_by=sort_by,
@@ -1646,6 +1752,10 @@ class ImageService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            brightness_min=brightness_min,
+            brightness_max=brightness_max,
+            color_temperature=color_temperature,
+            brightness_distribution=brightness_distribution,
         )
         image_ids = self._selection_ids_from_contract(contract)
         return {
@@ -1758,7 +1868,7 @@ class ImageService:
             limit=normalized_limit,
             has_more=has_more,
             next_offset=normalized_offset + len(image_ids) if has_more else None,
-            exact_total=not bool(contract["prompts"]),
+            exact_total=not bool(contract["prompts"]) or contract["promptMatchMode"] == PROMPT_MATCH_MODE_CONTAINS,
         )
 
     def resolve_image_source_path(self, image_id: int, primary_path: str) -> str:

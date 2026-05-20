@@ -22,6 +22,9 @@ from utils.path_validation import PathValidationError
 
 
 logger = logging.getLogger(__name__)
+PROMPT_MATCH_MODE_EXACT = "exact"
+PROMPT_MATCH_MODE_CONTAINS = "contains"
+VALID_PROMPT_MATCH_MODES = {PROMPT_MATCH_MODE_EXACT, PROMPT_MATCH_MODE_CONTAINS}
 
 
 router = APIRouter(prefix="/api", tags=["images"])
@@ -95,6 +98,7 @@ class SelectionIdsRequest(BaseModel):
     checkpoints: List[str] = Field(default_factory=list)
     loras: List[str] = Field(default_factory=list)
     prompts: List[str] = Field(default_factory=list)
+    promptMatchMode: str = PROMPT_MATCH_MODE_EXACT
     artist: Optional[str] = None
     search: str = ""
     sortBy: str = "newest"
@@ -105,6 +109,21 @@ class SelectionIdsRequest(BaseModel):
     aspectRatio: Optional[str] = None
     minAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     maxAesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    brightnessMin: Optional[float] = Field(default=None, ge=0, le=255)
+    brightnessMax: Optional[float] = Field(default=None, ge=0, le=255)
+    colorTemperature: Optional[str] = Field(default=None, pattern="^(warm|cool|neutral)$")
+    brightnessDistribution: Optional[str] = Field(
+        default=None,
+        pattern="^(left_heavy|right_heavy|middle_heavy|edge_heavy|balanced)$",
+    )
+
+    @model_validator(mode="after")
+    def validate_prompt_match_mode(self):
+        normalized = str(self.promptMatchMode or PROMPT_MATCH_MODE_EXACT).strip().lower()
+        if normalized not in VALID_PROMPT_MATCH_MODES:
+            raise ValueError("promptMatchMode must be exact or contains")
+        self.promptMatchMode = normalized
+        return self
 
 
 class SelectionTokenRequest(SelectionIdsRequest):
@@ -351,6 +370,12 @@ async def get_images(
         description="Comma-separated prompt terms (AND logic)",
         examples=["masterpiece,best_quality"],
     ),
+    prompt_match_mode: str = Query(
+        default=PROMPT_MATCH_MODE_EXACT,
+        description="Prompt term matching mode: exact token matching or contains substring matching",
+        pattern="^(exact|contains)$",
+        examples=["exact"],
+    ),
     aspect_ratio: Optional[str] = Query(
         default=None,
         description="Filter by aspect ratio: square, landscape, portrait",
@@ -409,6 +434,7 @@ async def get_images(
         min_height=min_height,
         max_height=max_height,
         prompts=prompts,
+        prompt_match_mode=prompt_match_mode,
         aspect_ratio=aspect_ratio,
         min_aesthetic=min_aesthetic,
         max_aesthetic=max_aesthetic,
@@ -444,6 +470,7 @@ async def create_selection_token(
         checkpoints=request.checkpoints,
         loras=request.loras,
         prompts=request.prompts,
+        prompt_match_mode=request.promptMatchMode,
         artist=request.artist,
         search=request.search,
         sort_by=request.sortBy,
@@ -454,6 +481,10 @@ async def create_selection_token(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        brightness_min=request.brightnessMin,
+        brightness_max=request.brightnessMax,
+        color_temperature=request.colorTemperature,
+        brightness_distribution=request.brightnessDistribution,
         excluded_image_ids=request.excludedImageIds,
         chunk_size=request.chunkSize,
     )
@@ -601,6 +632,7 @@ async def get_selection_ids(
         checkpoints=request.checkpoints,
         loras=request.loras,
         prompts=request.prompts,
+        prompt_match_mode=request.promptMatchMode,
         artist=request.artist,
         search=request.search,
         sort_by=request.sortBy,
@@ -611,6 +643,10 @@ async def get_selection_ids(
         aspect_ratio=request.aspectRatio,
         min_aesthetic=request.minAesthetic,
         max_aesthetic=request.maxAesthetic,
+        brightness_min=request.brightnessMin,
+        brightness_max=request.brightnessMax,
+        color_temperature=request.colorTemperature,
+        brightness_distribution=request.brightnessDistribution,
     )
 
 

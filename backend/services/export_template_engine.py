@@ -146,10 +146,13 @@ def process_tags(
     config: TagProcessingConfig,
 ) -> List[str]:
     """Apply the tag processing pipeline: blacklist -> replace -> max N -> append."""
+    blacklist_lower = _blacklist_tokens(config)
     if not tags:
-        return list(config.append) if config.append else []
-
-    blacklist_lower = {t.lower().strip() for t in config.blacklist if t and t.strip()}
+        return [
+            tag
+            for tag in list(config.append)
+            if _normalize_blacklist_item(tag, config) not in blacklist_lower
+        ] if config.append else []
 
     # Step 1: filter blacklist + extract tag strings (sorted by confidence desc)
     sorted_tags = sorted(
@@ -159,7 +162,7 @@ def process_tags(
     processed: List[str] = []
     for tag_data in sorted_tags:
         tag_str = str(tag_data.get("tag") or "").strip()
-        if not tag_str or tag_str.lower() in blacklist_lower:
+        if not tag_str or _normalize_blacklist_item(tag_str, config) in blacklist_lower:
             continue
         processed.append(tag_str)
 
@@ -185,11 +188,12 @@ def process_tags(
         if config.underscore_to_space:
             appended = [_format_tag_underscore(t, config.preserve_underscore_prefixes) for t in appended]
         # Dedupe append against existing
-        existing_lower = {t.lower() for t in processed}
+        existing_lower = {_normalize_blacklist_item(t, config) for t in processed}
         for ap in appended:
-            if ap.lower() not in existing_lower:
+            normalized_append = _normalize_blacklist_item(ap, config)
+            if normalized_append and normalized_append not in blacklist_lower and normalized_append not in existing_lower:
                 processed.append(ap)
-                existing_lower.add(ap.lower())
+                existing_lower.add(normalized_append)
 
     return processed
 
@@ -200,6 +204,45 @@ def _format_tag_underscore(tag: str, preserve_prefixes: List[str]) -> str:
         if tag.startswith(prefix):
             return tag
     return tag.replace("_", " ")
+
+
+def _normalize_blacklist_item(value: str, config: TagProcessingConfig) -> str:
+    normalized = str(value or "").strip()
+    if config.underscore_to_space:
+        normalized = _format_tag_underscore(normalized, config.preserve_underscore_prefixes)
+    return " ".join(normalized.split()).lower()
+
+
+def _blacklist_tokens(config: TagProcessingConfig) -> set[str]:
+    return {
+        token
+        for token in (_normalize_blacklist_item(item, config) for item in config.blacklist)
+        if token
+    }
+
+
+def _split_template_value(value: str, separator: str) -> List[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    sep = separator.strip()
+    if sep:
+        parts = [part.strip() for part in text.split(sep)]
+    else:
+        parts = [text]
+    return [part for part in parts if part]
+
+
+def _filter_template_value(value: str, config: TagProcessingConfig, separator: str) -> str:
+    blocked = _blacklist_tokens(config)
+    if not blocked:
+        return str(value or "").strip()
+    kept = [
+        part
+        for part in _split_template_value(value, separator)
+        if _normalize_blacklist_item(part, config) not in blocked
+    ]
+    return separator.join(kept)
 
 
 # ====================================================================
@@ -251,7 +294,7 @@ class TemplateContext:
     def resolve(self) -> Dict[str, str]:
         """Build dict of variable name -> resolved string."""
         split = _split_tags_by_type(self.tags_filtered)
-        count = _extract_count_tag(self.tags_filtered + self.tags_all)
+        count = _extract_count_tag(self.tags_filtered)
         sep = self.separator
 
         return {
@@ -374,22 +417,44 @@ def build_export_caption(
         ]
 
     filtered_tags = process_tags(tags, proc_config)
+    blocked = _blacklist_tokens(proc_config)
+    if blocked:
+        all_tag_strings = [
+            tag for tag in all_tag_strings
+            if _normalize_blacklist_item(tag, proc_config) not in blocked
+        ]
 
     # Determine rating
     rating = rating_override if rating_override is not None else _extract_rating(image)
+    rating = _filter_template_value(rating, proc_config, separator)
+    trigger_text = _filter_template_value(trigger.strip(), proc_config, separator)
+    nl_caption = _filter_template_value(str(image.get("ai_caption") or "").strip(), proc_config, separator)
+    prompt = _filter_template_value(str(image.get("prompt") or "").strip(), proc_config, separator)
+    negative = _filter_template_value(str(image.get("negative_prompt") or "").strip(), proc_config, separator)
+    quality = _filter_template_value(
+        quality_override if quality_override is not None else preset.get("default_quality", ""),
+        proc_config,
+        separator,
+    )
+    safety = _filter_template_value(
+        safety_override if safety_override is not None else preset.get("default_safety", ""),
+        proc_config,
+        separator,
+    )
+    append_text = "" if append else _filter_template_value(preset.get("default_append", ""), proc_config, separator)
 
     # Build context
     context = TemplateContext(
-        trigger=trigger.strip(),
+        trigger=trigger_text,
         tags_all=all_tag_strings,
         tags_filtered=filtered_tags,
-        nl_caption=str(image.get("ai_caption") or "").strip(),
-        prompt=str(image.get("prompt") or "").strip(),
-        negative=str(image.get("negative_prompt") or "").strip(),
+        nl_caption=nl_caption,
+        prompt=prompt,
+        negative=negative,
         rating=rating,
-        quality=quality_override if quality_override is not None else preset.get("default_quality", ""),
-        safety=safety_override if safety_override is not None else preset.get("default_safety", ""),
-        append=", ".join(append) if append else preset.get("default_append", ""),
+        quality=quality,
+        safety=safety,
+        append=append_text,
         separator=separator,
     )
 

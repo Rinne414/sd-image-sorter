@@ -28,6 +28,7 @@ from config import (
     get_wd14_model_dir,
 )
 from ai_runtime_guard import exclusive_ai_runtime
+from model_download_sources import endpoint_label, get_hf_endpoint_order
 from utils.path_validation import normalize_user_path
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,6 @@ CUSTOM_WD14_PROFILE_MODEL = "wd-swinv2-tagger-v3"
 # Will be imported lazily
 ort = None
 hf_hub = None
-HF_MIRROR_ENDPOINT = "https://hf-mirror.com"
 
 
 def _ensure_imports():
@@ -346,32 +346,27 @@ class WD14Tagger:
 
     def _download_with_fallback(self, repo_id: str, filename: str, local_dir: str) -> str:
         assert hf_hub is not None
-        configured = str(os.environ.get("HF_ENDPOINT", "") or "").strip().rstrip("/")
-        endpoints = []
-        if configured:
-            endpoints.append(configured)
-        endpoints.extend(["", HF_MIRROR_ENDPOINT])
+        endpoints = get_hf_endpoint_order(model_name=f"WD14 {self.model_name}")
 
         seen = set()
         last_error: Optional[Exception] = None
         for endpoint in endpoints:
-            key = endpoint or "__default__"
+            key = endpoint.lower()
             if key in seen:
                 continue
             seen.add(key)
             try:
+                logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint_label(endpoint))
                 kwargs = {
                     "repo_id": repo_id,
                     "filename": filename,
                     "local_dir": local_dir,
+                    "endpoint": endpoint,
                 }
-                if endpoint:
-                    kwargs["endpoint"] = endpoint
-                    logger.info("Downloading %s from %s via %s", filename, repo_id, endpoint)
                 return hf_hub.hf_hub_download(**kwargs)
             except Exception as exc:
                 last_error = exc
-                logger.warning("Download failed for %s via %s: %s", filename, endpoint or "huggingface", exc)
+                logger.warning("Download failed for %s via %s: %s", filename, endpoint_label(endpoint), exc)
 
         if last_error is None:
             raise RuntimeError(f"Failed to download {filename} from {repo_id}")

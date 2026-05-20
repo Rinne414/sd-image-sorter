@@ -20,6 +20,7 @@ from PIL import Image
 
 from config import TAGGER_MODELS, get_toriigate_model_dir, read_float_env
 from ai_runtime_guard import exclusive_ai_runtime
+from model_download_sources import endpoint_label, get_hf_endpoint_order
 
 logger = logging.getLogger(__name__)
 
@@ -189,18 +190,30 @@ class ToriiGateTagger:
         if not os.path.exists(os.path.join(local_dir, "config.json")):
             logger.info("Downloading ToriiGate model %s ...", self.model_name)
             assert hf_hub is not None
-            hf_hub.snapshot_download(
-                repo_id=config["repo_id"],
-                revision=TORIIGATE_COMMIT_HASH,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False,
-                allow_patterns=[
-                    "*.json",
-                    "*.safetensors",
-                    "*.txt",
-                    "*.jinja",
-                ],
-            )
+            last_error: Optional[Exception] = None
+            for endpoint in get_hf_endpoint_order(model_name="ToriiGate 0.5"):
+                try:
+                    logger.info("Downloading ToriiGate from %s via %s", config["repo_id"], endpoint_label(endpoint))
+                    hf_hub.snapshot_download(
+                        repo_id=config["repo_id"],
+                        revision=TORIIGATE_COMMIT_HASH,
+                        local_dir=local_dir,
+                        local_dir_use_symlinks=False,
+                        allow_patterns=[
+                            "*.json",
+                            "*.safetensors",
+                            "*.txt",
+                            "*.jinja",
+                        ],
+                        endpoint=endpoint,
+                    )
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    logger.warning("ToriiGate download failed via %s: %s", endpoint_label(endpoint), exc)
+            else:
+                assert last_error is not None
+                raise last_error
         return local_dir
 
     def _pick_torch_dtype(self):

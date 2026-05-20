@@ -15,6 +15,7 @@ from services.tagging_service import (
     TagRequest,
     TagImportRequest,
     BatchTagExportRequest,
+    ExportPreviewRequest,
 )
 
 
@@ -287,74 +288,17 @@ async def fix_rating_tags(
 # === v3.2.1: Export Template Engine endpoints ===
 
 
-from pydantic import BaseModel, Field as _Field
-from typing import Optional as _Optional, List as _List, Dict as _Dict, Any as _Any
-import database as _db
-
-
-class ExportPreviewRequest(BaseModel):
-    image_ids: _List[int] = _Field(default_factory=list, max_length=20)
-    preset_id: str = "custom"
-    template_override: _Optional[str] = None
-    trigger: str = ""
-    blacklist: _List[str] = _Field(default_factory=list)
-    replace_rules: _Dict[str, str] = _Field(default_factory=dict)
-    max_tags: int = 0
-    append: _List[str] = _Field(default_factory=list)
-    quality_override: _Optional[str] = None
-    safety_override: _Optional[str] = None
-    rating_override: _Optional[str] = None
-
-
 @router.post("/tags/export-preview")
-async def export_preview(request: ExportPreviewRequest):
+async def export_preview(
+    request: ExportPreviewRequest,
+    service: TaggingService = Depends(get_tagging_service),
+):
     """Render export captions for a small set of images using the template engine.
 
     Used by the export modal's live preview to show what the final captions
     will look like before committing to a batch export.
     """
-    from services.export_template_engine import build_export_caption
-
-    if len(request.image_ids) > 20:
-        from fastapi import HTTPException as _HTTPException
-        raise _HTTPException(400, "Preview limited to 20 images at a time")
-
-    results = []
-    for image_id in request.image_ids:
-        image = _db.get_image_by_id(image_id)
-        if not image:
-            results.append({"image_id": image_id, "error": "not_found", "rendered": ""})
-            continue
-        tag_rows = _db.get_image_tags(image_id) or []
-
-        try:
-            rendered = build_export_caption(
-                image,
-                tag_rows,
-                preset_id=request.preset_id,
-                template_override=request.template_override,
-                trigger=request.trigger,
-                blacklist=request.blacklist,
-                replace_rules=request.replace_rules,
-                max_tags=request.max_tags,
-                append=request.append,
-                quality_override=request.quality_override,
-                safety_override=request.safety_override,
-                rating_override=request.rating_override,
-            )
-        except Exception as e:
-            results.append({"image_id": image_id, "error": str(e), "rendered": ""})
-            continue
-
-        results.append({
-            "image_id": image_id,
-            "filename": image.get("filename") or "",
-            "thumbnail_path": image.get("path") or "",
-            "rendered": rendered,
-            "error": None,
-        })
-
-    return {"results": results}
+    return service.export_preview(request)
 
 
 @router.get("/tags/export-presets")

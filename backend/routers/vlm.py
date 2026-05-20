@@ -5,13 +5,17 @@ import asyncio
 import json
 import logging
 import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from config import CONFIG_DIR
+from utils.source_paths import resolve_existing_indexed_image_path
 from vlm_providers import (
     PROMPT_PRESETS,
     VLMConfig,
@@ -35,8 +39,19 @@ _batch_state: Dict[str, Any] = {
     "tokens_used": 0,
     "errors": [],
     "current_image": "",
+    "active_requests": 0,
+    "api_status": "idle",
+    "api_message": "",
+    "api_ok": 0,
+    "api_error": 0,
+    "last_api_latency_ms": None,
+    "last_api_error": "",
     "output_format": "nl_caption",
 }
+
+_debug_chat_events: List[Dict[str, Any]] = []
+_debug_chat_next_id = 1
+_DEBUG_CHAT_LIMIT = 80
 
 
 def _load_vlm_settings() -> Dict[str, Any]:
@@ -54,23 +69,185 @@ def _save_vlm_settings(settings: Dict[str, Any]) -> None:
     VLM_SETTINGS_PATH.write_text(json.dumps(safe, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _redact_debug_text(value: Any, limit: int = 5000) -> str:
+    text = "" if value is None else str(value)
+    if len(text) > limit:
+        return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
+    return text
+
+
+def _redact_debug_endpoint(value: Any) -> str:
+    """Hide endpoint credentials and query tokens before exposing debug events."""
+    endpoint = str(value or "").strip()
+    if not endpoint:
+        return ""
+    try:
+        parsed = urlsplit(endpoint)
+    except ValueError:
+        return _redact_debug_text(endpoint.split("?", 1)[0], 500)
+    if not parsed.scheme or not parsed.netloc:
+        return _redact_debug_text(endpoint.split("?", 1)[0], 500)
+    host = parsed.hostname or ""
+    if parsed.port:
+        host = f"{host}:{parsed.port}"
+    redacted_query = "..." if parsed.query else ""
+    redacted = urlunsplit((parsed.scheme, host, parsed.path, redacted_query, ""))
+    return _redact_debug_text(redacted, 500)
+
+
+def _coerce_int_setting(value: Any, default: int, *, minimum: int, maximum: int) -> int:
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        coerced = default
+    return max(minimum, min(maximum, coerced))
+
+
+def _coerce_float_setting(value: Any, default: float, *, minimum: float, maximum: float) -> float:
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError):
+        coerced = default
+    return max(minimum, min(maximum, coerced))
+
+
+def _resolve_image_path(image: Dict[str, Any]) -> str:
+    image_path = str((image or {}).get("path") or "")
+    resolved_path = resolve_existing_indexed_image_path(image_path, backend_file=__file__)
+    if not resolved_path:
+        raise HTTPException(404, "Image file not found on disk")
+    return resolved_path
+
+
+def _append_debug_chat_event(event: Dict[str, Any]) -> int:
+    global _debug_chat_next_id
+    with _batch_state_lock:
+        event_id = _debug_chat_next_id
+        _debug_chat_next_id += 1
+        safe_event = {"id": event_id, "at": _utc_now_iso(), **event}
+        _debug_chat_events.append(safe_event)
+        if len(_debug_chat_events) > _DEBUG_CHAT_LIMIT:
+            del _debug_chat_events[:-_DEBUG_CHAT_LIMIT]
+        return event_id
+
+
+def _build_debug_request_event(
+    *,
+    image_id: int,
+    image_name: str,
+    config: VLMConfig,
+    provider_name: str,
+    tags: List[str],
+    user_message: str,
+) -> Dict[str, Any]:
+    return {
+        "phase": "request",
+        "image_id": image_id,
+        "image_name": image_name,
+        "provider": provider_name,
+        "model": config.model,
+        "output_format": config.output_format,
+        "endpoint": _redact_debug_endpoint(config.endpoint),
+        "system_prompt": _redact_debug_text(config.system_prompt),
+        "user_prompt": _redact_debug_text(user_message),
+        "tags": tags[:120],
+        "tags_count": len(tags),
+        "note": "Image bytes are sent to the API but hidden here; API keys and base64 payloads are never shown.",
+    }
+
+
+def _append_debug_response_event(
+    *,
+    request_event_id: int,
+    image_id: int,
+    image_name: str,
+    result: Any,
+    latency_ms: int,
+) -> None:
+    _append_debug_chat_event({
+        "phase": "response" if not getattr(result, "error", None) else "error",
+        "request_id": request_event_id,
+        "image_id": image_id,
+        "image_name": image_name,
+        "model": getattr(result, "model", "") or "",
+        "latency_ms": latency_ms,
+        "tokens_used": int(getattr(result, "tokens_used", 0) or 0),
+        "caption": _redact_debug_text(getattr(result, "caption", "")),
+        "tags": list(getattr(result, "tags", []) or [])[:120],
+        "raw_text": _redact_debug_text(getattr(result, "raw_text", "")),
+        "error": _redact_debug_text(getattr(result, "error", "") or ""),
+        "error_type": getattr(result, "error_type", "") or "",
+        "retries_used": int(getattr(result, "retries_used", 0) or 0),
+    })
+
+
+def _reset_debug_chat_events() -> None:
+    global _debug_chat_next_id
+    with _batch_state_lock:
+        _debug_chat_events.clear()
+        _debug_chat_next_id = 1
+
+
+def _normalize_openai_endpoint(url: str) -> str:
+    """Auto-append ``/v1`` for OpenAI-compatible endpoints missing the version path.
+
+    A common new-user mistake is to paste ``https://aihubmix.com`` (or any
+    other OpenAI gateway) into the VLM endpoint field without the ``/v1``
+    suffix. The provider then builds ``https://aihubmix.com/chat/completions``
+    which the gateway's CDN often answers with an XML 401 "AuthenticationRequired"
+    from the underlying object storage instead of a useful API error.
+
+    We only touch URLs whose path is empty or ``/``. URLs that already have
+    any non-trivial path (e.g. ``/v1``, ``/openai/v1``, ``/api/proxy``) are
+    left alone — the user explicitly chose them.
+    """
+    if not url:
+        return url
+    cleaned = url.strip().rstrip("/")
+    if not cleaned:
+        return cleaned
+    try:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(cleaned)
+        if not parsed.scheme or not parsed.netloc:
+            return cleaned  # not a parseable URL; do not mangle
+        path = parsed.path or ""
+        if path in ("", "/"):
+            return cleaned + "/v1"
+        return cleaned
+    except Exception:
+        return cleaned
+
+
 def _build_config(overrides: Optional[Dict[str, Any]] = None) -> VLMConfig:
     settings = _load_vlm_settings()
     if overrides:
         settings.update({k: v for k, v in overrides.items() if v is not None})
+    provider = settings.get("provider", "openai_compat")
+    endpoint = settings.get("endpoint", "")
+    # OpenAI-compatible gateways always live under /v1; auto-pad missing paths
+    # so URLs saved without the suffix still hit /v1/chat/completions and
+    # /v1/models correctly.
+    if provider == "openai_compat" and endpoint:
+        endpoint = _normalize_openai_endpoint(endpoint)
     return VLMConfig(
-        provider=settings.get("provider", "openai_compat"),
-        endpoint=settings.get("endpoint", ""),
+        provider=provider,
+        endpoint=endpoint,
         api_key=settings.get("api_key", ""),
         model=settings.get("model", ""),
-        max_retries=int(settings.get("max_retries", 3)),
-        retry_delay_seconds=float(settings.get("retry_delay_seconds", 2.0)),
-        timeout_seconds=float(settings.get("timeout_seconds", 60.0)),
-        concurrent_requests=int(settings.get("concurrent_requests", 2)),
+        max_retries=_coerce_int_setting(settings.get("max_retries"), 3, minimum=0, maximum=10),
+        retry_delay_seconds=_coerce_float_setting(settings.get("retry_delay_seconds"), 2.0, minimum=0.0, maximum=60.0),
+        timeout_seconds=_coerce_float_setting(settings.get("timeout_seconds"), 60.0, minimum=1.0, maximum=600.0),
+        concurrent_requests=_coerce_int_setting(settings.get("concurrent_requests"), 2, minimum=1, maximum=16),
         system_prompt=settings.get("system_prompt", ""),
         user_prompt=settings.get("user_prompt", ""),
         include_tags_as_context=bool(settings.get("include_tags_as_context", True)),
-        max_image_size=int(settings.get("max_image_size", 1024)),
+        max_image_size=_coerce_int_setting(settings.get("max_image_size"), 1024, minimum=128, maximum=4096),
         nsfw_retry_prompt=settings.get("nsfw_retry_prompt", ""),
         output_format=settings.get("output_format", "nl_caption"),
         http_proxy=settings.get("http_proxy", ""),
@@ -124,14 +301,14 @@ class SaveSettingsRequest(BaseModel):
     endpoint: Optional[str] = None
     api_key: Optional[str] = None
     model: Optional[str] = None
-    max_retries: Optional[int] = None
-    retry_delay_seconds: Optional[float] = None
-    timeout_seconds: Optional[float] = None
-    concurrent_requests: Optional[int] = None
+    max_retries: Optional[int] = Field(default=None, ge=0, le=10)
+    retry_delay_seconds: Optional[float] = Field(default=None, ge=0, le=60)
+    timeout_seconds: Optional[float] = Field(default=None, ge=1, le=600)
+    concurrent_requests: Optional[int] = Field(default=None, ge=1, le=16)
     system_prompt: Optional[str] = None
     user_prompt: Optional[str] = None
     include_tags_as_context: Optional[bool] = None
-    max_image_size: Optional[int] = None
+    max_image_size: Optional[int] = Field(default=None, ge=128, le=4096)
     nsfw_retry_prompt: Optional[str] = None
     output_format: Optional[str] = None
     http_proxy: Optional[str] = None
@@ -186,9 +363,7 @@ async def caption_single(request: CaptionSingleRequest):
     if not image:
         raise HTTPException(404, "Image not found")
 
-    image_path = image.get("path", "")
-    if not image_path or not Path(image_path).exists():
-        raise HTTPException(404, "Image file not found on disk")
+    image_path = _resolve_image_path(image)
 
     tags = request.tags
     if tags is None:
@@ -257,6 +432,8 @@ async def caption_batch(request: BatchCaptionRequest):
     with _batch_state_lock:
         if _batch_state["running"]:
             raise HTTPException(409, "Batch captioning already in progress")
+    _reset_debug_chat_events()
+    with _batch_state_lock:
         _batch_state.update({
             "running": True,
             "cancel_requested": False,
@@ -266,10 +443,17 @@ async def caption_batch(request: BatchCaptionRequest):
             "tokens_used": 0,
             "errors": [],
             "current_image": "",
+            "active_requests": 0,
+            "api_status": "queued" if request.image_ids else "idle",
+            "api_message": "Waiting to send images to the VLM API" if request.image_ids else "No images queued",
+            "api_ok": 0,
+            "api_error": 0,
+            "last_api_latency_ms": None,
+            "last_api_error": "",
             "output_format": config.output_format,
         })
 
-    asyncio.get_event_loop().create_task(_run_batch(request.image_ids))
+    asyncio.create_task(_run_batch(request.image_ids))
     return {"status": "started", "total": len(request.image_ids), "output_format": config.output_format}
 
 
@@ -279,12 +463,24 @@ async def batch_progress():
         return dict(_batch_state)
 
 
+@router.get("/caption-batch/debug-chat")
+async def batch_debug_chat():
+    with _batch_state_lock:
+        return {
+            "events": list(_debug_chat_events),
+            "limit": _DEBUG_CHAT_LIMIT,
+            "running": bool(_batch_state.get("running")),
+        }
+
+
 @router.post("/caption-batch/cancel")
 async def batch_cancel():
     with _batch_state_lock:
         if not _batch_state["running"]:
             raise HTTPException(400, "No batch in progress")
         _batch_state["cancel_requested"] = True
+        _batch_state["api_status"] = "cancelling"
+        _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
     return {"status": "cancel_requested"}
 
 
@@ -292,9 +488,34 @@ async def _run_batch(image_ids: List[int]) -> None:
     """Run batch captioning with concurrency control."""
     import database as db
 
-    config = _build_config()
-    provider = get_provider(config)
-    semaphore = asyncio.Semaphore(config.concurrent_requests)
+    try:
+        config = _build_config()
+        provider = get_provider(config)
+        semaphore = asyncio.Semaphore(config.concurrent_requests)
+    except Exception as exc:
+        message = str(exc) or "Failed to initialize VLM batch"
+        with _batch_state_lock:
+            _batch_state["running"] = False
+            _batch_state["failed"] = int(_batch_state.get("total") or len(image_ids) or 0)
+            _batch_state["current_image"] = ""
+            _batch_state["active_requests"] = 0
+            _batch_state["api_status"] = "error"
+            _batch_state["api_message"] = "Could not start VLM batch"
+            _batch_state["last_api_error"] = message
+            if len(_batch_state["errors"]) < 50:
+                _batch_state["errors"].append({
+                    "image_id": None,
+                    "error": message,
+                    "error_type": "batch_init",
+                })
+        _append_debug_chat_event({
+            "phase": "error",
+            "image_id": None,
+            "image_name": "",
+            "error": _redact_debug_text(message),
+            "error_type": "batch_init",
+        })
+        return
 
     async def process_one(image_id: int) -> None:
         with _batch_state_lock:
@@ -312,18 +533,46 @@ async def _run_batch(image_ids: List[int]) -> None:
                     _record_error(image_id, "Image not found in DB", "not_found")
                     return
 
-                image_path = image.get("path", "")
+                image_path = str(image.get("path") or "")
                 with _batch_state_lock:
                     _batch_state["current_image"] = Path(image_path).name if image_path else ""
 
-                if not image_path or not Path(image_path).exists():
+                try:
+                    resolved_image_path = _resolve_image_path(image)
+                except HTTPException:
                     _record_error(image_id, "File not found on disk", "file_missing")
                     return
 
                 tag_rows = db.get_image_tags(image_id)
                 tags = [t["tag"] for t in tag_rows] if tag_rows else []
 
-                result = await provider.caption_image(image_path, tags=tags)
+                user_message = provider.build_user_message(tags)
+                image_name = Path(image_path or resolved_image_path).name
+                request_event_id = _append_debug_chat_event(_build_debug_request_event(
+                    image_id=image_id,
+                    image_name=image_name,
+                    config=config,
+                    provider_name=getattr(provider, "name", config.provider),
+                    tags=tags,
+                    user_message=user_message,
+                ))
+
+                start_time = time.monotonic()
+                with _batch_state_lock:
+                    _batch_state["active_requests"] += 1
+                    _batch_state["api_status"] = "waiting"
+                    _batch_state["api_message"] = f"Waiting for API response: {image_name}"
+                    _batch_state["last_api_error"] = ""
+
+                result = await provider.caption_image(resolved_image_path, tags=tags)
+                latency_ms = int((time.monotonic() - start_time) * 1000)
+                _append_debug_response_event(
+                    request_event_id=request_event_id,
+                    image_id=image_id,
+                    image_name=image_name,
+                    result=result,
+                    latency_ms=latency_ms,
+                )
 
                 if not result.error and (result.caption or result.tags):
                     if result.caption:
@@ -333,11 +582,45 @@ async def _run_batch(image_ids: List[int]) -> None:
                     with _batch_state_lock:
                         _batch_state["completed"] += 1
                         _batch_state["tokens_used"] += result.tokens_used
+                        _batch_state["api_ok"] += 1
+                        _batch_state["last_api_latency_ms"] = latency_ms
+                        _batch_state["api_status"] = "responded"
+                        _batch_state["api_message"] = f"API response OK in {latency_ms} ms"
                 else:
+                    with _batch_state_lock:
+                        _batch_state["api_error"] += 1
+                        _batch_state["last_api_latency_ms"] = latency_ms
+                        _batch_state["api_status"] = "error"
+                        _batch_state["api_message"] = f"API response failed in {latency_ms} ms"
+                        _batch_state["last_api_error"] = result.error or "No output"
                     _record_error(image_id, result.error or "No output", result.error_type or "unknown")
 
             except Exception as e:
+                try:
+                    _append_debug_chat_event({
+                        "phase": "error",
+                        "image_id": image_id,
+                        "image_name": Path(image_path).name if "image_path" in locals() and image_path else "",
+                        "error": _redact_debug_text(str(e)),
+                        "error_type": "exception",
+                    })
+                except Exception:
+                    pass
+                with _batch_state_lock:
+                    _batch_state["api_error"] += 1
+                    _batch_state["api_status"] = "error"
+                    _batch_state["api_message"] = "API request failed before a usable response"
+                    _batch_state["last_api_error"] = str(e)
                 _record_error(image_id, str(e), "exception")
+            finally:
+                with _batch_state_lock:
+                    _batch_state["active_requests"] = max(0, int(_batch_state.get("active_requests") or 0) - 1)
+                    if _batch_state["cancel_requested"]:
+                        _batch_state["api_status"] = "cancelling"
+                        _batch_state["api_message"] = "Cancel requested; waiting for active API calls to finish"
+                    elif _batch_state["active_requests"] > 0:
+                        _batch_state["api_status"] = "waiting"
+                        _batch_state["api_message"] = f"Waiting for {_batch_state['active_requests']} API response(s)"
 
     tasks = [process_one(img_id) for img_id in image_ids]
     await asyncio.gather(*tasks, return_exceptions=True)
@@ -345,11 +628,25 @@ async def _run_batch(image_ids: List[int]) -> None:
     with _batch_state_lock:
         _batch_state["running"] = False
         _batch_state["current_image"] = ""
+        _batch_state["active_requests"] = 0
+        if _batch_state["cancel_requested"]:
+            _batch_state["api_status"] = "cancelled"
+            _batch_state["api_message"] = "Cancelled"
+        elif _batch_state["failed"] > 0:
+            _batch_state["api_status"] = "done_with_errors"
+            _batch_state["api_message"] = "Finished with API or image errors"
+        else:
+            _batch_state["api_status"] = "done"
+            _batch_state["api_message"] = "Finished"
 
 
 def _record_error(image_id: int, message: str, error_type: str) -> None:
     with _batch_state_lock:
         _batch_state["failed"] += 1
+        if _batch_state.get("api_status") not in {"error", "cancelling", "cancelled"}:
+            _batch_state["api_status"] = "error"
+            _batch_state["api_message"] = message
+        _batch_state["last_api_error"] = message
         if len(_batch_state["errors"]) < 50:
             _batch_state["errors"].append({
                 "image_id": image_id,
@@ -406,7 +703,7 @@ async def pull_model(request: PullModelRequest):
             raise HTTPException(503, start_result.get("error", "Cannot start Ollama"))
 
     _pull_state.update({"pulling": True, "model": request.model, "percent": 0, "status": "starting"})
-    asyncio.get_event_loop().create_task(_do_pull(request.model))
+    asyncio.create_task(_do_pull(request.model))
     return {"status": "started", "model": request.model}
 
 

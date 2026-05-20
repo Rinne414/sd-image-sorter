@@ -16,6 +16,7 @@ from ai_runtime_guard import (
     exclusive_ai_runtime,
     looks_like_cuda_oom,
 )
+from model_download_sources import apply_hf_endpoint, endpoint_label, get_hf_endpoint_order
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,9 @@ def _load_predictor(device: Optional[str] = None):
         # Load CLIP
         try:
             import open_clip
+            endpoint = get_hf_endpoint_order(model_name="Aesthetic CLIP")[0]
+            apply_hf_endpoint(endpoint, purpose="Aesthetic CLIP / open_clip")
+            logger.info("open_clip aesthetic backbone will prefer %s.", endpoint_label(endpoint))
             model, _, preprocess = open_clip.create_model_and_transforms(
                 "ViT-L-14", pretrained="openai", device=_device
             )
@@ -131,9 +135,10 @@ def _load_predictor(device: Optional[str] = None):
         weights_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
         if not weights_path.exists():
             logger.info("Downloading aesthetic predictor weights...")
-            import urllib.request
+            from services.model_service import _direct_download_file
+
             url = "https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth"
-            urllib.request.urlretrieve(url, str(weights_path))
+            _direct_download_file(url, weights_path, timeout=120)
             logger.info("Download complete")
 
         # LAION's published predictor is a simple linear estimator on top of

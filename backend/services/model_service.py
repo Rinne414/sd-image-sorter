@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from app_info import APP_VERSION
 from config import TAGGER_MODELS, get_artist_model_dir, get_sam3_model_dir, get_toriigate_model_dir, get_wd14_model_dir, get_yolo_model_dir
+from model_download_sources import endpoint_label, get_hf_endpoint_order
 from model_health import get_model_health, get_sam3_checkpoint_path
 from optional_dependencies import DependencyInstallResult, ensure_group, ensure_group_with_soft_deps
 
@@ -928,77 +929,19 @@ class ModelService:
             restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
             if restart_result:
                 return restart_result
-            from config import (
-                ARTIST_HF_MODEL_ID,
-                ARTIST_KALOSCOPE_CHECKPOINT,
-                ARTIST_KALOSCOPE_CLASS_MAPPING,
-                get_download_mirror,
-            )
+            from artist_identifier import prepare_artist_assets
 
-            runtime_path = _ensure_artist_runtime_direct()
-            mirror = get_download_mirror()
-            # Map mirror selection to a base URL for HuggingFace-style resolves.
-            # Note: Kaloscope is hosted on HuggingFace, not ModelScope. When the
-            # user picks "modelscope" they're typically signalling "I can't
-            # reach huggingface.co"; respect that by routing through hf-mirror
-            # unless an explicit env override is set. The previous code
-            # silently fell through to huggingface.co, defeating the choice.
-            if mirror == "hf-mirror":
-                hf_base = "https://hf-mirror.com"
-            elif mirror == "modelscope":
-                if (
-                    os.environ.get("SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL")
-                    or os.environ.get("SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL")
-                ):
-                    # User configured explicit URLs; honor them via the override
-                    # path inside _artist_checkpoint_url. hf_base is unused.
-                    hf_base = "https://hf-mirror.com"
-                else:
-                    _model_logger.warning(
-                        "Mirror 'modelscope' is selected but Kaloscope is not on ModelScope; "
-                        "falling back to hf-mirror.com. Set SD_IMAGE_SORTER_ARTIST_CHECKPOINT_URL "
-                        "and SD_IMAGE_SORTER_ARTIST_CLASS_MAPPING_URL to override."
-                    )
-                    hf_base = "https://hf-mirror.com"
-            else:  # "auto" and any unknown value (defensive — VALID_MIRRORS gates this).
-                hf_base = "https://huggingface.co"
-            local_dir = Path(get_artist_model_dir()) / "kaloscope2.0"
-            checkpoint_dest = local_dir / ARTIST_KALOSCOPE_CHECKPOINT
-            mapping_dest = local_dir / ARTIST_KALOSCOPE_CLASS_MAPPING
-
-            if os.environ.get("SD_IMAGE_SORTER_DISABLE_LEGACY_MODEL_COPY") != "1":
-                legacy_dir = PROJECT_ROOT / "models" / "artist" / "kaloscope2.0"
-                _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CHECKPOINT, checkpoint_dest)
-                _materialize_existing_file(legacy_dir / ARTIST_KALOSCOPE_CLASS_MAPPING, mapping_dest)
-
-            if not checkpoint_dest.exists():
-                ckpt_url = _artist_checkpoint_url(ARTIST_HF_MODEL_ID, ARTIST_KALOSCOPE_CHECKPOINT, hf_base=hf_base)
-                _direct_download_file(ckpt_url, checkpoint_dest, timeout=600)
-            if not mapping_dest.exists():
-                map_url = _artist_checkpoint_url(ARTIST_HF_MODEL_ID, ARTIST_KALOSCOPE_CLASS_MAPPING, hf_base=hf_base)
-                _direct_download_file(map_url, mapping_dest, timeout=60)
-
-            missing_parts = []
-            if not runtime_path:
-                missing_parts.append("LSNet runtime")
-            if not checkpoint_dest.exists():
-                missing_parts.append("Kaloscope checkpoint")
-            if not mapping_dest.exists():
-                missing_parts.append("class mapping")
-            if missing_parts:
-                raise RuntimeError(
-                    f"Artist files partially downloaded but still missing: {', '.join(missing_parts)}. "
-                    f"Check server logs for download errors."
-                )
+            preferred_source = source or "auto"
+            prepared = prepare_artist_assets(preferred_source)
 
             return _with_dependency_result({
                 "status": "ok",
                 "model_id": normalized_model_id,
-                "message": f"Artist checkpoint downloaded via direct HTTP from {hf_base}.",
+                "message": f"Artist checkpoint is ready via {prepared.get('source', preferred_source)}.",
                 "paths": {
-                    "runtime_path": str(Path(runtime_path).resolve()),
-                    "checkpoint_path": str(checkpoint_dest.resolve()),
-                    "class_mapping_path": str(mapping_dest.resolve()),
+                    "runtime_path": str(Path(prepared["runtime_path"]).resolve()),
+                    "checkpoint_path": str(Path(prepared["checkpoint_path"]).resolve()),
+                    "class_mapping_path": str(Path(prepared["class_mapping_path"]).resolve()),
                 },
             }, dependency_result)
 
@@ -1108,7 +1051,7 @@ class ModelService:
             head_path = _get_models_dir() / "sa_0_4_vit_l_14_linear.pth"
             if not head_path.exists():
                 url = "https://github.com/LAION-AI/aesthetic-predictor/raw/main/sa_0_4_vit_l_14_linear.pth"
-                urllib.request.urlretrieve(url, str(head_path))
+                _direct_download_file(url, head_path, timeout=120)
 
             if is_available():
                 _ensure_loaded()

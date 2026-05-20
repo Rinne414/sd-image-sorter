@@ -4,8 +4,10 @@ Generates and caches thumbnails on disk to avoid regenerating on every request.
 """
 import hashlib
 import io
+import itertools
 import logging
 import os
+import secrets
 import threading
 import time
 from datetime import datetime, timezone
@@ -62,6 +64,27 @@ def _get_cache_key(source_path: str, size: int, mtime: float) -> str:
 def _get_cache_path(cache_key: str) -> Path:
     """Get the full path for a cache file."""
     return CACHE_DIR / cache_key
+
+
+_tmp_path_counter = itertools.count()
+
+
+def _get_cache_tmp_path(cache_path: Path) -> Path:
+    """Return a per-writer temp path for atomic thumbnail cache writes.
+
+    Uniqueness across concurrent writers comes from three sources combined:
+    - ``os.getpid()`` + ``threading.get_ident()`` separate processes/threads
+    - a process-local monotonic counter separates calls from the same thread
+      even when ``time.time_ns()`` repeats (Windows clock resolution can be
+      coarser than nanoseconds)
+    - 8 hex chars of OS randomness defend against the unlikely case of two
+      processes booting at the same instant and reaching the same counter.
+    """
+    return cache_path.with_name(
+        f"{cache_path.name}."
+        f"{os.getpid()}.{threading.get_ident()}."
+        f"{time.time_ns()}.{next(_tmp_path_counter)}.{secrets.token_hex(4)}.tmp"
+    )
 
 
 def _iter_cache_files() -> list[tuple[Path, int, float]]:
@@ -312,8 +335,8 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
     if get_thumbnail_cache_max_mb() <= 0:
         return (thumbnail_bytes, source_modified)
 
+    tmp_path = _get_cache_tmp_path(cache_path)
     try:
-        tmp_path = cache_path.with_suffix(".tmp")
         with open(tmp_path, "wb") as f:
             f.write(thumbnail_bytes)
         os.replace(str(tmp_path), str(cache_path))
@@ -321,7 +344,7 @@ def generate_and_cache_thumbnail(source_path: str, size: int) -> Tuple[bytes, da
     except OSError as e:
         logger.warning("Failed to write thumbnail cache: %s", e)
         try:
-            cache_path.with_suffix(".tmp").unlink(missing_ok=True)
+            tmp_path.unlink(missing_ok=True)
         except OSError:
             pass
 
