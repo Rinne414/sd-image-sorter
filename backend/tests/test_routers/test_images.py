@@ -119,6 +119,48 @@ class TestGetImages:
             if img.get("prompt"):
                 assert "landscape" in img["prompt"].lower()
 
+    def test_prompt_contains_mode_in_gallery_query_includes_parenthesized_variants(self, test_client, test_db, tmp_path):
+        """Gallery prompt filters should pass contains mode through to the image query."""
+        expected_ids = []
+        for value in [
+            "takamatsu_tomori",
+            "takamatsu_tomori(bang dream!)",
+            "takamatsu_tomori(bang dream!!!!!its mygo)",
+        ]:
+            image_path = tmp_path / f"router_gallery_prompt_contains_{len(expected_ids)}.png"
+            Image.new("RGB", (32, 32), "white").save(image_path)
+            expected_ids.append(
+                test_client.test_db.add_image(
+                    path=str(image_path),
+                    filename=image_path.name,
+                    prompt=f"{value}, 1girl",
+                    metadata_json="{}",
+                )
+            )
+        other_path = tmp_path / "router_gallery_prompt_contains_other.png"
+        Image.new("RGB", (32, 32), "white").save(other_path)
+        test_client.test_db.add_image(
+            path=str(other_path),
+            filename=other_path.name,
+            prompt="shiina_taki, 1girl",
+            metadata_json="{}",
+        )
+
+        response = test_client.get(
+            "/api/images",
+            params={
+                "prompts": "takamatsu_tomori",
+                "prompt_match_mode": "contains",
+                "sort_by": "oldest",
+                "limit": 10,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [image["id"] for image in data["images"]] == expected_ids
+        assert data["total"] == len(expected_ids)
+
     def test_filter_by_checkpoint_normalized_search_query(self, test_client, tmp_path):
         from PIL import Image
 
@@ -158,6 +200,57 @@ class TestGetImages:
         for img in data["images"]:
             ratio = img["width"] / img["height"]
             assert ratio > 1.1
+
+    def test_color_filters_apply_to_offset_pagination_and_total(self, test_client, test_db, tmp_path):
+        """Color filters must survive the non-cursor pagination branch."""
+        import database as db
+
+        bright_path = tmp_path / "bright.png"
+        dim_path = tmp_path / "dim.png"
+        neutral_path = tmp_path / "neutral.png"
+        for path, color in [(bright_path, "white"), (dim_path, "black"), (neutral_path, "gray")]:
+            Image.new("RGB", (32, 32), color=color).save(path)
+
+        bright_id = db.add_image(path=str(bright_path), filename=bright_path.name, metadata_json="{}")
+        dim_id = db.add_image(path=str(dim_path), filename=dim_path.name, metadata_json="{}")
+        neutral_id = db.add_image(path=str(neutral_path), filename=neutral_path.name, metadata_json="{}")
+        db.update_image_colors(bright_id, {
+            "avg_brightness": 245,
+            "color_temperature": "warm",
+            "color_saturation": 0.2,
+            "brightness_skew": 0.7,
+            "brightness_distribution": "right_heavy",
+        })
+        db.update_image_colors(dim_id, {
+            "avg_brightness": 15,
+            "color_temperature": "cool",
+            "color_saturation": 0.1,
+            "brightness_skew": -0.8,
+            "brightness_distribution": "left_heavy",
+        })
+        db.update_image_colors(neutral_id, {
+            "avg_brightness": 128,
+            "color_temperature": "neutral",
+            "color_saturation": 0.05,
+            "brightness_skew": 0.0,
+            "brightness_distribution": "balanced",
+        })
+
+        response = test_client.get(
+            "/api/images",
+            params={
+                "offset": 0,
+                "sort_by": "brightness",
+                "brightness_min": 200,
+                "color_temperature": "warm",
+                "brightness_distribution": "right_heavy",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert [image["id"] for image in payload["images"]] == [bright_id]
+        assert payload["total"] == 1
 
     def test_sort_by_options(self, test_client, test_db_with_images):
         """Various sort options should work."""
@@ -214,6 +307,41 @@ class TestGetImages:
             row = db.get_image_by_id(image_id)
             assert row["is_readable"] == 0
             assert "file not found" in (row["read_error"] or "").lower()
+
+    def test_get_images_does_not_mark_moved_row_missing_from_stale_snapshot(self, test_client, tmp_path, monkeypatch):
+        """A gallery read racing with a move should not poison the new DB path."""
+        import database as db
+        from services import image_service
+
+        old_path = tmp_path / "move-race-old.png"
+        new_path = tmp_path / "move-race-new.png"
+        Image.new("RGB", (32, 32), color="blue").save(new_path)
+        image_id = db.add_image(
+            path=str(old_path),
+            filename=old_path.name,
+            prompt="move race token",
+            metadata_json="{}",
+        )
+
+        original_get_image_by_id = db.get_image_by_id
+
+        def move_before_missing_mark(row_id):
+            if int(row_id) == image_id:
+                db.update_image_path(image_id, str(new_path))
+            return original_get_image_by_id(row_id)
+
+        monkeypatch.setattr(image_service.db, "get_image_by_id", move_before_missing_mark)
+
+        response = test_client.get("/api/images?limit=10&search=move%20race%20token")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["id"] for item in data["images"]] == [image_id]
+        assert data["images"][0]["path"] == str(new_path)
+
+        row = original_get_image_by_id(image_id)
+        assert row["is_readable"] == 1
+        assert row["read_error"] is None
 
     def test_get_images_skips_missing_files_for_offset_sorts(self, test_client, tmp_path):
         """Offset pagination should also backfill around stale rows for non-cursor sorts."""
@@ -406,6 +534,34 @@ class TestSelectionIds:
             "total": len(expected_ids),
         }
 
+    def test_selection_ids_prompt_contains_mode_includes_parenthesized_variants(self, test_client, test_db):
+        """Filtered selection should preserve the user's prompt match mode."""
+        expected_ids = []
+        for value in [
+            "takamatsu_tomori",
+            "takamatsu_tomori(bang dream)",
+            "takamatsu_tomori(bang dream!!!!!its mygo)",
+        ]:
+            expected_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_prompt_contains_{len(expected_ids)}.png",
+                    filename=f"router_selection_prompt_contains_{len(expected_ids)}.png",
+                    prompt=f"{value}, 1girl",
+                )
+            )
+
+        response = test_client.post("/api/images/selection-ids", json={
+            "prompts": ["takamatsu_tomori"],
+            "promptMatchMode": "contains",
+            "sortBy": "oldest",
+        })
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "image_ids": expected_ids,
+            "total": len(expected_ids),
+        }
+
     def test_selection_query_token_returns_stateless_chunk_contract(self, test_client, test_db_with_images):
         """Selection token should let clients page IDs without one giant response."""
         response = test_client.post("/api/images/selection-token", json={
@@ -443,6 +599,47 @@ class TestSelectionIds:
         assert first.json()["next_offset"] == 2
         assert first.json()["has_more"] is True
         assert second.json()["image_ids"] == expected_ids[2:4]
+
+    def test_selection_token_preserves_color_filter_contract(self, test_client, test_db, tmp_path):
+        """Chunked filtered selection must not drop color filters from the token."""
+        import database as db
+
+        bright_path = tmp_path / "token-bright.png"
+        dim_path = tmp_path / "token-dim.png"
+        Image.new("RGB", (32, 32), color="white").save(bright_path)
+        Image.new("RGB", (32, 32), color="black").save(dim_path)
+
+        bright_id = db.add_image(path=str(bright_path), filename=bright_path.name, metadata_json="{}")
+        dim_id = db.add_image(path=str(dim_path), filename=dim_path.name, metadata_json="{}")
+        db.update_image_colors(bright_id, {
+            "avg_brightness": 240,
+            "color_temperature": "warm",
+            "brightness_distribution": "right_heavy",
+        })
+        db.update_image_colors(dim_id, {
+            "avg_brightness": 20,
+            "color_temperature": "cool",
+            "brightness_distribution": "left_heavy",
+        })
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "sortBy": "brightness",
+            "chunkSize": 10,
+            "brightnessMin": 200,
+            "colorTemperature": "warm",
+            "brightnessDistribution": "right_heavy",
+        })
+        assert token_response.status_code == 200
+        assert token_response.json()["total_estimate"] == 1
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": token_response.json()["selection_token"], "offset": 0, "limit": 10},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == [bright_id]
+        assert dim_id not in chunk_response.json()["image_ids"]
 
     def test_selection_token_can_exclude_small_explicit_selection(self, test_client, test_db_with_images):
         """Token mode should preserve filtered-invert semantics without materializing every ID."""
@@ -535,6 +732,40 @@ class TestSelectionIds:
 
         assert chunk_response.status_code == 200
         assert chunk_response.json()["image_ids"] == list(reversed(exact_ids))[2:4]
+
+    def test_selection_token_prompt_contains_mode_pages_parenthesized_variants(self, test_client, test_db):
+        """Selection-token chunks should carry contains-mode prompt semantics."""
+        expected_ids = []
+        for value in [
+            "takamatsu_tomori",
+            "takamatsu_tomori(bang dream!)",
+            "takamatsu_tomori(bang dream!!!!!its mygo)",
+        ]:
+            expected_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/router_selection_token_contains_{len(expected_ids)}.png",
+                    filename=f"router_selection_token_contains_{len(expected_ids)}.png",
+                    prompt=f"{value}, 1girl",
+                )
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["takamatsu_tomori"],
+            "promptMatchMode": "contains",
+            "sortBy": "oldest",
+            "chunkSize": 2,
+        })
+        assert token_response.status_code == 200
+        payload = token_response.json()
+        assert payload["exact_total"] is True
+
+        chunk_response = test_client.get(
+            "/api/images/selection-chunk",
+            params={"selection_token": payload["selection_token"], "offset": 1, "limit": 2},
+        )
+
+        assert chunk_response.status_code == 200
+        assert chunk_response.json()["image_ids"] == expected_ids[1:]
 
     def test_selection_token_rejects_random_sort(self, test_client):
         """Random ordering cannot be split into stateless offset chunks without duplicates/gaps."""
@@ -1195,6 +1426,40 @@ class TestReparseImage:
 
 class TestExportSelectionData:
     """Tests for selected-image prompt/tag export data."""
+
+    def test_export_selection_data_token_respects_prompt_contains_mode(self, test_client, test_db):
+        """Token export preview should not fall back to exact prompt matching."""
+        expected_ids = []
+        for value in [
+            "takamatsu_tomori",
+            "takamatsu_tomori(bang dream!)",
+            "takamatsu_tomori(bang dream!!!!!its mygo)",
+        ]:
+            expected_ids.append(
+                test_client.test_db.add_image(
+                    path=f"/test/export_token_contains_{len(expected_ids)}.png",
+                    filename=f"export_token_contains_{len(expected_ids)}.png",
+                    prompt=f"{value}, 1girl",
+                )
+            )
+
+        token_response = test_client.post("/api/images/selection-token", json={
+            "prompts": ["takamatsu_tomori"],
+            "promptMatchMode": "contains",
+            "sortBy": "oldest",
+        })
+        assert token_response.status_code == 200
+
+        response = test_client.post("/api/images/export-data", json={
+            "selection_token": token_response.json()["selection_token"],
+            "offset": 1,
+            "limit": 2,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [image["id"] for image in data["images"]] == expected_ids[1:]
+        assert data["exact_total"] is True
 
     def test_export_data_includes_sd_negative_params_and_caption(self, test_client, tmp_path: Path):
         """Export previews should expose enough SD data for Pro prompt/caption workflows."""

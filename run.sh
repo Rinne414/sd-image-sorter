@@ -202,8 +202,24 @@ if [ "$NEED_INSTALL" -eq 1 ]; then
     fi
     echo
 
+    # Probe the fastest reachable PyPI mirror BEFORE installing. Uses stdlib
+    # only because httpx is not available yet. Saves 10-25 minutes on the
+    # ~1.5 GB requirements.txt download for users behind slow paths to
+    # pypi.org's Fastly CDN.
+    PIP_INDEX_URL="https://pypi.org/simple"
+    MIRROR_PROBE_OUT="${TMP_DIR}/pip-index-url-$$.tmp"
+    if "$PYTHON_CMD" backend/mirror_probe_stdlib.py > "${MIRROR_PROBE_OUT}" 2>/dev/null; then
+        PROBED_URL=$(cat "${MIRROR_PROBE_OUT}" 2>/dev/null || echo "")
+        if [ -n "${PROBED_URL}" ]; then
+            PIP_INDEX_URL="${PROBED_URL}"
+        fi
+    fi
+    rm -f "${MIRROR_PROBE_OUT}"
+    echo "[Info] PyPI mirror selected: ${PIP_INDEX_URL}"
+    echo
+
     echo "[INFO] Preparing Python build tools for source-only packages..."
-    if ! backend/venv/bin/python backend/launcher_pip.py install setuptools wheel; then
+    if ! backend/venv/bin/python backend/launcher_pip.py install --index-url "${PIP_INDEX_URL}" --extra-index-url https://pypi.org/simple setuptools wheel; then
         echo
         echo "[ERROR] Failed to install Python build tools."
         echo "        Check your internet connection and try again."
@@ -238,7 +254,7 @@ for raw_line in Path("backend/requirements.txt").read_text(encoding="utf-8").spl
 PYFILTER
     fi
 
-    if ! backend/venv/bin/python backend/launcher_pip.py install --no-build-isolation -r "${INSTALL_REQUIREMENTS}"; then
+    if ! backend/venv/bin/python backend/launcher_pip.py install --no-build-isolation --index-url "${PIP_INDEX_URL}" --extra-index-url https://pypi.org/simple -r "${INSTALL_REQUIREMENTS}"; then
         echo
         echo "[ERROR] Failed to install dependencies."
         echo "        Check your internet connection and try again."

@@ -346,6 +346,17 @@ def copy_project(destination_root: Path) -> None:
         shutil.copy2(item, destination)
 
 
+def write_release_notes(stage_dir: Path, version: str) -> Path:
+    """Copy the version-specific release notes into the package root."""
+    source = ROOT / "docs" / f"RELEASE_NOTES_v{version}.md"
+    if not source.exists():
+        raise FileNotFoundError(f"Release notes are missing for v{version}: {source}")
+    destination = stage_dir / "release-notes.md"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return destination
+
+
 def write_package_manifest(stage_dir: Path, version: str, *, include_model_payloads: bool = False) -> Path:
     managed_paths: list[str] = []
     installed_manifest_relative = INSTALLED_MANIFEST_RELATIVE_PATH.as_posix()
@@ -817,6 +828,7 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # === Windows portable: app + embedded Python, no models (auto-download) ===
     def populate_windows_portable(stage_dir: Path) -> None:
         copy_project(stage_dir)
+        write_release_notes(stage_dir, version)
         prepare_embedded_python(stage_dir)
         write_package_manifest(stage_dir, version)
 
@@ -825,11 +837,13 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # === Linux: app only, no models, no Python (uses system Python) ===
     def populate_linux(stage_dir: Path) -> None:
         copy_project(stage_dir)
+        write_release_notes(stage_dir, version)
         write_package_manifest(stage_dir, version)
 
     # === App patch: app files only, safe for in-app updater ===
     def populate_app_patch(stage_dir: Path) -> None:
         copy_project(stage_dir)
+        write_release_notes(stage_dir, version)
         write_portable_launcher(stage_dir)
         write_package_manifest(stage_dir, version)
 

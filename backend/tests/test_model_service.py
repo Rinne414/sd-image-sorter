@@ -412,3 +412,69 @@ def test_prepare_toriigate_downloads_after_runtime_exists(monkeypatch, tmp_path)
     assert fake_tagger_calls == [("toriigate-0.5", str(model_dir), False)]
     assert result["status"] == "ok"
     assert Path(result["paths"]["model_dir"]).name == "toriigate-0.5"
+
+
+def test_prepare_artist_delegates_to_runtime_artist_asset_preparer(monkeypatch, tmp_path):
+    runtime = tmp_path / "runtime"
+    checkpoint = tmp_path / "kaloscope2.0" / "448-90.13" / "best_checkpoint.pth"
+    mapping = tmp_path / "kaloscope2.0" / "class_mapping.csv"
+    runtime.mkdir(parents=True)
+    checkpoint.parent.mkdir(parents=True)
+    mapping.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint.write_bytes(b"ckpt")
+    mapping.write_text("class\n", encoding="utf-8")
+    calls = []
+
+    monkeypatch.setattr(
+        model_service,
+        "ensure_group_with_soft_deps",
+        lambda group: model_service.DependencyInstallResult((), False),
+    )
+    import artist_identifier
+
+    monkeypatch.setattr(
+        artist_identifier,
+        "prepare_artist_assets",
+        lambda source="auto": calls.append(source) or {
+            "runtime_path": str(runtime),
+            "checkpoint_path": str(checkpoint),
+            "class_mapping_path": str(mapping),
+            "source": source,
+        },
+    )
+
+    result = model_service.ModelService().prepare_model("artist", source="modelscope")
+
+    assert calls == ["modelscope"]
+    assert result["status"] == "ok"
+    assert result["paths"]["checkpoint_path"] == str(checkpoint.resolve())
+
+
+def test_toriigate_download_uses_shared_hf_endpoint_order(monkeypatch, tmp_path):
+    import toriigate_tagger
+
+    calls = []
+
+    class FakeHub:
+        def snapshot_download(self, **kwargs):
+            calls.append(kwargs)
+            Path(kwargs["local_dir"]).mkdir(parents=True, exist_ok=True)
+            (Path(kwargs["local_dir"]) / "config.json").write_text("{}", encoding="utf-8")
+            return kwargs["local_dir"]
+
+    monkeypatch.setattr(toriigate_tagger, "hf_hub", FakeHub())
+    monkeypatch.setattr(
+        toriigate_tagger,
+        "get_hf_endpoint_order",
+        lambda model_name="": ["https://hf-mirror.com", "https://huggingface.co"],
+    )
+
+    tagger = toriigate_tagger.ToriiGateTagger.__new__(toriigate_tagger.ToriiGateTagger)
+    tagger.model_name = "toriigate-0.5"
+    tagger.model_dir = str(tmp_path)
+
+    result = tagger._download_model()
+
+    assert Path(result).name == "toriigate-0.5"
+    assert calls
+    assert calls[0]["endpoint"] == "https://hf-mirror.com"

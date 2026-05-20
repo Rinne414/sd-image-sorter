@@ -544,6 +544,34 @@ def test_import_tags_overwrite_uses_shared_batch_writer_and_refreshes_tag_cache(
     assert not any(item["tag"] == "old_tag" for item in cached_after)
 
 
+def test_import_and_export_tags_preserves_ai_caption(test_db, tmp_path: Path):
+    image_path = tmp_path / "import-caption.png"
+    Image.new("RGB", (32, 32), color="white").save(image_path)
+    image_id = db.add_image(path=str(image_path), filename=image_path.name, metadata_json="{}")
+
+    service = TaggingService()
+    result = service.import_tags(
+        TagImportRequest(
+            images=[
+                {
+                    "path": str(image_path),
+                    "filename": image_path.name,
+                    "ai_caption": "a natural language caption for LoRA training",
+                    "tags": [{"tag": "caption_tag", "confidence": 0.8}],
+                }
+            ],
+            overwrite=True,
+        )
+    )
+
+    assert result == {"imported": 1, "skipped": 0}
+    assert db.get_image_by_id(image_id)["ai_caption"] == "a natural language caption for LoRA training"
+
+    exported = service.export_tags()
+    row = next(item for item in exported["images"] if item["filename"] == image_path.name)
+    assert row["ai_caption"] == "a natural language caption for LoRA training"
+
+
 def test_import_tags_skips_duplicate_rows_for_same_image_when_not_overwriting(test_db, tmp_path: Path):
     image_path = tmp_path / "import-duplicate-skip.png"
     Image.new("RGB", (32, 32), color="white").save(image_path)

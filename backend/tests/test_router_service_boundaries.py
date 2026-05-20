@@ -45,6 +45,8 @@ def test_tags_router_does_not_own_tagger_model_metadata_table():
     source = Path(__file__).resolve().parents[1] / "routers" / "tags.py"
     text = source.read_text(encoding="utf-8")
 
+    assert "import database" not in text
+    assert "from database" not in text
     assert "TAGGER_MODEL_HINTS =" not in text
     assert "from config import DEFAULT_TAGGER_MODEL, TAGGER_MODELS" not in text
 

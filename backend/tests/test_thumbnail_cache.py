@@ -49,6 +49,21 @@ def test_zero_cache_limit_disables_persistent_thumbnail_writes(monkeypatch, tmp_
     assert not list(cache_dir.glob("*.webp"))
 
 
+def test_thumbnail_cache_temp_paths_are_unique_for_same_cache_key(monkeypatch, tmp_path):
+    cache_path = tmp_path / "same_256.webp"
+
+    first = thumbnail_cache._get_cache_tmp_path(cache_path)
+    second = thumbnail_cache._get_cache_tmp_path(cache_path)
+
+    assert first != second
+    assert first.parent == cache_path.parent
+    assert second.parent == cache_path.parent
+    assert first.name.startswith(f"{cache_path.name}.")
+    assert second.name.startswith(f"{cache_path.name}.")
+    assert first.suffix == ".tmp"
+    assert second.suffix == ".tmp"
+
+
 def test_cache_stats_report_configured_limit(monkeypatch, tmp_path):
     monkeypatch.setattr(thumbnail_cache, "CACHE_DIR", tmp_path)
     monkeypatch.setattr(thumbnail_cache, "get_thumbnail_cache_max_mb", lambda: 500)
