@@ -1548,6 +1548,8 @@ window.I18nLang_zhCN = {
     'batchExport.tagPrefixHelper': '只添加到训练 caption 输出开头；Prompt、Tags、Negative、A1111 和 JSON 会保持精确。',
     'batchExport.tagBlacklist': '标签黑名单（可选）',
     'batchExport.tagBlacklistHelper': '从训练 caption 输出排除的标签，用逗号分隔。',
+    'batchExport.normalizeUnderscoresLabel': '把标签的下划线转成空格（保留 <code>score_*</code>）',
+    'batchExport.normalizeUnderscoresHelp': 'LoRA 训练默认开：<code>multiple_girls</code> → <code>multiple girls</code>；<code>score_5</code> / <code>score_9_up</code> 保持原样。如果你的训练器要的是原始 danbooru 下划线（Pony / NoobAI / 老 Kohya），取消勾选即可。',
     'batchExport.contentMode': '文件内容',
     'batchExport.contentModeHelper': '默认 LoRA caption = 可选 Class Token + AI caption + Prompt + Tags，每张图一行。',
     'batchExport.groupCommon': '常用',

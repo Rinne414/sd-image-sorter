@@ -883,7 +883,10 @@ class TestExportTagsBatch:
 
         txt_file = output_dir / "prefix_test.txt"
         content = txt_file.read_text()
-        assert content == "sks person, test_tag, second_tag"
+        # v3.2.1: 'test_tag' / 'second_tag' become 'test tag' / 'second tag'
+        # for LoRA-trainer compatibility; the user-supplied 'sks person'
+        # prefix is unchanged.
+        assert content == "sks person, test tag, second tag"
 
     def test_export_batch_prompt_mode_ignores_training_prefix(self, test_client, test_db, tmp_path: Path):
         """Prompt sidecars should contain exact Prompt text even if the LoRA prefix field has stale text."""
@@ -969,7 +972,12 @@ class TestExportTagsBatch:
         assert data["error_count"] == 1
         assert data["total"] == 2
         assert data["error_messages"] == ["Image 999999 not found"]
-        assert (output_dir / "contract_test.txt").read_text() == "contract_tag"
+        # Note: 'contract_tag' becomes 'contract tag' because v3.2.1 same-name
+        # `.txt` export normalizes danbooru-style underscores to spaces by
+        # default for LoRA-trainer compatibility (see
+        # test_export_batch_normalizes_lora_tag_underscores_by_default for
+        # the contract).
+        assert (output_dir / "contract_test.txt").read_text() == "contract tag"
 
     def test_export_batch_keeps_same_basename_files_distinct(self, test_client, test_db, tmp_path: Path):
         """Files that only differ by extension should not overwrite each other on export."""
@@ -1115,9 +1123,140 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         assert response.json()["exported"] == 1
-        assert (output_dir / "evil_name.txt").read_text(encoding="utf-8") == "safe_tag"
+        # 'safe_tag' becomes 'safe tag' because of the v3.2.1 LoRA-friendly
+        # underscore normalization. The point of this test is the FILENAME
+        # (must not escape the output folder), not the tag content.
+        assert (output_dir / "evil_name.txt").read_text(encoding="utf-8") == "safe tag"
         assert not (tmp_path / "evil:name.txt").exists()
 
+
+    def test_export_batch_normalizes_lora_tag_underscores_by_default(self, test_client, test_db, tmp_path: Path):
+        """LoRA training caption files must convert tag underscores to spaces
+        while preserving ``score_*`` quality tokens.
+
+        Reported by user 2026-05-21: the same-name ``.txt`` export was
+        emitting ``multiple_girls`` / ``looking_at_viewer`` etc., which the
+        Anima / FLUX / general anime-NL family of LoRA trainers cannot use
+        as-is. ``score_5`` / ``score_9_up`` (Pony / NoobAI quality tokens)
+        must NOT be normalized — those are deliberate underscore tokens the
+        base model was trained on. The default behavior of every danbooru-
+        tag content mode is therefore: convert ``_`` to space EXCEPT when
+        the tag starts with ``score_``.
+        """
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "test_image.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="test_image.png")
+        db.add_tags(image_id, [
+            {"tag": "1girl", "confidence": 0.99},
+            {"tag": "multiple_girls", "confidence": 0.95},
+            {"tag": "looking_at_viewer", "confidence": 0.9},
+            {"tag": "blue_hair", "confidence": 0.85},
+            {"tag": "score_5", "confidence": 0.99},
+            {"tag": "score_9_up", "confidence": 0.99},
+        ])
+
+        output_dir = tmp_path / "lora_default"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["exported"] == 1
+        rendered = (output_dir / "test_image.txt").read_text(encoding="utf-8")
+        # Underscores converted to spaces for normal danbooru tags.
+        assert "multiple girls" in rendered
+        assert "looking at viewer" in rendered
+        assert "blue hair" in rendered
+        # Score tokens keep their underscores.
+        assert "score_5" in rendered
+        assert "score_9_up" in rendered
+        # The unchanged-version of multi-word tags must NOT appear.
+        assert "multiple_girls" not in rendered
+        assert "looking_at_viewer" not in rendered
+        assert "blue_hair" not in rendered
+
+    def test_export_batch_normalize_underscores_can_be_disabled(self, test_client, test_db, tmp_path: Path):
+        """Users running Pony / NoobAI / Kohya pipelines that prefer raw
+        underscored tags can explicitly opt out via the
+        ``normalize_tag_underscores=false`` request flag (surfaced as a
+        checkbox in the export modal). The flag must short-circuit even for
+        danbooru-tag content modes that normalize by default."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "raw_underscores.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(path=str(img_path), filename="raw_underscores.png")
+        db.add_tags(image_id, [
+            {"tag": "multiple_girls", "confidence": 0.95},
+            {"tag": "score_5", "confidence": 0.99},
+        ])
+
+        output_dir = tmp_path / "raw"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "tags",
+                "normalize_tag_underscores": False,
+            },
+        )
+        assert response.status_code == 200, response.text
+        rendered = (output_dir / "raw_underscores.txt").read_text(encoding="utf-8")
+        assert "multiple_girls" in rendered
+        assert "score_5" in rendered
+        assert "multiple girls" not in rendered
+
+    def test_export_batch_does_not_normalize_user_prompt_text(self, test_client, test_db, tmp_path: Path):
+        """Underscore normalization applies only to the local tagger's
+        danbooru tag list. The user's original ``prompt`` and
+        ``negative_prompt`` text fields are deliberate input — content
+        modes that emit them (``prompt``, ``negative``, ``prompt_negative``,
+        ``a1111``, ``nl_caption``, ``prompt_nl``) MUST leave underscores
+        untouched. A user-written ``style_x`` token in the prompt has to
+        round-trip exactly as the user typed it."""
+        import database as db
+        from PIL import Image
+
+        img_path = tmp_path / "with_prompt.png"
+        Image.new("RGB", (32, 32), color="white").save(img_path)
+        image_id = db.add_image(
+            path=str(img_path),
+            filename="with_prompt.png",
+            prompt="masterpiece, style_xl, my_custom_concept",
+            negative_prompt="bad_quality, low_res",
+        )
+        db.add_tags(image_id, [{"tag": "1girl", "confidence": 0.99}])
+
+        output_dir = tmp_path / "prompt_export"
+        output_dir.mkdir()
+
+        response = test_client.post(
+            "/api/tags/export-batch",
+            json={
+                "image_ids": [image_id],
+                "output_folder": str(output_dir),
+                "content_mode": "prompt",
+            },
+        )
+        assert response.status_code == 200, response.text
+        rendered = (output_dir / "with_prompt.txt").read_text(encoding="utf-8")
+        # The prompt mode must preserve user-written underscores verbatim;
+        # 'style_xl' must NOT become 'style xl'.
+        assert "style_xl" in rendered
+        assert "my_custom_concept" in rendered
 
     def test_export_batch_skip_policy_keeps_existing_sidecars(self, test_client, test_db, tmp_path: Path):
         import database as db
@@ -1177,7 +1316,7 @@ class TestExportTagsBatch:
         assert data["status"] == "ok"
         assert data["exported"] == 1
         assert data["skipped"] == 0
-        assert sidecar.read_text(encoding="utf-8") == "replacement_tag"
+        assert sidecar.read_text(encoding="utf-8") == "replacement tag"
 
     def test_export_batch_can_write_sd_prompt_sidecars(self, test_client, test_db, tmp_path: Path):
         """Batch sidecar export should support SD prompt files, not only raw tag lists."""
@@ -1339,7 +1478,10 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         content = (output_dir / "tags_nl_caption.txt").read_text(encoding="utf-8")
-        assert content == "tomori_lora, blue_hair, smile, a blue-haired girl smiling"
+        # v3.2.1: the auto-tagged 'blue_hair' becomes 'blue hair' for LoRA
+        # compatibility; the user-supplied 'tomori_lora' prefix and the
+        # ai_caption NL text are NOT normalized (deliberate user input).
+        assert content == "tomori_lora, blue hair, smile, a blue-haired girl smiling"
         assert "original prompt should not appear" not in content
         assert "newest" not in content
         assert "safe" not in content
@@ -1380,7 +1522,9 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         content = (output_dir / "blacklist_caption.txt").read_text(encoding="utf-8")
-        assert content == "close-up portrait, soft light, blue_eyes"
+        # v3.2.1: tag-list 'blue_eyes' becomes 'blue eyes'; ai_caption tokens
+        # ('close-up portrait') and prompt tokens ('soft light') stay as-is.
+        assert content == "close-up portrait, soft light, blue eyes"
         for blocked in ["newest", "highres", "normal quality", "score_5", "safe", "1girl"]:
             assert blocked not in content
 
@@ -1594,8 +1738,8 @@ class TestEdgeCases:
         sidecar_b = sub_b / "beta.txt"
         assert sidecar_a.exists(), f"missing {sidecar_a}"
         assert sidecar_b.exists(), f"missing {sidecar_b}"
-        assert sidecar_a.read_text(encoding="utf-8") == "alpha_tag"
-        assert sidecar_b.read_text(encoding="utf-8") == "beta_tag"
+        assert sidecar_a.read_text(encoding="utf-8") == "alpha tag"
+        assert sidecar_b.read_text(encoding="utf-8") == "beta tag"
 
         # And tmp_path itself must NOT have collected sidecars at the top
         # level — that would be the legacy flat behaviour leaking through.

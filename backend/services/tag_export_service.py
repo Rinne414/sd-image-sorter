@@ -240,6 +240,60 @@ def _filter_tags(tags: List[Dict[str, Any]], blacklist: set[str]) -> List[str]:
     ]
 
 
+# Default underscore-preservation prefixes for the LoRA-friendly export path.
+# Re-exported from ``export_template_engine`` so the same convention applies
+# whether you run the basic ``tags`` mode or the template engine.
+LORA_PRESERVE_UNDERSCORE_PREFIXES = ["score_"]
+
+
+# Content modes that emit danbooru-style tag tokens. Underscore-to-space
+# normalization defaults to ON for these so LoRA trainers receive
+# ``multiple girls`` (with ``score_5`` preserved) instead of
+# ``multiple_girls``. Modes producing free-form text (prompt, NL caption,
+# A1111 parameter blocks) are left untouched because users may have written
+# deliberate underscores into their original prompts.
+DANBOORU_TAG_CONTENT_MODES = {
+    "tags",
+    "caption_tags",
+    "caption_merged",
+    "tags_nl",
+}
+
+
+def _maybe_normalize_underscores(
+    tags: List[str],
+    *,
+    normalize: bool,
+    preserve_prefixes: Optional[List[str]] = None,
+) -> List[str]:
+    """Apply LoRA-friendly underscore-to-space conversion to a list of tags."""
+    if not normalize:
+        return tags
+    from services.export_template_engine import normalize_lora_tag
+    prefixes = list(preserve_prefixes) if preserve_prefixes is not None else LORA_PRESERVE_UNDERSCORE_PREFIXES
+    return [normalize_lora_tag(t, prefixes) for t in tags]
+
+
+def _resolve_underscore_normalization(
+    content_mode: str,
+    normalize_tag_underscores: Optional[bool],
+) -> bool:
+    """Pick the effective underscore normalization flag for ``content_mode``.
+
+    ``normalize_tag_underscores`` is the request override (``True``, ``False``
+    or ``None`` for default). When ``None`` we apply normalization for every
+    danbooru-tag content mode (the LoRA-trainer expectation) and skip it for
+    NL / prompt / a1111 / json modes. ``template`` mode is also skipped here
+    because the template engine performs its own per-preset normalization
+    using the same underlying utility.
+    """
+    if normalize_tag_underscores is True:
+        return True
+    if normalize_tag_underscores is False:
+        return False
+    return str(content_mode or "").strip().lower() in DANBOORU_TAG_CONTENT_MODES
+
+
 def _join_caption_parts(parts: List[str]) -> str:
     seen = set()
     output: List[str] = []
@@ -304,12 +358,22 @@ def build_sidecar_content(
     blacklist: Optional[set[str]] = None,
     prefix: str = "",
     template_options: Optional[Dict[str, Any]] = None,
+    normalize_tag_underscores: Optional[bool] = None,
 ) -> str:
     """Build export content for one image according to a Pro SD workflow mode.
 
     For content_mode='template', template_options is required and may contain:
       preset_id, template_override, trigger, blacklist, replace_rules, max_tags,
       append, quality_override, safety_override, rating_override.
+
+    ``normalize_tag_underscores`` controls whether danbooru-tag content modes
+    (``tags``, ``caption_tags``, ``caption_merged``, ``tags_nl``) emit
+    LoRA-friendly captions with underscores converted to spaces (``score_*``
+    is always preserved). The default (``None``) follows the per-mode policy:
+    tag modes normalize, free-form text modes (prompt, NL, a1111, json) do
+    not. Pass ``False`` explicitly to keep underscores in tag modes; pass
+    ``True`` to force normalization in modes that do not normalize by default
+    (rarely useful — most callers should leave this at ``None``).
     """
     mode = str(content_mode or "tags").strip().lower()
     if mode not in VALID_CONTENT_MODES:
@@ -321,6 +385,14 @@ def build_sidecar_content(
     negative_prompt = str(image.get("negative_prompt") or "").strip()
     caption = str(image.get("ai_caption") or "").strip()
     prefix = str(prefix or "").strip()
+
+    # LoRA-friendly underscore normalization for danbooru-tag content modes.
+    # Applied AFTER blacklist filtering (so the blacklist still works against
+    # raw tag identifiers like ``multiple_girls``) but BEFORE the join, so
+    # downstream consumers see ``multiple girls`` while ``score_5`` /
+    # ``score_9_up`` survive intact.
+    underscore_apply = _resolve_underscore_normalization(mode, normalize_tag_underscores)
+    filtered_tags = _maybe_normalize_underscores(filtered_tags, normalize=underscore_apply)
 
     if mode == "tags":
         return _join_caption_parts(filtered_tags)
@@ -482,6 +554,11 @@ def export_tags_batch_request(
             except (TypeError, ValueError):
                 continue
 
+    # v3.2.1 follow-up: LoRA-trainer underscore convention. None == follow
+    # per-content-mode default. Explicit True / False is the user's
+    # checkbox override from the export modal.
+    normalize_tag_underscores_request = getattr(request, "normalize_tag_underscores", None)
+
     exported = 0
     skipped = 0
     error_count = 0
@@ -520,6 +597,7 @@ def export_tags_batch_request(
                         blacklist=blacklist,
                         prefix=prefix,
                         template_options=template_options,
+                        normalize_tag_underscores=normalize_tag_underscores_request,
                     )
                 # In ``beside_image`` mode each image lands in its own
                 # source directory. We do NOT auto-create directories on
@@ -615,6 +693,8 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
                 quality_override=getattr(request, "quality_override", None),
                 safety_override=getattr(request, "safety_override", None),
                 rating_override=getattr(request, "rating_override", None),
+                underscore_to_space_override=getattr(request, "underscore_to_space_override", None),
+                preserve_underscore_prefixes_override=getattr(request, "preserve_underscore_prefixes_override", None),
             )
         except Exception as exc:
             results.append({"image_id": image_id, "error": str(exc), "rendered": ""})

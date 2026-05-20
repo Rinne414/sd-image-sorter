@@ -206,6 +206,33 @@ def _format_tag_underscore(tag: str, preserve_prefixes: List[str]) -> str:
     return tag.replace("_", " ")
 
 
+# Public re-export so other modules (notably ``tag_export_service.build_sidecar_content``)
+# can reuse the exact same LoRA-trainer underscore convention.
+def normalize_lora_tag(tag: str, preserve_prefixes: Optional[List[str]] = None) -> str:
+    """Convert tag underscores to spaces while preserving the LoRA-quality
+    prefixes (``score_*`` by default) that Pony / NoobAI base models depend on.
+
+    Used by the same-name ``.txt`` export pipeline so danbooru-tag content
+    modes (``tags``, ``caption_tags``, ``caption_merged``, ``tags_nl``) emit
+    LoRA-friendly captions like ``multiple girls`` instead of
+    ``multiple_girls`` while still keeping ``score_5`` / ``score_9_up``.
+
+    Pass ``preserve_prefixes=[]`` to convert every underscore (rarely needed
+    in real LoRA workflows). Pass extra prefixes (e.g. ``["score_", "rating_"]``)
+    to keep additional Booru-style metadata tokens intact.
+    """
+    if not tag:
+        return tag
+    return _format_tag_underscore(str(tag), list(preserve_prefixes) if preserve_prefixes is not None else DEFAULT_LORA_PRESERVE_PREFIXES)
+
+
+# Default underscore-preservation prefixes used by every LoRA preset that
+# enables ``underscore_to_space``. Keeping it as a module constant makes the
+# convention discoverable and lets the same-name ``.txt`` exporter reuse it
+# without re-declaring the list.
+DEFAULT_LORA_PRESERVE_PREFIXES: List[str] = ["score_"]
+
+
 def _normalize_blacklist_item(value: str, config: TagProcessingConfig) -> str:
     normalized = str(value or "").strip()
     if config.underscore_to_space:
@@ -385,8 +412,16 @@ def build_export_caption(
     quality_override: Optional[str] = None,
     safety_override: Optional[str] = None,
     rating_override: Optional[str] = None,
+    underscore_to_space_override: Optional[bool] = None,
+    preserve_underscore_prefixes_override: Optional[List[str]] = None,
 ) -> str:
     """Build the final caption string for a single image using a preset + overrides.
+
+    ``underscore_to_space_override`` and ``preserve_underscore_prefixes_override``
+    let the caller force the LoRA underscore convention (``True`` to convert,
+    ``False`` to keep). Used by the live-preview path so the preview
+    matches the actual same-name ``.txt`` export when the user toggles the
+    "Convert tag underscores to spaces (preserve `score_*`)" checkbox.
 
     Returns the rendered caption string ready for writing to a sidecar file.
     """
@@ -394,14 +429,25 @@ def build_export_caption(
     template = template_override if template_override else preset["template"]
     separator = preset.get("separator", ", ")
 
+    effective_underscore = (
+        bool(underscore_to_space_override)
+        if underscore_to_space_override is not None
+        else bool(preset.get("underscore_to_space", False))
+    )
+    effective_preserve = list(
+        preserve_underscore_prefixes_override
+        if preserve_underscore_prefixes_override is not None
+        else preset.get("preserve_underscore_prefixes", [])
+    )
+
     # Build tag processing config
     proc_config = TagProcessingConfig(
         blacklist=list(blacklist or []),
         replace_rules=dict(replace_rules or {}),
         max_tags=int(max_tags or 0),
         append=list(append or []),
-        underscore_to_space=preset.get("underscore_to_space", False),
-        preserve_underscore_prefixes=list(preset.get("preserve_underscore_prefixes", [])),
+        underscore_to_space=effective_underscore,
+        preserve_underscore_prefixes=effective_preserve,
     )
 
     # Process tags
