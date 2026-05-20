@@ -1128,7 +1128,7 @@ async function openAutoSepOverflowModal() {
     await loadMoreAutoSepOverflow();
 }
 
-function renderAutoSepPreviewList(images = [], totalCount = 0) {
+function renderAutoSepPreviewList(images = [], totalCount = 0, reason = null) {
     const { $ } = window.App;
     const container = $('#autosep-preview-list');
     if (!container) return;
@@ -1138,7 +1138,27 @@ function renderAutoSepPreviewList(images = [], totalCount = 0) {
     if (!images.length) {
         const empty = document.createElement('div');
         empty.className = 'autosep-preview-empty';
-        empty.textContent = window.I18n?.t?.('autosep.previewEmptyInitial') || 'No preview yet. Click "Preview Results" to inspect matching images.';
+        if (reason === 'no-filters') {
+            // Helpful explanation when nothing is filtered yet (was: silent "0 match")
+            empty.classList.add('autosep-preview-empty--no-filters');
+            const title = document.createElement('div');
+            title.className = 'autosep-preview-empty-title';
+            title.textContent = window.I18n?.t?.('autosep.noFiltersTitle')
+                || (window.I18n?.getLang?.() === 'zh-CN'
+                    ? '尚未设置任何筛选'
+                    : 'No filters set yet');
+            const hint = document.createElement('div');
+            hint.className = 'autosep-preview-empty-hint';
+            hint.textContent = window.I18n?.t?.('autosep.noFiltersHint')
+                || (window.I18n?.getLang?.() === 'zh-CN'
+                    ? '请先设置筛选规则（如生成器、标签、提示词），或点击「从图库复制筛选」把图库当前的筛选条件带过来。'
+                    : 'Set filters above (e.g. generators, tags, prompts), or click "Copy from Gallery" to import the current gallery filters.');
+            empty.appendChild(title);
+            empty.appendChild(hint);
+        } else {
+            empty.textContent = window.I18n?.t?.('autosep.previewEmptyInitial')
+                || 'No preview yet. Click "Preview Results" to inspect matching images.';
+        }
         container.appendChild(empty);
         return;
     }
@@ -1200,7 +1220,7 @@ async function updateAutoSepPreview() {
         AutoSepState.matchCount = 0;
         AutoSepState.previewImages = [];
         AutoSepState.previewSignature = currentSignature;
-        renderAutoSepPreviewList([], 0);
+        renderAutoSepPreviewList([], 0, 'no-filters');
         return;
     }
 

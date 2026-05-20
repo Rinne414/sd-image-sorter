@@ -23,6 +23,9 @@
         pollTimer: null,
         lastProgress: null,
         bannerVisible: false,
+        wasRunning: false,         // tracks running->idle transition for "Done" UX
+        doneAutoCloseTimer: null,  // auto-close toast/chip 5s after completion
+        doneState: false,          // when true, chip/toast show completion banner
 
         t(en, zh) {
             return window.I18n?.getLang?.() === "zh-CN" ? zh : en;
@@ -45,6 +48,10 @@
             document.getElementById("btn-color-progress-close")?.addEventListener("click", () => this.closeToast());
             document.getElementById("btn-color-progress-hide")?.addEventListener("click", () => this.closeToast());
             document.getElementById("btn-color-progress-pause")?.addEventListener("click", () => this.cancelAnalysis());
+            // v3.2.1 task #26: filter modal inline banner.
+            document.getElementById("btn-filter-color-backfill-start")?.addEventListener("click", () => this.startAnalysis());
+            // Refresh the filter banner whenever the filter modal opens.
+            window.addEventListener("filterModalOpened", () => this.refreshFilterBanner());
         },
 
         // ---- Banner -------------------------------------------------------
@@ -97,6 +104,32 @@
         dismissBanner() {
             localStorage.setItem(BANNER_DISMISS_KEY, String(Date.now()));
             this.hideBanner();
+        },
+
+        // ---- Filter modal inline banner (task #26) ----------------------
+
+        async refreshFilterBanner() {
+            const banner = document.getElementById("filter-color-backfill-banner");
+            if (!banner) return;
+            const titleEl = document.getElementById("filter-color-backfill-title");
+            let missing = 0;
+            try {
+                missing = await this._fetchMissingCount();
+            } catch (_e) {
+                missing = 0;
+            }
+            if (missing <= 0) {
+                banner.hidden = true;
+                return;
+            }
+            if (titleEl) {
+                const tmpl = window.I18n?.t?.("filter.colorBackfillMissing")
+                    || (window.I18n?.getLang?.() === "zh-CN"
+                        ? `色彩筛选还需分析 {count} 张图。`
+                        : `Color filters need analysis on {count} more images.`);
+                titleEl.textContent = tmpl.replace("{count}", missing.toLocaleString());
+            }
+            banner.hidden = false;
         },
 
         // ---- Start / cancel ----------------------------------------------
@@ -162,25 +195,66 @@
             } catch (_) {
                 return;
             }
+            // Detect running->idle transition for "Done" UX banner.
+            // Only fire when the user actually saw a run in this session
+            // (wasRunning=true), not on initial-load idle state.
+            const justFinished = this.wasRunning && !data.running;
+            this.wasRunning = Boolean(data.running);
+
             this.lastProgress = data;
+
+            if (justFinished && data.completed > 0) {
+                this._showDoneBanner(data);
+                try { window.dispatchEvent(new CustomEvent("colorAnalysisCompleted")); } catch (_e) {}
+            }
+
             this._renderChip(data);
             this._renderToast(data);
+
             if (data.running) {
                 this.startPolling();
             } else {
                 this.stopPolling();
-                // When a run that we just kicked off finishes, refresh the
-                // gallery so newly-analyzed images surface their colors.
-                if (data.total > 0 && data.completed > 0) {
-                    try { window.dispatchEvent(new CustomEvent("colorAnalysisCompleted")); } catch (_e) {}
-                }
             }
+        },
+
+        _showDoneBanner(data) {
+            // Switch chip + toast into "done" mode for 5 seconds, then auto-hide.
+            this.doneState = true;
+            if (this.doneAutoCloseTimer) {
+                clearTimeout(this.doneAutoCloseTimer);
+            }
+            this.doneAutoCloseTimer = setTimeout(() => {
+                this.doneState = false;
+                this.doneAutoCloseTimer = null;
+                this.closeToast();
+                const chip = document.getElementById("nav-color-progress");
+                if (chip) chip.hidden = true;
+            }, 5000);
+            // Surface a global toast too — visible even when the chip toast is closed.
+            this._toast(
+                this.t(
+                    `Color analysis done — ${data.completed.toLocaleString()} images analyzed.`,
+                    `色彩分析完成 — 已分析 ${data.completed.toLocaleString()} 张。`,
+                ),
+                "success",
+            );
         },
 
         _renderChip(data) {
             const chip = document.getElementById("nav-color-progress");
             const label = document.getElementById("nav-color-progress-label");
             if (!chip || !label) return;
+            // Done mode: keep chip visible with a checkmark for 5s after completion.
+            if (this.doneState) {
+                chip.hidden = false;
+                label.textContent = "✓";
+                chip.setAttribute("aria-label", this.t(
+                    `Color analysis complete — ${data.completed.toLocaleString()} analyzed`,
+                    `色彩分析完成 — 已分析 ${data.completed.toLocaleString()}`,
+                ));
+                return;
+            }
             if (!data.running) {
                 chip.hidden = true;
                 return;
@@ -203,7 +277,11 @@
             const currentEl = document.getElementById("color-progress-toast-current");
             const pauseBtn = document.getElementById("btn-color-progress-pause");
 
-            const pct = data.total > 0 ? Math.floor((data.completed / data.total) * 100) : 0;
+            // Done mode: show 100% and a clear completion message.
+            const showingDone = this.doneState;
+            const pct = showingDone
+                ? 100
+                : (data.total > 0 ? Math.floor((data.completed / data.total) * 100) : 0);
             if (fill) {
                 fill.style.width = `${pct}%`;
                 fill.parentElement?.setAttribute("aria-valuenow", String(pct));
@@ -211,15 +289,22 @@
             if (count) count.textContent = `${data.completed.toLocaleString()} / ${data.total.toLocaleString()}`;
             if (pctEl) pctEl.textContent = `${pct}%`;
             if (currentEl) {
-                currentEl.textContent = data.current_image
-                    ? this.t(`Current: ${data.current_image}`, `当前：${data.current_image}`)
-                    : "";
+                if (showingDone) {
+                    currentEl.textContent = this.t(
+                        `Done — ${data.completed.toLocaleString()} images analyzed`,
+                        `已完成 — 共分析 ${data.completed.toLocaleString()} 张`,
+                    );
+                } else {
+                    currentEl.textContent = data.current_image
+                        ? this.t(`Current: ${data.current_image}`, `当前：${data.current_image}`)
+                        : "";
+                }
             }
             if (pauseBtn) {
                 if (data.cancel_requested) {
                     pauseBtn.disabled = true;
                     pauseBtn.textContent = this.t("Cancelling...", "正在取消...");
-                } else if (!data.running) {
+                } else if (showingDone || !data.running) {
                     pauseBtn.disabled = true;
                     pauseBtn.textContent = data.failed > 0
                         ? this.t(`Done with ${data.failed} error(s)`, `完成 (${data.failed} 错误)`)

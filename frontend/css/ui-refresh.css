@@ -679,6 +679,32 @@ textarea:focus,
     color: var(--text-primary);
 }
 
+/*
+ * Filter sidebar summary rows — single-line rule (DESIGN.md §filter-sidebar).
+ * Labels and values inside `.filter-summary .summary-row` must stay on ONE
+ * visual line. Long values truncate with ellipsis, never wrap.
+ */
+.filter-summary .summary-row {
+    flex-wrap: nowrap;
+    align-items: center;
+}
+
+.filter-summary .summary-label {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.filter-summary .summary-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
 .summary-value,
 .summary-item,
 .artist-name,
@@ -1713,6 +1739,30 @@ textarea:focus,
 .autosep-preview-empty {
     max-width: 720px;
     margin-inline: auto;
+}
+
+.autosep-preview-empty--no-filters {
+    padding: 28px 22px;
+    text-align: center;
+    border: 1px dashed rgba(191, 219, 254, 0.22);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+}
+
+.autosep-preview-empty--no-filters .autosep-preview-empty-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary, #f5f7fa);
+    margin-bottom: 8px;
+    letter-spacing: 0.01em;
+}
+
+.autosep-preview-empty--no-filters .autosep-preview-empty-hint {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary, rgba(229, 231, 235, 0.72));
+    max-width: 540px;
+    margin: 0 auto;
 }
 
 .empty-state {
@@ -3453,6 +3503,23 @@ textarea:focus,
 .filter-modal-shell .tag-search-container,
 .filter-modal-shell .active-tags {
     min-width: 0;
+}
+
+/*
+ * v3.2.1 task #31: filter modal right column auto-extend.
+ *
+ * The right column ("Search & Refine" + "Checkpoints / Loras") was capped at
+ * a hard 180 px per list and wasted vertical space on tall displays. Use
+ * viewport-relative caps so a 1080p screen surfaces ~340 px of list rows
+ * (≈8-10 visible items) without making 768 px laptops feel cramped.
+ */
+.filter-modal-grid .filter-list,
+.filter-modal-grid .active-tags {
+    max-height: clamp(180px, 32vh, 420px);
+    overflow-y: auto;
+}
+.filter-modal-grid .active-tags:empty {
+    max-height: none;
 }
 
 .filter-match-row {

@@ -964,7 +964,7 @@ Render up to 20 sample caption files for a given preset without writing to disk.
 Added in v3.2.1. The color analyzer extracts dominant colors, brightness, saturation, temperature, and distribution shape; persisted in 7 indexed DB columns added by migration 010.
 
 #### GET /api/colors/missing-count
-How many indexed images still need color analysis (used to gate the "Analyze All" button).
+How many indexed images still need color analysis (used to gate the "Analyze All" button). Returns `{missing: int, total: int}` where `total` is the total number of readable images (added in v3.2.1 follow-up so the tagger Color tab can show "Analyzed X of Y").
 
 #### GET /api/colors/progress
 Live progress for a running batch backfill: `{state, total, completed, failed, current_path, started_at}`.

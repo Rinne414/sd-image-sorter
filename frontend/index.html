@@ -2862,6 +2862,10 @@
                         <span aria-hidden="true">✨</span>
                         <span data-i18n="tagger.tabAesthetic">Aesthetic Score</span>
                     </button>
+                    <button type="button" class="tagger-tab" data-tagger-tab="color" role="tab" aria-selected="false">
+                        <span aria-hidden="true">🎨</span>
+                        <span data-i18n="tagger.tabColor">Color Analysis</span>
+                    </button>
                 </div>
                 <p class="tagger-tab-description" id="tagger-tab-description" data-i18n="tagger.tabLocalDesc">WD14 / Camie / PixAI ONNX models — fast Danbooru-style tags.</p>
 
@@ -2951,6 +2955,28 @@
                         <button class="btn btn-ghost danger" id="btn-tagger-aesthetic-cancel" type="button" style="display:none">
                             <span aria-hidden="true">■</span>
                             <span data-i18n="gallery.cancelAesthetic">Stop</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- v3.2.1 task #26: Color analysis panel inside tagger modal. -->
+                <div class="tagger-aesthetic-panel" id="tagger-color-panel" data-tagger-shows="color" style="display:none">
+                    <div class="tagger-aesthetic-status-card">
+                        <span class="tagger-aesthetic-icon" aria-hidden="true">🎨</span>
+                        <div class="tagger-aesthetic-status-copy">
+                            <strong id="tagger-color-status-title" data-i18n="tagger.colorReady">Color analysis is ready on this machine.</strong>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-color-status-hint" data-i18n="tagger.tabColorDesc">Extracts dominant colors, brightness, color temperature, and saturation. Required for the color sorts and filters.</p>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-color-status-counts" style="margin-top:6px"></p>
+                        </div>
+                    </div>
+                    <div class="tagger-aesthetic-actions">
+                        <button class="btn btn-primary" id="btn-tagger-color-start" type="button">
+                            <span aria-hidden="true">🎨</span>
+                            <span data-i18n="tagger.colorStart">Analyze Colors</span>
+                        </button>
+                        <button class="btn btn-ghost danger" id="btn-tagger-color-cancel" type="button" style="display:none">
+                            <span aria-hidden="true">■</span>
+                            <span data-i18n="tagger.colorCancel">Stop</span>
                         </button>
                     </div>
                 </div>
@@ -3574,6 +3600,18 @@
                                     <h4 data-i18n="filter.colors">Colors</h4>
                                 </div>
                                 <p class="filter-panel-help" data-i18n="filter.colorHelp">Filter images after running color analysis.</p>
+                            </div>
+                            <!-- v3.2.1 task #26: inline banner shown when images need color analysis -->
+                            <div class="filter-color-backfill-banner" id="filter-color-backfill-banner" hidden role="status" aria-live="polite">
+                                <span class="filter-color-backfill-icon" aria-hidden="true">🎨</span>
+                                <div class="filter-color-backfill-copy">
+                                    <strong id="filter-color-backfill-title"></strong>
+                                    <p class="filter-color-backfill-hint" data-i18n="filter.colorBackfillHint">Analysis is local and takes about 1 minute per 1,000 images.</p>
+                                </div>
+                                <button class="btn btn-primary btn-small" id="btn-filter-color-backfill-start" type="button">
+                                    <span aria-hidden="true">🎨</span>
+                                    <span data-i18n="filter.colorBackfillRunNow">Run color analysis</span>
+                                </button>
                             </div>
                             <div class="dimension-grid" role="group">
                                 <label class="dimension-field">
