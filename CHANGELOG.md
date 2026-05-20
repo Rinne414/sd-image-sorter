@@ -5,47 +5,7 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.2] - 2026-05-20
-
-补完 v3.2.1 留下的后端漏洞和缺失前端：色彩字段终于会在图库 API 返回；缩略图临时文件路径唯一化；批量打标 N+1 SQL 合并；新增 Mass Tag Editor / VLM 代理与 Vertex AI 设置 / 色彩补算引导横幅。
-
-Finishes the gaps left in v3.2.1: color columns now ship through `/api/images`; thumbnail cache uses unique temp paths under concurrent writes; tags-bulk operations batch-load instead of N+1; new Mass Tag Editor + VLM proxy/Vertex/output-format controls + color analysis backfill banner.
-
----
-
-### Added / 新增
-- **Mass Tag Editor (frontend)**: a new 🧹 button in the nav bar opens a modal for the 4 backend bulk-tag operations (Find & Replace / Bulk Add / Bulk Remove / Cleanup). The modal has a scope picker (current selection vs current filter), tabbed operation panels, mandatory Dry-run preview, and a separate confirm dialog with a 2-second delayed Apply button for any operation touching more than 1,000 images. Filter scope is resolved via the existing `/api/images/selection-token` + `selection-chunk` flow so even a 70k-image filter loads in ~3s. The summary panel shows affected-image count and up to 5 sample diff entries before commit. Fully bilingual (en + zh-CN), zero new dependencies.
-  - **批量标签编辑器（前端）**：导航栏新增 🧹 入口，打开后是 v3.2.1 已就绪的 4 个批量标签后端接口的统一界面（查找替换 / 批量添加 / 批量删除 / 清理）。带范围选择（已选 vs 当前筛选）、Tab 切换的操作面板、强制 Dry-run 预览，和影响超过 1,000 张时的二次确认弹窗（Apply 按钮有 2 秒倒计时禁用）。筛选范围通过既有的 `/api/images/selection-token` + `selection-chunk` 分块抓取 ID，7 万张图也能 ~3 秒内拿到。摘要面板会显示影响图片数和最多 5 条修改前后对比，确认后才真正写入。完全双语（英文 + 简中），无新增依赖。
-- **VLM Settings — proxy / Vertex AI / output format (frontend)**: the existing VLM Settings modal now exposes the three backend-ready feature groups that v3.2.1 shipped without UI. Output Format is a segmented control (NL caption / Danbooru tags / Both) at the top. Network Proxy is a collapsed `<details>` with HTTP / HTTPS / SOCKS fields. Vertex AI is a separate collapsed `<details>` (project / region / service-account JSON) that auto-appears only when the provider drop-down is set to Gemini. Both sections show a small "active" badge on the summary line when they hold non-default values.
-  - **VLM 设置 — 代理 / Vertex AI / 输出格式（前端）**：v3.2.1 后端已经实现但前端没接出的 3 组功能现在 UI 全到位。Output Format 是顶部的三段控件（自然语言 / Danbooru 标签 / 两者都要）；Network Proxy 是一个折叠区，里面有 HTTP / HTTPS / SOCKS 三个独立输入框；Vertex AI 是另一个折叠区（GCP project / 区域 / 服务账户 JSON），只有当 provider 选择 Gemini 时才会显示。两个折叠区都会在有非默认值时显示一个 "已启用" 小徽章，方便一眼看出哪些高级设置被改过。
-- **Color analysis backfill UX (frontend)**: a new banner appears above the gallery the first time the user picks a color-based sort (亮度 / 饱和度 / 亮度分布) AND the library still has images missing color data. The banner shows the live missing count via `GET /api/colors/missing-count` and offers a one-click `Analyze N images` button. While the analysis is running, a `[🎨 N%]` chip appears in the nav bar; clicking it opens a bottom-right corner toast with progress bar, current image filename, and Pause / Run-hidden actions. The banner can be dismissed for 24 hours via localStorage.
-  - **色彩补算引导（前端）**：用户第一次选 "最亮 / 饱和度最高 / 亮度分布" 排序、而图库还有没分析过的图时，图库上方会弹出引导横幅。横幅显示通过 `/api/colors/missing-count` 实时拉到的未分析图片数，并提供 "补算 N 张" 一键启动按钮。运行期间导航栏出现 `[🎨 N%]` 进度芯片，点开是右下角 toast，含进度条、当前文件名、暂停 / 后台运行操作。横幅可隐藏 24 小时（localStorage 记录）。
-- **`backend/database.py::count_images_missing_color_data()`**: a `SELECT COUNT(*)` helper that replaces the previous "fetch full ID list then `len()`" pattern in `/api/colors/missing-count`. Constant memory regardless of library size.
-  - **`count_images_missing_color_data()` 计数辅助**：用 `SELECT COUNT(*)` 替代之前 `/api/colors/missing-count` 接口里 "拉完整 ID 列表再 len()" 的写法，无论图库多大都是常数内存。
-
-### Changed / 變更
-- **`/api/images` and related endpoints now return color columns**: `dominant_colors`, `avg_brightness`, `color_temperature`, `color_saturation`, `brightness_distribution` are now in the gallery/list views; the detail view additionally returns `brightness_histogram` and `brightness_skew`. Previously the migration-010 columns existed in SQLite but were never SELECT-ed, so even after a successful color backfill the frontend could sort/filter but had no way to display the values. Fix lives in `_IMAGE_COLUMNS_*_FIELDS` constants in `backend/database.py`.
-  - **`/api/images` 等接口现在会返回色彩字段**：`dominant_colors`、`avg_brightness`、`color_temperature`、`color_saturation`、`brightness_distribution` 加入图库列表视图；详情视图还多 `brightness_histogram` 和 `brightness_skew`。之前 migration 010 的字段存在于 SQLite 但 SELECT 列表里没有，导致即使补算完成前端也拿不到色彩数据来显示。修复在 `backend/database.py` 的 `_IMAGE_COLUMNS_*_FIELDS` 常量。
-- **Tags-bulk operations batch-load tags** (`backend/routers/tags_bulk.py`): the 4 bulk-tag endpoints (`/find-replace`, `/add`, `/remove`, `/cleanup`) used to call `db.get_image_tags(id)` per image — at the Pydantic max of 500,000 images that meant 500k individual SQL round-trips. They now make one up-front call to `db.get_image_tags_map(image_ids)` which batches 500 IDs per query. Same write path; same dry-run semantics; ~500× fewer SELECTs on the read side.
-  - **批量标签操作改成批读** (`backend/routers/tags_bulk.py`)：四个端点之前每张图都跑一次 `db.get_image_tags(id)`，Pydantic 上限 500,000 张图就意味着 500k 次单独 SQL 往返。现在改成在循环前一次性调用 `db.get_image_tags_map(image_ids)`（内部每 500 个 ID 一批），写入路径和 dry-run 语义都不变，但读取阶段的 SELECT 数量降低约 500×。
-- **`asyncio.get_event_loop()` → `asyncio.create_task()` / `asyncio.get_running_loop()`** in `routers/colors.py` and `routers/vlm.py`: the old API has been deprecated in Python 3.10 and removed in 3.12 when no loop is running. All call sites are inside async handlers where the modern API is the correct equivalent.
-  - **`asyncio.get_event_loop()` 改成 `asyncio.create_task()` / `asyncio.get_running_loop()`**：旧 API 在 Python 3.10 已 deprecated、3.12 在无 running loop 时已抛 RuntimeError。所有调用点都已经在 async handler 内部，所以 `create_task()` 是对的写法。`test_vlm_batch_progress_and_debug_chat` 用例同步更新成 patch 新符号。
-- **`db.add_tags` docstring** now warns that this is `DELETE + INSERT` (replace) semantics, not append. Historical name was misleading. All existing call sites already build a merged list before calling — behaviour unchanged, only documentation.
-  - **`db.add_tags` docstring 警告改进**：明确说明这是 `DELETE + INSERT`（替换）语义，不是追加。函数历史命名容易让人误以为传单个标签就能 append。所有现有调用点都已经先合并再传，这次只是补 docstring 说明，没有改行为。
-
-### Fixed / 修复
-- **Thumbnail cache temp-path collision** (`backend/thumbnail_cache.py`): two writers in the same process+thread that both finished a thumbnail in the same `time.time_ns()` window (Windows clock resolution can be coarser than nanoseconds) could land on the exact same `.tmp` path and clobber each other's atomic rename. The path now combines PID + TID + nanosecond timestamp + a process-local monotonic counter + 8 hex characters of OS randomness. Verified by the previously-failing regression test `test_thumbnail_cache_temp_paths_are_unique_for_same_cache_key`.
-  - **缩略图缓存临时路径冲突**：同进程同线程下两个写入者如果落在同一个 `time.time_ns()` 窗口（Windows 时钟精度有时比纳秒粗）会撞到相同的 `.tmp` 路径，破坏原子 rename。现在路径组合 PID + TID + 纳秒戳 + 进程本地单调计数 + 8 个十六进制随机字符。之前一直失败的回归测试 `test_thumbnail_cache_temp_paths_are_unique_for_same_cache_key` 现已通过。
-
-### Notes / 注意事項
-- All 1,112 backend tests pass after the changes.
-  - 改完后 1,112 个后端测试全部通过。
-- The Mass Tag Editor confirm-dialog threshold (1,000 images) is the trip-wire for the 2-second delayed Apply button. Below that, the operation runs immediately on click.
-  - Mass Tag Editor 二次确认阈值是 1,000 张（超过才会出现倒计时 Apply 按钮），少于该数量直接执行。
-
----
-
-## [3.2.1] - 2026-05-18
+## [3.2.1] - 2026-05-20
 
 ### Added / 新增
 - **VLM (Vision Language Model) captioning system**: a multi-provider natural-language captioning pipeline that runs alongside the existing WD14 / Camie / PixAI / ToriiGate taggers. Supports OpenAI-compatible (OpenAI, Ollama, vLLM, LMStudio, OpenRouter, Volcengine Ark), Anthropic Claude, Google Gemini (public API and Vertex AI with service-account JSON), and any local model that exposes a chat-completions endpoint. Per-image caption stored in the existing `ai_caption` column. Concurrency-controlled batch processing with retry-on-error (configurable max retries + delay), NSFW-refusal detection with relaxed-prompt fallback, mid-batch cancel that preserves completed work, token usage and success/failed counts in the progress UI.
@@ -72,24 +32,44 @@ Finishes the gaps left in v3.2.1: color columns now ship through `/api/images`; 
   - **`/api/colors/analyze` 批量补算接口**：给已有图库批量补算色彩信息。带并发控制、可取消、可轮询进度。`/api/colors/missing-count` 看还剩多少张没分析。
 - **Mass tag editor (Tag-Master inspired)**: 4 new bulk tag operations on the DB tags table — Find & Replace (rename a tag across N images, supports remove via empty replace), Bulk Add (append tags with confidence override, dedupe vs existing), Bulk Remove (delete specified tags, case-sensitive optional), Cleanup (drop tags below min confidence + dedupe by case-insensitive tag name keeping highest-confidence copy). Each operation supports `dry_run=True` to preview affected_images count and up to 5 sample before/after pairs before committing.
   - **批量标签编辑器（参考 Tag-Master 设计）**：新增 4 个批量标签操作 — 查找替换（跨 N 张图重命名标签，replace 留空表示删除）、批量添加（追加标签并指定置信度，自动去重）、批量删除（删指定标签，可选大小写敏感）、清理（删除置信度低于阈值的标签 + 按 tag 名字去重保留最高置信度）。所有操作支持 `dry_run=True` 预览，返回影响图片数和最多 5 条修改前后对比。
+- **Mass Tag Editor frontend**: the nav bar gains a 🧹 button that opens a modal for the 4 bulk-tag operations above. Scope picker (current selection vs current filter), tabbed operation panels, mandatory dry-run preview, and a confirm dialog with a 2-second delayed Apply button when scope exceeds 1,000 images. Filter scope uses the `/api/images/selection-token` + `selection-chunk` flow so even a 70k-image filter loads in ~3s. Fully bilingual (en + zh-CN), zero new dependencies.
+  - **批量标签编辑器前端**：导航栏新增 🧹 入口，打开上述 4 个后端接口的统一界面。带范围选择（已选 vs 当前筛选）、Tab 切换操作面板、强制 Dry-run 预览、超过 1,000 张时二次确认弹窗（Apply 按钮有 2 秒倒计时）。筛选范围通过 `/api/images/selection-token` + `selection-chunk` 分块抓 ID，7 万张图 ~3 秒搞定。完全双语，无新增依赖。
+- **VLM Settings — proxy / Vertex AI / output format frontend**: the VLM Settings modal now surfaces the proxy, Vertex AI, and output-format backend features. Output Format is a segmented control (NL caption / Danbooru tags / Both) at the top. Network Proxy is a collapsed `<details>` with HTTP / HTTPS / SOCKS fields. Vertex AI is a separate collapsed `<details>` (project / region / service-account JSON) that auto-appears only when provider is Gemini. Both sections show an "active" badge when they hold non-default values.
+  - **VLM 设置 — 代理 / Vertex AI / 输出格式前端**：VLM 设置弹窗现在把代理、Vertex AI、输出格式三组后端功能全接出。Output Format 是顶部三段控件；Network Proxy 是折叠区含 HTTP / HTTPS / SOCKS 三个框；Vertex AI 是另一个折叠区（GCP project / 区域 / 服务账户 JSON），仅 provider 选 Gemini 时显示。有非默认值时显示 "已启用" 徽章。
+- **Color analysis backfill UX**: a banner appears above the gallery when the user picks a color-based sort and the library has images with missing color data. Shows live missing count via `/api/colors/missing-count` with a one-click "Analyze N images" button. While running, a `[🎨 N%]` chip in the nav bar opens a bottom-right toast with progress bar, current filename, and Pause / Run-hidden actions. Banner can be dismissed for 24h via localStorage.
+  - **色彩补算引导**：选色彩排序但库里还有没分析过的图时，图库上方弹引导横幅。实时显示未分析数，一键启动补算。运行时导航栏出现 `[🎨 N%]` 进度芯片，点开右下角 toast 含进度条、文件名、暂停操作。横幅可关闭 24 小时。
+- **`count_images_missing_color_data()` helper**: a `SELECT COUNT(*)` helper in `database.py` that replaces the "fetch full ID list then `len()`" pattern in `/api/colors/missing-count`. Constant memory regardless of library size.
+  - **`count_images_missing_color_data()` 计数辅助**：用 `SELECT COUNT(*)` 替代 `/api/colors/missing-count` 里 "拉完整 ID 列表再 len()" 的写法，常数内存。
 
 ### Changed / 變更
 - **VLM batch progress now reports token usage**: progress endpoint includes `tokens_used` (sum across completed requests) and `errors` list with up to 50 entries showing `image_id`, error message, and error type for debugging.
   - **VLM 批量进度增加 token 统计**：进度接口新增 `tokens_used`（已完成请求的 token 总数）和 `errors` 列表，最多 50 条，每条含 `image_id` / 错误信息 / 错误类型，方便排查。
+- **`/api/images` now returns color columns**: `dominant_colors`, `avg_brightness`, `color_temperature`, `color_saturation`, `brightness_distribution` are now in gallery/list views; detail view additionally returns `brightness_histogram` and `brightness_skew`. Previously migration-010 columns existed in SQLite but were never SELECT-ed, so color sort/filter worked but display didn't. Fix in `_IMAGE_COLUMNS_*_FIELDS` constants in `database.py`.
+  - **`/api/images` 现在会返回色彩字段**：5 个用户可见色彩字段加入列表视图；详情视图还多 `brightness_histogram` 和 `brightness_skew`。之前 migration 010 字段在 SQLite 存在但 SELECT 列表遗漏，修复在 `_IMAGE_COLUMNS_*_FIELDS`。
+- **Tags-bulk batch-load tags** (`routers/tags_bulk.py`): the 4 bulk-tag endpoints used to call `db.get_image_tags(id)` per image (500k round-trips at max). Now one up-front `db.get_image_tags_map(image_ids)` batched 500 IDs per query. ~500× fewer SELECTs on the read side.
+  - **批量标签操作改成批读**：四个端点之前逐图查标签，现在改成一次性 `get_image_tags_map` 批量读取（每 500 ID 一批），读取阶段 SELECT 降低约 500×。
+- **`asyncio.get_event_loop()` → `asyncio.create_task()` / `asyncio.get_running_loop()`** in `routers/colors.py` and `routers/vlm.py`: deprecated in Python 3.10, raises in 3.12 outside a running loop.
+  - **asyncio 现代化**：`routers/colors.py` 和 `routers/vlm.py` 的 `get_event_loop()` 替换为 `create_task()` / `get_running_loop()`。
+- **`db.add_tags` docstring** now warns this is `DELETE + INSERT` (replace) semantics, not append. Behaviour unchanged, only documentation.
+  - **`db.add_tags` docstring**：明确说明是替换语义，不是追加。
 
 ### Fixed / 修复
 - **PyPI + CUDA PyTorch downloads both auto-pick the fastest mirror**: the launcher (`run.bat` / `run.sh`) now probes Tsinghua TUNA, Aliyun, USTC, and the official PyPI host with a stdlib-only probe BEFORE `pip install -r requirements.txt`, then passes `--index-url <fastest> --extra-index-url https://pypi.org/simple` to every pip call. The same probe runs again for the CUDA torch wheel reinstall in `repair_torch_runtime.py`, choosing between SJTU and the official PyTorch host. Both probes hit the real PEP 503 path (`<base>/pip/` and `<base>/cu128/torch/`) so portal-page mirrors that 200 on `/` but 404 on the actual index are detected at probe time. The httpx-based selector caches its answer in `data/state/mirror_cache.json` for 30 minutes; the launcher's pre-install probe is stdlib-only (no httpx dep, since httpx is being installed by the very call we are accelerating). Power users can force a specific mirror with `SD_IMAGE_SORTER_PYPI_MIRROR=tuna|aliyun|ustc|official|<url>` and `SD_IMAGE_SORTER_TORCH_CUDA_MIRROR=sjtu|official|<url>`. Before this fix `_resolve_pypi_fallback_index()` already referenced a `mirror_selector` module that had never been committed — every call silently fell back to `pypi.org/simple` and the CUDA torch wheel was never routed through any mirror selection at all. On a Chinese broadband line that means the previously slow ~1.5 GB `requirements.txt` install (10–25 minutes on Fastly) plus the 2.5 GB CUDA torch wheel (30–60 minutes) now both fall to minutes via Tuna / SJTU.
   - **PyPI 和 CUDA PyTorch 下载都自动选最快镜像**：启动脚本（`run.bat` / `run.sh`）在 `pip install -r requirements.txt` **之前**用纯 stdlib 探测清华 TUNA、阿里云、中科大、官方 PyPI 源，挑最快的传给每个 pip 调用 `--index-url <fastest> --extra-index-url https://pypi.org/simple`。CUDA torch wheel 在 `repair_torch_runtime.py` 里再探一次，在 SJTU 和官方 PyTorch 源之间挑。两个 probe 都打真正的 PEP 503 路径（`<base>/pip/` 和 `<base>/cu128/torch/`），所以"`/` 返回 200 但实际 index 404"的门户页假镜像在探测阶段就会被识破。httpx 版的选择器把结果缓存到 `data/state/mirror_cache.json` 保 30 分钟；启动脚本里那一步是 stdlib-only（不能用 httpx，因为 httpx 正是它要装的东西）。可用 `SD_IMAGE_SORTER_PYPI_MIRROR=tuna|aliyun|ustc|official|<url>` 和 `SD_IMAGE_SORTER_TORCH_CUDA_MIRROR=sjtu|official|<url>` 强制指定。修复前 `_resolve_pypi_fallback_index()` 已经引用了一个从未提交过的 `mirror_selector` 模块 —— 每次调用都静默回退到 `pypi.org/simple`，而 CUDA torch wheel 主路径压根没接入任何镜像选择。对中国宽带用户来说，原来慢的 ~1.5 GB `requirements.txt`（Fastly 上 10–25 分钟）加上 2.5 GB CUDA torch wheel（30–60 分钟），现在通过 Tuna / SJTU 都能降到几分钟。
+- **Thumbnail cache temp-path collision** (`thumbnail_cache.py`): two writers in the same process+thread that both finished in the same `time.time_ns()` window could collide on the `.tmp` path. Path now combines PID + TID + nanosecond + process-local counter + 8 hex chars of OS randomness. Verified by the previously-failing regression test `test_thumbnail_cache_temp_paths_are_unique_for_same_cache_key`.
+  - **缩略图缓存临时路径冲突**：同进程同线程两个写入者落在同一 `time.time_ns()` 窗口会撞到相同 `.tmp` 路径。现在路径组合 PID + TID + 纳秒戳 + 单调计数 + 8 个随机十六进制字符。
 
 ### Notes / 注意事項
 - Vertex AI requires the `google-auth` Python package; the app shows a helpful error message if it's missing. Run `pip install google-auth` to enable.
   - Vertex AI 需要 `google-auth` 包，没装会有提示。`pip install google-auth` 装上即可。
 - SOCKS proxy requires `httpx[socks]` extra. The provider falls back to direct connection with a log warning if not installed.
   - SOCKS 代理需要 `httpx[socks]`，没装的话会自动降级直连并记录警告。
-- Color analysis is opt-in for existing libraries; run via `/api/colors/analyze` to backfill. New scans automatically populate color data.
-  - 色彩分析对老图库是按需执行；用 `/api/colors/analyze` 补算。新扫的图会自动填好。
-- Color filter pills and mass tag editor UI will follow in a subsequent UI polish release; the backend APIs are stable in v3.2.1.
-  - 色彩筛选 UI、批量标签编辑器的前端交互会在后续 UI 抛光版本里补上；v3.2.1 已经把后端 API 稳定下来。
+- Color analysis is opt-in for existing libraries; run via `/api/colors/analyze` or use the new backfill banner to backfill. New scans automatically populate color data.
+  - 色彩分析对老图库是按需执行；用 `/api/colors/analyze` 或新的补算引导横幅来补算。新扫的图会自动填好。
+- All 1,112 backend tests pass after the changes.
+  - 改完后 1,112 个后端测试全部通过。
+- The Mass Tag Editor confirm-dialog threshold (1,000 images) is the trip-wire for the 2-second delayed Apply button. Below that, the operation runs immediately on click.
+  - Mass Tag Editor 二次确认阈值是 1,000 张（超过才会出现倒计时 Apply 按钮），少于该数量直接执行。
 
 ### UX Polish (pre-release sweep) / 体验抛光（发版前最后一轮）
 - **i18n stays fresh after upgrade without `Ctrl+Shift+R`**: every `<script>` and `<link>` tag served by `GET /` now gets a `?v=APP_VERSION` cache-bust query, so a normal browser F5 after upgrading the backend pulls the new `lang/*.js` instead of silently re-using the cached old language pack. The Help modal also gains a "🔄 Refresh translations / 🔄 重新载入界面文字" button that re-fetches the language packs in place — gallery filters, scan progress, selection state, and `localStorage` survive the swap.

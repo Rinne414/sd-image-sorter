@@ -223,6 +223,7 @@ Useful for cleaning up WD14 mistakes across an entire library, normalizing tag v
 
 ## Known Limitations
 
-- Color filter pills and mass tag editor UI are follow-up polish items; backend APIs are stable.
-- Color extraction is currently opt-in for existing libraries (not auto-run on every gallery open). Trigger via `/api/colors/analyze` once.
-- VLM proxy / Vertex auth UI in the settings modal lives under "Advanced Settings" — not surfaced by default.
+- Mass Tag Editor scope picker supports "current selection" and "current filter" only. Operating on the entire library requires clearing the filter first.
+- Color backfill banner only triggers when a color-based sort is selected; it doesn't proactively prompt on every gallery open.
+- Color extraction is opt-in for existing libraries. Trigger via `/api/colors/analyze` or the new backfill banner.
+- Vertex AI section in VLM Settings requires `google-auth` installed (the error is friendly, but the install step is manual).
