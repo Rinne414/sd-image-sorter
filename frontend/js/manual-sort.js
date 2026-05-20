@@ -34,6 +34,7 @@ const MANUAL_SORT_FILTER_STATE_KEY = 'manual_sort_filter_state_v1';
 const MANUAL_SORT_SCOPE_META_KEY = 'manual_sort_scope_meta_v1';
 const MANUAL_SORT_OPERATION_MODE_KEY = 'manual_sort_operation_mode_v1';
 const MAX_MINIMAP_IMAGES = 1000;
+const MANUAL_SORT_PROMPT_MATCH_MODES = new Set(['exact', 'contains']);
 
 // Key mappings
 const KEY_MAP = {
@@ -53,6 +54,15 @@ const DIRECTION_MAP = {
     's': 'down',
     'd': 'right'
 };
+
+function normalizeManualSortPromptMatchMode(value) {
+    const appNormalize = window.App?.normalizePromptMatchMode;
+    if (typeof appNormalize === 'function') {
+        return appNormalize(value);
+    }
+    const text = String(value || '').trim().toLowerCase();
+    return MANUAL_SORT_PROMPT_MATCH_MODES.has(text) ? text : 'exact';
+}
 
 const DEFAULT_FOLDER_LABELS = {
     w: 'Top',
@@ -144,6 +154,7 @@ function serializeManualSortFilters(filters) {
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
+        promptMatchMode: normalizeManualSortPromptMatchMode(source.promptMatchMode || source.prompt_match_mode),
         artist: source.artist || null,
         search: source.search || '',
         sortBy: source.sortBy || 'newest',
@@ -283,6 +294,7 @@ function getManualSortScopeSignature(filters) {
         checkpoints: contract.checkpoints || [],
         loras: contract.loras || [],
         prompts: contract.prompts || [],
+        promptMatchMode: contract.promptMatchMode || 'exact',
         artist: contract.artist || null,
         search: contract.search || '',
         minWidth: contract.minWidth || null,
@@ -819,6 +831,7 @@ async function startSorting() {
             operationMode,
             f.artist,
             replaceExisting,
+            f.promptMatchMode,
         );
 
         if (result.total_images === 0) {
@@ -845,6 +858,7 @@ async function startSorting() {
                 checkpoints: checkpoints,
                 loras: loras,
                 prompts: prompts,
+                promptMatchMode: f.promptMatchMode,
                 artist: f.artist,
                 search: search,
                 minWidth: f.minWidth,

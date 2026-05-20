@@ -16,6 +16,8 @@
     <link rel="stylesheet" href="/static/css/new-views.css">
     <link rel="stylesheet" href="/static/css/ui-refresh.css">
     <link rel="stylesheet" href="/static/css/vlm.css">
+    <link rel="stylesheet" href="/static/css/color-backfill.css">
+    <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -204,6 +206,10 @@
                             <span aria-hidden="true">🌐</span>
                             <span data-i18n="lang.toggle">中文</span>
                         </button>
+                        <button class="btn btn-ghost full-width" id="mobile-btn-help" aria-label="Open guide for current tab" data-i18n-aria="guide.tooltip">
+                            <span aria-hidden="true">❓</span>
+                            <span data-i18n="guide.openLabel">Open Guide</span>
+                        </button>
                         <button class="btn btn-ghost full-width" id="mobile-btn-app-update" aria-label="Check for application updates">
                             <span aria-hidden="true">⬆️</span>
                             <span data-i18n="update.check">Check Updates</span>
@@ -224,8 +230,18 @@
                 <button id="btn-app-update" class="btn btn-ghost btn-icon-only" title="Check for application updates" aria-label="Check for application updates" data-i18n-title="update.checkTitle">
                     <span aria-hidden="true">⬆️</span>
                 </button>
+                <button id="nav-color-progress" class="btn btn-ghost btn-icon-only nav-color-chip" type="button" hidden title="Color analysis progress" aria-label="Color analysis progress" data-i18n-title="color.progressTooltip">
+                    <span aria-hidden="true">🎨</span>
+                    <span class="nav-color-chip-label" id="nav-color-progress-label">0%</span>
+                </button>
                 <button id="btn-help" class="btn-help btn-icon-only" title="Open guide for current tab" aria-label="Open guide for current tab" data-i18n-title="guide.tooltip">
                     <span aria-hidden="true">❓</span>
+                </button>
+                <button id="btn-refresh-ui" class="btn btn-ghost btn-icon-only" type="button" title="Hard refresh: clear cache and reload UI (gallery / DB / settings preserved)" aria-label="Hard refresh UI" data-i18n-title="refresh.uiTooltip">
+                    <span aria-hidden="true">🔄</span>
+                </button>
+                <button id="btn-mass-tag-editor" class="btn btn-ghost btn-icon-only" type="button" title="Mass tag editor — bulk find/replace, add, remove, cleanup" aria-label="Open mass tag editor" data-i18n-title="massTag.openTooltip">
+                    <span aria-hidden="true">🧹</span>
                 </button>
                 <button id="btn-scan" class="btn btn-primary" aria-label="Import images from a folder">
                     <span aria-hidden="true">📂</span>
@@ -312,6 +328,10 @@
                         <div class="summary-row">
                             <span class="summary-label">Search:</span>
                             <span class="summary-value" id="summary-search" data-i18n="common.none">None</span>
+                        </div>
+                        <div class="summary-row">
+                            <span class="summary-label" data-i18n="filter.colors">Colors:</span>
+                            <span class="summary-value" id="summary-colors">Any</span>
                         </div>
                         <div class="summary-row" id="artist-filter-row" style="display: none;">
                             <span class="summary-label">Artist:</span>
@@ -450,6 +470,9 @@
                                 <option value="character_count">Characters</option>
                                 <option value="file_size">File Size</option>
                                 <option value="aesthetic">Aesthetic Score</option>
+                                <option value="brightness" data-i18n="sort.brightness">Brightest</option>
+                                <option value="saturation" data-i18n="sort.saturation">Most Saturated</option>
+                                <option value="brightness_skew" data-i18n="sort.brightnessSkew">Brightness Spread</option>
                                 <option value="random" data-i18n="sort.random">Random</option>
                             </select>
                             <button class="view-btn sort-reverse-btn" id="sort-reverse-btn" title="Reverse sort order" aria-label="Reverse sort order" aria-pressed="false">
@@ -471,6 +494,17 @@
                             </button>
                         </div>
 
+                    </div>
+                    <div id="color-backfill-banner" class="color-backfill-banner" hidden role="status" aria-live="polite">
+                        <div class="color-backfill-banner-icon" aria-hidden="true">🎨</div>
+                        <div class="color-backfill-banner-copy">
+                            <strong data-i18n="color.bannerTitle">Color sort needs analysis first</strong>
+                            <span class="color-backfill-banner-detail" id="color-backfill-banner-detail">—</span>
+                        </div>
+                        <div class="color-backfill-banner-actions">
+                            <button type="button" class="btn btn-primary btn-small" id="btn-color-backfill-start">Analyze now</button>
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-color-backfill-dismiss" data-i18n="color.bannerDismiss">Hide</button>
+                        </div>
                     </div>
                     <div class="gallery-grid" id="gallery-grid" role="grid" aria-label="Image gallery" aria-describedby="gallery-loading">
                         <!-- Initial skeleton content - will be replaced when app loads -->
@@ -2664,7 +2698,7 @@
         <!-- Scan Modal -->
         <div class="modal" id="scan-modal" role="dialog" aria-modal="true" aria-labelledby="scan-modal-title">
             <div class="modal-backdrop" aria-hidden="true"></div>
-            <div class="modal-content modal-small">
+            <div class="modal-content modal-medium">
                 <h3 id="scan-modal-title" data-i18n="modal.scanFolder">Import Image Folder</h3>
                 <p class="modal-description" data-i18n="modal.scanDescription">Choose a folder and import.</p>
                 <div class="form-group">
@@ -2814,9 +2848,38 @@
                 <h3 id="tag-modal-title" data-i18n="modal.tagTitle">AI Auto Tagging</h3>
                 <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
 
-                <div class="form-group">
+                <!-- v3.2.1: 3-tab redesign — Local / Natural Language / Aesthetic -->
+                <div class="tagger-tabs" role="tablist" aria-label="Tagger mode">
+                    <button type="button" class="tagger-tab active" data-tagger-tab="local" role="tab" aria-selected="true">
+                        <span aria-hidden="true">🏷️</span>
+                        <span data-i18n="tagger.tabLocal">Local Tagger</span>
+                    </button>
+                    <button type="button" class="tagger-tab" data-tagger-tab="nl" role="tab" aria-selected="false">
+                        <span aria-hidden="true">🧠</span>
+                        <span data-i18n="tagger.tabNl">Natural Language</span>
+                    </button>
+                    <button type="button" class="tagger-tab" data-tagger-tab="aesthetic" role="tab" aria-selected="false">
+                        <span aria-hidden="true">✨</span>
+                        <span data-i18n="tagger.tabAesthetic">Aesthetic Score</span>
+                    </button>
+                </div>
+                <p class="tagger-tab-description" id="tagger-tab-description" data-i18n="tagger.tabLocalDesc">WD14 / Camie / PixAI ONNX models — fast Danbooru-style tags.</p>
+
+                <!-- Natural Language tab: sub-toggle to pick between local ToriiGate and remote VLM API -->
+                <div class="tagger-nl-subtoggle tagger-nl-source-inputs" data-tagger-shows="nl" role="radiogroup" aria-label="Natural Language source" style="display:none">
+                    <label class="segmented-option">
+                        <input type="radio" name="tagger-nl-source" value="toriigate" checked>
+                        <span aria-hidden="true">📦</span> <span data-i18n="tagger.nlSourceTorii">ToriiGate (local)</span>
+                    </label>
+                    <label class="segmented-option">
+                        <input type="radio" name="tagger-nl-source" value="vlm">
+                        <span aria-hidden="true">☁️</span> <span data-i18n="tagger.nlSourceVlm">VLM API (Cloud / Ollama)</span>
+                    </label>
+                </div>
+
+                <div class="form-group tagger-model-selector" data-tagger-shows="local nl">
                     <label for="tag-model-select" id="tag-model-select-label" data-i18n="modal.tagModel">Model</label>
-                    <select id="tag-model-select" class="input-field" aria-describedby="tag-model-select-label">
+                    <select id="tag-model-select" class="input-field tagger-native-select" aria-describedby="tag-model-select-label" aria-hidden="true" tabindex="-1">
                         <optgroup label="Local Tagger (Danbooru tags)" data-i18n-label="modal.tagGroupLocal">
                             <option value="wd-swinv2-tagger-v3" selected>wd-swinv2-tagger-v3</option>
                             <option value="wd-convnext-tagger-v3">wd-convnext-tagger-v3</option>
@@ -2829,11 +2892,70 @@
                             <option value="vlm">🧠 VLM (Cloud API or Local Ollama)</option>
                         </optgroup>
                     </select>
+                    <button type="button" class="tagger-model-current" id="tagger-model-current" aria-expanded="false" aria-controls="tag-model-choice-list">
+                        <span class="tagger-model-current-copy">
+                            <span class="tagger-model-current-kicker" data-i18n="tagger.selectedModel">Selected model</span>
+                            <span class="tagger-model-current-title" id="tagger-model-current-title">wd-swinv2-tagger-v3</span>
+                            <span class="tagger-model-current-meta" id="tagger-model-current-meta">Balanced default. Good if you are not sure.</span>
+                        </span>
+                        <span class="tagger-model-current-action" data-i18n="tagger.changeModel">Change model</span>
+                    </button>
+                    <div class="tagger-model-choice-list" id="tag-model-choice-list" role="radiogroup" aria-labelledby="tag-model-select-label"></div>
                     <small class="helper-text" id="tag-model-help" aria-live="polite">Balanced default. Good if you are not sure.</small>
                 </div>
 
-                <!-- VLM mode banner (shown when VLM model is selected) -->
-                <div class="vlm-mode-banner" id="vlm-mode-banner" style="display:none">
+                <div class="tagger-nl-workflow-card tagger-nl-status-card" id="tagger-nl-workflow-card" data-tagger-shows="nl" style="display:none">
+                    <span id="tagger-nl-workflow-title" data-i18n="tagger.nlToriiTitle">ToriiGate (local model)</span>
+                    <span id="tagger-nl-workflow-hint" class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Heavy local VLM. Needs a one-time ~5 GB model download from the Setup page.</span>
+                    <span class="tagger-nl-workflow-status" id="vlm-banner-current" style="display:none">Not configured</span>
+                    <div id="vlm-progress-container" style="display:none" class="progress-container tagger-nl-progress">
+                        <div class="progress-bar"><div class="progress-fill" id="vlm-progress-fill"></div></div>
+                        <span class="progress-text" id="vlm-progress-text">Starting...</span>
+                    </div>
+                    <button type="button" class="btn btn-small btn-ghost tagger-nl-debug-btn" id="btn-vlm-debug-chat" data-vlm-debug-chat data-i18n="vlm.debugChat">API Chat</button>
+                    <div id="vlm-batch-status" class="vlm-status tagger-nl-status" style="display:none"></div>
+                    <button type="button" class="btn btn-small btn-secondary tagger-nl-retry-btn" id="btn-vlm-retry-failed" style="display:none" data-i18n="vlm.retryFailed">Retry failed</button>
+                    <div id="vlm-error-list" style="display:none" class="vlm-error-list tagger-nl-errors"></div>
+                </div>
+
+                <!-- Hidden compatibility cards. v321-ui keeps these IDs updated for existing tests and older integration points. -->
+                <div class="tagger-nl-card tagger-compat-hidden" id="tagger-nl-toriigate-card" style="display:none" aria-hidden="true">
+                    <div class="tagger-nl-card-head">
+                        <span class="tagger-nl-icon" aria-hidden="true">🤖</span>
+                        <div>
+                            <strong data-i18n="tagger.nlToriiTitle">ToriiGate (local model)</strong>
+                            <p class="tagger-nl-card-hint" data-i18n="tagger.nlToriiHint">Heavy local VLM. Needs a one-time ~5 GB model download from the Setup page.</p>
+                        </div>
+                    </div>
+                    <div class="tagger-nl-card-actions"></div>
+                </div>
+
+                <!-- Aesthetic tab content -->
+                <div class="tagger-aesthetic-panel" id="tagger-aesthetic-panel" data-tagger-shows="aesthetic" style="display:none">
+                    <div class="tagger-aesthetic-status-card">
+                        <span class="tagger-aesthetic-icon" aria-hidden="true">✨</span>
+                        <div class="tagger-aesthetic-status-copy">
+                            <strong id="tagger-aesthetic-status-title" data-i18n="tagger.aestheticReady">Aesthetic scoring is ready on this machine.</strong>
+                            <p class="tagger-aesthetic-status-hint" id="tagger-aesthetic-status-hint" data-i18n="tagger.tabAestheticDesc">Local CLIP + LAION head produces a 1–10 visual quality score.</p>
+                        </div>
+                    </div>
+                    <div class="tagger-aesthetic-actions">
+                        <button class="btn btn-secondary btn-small" id="btn-tagger-aesthetic-setup" type="button" style="display:none">
+                            <span aria-hidden="true">🛠️</span>
+                            <span data-i18n="tagger.aestheticOpenSetup">Open Setup to install</span>
+                        </button>
+                        <button class="btn btn-primary" id="btn-tagger-aesthetic-start" type="button">
+                            <span aria-hidden="true">✨</span>
+                            <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
+                        </button>
+                        <button class="btn btn-ghost danger" id="btn-tagger-aesthetic-cancel" type="button" style="display:none">
+                            <span aria-hidden="true">■</span>
+                            <span data-i18n="gallery.cancelAesthetic">Stop</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="vlm-mode-banner tagger-compat-hidden" id="vlm-mode-banner" data-tagger-shows="nl" style="display:none" aria-hidden="true">
                     <div class="vlm-banner-header">
                         <span class="vlm-banner-icon" aria-hidden="true">🧠</span>
                         <strong data-i18n="vlm.bannerTitle">Natural Language Captioning Mode</strong>
@@ -2844,21 +2966,21 @@
                         Configure provider, model, and prompts in VLM Settings.
                     </p>
                     <div class="vlm-banner-actions">
-                        <button class="btn btn-primary" id="btn-vlm-banner-settings">
+                        <button class="btn btn-primary" id="btn-vlm-banner-settings-legacy">
                             <span aria-hidden="true">⚙️</span> <span data-i18n="vlm.openSettings">VLM Settings</span>
                         </button>
-                        <span class="vlm-banner-current" id="vlm-banner-current">Not configured</span>
+                        <span class="vlm-banner-current" id="vlm-banner-current-legacy">Not configured</span>
                     </div>
                 </div>
 
-                <div class="tagger-model-panel" id="tagger-model-panel" role="status" aria-live="polite">
+                <div class="tagger-model-panel" id="tagger-model-panel" data-tagger-shows="local" role="status" aria-live="polite">
                     <div class="tagger-model-panel-title" data-i18n="modal.tagModelSnapshot">Current Plan</div>
                     <div class="tagger-model-panel-subtitle" id="tag-model-subtitle">Balanced default. Good if you are not sure.</div>
                     <div class="tagger-model-badges" id="tag-model-badges"></div>
                     <div class="tagger-model-note" id="tag-model-note">The selected model changes speed, quality, and load.</div>
                 </div>
 
-                <details class="guided-advanced-panel" id="tag-advanced-options">
+                <details class="guided-advanced-panel" id="tag-advanced-options" data-tagger-shows="local">
                     <summary class="guided-advanced-summary">
                         <span data-i18n="tagger.advancedSummary">Advanced settings</span>
                         <span class="guided-advanced-hint" id="tag-advanced-options-hint" data-i18n="tagger.advancedHintPanel">Optional. Open this only if you want more control.</span>
@@ -2987,10 +3109,11 @@
                     </div>
                 </details>
 
-                <div class="tagger-utility-strip" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions">
+                <div class="tagger-utility-strip tagger-compat-hidden" data-tagger-shows="nl" aria-label="AI utility actions" data-i18n-aria="tagger.aiUtilityActions" aria-hidden="true">
                     <div class="tagger-aesthetic-tool" id="vlm-utility-tool">
                         <div class="tagger-aesthetic-copy">
-                            <span class="tagger-aesthetic-title" data-i18n="vlm.utilityTitle">VLM Captioning</span>
+                            <span class="tagger-aesthetic-title" data-i18n="tagger.nlVlmApiTitle">VLM API (Cloud / Ollama / OpenRouter)</span>
+                            <span class="tagger-aesthetic-status" id="vlm-utility-current" aria-live="polite"></span>
                         </div>
                         <div class="tagger-aesthetic-actions">
                             <button class="btn btn-ghost" id="btn-vlm-settings" data-i18n-title="vlm.utilitySettingsTitle" title="VLM Caption Settings">
@@ -3007,29 +3130,13 @@
                             </button>
                         </div>
                     </div>
-                    <div id="vlm-progress-container" style="display:none" class="progress-container">
-                        <div class="progress-bar"><div class="progress-fill" id="vlm-progress-fill"></div></div>
-                        <span class="progress-text" id="vlm-progress-text">Starting...</span>
-                    </div>
-                    <div id="vlm-batch-status" class="vlm-status" style="display:none"></div>
-                    <div id="vlm-error-list" style="display:none" class="vlm-error-list"></div>
+                </div>
 
-                    <div class="tagger-aesthetic-tool">
-                        <div class="tagger-aesthetic-copy">
-                            <span class="tagger-aesthetic-title" data-i18n="tagger.aestheticToolTitle">Aesthetic scoring</span>
-                            <span class="tagger-aesthetic-status is-warning" id="aesthetic-status-chip" aria-live="polite" style="display:none" data-i18n="gallery.aestheticUnavailableShort">Aesthetic unavailable</span>
-                        </div>
-                        <div class="tagger-aesthetic-actions">
-                            <button class="btn btn-ghost" id="btn-score-aesthetic" title="Score aesthetics" aria-label="Score aesthetics" aria-describedby="aesthetic-status-chip" data-i18n-title="gallery.scoreAesthetic" data-i18n-aria="gallery.scoreAesthetic">
-                                <span aria-hidden="true">✨</span>
-                                <span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span>
-                            </button>
-                            <button class="btn btn-ghost danger" id="btn-cancel-aesthetic" style="display:none" title="Stop aesthetic scoring" aria-label="Stop aesthetic scoring" data-i18n-title="gallery.cancelAestheticTitle" data-i18n-aria="gallery.cancelAestheticTitle">
-                                <span aria-hidden="true">■</span>
-                                <span data-i18n="gallery.cancelAesthetic">Stop</span>
-                            </button>
-                        </div>
-                    </div>
+                <!-- Legacy hidden aesthetic shell — JS still reads aesthetic-status-chip / btn-score-aesthetic / btn-cancel-aesthetic by ID, so keep them in DOM but hidden. The visible UI now lives inside #tagger-aesthetic-panel above. -->
+                <div class="tagger-aesthetic-legacy-shell" style="display:none" aria-hidden="true">
+                    <span id="aesthetic-status-chip" data-i18n="gallery.aestheticUnavailableShort">Aesthetic unavailable</span>
+                    <button id="btn-score-aesthetic" type="button"><span data-i18n="gallery.scoreAesthetic">Score Aesthetic</span></button>
+                    <button id="btn-cancel-aesthetic" type="button"><span data-i18n="gallery.cancelAesthetic">Stop</span></button>
                 </div>
 
                 <div class="progress-container" id="tag-progress-container" style="display: none;">
@@ -3038,13 +3145,17 @@
                     </div>
                     <span class="progress-text" id="tag-progress-text" data-i18n="modal.tagLoadingModel">Loading model...</span>
                 </div>
-                <div class="modal-actions">
-                    <button class="btn btn-ghost" id="btn-export-tags-json" title="Export all tags to JSON file">📤 <span data-i18n="modal.tagExport">Export Tags</span></button>
-                    <button class="btn btn-ghost" id="btn-import-tags" title="Import tags from JSON file">📥 <span data-i18n="modal.tagImport">Import Tags</span></button>
+                <div class="modal-actions" id="tagger-modal-actions" data-tagger-shows="local nl">
+                    <button class="btn btn-ghost tagger-local-action" id="btn-export-tags-json" title="Export all tags to JSON file">📤 <span data-i18n="modal.tagExport">Export Tags</span></button>
+                    <button class="btn btn-ghost tagger-local-action" id="btn-import-tags" title="Import tags from JSON file">📥 <span data-i18n="modal.tagImport">Import Tags</span></button>
                     <input type="file" id="import-tags-file" accept=".json" style="display: none;">
                     <div style="flex: 1;"></div>
                     <button class="btn btn-ghost" id="btn-cancel-tag" data-i18n="modal.tagCancel">Cancel</button>
                     <button class="btn btn-primary" id="btn-start-tag" data-i18n="modal.tagStart">Start Tagging</button>
+                </div>
+                <div class="modal-actions" id="tagger-modal-actions-aesthetic" data-tagger-shows="aesthetic" style="display:none">
+                    <div style="flex: 1;"></div>
+                    <button class="btn btn-ghost" id="btn-cancel-aesthetic-tab" data-i18n="modal.cancel">Cancel</button>
                 </div>
             </div>
         </div>
@@ -3160,6 +3271,14 @@
                             <input type="radio" name="batch-export-output-mode" value="folder">
                             <span data-i18n="batchExport.outputModeFolder">Save to one folder</span>
                         </label>
+                        <label class="segmented-option">
+                            <input type="radio" name="batch-export-output-mode" value="clipboard">
+                            <span data-i18n="batchExport.outputModeClipboard">📋 Copy combined to clipboard</span>
+                        </label>
+                        <label class="segmented-option">
+                            <input type="radio" name="batch-export-output-mode" value="download">
+                            <span data-i18n="batchExport.outputModeDownload">⬇️ Download single file</span>
+                        </label>
                     </div>
                     <small class="helper-text" data-i18n="batchExport.outputModeBesideImageHelper">Writes each .txt / .json into the same folder as the source image. Best when your library spans many subfolders or feeds a per-folder training tool.</small>
                 </div>
@@ -3182,6 +3301,7 @@
                         <option value="caption_tags" data-i18n="batchExport.modeCaptionTags">Caption + Tags</option>
                         <option value="" disabled data-i18n="batchExport.groupNl">v3.2.1 Natural Language</option>
                         <option value="nl_caption" data-i18n="batchExport.modeNlCaption">Natural language caption only</option>
+                        <option value="tags_nl" data-i18n="batchExport.modeTagsNl">Tags + Natural language caption</option>
                         <option value="prompt_nl" data-i18n="batchExport.modePromptNl">Prompt + Natural language caption</option>
                         <option value="template" data-i18n="batchExport.modeTemplate">🎯 LoRA Training Template (Anima/IL/FLUX/...)</option>
                         <option value="" disabled data-i18n="batchExport.groupAdvanced">Advanced formats</option>
@@ -3314,6 +3434,7 @@
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.loras">LoRAs</span><strong class="filter-stat-value" id="filter-modal-count-loras">0</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.sizeRules">Size Rules</span><strong class="filter-stat-value" id="filter-modal-count-dimensions">Any</strong></div>
                     <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.aesthetic">Aesthetic</span><strong class="filter-stat-value" id="filter-modal-count-aesthetic">Any</strong></div>
+                    <div class="filter-stat-card"><span class="filter-stat-label" data-i18n="filter.colors">Colors</span><strong class="filter-stat-value" id="filter-modal-count-colors">Any</strong></div>
                 </div>
 
                 <div class="filter-modal-grid">
@@ -3445,6 +3566,72 @@
                                 <button class="btn btn-ghost btn-small aesthetic-quick" data-min="" data-max="" data-i18n="filter.aestheticUnscored">Unscored</button>
                             </div>
                         </section>
+
+                        <section class="filter-panel">
+                            <div class="filter-panel-header">
+                                <div>
+                                    <p class="filter-panel-kicker" data-i18n="filter.colorAnalysis">Color Analysis</p>
+                                    <h4 data-i18n="filter.colors">Colors</h4>
+                                </div>
+                                <p class="filter-panel-help" data-i18n="filter.colorHelp">Filter images after running color analysis.</p>
+                            </div>
+                            <div class="dimension-grid" role="group">
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.brightnessMin">Min brightness</span>
+                                    <input type="number" id="filter-brightness-min" class="input-field" placeholder="0" min="0" max="255" step="1" aria-label="Minimum brightness">
+                                </label>
+                                <label class="dimension-field">
+                                    <span class="dimension-label" data-i18n="filter.brightnessMax">Max brightness</span>
+                                    <input type="number" id="filter-brightness-max" class="input-field" placeholder="255" min="0" max="255" step="1" aria-label="Maximum brightness">
+                                </label>
+                            </div>
+                            <h5 data-i18n="filter.colorTemperature">Color Temperature</h5>
+                            <div class="aspect-choice-grid" role="group" aria-label="Color temperature">
+                                <label class="filter-choice">
+                                    <input type="radio" name="color-temperature" value="" checked>
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">○</span><span data-i18n="filter.any">Any</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="color-temperature" value="warm">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◐</span><span data-i18n="filter.colorWarm">Warm</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="color-temperature" value="neutral">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◍</span><span data-i18n="filter.colorNeutral">Neutral</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="color-temperature" value="cool">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◑</span><span data-i18n="filter.colorCool">Cool</span></span>
+                                </label>
+                            </div>
+                            <h5 data-i18n="filter.brightnessDistribution">Brightness Distribution</h5>
+                            <div class="aspect-choice-grid" role="group" aria-label="Brightness distribution">
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="" checked>
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">○</span><span data-i18n="filter.any">Any</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="left_heavy">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◨</span><span data-i18n="filter.darkHeavy">Dark-heavy</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="right_heavy">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◧</span><span data-i18n="filter.brightHeavy">Bright-heavy</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="middle_heavy">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◉</span><span data-i18n="filter.midHeavy">Mid-heavy</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="edge_heavy">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◈</span><span data-i18n="filter.edgeHeavy">Edge-heavy</span></span>
+                                </label>
+                                <label class="filter-choice">
+                                    <input type="radio" name="brightness-distribution" value="balanced">
+                                    <span class="filter-choice-card"><span class="filter-choice-icon">◌</span><span data-i18n="filter.balanced">Balanced</span></span>
+                                </label>
+                            </div>
+                        </section>
                     </div>
 
                     <div class="filter-column filter-column-secondary">
@@ -3471,6 +3658,19 @@
                                 <div class="tag-search-container">
                                     <input type="text" id="modal-prompt-search" class="input-field" placeholder="Type to search prompts..." data-i18n-placeholder="filter.searchPrompts">
                                     <div class="tag-suggestions" id="modal-prompt-suggestions"></div>
+                                </div>
+                                <div class="filter-match-row">
+                                    <span class="filter-match-label" data-i18n="filter.promptMatchMode">Match</span>
+                                    <div class="segmented-control prompt-match-control" role="radiogroup" aria-label="Prompt match mode" data-i18n-aria="filter.promptMatchMode">
+                                        <label class="segmented-option">
+                                            <input type="radio" name="prompt-match-mode" value="exact" checked>
+                                            <span data-i18n="filter.promptMatchExact">Exact</span>
+                                        </label>
+                                        <label class="segmented-option">
+                                            <input type="radio" name="prompt-match-mode" value="contains">
+                                            <span data-i18n="filter.promptMatchContains">Contains</span>
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="active-tags" id="modal-active-prompts"></div>
                             </div>
@@ -3798,6 +3998,8 @@
     <script src="/static/js/unreadable-banner.js"></script>
     <script src="/static/js/vlm-caption.js"></script>
     <script src="/static/js/v321-ui.js"></script>
+    <script src="/static/js/color-backfill.js"></script>
+    <script src="/static/js/mass-tag-editor.js"></script>
     <script src="/static/js/ui-refresh.js"></script>
     <script>
     /* Sorting sub-tab toggle (Auto-Separate / Manual Sort) */
@@ -3825,6 +4027,27 @@
         });
     };
     </script>
+
+    <!-- Color Analysis Progress Toast -->
+    <div class="color-progress-toast" id="color-progress-toast" hidden role="dialog" aria-labelledby="color-progress-title" aria-live="polite">
+        <div class="color-progress-toast-head">
+            <span class="color-progress-toast-icon" aria-hidden="true">🎨</span>
+            <strong id="color-progress-title" data-i18n="color.toastTitle">Color analysis</strong>
+            <button type="button" class="color-progress-toast-close" id="btn-color-progress-close" aria-label="Close color analysis toast">✕</button>
+        </div>
+        <div class="color-progress-toast-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div class="color-progress-toast-fill" id="color-progress-toast-fill"></div>
+        </div>
+        <div class="color-progress-toast-meta">
+            <span id="color-progress-toast-count">0 / 0</span>
+            <span id="color-progress-toast-percent">0%</span>
+        </div>
+        <div class="color-progress-toast-current" id="color-progress-toast-current"></div>
+        <div class="color-progress-toast-actions">
+            <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-pause" data-i18n="color.pause">Pause</button>
+            <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-hide" data-i18n="color.runHidden">Run hidden</button>
+        </div>
+    </div>
 
     <!-- VLM Settings Modal -->
     <div class="modal" id="vlm-settings-modal">
@@ -3861,6 +4084,27 @@
                 <button class="btn btn-small btn-ghost" id="btn-vlm-fetch-models" style="margin-top:4px" data-i18n="vlmSettings.fetchModels">Fetch Available Models</button>
                 <div id="vlm-model-list-status" class="vlm-status" style="display:none"></div>
                 <div id="vlm-model-list" class="vlm-model-list"></div>
+            </div>
+
+            <div class="form-group vlm-output-format-group">
+                <label data-i18n="vlmSettings.outputFormat">Output Format</label>
+                <div class="vlm-segmented" role="radiogroup" aria-label="Output format" id="vlm-output-format">
+                    <button type="button" class="vlm-segmented-btn active" data-output-format="nl_caption" role="radio" aria-checked="true">
+                        <span aria-hidden="true">📝</span>
+                        <span data-i18n="vlmSettings.outputFormatNL">NL caption</span>
+                    </button>
+                    <button type="button" class="vlm-segmented-btn" data-output-format="danbooru_tags" role="radio" aria-checked="false">
+                        <span aria-hidden="true">🏷️</span>
+                        <span data-i18n="vlmSettings.outputFormatTags">Danbooru tags</span>
+                    </button>
+                    <button type="button" class="vlm-segmented-btn" data-output-format="both" role="radio" aria-checked="false">
+                        <span aria-hidden="true">📝🏷️</span>
+                        <span data-i18n="vlmSettings.outputFormatBoth">Both</span>
+                    </button>
+                </div>
+                <small class="helper-text" data-i18n="vlmSettings.outputFormatHelper">
+                    NL caption writes to <code>ai_caption</code>. Tags writes danbooru-style entries to the tags table. Both uses a hybrid format.
+                </small>
             </div>
 
             <details class="form-group">
@@ -3919,12 +4163,220 @@
                 </div>
             </details>
 
+            <details class="form-group" id="vlm-proxy-details">
+                <summary>
+                    <span data-i18n="vlmSettings.proxy">Network Proxy</span>
+                    <span class="vlm-details-badge" id="vlm-proxy-active-badge" hidden data-i18n="vlmSettings.proxyActive">active</span>
+                </summary>
+                <div style="padding-top:8px">
+                    <small class="helper-text" data-i18n="vlmSettings.proxyHelper">
+                        Route VLM API calls through a proxy. Useful when OpenAI / Anthropic / Gemini are blocked at your network. SOCKS overrides HTTP/HTTPS; install <code>httpx[socks]</code> first.
+                    </small>
+                    <div class="form-group">
+                        <label for="vlm-http-proxy" data-i18n="vlmSettings.httpProxy">HTTP Proxy</label>
+                        <input type="text" id="vlm-http-proxy" class="input-field" placeholder="http://proxy.example:8080">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-https-proxy" data-i18n="vlmSettings.httpsProxy">HTTPS Proxy</label>
+                        <input type="text" id="vlm-https-proxy" class="input-field" placeholder="http://proxy.example:8080">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-socks-proxy" data-i18n="vlmSettings.socksProxy">SOCKS Proxy (overrides HTTP/HTTPS)</label>
+                        <input type="text" id="vlm-socks-proxy" class="input-field" placeholder="socks5://localhost:1080">
+                    </div>
+                </div>
+            </details>
+
+            <details class="form-group" id="vlm-vertex-details" hidden>
+                <summary>
+                    <span data-i18n="vlmSettings.vertex">Vertex AI (Service Account)</span>
+                    <span class="vlm-details-badge" id="vlm-vertex-active-badge" hidden data-i18n="vlmSettings.vertexActive">active</span>
+                </summary>
+                <div style="padding-top:8px">
+                    <small class="helper-text" data-i18n="vlmSettings.vertexHelper">
+                        Use Google Cloud Vertex AI instead of the public Gemini API key. Requires <code>google-auth</code>. Cached OAuth tokens last ~50 minutes.
+                    </small>
+                    <div class="form-group">
+                        <label><input type="checkbox" id="vlm-use-vertex"> <span data-i18n="vlmSettings.useVertex">Use Vertex AI (instead of public Gemini API key)</span></label>
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-vertex-project" data-i18n="vlmSettings.vertexProject">GCP Project ID</label>
+                        <input type="text" id="vlm-vertex-project" class="input-field" placeholder="my-gcp-project">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-vertex-location" data-i18n="vlmSettings.vertexLocation">Region</label>
+                        <input type="text" id="vlm-vertex-location" class="input-field" placeholder="us-central1" value="us-central1">
+                    </div>
+                    <div class="form-group">
+                        <label for="vlm-vertex-sa-json" data-i18n="vlmSettings.vertexServiceAccount">Service Account JSON</label>
+                        <textarea id="vlm-vertex-sa-json" class="input-field" rows="3" placeholder='{ "type": "service_account", ... }   — or a filesystem path' data-i18n-placeholder="vlmSettings.vertexServiceAccountPlaceholder"></textarea>
+                        <small class="helper-text" data-i18n="vlmSettings.vertexServiceAccountHelper">
+                            Paste the full JSON or a local file path. The displayed value is masked after save.
+                        </small>
+                    </div>
+                </div>
+            </details>
+
             <div id="vlm-status" class="vlm-status" style="display:none"></div>
 
             <div class="modal-actions">
                 <button class="btn btn-ghost" id="btn-vlm-test" data-i18n="vlmSettings.testConnection">Test Connection</button>
                 <div style="flex:1"></div>
                 <button class="btn btn-primary" id="btn-vlm-save-settings" data-i18n="vlmSettings.save">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VLM API Debug Chat Modal -->
+    <div class="modal" id="vlm-debug-chat-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-large vlm-debug-chat-shell">
+            <button class="modal-close" id="btn-vlm-debug-chat-close">✕</button>
+            <h3 data-i18n="vlm.debugChatTitle">VLM API Chat</h3>
+            <p class="modal-description" data-i18n="vlm.debugChatDesc">Inspect the latest prompts, responses, errors, and timing. API keys and image base64 are hidden.</p>
+            <div class="vlm-debug-chat-actions">
+                <button class="btn btn-small btn-ghost" id="btn-vlm-debug-chat-refresh" data-i18n="common.refresh">Refresh</button>
+            </div>
+            <div class="vlm-debug-chat-list" id="vlm-debug-chat-list" role="log" aria-live="polite">
+                <div class="empty-state-small" data-i18n="vlm.debugChatEmpty">No VLM API messages yet.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mass Tag Editor Modal (v3.2.1+) -->
+    <div class="modal" id="mass-tag-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-large mass-tag-shell">
+            <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor">✕</button>
+            <h3 data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
+            <p class="modal-description" data-i18n="massTag.description">
+                Bulk operations on stored tags. Always run "Dry-run preview" before "Apply" — these changes can't be undone.
+            </p>
+
+            <section class="mass-tag-scope" aria-labelledby="mass-tag-scope-title">
+                <div class="mass-tag-scope-title" id="mass-tag-scope-title" data-i18n="massTag.scope">Scope</div>
+                <div class="mass-tag-scope-options" role="radiogroup" aria-labelledby="mass-tag-scope-title">
+                    <label class="mass-tag-scope-card">
+                        <input type="radio" name="mass-tag-scope" value="selection" checked>
+                        <span class="mass-tag-scope-card-body">
+                            <strong data-i18n="massTag.scopeSelection">Current selection</strong>
+                            <small id="mass-tag-scope-selection-count">— 0 images</small>
+                        </span>
+                    </label>
+                    <label class="mass-tag-scope-card">
+                        <input type="radio" name="mass-tag-scope" value="filter">
+                        <span class="mass-tag-scope-card-body">
+                            <strong data-i18n="massTag.scopeFilter">Current filter</strong>
+                            <small id="mass-tag-scope-filter-count">— check size</small>
+                        </span>
+                    </label>
+                </div>
+                <p class="helper-text" id="mass-tag-scope-helper" data-i18n="massTag.scopeHelper">
+                    Tip: enable selection mode in the gallery to pick specific images. Filter scope uses whatever the current Filter Modal has set.
+                </p>
+            </section>
+
+            <div class="mass-tag-tabs" role="tablist" aria-label="Operation">
+                <button type="button" class="mass-tag-tab active" data-mass-tag-tab="find_replace" role="tab" aria-selected="true">
+                    <span aria-hidden="true">🔁</span>
+                    <span data-i18n="massTag.tabFindReplace">Find &amp; Replace</span>
+                </button>
+                <button type="button" class="mass-tag-tab" data-mass-tag-tab="add" role="tab" aria-selected="false">
+                    <span aria-hidden="true">➕</span>
+                    <span data-i18n="massTag.tabAdd">Bulk Add</span>
+                </button>
+                <button type="button" class="mass-tag-tab" data-mass-tag-tab="remove" role="tab" aria-selected="false">
+                    <span aria-hidden="true">➖</span>
+                    <span data-i18n="massTag.tabRemove">Bulk Remove</span>
+                </button>
+                <button type="button" class="mass-tag-tab" data-mass-tag-tab="cleanup" role="tab" aria-selected="false">
+                    <span aria-hidden="true">🧽</span>
+                    <span data-i18n="massTag.tabCleanup">Cleanup</span>
+                </button>
+            </div>
+
+            <section class="mass-tag-panel" data-panel="find_replace" role="tabpanel">
+                <div class="form-group">
+                    <label for="mass-tag-find" data-i18n="massTag.findLabel">Find tag</label>
+                    <input type="text" id="mass-tag-find" class="input-field" placeholder="school_uniform">
+                </div>
+                <div class="form-group">
+                    <label for="mass-tag-replace" data-i18n="massTag.replaceLabel">Replace with (empty = remove)</label>
+                    <input type="text" id="mass-tag-replace" class="input-field" placeholder="serafuku">
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="mass-tag-find-replace-case"> <span data-i18n="massTag.caseSensitive">Case sensitive</span></label>
+                </div>
+            </section>
+
+            <section class="mass-tag-panel" data-panel="add" role="tabpanel" hidden>
+                <div class="form-group">
+                    <label for="mass-tag-add-tags" data-i18n="massTag.addTagsLabel">Tags to add (comma-separated, max 200)</label>
+                    <textarea id="mass-tag-add-tags" class="input-field" rows="3" placeholder="masterpiece, best_quality, 1girl"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="mass-tag-add-confidence" data-i18n="massTag.confidenceLabel">Confidence (0.0–1.0)</label>
+                    <input type="number" id="mass-tag-add-confidence" class="input-field" min="0" max="1" step="0.05" value="0.85">
+                    <small class="helper-text" data-i18n="massTag.confidenceHelper">0.85 = "manual" tier. Existing tags are kept and not overwritten.</small>
+                </div>
+            </section>
+
+            <section class="mass-tag-panel" data-panel="remove" role="tabpanel" hidden>
+                <div class="form-group">
+                    <label for="mass-tag-remove-tags" data-i18n="massTag.removeTagsLabel">Tags to remove (comma-separated, max 200)</label>
+                    <textarea id="mass-tag-remove-tags" class="input-field" rows="3" placeholder="lowres, worst_quality, blurry"></textarea>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="mass-tag-remove-case"> <span data-i18n="massTag.caseSensitive">Case sensitive</span></label>
+                </div>
+            </section>
+
+            <section class="mass-tag-panel" data-panel="cleanup" role="tabpanel" hidden>
+                <div class="form-group">
+                    <label for="mass-tag-cleanup-confidence" data-i18n="massTag.cleanupMinLabel">Drop tags below confidence</label>
+                    <input type="number" id="mass-tag-cleanup-confidence" class="input-field" min="0" max="1" step="0.05" value="0.20">
+                    <small class="helper-text" data-i18n="massTag.cleanupMinHelper">Tags below this threshold are deleted. 0.20 catches noise without touching manual entries.</small>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="mass-tag-cleanup-dedupe" checked> <span data-i18n="massTag.cleanupDedupe">Also deduplicate case-insensitive matches (keep highest confidence)</span></label>
+                </div>
+            </section>
+
+            <div class="mass-tag-result" id="mass-tag-result" hidden role="status" aria-live="polite">
+                <div class="mass-tag-result-summary" id="mass-tag-result-summary"></div>
+                <details class="mass-tag-result-samples" id="mass-tag-result-samples" hidden>
+                    <summary data-i18n="massTag.sampleChanges">Sample changes (first 5)</summary>
+                    <pre id="mass-tag-result-samples-body"></pre>
+                </details>
+            </div>
+
+            <div id="mass-tag-status" class="vlm-status" style="display:none"></div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" id="btn-mass-tag-dry-run" data-i18n="massTag.dryRun">Dry-run preview</button>
+                <div style="flex:1"></div>
+                <button type="button" class="btn btn-primary" id="btn-mass-tag-apply" data-i18n="massTag.apply">Apply</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mass Tag Editor Confirm Dialog (>1000 scope) -->
+    <div class="modal" id="mass-tag-confirm-modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-small mass-tag-confirm-shell">
+            <h3>
+                <span aria-hidden="true">⚠</span>
+                <span data-i18n="massTag.confirmTitle">Confirm bulk edit</span>
+            </h3>
+            <dl class="mass-tag-confirm-summary" id="mass-tag-confirm-summary"></dl>
+            <p class="mass-tag-confirm-note" data-i18n="massTag.confirmNote">
+                This is a DELETE + INSERT operation and cannot be undone. Make sure the dry-run looked right.
+            </p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" id="btn-mass-tag-confirm-cancel" data-i18n="common.cancel">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-mass-tag-confirm-apply" disabled>
+                    <span id="mass-tag-confirm-apply-label" data-i18n="massTag.confirmCountdown">Apply in 2s…</span>
+                </button>
             </div>
         </div>
     </div>

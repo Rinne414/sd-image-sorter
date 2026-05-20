@@ -29,9 +29,20 @@ function formatFilterSummary(filters) {
     const selectedSuffix = t ? t('common.selected') : 'selected';
     const tagLabel = t ? t('modal.tags') : 'tags';
     const promptLabel = t ? t('library.prompts') : 'prompts';
+    const containsLabel = t ? t('filter.promptMatchContains') : 'Contains';
     const anyLabel = t ? t('filter.any') : 'Any';
     const infinityLabel = '∞';
     const customLabel = t ? t('filter.custom') : 'Custom';
+    const warmLabel = t ? t('filter.colorWarm') : 'Warm';
+    const neutralLabel = t ? t('filter.colorNeutral') : 'Neutral';
+    const coolLabel = t ? t('filter.colorCool') : 'Cool';
+    const distributionLabels = {
+        left_heavy: t ? t('filter.darkHeavy') : 'Dark-heavy',
+        right_heavy: t ? t('filter.brightHeavy') : 'Bright-heavy',
+        middle_heavy: t ? t('filter.midHeavy') : 'Mid-heavy',
+        edge_heavy: t ? t('filter.edgeHeavy') : 'Edge-heavy',
+        balanced: t ? t('filter.balanced') : 'Balanced',
+    };
     const formatGenerator = (generator) => {
         const normalized = String(generator || 'unknown').trim().toLowerCase();
         const key = `generator.${normalized}`;
@@ -70,13 +81,22 @@ function formatFilterSummary(filters) {
 
         prompts:
             !f.prompts || f.prompts.length === 0 ? noneLabel :
-                f.prompts.length > 2 ? `${f.prompts.length} ${promptLabel}` : f.prompts.join(', '),
+                `${f.prompts.length > 2 ? `${f.prompts.length} ${promptLabel}` : f.prompts.join(', ')}${f.promptMatchMode === 'contains' ? ` (${containsLabel})` : ''}`,
 
         search:
             !f.search || !String(f.search).trim() ? noneLabel :
                 String(f.search).trim().length > 40 ? `${String(f.search).trim().slice(0, 37)}...` : String(f.search).trim(),
 
         dimensions: formatDimensionsSummary(f, { anyLabel, infinityLabel, customLabel }),
+
+        colors: formatColorSummary(f, {
+            anyLabel,
+            infinityLabel,
+            warmLabel,
+            neutralLabel,
+            coolLabel,
+            distributionLabels,
+        }),
 
         artist: f.artist ? formatArtistName(f.artist) : null
     };
@@ -110,6 +130,31 @@ function formatDimensionsSummary(filters, labels = {}) {
     return parts.join(', ') || labels.customLabel || 'Custom';
 }
 
+function formatColorSummary(filters, labels = {}) {
+    const f = filters || {};
+    const hasColorFilter = f.brightnessMin || f.brightnessMax || f.colorTemperature || f.brightnessDistribution;
+    if (!hasColorFilter) {
+        return labels.anyLabel || 'Any';
+    }
+
+    const parts = [];
+    if (f.brightnessMin || f.brightnessMax) {
+        parts.push(`B: ${f.brightnessMin || 0}-${f.brightnessMax || labels.infinityLabel || '255'}`);
+    }
+    const temperatureLabels = {
+        warm: labels.warmLabel || 'Warm',
+        neutral: labels.neutralLabel || 'Neutral',
+        cool: labels.coolLabel || 'Cool',
+    };
+    if (f.colorTemperature) {
+        parts.push(temperatureLabels[f.colorTemperature] || f.colorTemperature);
+    }
+    if (f.brightnessDistribution) {
+        parts.push(labels.distributionLabels?.[f.brightnessDistribution] || f.brightnessDistribution);
+    }
+    return parts.join(', ');
+}
+
 /**
  * Format an artist name for display.
  * Replaces underscores with spaces and capitalizes words.
@@ -128,4 +173,5 @@ function formatArtistName(artist) {
 // Export to global namespace for current use (backward compatibility)
 window.formatFilterSummary = formatFilterSummary;
 window.formatDimensionsSummary = formatDimensionsSummary;
+window.formatColorSummary = formatColorSummary;
 window.formatArtistName = formatArtistName;

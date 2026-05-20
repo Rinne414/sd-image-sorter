@@ -1,0 +1,189 @@
+/* SD Image Sorter — Color backfill UI (v3.2.1+)
+ * Banner above the gallery + nav chip + bottom-right progress toast.
+ * Uses the same design tokens as the rest of the app (defined in styles.css). */
+
+/* ---- Inline gallery banner -------------------------------------------- */
+
+.color-backfill-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px 14px;
+    margin: 10px 0 14px;
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.10),
+        rgba(var(--accent-secondary-rgb), 0.08)
+    );
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    animation: color-banner-in 220ms ease-out;
+}
+
+.color-backfill-banner[hidden] { display: none; }
+
+@keyframes color-banner-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.color-backfill-banner-icon {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(245, 158, 11, 0.18);
+    font-size: 1.2rem;
+}
+
+.color-backfill-banner-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.color-backfill-banner-copy strong {
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.color-backfill-banner-detail {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.color-backfill-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 680px) {
+    .color-backfill-banner {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    .color-backfill-banner-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}
+
+/* ---- Nav chip --------------------------------------------------------- */
+
+.nav-color-chip {
+    /* Hijack the existing icon-only button base; widen slightly to make room for the % label. */
+    min-width: auto;
+    padding-right: 10px;
+    gap: 4px;
+}
+
+.nav-color-chip[hidden] { display: none !important; }
+
+.nav-color-chip-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent-secondary);
+    letter-spacing: 0;
+}
+
+.nav-color-chip:hover .nav-color-chip-label {
+    color: var(--accent-primary);
+}
+
+/* ---- Progress toast (bottom-right corner) ----------------------------- */
+
+.color-progress-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9000;
+    width: min(360px, calc(100vw - 32px));
+    padding: 14px 16px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.36);
+    backdrop-filter: blur(12px);
+    animation: color-toast-in 200ms ease-out;
+}
+
+.color-progress-toast[hidden] { display: none; }
+
+@keyframes color-toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.color-progress-toast-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.color-progress-toast-icon { font-size: 1.1rem; }
+
+.color-progress-toast-head strong { flex: 1; }
+
+.color-progress-toast-close {
+    background: none;
+    border: 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+}
+.color-progress-toast-close:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.color-progress-toast-bar {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.color-progress-toast-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(
+        90deg,
+        var(--accent-primary),
+        var(--accent-secondary)
+    );
+    transition: width 320ms ease;
+}
+
+.color-progress-toast-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.color-progress-toast-current {
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.color-progress-toast-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}

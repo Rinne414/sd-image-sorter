@@ -12,6 +12,7 @@ const AUTOSEP_FILTER_STATE_KEY = 'autosep_filter_state_v1';
 const AUTOSEP_SCOPE_META_KEY = 'autosep_scope_meta_v1';
 const AUTOSEP_PREVIEW_FETCH_LIMIT = 200;
 const AUTOSEP_OVERFLOW_PAGE_SIZE = 200;
+const AUTOSEP_PROMPT_MATCH_MODES = new Set(['exact', 'contains']);
 
 const DEFAULT_AUTOSEP_SETTINGS = {
     rememberDestination: true,
@@ -39,6 +40,15 @@ const AutoSepState = {
     inheritedCurrentGalleryFilters: false,
     scopeMeta: null,
 };
+
+function normalizeAutoSepPromptMatchMode(value) {
+    const appNormalize = window.App?.normalizePromptMatchMode;
+    if (typeof appNormalize === 'function') {
+        return appNormalize(value);
+    }
+    const text = String(value || '').trim().toLowerCase();
+    return AUTOSEP_PROMPT_MATCH_MODES.has(text) ? text : 'exact';
+}
 
 function tKey(key, enText, zhText = enText) {
     const translated = window.I18n?.t?.(key);
@@ -522,6 +532,7 @@ function serializeAutoSepFilters(filters) {
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
+        promptMatchMode: normalizeAutoSepPromptMatchMode(source.promptMatchMode || source.prompt_match_mode),
         artist: source.artist || null,
         search: source.search || '',
         minWidth: source.minWidth ?? null,
@@ -939,6 +950,7 @@ function getAutoSepFilterSignature(filters) {
         checkpoints: contract.checkpoints || [],
         loras: contract.loras || [],
         prompts: contract.prompts || [],
+        promptMatchMode: contract.promptMatchMode || 'exact',
         artist: contract.artist || null,
         search: contract.search || '',
         minWidth: contract.minWidth ?? null,
@@ -1046,6 +1058,7 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         checkpoints: contract.checkpoints?.length > 0 ? contract.checkpoints : null,
         loras: contract.loras?.length > 0 ? contract.loras : null,
         prompts: contract.prompts?.length > 0 ? contract.prompts : null,
+        promptMatchMode: contract.promptMatchMode || 'exact',
         artist: contract.artist || null,
         search: contract.search?.trim() || null,
         minWidth: contract.minWidth,
@@ -1659,6 +1672,7 @@ async function executeAutoSeparateWithProgress() {
                     },
                     operationMode,
                     contract.artist,
+                    contract.promptMatchMode,
                 );
 
                 if (startResult?.error) {

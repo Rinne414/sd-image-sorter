@@ -2606,6 +2606,8 @@ test.describe('Smoke Tests', () => {
     await expect(page.locator('#batch-export-content-description')).toContainText('LoRA training')
     await expect(page.locator('#batch-export-overwrite')).toBeVisible()
 
+    await page.locator('input[name="batch-export-output-mode"][value="folder"]').check({ force: true })
+    await expect(page.locator('#batch-export-folder')).toBeVisible()
     await page.locator('#batch-export-folder').fill('C:/exports/sidecars')
     await page.locator('#batch-export-content-mode').selectOption('a1111')
     await page.locator('#batch-export-overwrite').selectOption('skip')
@@ -2717,6 +2719,7 @@ test.describe('Smoke Tests', () => {
 
     const actionPanel = page.locator('#autosep-action-mode-panel')
     await expect(actionPanel).toBeVisible()
+    await actionPanel.locator('input[data-autosep-operation-mode][value="move"]').check({ force: true })
     await expect(actionPanel.locator('input[data-autosep-operation-mode][value="move"]')).toBeChecked()
     await expect(page.locator('#btn-execute-autosep')).toContainText('Move Images')
 

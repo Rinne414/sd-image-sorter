@@ -6,6 +6,7 @@
 const API_BASE = '';  // Same origin
 const SCAN_PREVIEW_PAGE_SIZE = 80;
 const VALID_ASPECT_RATIO_FILTERS = new Set(['square', 'landscape', 'portrait']);
+const VALID_PROMPT_MATCH_MODES = new Set(['exact', 'contains']);
 
 // Utility: Debounce function
 function debounce(func, wait) {
@@ -48,6 +49,11 @@ function appT(key, fallback, params) {
 function normalizeAspectRatioFilter(value) {
     const text = String(value || '').trim();
     return VALID_ASPECT_RATIO_FILTERS.has(text) ? text : '';
+}
+
+function normalizePromptMatchMode(value) {
+    const text = String(value || '').trim().toLowerCase();
+    return VALID_PROMPT_MATCH_MODES.has(text) ? text : 'exact';
 }
 
 // Generators that show as their own top-level tab in the gallery header.
@@ -197,6 +203,7 @@ function createDefaultFilterState() {
         checkpoints: [],
         loras: [],
         prompts: [],
+        promptMatchMode: 'exact',
         artist: null,
         search: '',
         sortBy: 'newest',
@@ -207,7 +214,11 @@ function createDefaultFilterState() {
         maxHeight: null,
         aspectRatio: '',
         minAesthetic: null,
-        maxAesthetic: null
+        maxAesthetic: null,
+        brightnessMin: null,
+        brightnessMax: null,
+        colorTemperature: '',
+        brightnessDistribution: ''
     };
 }
 
@@ -223,6 +234,7 @@ function cloneFilterState(filters) {
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
+        promptMatchMode: normalizePromptMatchMode(source.promptMatchMode || source.prompt_match_mode),
         artist: source.artist || null,
         search: source.search || '',
         sortBy: source.sortBy || 'newest',
@@ -233,7 +245,15 @@ function cloneFilterState(filters) {
         maxHeight: source.maxHeight ?? null,
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio),
         minAesthetic: source.minAesthetic ?? null,
-        maxAesthetic: source.maxAesthetic ?? null
+        maxAesthetic: source.maxAesthetic ?? null,
+        brightnessMin: source.brightnessMin ?? null,
+        brightnessMax: source.brightnessMax ?? null,
+        colorTemperature: ['warm', 'neutral', 'cool'].includes(String(source.colorTemperature || '').trim())
+            ? String(source.colorTemperature || '').trim()
+            : '',
+        brightnessDistribution: ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced'].includes(String(source.brightnessDistribution || '').trim())
+            ? String(source.brightnessDistribution || '').trim()
+            : ''
     };
 }
 
@@ -287,6 +307,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
             .filter(Boolean),
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
+        promptMatchMode: normalizePromptMatchMode(source.promptMatchMode),
         artist: source.artist ? String(source.artist).trim() : null,
         search: source.search || '',
         sortBy: source.sortBy || 'newest',
@@ -297,6 +318,10 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         aspectRatio: normalizeAspectRatioFilter(source.aspectRatio) || null,
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        brightnessMin: source.brightnessMin ?? null,
+        brightnessMax: source.brightnessMax ?? null,
+        colorTemperature: source.colorTemperature || null,
+        brightnessDistribution: source.brightnessDistribution || null,
     };
 }
 
@@ -313,6 +338,7 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         checkpoints: request.checkpoints,
         loras: request.loras,
         prompts: request.prompts,
+        promptMatchMode: request.promptMatchMode,
         artist: request.artist,
         search: request.search || '',
         minWidth: request.minWidth ?? null,
@@ -322,6 +348,10 @@ function buildAdvancedFilterContract(filters = AppState?.filters || createDefaul
         aspectRatio: request.aspectRatio || '',
         minAesthetic: request.minAesthetic ?? null,
         maxAesthetic: request.maxAesthetic ?? null,
+        brightnessMin: request.brightnessMin ?? null,
+        brightnessMax: request.brightnessMax ?? null,
+        colorTemperature: request.colorTemperature || '',
+        brightnessDistribution: request.brightnessDistribution || '',
     };
 }
 
@@ -383,6 +413,57 @@ function loadSavedFilterState() {
 const savedFilters = cloneFilterState(loadSavedFilterState());
 const AppFilterStore = window.FilterStore?.create(savedFilters || createDefaultFilterState()) || null;
 const AppSelectionStore = window.SelectionStore?.create(createDefaultSelectionState()) || null;
+
+// Expose store handles + a small read-only accessor for features (Mass Tag
+// Editor, color backfill, etc.) that need to read current selection / filter
+// state without coupling to internal IIFE variables. Keep the accessor shape
+// narrow so future refactors only need to remap these few methods.
+window.AppFilterStore = AppFilterStore;
+window.AppSelectionStore = AppSelectionStore;
+window.AppFilterAccess = {
+    /** Returns the current selection as an int[] (empty array if nothing selected). */
+    getSelectedImageIds() {
+        const state = AppSelectionStore?.getState?.();
+        if (!state) return [];
+        if (state.selectedIds instanceof Set) return Array.from(state.selectedIds);
+        if (Array.isArray(state.selectedIds)) return [...state.selectedIds];
+        return [];
+    },
+    /**
+     * Returns a URLSearchParams instance for the current gallery filter,
+     * suitable for `fetch('/api/images?' + p)`. Mirrors the mapping used by
+     * the gallery's own load path (Api.getImages in app.js) so a filter-scope
+     * bulk operation sees the same images the user sees.
+     */
+    getFilterQueryParams() {
+        const filters = AppFilterStore?.getState?.() || createDefaultFilterState();
+        const params = new URLSearchParams();
+        if (filters.generators?.length) params.set('generators', filters.generators.join(','));
+        if (filters.ratings?.length) params.set('ratings', filters.ratings.join(','));
+        if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
+        if (filters.loras?.length) params.set('loras', filters.loras.join(','));
+        if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
+        const promptMatchMode = typeof normalizePromptMatchMode === 'function'
+            ? normalizePromptMatchMode(filters.promptMatchMode)
+            : (filters.promptMatchMode === 'contains' ? 'contains' : 'exact');
+        if (promptMatchMode !== 'exact') params.set('prompt_match_mode', promptMatchMode);
+        if (filters.artist) params.set('artist', filters.artist);
+        if (filters.search) params.set('search', filters.search);
+        if (filters.minWidth) params.set('min_width', filters.minWidth);
+        if (filters.maxWidth) params.set('max_width', filters.maxWidth);
+        if (filters.minHeight) params.set('min_height', filters.minHeight);
+        if (filters.maxHeight) params.set('max_height', filters.maxHeight);
+        if (filters.aspectRatio) params.set('aspect_ratio', filters.aspectRatio);
+        if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
+        if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
+        if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
+        if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
+        if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
+        return params;
+    },
+};
 
 // App State
 const AppState = {
@@ -589,6 +670,9 @@ const SORT_PAIRS = {
     character_count: 'character_count_asc',
     file_size: 'file_size_asc',
     aesthetic: 'aesthetic_asc',
+    brightness: 'brightness_asc',
+    saturation: 'saturation_asc',
+    brightness_skew: 'brightness_skew_asc',
 };
 // Build full bidirectional reverse map
 const SORT_REVERSE_MAP = {};
@@ -640,6 +724,9 @@ function syncGallerySortLabels() {
         character_count: ['sort.characterCount', 'Characters'],
         file_size: ['sort.fileSize', 'Largest File'],
         aesthetic: ['sort.aesthetic', 'Aesthetic Score'],
+        brightness: ['sort.brightness', 'Brightest'],
+        saturation: ['sort.saturation', 'Most Saturated'],
+        brightness_skew: ['sort.brightnessSkew', 'Brightness Spread'],
         random: ['sort.random', 'Random'],
     };
 
@@ -788,6 +875,8 @@ const API = {
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
+        const promptMatchMode = normalizePromptMatchMode(filters.promptMatchMode);
+        if (promptMatchMode !== 'exact') params.set('prompt_match_mode', promptMatchMode);
         if (filters.artist) params.set('artist', filters.artist);  // Artist filter
         if (filters.search) params.set('search', filters.search);
         if (filters.sortBy) params.set('sort_by', filters.sortBy);
@@ -804,6 +893,10 @@ const API = {
         if (aspectRatio) params.set('aspect_ratio', aspectRatio);
         if (filters.minAesthetic) params.set('min_aesthetic', filters.minAesthetic);
         if (filters.maxAesthetic) params.set('max_aesthetic', filters.maxAesthetic);
+        if (filters.brightnessMin) params.set('brightness_min', filters.brightnessMin);
+        if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
+        if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
+        if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -1119,7 +1212,7 @@ const API = {
         return this.post('/api/move', { image_ids: imageIds, destination_folder: destinationFolder, operation });
     },
 
-    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null) {
+    async batchMove(generators, tags, ratings, destinationFolder, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operation = 'move', artist = null, promptMatchMode = 'exact') {
         return this.post('/api/batch-move', {
             generators,
             tags,
@@ -1127,6 +1220,7 @@ const API = {
             checkpoints,
             loras,
             prompts,
+            prompt_match_mode: normalizePromptMatchMode(promptMatchMode),
             artist: artist ? String(artist).trim() : null,
             search,
             min_width: dimensions?.minWidth || null,
@@ -1142,7 +1236,7 @@ const API = {
     },
 
     // Manual Sort
-    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false) {
+    async startSortSession(generators, tags, ratings, folders, checkpoints = null, loras = null, prompts = null, dimensions = null, search = null, aesthetic = null, operationMode = 'copy', artist = null, replaceExisting = false, promptMatchMode = 'exact') {
         return this.post('/api/sort/start', {
             generators,
             tags,
@@ -1150,6 +1244,7 @@ const API = {
             checkpoints,
             loras,
             prompts,
+            prompt_match_mode: normalizePromptMatchMode(promptMatchMode),
             artist: artist ? String(artist).trim() : null,
             search,
             min_width: dimensions?.minWidth || null,
@@ -1192,6 +1287,12 @@ const API = {
             content_mode: contentMode,
             overwrite_policy: overwritePolicy
         };
+        if (options.templateOptions) {
+            payload.template_options = options.templateOptions;
+        }
+        if (options.imageOverrides && typeof options.imageOverrides === 'object') {
+            payload.image_overrides = options.imageOverrides;
+        }
         if (options.selectionToken) {
             payload.selection_token = options.selectionToken;
         } else {
@@ -6248,6 +6349,20 @@ async function pollTagProgress() {
             syncTaggerModelUi();
             loadImages();
             loadStats();
+            // v3.2.1: dispatch a hookable event so other modules (gallery
+            // sub-views, prompt-lab, etc.) can react to fresh tags without
+            // needing to know about the polling internals here.
+            try {
+                document.dispatchEvent(new CustomEvent('taggingCompleted', {
+                    detail: {
+                        completed: progress?.completed || 0,
+                        errors: errors || 0,
+                        message: progress?.message || '',
+                    },
+                }));
+            } catch (_e) {
+                /* event dispatch is best-effort */
+            }
         } else if (progress.status === 'cancelled') {
             window.__liveTagProgress = null;
             _tagPollingActive = false;
@@ -7591,6 +7706,9 @@ function getBatchExportContentDescription(mode) {
         prompt_negative: appT('batchExport.descPromptNegative', 'Writes one same-name .txt per image with Prompt plus Negative prompt.'),
         a1111: appT('batchExport.descA1111', 'Writes one same-name .txt per image in A1111 / Forge parameter-block format for regeneration.'),
         caption_tags: appT('batchExport.descCaptionTags', 'Writes one same-name .txt per image with optional Class Token + AI caption + Tags, without the original Prompt.'),
+        tags_nl: appT('batchExport.descTagsNl', 'Writes one same-name .txt per image with optional Class Token + Tags + Natural Language caption, without the original Prompt.'),
+        nl_caption: appT('batchExport.descNlCaption', 'Writes one same-name .txt per image containing only the Natural Language caption.'),
+        prompt_nl: appT('batchExport.descPromptNl', 'Writes one same-name .txt per image with Prompt plus Natural Language caption.'),
         json: appT('batchExport.descJson', 'Writes one same-name .json per image with Prompt, Tags, model, size, and generation parameters.'),
     };
     return descriptions[mode] || descriptions.caption_merged;
@@ -8074,7 +8192,13 @@ async function executeBatchExport() {
     if (startBtn) startBtn.disabled = true;
 
     try {
-        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken, outputMode });
+        const templateOptions = contentMode === 'template' && window.V321Integration?.collectTemplateOptions
+            ? window.V321Integration.collectTemplateOptions()
+            : null;
+        const imageOverrides = window.V321Integration?.collectEditedCaptionOverrides
+            ? window.V321Integration.collectEditedCaptionOverrides()
+            : null;
+        const result = await API.exportTagsBatch(imageIds, outputFolder, blacklist, prefix, contentMode, overwritePolicy, { selectionToken, outputMode, templateOptions, imageOverrides });
 
         $('#batch-export-progress-fill').style.width = '100%';
 
@@ -8253,6 +8377,19 @@ async function openFilterModal(options = {}) {
     const maxAestheticInput = $('#filter-aesthetic-max');
     if (minAestheticInput) minAestheticInput.value = filterState.minAesthetic ?? '';
     if (maxAestheticInput) maxAestheticInput.value = filterState.maxAesthetic ?? '';
+    const brightnessMinInput = $('#filter-brightness-min');
+    const brightnessMaxInput = $('#filter-brightness-max');
+    if (brightnessMinInput) brightnessMinInput.value = filterState.brightnessMin ?? '';
+    if (brightnessMaxInput) brightnessMaxInput.value = filterState.brightnessMax ?? '';
+    $$('input[name="color-temperature"]').forEach(radio => {
+        radio.checked = radio.value === (filterState.colorTemperature || '');
+    });
+    $$('input[name="brightness-distribution"]').forEach(radio => {
+        radio.checked = radio.value === (filterState.brightnessDistribution || '');
+    });
+    $$('input[name="prompt-match-mode"]').forEach(radio => {
+        radio.checked = radio.value === normalizePromptMatchMode(filterState.promptMatchMode);
+    });
     // Don't prefill prompt search bar with AppState.filters.search —
     // the prompt search is for adding prompt filters, not for text search
     $('#modal-prompt-search').value = '';
@@ -8841,7 +8978,7 @@ function renderModelManager(models = []) {
                     </details>
                 ` : ''}
                 <div class="model-card-actions">
-                    ${model.download_supported ? `<button class="btn btn-primary btn-small btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
+                    ${model.download_supported ? `<button class="btn btn-primary btn-prepare-model" data-model-id="${safeId}">${escapeHtml(status === 'ready' ? appT('models.repair', 'Recheck / Repair') : appT('models.prepare', 'Prepare / Download'))}</button>` : ''}
                     ${!model.download_supported && status !== 'ready' ? `<span class="model-card-hint">${escapeHtml(appT('models.noAutoDownload', 'Automatic download not available — follow manual steps above'))}</span>` : ''}
                     ${externalLinks}
                 </div>
@@ -9413,6 +9550,11 @@ function updateFilterModalSummary() {
     const maxHeight = parseInt($('#filter-max-height')?.value, 10) || null;
     const aspectRatio = $('input[name="aspect-ratio"]:checked')?.value || '';
     const dimensionCount = [minWidth, maxWidth, minHeight, maxHeight].filter(Boolean).length + (aspectRatio ? 1 : 0);
+    const brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
+    const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
+    const colorTemperature = $('input[name="color-temperature"]:checked')?.value || '';
+    const brightnessDistribution = $('input[name="brightness-distribution"]:checked')?.value || '';
+    const colorCount = [brightnessMin, brightnessMax].filter(Boolean).length + (colorTemperature ? 1 : 0) + (brightnessDistribution ? 1 : 0);
 
     setCount('filter-modal-count-generators', `${generatorCount}/${generatorTotal}`);
     setCount('filter-modal-count-ratings', `${ratingCount}/${ratingTotal}`);
@@ -9421,6 +9563,7 @@ function updateFilterModalSummary() {
     setCount('filter-modal-count-checkpoints', String(checkpointCount));
     setCount('filter-modal-count-loras', String(loraCount));
     setCount('filter-modal-count-dimensions', dimensionCount > 0 ? String(dimensionCount) : t('filter.any', null, 'Any'));
+    setCount('filter-modal-count-colors', colorCount > 0 ? String(colorCount) : t('filter.any', null, 'Any'));
 
     // Aesthetic stat
     const aestheticMin = filterState.minAesthetic;
@@ -9437,7 +9580,8 @@ function updateFilterModalSummary() {
         promptCount > 0,
         checkpointCount > 0,
         loraCount > 0,
-        dimensionCount > 0
+        dimensionCount > 0,
+        colorCount > 0
     ].filter(Boolean).length;
 
     if (selectionSummary) {
@@ -9646,6 +9790,8 @@ function applyModalFilters() {
     filterState.search = freeTextSearch ? freeTextSearch.value.trim() : '';
     const promptSearch = $('#modal-prompt-search');
     if (promptSearch) promptSearch.value = '';
+    const promptMatchRadio = $('input[name="prompt-match-mode"]:checked');
+    filterState.promptMatchMode = normalizePromptMatchMode(promptMatchRadio?.value);
 
     // Get dimension filters
     const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;
@@ -9666,6 +9812,15 @@ function applyModalFilters() {
     const maxAesthetic = parseFloat($('#filter-aesthetic-max')?.value) || null;
     filterState.minAesthetic = minAesthetic;
     filterState.maxAesthetic = maxAesthetic;
+
+    const brightnessMin = parseFloat($('#filter-brightness-min')?.value) || null;
+    const brightnessMax = parseFloat($('#filter-brightness-max')?.value) || null;
+    const colorTemperatureRadio = $('input[name="color-temperature"]:checked');
+    const brightnessDistributionRadio = $('input[name="brightness-distribution"]:checked');
+    filterState.brightnessMin = brightnessMin;
+    filterState.brightnessMax = brightnessMax;
+    filterState.colorTemperature = colorTemperatureRadio ? colorTemperatureRadio.value : '';
+    filterState.brightnessDistribution = brightnessDistributionRadio ? brightnessDistributionRadio.value : '';
 
     const committedFilters = commitFilterModalState(filterState);
 
@@ -9715,6 +9870,10 @@ function resetAllFilters() {
     $$('#modal-lora-list input').forEach(cb => cb.checked = false);
     const modalPromptSearch = $('#modal-prompt-search');
     if (modalPromptSearch) modalPromptSearch.value = '';
+    filterState.promptMatchMode = 'exact';
+    $$('input[name="prompt-match-mode"]').forEach(radio => {
+        radio.checked = radio.value === 'exact';
+    });
     const freeTextSearch = $('#modal-free-text-search');
     if (freeTextSearch) freeTextSearch.value = '';
     // Reset aesthetic inputs
@@ -9722,6 +9881,12 @@ function resetAllFilters() {
     const maxAeInput = $('#filter-aesthetic-max');
     if (minAeInput) minAeInput.value = '';
     if (maxAeInput) maxAeInput.value = '';
+    const brightnessMinInput = $('#filter-brightness-min');
+    const brightnessMaxInput = $('#filter-brightness-max');
+    if (brightnessMinInput) brightnessMinInput.value = '';
+    if (brightnessMaxInput) brightnessMaxInput.value = '';
+    $$('input[name="color-temperature"]').forEach(r => r.checked = r.value === '');
+    $$('input[name="brightness-distribution"]').forEach(r => r.checked = r.value === '');
     renderModalActiveTags();
     renderModalActivePrompts();
 
@@ -9790,6 +9955,7 @@ function saveFilterPreset(name) {
         checkpoints: AppState.filters.checkpoints,
         loras: AppState.filters.loras,
         prompts: AppState.filters.prompts,
+        promptMatchMode: normalizePromptMatchMode(AppState.filters.promptMatchMode),
         search: AppState.filters.search,
         artist: AppState.filters.artist,
         minWidth: AppState.filters.minWidth,
@@ -9934,6 +10100,7 @@ function saveFilterState() {
             checkpoints: AppState.filters.checkpoints,
             loras: AppState.filters.loras,
             prompts: AppState.filters.prompts,
+            promptMatchMode: normalizePromptMatchMode(AppState.filters.promptMatchMode),
             search: AppState.filters.search,
             artist: AppState.filters.artist,
             sortBy: AppState.filters.sortBy,
@@ -9944,6 +10111,10 @@ function saveFilterState() {
             aspectRatio: AppState.filters.aspectRatio,
             minAesthetic: AppState.filters.minAesthetic,
             maxAesthetic: AppState.filters.maxAesthetic,
+            brightnessMin: AppState.filters.brightnessMin,
+            brightnessMax: AppState.filters.brightnessMax,
+            colorTemperature: AppState.filters.colorTemperature,
+            brightnessDistribution: AppState.filters.brightnessDistribution,
         };
         localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(stateToSave));
     } catch (e) {
@@ -9984,6 +10155,12 @@ function updateFilterSummary() {
     const searchSummary = $('#summary-search');
     if (searchSummary) {
         searchSummary.textContent = summary.search;
+    }
+
+    const colorSummary = $('#summary-colors');
+    if (colorSummary) {
+        colorSummary.removeAttribute('data-i18n');
+        colorSummary.textContent = summary.colors || appT('filter.any', 'Any');
     }
 
     // Artist filter
@@ -10471,6 +10648,7 @@ function buildAppContext() {
         resetAllFilters,
         updateFilterSummary,
         syncGenTabsWithFilters,
+        normalizePromptMatchMode,
         createDefaultFilterState,
         cloneFilterState,
         copyFilterState,

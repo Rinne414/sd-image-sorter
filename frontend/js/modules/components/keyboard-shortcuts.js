@@ -143,6 +143,26 @@ const KeyboardShortcutsPanel = (function () {
                 }
             });
         }
+
+        // Mobile mirror of the same help action. The desktop nav-actions row
+        // is hidden by CSS at <=768px viewports, so the only way for users on
+        // narrow screens / split-screen / tablet to reach the guide is via
+        // the hamburger menu.
+        const mobileHelpBtn = document.getElementById('mobile-btn-help');
+        if (mobileHelpBtn) {
+            mobileHelpBtn.addEventListener('click', function () {
+                // Close the mobile nav so the guide modal is not stacked
+                // underneath the hamburger overlay.
+                var overlay = document.getElementById('mobile-nav-overlay');
+                if (overlay) {
+                    overlay.classList.remove('visible');
+                    document.body.style.overflow = '';
+                }
+                if (!showGuideForCurrentTab()) {
+                    show();
+                }
+            });
+        }
     }
 
     return { init, show, hide, SHORTCUTS };
