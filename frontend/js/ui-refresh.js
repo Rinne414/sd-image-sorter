@@ -156,6 +156,9 @@
                 file_size: 'sort.fileSize',
                 file_size_asc: 'sort.fileSizeAsc',
                 aesthetic: 'sort.aesthetic',
+                brightness: 'sort.brightness',
+                saturation: 'sort.saturation',
+                brightness_skew: 'sort.brightnessSkew',
                 random: 'sort.random'
             });
 
@@ -336,7 +339,11 @@
 
             this._setText('#tag-modal-title', 'modal.tagTitle');
             this._setText('#tag-modal .modal-description', 'modal.tagDescription');
-            this._setText('#tag-model-select-label', 'modal.tagModel');
+            if (window.V321Integration && typeof window.V321Integration.syncVisibleTaggerCopy === 'function') {
+                window.V321Integration.syncVisibleTaggerCopy();
+            } else {
+                this._setText('#tag-model-select-label', 'modal.tagModel');
+            }
             this._setOptionText('#tag-model-select', {
                 custom: 'modal.tagCustomModel'
             });

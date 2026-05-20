@@ -1,0 +1,239 @@
+/* SD Image Sorter — Mass Tag Editor (v3.2.1+)
+ * Modal with scope picker, 4-tab editor, dry-run preview, and a separate
+ * confirm dialog for high-scope (>1000 image) destructive operations.
+ *
+ * Uses tokens from styles.css so the rest of the app retains visual unity. */
+
+/* ---- Modal shell ----------------------------------------------------- */
+
+.mass-tag-shell {
+    width: min(720px, calc(100vw - 40px));
+    max-width: 720px;
+}
+
+/* ---- Scope picker ---------------------------------------------------- */
+
+.mass-tag-scope {
+    margin: 8px 0 16px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+
+.mass-tag-scope-title {
+    margin-bottom: 8px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.mass-tag-scope-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.mass-tag-scope-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.mass-tag-scope-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-glow);
+}
+
+.mass-tag-scope-card:has(input:checked) {
+    border-color: var(--accent-primary);
+    background: rgba(var(--accent-primary-rgb), 0.10);
+}
+
+.mass-tag-scope-card input {
+    flex-shrink: 0;
+}
+
+.mass-tag-scope-card-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.mass-tag-scope-card-body strong {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.mass-tag-scope-card-body small {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+}
+
+/* ---- Operation tabs -------------------------------------------------- */
+
+.mass-tag-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 12px 0;
+    padding: 4px;
+    border-radius: var(--radius-md);
+    background: rgba(15, 30, 41, 0.55);
+    border: 1px solid var(--border-color);
+}
+
+.mass-tag-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.mass-tag-tab span[aria-hidden] { font-size: 1rem; }
+
+.mass-tag-tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}
+
+.mass-tag-tab.active {
+    background: linear-gradient(
+        135deg,
+        rgba(var(--accent-primary-rgb), 0.20),
+        rgba(var(--accent-secondary-rgb), 0.14)
+    );
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.mass-tag-panel {
+    margin-top: 8px;
+    padding: 14px;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+}
+
+.mass-tag-panel[hidden] { display: none; }
+
+/* ---- Result panel ---------------------------------------------------- */
+
+.mass-tag-result {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--accent-secondary-rgb), 0.06);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.30);
+}
+
+.mass-tag-result[hidden] { display: none; }
+
+.mass-tag-result.danger {
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.30);
+}
+
+.mass-tag-result-summary {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.mass-tag-result-samples {
+    margin-top: 8px;
+}
+
+.mass-tag-result-samples summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+.mass-tag-result-samples pre {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--text-secondary);
+    font: 12px/1.5 ui-monospace, "SF Mono", Consolas, monospace;
+    max-height: 220px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* ---- Confirm dialog -------------------------------------------------- */
+
+.mass-tag-confirm-shell {
+    width: min(440px, calc(100vw - 40px));
+}
+
+.mass-tag-confirm-shell h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(245, 158, 11, 1);
+}
+
+.mass-tag-confirm-summary {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 12px;
+    font-size: 0.86rem;
+}
+
+.mass-tag-confirm-summary dt {
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.mass-tag-confirm-summary dd {
+    margin: 0;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.mass-tag-confirm-note {
+    color: rgba(239, 68, 68, 0.85);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin-top: 8px;
+}
+
+/* The 2-second countdown disables the primary button until it elapses. */
+#btn-mass-tag-confirm-apply:disabled {
+    cursor: progress;
+    opacity: 0.75;
+}
+
+@media (max-width: 540px) {
+    .mass-tag-scope-options,
+    .mass-tag-tabs {
+        grid-template-columns: 1fr 1fr;
+    }
+    .mass-tag-tabs { grid-auto-rows: 1fr; }
+}

@@ -5,6 +5,72 @@
 .vlm-status-warning { background: rgba(234, 179, 8, 0.12); color: #eab308; }
 .vlm-status-info { background: rgba(59, 130, 246, 0.12); color: #3b82f6; }
 
+/* Output-format segmented control (NL caption / Tags / Both).
+   Picks up the same visual language as the LoRA preset chips, but laid out
+   as a single horizontal group with clear active state. */
+.vlm-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 6px;
+}
+.vlm-segmented-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+.vlm-segmented-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-glow);
+    color: var(--text-primary);
+}
+.vlm-segmented-btn.active {
+    background: linear-gradient(
+        135deg,
+        rgba(var(--accent-primary-rgb), 0.20),
+        rgba(var(--accent-secondary-rgb), 0.14)
+    );
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+    box-shadow: 0 0 0 1px rgba(var(--accent-primary-rgb), 0.35);
+}
+.vlm-segmented-btn span[aria-hidden] {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+/* "active" pill rendered inside a <details> summary so users can tell at a
+   glance which collapsed sections currently override the defaults. */
+.vlm-details-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: rgba(var(--accent-secondary-rgb), 0.18);
+    color: var(--accent-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+}
+.vlm-details-badge[hidden] { display: none; }
+
+@media (max-width: 520px) {
+    .vlm-segmented { grid-template-columns: 1fr; }
+}
+
 .vlm-model-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .vlm-model-item {
     padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
@@ -39,7 +105,10 @@
 /* Uses design tokens defined in styles.css to match the rest of the app. */
 
 /* Wider modal-large export shell so the LoRA + preview grid breathes */
-.batch-export-shell { max-width: 1100px; }
+.batch-export-shell {
+    width: min(1280px, calc(100vw - 40px));
+    max-width: 1280px;
+}
 
 /* 2-column responsive grid: settings on left, live preview on right */
 .batch-export-grid {
@@ -48,6 +117,12 @@
     gap: 16px;
     margin: 12px 0;
     align-items: start;
+}
+.batch-export-grid:not([data-content-mode="template"]) {
+    grid-template-columns: minmax(0, 1fr);
+}
+.batch-export-grid[data-content-mode="template"] {
+    grid-template-columns: minmax(320px, 0.74fr) minmax(560px, 1.26fr);
 }
 @media (max-width: 880px) {
     .batch-export-grid { grid-template-columns: 1fr; }
@@ -61,13 +136,20 @@
     border-radius: var(--radius-md);
     background: var(--bg-card);
     border: 1px solid var(--border-color);
+    min-width: 0;
 }
 .export-preview-header {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(180px, 1fr) auto;
+    align-items: center;
+    gap: 10px;
     margin-bottom: 10px;
 }
 .export-preview-header strong { color: var(--text-primary); }
-.export-preview-header .helper-text { flex: 1; }
+.export-preview-header .helper-text {
+    min-width: 0;
+    margin: 0;
+}
 
 .vlm-mode-banner {
     margin: 12px 0;
@@ -140,20 +222,179 @@
 
 .export-preview-list {
     margin-top: 10px;
-    max-height: 420px;
-    overflow-y: auto;
+    max-height: min(62vh, 700px);
+    overflow: visible;
     border-radius: var(--radius-md);
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     padding: 6px;
 }
-.export-preview-row {
-    display: flex; gap: 12px; padding: 10px;
+
+.export-preview-save-note {
+    margin: 0 0 6px;
+    padding: 7px 9px;
+    border-radius: var(--radius-sm);
+    background: rgba(var(--accent-secondary-rgb), 0.08);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.22);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.export-preview-workbench {
+    display: grid;
+    grid-template-columns: minmax(190px, 0.72fr) minmax(340px, 1.55fr) minmax(250px, 1fr);
+    gap: 10px;
+    height: min(56vh, 630px);
+    min-height: 430px;
+}
+
+.batch-export-grid[data-content-mode="template"] .export-preview-list {
+    max-height: none;
+}
+
+.batch-export-grid[data-content-mode="template"] .export-preview-workbench {
+    grid-template-columns: minmax(172px, 0.58fr) minmax(0, 1.42fr);
+    height: auto;
+    min-height: 0;
+}
+
+.batch-export-grid[data-content-mode="template"] .export-preview-queue,
+.batch-export-grid[data-content-mode="template"] .export-preview-editor {
+    height: min(44vh, 500px);
+    min-height: 360px;
+}
+
+.batch-export-grid[data-content-mode="template"] .export-preview-tools {
+    grid-column: 1 / -1;
+    max-height: 300px;
+}
+
+.export-preview-queue,
+.export-preview-editor,
+.export-preview-tools {
+    min-width: 0;
+    min-height: 0;
     border-radius: var(--radius-sm);
     background: var(--bg-elevated);
-    margin-bottom: 6px;
+    border: 1px solid var(--border-color);
 }
-.export-preview-row:last-child { margin-bottom: 0; }
+
+.export-preview-queue,
+.export-preview-tools {
+    display: flex;
+    flex-direction: column;
+}
+
+.export-preview-queue {
+    overflow: hidden;
+}
+
+.export-preview-tools {
+    overflow-y: auto;
+}
+
+.export-preview-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 9px;
+    overflow: hidden;
+}
+
+.export-preview-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 11px;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.export-preview-panel-head strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-preview-panel-head span {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.export-preview-queue-list,
+.export-preview-common-tags {
+    overflow-y: auto;
+    min-height: 0;
+    padding: 8px;
+}
+
+.export-preview-queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.export-preview-queue-item {
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+    padding: 6px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.export-preview-queue-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.export-preview-queue-item.active {
+    background: rgba(var(--accent-primary-rgb), 0.16);
+    border-color: rgba(var(--accent-primary-rgb), 0.42);
+    color: var(--text-primary);
+}
+
+.export-preview-queue-item.edited {
+    border-color: rgba(var(--accent-secondary-rgb), 0.38);
+}
+
+.export-preview-queue-item .export-preview-thumb {
+    width: 46px;
+    height: 46px;
+}
+
+.export-preview-queue-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    gap: 2px;
+}
+
+.export-preview-queue-copy span,
+.export-preview-queue-copy small {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.export-preview-queue-copy strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+}
+
 .export-preview-thumb {
     width: 80px; height: 80px; flex-shrink: 0;
     object-fit: cover;
@@ -161,16 +402,53 @@
     background: var(--bg-card-solid);
     border: 1px solid var(--border-color);
 }
-.export-preview-content {
-    flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+
+.export-preview-current {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
 }
-.export-preview-filename {
-    font-size: 0.75rem;
+
+.export-preview-current .export-preview-thumb {
+    width: 86px;
+    height: 86px;
+}
+
+.export-preview-current-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.export-preview-current-meta span,
+.export-preview-current-meta small {
     color: var(--text-muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 12px;
 }
+
+.export-preview-current-meta strong {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-preview-editor-helper,
+.export-preview-tools-helper {
+    margin: -2px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.export-preview-tools-helper {
+    padding: 9px 11px 0;
+}
+
 .export-preview-textarea {
-    flex: 1; min-height: 60px;
+    flex: 1; min-height: 86px;
     background: var(--bg-card-solid);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
@@ -182,6 +460,12 @@
     resize: vertical;
     transition: var(--transition-fast);
 }
+
+.export-preview-main-textarea {
+    min-height: 142px;
+    resize: none;
+}
+
 .export-preview-textarea:focus {
     outline: none;
     border-color: var(--accent-primary);
@@ -198,4 +482,782 @@
     background: rgba(var(--accent-secondary-rgb), 0.15);
     color: var(--accent-secondary);
     align-self: flex-start;
+}
+
+.export-preview-token-list,
+.export-preview-common-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+}
+
+.export-preview-token-list {
+    overflow-y: auto;
+    min-height: 0;
+    max-height: 165px;
+    padding-right: 2px;
+}
+
+.export-preview-token,
+.export-preview-common-tag {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    gap: 6px;
+    padding: 5px 8px;
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-solid);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.export-preview-token span,
+.export-preview-common-tag span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-preview-token:hover,
+.export-preview-common-tag:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+    background: rgba(var(--accent-primary-rgb), 0.12);
+}
+
+.export-preview-common-tag small {
+    color: var(--text-muted);
+}
+
+.export-preview-editor-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.export-preview-editor-actions .btn {
+    padding-inline: 10px;
+    letter-spacing: 0;
+}
+
+.export-preview-checks,
+.export-preview-cleanup {
+    padding: 9px 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.export-preview-checks > strong,
+.export-preview-cleanup > strong {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.export-preview-stat-grid,
+.export-preview-cleanup-grid {
+    display: grid;
+    gap: 6px;
+}
+
+.export-preview-stat-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.export-preview-cleanup-grid {
+    grid-template-columns: 1fr;
+}
+
+.export-preview-stat {
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-solid);
+}
+
+.export-preview-stat.warn {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.export-preview-stat span,
+.export-preview-stat strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-preview-stat span {
+    color: var(--text-muted);
+    font-size: 10px;
+}
+
+.export-preview-stat strong {
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.export-preview-cleanup-row {
+    display: grid;
+    grid-template-columns: minmax(74px, 1fr) minmax(58px, 0.72fr) minmax(48px, 0.56fr);
+    gap: 6px;
+    align-items: center;
+}
+
+.export-preview-cleanup-row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.export-preview-cleanup-row-single {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.export-preview-cleanup-grid .btn {
+    min-width: 0;
+    min-height: 28px;
+    padding: 4px 7px;
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.export-preview-tag-form {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 9px 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.export-preview-tag-form .input-field {
+    grid-column: 1 / -1;
+}
+
+.export-preview-tag-form .btn {
+    min-width: 0;
+    justify-content: center;
+    white-space: nowrap;
+    line-height: 1.2;
+    min-height: 30px;
+    padding: 4px 8px;
+    letter-spacing: 0;
+    border-radius: var(--radius-xs);
+}
+
+.export-preview-empty-tools {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0;
+}
+
+@media (max-width: 1080px) {
+    .export-preview-workbench {
+        grid-template-columns: minmax(160px, 0.9fr) minmax(280px, 1.4fr);
+    }
+
+    .export-preview-tools {
+        grid-column: 1 / -1;
+        min-height: 210px;
+    }
+}
+
+@media (max-width: 760px) {
+    .batch-export-shell {
+        width: min(100vw - 16px, 100%);
+    }
+
+    .export-preview-header {
+        grid-template-columns: 1fr auto;
+    }
+
+    .export-preview-header .helper-text {
+        grid-column: 1 / -1;
+    }
+
+    .export-preview-list {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .export-preview-workbench {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+    }
+
+    .export-preview-queue,
+    .export-preview-tools {
+        max-height: 260px;
+    }
+
+    .export-preview-tools {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .export-preview-current {
+        grid-template-columns: 76px minmax(0, 1fr);
+    }
+
+    .export-preview-current .export-preview-thumb {
+        width: 76px;
+        height: 76px;
+    }
+
+    .export-preview-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+
+/* === v3.2.1: Tagger modal 3-tab redesign ============================== */
+/* Tabs row at the top of #tag-modal: Local / Natural Language / Aesthetic. */
+
+.tagger-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 12px;
+    padding: 4px;
+    border-radius: 14px;
+    background: rgba(15, 30, 41, 0.55);
+    border: 1px solid rgba(184, 215, 233, 0.10);
+    flex-wrap: wrap;
+}
+
+.tagger-tab {
+    flex: 1 1 140px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.tagger-tab:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-primary);
+}
+
+.tagger-tab.active {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(20, 184, 166, 0.18));
+    border-color: rgba(245, 158, 11, 0.32);
+    color: var(--text-primary);
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.12);
+}
+
+.tagger-tab span[aria-hidden] {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.tagger-tab-description {
+    margin: 0 0 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.tagger-native-select {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    min-width: 1px !important;
+    min-height: 1px !important;
+    max-width: 1px !important;
+    max-height: 1px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+    clip-path: inset(50%) !important;
+}
+
+.tagger-model-selector {
+    position: relative;
+}
+
+.tagger-model-current {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 72px;
+    padding: 13px 15px;
+    border: 1px solid rgba(var(--accent-primary-rgb), 0.28);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(9, 19, 29, 0.86), rgba(20, 35, 48, 0.72));
+    color: var(--text-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.tagger-model-current:hover {
+    border-color: rgba(var(--accent-primary-rgb), 0.48);
+    background: rgba(17, 35, 49, 0.92);
+    transform: translateY(-1px);
+}
+
+.tagger-model-current[hidden] {
+    display: none !important;
+}
+
+.tagger-model-current-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tagger-model-current-kicker {
+    color: var(--accent-secondary);
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.tagger-model-current-title {
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.tagger-model-current-meta {
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.tagger-model-current-action {
+    flex: 0 0 auto;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid rgba(184, 215, 233, 0.14);
+    border-radius: 999px;
+    color: var(--accent-primary);
+    background: rgba(var(--accent-primary-rgb), 0.10);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.tagger-model-choice-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.tagger-model-choice-list[hidden] {
+    display: none !important;
+}
+
+.tagger-model-choice {
+    width: 100%;
+    min-height: 70px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 13px;
+    border: 1px solid rgba(184, 215, 233, 0.12);
+    border-radius: 10px;
+    background: rgba(9, 19, 29, 0.72);
+    color: var(--text-secondary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        background 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+}
+
+.tagger-model-selector[data-active-tab="local"] .tagger-model-choice {
+    min-height: 58px;
+}
+
+.tagger-model-choice:hover {
+    background: rgba(17, 35, 49, 0.92);
+    border-color: rgba(var(--accent-secondary-rgb), 0.28);
+    transform: translateY(-1px);
+}
+
+.tagger-model-choice.is-selected {
+    color: var(--text-primary);
+    border-color: rgba(var(--accent-primary-rgb), 0.48);
+    background: linear-gradient(
+        135deg,
+        rgba(var(--accent-primary-rgb), 0.14),
+        rgba(var(--accent-secondary-rgb), 0.10)
+    );
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.22);
+}
+
+.tagger-model-choice-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.tagger-model-choice-actions .btn {
+    min-height: 30px;
+    padding: 5px 9px;
+    font-size: 11.5px;
+}
+
+.tagger-model-choice.is-disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.tagger-model-choice-icon {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--accent-secondary);
+    font-size: 15px;
+}
+
+.tagger-model-choice.is-selected .tagger-model-choice-icon {
+    background: rgba(var(--accent-primary-rgb), 0.18);
+    color: var(--accent-tertiary);
+}
+
+.tagger-model-choice-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tagger-model-choice-title {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.tagger-model-choice-meta {
+    color: var(--text-muted);
+    font-size: 11.5px;
+    line-height: 1.35;
+}
+
+.tagger-model-choice-badge {
+    width: max-content;
+    max-width: 100%;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(var(--accent-secondary-rgb), 0.13);
+    color: var(--accent-secondary);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.tagger-model-selector[data-active-tab="nl"] label[for="tag-model-select"] {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.tagger-nl-source-inputs {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.tagger-model-selector[data-active-tab="nl"] .tagger-model-choice-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tagger-model-selector[data-active-tab="nl"] .tagger-model-choice {
+    min-height: 92px;
+}
+
+.tagger-model-selector[data-active-tab="nl"] #tag-model-help {
+    display: none;
+}
+
+.tagger-nl-workflow-card {
+    display: none;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    gap: 8px 12px;
+    align-items: center;
+    margin: 8px 0 12px;
+    padding: 0;
+    border: 1px solid rgba(184, 215, 233, 0.12);
+    border-radius: 12px;
+    background: transparent;
+}
+
+.tagger-nl-workflow-copy {
+    min-width: 0;
+}
+
+.tagger-nl-workflow-card > span:first-child {
+    display: block;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.tagger-nl-status-card {
+    border: 0;
+    background: transparent;
+}
+
+.tagger-nl-workflow-status {
+    grid-column: 2;
+    max-width: 100%;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tagger-nl-progress,
+.tagger-nl-status,
+.tagger-nl-errors,
+.tagger-nl-debug-btn {
+    grid-column: 1 / -1;
+}
+
+.tagger-nl-debug-btn {
+    justify-self: start;
+    min-height: 30px;
+    padding: 5px 9px;
+    font-size: 12px;
+}
+
+.vlm-debug-chat-shell {
+    max-width: min(980px, calc(100vw - 40px));
+}
+
+.vlm-debug-chat-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+}
+
+.vlm-debug-chat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: min(68vh, 680px);
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.vlm-debug-message {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-elevated);
+    padding: 10px;
+}
+
+.vlm-debug-message.request {
+    border-color: rgba(var(--accent-primary-rgb), 0.28);
+}
+
+.vlm-debug-message.response {
+    border-color: rgba(34, 197, 94, 0.28);
+}
+
+.vlm-debug-message.error {
+    border-color: rgba(239, 68, 68, 0.34);
+}
+
+.vlm-debug-message-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.vlm-debug-message-phase {
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0;
+}
+
+.vlm-debug-message-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vlm-debug-message-body {
+    display: grid;
+    gap: 8px;
+}
+
+.vlm-debug-field {
+    display: grid;
+    gap: 3px;
+}
+
+.vlm-debug-field-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.vlm-debug-field pre {
+    margin: 0;
+    max-height: 190px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text-secondary);
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+}
+
+.tagger-compat-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
+/* Cards used in the Natural Language and Aesthetic tabs. */
+.tagger-nl-card,
+.tagger-aesthetic-status-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: rgba(13, 27, 38, 0.5);
+    border: 1px solid rgba(184, 215, 233, 0.10);
+    margin-bottom: 12px;
+}
+
+.tagger-nl-icon,
+.tagger-aesthetic-icon {
+    font-size: 22px;
+    line-height: 1;
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.tagger-nl-card-head {
+    display: flex;
+    gap: 12px;
+    flex: 1;
+}
+
+.tagger-nl-card-hint,
+.tagger-aesthetic-status-hint {
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 12.5px;
+    line-height: 1.55;
+}
+
+.tagger-nl-card-actions,
+.tagger-aesthetic-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    margin-left: 34px;  /* align with text after icon */
+}
+
+.tagger-aesthetic-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tagger-aesthetic-status-copy {
+    flex: 1;
+}
+
+.tagger-aesthetic-actions {
+    margin-left: 0;
+}
+
+@media (max-width: 760px) {
+    .tagger-model-choice-list,
+    .tagger-model-selector[data-active-tab="nl"] .tagger-model-choice-list {
+        grid-template-columns: 1fr;
+    }
+
+    .tagger-nl-workflow-card {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Highlight pulse used when Tagger -> Aesthetic Setup CTA opens
+   the Model Manager and we want to draw attention to a specific card. */
+.model-card.is-highlighted {
+    border-color: rgba(45, 212, 191, 0.55) !important;
+    box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.18);
+    animation: modelCardPulse 1.6s ease-in-out 2;
+}
+
+@keyframes modelCardPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.0); }
+    50%      { box-shadow: 0 0 0 8px rgba(45, 212, 191, 0.30); }
 }

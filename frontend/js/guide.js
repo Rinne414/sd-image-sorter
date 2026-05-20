@@ -14,6 +14,10 @@
             button: 'Guide',
             subtitle: 'What this tab does and how to use it',
             close: 'Close',
+            refreshI18n: '🔄 Refresh translations',
+            refreshI18nTitle: 'Re-fetch lang/*.js without losing your scan, filters, or selection',
+            refreshI18nDone: 'Translations refreshed without losing your data.',
+            refreshI18nFailed: 'Could not refresh translations. Try a normal F5 instead.',
             sections: {
                 purpose: 'What This Tab Is For',
                 steps: 'How To Use It',
@@ -185,6 +189,10 @@
             button: '指南',
             subtitle: '这个标签页能做什么，以及应该怎么用',
             close: '关闭',
+            refreshI18n: '🔄 重新载入界面文字',
+            refreshI18nTitle: '重新拉取 lang/*.js，不会清空扫描结果、筛选或选择',
+            refreshI18nDone: '界面文字已刷新，资料没有被清空。',
+            refreshI18nFailed: '刷新失败，请直接按 F5 重新整理整页。',
             sections: {
                 purpose: '这个标签页的用途',
                 steps: '使用步骤',
@@ -620,7 +628,9 @@
 }
 .guide-modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
     padding: 18px 24px 22px;
     border-top: 1px solid rgba(184, 215, 233, 0.08);
 }
@@ -632,6 +642,31 @@
     color: #ffe3ca;
     font-weight: 700;
     cursor: pointer;
+}
+.guide-modal-refresh-i18n {
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(45, 212, 191, 0.28);
+    background: rgba(45, 212, 191, 0.10);
+    color: #dffff9;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 160ms ease;
+}
+.guide-modal-refresh-i18n:hover {
+    background: rgba(45, 212, 191, 0.18);
+    border-color: rgba(45, 212, 191, 0.45);
+}
+@media (max-width: 520px) {
+    .guide-modal-footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+    .guide-modal-action,
+    .guide-modal-refresh-i18n {
+        width: 100%;
+    }
 }
 @media (max-width: 768px) {
     .guide-btn {
@@ -755,6 +790,74 @@
             if (this._escHandler) {
                 document.removeEventListener('keydown', this._escHandler, true);
                 this._escHandler = null;
+            }
+        },
+
+        /**
+         * Manually re-fetch lang/*.js + guide-translations.js without a page
+         * reload. State (gallery filters, selection, scan progress, modal
+         * positions, etc.) is fully preserved because we never touch
+         * localStorage and never call location.reload(). This is the manual
+         * fallback for users who keep their browser tab open across an app
+         * upgrade and never bother to F5.
+         *
+         * The normal F5 path is already handled server-side: GET / injects
+         * ?v=APP_VERSION onto every /static/*.js URL, so a regular refresh
+         * after upgrading the backend will pull the fresh language packs.
+         */
+        async refreshTranslations() {
+            const copy = this._copy();
+            const buster = '_t=' + Date.now();
+            const scripts = [
+                '/static/js/lang/en.js?' + buster,
+                '/static/js/lang/zh-CN.js?' + buster,
+                '/static/js/guide-translations.js?' + buster,
+            ];
+
+            const loadOne = (url) => new Promise((resolve, reject) => {
+                const tag = document.createElement('script');
+                tag.src = url;
+                tag.async = false;
+                tag.onload = () => resolve(url);
+                tag.onerror = () => reject(new Error('Failed to load ' + url));
+                document.head.appendChild(tag);
+            });
+
+            try {
+                for (const url of scripts) {
+                    await loadOne(url);
+                }
+                if (window.I18n && window.I18n.translations) {
+                    if (window.I18nLang_en) {
+                        window.I18n.translations['en'] = window.I18nLang_en;
+                    }
+                    if (window.I18nLang_zhCN) {
+                        window.I18n.translations['zh-CN'] = window.I18nLang_zhCN;
+                    }
+                    if (typeof window.I18n.applyToDOM === 'function') {
+                        window.I18n.applyToDOM();
+                    }
+                    try {
+                        document.dispatchEvent(new CustomEvent('languageChanged', {
+                            detail: { lang: window.I18n.currentLang }
+                        }));
+                    } catch (_e) {
+                        // CustomEvent constructor unavailable in extreme environments;
+                        // silently skip and rely on applyToDOM above.
+                    }
+                }
+                if (this._openTab && this._modalEl?.classList.contains('visible')) {
+                    this.show(this._openTab);
+                }
+                if (typeof window.showToast === 'function') {
+                    window.showToast(copy.refreshI18nDone || 'Translations refreshed.', 'success');
+                }
+            } catch (err) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast(copy.refreshI18nFailed || 'Failed to refresh translations.', 'error');
+                } else if (window.console && window.console.error) {
+                    window.console.error('refreshTranslations failed', err);
+                }
             }
         },
 

@@ -1100,6 +1100,7 @@ test('auto-separate should honor search and move the matching files', async ({ p
   await expect(page.locator('#gallery-grid .gallery-item')).toHaveCount(2)
 
   await openSortingSubView(page, 'autosep')
+  await page.locator('#autosep-action-mode-panel input[data-autosep-operation-mode][value="move"]').check({ force: true })
   await page.locator('#autosep-destination').fill(autoSepOut)
   await page.locator('#btn-preview-autosep').click()
 
@@ -1152,6 +1153,7 @@ test('manual sort should honor search and support move, skip, and undo', async (
 
   await openSortingSubView(page, 'manual')
 
+  await page.locator('input[name="manual-sort-operation"][value="move"]').check({ force: true })
   await page.locator('.folder-path-input[data-key="w"]').fill(manualSortTop)
   await page.locator('.folder-path-input[data-key="d"]').fill(manualSortRight)
   await page.locator('.folder-path-input[data-key="s"]').fill(manualSortBottom)

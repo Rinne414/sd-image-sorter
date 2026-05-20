@@ -18,6 +18,7 @@
             checkpoints: [],
             loras: [],
             prompts: [],
+            promptMatchMode: 'exact',
             artist: null,
             search: '',
             sortBy: 'newest',
@@ -29,6 +30,10 @@
             aspectRatio: '',
             minAesthetic: null,
             maxAesthetic: null,
+            brightnessMin: null,
+            brightnessMax: null,
+            colorTemperature: '',
+            brightnessDistribution: '',
         };
     }
 
@@ -41,6 +46,7 @@
             checkpoints: [...(source.checkpoints || [])],
             loras: [...(source.loras || [])],
             prompts: [...(source.prompts || [])],
+            promptMatchMode: source.promptMatchMode === 'contains' || source.prompt_match_mode === 'contains' ? 'contains' : 'exact',
             artist: source.artist || null,
             search: source.search || '',
             sortBy: source.sortBy || 'newest',
@@ -54,6 +60,14 @@
                 : '',
             minAesthetic: source.minAesthetic ?? null,
             maxAesthetic: source.maxAesthetic ?? null,
+            brightnessMin: source.brightnessMin ?? null,
+            brightnessMax: source.brightnessMax ?? null,
+            colorTemperature: ['warm', 'neutral', 'cool'].includes(String(source.colorTemperature || '').trim())
+                ? String(source.colorTemperature || '').trim()
+                : '',
+            brightnessDistribution: ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced'].includes(String(source.brightnessDistribution || '').trim())
+                ? String(source.brightnessDistribution || '').trim()
+                : '',
         };
     }
 
