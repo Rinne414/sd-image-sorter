@@ -363,6 +363,13 @@ const VLMCaption = {
                 try {
                     if (typeof window.loadImages === 'function') window.loadImages();
                     if (typeof window.loadStats === 'function') window.loadStats();
+                    // v3.2.2: if the image detail modal is open, re-fetch so
+                    // the user sees the new ai_caption immediately without
+                    // having to close and reopen the modal.
+                    if (window.Gallery?.currentPreviewRequestId && window.Gallery?.openPreview) {
+                        const currentId = window.Gallery.images?.[window.Gallery.currentPreviewIndex]?.id;
+                        if (currentId) window.Gallery.openPreview(currentId);
+                    }
                     document.dispatchEvent(new CustomEvent('vlmBatchCompleted', {
                         detail: {
                             completed: data.completed || 0,
