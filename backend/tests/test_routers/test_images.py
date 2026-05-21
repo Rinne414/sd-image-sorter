@@ -1424,8 +1424,8 @@ class TestReparseImage:
         assert response.status_code == 404
 
 
-class TestExportSelectionData:
-    """Tests for selected-image prompt/tag export data."""
+class TestExportSelectionDataAdvanced:
+    """Tests for selected-image prompt/tag export data (advanced scenarios)."""
 
     def test_export_selection_data_token_respects_prompt_contains_mode(self, test_client, test_db):
         """Token export preview should not fall back to exact prompt matching."""
