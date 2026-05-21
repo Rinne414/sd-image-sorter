@@ -1837,7 +1837,7 @@ const V321Integration = {
 
         const commonList = document.createElement('div');
         commonList.className = 'export-preview-common-tags';
-        for (const item of common.slice(0, 80)) {
+        for (const item of common) {
             const chip = document.createElement('button');
             chip.type = 'button';
             chip.className = 'export-preview-common-tag';
