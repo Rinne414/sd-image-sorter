@@ -683,8 +683,8 @@ def test_release_ci_keeps_security_audit_and_windows_linux_guardrails():
     assert "--disable-pip" in security_check
     assert "ubuntu-latest" in workflow
     assert "windows-latest" in workflow
+    assert "macos-latest" in workflow
     assert "Release and updater tests" in workflow
-    assert "macos-latest" not in workflow
     assert "macOS dependency import and release guard tests" not in workflow
     assert "cache: \"pip\"" in workflow
 
