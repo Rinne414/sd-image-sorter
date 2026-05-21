@@ -1000,10 +1000,11 @@
                                     <div class="autosep-scope-detail-block">
                                         <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will still use the filters shown here.</div>
                                         <div class="scope-status-actions">
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery">Copy Current Gallery Filters</button>
-                                            <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery">Copy Gallery Filters Again</button>
-                                            <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved">Use These Saved Filters</button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery" title="Use whatever filters Gallery has right now">📋 Use Gallery's current filters</button>
+                                            <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery" title="Gallery filters changed — click to update" hidden>🔄 Update from Gallery</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved" title="Ignore Gallery changes, keep using the filters shown below" hidden>🔒 Keep my filters</button>
                                         </div>
+                                        <small class="helper-text" style="margin-top:4px">Tip: Auto-Separate has its own filters. Click above to sync from Gallery, or use "Edit Filters" to set them independently.</small>
                                     </div>
                                 </div>
 
