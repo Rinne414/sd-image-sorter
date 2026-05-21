@@ -457,7 +457,7 @@ sd-image-sorter/
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger 系列模型 |
 | [Camie](https://huggingface.co/camie-tagger/camie-tagger-v2) | Camie Tagger v2 模型 |
 | [PixAI](https://huggingface.co/PixAI-Tagger/PixAI-Tagger-v0.9) | PixAI Tagger v0.9 模型 |
-| [ToriiGate](https://huggingface.co/ToriiGate/ToriiGate-v0.5) | ToriiGate 多模态 VLM Tagger |
+| [ToriiGate](https://huggingface.co/Minthy/ToriiGate-0.5) | ToriiGate 多模态 VLM Tagger |
 | [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | 自动打码思路与 YOLO 隐私检测模型 |
 | [NudeNet](https://github.com/notAI-tech/NudeNet) | NudeNet NSFW 检测模型 |
 | [SAM3 / Segment Anything](https://github.com/facebookresearch/sam2) | SAM3 文本引导分割精修 |
@@ -467,12 +467,10 @@ sd-image-sorter/
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader 方向启发 |
 | [大番茄图片混淆](https://dfqtphx.netlify.app/) | 图片混淆 Hilbert 曲线方案 |
 | [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | 图片隐藏兼容方案 |
-| [OpenAI](https://openai.com) | VLM captioning provider (GPT-4o Vision) |
-| [Anthropic](https://anthropic.com) | VLM captioning provider (Claude 3.5 Sonnet) |
-| [Google Gemini](https://ai.google.dev) | VLM captioning provider (Gemini Pro Vision) |
-| [Ollama](https://ollama.com) | Local VLM runtime for privacy-first captioning |
-| [sorryhyun/anima_lora](https://github.com/sorryhyun/anima_lora) | Anima LoRA training convention reference |
-| [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) | Kohya SD training script conventions |
+| [OpenAI](https://openai.com) / [Anthropic](https://anthropic.com) / [Google Gemini](https://ai.google.dev) / [Ollama](https://ollama.com) | VLM captioning providers & 本地运行时 |
+| [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | 图库浏览 + 元数据搜索灵感来源 |
+| [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 三栏工作台设计参考 |
+| [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete) | Booru 标签自动补全 UX 参考 |
 
 License: [MIT](LICENSE)
 
@@ -690,7 +688,7 @@ Practical rule:
 | [SmilingWolf](https://huggingface.co/SmilingWolf) | WD14 Tagger models |
 | [Camie](https://huggingface.co/camie-tagger/camie-tagger-v2) | Camie Tagger v2 model |
 | [PixAI](https://huggingface.co/PixAI-Tagger/PixAI-Tagger-v0.9) | PixAI Tagger v0.9 model |
-| [ToriiGate](https://huggingface.co/ToriiGate/ToriiGate-v0.5) | ToriiGate multimodal VLM tagger |
+| [ToriiGate](https://huggingface.co/Minthy/ToriiGate-0.5) | ToriiGate multimodal VLM tagger |
 | [Wenaka2004](https://github.com/Wenaka2004/auto-censor) | Auto-censor concept & YOLO privacy detection model |
 | [NudeNet](https://github.com/notAI-tech/NudeNet) | NudeNet NSFW detection model |
 | [SAM3 / Segment Anything](https://github.com/facebookresearch/sam2) | SAM3 text-guided segmentation refinement |
@@ -700,11 +698,9 @@ Practical rule:
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader inspiration |
 | [大番茄图片混淆](https://dfqtphx.netlify.app/) | Hilbert curve image obfuscation |
 | [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | Image hiding compatibility |
-| [OpenAI](https://openai.com) | VLM captioning provider (GPT-4o Vision) |
-| [Anthropic](https://anthropic.com) | VLM captioning provider (Claude 3.5 Sonnet) |
-| [Google Gemini](https://ai.google.dev) | VLM captioning provider (Gemini Pro Vision) |
-| [Ollama](https://ollama.com) | Local VLM runtime for privacy-first captioning |
-| [sorryhyun/anima_lora](https://github.com/sorryhyun/anima_lora) | Anima LoRA training convention reference |
-| [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) | Kohya SD training script conventions |
+| [OpenAI](https://openai.com) / [Anthropic](https://anthropic.com) / [Google Gemini](https://ai.google.dev) / [Ollama](https://ollama.com) | VLM captioning providers & local runtime |
+| [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | Gallery browsing + metadata search inspiration |
+| [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 3-pane workbench design reference |
+| [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete) | Booru tag autocomplete UX reference |
 
 License: [MIT](LICENSE)
