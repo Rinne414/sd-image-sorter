@@ -96,22 +96,19 @@ jobs:
         run: |
           python -m pytest tests/ -q --ignore=tests/test_update_worker.py
 
-      - name: Verify run.sh is executable and server boots
+      - name: Verify server boots on macOS
         run: |
           chmod +x run.sh
-          # Start server in background, wait for it to respond, then kill
-          SD_IMAGE_SORTER_PORT=18999 timeout 30 bash -c '
-            python backend/main.py --port 18999 &
-            PID=$!
-            for i in $(seq 1 20); do
-              if curl -s http://127.0.0.1:18999/ > /dev/null 2>&1; then
-                echo "Server booted successfully on macOS"
-                kill $PID
-                exit 0
-              fi
-              sleep 1
-            done
-            echo "Server failed to boot"
-            kill $PID 2>/dev/null
-            exit 1
-          '
+          python backend/main.py --port 18999 &
+          PID=$!
+          for i in $(seq 1 20); do
+            if curl -s http://127.0.0.1:18999/ > /dev/null 2>&1; then
+              echo "Server booted successfully on macOS"
+              kill $PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to boot within 20s"
+          kill $PID 2>/dev/null
+          exit 1
