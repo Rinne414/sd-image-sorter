@@ -34,6 +34,12 @@
             brightnessMax: null,
             colorTemperature: '',
             brightnessDistribution: '',
+            // v3.2.2 per-item exclude filters
+            excludeTags: [],
+            excludeGenerators: [],
+            excludeRatings: [],
+            excludeCheckpoints: [],
+            excludeLoras: [],
         };
     }
 
@@ -68,6 +74,12 @@
             brightnessDistribution: ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced'].includes(String(source.brightnessDistribution || '').trim())
                 ? String(source.brightnessDistribution || '').trim()
                 : '',
+            // v3.2.2 per-item exclude filters
+            excludeTags: [...(source.excludeTags || [])],
+            excludeGenerators: [...(source.excludeGenerators || [])],
+            excludeRatings: [...(source.excludeRatings || [])],
+            excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+            excludeLoras: [...(source.excludeLoras || [])],
         };
     }
 

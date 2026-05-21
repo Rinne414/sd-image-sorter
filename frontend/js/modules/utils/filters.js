@@ -56,28 +56,45 @@ function formatFilterSummary(filters) {
         return translated && translated !== key ? translated : String(rating || '');
     };
 
+    const exTagCount = (f.excludeTags || []).length;
+    const exGenCount = (f.excludeGenerators || []).length;
+    const exRatingCount = (f.excludeRatings || []).length;
+    const exCpCount = (f.excludeCheckpoints || []).length;
+    const exLrCount = (f.excludeLoras || []).length;
+    const excludeSuffix = t ? t('filter.excluded') : 'excluded';
+
+    function appendExclude(base, count) {
+        if (!count) return base;
+        return `${base} (-${count} ${excludeSuffix})`;
+    }
+
     return {
-        generators:
+        generators: appendExclude(
             !f.generators || f.generators.length === allGens.length ? allLabel :
                 f.generators.length === 0 ? noneLabel :
                     f.generators.length > 2 ? `${f.generators.length} ${selectedSuffix}` : f.generators.map(formatGenerator).join(', '),
+            exGenCount),
 
-        ratings:
+        ratings: appendExclude(
             !f.ratings || f.ratings.length === allRatings.length ? allLabel :
                 f.ratings.length === 0 ? noneLabel :
                     f.ratings.length > 2 ? `${f.ratings.length} ${selectedSuffix}` : f.ratings.map(formatRating).join(', '),
+            exRatingCount),
 
-        tags:
+        tags: appendExclude(
             !f.tags || f.tags.length === 0 ? noneLabel :
                 f.tags.length > 2 ? `${f.tags.length} ${tagLabel}` : f.tags.join(', '),
+            exTagCount),
 
-        checkpoints:
+        checkpoints: appendExclude(
             !f.checkpoints || f.checkpoints.length === 0 ? noneLabel :
                 f.checkpoints.length > 2 ? `${f.checkpoints.length} ${selectedSuffix}` : f.checkpoints.join(', '),
+            exCpCount),
 
-        loras:
+        loras: appendExclude(
             !f.loras || f.loras.length === 0 ? noneLabel :
                 f.loras.length > 2 ? `${f.loras.length} ${selectedSuffix}` : f.loras.join(', '),
+            exLrCount),
 
         prompts:
             !f.prompts || f.prompts.length === 0 ? noneLabel :

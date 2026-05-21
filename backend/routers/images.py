@@ -116,6 +116,12 @@ class SelectionIdsRequest(BaseModel):
         default=None,
         pattern="^(left_heavy|right_heavy|middle_heavy|edge_heavy|balanced)$",
     )
+    # v3.2.2 per-item exclude filters
+    excludeTags: List[str] = Field(default_factory=list)
+    excludeGenerators: List[str] = Field(default_factory=list)
+    excludeRatings: List[str] = Field(default_factory=list)
+    excludeCheckpoints: List[str] = Field(default_factory=list)
+    excludeLoras: List[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_prompt_match_mode(self):
@@ -414,6 +420,27 @@ async def get_images(
         default=None,
         description="Filter by brightness distribution shape: left_heavy | right_heavy | middle_heavy | edge_heavy | balanced",
     ),
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[str] = Query(
+        default=None,
+        description="Comma-separated tags to exclude (images with ANY of these tags are hidden)",
+    ),
+    exclude_generators: Optional[str] = Query(
+        default=None,
+        description="Comma-separated generators to exclude",
+    ),
+    exclude_ratings: Optional[str] = Query(
+        default=None,
+        description="Comma-separated ratings to exclude",
+    ),
+    exclude_checkpoints: Optional[str] = Query(
+        default=None,
+        description="Comma-separated checkpoints to exclude",
+    ),
+    exclude_loras: Optional[str] = Query(
+        default=None,
+        description="Comma-separated LoRAs to exclude",
+    ),
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
@@ -442,6 +469,11 @@ async def get_images(
         brightness_max=brightness_max,
         color_temperature=color_temperature,
         brightness_distribution=brightness_distribution,
+        exclude_tags=exclude_tags,
+        exclude_generators=exclude_generators,
+        exclude_ratings=exclude_ratings,
+        exclude_checkpoints=exclude_checkpoints,
+        exclude_loras=exclude_loras,
     )
 
 
@@ -486,6 +518,11 @@ async def create_selection_token(
         color_temperature=request.colorTemperature,
         brightness_distribution=request.brightnessDistribution,
         excluded_image_ids=request.excludedImageIds,
+        exclude_tags=request.excludeTags,
+        exclude_generators=request.excludeGenerators,
+        exclude_ratings=request.excludeRatings,
+        exclude_checkpoints=request.excludeCheckpoints,
+        exclude_loras=request.excludeLoras,
         chunk_size=request.chunkSize,
     )
 

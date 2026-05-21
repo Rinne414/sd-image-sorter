@@ -144,6 +144,12 @@ class SortFilterRequest(BaseModel):
     aspect_ratio: Optional[str] = None
     min_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
     max_aesthetic: Optional[float] = Field(default=None, ge=0, le=10)
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = Field(default=None)
+    exclude_generators: Optional[List[str]] = Field(default=None)
+    exclude_ratings: Optional[List[str]] = Field(default=None)
+    exclude_checkpoints: Optional[List[str]] = Field(default=None)
+    exclude_loras: Optional[List[str]] = Field(default=None)
 
     @field_validator('aspect_ratio')
     @classmethod
@@ -1658,6 +1664,12 @@ class SortingService:
         folders: Optional[Any] = None,
         operation_mode: str = "move",
         replace_existing: bool = False,
+        # v3.2.2 per-item exclude filters
+        exclude_tags: Optional[Any] = None,
+        exclude_generators: Optional[Any] = None,
+        exclude_ratings: Optional[Any] = None,
+        exclude_checkpoints: Optional[Any] = None,
+        exclude_loras: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Start a manual sort session."""
         operation_mode = self._validate_file_operation(operation_mode)
@@ -1713,6 +1725,11 @@ class SortingService:
             aspect_ratio=aspect_ratio,
             min_aesthetic=min_aesthetic,
             max_aesthetic=max_aesthetic,
+            exclude_tags=self._coerce_sort_filter_values(exclude_tags),
+            exclude_generators=self._coerce_sort_filter_values(exclude_generators),
+            exclude_ratings=self._coerce_sort_filter_values(exclude_ratings),
+            exclude_checkpoints=self._coerce_sort_filter_values(exclude_checkpoints),
+            exclude_loras=self._coerce_sort_filter_values(exclude_loras),
         )
         # DB-level filter already excludes images marked unreadable.
         # Per-image verification runs lazily in get_current_sort_image so

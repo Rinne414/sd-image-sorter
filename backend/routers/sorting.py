@@ -348,6 +348,11 @@ async def start_sort_session(
             folders=request.folders,
             operation_mode=request.operation_mode,
             replace_existing=request.replace_existing,
+            exclude_tags=request.exclude_tags,
+            exclude_generators=request.exclude_generators,
+            exclude_ratings=request.exclude_ratings,
+            exclude_checkpoints=request.exclude_checkpoints,
+            exclude_loras=request.exclude_loras,
         )
 
     return service.start_sort_session(

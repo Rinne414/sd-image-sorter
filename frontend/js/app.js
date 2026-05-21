@@ -322,6 +322,12 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         brightnessMax: source.brightnessMax ?? null,
         colorTemperature: source.colorTemperature || null,
         brightnessDistribution: source.brightnessDistribution || null,
+        // v3.2.2 per-item exclude filters
+        excludeTags: [...(source.excludeTags || [])],
+        excludeGenerators: [...(source.excludeGenerators || [])],
+        excludeRatings: [...(source.excludeRatings || [])],
+        excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+        excludeLoras: [...(source.excludeLoras || [])],
     };
 }
 
@@ -461,6 +467,12 @@ window.AppFilterAccess = {
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
         if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
+        // v3.2.2 per-item exclude filters
+        if (filters.excludeTags?.length) params.set('exclude_tags', filters.excludeTags.join(','));
+        if (filters.excludeGenerators?.length) params.set('exclude_generators', filters.excludeGenerators.join(','));
+        if (filters.excludeRatings?.length) params.set('exclude_ratings', filters.excludeRatings.join(','));
+        if (filters.excludeCheckpoints?.length) params.set('exclude_checkpoints', filters.excludeCheckpoints.join(','));
+        if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
         return params;
     },
 };
@@ -897,6 +909,13 @@ const API = {
         if (filters.brightnessMax) params.set('brightness_max', filters.brightnessMax);
         if (filters.colorTemperature) params.set('color_temperature', filters.colorTemperature);
         if (filters.brightnessDistribution) params.set('brightness_distribution', filters.brightnessDistribution);
+
+        // v3.2.2 per-item exclude filters
+        if (filters.excludeTags?.length) params.set('exclude_tags', filters.excludeTags.join(','));
+        if (filters.excludeGenerators?.length) params.set('exclude_generators', filters.excludeGenerators.join(','));
+        if (filters.excludeRatings?.length) params.set('exclude_ratings', filters.excludeRatings.join(','));
+        if (filters.excludeCheckpoints?.length) params.set('exclude_checkpoints', filters.excludeCheckpoints.join(','));
+        if (filters.excludeLoras?.length) params.set('exclude_loras', filters.excludeLoras.join(','));
 
         return this.get(`/api/images?${params}`, options);
     },
@@ -8524,17 +8543,56 @@ function renderModalActiveTags() {
     container.innerHTML = '';
 
     const filterState = getFilterModalState();
+
+    // Render included tags
     filterState.tags.forEach(tag => {
         const tagEl = document.createElement('span');
         tagEl.className = 'active-tag';
+        tagEl.title = 'Click to exclude; click again to remove';
         tagEl.appendChild(document.createTextNode(`${tag} `));
 
         const removeEl = document.createElement('span');
         removeEl.className = 'remove-modal-tag';
         removeEl.dataset.tag = tag;
-        removeEl.textContent = '×';
-        removeEl.addEventListener('click', () => {
+        removeEl.textContent = '\u00d7';
+        removeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
             filterState.tags = filterState.tags.filter(t => t !== tag);
+            renderModalActiveTags();
+        });
+
+        tagEl.addEventListener('click', () => {
+            // Cycle: include -> exclude
+            filterState.tags = filterState.tags.filter(t => t !== tag);
+            if (!filterState.excludeTags) filterState.excludeTags = [];
+            if (!filterState.excludeTags.includes(tag)) filterState.excludeTags.push(tag);
+            renderModalActiveTags();
+        });
+
+        tagEl.appendChild(removeEl);
+        container.appendChild(tagEl);
+    });
+
+    // Render excluded tags
+    (filterState.excludeTags || []).forEach(tag => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'active-tag active-tag-exclude';
+        tagEl.title = 'Click to remove exclusion';
+        tagEl.appendChild(document.createTextNode(`${tag} `));
+
+        const removeEl = document.createElement('span');
+        removeEl.className = 'remove-modal-tag';
+        removeEl.dataset.tag = tag;
+        removeEl.textContent = '\u00d7';
+        removeEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            filterState.excludeTags = (filterState.excludeTags || []).filter(t => t !== tag);
+            renderModalActiveTags();
+        });
+
+        tagEl.addEventListener('click', () => {
+            // Cycle: exclude -> remove
+            filterState.excludeTags = (filterState.excludeTags || []).filter(t => t !== tag);
             renderModalActiveTags();
         });
 

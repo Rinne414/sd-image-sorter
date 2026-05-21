@@ -542,6 +542,12 @@ function serializeAutoSepFilters(filters) {
         aspectRatio: source.aspectRatio || '',
         minAesthetic: source.minAesthetic ?? null,
         maxAesthetic: source.maxAesthetic ?? null,
+        // v3.2.2 per-item exclude filters
+        excludeTags: [...(source.excludeTags || [])],
+        excludeGenerators: [...(source.excludeGenerators || [])],
+        excludeRatings: [...(source.excludeRatings || [])],
+        excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+        excludeLoras: [...(source.excludeLoras || [])],
     };
 }
 

@@ -3688,6 +3688,15 @@ textarea:focus,
     background: rgba(245, 158, 11, 0.12);
     border-color: rgba(245, 158, 11, 0.28);
     color: #ffe6c4;
+    cursor: pointer;
+    user-select: none;
+}
+
+.filter-modal-shell .active-tag.active-tag-exclude {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+    text-decoration: line-through;
 }
 
 .filter-modal-shell .remove-modal-tag,

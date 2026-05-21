@@ -825,6 +825,15 @@ body::before {
         border-radius: 20px;
         font-size: 12px;
         color: var(--accent-primary);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .active-tag.active-tag-exclude {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #f87171;
+        text-decoration: line-through;
     }
 
     .active-tag .remove-tag {

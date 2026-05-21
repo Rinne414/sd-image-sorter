@@ -1259,6 +1259,12 @@ class ImageService:
         brightness_max: Optional[float] = None,
         color_temperature: Optional[str] = None,
         brightness_distribution: Optional[str] = None,
+        # v3.2.2 per-item exclude filters
+        exclude_tags: Optional[str] = None,
+        exclude_generators: Optional[str] = None,
+        exclude_ratings: Optional[str] = None,
+        exclude_checkpoints: Optional[str] = None,
+        exclude_loras: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Retrieve images with optional filtering using cursor-based pagination.
@@ -1313,6 +1319,13 @@ class ImageService:
         color_temperature = _sanitize_filter_value(color_temperature).lower() if color_temperature else None
         brightness_distribution = _sanitize_filter_value(brightness_distribution).lower() if brightness_distribution else None
 
+        # v3.2.2 per-item exclude filters
+        ex_tag_list = _sanitize_filter_values(exclude_tags)
+        ex_gen_list = _sanitize_filter_values(exclude_generators)
+        ex_rating_list = _sanitize_filter_values(exclude_ratings)
+        ex_cp_list = _sanitize_filter_values(exclude_checkpoints)
+        ex_lr_list = _sanitize_filter_values(exclude_loras)
+
         cursor_payload = None
         if cursor:
             try:
@@ -1356,6 +1369,11 @@ class ImageService:
                     brightness_max=brightness_max,
                     color_temperature=color_temperature,
                     brightness_distribution=brightness_distribution,
+                    exclude_tags=ex_tag_list,
+                    exclude_generators=ex_gen_list,
+                    exclude_ratings=ex_rating_list,
+                    exclude_checkpoints=ex_cp_list,
+                    exclude_loras=ex_lr_list,
                     skip_count=total >= 0,
                 )
                 if total < 0:
@@ -1416,6 +1434,11 @@ class ImageService:
                 brightness_max=brightness_max,
                 color_temperature=color_temperature,
                 brightness_distribution=brightness_distribution,
+                exclude_tags=ex_tag_list,
+                exclude_generators=ex_gen_list,
+                exclude_ratings=ex_rating_list,
+                exclude_checkpoints=ex_cp_list,
+                exclude_loras=ex_lr_list,
             )
             if not batch:
                 break
@@ -1453,6 +1476,11 @@ class ImageService:
             brightness_max=brightness_max,
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
+            exclude_tags=ex_tag_list,
+            exclude_generators=ex_gen_list,
+            exclude_ratings=ex_rating_list,
+            exclude_checkpoints=ex_cp_list,
+            exclude_loras=ex_lr_list,
         )
 
         return {
@@ -1489,6 +1517,12 @@ class ImageService:
         brightness_max: Optional[float] = None,
         color_temperature: Optional[str] = None,
         brightness_distribution: Optional[str] = None,
+        # v3.2.2 per-item exclude filters
+        exclude_tags: Optional[List[str]] = None,
+        exclude_generators: Optional[List[str]] = None,
+        exclude_ratings: Optional[List[str]] = None,
+        exclude_checkpoints: Optional[List[str]] = None,
+        exclude_loras: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Build the canonical filter contract encoded into selection tokens."""
         sort_by = _coerce_optional_string_filter(sort_by, "sortBy") or "newest"
@@ -1549,6 +1583,11 @@ class ImageService:
             "colorTemperature": color_temperature,
             "brightnessDistribution": brightness_distribution,
             "excludedImageIds": excluded_image_ids,
+            "excludeTags": _sanitize_filter_values(exclude_tags) or [],
+            "excludeGenerators": _sanitize_filter_values(exclude_generators) or [],
+            "excludeRatings": _sanitize_filter_values(exclude_ratings) or [],
+            "excludeCheckpoints": _sanitize_filter_values(exclude_checkpoints) or [],
+            "excludeLoras": _sanitize_filter_values(exclude_loras) or [],
         }
 
     def _selection_ids_from_contract(
@@ -1581,6 +1620,11 @@ class ImageService:
             color_temperature=contract["colorTemperature"],
             brightness_distribution=contract["brightnessDistribution"],
             excluded_image_ids=contract.get("excludedImageIds"),
+            exclude_tags=contract.get("excludeTags"),
+            exclude_generators=contract.get("excludeGenerators"),
+            exclude_ratings=contract.get("excludeRatings"),
+            exclude_checkpoints=contract.get("excludeCheckpoints"),
+            exclude_loras=contract.get("excludeLoras"),
             fetch_chunk_size=SELECTION_IDS_FETCH_CHUNK,
             offset=offset,
             limit=limit,
@@ -1609,6 +1653,11 @@ class ImageService:
             color_temperature=contract["colorTemperature"],
             brightness_distribution=contract["brightnessDistribution"],
             excluded_image_ids=contract.get("excludedImageIds"),
+            exclude_tags=contract.get("excludeTags"),
+            exclude_generators=contract.get("excludeGenerators"),
+            exclude_ratings=contract.get("excludeRatings"),
+            exclude_checkpoints=contract.get("excludeCheckpoints"),
+            exclude_loras=contract.get("excludeLoras"),
         )
 
     def _encode_selection_token(self, contract: Dict[str, Any]) -> str:
@@ -1661,6 +1710,11 @@ class ImageService:
                 color_temperature=filters.get("colorTemperature"),
                 brightness_distribution=filters.get("brightnessDistribution"),
                 excluded_image_ids=filters.get("excludedImageIds"),
+                exclude_tags=filters.get("excludeTags"),
+                exclude_generators=filters.get("excludeGenerators"),
+                exclude_ratings=filters.get("excludeRatings"),
+                exclude_checkpoints=filters.get("excludeCheckpoints"),
+                exclude_loras=filters.get("excludeLoras"),
             )
         except HTTPException:
             raise

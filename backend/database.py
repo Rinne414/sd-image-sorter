@@ -1670,6 +1670,79 @@ def _apply_lora_filter(conditions: List[str], params: List[Any],
     return conditions, params
 
 
+def _apply_exclude_tags_filter(conditions: List[str], params: List[Any],
+                               exclude_tags: Optional[List[str]]) -> tuple:
+    """Exclude images that have ANY of the specified tags."""
+    if not exclude_tags:
+        return conditions, params
+    placeholders = ",".join("?" * len(exclude_tags))
+    conditions.append(
+        f"i.id NOT IN (SELECT image_id FROM tags WHERE LOWER(tag) IN ({placeholders}))"
+    )
+    params.extend([t.lower() for t in exclude_tags])
+    return conditions, params
+
+
+def _apply_exclude_generators_filter(conditions: List[str], params: List[Any],
+                                     exclude_generators: Optional[List[str]]) -> tuple:
+    """Exclude images matching any of the specified generators."""
+    if not exclude_generators:
+        return conditions, params
+    placeholders = ",".join("?" * len(exclude_generators))
+    conditions.append(f"LOWER(i.generator) NOT IN ({placeholders})")
+    params.extend([g.lower() for g in exclude_generators])
+    return conditions, params
+
+
+def _apply_exclude_ratings_filter(conditions: List[str], params: List[Any],
+                                  exclude_ratings: Optional[List[str]]) -> tuple:
+    """Exclude images that have ANY of the specified rating tags."""
+    if not exclude_ratings:
+        return conditions, params
+    placeholders = ",".join("?" * len(exclude_ratings))
+    conditions.append(
+        f"i.id NOT IN (SELECT image_id FROM tags WHERE LOWER(tag) IN ({placeholders}))"
+    )
+    params.extend([r.lower() for r in exclude_ratings])
+    return conditions, params
+
+
+def _apply_exclude_checkpoints_filter(conditions: List[str], params: List[Any],
+                                      exclude_checkpoints: Optional[List[str]]) -> tuple:
+    """Exclude images matching any of the specified checkpoints."""
+    if not exclude_checkpoints:
+        return conditions, params
+    normalized = []
+    seen: set = set()
+    for cp in exclude_checkpoints:
+        n = normalize_checkpoint_name(cp)
+        identity = checkpoint_identity_key(n)
+        if not n or identity in seen:
+            continue
+        seen.add(identity)
+        normalized.append(n)
+    if not normalized:
+        return conditions, params
+    placeholders = ",".join("?" * len(normalized))
+    conditions.append(f"i.checkpoint_normalized COLLATE NOCASE NOT IN ({placeholders})")
+    params.extend(normalized)
+    return conditions, params
+
+
+def _apply_exclude_loras_filter(conditions: List[str], params: List[Any],
+                                exclude_loras: Optional[List[str]]) -> tuple:
+    """Exclude images that have ANY of the specified LoRAs."""
+    if not exclude_loras:
+        return conditions, params
+    for lora in exclude_loras:
+        lora_normalized = normalize_lora_name(lora)
+        conditions.append(
+            "NOT EXISTS (SELECT 1 FROM image_loras il WHERE il.image_id = i.id AND LOWER(il.lora_name) = ?)"
+        )
+        params.append(lora_normalized)
+    return conditions, params
+
+
 def _apply_search_filter(conditions: List[str], params: List[Any],
                          search_query: Optional[str]) -> tuple:
     """Apply prompt search filtering with normalization.
@@ -2176,6 +2249,12 @@ def get_images(
     brightness_max: Optional[float] = None,
     color_temperature: Optional[str] = None,
     brightness_distribution: Optional[str] = None,
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get images with optional filters.
@@ -2277,6 +2356,13 @@ def get_images(
             brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
 
+        # Apply v3.2.2 per-item exclude filters
+        conditions, params = _apply_exclude_tags_filter(conditions, params, exclude_tags)
+        conditions, params = _apply_exclude_generators_filter(conditions, params, exclude_generators)
+        conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
+        conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
+        conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -2334,6 +2420,12 @@ def get_filtered_image_count(
     brightness_max: Optional[float] = None,
     color_temperature: Optional[str] = None,
     brightness_distribution: Optional[str] = None,
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
 ) -> int:
     """Get count of images matching filters without loading image data.
 
@@ -2413,6 +2505,13 @@ def get_filtered_image_count(
             brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
 
+        # Apply v3.2.2 per-item exclude filters
+        conditions, params = _apply_exclude_tags_filter(conditions, params, exclude_tags)
+        conditions, params = _apply_exclude_generators_filter(conditions, params, exclude_generators)
+        conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
+        conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
+        conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -2454,6 +2553,12 @@ def get_filtered_image_ids(
     brightness_max: Optional[float] = None,
     color_temperature: Optional[str] = None,
     brightness_distribution: Optional[str] = None,
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
 ) -> List[int]:
     """Get list of image IDs matching filters without loading full image data.
 
@@ -2537,6 +2642,13 @@ def get_filtered_image_ids(
             brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
 
+        # Apply v3.2.2 per-item exclude filters
+        conditions, params = _apply_exclude_tags_filter(conditions, params, exclude_tags)
+        conditions, params = _apply_exclude_generators_filter(conditions, params, exclude_generators)
+        conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
+        conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
+        conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
+
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
 
@@ -2613,6 +2725,12 @@ def iter_filtered_image_id_chunks(
     brightness_max: Optional[float] = None,
     color_temperature: Optional[str] = None,
     brightness_distribution: Optional[str] = None,
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
 ) -> Iterator[List[int]]:
     """Yield filtered image IDs in bounded chunks without a giant ID list."""
     normalized_chunk_size = max(1, int(chunk_size or 2000))
@@ -2643,6 +2761,11 @@ def iter_filtered_image_id_chunks(
             brightness_max=brightness_max,
             color_temperature=color_temperature,
             brightness_distribution=brightness_distribution,
+            exclude_tags=exclude_tags,
+            exclude_generators=exclude_generators,
+            exclude_ratings=exclude_ratings,
+            exclude_checkpoints=exclude_checkpoints,
+            exclude_loras=exclude_loras,
             fetch_chunk_size=normalized_chunk_size,
             offset=offset,
             limit=normalized_chunk_size,
@@ -2684,6 +2807,12 @@ def get_images_paginated(
     brightness_max: Optional[float] = None,
     color_temperature: Optional[str] = None,
     brightness_distribution: Optional[str] = None,
+    # v3.2.2 per-item exclude filters
+    exclude_tags: Optional[List[str]] = None,
+    exclude_generators: Optional[List[str]] = None,
+    exclude_ratings: Optional[List[str]] = None,
+    exclude_checkpoints: Optional[List[str]] = None,
+    exclude_loras: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Get images with cursor-based pagination for efficient handling of large datasets.
@@ -2777,6 +2906,13 @@ def get_images_paginated(
             conditions, params,
             brightness_min, brightness_max, color_temperature, brightness_distribution,
         )
+
+        # Apply v3.2.2 per-item exclude filters
+        conditions, params = _apply_exclude_tags_filter(conditions, params, exclude_tags)
+        conditions, params = _apply_exclude_generators_filter(conditions, params, exclude_generators)
+        conditions, params = _apply_exclude_ratings_filter(conditions, params, exclude_ratings)
+        conditions, params = _apply_exclude_checkpoints_filter(conditions, params, exclude_checkpoints)
+        conditions, params = _apply_exclude_loras_filter(conditions, params, exclude_loras)
 
         # Apply artist filter (JOIN)
         query, conditions, params = _apply_artist_filter(query, conditions, params, artist)
