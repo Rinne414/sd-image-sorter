@@ -664,8 +664,8 @@ def export_tags_batch_request(
 def render_export_preview(request: Any) -> Dict[str, Any]:
     """Render template-engine previews for a small image set without writing sidecars."""
     image_ids = _normalize_export_image_ids(getattr(request, "image_ids", []) or [])
-    if len(image_ids) > 20:
-        raise HTTPException(status_code=400, detail="Preview limited to 20 images at a time")
+    if len(image_ids) > 500:
+        raise HTTPException(status_code=400, detail="Preview limited to 500 images at a time")
 
     from services.export_template_engine import build_export_caption
 

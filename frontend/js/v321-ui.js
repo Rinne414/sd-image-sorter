@@ -13,7 +13,7 @@ const V321Integration = {
     editedCaptions: new Map(),  // image_id -> user-edited caption
     previewResults: [],
     activePreviewImageId: null,
-    previewLimit: 20,
+    previewLimit: 500,
     vlmActive: false,
 
     init() {
@@ -1129,7 +1129,7 @@ const V321Integration = {
 
     /** Get selected image_ids for the preview workbench. */
     async getPreviewImageIds() {
-        const limit = this.previewLimit || 20;
+        const limit = this.previewLimit || 500;
         const selectionToken = this._getActiveSelectionTokenForExport();
         if (selectionToken && window.App?.API?.getSelectionChunk) {
             try {
