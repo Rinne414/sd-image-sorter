@@ -30,12 +30,12 @@ logger = logging.getLogger(__name__)
 PRESETS: Dict[str, Dict[str, Any]] = {
     "anima": {
         "name": "Anima (Tags + NL)",
-        "description": "Anima base model: space-separated tags, optional NL caption, score_N keeps underscore.",
-        "template": "{quality}, {safety}, {count}, {trigger}, {nl_caption}, {tags:filtered}",
+        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption. Official tag order: quality → safety → count → trigger → general tags → NL.",
+        "template": "{quality}, {safety}, {count}, {trigger}, {tags:filtered}, {nl_caption}",
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
-        "default_quality": "newest, highres, normal quality, score_5",
+        "default_quality": "masterpiece, best quality, score_5",
         "default_safety": "safe",
         "default_append": "",
     },
