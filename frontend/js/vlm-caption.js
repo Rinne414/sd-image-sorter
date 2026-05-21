@@ -87,6 +87,7 @@ const VLMCaption = {
         this._setVal('vlm-concurrent', s.concurrent_requests ?? 2);
         this._setVal('vlm-system-prompt', s.system_prompt || '');
         this._setVal('vlm-user-prompt', s.user_prompt || '');
+        this._currentPresetWithTags = s.user_prompt_with_tags || '';
         this._setChecked('vlm-include-tags', s.include_tags_as_context ?? true);
         // v3.2.1 fields
         this._setOutputFormat(s.output_format || 'nl_caption');
@@ -150,6 +151,7 @@ const VLMCaption = {
             concurrent_requests: parseInt(this._getVal('vlm-concurrent')) || 2,
             system_prompt: this._getVal('vlm-system-prompt'),
             user_prompt: this._getVal('vlm-user-prompt'),
+            user_prompt_with_tags: this._currentPresetWithTags || '',
             include_tags_as_context: this._getChecked('vlm-include-tags'),
             output_format: this._getOutputFormat(),
             http_proxy: this._getVal('vlm-http-proxy'),
@@ -260,10 +262,16 @@ const VLMCaption = {
             const preset = data.presets?.[presetId];
             if (!preset) return;
             this._setVal('vlm-system-prompt', preset.system_prompt || '');
-            // Use the with_tags variant if available and include-tags is checked
-            const useTags = this._getChecked('vlm-include-tags');
-            const userPrompt = (useTags && preset.user_prompt_with_tags) ? preset.user_prompt_with_tags : preset.user_prompt;
-            this._setVal('vlm-user-prompt', userPrompt || '');
+            // Always show the regular user_prompt in the textarea.
+            // The with_tags variant is stored separately and used by the
+            // backend when the image has existing tags.
+            this._setVal('vlm-user-prompt', preset.user_prompt || '');
+            // Store the with_tags prompt in a hidden field so it gets saved
+            this._currentPresetWithTags = preset.user_prompt_with_tags || '';
+            // Auto-set output_format to match the preset
+            if (preset.output_format) {
+                this._setOutputFormat(preset.output_format);
+            }
             this._showStatus('vlm-status', `Applied preset: ${preset.name}`, 'success');
         } catch (e) {
             this._showStatus('vlm-status', `Error loading presets: ${e.message}`, 'error');
