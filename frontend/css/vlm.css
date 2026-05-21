@@ -326,6 +326,18 @@
     flex-shrink: 0;
 }
 
+.export-queue-count {
+    background: var(--bg-tertiary, rgba(255,255,255,0.06));
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.export-queue-count--warn {
+    color: var(--accent-warning, #f59e0b);
+    background: rgba(245, 158, 11, 0.12);
+}
+
 .export-preview-queue-list,
 .export-preview-common-tags {
     overflow-y: auto;

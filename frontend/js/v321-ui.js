@@ -20,6 +20,7 @@ const V321Integration = {
     vlmActive: false,
     _queueScrollContainer: null,
     _queueRenderVisible: null,
+    _captionEditorKeyHandler: null,
 
     init() {
         this.bindTaggerBackendSwitch();
@@ -1077,6 +1078,9 @@ const V321Integration = {
         } else {
             this._renderPreviewWorkbench();
         }
+        // P2-2 / P2-2b: keyboard shortcuts for caption editor
+        this._captionEditorKeyHandler = (e) => this._handleCaptionEditorKey(e);
+        document.addEventListener('keydown', this._captionEditorKeyHandler);
     },
 
     /** v3.2.1 task #33: close the editor. Edits are kept in this.editedCaptions. */
@@ -1088,8 +1092,49 @@ const V321Integration = {
         if (!document.querySelector('.modal.visible')) {
             document.body.classList.remove('modal-open');
         }
+        // Remove keyboard listener
+        if (this._captionEditorKeyHandler) {
+            document.removeEventListener('keydown', this._captionEditorKeyHandler);
+            this._captionEditorKeyHandler = null;
+        }
         // Re-render workbench in the small inline pane so the user sees their edits there too.
         this._renderPreviewWorkbench();
+    },
+
+    /** P2-2 / P2-2b: keyboard handler for caption editor modal */
+    _handleCaptionEditorKey(e) {
+        const modal = document.getElementById('caption-editor-modal');
+        if (!modal || !modal.classList.contains('visible')) return;
+        const inTextarea = e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'INPUT';
+
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this.closeCaptionEditor();
+            return;
+        }
+        // Ctrl+Enter / Cmd+Enter: save + next; Ctrl+Shift+Enter: save + prev
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            this._navigateQueue(e.shiftKey ? -1 : 1);
+            return;
+        }
+        // ArrowUp/ArrowDown without Ctrl: navigate queue (only when not typing in textarea)
+        if (!inTextarea && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            this._navigateQueue(e.key === 'ArrowUp' ? -1 : 1);
+        }
+    },
+
+    /** Navigate to adjacent queue item by delta (-1 = prev, +1 = next) */
+    _navigateQueue(delta) {
+        const ids = this.queueImageIds;
+        if (!ids.length) return;
+        const curIdx = ids.indexOf(Number(this.activePreviewImageId));
+        const nextIdx = Math.max(0, Math.min(ids.length - 1, curIdx + delta));
+        const newId = ids[nextIdx];
+        if (newId == null || newId === Number(this.activePreviewImageId)) return;
+        this.activePreviewImageId = newId;
+        this._onQueueItemClick(newId);
     },
 
     _getSelectionState() {
@@ -1528,7 +1573,7 @@ const V321Integration = {
         const head = document.createElement('div');
         head.className = 'export-preview-panel-head';
         const total = this.queueTotalCount || this.queueImageIds.length || this.previewResults.length;
-        head.innerHTML = `<strong>${this._i18n('batchExport.previewQueue', 'Images')}</strong><span>${total}</span>`;
+        head.innerHTML = `<strong>${this._i18n('batchExport.previewQueue', 'Images')}</strong><span class="export-queue-count${total > 1000 ? ' export-queue-count--warn' : ''}">${total} images</span>`;
         queue.appendChild(head);
 
         const body = document.createElement('div');
