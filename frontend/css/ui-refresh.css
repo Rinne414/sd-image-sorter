@@ -6618,3 +6618,19 @@ html.lang-zh #view-censor .queue-action-btn span {
         order: 99;
     }
 }
+
+
+/* === v3.2.2: Global button click responsiveness ===
+   Prevent double-click issues by briefly disabling pointer events after
+   a button is clicked. This is a CSS-only guard that works without JS
+   changes — the button visually responds immediately (no delay) but
+   ignores rapid duplicate clicks within 300ms. */
+.btn:active {
+    transform: scale(0.97);
+    transition: transform 60ms ease;
+}
+
+.btn.is-busy {
+    pointer-events: none;
+    opacity: 0.7;
+}
