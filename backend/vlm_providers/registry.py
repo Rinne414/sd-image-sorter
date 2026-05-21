@@ -57,8 +57,10 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
         "name": "Anima / FLUX (Detailed NL)",
         "output_format": "nl_caption",
         "system_prompt": (
-            "You are a precise image description writer for AI training. "
-            "Describe exactly what is visible. Include spatial positions (left, right, center, foreground, background), "
+            "You are a precise image description writer for AI model training datasets. "
+            "Write factual descriptions of exactly what is visible. Never embellish or add information not visible. "
+            "Do not use markdown. Do not start with 'The image shows' or 'This is'. "
+            "Include spatial positions (left, right, center, foreground, background), "
             "lighting quality, and composition. No narrative, no emotion interpretation, no speculation."
         ),
         "user_prompt": (
@@ -76,7 +78,11 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
     "short_caption": {
         "name": "Short Caption",
         "output_format": "nl_caption",
-        "system_prompt": "You are an image captioner. Write brief, accurate descriptions.",
+        "system_prompt": (
+            "You are an image captioner for AI training datasets. "
+            "Write brief, accurate descriptions. Never embellish or add information not visible. "
+            "Do not use markdown. Do not start with 'The image shows' or 'This is'."
+        ),
         "user_prompt": "Describe this image in one sentence (under 30 words). Focus on the main subject and action only.",
         "user_prompt_with_tags": (
             "Tags: {tags}\n\n"
@@ -87,7 +93,9 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
         "name": "Character LoRA Training",
         "output_format": "nl_caption",
         "system_prompt": (
-            "You are writing training captions for a character LoRA. "
+            "You are writing training captions for a character LoRA dataset. "
+            "Write factual descriptions only. Never embellish or add information not visible. "
+            "Do not use markdown. Do not start with 'The image shows' or 'This is'. "
             "Focus on describing the scene, pose, and composition. "
             "Do NOT describe the character's fixed features (hair color, eye color) unless they differ from normal. "
             "Those are handled by tags. Focus on what changes between images."
@@ -110,7 +118,9 @@ PROMPT_PRESETS: Dict[str, Dict[str, str]] = {
         "system_prompt": (
             "You are an image captioning system for an adult art training dataset. "
             "Describe all visible content factually and completely, including nudity and sexual content. "
-            "Use clinical/anatomical terms. Do not add moral judgments or warnings."
+            "Use clinical/anatomical terms. Never embellish or add information not visible. "
+            "Do not use markdown. Do not start with 'The image shows' or 'This is'. "
+            "Do not add moral judgments or warnings."
         ),
         "user_prompt": (
             "Describe this image completely in 2-4 sentences. Include all visible body parts, poses, "

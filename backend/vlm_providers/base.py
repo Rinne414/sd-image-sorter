@@ -43,6 +43,7 @@ class VLMConfig:
     concurrent_requests: int = 2
     system_prompt: str = ""
     user_prompt: str = ""
+    user_prompt_with_tags: str = ""  # Used when image already has danbooru tags
     include_tags_as_context: bool = True
     max_image_size: int = 1024
     nsfw_retry_prompt: str = ""
@@ -70,6 +71,7 @@ class VLMConfig:
             "concurrent_requests": self.concurrent_requests,
             "system_prompt": self.system_prompt,
             "user_prompt": self.user_prompt,
+            "user_prompt_with_tags": self.user_prompt_with_tags,
             "include_tags_as_context": self.include_tags_as_context,
             "max_image_size": self.max_image_size,
             "nsfw_retry_prompt": self.nsfw_retry_prompt,
@@ -213,9 +215,16 @@ class VLMProvider:
 
     def build_user_message(self, tags: Optional[List[str]] = None) -> str:
         """Build the user prompt, optionally including tags as context."""
-        prompt = self.config.user_prompt
         tag_str = ", ".join(tags) if tags else ""
 
+        # If tags exist and we have a dedicated with-tags prompt, use it
+        if tags and self.config.include_tags_as_context and self.config.user_prompt_with_tags:
+            prompt = self.config.user_prompt_with_tags
+            prompt = prompt.replace("{tags}", tag_str)
+            return prompt.strip()
+
+        # Fallback: use the regular user_prompt
+        prompt = self.config.user_prompt
         if tags and self.config.include_tags_as_context:
             if "{tags}" in prompt:
                 prompt = prompt.replace("{tags}", tag_str)

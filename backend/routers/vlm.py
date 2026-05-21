@@ -246,6 +246,7 @@ def _build_config(overrides: Optional[Dict[str, Any]] = None) -> VLMConfig:
         concurrent_requests=_coerce_int_setting(settings.get("concurrent_requests"), 2, minimum=1, maximum=16),
         system_prompt=settings.get("system_prompt", ""),
         user_prompt=settings.get("user_prompt", ""),
+        user_prompt_with_tags=settings.get("user_prompt_with_tags", ""),
         include_tags_as_context=bool(settings.get("include_tags_as_context", True)),
         max_image_size=_coerce_int_setting(settings.get("max_image_size"), 1024, minimum=128, maximum=4096),
         nsfw_retry_prompt=settings.get("nsfw_retry_prompt", ""),
