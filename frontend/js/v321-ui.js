@@ -1867,7 +1867,9 @@ const V321Integration = {
             event.preventDefault();
             const active = this._getPreviewItem();
             if (!active) return;
-            this._applyTokenToCaption(active.image_id, input.value, 'add');
+            // Support comma-separated multi-tag input
+            const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
+            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add');
             input.value = '';
             this._renderPreviewWorkbench();
         });
@@ -1875,23 +1877,34 @@ const V321Integration = {
         const addCurrent = this._toolButton('batchExport.addToCurrent', 'Add', () => {
             const active = this._getPreviewItem();
             if (!active) return;
-            this._applyTokenToCaption(active.image_id, input.value, 'add');
+            // Support comma-separated multi-tag input
+            const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
+            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add');
             input.value = '';
             this._renderPreviewWorkbench();
         });
         const removeCurrent = this._toolButton('batchExport.removeFromCurrent', 'Remove', () => {
             const active = this._getPreviewItem();
             if (!active) return;
-            this._applyTokenToCaption(active.image_id, input.value, 'remove');
+            const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
+            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'remove');
             input.value = '';
             this._renderPreviewWorkbench();
         });
-        const addAll = this._toolButton('batchExport.addToAllPreview', 'Add all', () => {
-            this._applyTokenToAll(input.value, 'add');
+        const addAll = this._toolButton('batchExport.addToAllPreview', '+All images', () => {
+            const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
+            if (!tags.length) return;
+            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`))) return;
+            for (const tag of tags) this._applyTokenToAll(tag, 'add');
             input.value = '';
         });
-        const removeAll = this._toolButton('batchExport.removeFromAllPreview', 'Remove all', () => {
-            this._applyTokenToAll(input.value, 'remove');
+        const removeAll = this._toolButton('batchExport.removeFromAllPreview', '-All images', () => {
+            const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
+            if (!tags.length) return;
+            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`))) return;
+            for (const tag of tags) this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
         form.append(input, addCurrent, removeCurrent, addAll, removeAll);
@@ -1970,19 +1983,34 @@ const V321Integration = {
             if (!id) return;
             this._cleanupPreviewCaption(id, { dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAll', 'All', 'dedupe-all', () => this._cleanupAllPreviewCaptions({ dedupe: true }));
+        }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', () => {
+            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`))) return;
+            this._cleanupAllPreviewCaptions({ dedupe: true });
+        });
         addRow('batchExport.cleanupBlacklistLabel', 'Blacklist', 'batchExport.cleanupCurrent', 'Current', 'blacklist-current', () => {
             const id = activeId();
             if (!id) return;
             this._cleanupPreviewCaption(id, { blacklist: true, dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAll', 'All', 'blacklist-all', () => this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true }));
+        }, 'batchExport.cleanupAllImages', 'All images', 'blacklist-all', () => {
+            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const blacklist = this._getBlacklistTokens();
+            const preview = blacklist.length ? blacklist.slice(0, 10).join(', ') + (blacklist.length > 10 ? '...' : '') : '(empty)';
+            if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`))) return;
+            this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
+        });
         addRow('batchExport.cleanupBoilerplateLabel', 'Quality/rating', 'batchExport.cleanupCurrent', 'Current', 'boilerplate-current', () => {
             const id = activeId();
             if (!id) return;
             this._cleanupPreviewCaption(id, { boilerplate: true, dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAll', 'All', 'boilerplate-all', () => this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true }));
+        }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', () => {
+            const count = this.queueImageIds?.length || this.previewResults?.length || 0;
+            const boilerplate = this._getLoraBoilerplateTokens().slice(0, 8).join(', ') + '...';
+            if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`))) return;
+            this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
+        });
         const copyRow = document.createElement('div');
         copyRow.className = 'export-preview-cleanup-row export-preview-cleanup-row-single';
         copyRow.appendChild(this._toolButton('batchExport.copyCurrentCaption', 'Copy current', () => this._copyCurrentPreviewCaption(), {
