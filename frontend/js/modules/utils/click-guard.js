@@ -21,6 +21,10 @@
         if (btn.disabled) return;
         // Skip if it's a toggle/checkbox-style button (aria-pressed)
         if (btn.getAttribute('aria-pressed') !== null) return;
+        // Skip small tool buttons (tag add/remove, chip clear) — users
+        // legitimately rapid-fire these. Only guard primary actions and
+        // large CTA buttons where double-click causes real problems.
+        if (btn.classList.contains('btn-small') || btn.classList.contains('btn-ghost')) return;
 
         const lastClick = busyButtons.get(btn) || 0;
         const now = Date.now();
