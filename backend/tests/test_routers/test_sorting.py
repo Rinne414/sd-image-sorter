@@ -2058,7 +2058,7 @@ class TestExportTagsBatch:
         txt_file = output_dir / "export_test.txt"
         assert txt_file.exists()
         content = txt_file.read_text()
-        assert "keep_tag" in content
+        assert "keep tag" in content
         assert "remove_tag" not in content
 
 

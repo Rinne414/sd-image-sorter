@@ -29,6 +29,23 @@ os.environ.setdefault("SD_IMAGE_SORTER_SCAN_METADATA_EXECUTOR", "thread")
 os.environ.setdefault("SD_IMAGE_SORTER_PYPI_MIRROR", "official")
 os.environ.setdefault("SD_IMAGE_SORTER_TORCH_CUDA_MIRROR", "official")
 
+# Windows + conda can accumulate a PATH longer than the 32767-char env var
+# limit. When unittest.mock.patch.dict tries to restore the original env on
+# teardown it raises ValueError, which cascades into test pollution (the
+# test_client fixture's DATABASE_PATH restore runs inside the patch.dict
+# context, so a crash there leaves a stale path for subsequent tests).
+# Truncating PATH to a safe length at import time prevents the cascade.
+if os.name == "nt" and len(os.environ.get("PATH", "")) > 30000:
+    _original_path_entries = os.environ["PATH"].split(os.pathsep)
+    _truncated = []
+    _length = 0
+    for _entry in _original_path_entries:
+        if _length + len(_entry) + 1 > 30000:
+            break
+        _truncated.append(_entry)
+        _length += len(_entry) + 1
+    os.environ["PATH"] = os.pathsep.join(_truncated)
+
 
 # ============================================================================
 # Test Database Fixture
@@ -208,7 +225,18 @@ def test_client(test_db):
 
     # Import main app - this will initialize the database
     # We need to patch before importing
-    with patch.dict(os.environ, {"SD_SORTER_TESTING": "1", "TESTING": "1"}):
+    # Set testing env vars directly instead of using patch.dict(os.environ)
+    # because patch.dict's __exit__ tries to restore ALL env vars to their
+    # original values, which crashes on Windows when PATH exceeds 32767 chars
+    # (conda environments routinely hit this limit). The crash cascades into
+    # test pollution because the DATABASE_PATH restore below never runs.
+    _testing_env_keys = {"SD_SORTER_TESTING": "1", "TESTING": "1"}
+    _original_env_values = {}
+    for _key, _val in _testing_env_keys.items():
+        _original_env_values[_key] = os.environ.get(_key)
+        os.environ[_key] = _val
+
+    try:
         # Patch database path before importing main
         original_path = db.DATABASE_PATH
         with tempfile.NamedTemporaryFile(
@@ -255,6 +283,13 @@ def test_client(test_db):
             client_db_path.unlink(missing_ok=True)
         except OSError:
             pass
+    finally:
+        # Restore testing env vars (runs even if yield body raises)
+        for _key, _orig in _original_env_values.items():
+            if _orig is None:
+                os.environ.pop(_key, None)
+            else:
+                os.environ[_key] = _orig
 
 
 # ============================================================================

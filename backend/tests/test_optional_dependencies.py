@@ -28,6 +28,14 @@ def test_requirement_lock_map_uses_release_pins():
     assert optional_dependencies._lock_package_spec("torch>=2.0.0") == expected_torch
 
 
+def _fake_install(installed_list):
+    """Return a mock install_packages that records calls and returns False (no DLL lock)."""
+    def _mock(packages):
+        installed_list.extend(packages)
+        return False
+    return _mock
+
+
 def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
     installed = []
 
@@ -37,7 +45,7 @@ def test_ensure_group_installs_missing_or_too_old_packages(monkeypatch):
         "version",
         lambda package: "5.5.0" if package == "transformers" else "999.0.0",
     )
-    monkeypatch.setattr(optional_dependencies, "install_packages", lambda packages: installed.extend(packages))
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
     result = optional_dependencies.ensure_group("sam3")
 
@@ -55,7 +63,7 @@ def test_toriigate_requires_transformers_version_with_qwen35_support(monkeypatch
         "version",
         lambda package: "5.5.0" if package == "transformers" else "999.0.0",
     )
-    monkeypatch.setattr(optional_dependencies, "install_packages", lambda packages: installed.extend(packages))
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
     result = optional_dependencies.ensure_group("toriigate")
 
@@ -69,7 +77,7 @@ def test_ensure_group_skips_already_satisfied_packages(monkeypatch):
 
     monkeypatch.setattr(optional_dependencies.importlib.util, "find_spec", lambda module: object())
     monkeypatch.setattr(optional_dependencies.importlib.metadata, "version", lambda package: "999.0.0")
-    monkeypatch.setattr(optional_dependencies, "install_packages", lambda packages: installed.extend(packages))
+    monkeypatch.setattr(optional_dependencies, "install_packages", _fake_install(installed))
 
     result = optional_dependencies.ensure_group("clip")
 
