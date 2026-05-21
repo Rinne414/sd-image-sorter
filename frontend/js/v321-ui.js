@@ -1289,6 +1289,11 @@ const V321Integration = {
         }
     },
 
+    _getCurrentExportOptions() {
+        const contentMode = document.getElementById('batch-export-content-mode')?.value || 'tags';
+        return this._previewOptionsForContentMode(contentMode);
+    },
+
     _previewOptionsForContentMode(contentMode) {
         // v3.2.1 follow-up: read the underscore checkbox once so both
         // template and non-template preview paths agree with the actual
@@ -1497,8 +1502,36 @@ const V321Integration = {
         this._setPreviewCaption(id, this._joinCaptionTokens(next));
     },
 
-    _applyTokenToAll(token, mode, position = 'prepend') {
+    async _applyTokenToAll(token, mode, position = 'prepend') {
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
+
+        // Ensure all captions are loaded before bulk-editing.
+        // Without this, unloaded images get overwritten with just the token.
+        const unloaded = ids.filter(id => !this.previewCache.has(id) && !this.editedCaptions.has(id));
+        if (unloaded.length > 0) {
+            const batchSize = 200;
+            for (let i = 0; i < unloaded.length; i += batchSize) {
+                const batch = unloaded.slice(i, i + batchSize);
+                try {
+                    const opts = this._getCurrentExportOptions();
+                    const r = await fetch('/api/tags/export-preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image_ids: batch, ...opts }),
+                    });
+                    if (r.ok) {
+                        const data = await r.json();
+                        for (const item of (data.results || data || [])) {
+                            const itemId = Number(item.image_id);
+                            if (!this.previewCache.has(itemId)) {
+                                this.previewCache.set(itemId, item.rendered || '');
+                            }
+                        }
+                    }
+                } catch (_) { /* best effort */ }
+            }
+        }
+
         for (const id of ids) {
             this._applyTokenToCaption(id, token, mode, position);
         }
@@ -1918,20 +1951,20 @@ const V321Integration = {
             input.value = '';
             this._renderPreviewWorkbench();
         });
-        const addAll = this._toolButton('batchExport.addToAllPreview', '+All images', () => {
+        const addAll = this._toolButton('batchExport.addToAllPreview', '+All images', async () => {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count }))) return;
-            for (const tag of tags) this._applyTokenToAll(tag, 'add', getPosition());
+            for (const tag of tags) await this._applyTokenToAll(tag, 'add', getPosition());
             input.value = '';
         });
-        const removeAll = this._toolButton('batchExport.removeFromAllPreview', '-All images', () => {
+        const removeAll = this._toolButton('batchExport.removeFromAllPreview', '-All images', async () => {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`, { tags: tags.join(', '), count }))) return;
-            for (const tag of tags) this._applyTokenToAll(tag, 'remove');
+            for (const tag of tags) await this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
         form.append(posRow, input, addCurrent, removeCurrent, addAll, removeAll);
