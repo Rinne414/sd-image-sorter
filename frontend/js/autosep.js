@@ -1310,14 +1310,9 @@ async function updateAutoSepPreview() {
         filters.minWidth || filters.maxWidth || filters.minHeight || filters.maxHeight ||
         filters.aspectRatio || filters.minAesthetic != null || filters.maxAesthetic != null;
 
-    if (!hasFilters) {
-        $('#autosep-preview .stat-number').textContent = '0';
-        AutoSepState.matchCount = 0;
-        AutoSepState.previewImages = [];
-        AutoSepState.previewSignature = currentSignature;
-        renderAutoSepPreviewList([], 0, 'no-filters');
-        return;
-    }
+    // When no filters are set, still allow preview (matches ALL images)
+    // but mark the state so the UI can show a warning
+    AutoSepState.allImagesMode = !hasFilters;
 
     try {
         const previewImages = [];
@@ -1822,11 +1817,16 @@ async function executeAutoSeparateWithProgress() {
     };
 
     if (AutoSepState.settings.confirmBeforeMove) {
+        const allWarn = AutoSepState.allImagesMode
+            ? (window.I18n?.getLang?.() === 'zh-CN'
+                ? '\n⚠️ 当前没有设置任何筛选条件，将操作图库中的全部图片！\n'
+                : '\n⚠️ No filters are set — this will affect ALL images in the library!\n')
+            : '';
         showConfirm(
             tKey('autosep.confirmExecuteTitle', 'Confirm Auto-Separate', '确认自动分类'),
             window.I18n?.getLang?.() === 'zh-CN'
-                ? `要把 ${total} 张匹配图片${operationMode === 'copy' ? '复制到' : '移动到'}：\n${destination}\n\n操作模式：${operationLabel}\n${scopeLine}\n继续前先确认上方预览列表。`
-                : `${operationMode === 'copy' ? 'Copy' : 'Move'} ${total} matching images to:\n${destination}\n\nAction mode: ${operationLabel}\n${scopeLine}\nReview the preview list above before continuing.`,
+                ? `要把 ${total} 张匹配图片${operationMode === 'copy' ? '复制到' : '移动到'}：\n${destination}${allWarn}\n操作模式：${operationLabel}\n${scopeLine}\n继续前先确认上方预览列表。`
+                : `${operationMode === 'copy' ? 'Copy' : 'Move'} ${total} matching images to:\n${destination}${allWarn}\nAction mode: ${operationLabel}\n${scopeLine}\nReview the preview list above before continuing.`,
             executeMove
         );
         return;
