@@ -1553,13 +1553,26 @@ class TestExportTagsBatch:
         output_dir = tmp_path / "template_blacklist_out"
         output_dir.mkdir()
 
+        # Blacklist covers: anima default_quality tokens, default_safety/rating
+        # tokens, count tags, and common quality/rating boilerplate that LoRA
+        # trainers typically strip.
+        blacklist = [
+            # quality tokens (anima + anima_tags_only defaults)
+            "masterpiece", "best quality", "newest", "highres", "normal quality",
+            "score_5", "score_9", "score_8_up", "score_7_up", "score_6_up", "score_5_up",
+            # safety / rating tokens
+            "safe", "sensitive", "questionable", "explicit", "general", "nsfw", "sfw",
+            # count / subject tags
+            "1girl", "1boy", "solo",
+        ]
+
         response = test_client.post(
             "/api/tags/export-batch",
             json={
                 "image_ids": [image_id],
                 "output_folder": str(output_dir),
                 "content_mode": "template",
-                "blacklist": ["newest", "highres", "normal quality", "score_5", "safe", "1girl"],
+                "blacklist": blacklist,
                 "template_options": {
                     "preset_id": "anima",
                 },
@@ -1568,8 +1581,9 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         content = (output_dir / "template_blacklist.txt").read_text(encoding="utf-8")
-        assert content == "close-up portrait, blue eyes"
-        for blocked in ["newest", "highres", "normal quality", "score_5", "safe", "1girl"]:
+        # Only actual content tags and NL caption survive after blacklist
+        assert content == "blue eyes. close-up portrait"
+        for blocked in blacklist:
             assert blocked not in content
 
     def test_export_preview_uses_service_boundary(self, test_client, test_db, tmp_path: Path):

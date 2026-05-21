@@ -38,3 +38,14 @@ Each filter row in the left pane now has:
 - **自动分类 inline chip 编辑**：左栏每行可直接清除或添加筛选
 - **键盘快捷键**：Esc 关闭、Ctrl+Enter 下一张、方向键导航
 - **Filter 9 chips 一行**：颜色不再独占第二行
+
+
+## New-User First-Run Experience Improvements
+
+- **Windows browser timing**: no more `ERR_CONNECTION_REFUSED` on first launch — browser opens only after server is ready
+- **macOS source-clone**: `./run.sh` works on macOS when cloned from source (only release tarballs reject Darwin)
+- **Onboarding tour**: auto-starts on true first-run (empty gallery); restart via Guide modal "Tour" button
+- **Model download timeout**: 4-minute cap prevents infinite "Working..." state
+- **Model download cancel**: Cancel button appears during downloads
+- **Feature Setup discoverability**: orange pulse animation on the wrench button until first click
+- **Feature availability notice**: now mentions Color Analysis, LoRA Export, and VLM captioning

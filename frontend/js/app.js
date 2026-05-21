@@ -7035,6 +7035,9 @@ async function loadImages(appendMode = false, options = {}) {
         if (emptyState) {
             emptyState.style.display = AppState.images.length === 0 ? 'flex' : 'none';
         }
+        if (AppState.images.length > 0 && window.OnboardingTour) {
+            OnboardingTour.markHasSeenImages();
+        }
     } catch (error) {
         if (error.name === 'AbortError' || error.cancelled) {
             return;
@@ -8661,6 +8664,8 @@ function renderFeatureAvailabilityNotice() {
         appT('features.ready.filters', 'Filter, search, batch select, auto-separate, and WASD manual sort'),
         appT('features.ready.prompts', 'Prompt Lab, tag library, export sidecar .txt / .json files'),
         appT('features.ready.censorManual', 'Manual censor editor tools: brush, pen, eraser, clone, preview/save'),
+        appT('features.ready.colorAnalysis', 'Color analysis: dominant colors, brightness, saturation, color temperature'),
+        appT('features.ready.loraExport', 'LoRA training export: Caption Editor, template presets, batch export'),
     ];
     const prepareItems = [
         appT('features.prepare.wd14', 'WD14 / ONNX tagging: downloads model files and repairs Windows GPU runtime when needed'),
@@ -8669,6 +8674,7 @@ function renderFeatureAvailabilityNotice() {
         appT('features.prepare.artist', 'Artist ID: installs torch/transformers/timm/safetensors/triton and downloads Kaloscope files'),
         appT('features.prepare.censorAi', 'AI censor detectors: NudeNet / Privacy YOLO / SAM3 install their own runtimes and model files'),
         appT('features.prepare.toriigate', 'ToriiGate VLM tagging: heavy PyTorch runtime + about 5 GB model download on first use'),
+        appT('features.prepare.vlm', 'VLM natural language captioning: requires API keys (OpenAI/Anthropic/Gemini) or local Ollama'),
     ];
 
     noticeEl.innerHTML = `
@@ -8767,6 +8773,12 @@ function bindDatasetAuditLazyInit() {
 }
 
 async function openModelManager() {
+    // Remove first-run pulse indicator once user has found the button
+    const setupBtn = $('#btn-open-model-manager');
+    if (setupBtn && setupBtn.classList.contains('setup-pulse')) {
+        setupBtn.classList.remove('setup-pulse');
+        localStorage.setItem('sd-image-sorter-setup-clicked', '1');
+    }
     const summaryEl = $('#model-manager-summary');
     const gridEl = $('#model-manager-grid');
     if (summaryEl) {
@@ -9167,7 +9179,36 @@ function renderModelManager(models = []) {
             }
 
             let finished = false;
+            let pollCount = 0;
+            const MAX_POLL_COUNT = 300; // ~4 minutes at 800ms intervals
+
+            // Insert a cancel button next to the prepare button
+            let cancelBtn = button.parentElement.querySelector('.btn-cancel-download');
+            if (!cancelBtn) {
+                cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn btn-ghost btn-small btn-cancel-download';
+                cancelBtn.textContent = appT('models.cancelDownload', 'Cancel');
+                button.parentElement.insertBefore(cancelBtn, button.nextSibling);
+            }
+            cancelBtn.style.display = '';
+            cancelBtn.onclick = () => {
+                finished = true;
+                cancelBtn.style.display = 'none';
+                button.disabled = false;
+                button.textContent = originalLabel;
+                showToast(appT('models.downloadCancelled', 'Download cancelled.'), 'info');
+            };
+
             const pollProgress = async () => {
+                pollCount++;
+                if (pollCount > MAX_POLL_COUNT && !finished) {
+                    finished = true;
+                    cancelBtn.style.display = 'none';
+                    showToast(appT('models.downloadStalled', 'Download may have stalled. Check your network connection and try again.'), 'warning');
+                    button.disabled = false;
+                    button.textContent = originalLabel;
+                    return;
+                }
                 try {
                     const p = await API.get('/api/models/download-progress');
                     if (p?.active && p.total > 0) {
@@ -9182,6 +9223,7 @@ function renderModelManager(models = []) {
                     const pr = p?.prepare_result;
                     if (pr && !pr.active && pr.model_id === modelId && pr.status) {
                         finished = true;
+                        cancelBtn.style.display = 'none';
                         if (pr.status === 'done') {
                             showToast(withRestartReminder(pr.message || appT('models.readyToast', '{model} is ready.', { model: modelId }), pr), pr.restart_recommended ? 'warning' : 'success');
                             const refreshed = await API.getModelStatus();
@@ -10627,6 +10669,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initMissingFilterMarkup();
     initEventListeners();
     initInputModal();
+
+    // Add pulse indicator to Setup button if user has never clicked it
+    if (!localStorage.getItem('sd-image-sorter-setup-clicked')) {
+        const setupBtn = $('#btn-open-model-manager');
+        if (setupBtn) setupBtn.classList.add('setup-pulse');
+    }
     initGlobalKeyboardShortcuts();
     initGalleryDropZone();
     loadTaggerModels();

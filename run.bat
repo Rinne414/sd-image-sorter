@@ -327,8 +327,9 @@ echo   Press Ctrl+C to stop the server.
 echo ==========================================
 echo.
 
-REM -- Open browser and start server
-start "" !APP_URL!
+REM -- Open browser after server is ready (background probe)
+start /b "" powershell -NoProfile -WindowStyle Hidden -Command ^
+    "$url='!APP_URL!'; for($i=0;$i -lt 30;$i++){try{Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop|Out-Null;Start-Process $url;exit}catch{Start-Sleep -Milliseconds 500}}" >nul 2>&1
 
 cd backend
 call venv\Scripts\activate.bat 2>nul

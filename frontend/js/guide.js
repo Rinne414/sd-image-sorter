@@ -737,6 +737,7 @@
                     </div>
                     <div class="guide-modal-body"></div>
                     <div class="guide-modal-footer">
+                        <button class="guide-modal-tour" title="Restart onboarding tour">🎓 Tour</button>
                         <button class="guide-modal-action"></button>
                     </div>
                 </div>
@@ -749,6 +750,13 @@
             overlay.querySelector('.guide-overlay-backdrop').addEventListener('click', hide);
             overlay.querySelector('.guide-modal-close').addEventListener('click', hide);
             overlay.querySelector('.guide-modal-action').addEventListener('click', hide);
+            overlay.querySelector('.guide-modal-tour').addEventListener('click', () => {
+                hide();
+                if (window.OnboardingTour) {
+                    OnboardingTour.resetState();
+                    OnboardingTour.start();
+                }
+            });
         },
 
         show(tabName) {

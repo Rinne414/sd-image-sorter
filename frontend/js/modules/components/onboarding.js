@@ -8,7 +8,8 @@ const OnboardingTour = (function() {
 
     const STORAGE_KEY = 'sd-image-sorter-onboarding-completed';
     const DISMISSED_KEY = 'sd-image-sorter-onboarding-dismissed-version';
-    const AUTO_START_ENABLED = false;
+    const AUTO_START_ENABLED = true;
+    const FIRST_RUN_CHECK_KEY = 'sd-image-sorter-has-seen-images';
 
     // Current tour version - increment when adding new features
     const TOUR_VERSION = 1;
@@ -532,12 +533,19 @@ const OnboardingTour = (function() {
     function init() {
         cleanupResidualTourUi();
 
-        // Do not auto-open a full-screen blocking overlay on first launch.
-        // The tour remains available via OnboardingTour.start() if we expose
-        // it from a dedicated help action in the future.
+        // Auto-start only on true first-run: user has never loaded images
+        // and hasn't completed or dismissed the tour before.
         if (AUTO_START_ENABLED && !isCompleted() && !wasDismissed()) {
-            setTimeout(() => start(), 800);
+            const hasSeen = localStorage.getItem(FIRST_RUN_CHECK_KEY);
+            if (!hasSeen) {
+                setTimeout(() => start(), 800);
+            }
         }
+    }
+
+    /** Mark that the user has loaded images at least once (called by app after gallery loads). */
+    function markHasSeenImages() {
+        localStorage.setItem(FIRST_RUN_CHECK_KEY, '1');
     }
 
     // Public API
@@ -548,7 +556,8 @@ const OnboardingTour = (function() {
         complete,
         resetState,
         isCompleted,
-        wasDismissed
+        wasDismissed,
+        markHasSeenImages
     };
 })();
 

@@ -84,6 +84,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **PyPI 和 CUDA PyTorch 下载都自动选最快镜像**：启动脚本（`run.bat` / `run.sh`）在 `pip install -r requirements.txt` **之前**用纯 stdlib 探测清华 TUNA、阿里云、中科大、官方 PyPI 源，挑最快的传给每个 pip 调用 `--index-url <fastest> --extra-index-url https://pypi.org/simple`。CUDA torch wheel 在 `repair_torch_runtime.py` 里再探一次，在 SJTU 和官方 PyTorch 源之间挑。两个 probe 都打真正的 PEP 503 路径（`<base>/pip/` 和 `<base>/cu128/torch/`），所以"`/` 返回 200 但实际 index 404"的门户页假镜像在探测阶段就会被识破。httpx 版的选择器把结果缓存到 `data/state/mirror_cache.json` 保 30 分钟；启动脚本里那一步是 stdlib-only（不能用 httpx，因为 httpx 正是它要装的东西）。可用 `SD_IMAGE_SORTER_PYPI_MIRROR=tuna|aliyun|ustc|official|<url>` 和 `SD_IMAGE_SORTER_TORCH_CUDA_MIRROR=sjtu|official|<url>` 强制指定。修复前 `_resolve_pypi_fallback_index()` 已经引用了一个从未提交过的 `mirror_selector` 模块 —— 每次调用都静默回退到 `pypi.org/simple`，而 CUDA torch wheel 主路径压根没接入任何镜像选择。对中国宽带用户来说，原来慢的 ~1.5 GB `requirements.txt`（Fastly 上 10–25 分钟）加上 2.5 GB CUDA torch wheel（30–60 分钟），现在通过 Tuna / SJTU 都能降到几分钟。
 - **Thumbnail cache temp-path collision** (`thumbnail_cache.py`): two writers in the same process+thread that both finished in the same `time.time_ns()` window could collide on the `.tmp` path. Path now combines PID + TID + nanosecond + process-local counter + 8 hex chars of OS randomness. Verified by the previously-failing regression test `test_thumbnail_cache_temp_paths_are_unique_for_same_cache_key`.
   - **缩略图缓存临时路径冲突**：同进程同线程两个写入者落在同一 `time.time_ns()` 窗口会撞到相同 `.tmp` 路径。现在路径组合 PID + TID + 纳秒戳 + 单调计数 + 8 个随机十六进制字符。
+- **Windows browser no longer opens before server is ready** — launcher now probes the port in a background PowerShell process and only opens the browser once the server responds (up to 15 s timeout). Eliminates the `ERR_CONNECTION_REFUSED` page on first launch.
+  - **Windows 浏览器不再在 server 就绪前打开** —— 启动器现在用后台 PowerShell 探测端口，server 响应后才开浏览器（最多等 15 秒）。
+- **macOS source-clone no longer rejected by `run.sh`** — the Darwin check now only fires inside release tarballs (detected via `update/package-manifest.json`). Users cloning from source on macOS can run `./run.sh` directly.
+  - **macOS 从源码 clone 不再被 `run.sh` 拒绝** —— Darwin 检查现在只在 release tarball 内触发。
+- **Onboarding tour auto-starts on true first-run** — when the gallery has never loaded images (fresh install), the interactive guided tour starts automatically. A "Tour" button in the Guide modal lets users restart it anytime.
+  - **首次启动自动开始引导导览** —— 空图库时自动启动互动导览；Guide 弹窗里有「Tour」按钮可随时重启。
+- **Model download polling has a 4-minute timeout** — if the backend silently stalls, the UI shows a warning and re-enables the Prepare button instead of spinning forever.
+  - **模型下载轮询有 4 分钟超时** —— 后端静默卡住时 UI 会提示并恢复按钮。
+- **Cancel button for in-progress model downloads** — users can abort a download without closing the modal or refreshing the page.
+  - **模型下载可取消** —— 下载中出现 Cancel 按钮，不用关弹窗或刷新页面。
+- **Feature Setup button pulses on first visit** — an orange ring animation draws attention to the setup entry point until the user clicks it once.
+  - **Feature Setup 按钮首次访问有脉冲动画** —— 橘色光环提示新用户注意。
+- **Feature availability notice now lists Color Analysis, LoRA Export, and VLM captioning** — the "Ready" and "Needs Prepare" cards in Feature Setup are more complete.
+  - **功能可用性说明补全** —— 现在列出色彩分析、LoRA 导出、VLM 打标。
 
 ### Notes / 注意事項
 - Vertex AI requires the `google-auth` Python package; the app shows a helpful error message if it's missing. Run `pip install google-auth` to enable.

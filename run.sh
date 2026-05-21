@@ -10,9 +10,10 @@ echo
 cd "$(dirname "$0")"
 ROOT_DIR="$(pwd)"
 
-if [ "$(uname -s)" = "Darwin" ]; then
+if [ "$(uname -s)" = "Darwin" ] && [ -f "update/package-manifest.json" ]; then
     echo "[ERROR] macOS is not supported by this release package."
-    echo "        Please use Windows or Linux."
+    echo "        Please clone from source and run ./run.sh instead."
+    echo "        See: https://github.com/peter119lee/sd-image-sorter#quick-start"
     exit 1
 fi
 

@@ -6634,3 +6634,40 @@ html.lang-zh #view-censor .queue-action-btn span {
     pointer-events: none;
     opacity: 0.7;
 }
+
+
+/* Setup button first-run pulse indicator */
+@keyframes setup-pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(255, 138, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0); }
+}
+.setup-pulse {
+    animation: setup-pulse-ring 2s ease-out infinite;
+    border-radius: 8px;
+}
+
+
+/* Cancel button for model downloads */
+.btn-cancel-download {
+    margin-left: 8px;
+    color: var(--color-warning, #f59e0b);
+}
+
+
+/* Guide modal tour restart button */
+.guide-modal-tour {
+    background: transparent;
+    border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    color: var(--color-text-secondary, #aaa);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: opacity 0.2s;
+}
+.guide-modal-tour:hover {
+    opacity: 0.8;
+    border-color: var(--color-primary, #ff8a00);
+    color: var(--color-primary, #ff8a00);
+}
