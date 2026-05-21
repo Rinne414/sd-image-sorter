@@ -15,16 +15,16 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.2.1-ff8a00" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.2.2-ff8a00" alt="Version">
   <img src="https://img.shields.io/badge/python-3.12%2B-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
 
 <p align="center">
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-windows-portable.zip"><b>Download for Windows</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-linux.tar.gz"><b>Download for Linux</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz"><b>Download for Linux</b></a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -194,7 +194,7 @@
 
 ### Windows
 
-1. 下载 [sd-image-sorter-v3.2.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-windows-portable.zip)
+1. 下载 [sd-image-sorter-v3.2.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-windows-portable.zip)
 2. 解压到任意目录
 3. 双击 `run-portable.bat`
 4. 浏览器会自动打开 `http://localhost:8487`
@@ -202,11 +202,11 @@
 
 ### Linux
 
-1. 下载 [sd-image-sorter-v3.2.1-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-linux.tar.gz)
+1. 下载 [sd-image-sorter-v3.2.2-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz)
 2. 解压并执行：
 
 ```bash
-tar xzf sd-image-sorter-v3.2.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.2.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
@@ -541,7 +541,7 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 
 #### Windows Portable
 
-1. Download [sd-image-sorter-v3.2.1-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.1-windows-portable.zip)
+1. Download [sd-image-sorter-v3.2.2-windows-portable.zip](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-windows-portable.zip)
 2. Extract it anywhere
 3. Double-click `run-portable.bat`
 4. Your browser opens `http://localhost:8487`
@@ -552,7 +552,7 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 #### Linux
 
 ```bash
-tar xzf sd-image-sorter-v3.2.1-linux.tar.gz
+tar xzf sd-image-sorter-v3.2.2-linux.tar.gz
 cd sd-image-sorter
 chmod +x run.sh
 ./run.sh
