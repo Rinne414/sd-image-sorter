@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 PRESETS: Dict[str, Dict[str, Any]] = {
     "anima": {
         "name": "Anima (Tags + NL)",
-        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption. Official tag order: quality → safety → count → trigger → general tags → NL.",
-        "template": "{quality}, {safety}, {count}, {trigger}, {tags:filtered}, {nl_caption}",
+        "description": "Anima base model: quality/safety prefix, danbooru tags (spaces not underscores), then NL caption separated by period. Official tag order: quality → safety → count → trigger → general tags → NL.",
+        "template": "{quality}, {safety}, {count}, {trigger}, {tags:filtered}. {nl_caption}",
         "separator": ", ",
         "underscore_to_space": True,
         "preserve_underscore_prefixes": ["score_"],
@@ -391,7 +391,24 @@ def _cleanup_separators(text: str, separator: str) -> str:
         return text.strip()
     parts = [p.strip() for p in text.split(sep_stripped)]
     parts = [p for p in parts if p]
-    return separator.join(parts)
+    result = separator.join(parts).strip()
+    # Remove trailing ". " or "." left when template variables after a period
+    # separator (e.g., "{tags}. {nl_caption}") resolve to empty.
+    while result.endswith('.') or result.endswith('. '):
+        candidate = result.rstrip('. ').rstrip('.')
+        if candidate == result:
+            break
+        # Only strip if what remains looks like it ended with a comma-separated
+        # tag (not a proper NL sentence that naturally ends with a period).
+        # Heuristic: if the last character before the period is a letter and
+        # the segment after the last comma has spaces, it's a sentence — keep it.
+        last_comma = candidate.rfind(sep_stripped)
+        tail = candidate[last_comma + len(sep_stripped):].strip() if last_comma >= 0 else candidate
+        if ' ' in tail and len(tail) > 20:
+            # Looks like a sentence — don't strip
+            break
+        result = candidate
+    return result
 
 
 # ====================================================================
