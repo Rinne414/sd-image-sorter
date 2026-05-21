@@ -787,7 +787,7 @@ class BatchTagExportRequest(BaseModel):
 
 class ExportPreviewRequest(BaseModel):
     """Request model for template live preview rendering."""
-    image_ids: List[int] = Field(default_factory=list, max_length=500)
+    image_ids: List[int] = Field(default_factory=list, max_length=100)
     preset_id: str = "custom"
     template_override: Optional[str] = None
     trigger: str = ""
