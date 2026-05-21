@@ -1354,6 +1354,7 @@
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
+    overflow: hidden;
     /* Let the editor column grow much wider than the inline pane allows. */
     grid-template-columns: minmax(220px, 0.7fr) minmax(420px, 2fr) minmax(280px, 1fr);
 }
