@@ -1318,7 +1318,7 @@ window.I18nLang_en = {
     'batchExport.loraAppend': 'Append (extra tags after main)',
     'batchExport.loraAppendPlaceholder': 'masterpiece, best_quality',
     'batchExport.livePreview': 'Live preview',
-    'batchExport.livePreviewHelper': 'Preview up to 20 selected images, edit captions, and adjust shared tags before export.',
+    'batchExport.livePreviewHelper': 'Preview selected images, edit captions, and adjust shared tags before export.',
     'batchExport.refreshPreview': '🔄 Refresh preview',
     'batchExport.editorOpenHint': 'Editing in the Caption Editor window — close it to return.',
     'captionEditor.title': '📝 Caption Editor',

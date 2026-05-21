@@ -1492,7 +1492,7 @@ window.I18nLang_zhCN = {
     'batchExport.loraAppend': '追加标签 (放在主体后面)',
     'batchExport.loraAppendPlaceholder': '例如: masterpiece, best_quality',
     'batchExport.livePreview': '即时预览',
-    'batchExport.livePreviewHelper': '最多预览 20 张已选图片，导出前修改 caption，并处理共同标签。',
+    'batchExport.livePreviewHelper': '预览已选图片，导出前修改 caption，并处理共同标签。',
     'batchExport.refreshPreview': '🔄 重新生成预览',
     'batchExport.editorOpenHint': '正在 Caption 编辑器窗口里编辑 — 关闭后即可返回。',
     'captionEditor.title': '📝 Caption 编辑器',
