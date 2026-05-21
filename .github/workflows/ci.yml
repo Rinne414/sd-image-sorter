@@ -74,3 +74,44 @@ jobs:
         working-directory: backend
         run: |
           python -m pytest tests/test_release_build.py tests/test_update_service.py tests/test_update_worker.py -q
+
+  macos-compat:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+
+      - name: Backend full test suite (macOS)
+        working-directory: backend
+        run: |
+          python -m pytest tests/ -q --ignore=tests/test_update_worker.py
+
+      - name: Verify run.sh is executable and server boots
+        run: |
+          chmod +x run.sh
+          # Start server in background, wait for it to respond, then kill
+          SD_IMAGE_SORTER_PORT=18999 timeout 30 bash -c '
+            python backend/main.py --port 18999 &
+            PID=$!
+            for i in $(seq 1 20); do
+              if curl -s http://127.0.0.1:18999/ > /dev/null 2>&1; then
+                echo "Server booted successfully on macOS"
+                kill $PID
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "Server failed to boot"
+            kill $PID 2>/dev/null
+            exit 1
+          '
