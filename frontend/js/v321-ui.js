@@ -2000,7 +2000,8 @@ const V321Integration = {
             if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`))) return;
             this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
-        // "Edit blacklist" link so users can find the blacklist textarea
+        // "Edit blacklist" — show inline editable blacklist right here
+        // instead of closing the editor and navigating away
         const blacklistEditRow = document.createElement('div');
         blacklistEditRow.className = 'export-preview-cleanup-row export-preview-cleanup-row-single';
         const editLink = document.createElement('button');
@@ -2008,18 +2009,32 @@ const V321Integration = {
         editLink.className = 'btn btn-small btn-ghost';
         editLink.textContent = this._i18n('batchExport.editBlacklist', '✏️ Edit blacklist...');
         editLink.addEventListener('click', () => {
-            // If in fullscreen editor, close it first so user can see the export modal
-            if (document.getElementById('caption-editor-modal')?.classList.contains('visible')) {
-                this.closeCaptionEditor();
+            // Toggle an inline textarea right below this button
+            let existing = blacklistEditRow.parentElement?.querySelector('.inline-blacklist-editor');
+            if (existing) {
+                existing.remove();
+                return;
             }
-            // Open the advanced details section and focus the blacklist textarea
-            const details = document.querySelector('#batch-export-modal details');
-            if (details) details.open = true;
-            const textarea = document.getElementById('batch-export-blacklist');
-            if (textarea) {
-                textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => textarea.focus(), 300);
-            }
+            const editor = document.createElement('div');
+            editor.className = 'inline-blacklist-editor';
+            editor.style.cssText = 'margin-top:8px; display:flex; flex-direction:column; gap:6px;';
+            const label = document.createElement('small');
+            label.style.color = 'var(--text-muted)';
+            label.textContent = this._i18n('batchExport.blacklistInlineHint', 'Comma-separated tags to exclude from export:');
+            const textarea = document.createElement('textarea');
+            textarea.className = 'input-field';
+            textarea.rows = 3;
+            textarea.style.fontSize = '12px';
+            // Sync from the main blacklist textarea
+            const mainTextarea = document.getElementById('batch-export-blacklist');
+            textarea.value = mainTextarea?.value || '';
+            textarea.addEventListener('input', () => {
+                // Sync back to the main blacklist textarea
+                if (mainTextarea) mainTextarea.value = textarea.value;
+            });
+            editor.append(label, textarea);
+            blacklistEditRow.parentElement?.insertBefore(editor, blacklistEditRow.nextSibling);
+            textarea.focus();
         });
         blacklistEditRow.appendChild(editLink);
         grid.appendChild(blacklistEditRow);
