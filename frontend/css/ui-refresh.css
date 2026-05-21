@@ -3866,6 +3866,20 @@ textarea:focus,
     gap: 0;
 }
 
+#image-modal .modal-close {
+    top: 8px;
+    right: 8px;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    color: #fff;
+    backdrop-filter: blur(4px);
+}
+
 .modal-image-column,
 .modal-info-workspace {
     min-width: 0;

@@ -1058,10 +1058,11 @@ function getAutoSepFilterSignature(filters) {
 }
 
 function _formatAutoSepI18n(key, fallback, replacements = {}) {
-    const raw = window.I18n?.t?.(key) || fallback;
+    const raw = window.I18n?.t?.(key);
+    const resolved = (raw && raw !== key) ? raw : fallback;
     return Object.entries(replacements).reduce(
         (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
-        raw,
+        resolved,
     );
 }
 

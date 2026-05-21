@@ -3129,8 +3129,10 @@ function syncSelectionModeButton() {
     const iconEl = toggleBtn.querySelector('span:first-child');
     const labelEl = toggleBtn.querySelector('span:last-child');
     const isSelecting = Boolean(AppState.selectionMode);
-    const doneLabel = window.I18n?.t?.('selection.doneSelecting') || 'Done Selecting';
-    const idleLabel = window.I18n?.t?.('gallery.selectImages') || 'Select Images';
+    const _d = window.I18n?.t?.('selection.doneSelecting');
+    const doneLabel = (_d && _d !== 'selection.doneSelecting') ? _d : 'Done Selecting';
+    const _s = window.I18n?.t?.('gallery.selectImages');
+    const idleLabel = (_s && _s !== 'gallery.selectImages') ? _s : 'Select Images';
 
     toggleBtn.classList.toggle('active', isSelecting);
     toggleBtn.classList.toggle('selection-active', isSelecting);
@@ -6248,8 +6250,10 @@ async function loadTaggerModels() {
         });
         options.push('<option value="custom">Custom Local Model...</option>');
         // v3.2.1: add VLM (Natural Language) backend as a primary tagger choice
-        const vlmGroupLabel = (window.I18n?.t?.('modal.tagGroupVlm') || 'VLM Captioning (Natural Language)');
-        const vlmOptionLabel = (window.I18n?.t?.('modal.tagModelVlm') || '🧠 VLM (Cloud API or Local Ollama)');
+        const _vg = window.I18n?.t?.('modal.tagGroupVlm');
+        const vlmGroupLabel = (_vg && _vg !== 'modal.tagGroupVlm') ? _vg : 'VLM Captioning (Natural Language)';
+        const _vm = window.I18n?.t?.('modal.tagModelVlm');
+        const vlmOptionLabel = (_vm && _vm !== 'modal.tagModelVlm') ? _vm : '🧠 VLM (Cloud API or Local Ollama)';
         options.push(
             `<optgroup label="${escapeHtml(vlmGroupLabel)}">` +
             `<option value="vlm">${escapeHtml(vlmOptionLabel)}</option>` +
@@ -6287,7 +6291,7 @@ async function exportTagLibraryJson() {
 }
 
 async function startTagging() {
-    const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
+    const t = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
     if (!hasLoadedTaggerSystemInfo() && typeof loadSystemInfo === 'function') {
         await loadSystemInfo();
     }

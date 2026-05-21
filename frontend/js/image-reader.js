@@ -170,7 +170,7 @@
         },
 
         _t(key, fallback, params) {
-            return window.I18n?.t?.(key, params) || fallback;
+            const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback;
         },
 
         _formatGeneratorLabel(generator) {
@@ -642,7 +642,7 @@
         },
 
         _renderPromptSection(result, options = {}) {
-            const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const t = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const promptView = this._buildPromptView(result, this._promptFormat);
             const clipboardMetadataMissing = Boolean(options.clipboardMetadataMissing);
             const promptText = clipboardMetadataMissing
@@ -1201,7 +1201,7 @@
         },
 
         _renderResult(result, filename, options = {}) {
-            const t = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const t = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const gp = this._getGenParams(result);
             const resetFormat = options.resetFormat !== false;
 

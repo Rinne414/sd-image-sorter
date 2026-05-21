@@ -787,7 +787,7 @@ const VLMCaption = {
     _getVal(id) { const el = document.getElementById(id); return el ? el.value : ''; },
     _setChecked(id, val) { const el = document.getElementById(id); if (el) el.checked = !!val; },
     _getChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; },
-    _t(key, fallback) { return window.I18n?.t?.(key) || fallback; },
+    _t(key, fallback) { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; },
 };
 
 // Self-init

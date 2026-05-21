@@ -747,7 +747,7 @@ const Gallery = {
     _truncateLargeCardPrompt(prompt, maxLength = 140) {
         const normalized = String(prompt || '').replace(/\s+/g, ' ').trim();
         if (!normalized) {
-            return window.I18n?.t?.('gallery.noPromptPreview') || 'No prompt info yet';
+            const _v = window.I18n?.t?.('gallery.noPromptPreview'); return (_v && _v !== 'gallery.noPromptPreview') ? _v : 'No prompt info yet';
         }
 
         return normalized.length > maxLength
@@ -3226,7 +3226,7 @@ ${String(value)}`)
     _showContextMenu(e, image) {
         // Remove existing menu
         document.querySelector('.gallery-context-menu')?.remove();
-        const t = (key, fallback, params) => window.I18n?.t?.(key, params) || fallback;
+        const t = (key, fallback, params) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback; };
         const app = window.App || {};
         const imageId = Number(image?.id);
         const selectedIds = app.AppState?.selectedIds instanceof Set ? app.AppState.selectedIds : new Set();

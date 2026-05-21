@@ -34,7 +34,7 @@
     }
 
     function tText(key, fallback, params) {
-        return window.I18n?.t?.(key, params) || fallback;
+        const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback;
     }
 
     function formatMegapixelLimit(pixels) {

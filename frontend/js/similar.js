@@ -48,7 +48,7 @@ const SimilarImages = {
     uploadDropzoneActive: false,
 
     _t(key, fallback, params) {
-        return window.I18n?.t?.(key, params) || fallback || key;
+        const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : (fallback || key);
     },
 
     _applyLocalizedDefaults() {

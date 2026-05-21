@@ -595,10 +595,12 @@ const V321Integration = {
     _getModelChoiceTitle(opt) {
         const value = opt?.value || '';
         if (value === 'vlm') {
-            return window.I18n?.t?.('tagger.nlVlmApiTitle') || 'VLM API (Cloud / Ollama / OpenRouter)';
+            const _v1 = window.I18n?.t?.('tagger.nlVlmApiTitle');
+            return (_v1 && _v1 !== 'tagger.nlVlmApiTitle') ? _v1 : 'VLM API (Cloud / Ollama / OpenRouter)';
         }
         if (value.toLowerCase().includes('toriigate')) {
-            return window.I18n?.t?.('tagger.nlToriiTitle') || 'ToriiGate (local model)';
+            const _v2 = window.I18n?.t?.('tagger.nlToriiTitle');
+            return (_v2 && _v2 !== 'tagger.nlToriiTitle') ? _v2 : 'ToriiGate (local model)';
         }
         return (opt?.textContent || value || 'Model')
             .replace(/\s+\(Recommended\)\s*$/i, '')
@@ -2216,7 +2218,7 @@ const V321Integration = {
      *  user saw in the right preview pane character-for-character.
      */
     async _runCombinedExport(destination) {
-        const i18n = (key, params, fallback) => window.I18n?.t?.(key, params) || fallback;
+        const i18n = (key, params, fallback) => { const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : fallback; };
         const ids = await this._getAllSelectedImageIdsForExport();
         if (!ids.length) {
             if (typeof window.showToast === 'function') {

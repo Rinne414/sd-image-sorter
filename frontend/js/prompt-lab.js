@@ -165,7 +165,7 @@ const PromptLab = {
     },
 
     _t(key, fallback, params) {
-        return window.I18n?.t?.(key, params) || fallback || key;
+        const v = window.I18n?.t?.(key, params); return (v && v !== key) ? v : (fallback || key);
     },
 
     _renderStatsEmpty(message) {
@@ -713,7 +713,8 @@ const PromptLab = {
         const selector = document.getElementById('promptlab-set-select');
         if (!selector) return;
 
-        const defaultLabel = window.I18n?.t?.('promptlab.selectTagSet') || '-- Select Tag Set --';
+        const _pl = window.I18n?.t?.('promptlab.selectTagSet');
+        const defaultLabel = (_pl && _pl !== 'promptlab.selectTagSet') ? _pl : '-- Select Tag Set --';
         const options = [
             `<option value="">${this._escapeValue(defaultLabel)}</option>`,
             ...this.tagSets.map((set) => `

@@ -78,7 +78,8 @@ function manualSortText(key, enText, zhText = enText) {
 }
 
 function formatManualSortI18n(key, fallback, replacements = {}) {
-    const raw = window.I18n?.t?.(key) || fallback;
+    const v = window.I18n?.t?.(key);
+    const raw = (v && v !== key) ? v : fallback;
     return Object.entries(replacements).reduce(
         (out, [token, value]) => out.replaceAll(`{${token}}`, String(value)),
         raw
