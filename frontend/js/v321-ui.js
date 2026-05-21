@@ -1897,7 +1897,7 @@ const V321Integration = {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
-            if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`))) return;
+            if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count }))) return;
             for (const tag of tags) this._applyTokenToAll(tag, 'add');
             input.value = '';
         });
@@ -1905,7 +1905,7 @@ const V321Integration = {
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
             if (!tags.length) return;
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
-            if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`))) return;
+            if (!confirm(this._i18n('batchExport.confirmRemoveAll', `Remove "${tags.join(', ')}" from all ${count} images?`, { tags: tags.join(', '), count }))) return;
             for (const tag of tags) this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
@@ -1987,7 +1987,7 @@ const V321Integration = {
             this._renderPreviewWorkbench();
         }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', () => {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
-            if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`))) return;
+            if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`, { count }))) return;
             this._cleanupAllPreviewCaptions({ dedupe: true });
         });
         addRow('batchExport.cleanupBlacklistLabel', 'Blacklist', 'batchExport.cleanupCurrent', 'Current', 'blacklist-current', () => {
@@ -1999,7 +1999,7 @@ const V321Integration = {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             const blacklist = this._getBlacklistTokens();
             const preview = blacklist.length ? blacklist.slice(0, 10).join(', ') + (blacklist.length > 10 ? '...' : '') : '(empty)';
-            if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`))) return;
+            if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }))) return;
             this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
         // "Edit blacklist" — show inline editable blacklist right here
@@ -2048,7 +2048,7 @@ const V321Integration = {
         }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', () => {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             const boilerplate = this._getLoraBoilerplateTokens().slice(0, 8).join(', ') + '...';
-            if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`))) return;
+            if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }))) return;
             this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
         });
         const copyRow = document.createElement('div');
@@ -2124,8 +2124,8 @@ const V321Integration = {
         return img;
     },
 
-    _i18n(key, fallback) {
-        const translated = window.I18n?.t?.(key);
+    _i18n(key, fallback, params) {
+        const translated = window.I18n?.t?.(key, params);
         return (translated && translated !== key) ? translated : fallback;
     },
 
