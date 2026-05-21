@@ -40,7 +40,7 @@ const VLMCaption = {
         document.getElementById('btn-vlm-debug-chat-close')?.addEventListener('click', () => this.closeDebugChat());
         document.querySelector('#vlm-debug-chat-modal .modal-backdrop')?.addEventListener('click', () => this.closeDebugChat());
         document.getElementById('btn-cancel-tag')?.addEventListener('click', (event) => {
-            if (!this.isRunning || document.getElementById('tag-model-select')?.value !== 'vlm') return;
+            if (!this.isRunning) return;
             event.preventDefault();
             event.stopPropagation();
             this.cancelBatch();
