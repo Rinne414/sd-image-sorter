@@ -1530,6 +1530,8 @@ window.I18nLang_zhCN = {
     'batchExport.cleanupBoilerplateLabel': '质量词',
     'batchExport.cleanupCurrent': '当前',
     'batchExport.cleanupAll': '全部',
+    'batchExport.cleanupAllImages': '全部',
+    'batchExport.editBlacklist': '✏️ 编辑黑名单...',
     'batchExport.dedupeCurrentPreview': '去重',
     'batchExport.dedupeAllPreview': '全部',
     'batchExport.removeBlacklistCurrentPreview': '黑名单',

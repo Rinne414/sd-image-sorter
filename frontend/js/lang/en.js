@@ -1356,6 +1356,8 @@ window.I18nLang_en = {
     'batchExport.cleanupBoilerplateLabel': 'Quality',
     'batchExport.cleanupCurrent': 'Current',
     'batchExport.cleanupAll': 'All',
+    'batchExport.cleanupAllImages': 'All images',
+    'batchExport.editBlacklist': 'Edit blacklist...',
     'batchExport.dedupeCurrentPreview': 'Dedupe',
     'batchExport.dedupeAllPreview': 'All',
     'batchExport.removeBlacklistCurrentPreview': 'Blacklist',

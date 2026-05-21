@@ -1333,6 +1333,13 @@
     gap: 8px;
     flex-shrink: 0;
 }
+.caption-editor-topbar-actions .modal-close {
+    position: static;
+    width: auto;
+    height: auto;
+    min-width: 36px;
+    min-height: 36px;
+}
 
 .caption-editor-body {
     flex: 1 1 auto;

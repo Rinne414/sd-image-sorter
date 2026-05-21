@@ -152,7 +152,7 @@ const V321Integration = {
                     this._highlightModelCard(highlightId);
                 }
                 if (toastKey && typeof window.showToast === 'function') {
-                    const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+                    const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
                     window.showToast(i18n(toastKey, ''), 'info');
                 }
             }, 60);
@@ -205,7 +205,7 @@ const V321Integration = {
         const desc = document.getElementById('tagger-tab-description');
         const modalDesc = document.querySelector('#tag-modal .modal-description');
         if (desc) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
                 local: 'tagger.tabLocalDesc',
                 nl: 'tagger.tabNlDesc',
@@ -216,7 +216,7 @@ const V321Integration = {
             desc.textContent = i18n(map[tab], '');
         }
         if (modalDesc) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
                 local: ['modal.tagDescription', 'Pick a supported tagger model and generate tags for images.'],
                 nl: ['tagger.modalDescNl', 'Choose a natural-language backend and caption selected images.'],
@@ -229,7 +229,7 @@ const V321Integration = {
         }
         const modelLabel = document.getElementById('tag-model-select-label');
         if (modelLabel) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const key = tab === 'nl' ? 'tagger.nlSourceLabel' : 'modal.tagModel';
             modelLabel.setAttribute('data-i18n', key);
             modelLabel.textContent = i18n(key, tab === 'nl' ? 'Natural language source' : 'Model');
@@ -305,7 +305,7 @@ const V321Integration = {
     },
 
     _syncNlWorkflow(source) {
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const title = document.getElementById('tagger-nl-workflow-title');
         const hint = document.getElementById('tagger-nl-workflow-hint');
         const vlmStatus = document.getElementById('vlm-banner-current');
@@ -418,7 +418,7 @@ const V321Integration = {
         }
         const startBtn = document.getElementById('btn-start-tag');
         if (startBtn && !startBtn.disabled) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             if (tab === 'nl') {
                 startBtn.dataset.i18nLocked = '1';
                 const source = document.querySelector('input[name="tagger-nl-source"]:checked')?.value || 'toriigate';
@@ -525,7 +525,7 @@ const V321Integration = {
         const tab = this.activeTaggerTab || 'local';
         const modalDesc = document.querySelector('#tag-modal .modal-description');
         if (modalDesc) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const map = {
                 local: ['modal.tagDescription', 'Pick a supported tagger model and generate tags for images.'],
                 nl: ['tagger.modalDescNl', 'Choose a natural-language backend and caption selected images.'],
@@ -537,7 +537,7 @@ const V321Integration = {
         }
         const modelLabel = document.getElementById('tag-model-select-label');
         if (modelLabel) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             const key = tab === 'nl' ? 'tagger.nlSourceLabel' : 'modal.tagModel';
             modelLabel.setAttribute('data-i18n', key);
             modelLabel.textContent = i18n(key, tab === 'nl' ? 'Natural language source' : 'Model');
@@ -573,7 +573,7 @@ const V321Integration = {
             metaEl.textContent = opt ? this._getModelChoiceMeta(opt.value || '', opt, 'local') : '';
         }
         if (actionEl) {
-            const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+            const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
             actionEl.textContent = this.localModelPickerOpen
                 ? i18n('tagger.hideModelList', 'Hide list')
                 : i18n('tagger.changeModel', 'Change model');
@@ -607,7 +607,7 @@ const V321Integration = {
     },
 
     _getModelChoiceMeta(value, opt, activeTab) {
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const lower = String(value || '').toLowerCase();
         if (value === 'vlm') {
             return i18n('tagger.nlVlmApiHint', 'Send images to a remote VLM endpoint. Configure provider + model in VLM Settings.');
@@ -630,7 +630,7 @@ const V321Integration = {
 
     _getModelChoiceBadge(value, opt, activeTab) {
         const text = opt?.textContent || '';
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         if (opt?.disabled) return i18n('tagger.chipCatalogOnly', 'Catalog Only');
         if (value === 'vlm') return i18n('tagger.tierVlm', 'VLM');
         if (String(value || '').toLowerCase().includes('toriigate')) return i18n('tagger.chipPytorchCuda', 'PyTorch CUDA');
@@ -649,7 +649,7 @@ const V321Integration = {
 
     _getModelChoiceActionHtml(value, activeTab, selected, disabled) {
         if (activeTab !== 'nl' || !selected || disabled) return '';
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         if (value === 'vlm') {
             return `
                 <span class="tagger-model-choice-actions">
@@ -696,7 +696,7 @@ const V321Integration = {
         const titleEl = document.getElementById('tagger-aesthetic-status-title');
         const setupBtn = document.getElementById('btn-tagger-aesthetic-setup');
         const startBtn = document.getElementById('btn-tagger-aesthetic-start');
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
 
         // Optimistic "checking..." state while the request is in flight so the
         // user does not see a stale ready/missing message from the previous
@@ -736,7 +736,7 @@ const V321Integration = {
 
     /** v3.2.1 task #26: Color analysis tab — show counts and wire start/cancel. */
     async _refreshColorTab() {
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const titleEl = document.getElementById('tagger-color-status-title');
         const countsEl = document.getElementById('tagger-color-status-counts');
         const startBtn = document.getElementById('btn-tagger-color-start');
@@ -825,7 +825,7 @@ const V321Integration = {
         const el = document.getElementById('vlm-banner-current');
         const legacyEl = document.getElementById('vlm-banner-current-legacy');
         if (!el) return;
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
         const setText = (text) => {
             el.textContent = text;
             if (legacyEl) legacyEl.textContent = text;
@@ -934,7 +934,7 @@ const V321Integration = {
         const folderGroup = document.getElementById('batch-export-folder-group');
         const folderInput = document.getElementById('batch-export-folder');
         const startBtn = document.getElementById('btn-start-batch-export');
-        const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+        const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
 
         const sync = () => {
             const checked = document.querySelector('input[name="batch-export-output-mode"]:checked');
@@ -2123,7 +2123,8 @@ const V321Integration = {
     },
 
     _i18n(key, fallback) {
-        return window.I18n?.t?.(key) || fallback;
+        const translated = window.I18n?.t?.(key);
+        return (translated && translated !== key) ? translated : fallback;
     },
 
     /** Hook into existing export submit — inject template_options + image_overrides */
@@ -2196,7 +2197,7 @@ const V321Integration = {
             try {
                 await this._runCombinedExport(value);
             } catch (err) {
-                const i18n = (key, fallback) => window.I18n?.t?.(key) || fallback;
+                const i18n = (key, fallback) => { const v = window.I18n?.t?.(key); return (v && v !== key) ? v : fallback; };
                 if (typeof window.showToast === 'function') {
                     window.showToast(
                         i18n('batchExport.combinedCopyFailed', 'Could not copy combined export.'),
