@@ -67,21 +67,33 @@
 ## 截图
 
 <p align="center">
-  <img src="docs/screenshots/workflow_focus.gif" alt="Reader to queue workflow demo" width="100%">
+  <img src="docs/screenshots/gallery_hero.png" alt="Gallery with images" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filters screenshot" width="48%">
-  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace screenshot" width="48%">
+  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filter modal" width="48%">
+  <img src="docs/screenshots/autosep_workbench.png" alt="Auto-Separate 3-pane workbench" width="48%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/obfuscate_workspace.png" alt="Image obfuscate workspace screenshot" width="48%">
-  <img src="docs/screenshots/prompt_lab_stats.png" alt="Prompt Lab stats screenshot" width="48%">
+  <img src="docs/screenshots/caption_editor_fullscreen.png" alt="Caption Editor full-screen" width="48%">
+  <img src="docs/screenshots/tagger_modal.png" alt="Tagger with 4 tabs" width="48%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/artist_identification.png" alt="Artist identification screenshot" width="100%">
+  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace" width="48%">
+  <img src="docs/screenshots/censor_workspace.png" alt="Censor Edit workspace" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/model_manager.png" alt="Model Manager" width="48%">
+  <img src="docs/screenshots/batch_export_modal.png" alt="LoRA export with presets" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/similar_search.png" alt="Similar image search" width="32%">
+  <img src="docs/screenshots/prompt_lab.png" alt="Prompt Lab" width="32%">
+  <img src="docs/screenshots/artist_identification.png" alt="Artist identification" width="32%">
 </p>
 
 ## 核心功能
@@ -135,6 +147,41 @@
 - **Image Reader**：拖放或选择原始 PNG，立刻读参数，不用先扫描图库；剪贴板图片会明确提示可能丢失 SD metadata
 - **Image Obfuscate**：图片加扰 / 解扰，适合带密码分享
 - **Aesthetic Score**：本地美学评分
+
+### 8. VLM 自然语言打标
+
+- 多厂商 VLM 打标：OpenAI / Anthropic / Gemini / Vertex AI / Ollama
+- 一键部署本地 Ollama 视觉模型（Gemma 3、Qwen 2.5 VL、MiniCPM-V 等）
+- 5 个 LoRA 训练 prompt preset（通用 NL、Anima 详细、短句、角色 LoRA、NSFW 兼容）
+- VLM 也能输出 danbooru 结构化标签
+- 支持 HTTP / HTTPS / SOCKS 代理
+
+### 9. LoRA 训练导出
+
+- 模板引擎：7 个内建 preset（Anima、Illustrious/Pony、NoobAI、FLUX、Kohya、自定义）
+- 14 个模板变量：`{trigger}`、`{tags}`、`{nl_caption}`、`{rating}`、`{count}` 等
+- Caption Editor 工作台（三栏：图片队列 / 编辑器 / 共同标签工具）
+- 全屏专用编辑模式
+- 下划线转空格（保留 `score_*`），可手动关闭
+- 导出前 Live Preview
+
+### 10. 色彩分析
+
+- 提取主色、亮度、饱和度、色温
+- 按亮度 / 饱和度 / 亮度偏度排序
+- 按色温 / 亮度区间 / 分布形状筛选
+- 直方图形状分类（线稿 vs 照片）
+
+### 11. 批量标签编辑器
+
+- 全库批量查找替换、添加、移除标签
+- 操作前预览影响范围
+
+### 12. Reader 元数据编辑
+
+- 编辑 prompt / negative / seed / sampler / steps / CFG / model / LoRA
+- 另存为新图（PNG / WebP / JPG）
+- 同路径覆盖需二次确认
 
 ## 这工具最适合谁
 
@@ -420,6 +467,12 @@ sd-image-sorter/
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader 方向启发 |
 | [大番茄图片混淆](https://dfqtphx.netlify.app/) | 图片混淆 Hilbert 曲线方案 |
 | [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | 图片隐藏兼容方案 |
+| [OpenAI](https://openai.com) | VLM captioning provider (GPT-4o Vision) |
+| [Anthropic](https://anthropic.com) | VLM captioning provider (Claude 3.5 Sonnet) |
+| [Google Gemini](https://ai.google.dev) | VLM captioning provider (Gemini Pro Vision) |
+| [Ollama](https://ollama.com) | Local VLM runtime for privacy-first captioning |
+| [sorryhyun/anima_lora](https://github.com/sorryhyun/anima_lora) | Anima LoRA training convention reference |
+| [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) | Kohya SD training script conventions |
 
 License: [MIT](LICENSE)
 
@@ -446,25 +499,44 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 - **Similar search**: CLIP embeddings for duplicates and near-matches
 - **Prompt Lab**: generate reusable prompts from your own library
 - **Extra tools**: Artist ID, Image Reader (original file / drag-drop is metadata-safe; clipboard images may lose SD PNG metadata), Image Obfuscate, Aesthetic Score
+- **VLM Captioning**: Multi-provider natural language captioning (OpenAI, Anthropic, Gemini, Ollama) with one-click local model deployment
+- **LoRA Training Export**: Template engine with 7 presets, 14 variables, Caption Editor workbench (3-pane + full-screen), underscore normalization
+- **Color Analysis**: Dominant colors, brightness/saturation sort, color temperature filter, histogram shape classification
+- **Mass Tag Editor**: Bulk find/replace, add, remove tags across entire library
+- **Reader Metadata Editor**: Edit and save-as-new with format choice (PNG/WebP/JPG)
+- **Auto-Separate 3-pane**: Filter editor + preview grid + action sidebar visible at once
+- **Caption Editor**: Dedicated full-screen workbench for editing LoRA training captions
 
 ### Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/workflow_focus.gif" alt="Reader and queue workflow gif" width="100%">
+  <img src="docs/screenshots/gallery_hero.png" alt="Gallery with images" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filters screenshot" width="48%">
-  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace screenshot" width="48%">
+  <img src="docs/screenshots/gallery_filters.png" alt="Gallery filter modal" width="48%">
+  <img src="docs/screenshots/autosep_workbench.png" alt="Auto-Separate 3-pane workbench" width="48%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/obfuscate_workspace.png" alt="Image obfuscate workspace screenshot" width="48%">
-  <img src="docs/screenshots/prompt_lab_stats.png" alt="Prompt Lab stats screenshot" width="48%">
+  <img src="docs/screenshots/caption_editor_fullscreen.png" alt="Caption Editor full-screen" width="48%">
+  <img src="docs/screenshots/tagger_modal.png" alt="Tagger with 4 tabs" width="48%">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/artist_identification.png" alt="Artist identification screenshot" width="100%">
+  <img src="docs/screenshots/reader_workspace.png" alt="Reader workspace" width="48%">
+  <img src="docs/screenshots/censor_workspace.png" alt="Censor Edit workspace" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/model_manager.png" alt="Model Manager" width="48%">
+  <img src="docs/screenshots/batch_export_modal.png" alt="LoRA export with presets" width="48%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/similar_search.png" alt="Similar image search" width="32%">
+  <img src="docs/screenshots/prompt_lab.png" alt="Prompt Lab" width="32%">
+  <img src="docs/screenshots/artist_identification.png" alt="Artist identification" width="32%">
 </p>
 
 ### Quick Start
@@ -628,5 +700,11 @@ Practical rule:
 | [Receyuki](https://github.com/receyuki/stable-diffusion-prompt-reader) | Prompt Reader inspiration |
 | [大番茄图片混淆](https://dfqtphx.netlify.app/) | Hilbert curve image obfuscation |
 | [小番茄图片隐藏](https://singularpoint.cn/hideImg1.html) | Image hiding compatibility |
+| [OpenAI](https://openai.com) | VLM captioning provider (GPT-4o Vision) |
+| [Anthropic](https://anthropic.com) | VLM captioning provider (Claude 3.5 Sonnet) |
+| [Google Gemini](https://ai.google.dev) | VLM captioning provider (Gemini Pro Vision) |
+| [Ollama](https://ollama.com) | Local VLM runtime for privacy-first captioning |
+| [sorryhyun/anima_lora](https://github.com/sorryhyun/anima_lora) | Anima LoRA training convention reference |
+| [kohya-ss/sd-scripts](https://github.com/kohya-ss/sd-scripts) | Kohya SD training script conventions |
 
 License: [MIT](LICENSE)
