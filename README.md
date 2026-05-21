@@ -220,11 +220,14 @@ cd sd-image-sorter
 # Windows
 run.bat
 
-# Linux
+# Linux / macOS
 ./run.sh
 ```
 
 默认会在 `http://127.0.0.1:8487` 启动（可通过 `SD_IMAGE_SORTER_PORT` 覆盖）。
+
+> [!TIP]
+> macOS 用户直接用 `./run.sh` 即可。脚本会自动创建 Python venv 并安装依赖。Apple Silicon (M1/M2/M3/M4) 和 Intel Mac 均支持，AI 推理走 CPU（ONNX Runtime 自动选择最优 provider）。
 
 > [!TIP]
 > Windows 便携版自带 Python 3.12。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
@@ -565,6 +568,9 @@ git clone https://github.com/peter119lee/sd-image-sorter.git
 cd sd-image-sorter
 ./run.sh
 ```
+
+> [!TIP]
+> macOS users can run `./run.sh` directly. The script creates a Python venv and installs dependencies automatically. Both Apple Silicon (M1/M2/M3/M4) and Intel Macs are supported; AI inference runs on CPU (ONNX Runtime auto-selects the optimal provider).
 
 
 ### What Works Immediately vs. What Needs Setup?
