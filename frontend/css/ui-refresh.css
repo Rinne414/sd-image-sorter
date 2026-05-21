@@ -6685,3 +6685,16 @@ html.lang-zh #view-censor .queue-action-btn span {
     border-color: var(--color-primary, #ff8a00);
     color: var(--color-primary, #ff8a00);
 }
+
+/* Tag insert position toggle */
+.export-preview-position-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 0 4px;
+}
+.export-preview-position-toggle .btn.active {
+    background: var(--accent-primary, #ff8a00);
+    color: #fff;
+    border-color: var(--accent-primary, #ff8a00);
+}

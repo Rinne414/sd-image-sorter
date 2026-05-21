@@ -1480,22 +1480,27 @@ const V321Integration = {
         ];
     },
 
-    _applyTokenToCaption(imageId, token, mode) {
+    _applyTokenToCaption(imageId, token, mode, position = 'prepend') {
         const clean = String(token || '').trim();
         if (!clean) return;
         const id = Number(imageId);
         const tokens = this._splitCaptionTokens(this._getRenderedCaption(id));
         const key = clean.toLowerCase();
-        const next = mode === 'remove'
-            ? tokens.filter((part) => part.toLowerCase() !== key)
-            : [...tokens, clean];
+        let next;
+        if (mode === 'remove') {
+            next = tokens.filter((part) => part.toLowerCase() !== key);
+        } else if (position === 'prepend') {
+            next = tokens.includes(clean) ? tokens : [clean, ...tokens];
+        } else {
+            next = tokens.includes(clean) ? tokens : [...tokens, clean];
+        }
         this._setPreviewCaption(id, this._joinCaptionTokens(next));
     },
 
-    _applyTokenToAll(token, mode) {
+    _applyTokenToAll(token, mode, position = 'prepend') {
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
         for (const id of ids) {
-            this._applyTokenToCaption(id, token, mode);
+            this._applyTokenToCaption(id, token, mode, position);
         }
         this._renderPreviewWorkbench();
     },
@@ -1859,6 +1864,28 @@ const V321Integration = {
 
         const form = document.createElement('div');
         form.className = 'export-preview-tag-form';
+
+        // Position toggle: prepend (front) vs append (back)
+        const posRow = document.createElement('div');
+        posRow.className = 'export-preview-position-toggle';
+        const posLabel = document.createElement('small');
+        posLabel.textContent = this._i18n('batchExport.insertPosition', 'Insert position:');
+        posLabel.style.color = 'var(--text-muted)';
+        const posPrepend = document.createElement('button');
+        posPrepend.type = 'button';
+        posPrepend.className = 'btn btn-small btn-ghost active';
+        posPrepend.textContent = this._i18n('batchExport.positionFront', '↑ Front');
+        posPrepend.dataset.pos = 'prepend';
+        const posAppend = document.createElement('button');
+        posAppend.type = 'button';
+        posAppend.className = 'btn btn-small btn-ghost';
+        posAppend.textContent = this._i18n('batchExport.positionBack', '↓ Back');
+        posAppend.dataset.pos = 'append';
+        const getPosition = () => posAppend.classList.contains('active') ? 'append' : 'prepend';
+        posPrepend.addEventListener('click', () => { posPrepend.classList.add('active'); posAppend.classList.remove('active'); });
+        posAppend.addEventListener('click', () => { posAppend.classList.add('active'); posPrepend.classList.remove('active'); });
+        posRow.append(posLabel, posPrepend, posAppend);
+
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'input-field';
@@ -1869,9 +1896,8 @@ const V321Integration = {
             event.preventDefault();
             const active = this._getPreviewItem();
             if (!active) return;
-            // Support comma-separated multi-tag input
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
-            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add');
+            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add', getPosition());
             input.value = '';
             this._renderPreviewWorkbench();
         });
@@ -1879,9 +1905,8 @@ const V321Integration = {
         const addCurrent = this._toolButton('batchExport.addToCurrent', 'Add', () => {
             const active = this._getPreviewItem();
             if (!active) return;
-            // Support comma-separated multi-tag input
             const tags = input.value.split(',').map(t => t.trim()).filter(Boolean);
-            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add');
+            for (const tag of tags) this._applyTokenToCaption(active.image_id, tag, 'add', getPosition());
             input.value = '';
             this._renderPreviewWorkbench();
         });
@@ -1898,7 +1923,7 @@ const V321Integration = {
             if (!tags.length) return;
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             if (!confirm(this._i18n('batchExport.confirmAddAll', `Add "${tags.join(', ')}" to all ${count} images?`, { tags: tags.join(', '), count }))) return;
-            for (const tag of tags) this._applyTokenToAll(tag, 'add');
+            for (const tag of tags) this._applyTokenToAll(tag, 'add', getPosition());
             input.value = '';
         });
         const removeAll = this._toolButton('batchExport.removeFromAllPreview', '-All images', () => {
@@ -1909,7 +1934,7 @@ const V321Integration = {
             for (const tag of tags) this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
-        form.append(input, addCurrent, removeCurrent, addAll, removeAll);
+        form.append(posRow, input, addCurrent, removeCurrent, addAll, removeAll);
 
         panel.append(head, helper, commonList, diagnostics, cleanup, form);
         return panel;
