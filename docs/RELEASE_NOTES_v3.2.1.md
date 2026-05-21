@@ -227,3 +227,21 @@ Useful for cleaning up WD14 mistakes across an entire library, normalizing tag v
 - Color backfill banner only triggers when a color-based sort is selected; it doesn't proactively prompt on every gallery open.
 - Color extraction is opt-in for existing libraries. Trigger via `/api/colors/analyze` or the new backfill banner.
 - Vertex AI section in VLM Settings requires `google-auth` installed (the error is friendly, but the install step is manual).
+
+
+---
+
+## 中文摘要
+
+v3.2.1 是自 v3.0 以来最大的功能更新：
+
+- **VLM 多厂商自然语言打标**：支持 OpenAI / Anthropic / Gemini / Vertex AI / Ollama，一键部署本地视觉模型
+- **LoRA 训练导出模板引擎**：7 个内建 preset（Anima / Pony / NoobAI / FLUX / Kohya / 自定义），14 个模板变量，Caption Editor 三栏工作台 + 全屏编辑模式
+- **色彩分析**：提取主色、亮度、饱和度、色温，按色彩排序和筛选，直方图形状分类（线稿 vs 照片）
+- **批量标签编辑器**：全库批量查找替换、添加、移除标签，操作前预览
+- **Auto-Separate 三栏工作台**：左侧筛选 + 中间预览 + 右侧执行，一屏看完所有信息
+- **Reader 元数据编辑**：编辑 prompt / model / LoRA 后另存为新图（PNG / WebP / JPG）
+- **下划线转空格**：导出 .txt 时自动把 `multiple_girls` 转成 `multiple girls`，保留 `score_5`
+- **UX 打磨**：i18n 缓存刷新、3-tab Tagger modal、统一导出弹窗、Model Manager 磁盘面板、1366×768 笔记本适配
+
+详细说明见上方英文部分。
