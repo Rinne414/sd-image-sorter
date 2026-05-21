@@ -2000,6 +2000,29 @@ const V321Integration = {
             if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`))) return;
             this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
+        // "Edit blacklist" link so users can find the blacklist textarea
+        const blacklistEditRow = document.createElement('div');
+        blacklistEditRow.className = 'export-preview-cleanup-row export-preview-cleanup-row-single';
+        const editLink = document.createElement('button');
+        editLink.type = 'button';
+        editLink.className = 'btn btn-small btn-ghost';
+        editLink.textContent = this._i18n('batchExport.editBlacklist', '✏️ Edit blacklist...');
+        editLink.addEventListener('click', () => {
+            // If in fullscreen editor, close it first so user can see the export modal
+            if (document.getElementById('caption-editor-modal')?.classList.contains('visible')) {
+                this.closeCaptionEditor();
+            }
+            // Open the advanced details section and focus the blacklist textarea
+            const details = document.querySelector('#batch-export-modal details');
+            if (details) details.open = true;
+            const textarea = document.getElementById('batch-export-blacklist');
+            if (textarea) {
+                textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(() => textarea.focus(), 300);
+            }
+        });
+        blacklistEditRow.appendChild(editLink);
+        grid.appendChild(blacklistEditRow);
         addRow('batchExport.cleanupBoilerplateLabel', 'Quality/rating', 'batchExport.cleanupCurrent', 'Current', 'boilerplate-current', () => {
             const id = activeId();
             if (!id) return;
