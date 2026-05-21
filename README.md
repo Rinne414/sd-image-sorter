@@ -470,7 +470,7 @@ sd-image-sorter/
 | [OpenAI](https://openai.com) / [Anthropic](https://anthropic.com) / [Google Gemini](https://ai.google.dev) / [Ollama](https://ollama.com) | VLM captioning providers & 本地运行时 |
 | [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | 图库浏览 + 元数据搜索灵感来源 |
 | [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 三栏工作台设计参考 |
-| [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete) | Booru 标签自动补全 UX 参考 |
+| [Tera-Dark/Tag-Master](https://github.com/Tera-Dark/Tag-Master) | Booru 标签管理 + 自动补全 UX 参考 |
 
 License: [MIT](LICENSE)
 
@@ -701,6 +701,6 @@ Practical rule:
 | [OpenAI](https://openai.com) / [Anthropic](https://anthropic.com) / [Google Gemini](https://ai.google.dev) / [Ollama](https://ollama.com) | VLM captioning providers & local runtime |
 | [zanllp/infinite-image-browsing](https://github.com/zanllp/sd-webui-infinite-image-browsing) | Gallery browsing + metadata search inspiration |
 | [starik222/BooruDatasetTagManager](https://github.com/starik222/BooruDatasetTagManager) | Caption Editor 3-pane workbench design reference |
-| [DominikDoom/a1111-sd-webui-tagcomplete](https://github.com/DominikDoom/a1111-sd-webui-tagcomplete) | Booru tag autocomplete UX reference |
+| [Tera-Dark/Tag-Master](https://github.com/Tera-Dark/Tag-Master) | Booru tag management + autocomplete UX reference |
 
 License: [MIT](LICENSE)
