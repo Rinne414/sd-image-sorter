@@ -5,6 +5,24 @@ All notable changes to SD Image Sorter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2] - 2026-05-22
+
+### Added / 新增
+- **Caption Editor virtual scroll**: unlimited images, on-demand caption loading, keyboard shortcuts (Escape/Ctrl+Enter/Arrows), queue count badge with >1000 warning
+  - **Caption 编辑器虚拟滚动**：无上限图片支持、按需加载 caption、键盘快捷键、队列计数徽章
+- **Per-item exclude on filters**: filter chips cycle include → exclude → remove; works on tags, generators, ratings, checkpoints, LoRAs
+  - **筛选排除**：标签/生成器/分级/模型/LoRA 支持排除（红色删除线）
+- **Auto-Separate inline filter chip editing**: clear individual filter dimensions without opening the modal
+  - **自动分类 inline chip 编辑**：左栏每行可直接清除或添加筛选
+
+### Fixed / 修复
+- Filter modal stat grid: all 9 chips fit one row at any width
+  - 筛选弹窗 9 个 chip 全部在一行
+- Stale "up to 20 images" text removed from export preview
+  - 移除过时的"最多 20 张"文字
+- Duplicate TestExportSelectionData test class renamed (Debt-25)
+  - 修复重复测试类名
+
 ## [3.2.1] - 2026-05-20
 
 ### Added / 新增
