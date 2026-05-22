@@ -4569,11 +4569,28 @@ function initEventListeners() {
     });
 
     // --- Censored Edit ---
-    $('#btn-send-to-censor')?.addEventListener('click', (e) => {
+    $('#btn-send-to-censor')?.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (getSelectedGalleryCount() > 0) {
-            if (getActiveSelectionTokenForActions()) {
-                showToast(appT('selection.censorRequiresExplicitIds', 'Censor queue needs explicit selected images. Select visible images instead of all filtered results.'), 'info');
+            const token = getActiveSelectionTokenForActions();
+            if (token) {
+                // Resolve filtered selection into actual IDs
+                try {
+                    const ids = [];
+                    let offset = 0;
+                    const pageSize = 5000;
+                    let done = false;
+                    while (!done) {
+                        const chunk = await API.getSelectionChunk(token, { offset, limit: pageSize });
+                        const batch = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
+                        ids.push(...batch);
+                        if (batch.length < pageSize) done = true;
+                        else offset += pageSize;
+                    }
+                    if (ids.length) addToCensorQueue(ids);
+                } catch (_) {
+                    addToCensorQueue(getSelectedGalleryIds());
+                }
                 return;
             }
             addToCensorQueue(getSelectedGalleryIds());

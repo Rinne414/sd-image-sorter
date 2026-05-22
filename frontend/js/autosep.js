@@ -299,45 +299,17 @@ function updateAutoSepScopeStatus() {
     const useBtn = document.getElementById('btn-autosep-use-gallery-scope');
     const resyncBtn = document.getElementById('btn-autosep-resync-scope');
     const keepBtn = document.getElementById('btn-autosep-keep-scope');
-    if (!card || !badge || !meta || !detail || !useBtn || !resyncBtn || !keepBtn) return;
+    if (!card || !useBtn || !resyncBtn || !keepBtn) return;
 
-    const tool = getAutoSepToolLabel();
     const status = getAutoSepScopeStatus();
 
-    badge.textContent = _formatAutoSepI18n('scope.usingSaved', '{tool} will use these saved filters', { tool });
-    meta.textContent = status.lastSyncedLabel
-        ? _formatAutoSepI18n('scope.syncedAt', 'Copied from Gallery: {time}', {
-            time: status.lastSyncedLabel,
-        })
-        : _formatAutoSepI18n('scope.standalone', 'These filters will not change automatically when Gallery filters change later.');
-
-    if (status.matchesGallery && status.lastSyncedLabel) {
-        detail.textContent = _formatAutoSepI18n('scope.aligned', 'Gallery and {tool} are currently aligned.', { tool });
-    } else if (status.matchesGallery) {
-        detail.textContent = _formatAutoSepI18n(
-            'scope.alignedUnsynced',
-            '{tool} currently matches the Gallery filters. Later Gallery changes will not be copied automatically.',
-            { tool }
-        );
-    } else if (status.isAcknowledged) {
-        detail.textContent = _formatAutoSepI18n(
-            'scope.kept',
-            'Using the saved {tool} filters shown here. Current Gallery filters were not copied.',
-            { tool }
-        );
-    } else {
-        detail.textContent = _formatAutoSepI18n(
-            'scope.mismatch',
-            'Gallery filters changed. {tool} will still use the saved filters shown here.',
-            { tool }
-        );
-    }
-
-    card.classList.toggle('is-synced', status.matchesGallery);
-    card.classList.toggle('is-warning', !status.matchesGallery && !status.isAcknowledged);
+    // Simplified: only show relevant buttons
+    if (badge) badge.textContent = '';
+    if (meta) meta.textContent = '';
+    if (detail) detail.textContent = '';
 
     useBtn.hidden = Boolean(status.lastSyncedAt);
-    resyncBtn.hidden = !Boolean(status.lastSyncedAt);
+    resyncBtn.hidden = !Boolean(status.lastSyncedAt) || status.matchesGallery;
     keepBtn.hidden = status.matchesGallery || status.isAcknowledged;
 }
 
@@ -605,8 +577,8 @@ function renderAutoSepConfigControls() {
     const selectedConfig = getAutoSepConfigById(select.value);
     if (!selectedConfig) {
         summary.textContent = AutoSepState.configs.length
-            ? tKey('autosep.configHelp', 'Saved configs keep your current filters and destination for later reuse.', '已保存配置会记住你当前的筛选条件和目标目录，方便以后直接复用。')
-            : tKey('autosep.noConfigsYet', 'No saved configs yet. Save your current setup and reuse it later.', '还没有保存配置。先把当前规则存成一个方案，之后就能直接复用。');
+            ? tKey('autosep.configHelp', 'Save filters + destination for quick reuse.', '保存筛选+目标路径，方便下次直接用。')
+            : tKey('autosep.noConfigsYet', 'No saved configs yet.', '还没有保存配置。');
     } else {
         const filters = selectedConfig.filters || {};
         const summaryParts = [];

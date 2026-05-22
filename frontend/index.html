@@ -979,32 +979,22 @@
                                         <select id="autosep-config-select" class="input-field"></select>
                                         <div class="autosep-config-controls-row">
                                             <button class="btn btn-secondary btn-small" id="btn-autosep-load-config" type="button" data-i18n="autosep.loadConfig">Load</button>
-                                            <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save Current</button>
-                                            <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig">Rename</button>
+                                            <button class="btn btn-primary btn-small" id="btn-autosep-save-config" type="button" data-i18n="autosep.saveCurrentConfig">Save</button>
                                             <button class="btn btn-ghost btn-small" id="btn-autosep-delete-config" type="button" data-i18n="autosep.deleteConfig">Delete</button>
+                                            <button class="btn btn-ghost btn-small" id="btn-autosep-rename-config" type="button" data-i18n="autosep.renameConfig" hidden>Rename</button>
                                         </div>
                                         <div class="autosep-config-summary" id="autosep-config-summary"></div>
                                     </div>
                                 </div>
 
-                                <!-- Scope status: keep all 3 button IDs visible inline. The 3 distinct
-                                     intents (use saved / copy from gallery / resync) remain reachable
-                                     so the locked ADR contract holds. -->
+                                <!-- Simplified scope: single sync button, no confusing state machine -->
                                 <div class="autosep-card autosep-card-scope" id="autosep-scope-status">
-                                    <div class="autosep-card-head autosep-scope-head">
-                                        <div class="autosep-scope-summary-content">
-                                            <span class="scope-status-badge" id="autosep-scope-badge">Auto-Separate will use these saved filters</span>
-                                            <span class="scope-status-meta" id="autosep-scope-meta">Copied from Gallery: --</span>
-                                        </div>
-                                    </div>
                                     <div class="autosep-scope-detail-block">
-                                        <div class="scope-status-detail" id="autosep-scope-detail">Gallery filters changed. Auto-Separate will still use the filters shown here.</div>
                                         <div class="scope-status-actions">
                                             <button class="btn btn-secondary btn-small" id="btn-autosep-use-gallery-scope" type="button" data-i18n="scope.useGallery" title="Use whatever filters Gallery has right now">📋 Use Gallery's current filters</button>
                                             <button class="btn btn-secondary btn-small" id="btn-autosep-resync-scope" type="button" data-i18n="scope.resyncGallery" title="Gallery filters changed — click to update" hidden>🔄 Update from Gallery</button>
                                             <button class="btn btn-ghost btn-small" id="btn-autosep-keep-scope" type="button" data-i18n="scope.keepSaved" title="Ignore Gallery changes, keep using the filters shown below" hidden>🔒 Keep my filters</button>
                                         </div>
-                                        <small class="helper-text" style="margin-top:4px">Tip: Auto-Separate has its own filters. Click above to sync from Gallery, or use "Edit Filters" to set them independently.</small>
                                     </div>
                                 </div>
 
