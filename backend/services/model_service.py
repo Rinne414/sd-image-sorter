@@ -624,6 +624,11 @@ class ModelService:
                 "message_key": clip_message_key,
                 "path": clip_health["model_path"] or clip_health.get("expected_path", ""),
                 "download_supported": True,
+                "setup_steps": [
+                    "Click Prepare to install fastembed Python package (restart required after install).",
+                    "Click Prepare again after restart to download the CLIP ViT-B/32 ONNX model (~335 MB).",
+                    "Manual: place model.onnx + config.json in " + clip_health.get("expected_path", "data/models/clip/Qdrant-clip-ViT-B-32-vision"),
+                ],
             },
             {
                 "id": "aesthetic",
@@ -659,6 +664,11 @@ class ModelService:
                     or (s == "modelscope" and artist.get("modelscope_available"))
                 ],
                 "runtime_path": artist["runtime_path"],
+                "setup_steps": [
+                    "Click Prepare to install torch/transformers/timm Python packages (restart required).",
+                    "Click Prepare again after restart to download Kaloscope 2.0 model (~2.8 GB).",
+                    "Manual: download from HuggingFace (Heathcliff02/Kaloscope-2.0) or ModelScope, place files in " + str(Path(get_artist_model_dir())),
+                ],
             },
             {
                 "id": "censor-legacy",
@@ -679,6 +689,11 @@ class ModelService:
                         "label": "Civitai",
                         "url": PRIVACY_YOLO_PAGE_URL,
                     }
+                ],
+                "setup_steps": [
+                    "Click Prepare to auto-download the recommended privacy YOLO model.",
+                    "If auto-download fails (Civitai login wall), download manually from the Civitai link above.",
+                    "Place the .pt file in " + str(Path(get_yolo_model_dir())),
                 ],
             },
             {
