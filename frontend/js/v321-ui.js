@@ -1564,6 +1564,37 @@ const V321Integration = {
         this._renderPreviewWorkbench();
     },
 
+    async _removeTagsByCategory(category) {
+        const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
+        const allTokens = new Set();
+        for (const id of ids) {
+            for (const token of this._splitCaptionTokens(this._getRenderedCaption(id))) {
+                allTokens.add(token);
+            }
+        }
+        if (!allTokens.size) return;
+        try {
+            const resp = await fetch('/api/prompts/categorize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify([...allTokens]),
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            const toRemove = data.results
+                .filter(item => item.category === category)
+                .map(item => item.tag);
+            if (!toRemove.length) {
+                window.showToast?.(`No ${category} tags found.`, 'info');
+                return;
+            }
+            if (!confirm(this._i18n('batchExport.confirmCategoryRemoveAll', `Remove ${toRemove.length} ${category} tags from all images?`, { count: toRemove.length, category }))) return;
+            for (const tag of toRemove) await this._applyTokenToAll(tag, 'remove');
+        } catch (err) {
+            window.showToast?.(`Category removal failed: ${err.message}`, 'error');
+        }
+    },
+
     async _copyCurrentPreviewCaption() {
         const active = this._getPreviewItem();
         if (!active) return;
@@ -1898,27 +1929,25 @@ const V321Integration = {
         const form = document.createElement('div');
         form.className = 'export-preview-tag-form';
 
-        // Position toggle: prepend (front) vs append (back)
-        const posRow = document.createElement('div');
-        posRow.className = 'export-preview-position-toggle';
-        const posLabel = document.createElement('small');
-        posLabel.textContent = this._i18n('batchExport.insertPosition', 'Insert position:');
-        posLabel.style.color = 'var(--text-muted)';
+        // Position toggle as inline icon buttons
         const posPrepend = document.createElement('button');
         posPrepend.type = 'button';
         posPrepend.className = 'btn btn-small btn-ghost active';
-        posPrepend.textContent = this._i18n('batchExport.positionFront', '↑ Front');
+        posPrepend.textContent = '↑';
+        posPrepend.title = this._i18n('batchExport.positionFront', 'Front');
         posPrepend.dataset.pos = 'prepend';
         const posAppend = document.createElement('button');
         posAppend.type = 'button';
         posAppend.className = 'btn btn-small btn-ghost';
-        posAppend.textContent = this._i18n('batchExport.positionBack', '↓ Back');
+        posAppend.textContent = '↓';
+        posAppend.title = this._i18n('batchExport.positionBack', 'Back');
         posAppend.dataset.pos = 'append';
         const getPosition = () => posAppend.classList.contains('active') ? 'append' : 'prepend';
         posPrepend.addEventListener('click', () => { posPrepend.classList.add('active'); posAppend.classList.remove('active'); });
         posAppend.addEventListener('click', () => { posAppend.classList.add('active'); posPrepend.classList.remove('active'); });
-        posRow.append(posLabel, posPrepend, posAppend);
 
+        const inputRow = document.createElement('div');
+        inputRow.className = 'export-preview-tag-input-row';
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'input-field';
@@ -1934,6 +1963,7 @@ const V321Integration = {
             input.value = '';
             this._renderPreviewWorkbench();
         });
+        inputRow.append(posPrepend, posAppend, input);
 
         const addCurrent = this._toolButton('batchExport.addToCurrent', 'Add', () => {
             const active = this._getPreviewItem();
@@ -1967,7 +1997,7 @@ const V321Integration = {
             for (const tag of tags) await this._applyTokenToAll(tag, 'remove');
             input.value = '';
         });
-        form.append(posRow, input, addCurrent, removeCurrent, addAll, removeAll);
+        form.append(inputRow, addCurrent, removeCurrent, addAll, removeAll);
 
         panel.append(head, helper, commonList, diagnostics, cleanup, form);
         return panel;
@@ -2060,44 +2090,34 @@ const V321Integration = {
             if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }))) return;
             this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
-        // "Edit blacklist" — show inline editable blacklist right here
-        // instead of closing the editor and navigating away
-        const blacklistEditRow = document.createElement('div');
-        blacklistEditRow.className = 'export-preview-cleanup-row export-preview-cleanup-row-single';
-        const editLink = document.createElement('button');
-        editLink.type = 'button';
-        editLink.className = 'btn btn-small btn-ghost';
-        editLink.textContent = this._i18n('batchExport.editBlacklist', '✏️ Edit blacklist...');
-        editLink.addEventListener('click', () => {
-            // Toggle an inline textarea right below this button
-            let existing = blacklistEditRow.parentElement?.querySelector('.inline-blacklist-editor');
-            if (existing) {
-                existing.remove();
-                return;
-            }
+        // Pencil icon for editing blacklist inline, appended to the Blacklist row
+        const blacklistRow = grid.lastElementChild;
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'btn btn-small btn-ghost';
+        editBtn.title = this._i18n('batchExport.editBlacklist', 'Edit blacklist...');
+        editBtn.textContent = '✏️';
+        editBtn.addEventListener('click', () => {
+            let existing = grid.querySelector('.inline-blacklist-editor');
+            if (existing) { existing.remove(); return; }
             const editor = document.createElement('div');
             editor.className = 'inline-blacklist-editor';
-            editor.style.cssText = 'margin-top:8px; display:flex; flex-direction:column; gap:6px;';
-            const label = document.createElement('small');
-            label.style.color = 'var(--text-muted)';
-            label.textContent = this._i18n('batchExport.blacklistInlineHint', 'Comma-separated tags to exclude from export:');
+            editor.style.cssText = 'margin-top:8px; display:flex; flex-direction:column; gap:6px; grid-column:1/-1;';
+            const hint = document.createElement('small');
+            hint.style.color = 'var(--text-muted)';
+            hint.textContent = this._i18n('batchExport.blacklistInlineHint', 'Comma-separated tags to exclude from export:');
             const textarea = document.createElement('textarea');
             textarea.className = 'input-field';
             textarea.rows = 3;
             textarea.style.fontSize = '12px';
-            // Sync from the main blacklist textarea
             const mainTextarea = document.getElementById('batch-export-blacklist');
             textarea.value = mainTextarea?.value || '';
-            textarea.addEventListener('input', () => {
-                // Sync back to the main blacklist textarea
-                if (mainTextarea) mainTextarea.value = textarea.value;
-            });
-            editor.append(label, textarea);
-            blacklistEditRow.parentElement?.insertBefore(editor, blacklistEditRow.nextSibling);
+            textarea.addEventListener('input', () => { if (mainTextarea) mainTextarea.value = textarea.value; });
+            editor.append(hint, textarea);
+            blacklistRow.after(editor);
             textarea.focus();
         });
-        blacklistEditRow.appendChild(editLink);
-        grid.appendChild(blacklistEditRow);
+        blacklistRow.appendChild(editBtn);
         addRow('batchExport.cleanupBoilerplateLabel', 'Quality/rating', 'batchExport.cleanupCurrent', 'Current', 'boilerplate-current', () => {
             const id = activeId();
             if (!id) return;
@@ -2109,13 +2129,25 @@ const V321Integration = {
             if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }))) return;
             this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
         });
-        const copyRow = document.createElement('div');
-        copyRow.className = 'export-preview-cleanup-row export-preview-cleanup-row-single';
-        copyRow.appendChild(this._toolButton('batchExport.copyCurrentCaption', 'Copy current', () => this._copyCurrentPreviewCaption(), {
-            className: 'btn btn-small btn-ghost',
-            tool: 'copy-current',
-        }));
-        grid.appendChild(copyRow);
+        // Category batch removal row
+        const catRow = document.createElement('div');
+        catRow.className = 'export-preview-cleanup-row';
+        const catLabel = document.createElement('span');
+        catLabel.textContent = this._i18n('batchExport.cleanupCategoryLabel', 'Category');
+        const catSelect = document.createElement('select');
+        catSelect.className = 'input-field';
+        catSelect.style.cssText = 'flex:1; font-size:12px; padding:2px 6px;';
+        for (const opt of ['character', 'copyright', 'meta']) {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+            catSelect.appendChild(o);
+        }
+        const catBtn = this._toolButton('batchExport.cleanupCategoryRemoveAll', 'Remove All', async () => {
+            await this._removeTagsByCategory(catSelect.value);
+        }, { className: 'btn btn-small btn-ghost' });
+        catRow.append(catLabel, catSelect, catBtn);
+        grid.appendChild(catRow);
         section.append(title, grid);
         return section;
     },

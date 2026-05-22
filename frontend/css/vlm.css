@@ -110,22 +110,21 @@
     max-width: 1280px;
 }
 
-/* 2-column responsive grid: settings on left, live preview on right */
+/* Vertical stack: template section on top, preview below */
 .batch-export-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    display: flex;
+    flex-direction: column;
     gap: 16px;
     margin: 12px 0;
-    align-items: start;
 }
 .batch-export-grid:not([data-content-mode="template"]) {
-    grid-template-columns: minmax(0, 1fr);
+    /* hide template section when not in template mode */
 }
 .batch-export-grid[data-content-mode="template"] {
-    grid-template-columns: minmax(320px, 0.74fr) minmax(560px, 1.26fr);
+    /* no special grid needed */
 }
 @media (max-width: 880px) {
-    .batch-export-grid { grid-template-columns: 1fr; }
+    .batch-export-grid { /* already flex column */ }
 }
 .batch-export-grid > * {
     min-width: 0;  /* prevent flex/grid blowout */
@@ -184,11 +183,22 @@
 }
 
 .lora-template-section {
-    margin: 12px 0;
+    margin: 0;
     padding: 14px;
     border-radius: var(--radius-md);
     background: var(--bg-card);
     border: 1px solid var(--border-color);
+    max-height: 420px;
+    overflow-y: auto;
+}
+.lora-template-section > summary {
+    cursor: pointer;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.lora-template-section:not([open]) {
+    max-height: none;
+    overflow: visible;
 }
 .lora-preset-grid {
     display: grid;
@@ -656,6 +666,22 @@
     gap: 6px;
     padding: 9px 10px;
     border-top: 1px solid var(--border-color);
+}
+
+.export-preview-tag-input-row {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.export-preview-tag-input-row .input-field {
+    flex: 1;
+    min-width: 0;
+}
+.export-preview-tag-input-row .btn {
+    padding: 2px 6px;
+    min-width: 24px;
+    font-size: 14px;
 }
 
 .export-preview-tag-form .input-field {

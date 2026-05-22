@@ -3416,7 +3416,8 @@
 
                 <!-- v3.2.1: LoRA template + Live preview, shown only when content_mode='template' -->
                 <div class="batch-export-grid" id="batch-export-grid" style="display:none">
-                    <div class="lora-template-section" id="lora-template-section">
+                    <details class="lora-template-section" id="lora-template-section" open>
+                    <summary>LoRA Training Preset</summary>
                     <div class="form-group">
                         <label data-i18n="batchExport.loraPreset">LoRA Training Preset</label>
                         <div class="lora-preset-grid" id="lora-preset-grid"></div>
@@ -3448,7 +3449,7 @@
                             </div>
                         </div>
                     </details>
-                    </div>
+                    </details>
 
                     <div class="export-preview-pane" id="export-preview-group">
                         <div class="export-preview-header">
