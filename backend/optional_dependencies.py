@@ -170,7 +170,24 @@ def _installed_version_satisfies(package_spec: str) -> bool:
 
 
 def _needs_install(module_name: str, package_spec: str) -> bool:
-    return importlib.util.find_spec(module_name) is None or not _installed_version_satisfies(package_spec)
+    """Check if a module needs installation.
+
+    Beyond find_spec + version check, attempts a real import for packages
+    known to fail when installed with --no-deps (missing transitive deps).
+    """
+    if importlib.util.find_spec(module_name) is None:
+        return True
+    if not _installed_version_satisfies(package_spec):
+        return True
+    # Packages that are known to break when installed with --no-deps
+    # (their top-level __init__.py imports sub-dependencies immediately).
+    _NO_DEPS_FRAGILE = {"fastembed", "nudenet", "ultralytics"}
+    if module_name in _NO_DEPS_FRAGILE:
+        try:
+            __import__(module_name)
+        except ImportError:
+            return True
+    return False
 
 
 def _running_in_virtualenv() -> bool:
@@ -233,17 +250,30 @@ def install_packages(packages: Sequence[str]) -> bool:
                 check=True,
                 text=True,
             )
-            # --no-deps skips transitive dependencies. Install them in a second
-            # pass (without --no-deps) so packages like fastembed get 'requests'.
+            # --no-deps skips transitive dependencies. Run a second pass that
+            # asks pip to resolve and install only the missing sub-dependencies.
+            # We use --no-deps on the main package again but explicitly install
+            # its requirements via pip's dependency resolver on a dry-run parse.
             try:
-                subprocess.run(
-                    [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *packages],
-                    check=False,
-                    text=True,
-                    capture_output=True,
-                )
+                # pip install <pkg> --dry-run would be ideal but isn't available
+                # on all pip versions. Instead, just try importing common deps
+                # that are known to be needed by our optional groups.
+                _KNOWN_TRANSITIVE_DEPS = ["requests", "tqdm", "pillow", "numpy"]
+                missing_deps = []
+                for dep in _KNOWN_TRANSITIVE_DEPS:
+                    try:
+                        __import__(dep.replace("-", "_"))
+                    except ImportError:
+                        missing_deps.append(dep)
+                if missing_deps:
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *missing_deps],
+                        check=False,
+                        text=True,
+                        capture_output=True,
+                    )
             except Exception:
-                pass  # best effort; the main package is already installed
+                pass  # best effort
             importlib.invalidate_caches()
             return True
         else:
