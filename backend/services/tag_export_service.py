@@ -431,6 +431,13 @@ def build_sidecar_content(
         # Use the export template engine
         from services.export_template_engine import build_export_caption
         opts = _merge_template_blacklist_options(template_options, blacklist)
+        # Forward the underscore checkbox override so sidecar export matches preview
+        if normalize_tag_underscores is False and "underscore_to_space_override" not in opts:
+            opts["underscore_to_space_override"] = False
+            opts.setdefault("preserve_underscore_prefixes_override", ["score_"])
+        elif normalize_tag_underscores is True and "underscore_to_space_override" not in opts:
+            opts["underscore_to_space_override"] = True
+            opts.setdefault("preserve_underscore_prefixes_override", ["score_"])
         return build_export_caption(image, tags, **opts)
     if mode == "json":
         payload = {
@@ -647,7 +654,10 @@ def export_tags_batch_request(
                 raise
             except Exception as exc:
                 error_count += 1
-                error_messages.append(f"Error exporting sidecar for image {image_id}: {exc}")
+                if len(error_messages) < 20:
+                    error_messages.append(f"Error exporting sidecar for image {image_id}: {exc}")
+                elif len(error_messages) == 20:
+                    error_messages.append(f"... and more errors (total: showing first 20)")
 
     return {
         "exported": exported,

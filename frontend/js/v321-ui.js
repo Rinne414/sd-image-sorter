@@ -915,6 +915,8 @@ const V321Integration = {
                 loraSection.style.display = mode === 'template' ? '' : 'none';
             }
             // Refresh preview when content mode changes
+            // Clear manual edits since they were for the previous mode's format
+            this.editedCaptions.clear();
             this.refreshPreview();
         };
         contentSelect.addEventListener('change', updateVis);
@@ -1280,11 +1282,14 @@ const V321Integration = {
             case 'tags': return '{tags:filtered}';
             case 'prompt': return '{prompt}';
             case 'negative': return '{negative}';
+            case 'prompt_negative': return '{prompt}\nNegative prompt: {negative}';
             case 'nl_caption': return '{nl_caption}';
             case 'tags_nl': return '{tags:filtered}, {nl_caption}';
             case 'prompt_nl': return '{prompt}\n{nl_caption}';
             case 'caption_tags': return '{nl_caption}, {tags:filtered}';
             case 'caption_merged': return '{nl_caption}, {prompt}, {tags:filtered}';
+            case 'a1111': return '{prompt}\nNegative prompt: {negative}';
+            case 'json': return '{tags:filtered}';
             default: return '{tags:filtered}';
         }
     },
