@@ -24,10 +24,15 @@ def aesthetic_status(service: AestheticService = Depends(get_aesthetic_service))
     try:
         from aesthetic import is_available
         return service.get_status(is_available)
-    except ImportError:
+    except (ImportError, OSError) as exc:
+        # OSError covers Windows DLL load failures (e.g. broken cudnn). Without
+        # it, this endpoint returns 500 instead of a clean "not available"
+        # status, breaking the aesthetic settings panel for any user with a
+        # damaged torch runtime.
+        logger.warning("Aesthetic predictor unavailable: %s", exc)
         return {
             "available": False,
-            "message": "Aesthetic predictor dependencies are not installed",
+            "message": "Aesthetic predictor dependencies are not installed or runtime is broken",
             "scored_count": service.get_status(lambda: False)["scored_count"],
         }
 
@@ -40,8 +45,9 @@ def score_single_image(
     """Score a single image by database ID."""
     try:
         from aesthetic import predict_score
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
+    except (ImportError, OSError) as exc:
+        logger.warning("Aesthetic predictor torch import failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
 
     try:
         return service.score_single_image(
@@ -68,8 +74,9 @@ def score_all_images(
         from aesthetic import predict_score, is_available
         if not is_available():
             raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed")
+    except (ImportError, OSError) as exc:
+        logger.warning("Aesthetic predictor torch import failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Aesthetic predictor dependencies not installed or runtime is broken")
 
     total = service.count_images_to_score(force=force)
     service.start_scoring_progress(total=total)

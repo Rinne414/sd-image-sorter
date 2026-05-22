@@ -5,9 +5,10 @@ Endpoints for image embedding, similarity search, and duplicate detection.
 
 Refactored to use Service Layer pattern with dependency injection.
 """
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, UploadFile, File, Query, BackgroundTasks
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from services.service_provider import ServiceProvider
@@ -22,6 +23,25 @@ _similarity_service_provider = ServiceProvider(SimilarityService)
 
 get_similarity_service = _similarity_service_provider.get
 set_similarity_service = _similarity_service_provider.set
+
+
+class EmbedRequest(BaseModel):
+    """Body schema for POST /api/similarity/embed.
+
+    Without this schema FastAPI treated ``image_ids`` as a query parameter
+    on a POST handler with a plain ``list`` annotation, so a JSON body of
+    ``{"image_ids": [1, 2, 3]}`` was silently ignored and the worker
+    embedded the entire library instead of the requested subset.
+    """
+
+    image_ids: Optional[List[int]] = Field(
+        default=None,
+        max_length=5_000_000,
+        description=(
+            "Optional list of image IDs to embed. If omitted (or null), all "
+            "images without embeddings are processed."
+        ),
+    )
 
 
 @router.post(
@@ -49,10 +69,15 @@ Poll `/api/similarity/progress` to track embedding status.
 )
 async def embed_images(
     background_tasks: BackgroundTasks,
-    image_ids: Optional[list] = None,
+    request: Optional[EmbedRequest] = None,
     service: SimilarityService = Depends(get_similarity_service),
 ):
-    """Start embedding images in the background."""
+    """Start embedding images in the background.
+
+    Body is optional - call with no body to embed every image without an
+    embedding. Pass ``{"image_ids": [...]}`` to scope the run to a subset.
+    """
+    image_ids = request.image_ids if request else None
     return await run_in_threadpool(service.embed_images, background_tasks, image_ids)
 
 

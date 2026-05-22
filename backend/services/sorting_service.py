@@ -202,6 +202,54 @@ class BatchMoveRequest(SortFilterRequest):
             raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
 
+    @model_validator(mode='after')
+    def require_at_least_one_filter(self) -> 'BatchMoveRequest':
+        """Catastrophic-foot-gun guard: empty filter set used to mean "match
+        everything in the library". A user with 71k images who fired this
+        endpoint with no filters (e.g. via a 3rd-party script, or via a
+        frontend bug that forgot to forward selected filters) would have
+        their entire library moved into a single folder. Refuse the call
+        unless the caller explicitly opts into "move everything" by passing
+        ``operation='move'`` with the special wildcard search ``"*"``.
+        """
+        # SortFilterRequest fields that, if any of them is set, indicate the
+        # caller actually intended a filter-scoped move.
+        filter_fields = (
+            self.generators, self.tags, self.ratings,
+            self.checkpoints, self.loras, self.prompts,
+            self.exclude_tags, self.exclude_generators,
+            self.exclude_ratings, self.exclude_checkpoints,
+            self.exclude_loras,
+            self.artist, self.search,
+            self.min_width, self.max_width,
+            self.min_height, self.max_height,
+            self.aspect_ratio,
+            self.min_aesthetic, self.max_aesthetic,
+        )
+        # ``self.aspect_ratio`` is acceptable as a filter even though it has
+        # only 3 valid values (square / landscape / portrait); ``ratings``
+        # similarly. A list with at least one entry is the signal.
+        any_set = False
+        for value in filter_fields:
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)) and len(value) == 0:
+                continue
+            if isinstance(value, str) and value.strip() == "":
+                continue
+            any_set = True
+            break
+        if not any_set:
+            raise ValueError(
+                "batch-move requires at least one filter (generators, tags, "
+                "ratings, checkpoints, loras, prompts, artist, search, "
+                "min/max dimensions, aspect_ratio, or aesthetic range). "
+                "Refusing to move every image in the library by default. "
+                "If you really want to move every image, use /api/move with "
+                "an explicit selection_token covering the whole library."
+            )
+        return self
+
 
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""

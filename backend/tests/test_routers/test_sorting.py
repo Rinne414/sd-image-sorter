@@ -1003,7 +1003,16 @@ class TestBatchMove:
         monkeypatch.setattr(isolated_sorting_service, "_apply_file_operation", lambda **_kwargs: None)
 
         isolated_sorting_service.batch_move_images(
-            BatchMoveRequest(destination_folder=str(tmp_path / "dest"), operation="copy"),
+            BatchMoveRequest(
+                destination_folder=str(tmp_path / "dest"),
+                operation="copy",
+                # v3.2.2 safety guard: BatchMoveRequest now requires at
+                # least one filter so an unfiltered request can't move the
+                # whole library by accident. Pass a tiny generators filter
+                # that matches everything in this fixture so the validator
+                # is happy without changing the count semantics.
+                generators=["forge", "comfyui", "nai", "webui", "unknown", "others"],
+            ),
             background_tasks,
         )
         background_tasks.tasks[0].func()
