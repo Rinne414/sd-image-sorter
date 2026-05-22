@@ -8973,7 +8973,7 @@ async function runBulkDownload(items) {
     // Show a persistent progress banner inside the model manager modal
     const gridEl = $('#model-manager-grid');
     let banner = document.getElementById('bulk-download-progress-banner');
-    if (!banner && gridEl) {
+    if (!banner && gridEl && gridEl.parentElement) {
         banner = document.createElement('div');
         banner.id = 'bulk-download-progress-banner';
         banner.style.cssText = 'padding:12px 16px;margin-bottom:12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--accent-primary);font-size:13px;';
