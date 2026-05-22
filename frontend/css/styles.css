@@ -1486,6 +1486,10 @@ body::before {
         -webkit-backdrop-filter: blur(10px);
     }
 
+    .autosep-preview-empty {
+        grid-column: 1 / -1;
+    }
+
     .autosep-preview-item {
         overflow: hidden;
         cursor: pointer;
@@ -6801,6 +6805,7 @@ input[type="radio"],
 
 /* Auto-sep preview empty state enhancement */
 .autosep-preview-empty {
+    grid-column: 1 / -1;
     text-align: center;
     padding: 24px 16px;
     color: var(--text-muted);
