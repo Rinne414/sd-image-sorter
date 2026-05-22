@@ -416,9 +416,8 @@ const OnboardingTour = (function() {
         isActive = true;
         currentStepIndex = 0;
 
-        // Prevent body scroll
-        originalOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+        // Do NOT block body scroll — it makes the page unresponsive if
+        // cleanup fails for any reason.
 
         // Create and append elements
         overlayEl = createOverlay();
@@ -438,7 +437,7 @@ const OnboardingTour = (function() {
 
         // Allow clicking the overlay backdrop to dismiss the tour
         overlayEl.addEventListener('click', (e) => {
-            if (e.target === overlayEl) skip();
+            if (e.target === overlayEl || e.target.classList.contains('onboarding-highlight-container')) skip();
         });
 
         // Keyboard navigation
@@ -500,30 +499,20 @@ const OnboardingTour = (function() {
         // Remove event listeners
         document.removeEventListener('keydown', handleKeydown);
 
-        // Remove elements with animation
-        if (overlayEl) {
-            overlayEl.classList.add('onboarding-fade-out');
-            setTimeout(() => {
-                if (overlayEl && overlayEl.parentNode) {
-                    overlayEl.parentNode.removeChild(overlayEl);
-                }
-            }, 300);
+        // Remove elements immediately — no animation delay that could leave
+        // a blocking overlay if something goes wrong.
+        if (overlayEl && overlayEl.parentNode) {
+            overlayEl.parentNode.removeChild(overlayEl);
         }
-
-        if (tooltipEl) {
-            tooltipEl.classList.add('onboarding-fade-out');
-            setTimeout(() => {
-                if (tooltipEl && tooltipEl.parentNode) {
-                    tooltipEl.parentNode.removeChild(tooltipEl);
-                }
-            }, 300);
+        if (tooltipEl && tooltipEl.parentNode) {
+            tooltipEl.parentNode.removeChild(tooltipEl);
         }
 
         overlayEl = null;
         tooltipEl = null;
 
-        // Restore body scroll
-        document.body.style.overflow = originalOverflow;
+        // Restore body scroll (safety — in case old code set it)
+        document.body.style.overflow = '';
     }
 
     /**
@@ -538,7 +527,16 @@ const OnboardingTour = (function() {
         if (AUTO_START_ENABLED && !isCompleted() && !wasDismissed()) {
             const hasSeen = localStorage.getItem(FIRST_RUN_CHECK_KEY);
             if (!hasSeen) {
-                setTimeout(() => start(), 800);
+                setTimeout(() => {
+                    start();
+                    // Safety: force-clean after 90s in case user is stuck
+                    setTimeout(() => {
+                        if (isActive) {
+                            skip();
+                            cleanupResidualTourUi();
+                        }
+                    }, 90000);
+                }, 800);
             }
         }
     }
