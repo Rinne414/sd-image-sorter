@@ -622,7 +622,7 @@ class ModelService:
                 ),
                 "message": clip_message,
                 "message_key": clip_message_key,
-                "path": clip_health["model_path"],
+                "path": clip_health["model_path"] or clip_health.get("expected_path", ""),
                 "download_supported": True,
             },
             {
@@ -650,7 +650,7 @@ class ModelService:
                 ),
                 "message": artist["message"],
                 "message_key": artist_message_key,
-                "path": artist["checkpoint_path"],
+                "path": artist["checkpoint_path"] or artist.get("expected_path", ""),
                 "download_supported": bool(artist.get("has_download_source", True)),
                 "sources": [
                     s for s in ["auto", "huggingface", "modelscope"]
@@ -672,7 +672,7 @@ class ModelService:
                 ),
                 "message": legacy["message"],
                 "message_key": censor_legacy_key,
-                "path": legacy["default_model_path"],
+                "path": legacy["default_model_path"] or legacy.get("expected_path", ""),
                 "download_supported": True,
                 "external_links": [
                     {
@@ -709,7 +709,7 @@ class ModelService:
                 "message": sam3["message"],
                 "message_key": sam3_key,
                 "message_params": sam3_message_params,
-                "path": sam3["checkpoint_path"],
+                "path": sam3["checkpoint_path"] or sam3.get("expected_path", ""),
                 "download_supported": True,
                 "setup_steps": [
                     "Click Prepare / Download to install SAM3 Python runtime packages if they are missing.",

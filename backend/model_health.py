@@ -633,6 +633,7 @@ def get_model_health() -> Dict[str, Any]:
             "runtime_loaded": _clip_model_loaded(),
             "model_name": CLIP_MODEL_NAME,
             "model_path": clip_model_path,
+            "expected_path": str(Path(get_clip_model_dir()) / CLIP_MODEL_NAME.replace("/", "-").replace("\\", "-")),
             "message": (
                 "Local CLIP model ready."
                 if clip_model_path and _module_installed("fastembed")
@@ -647,6 +648,7 @@ def get_model_health() -> Dict[str, Any]:
             "legacy": {
                 "available": bool(legacy_model_path),
                 "default_model_path": legacy_model_path,
+                "expected_path": str(Path(get_yolo_model_dir())),
                 "message": legacy_message,
                 "files": yolo_files,
                 "has_yolo26": any("yolo26" in name for name in yolo_names),
@@ -690,6 +692,7 @@ def get_model_health() -> Dict[str, Any]:
             "sam3": {
                 "available": sam3_supported and bool(sam3_checkpoint) and not sam3_missing and cuda_available,
                 "checkpoint_path": sam3_checkpoint,
+                "expected_path": str(Path(get_sam3_model_dir())),
                 "missing_dependencies": sam3_missing,
                 "missing_dependency_packages": sam3_missing_packages,
                 "cuda_available": cuda_available,
@@ -731,6 +734,7 @@ def get_model_health() -> Dict[str, Any]:
             "model_name": ARTIST_HF_MODEL_ID,
             "runtime_path": artist_runtime_path,
             "checkpoint_path": artist_checkpoint,
+            "expected_path": str(Path(get_artist_model_dir())),
             "class_mapping_path": artist_class_mapping,
             "missing_dependencies": artist_missing,
             "huggingface_available": artist_hf_available,
