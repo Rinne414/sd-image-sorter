@@ -4730,6 +4730,12 @@ kbd {
     cursor: pointer;
 }
 
+/* Keep nav actions (language switch, setup) clickable above the tour overlay */
+.nav-actions {
+    position: relative;
+    z-index: 5001;
+}
+
 .onboarding-overlay.onboarding-fade-out {
     animation: onboardingFadeOut 0.3s ease forwards;
 }
