@@ -8968,8 +8968,21 @@ async function runBulkDownload(items) {
     const total = items.length;
     let completed = 0;
     const failures = [];
+    let needsRestart = false;
+
+    // Show a persistent progress banner inside the model manager modal
+    const gridEl = $('#model-manager-grid');
+    let banner = document.getElementById('bulk-download-progress-banner');
+    if (!banner && gridEl) {
+        banner = document.createElement('div');
+        banner.id = 'bulk-download-progress-banner';
+        banner.style.cssText = 'padding:12px 16px;margin-bottom:12px;border-radius:8px;background:var(--bg-elevated);border:1px solid var(--accent-primary);font-size:13px;';
+        gridEl.parentElement.insertBefore(banner, gridEl);
+    }
+    const updateBanner = (text) => { if (banner) banner.textContent = text; };
 
     for (const item of items) {
+        updateBanner(appT('models.bulkProgress', 'Downloading {index}/{total}: {name}', { index: completed + 1, total, name: item.name || item.id }));
         if (button) {
             button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
                 'models.bulkProgress',
@@ -9006,6 +9019,7 @@ async function runBulkDownload(items) {
                 const pr = p?.prepare_result;
                 if (pr && !pr.active && pr.model_id === item.id && pr.status) {
                     finished = true;
+                    if (pr.restart_recommended) needsRestart = true;
                     if (pr.status !== 'done' && pr.status !== 'ready' && pr.status !== 'warning') {
                         failures.push({ id: item.id, message: pr.message || pr.error || pr.status });
                     }
@@ -9013,11 +9027,9 @@ async function runBulkDownload(items) {
                 }
                 if (button && p?.active && p.total > 0) {
                     const pct = Math.round((p.downloaded / p.total) * 100);
-                    button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(appT(
-                        'models.bulkProgressDetail',
-                        '{index}/{total}: {name} {pct}%',
-                        { index: completed + 1, total, name: item.name || item.id, pct }
-                    ))}</span>`;
+                    const detail = appT('models.bulkProgressDetail', '{index}/{total}: {name} {pct}%', { index: completed + 1, total, name: item.name || item.id, pct });
+                    updateBanner(detail);
+                    button.innerHTML = `<span aria-hidden="true">⏳</span> <span>${escapeHtml(detail)}</span>`;
                 }
             } catch (err) {
                 // Network blip — just retry the poll.
@@ -9040,8 +9052,27 @@ async function runBulkDownload(items) {
             || `<span aria-hidden="true">⬇️</span> <span>${escapeHtml(appT('models.bulkDownload', 'Download all recommended models'))}</span>`;
     }
 
-    if (failures.length === 0) {
-        showToast(appT('models.bulkDoneAll', 'Downloaded all {count} model(s) successfully.', { count: total }), 'success');
+    // Update banner with final result
+    if (banner) {
+        if (needsRestart) {
+            banner.style.borderColor = 'var(--color-warning, #f59e0b)';
+            banner.style.background = 'rgba(245, 158, 11, 0.1)';
+            banner.innerHTML = `<strong>${escapeHtml(appT('models.bulkNeedsRestart', '⚠️ Restart required'))}</strong><br>${escapeHtml(appT('models.bulkRestartExplain', 'Some features installed Python packages. Close and restart the app, then click "Download all" again to finish downloading model files.'))}`;
+        } else if (failures.length === 0) {
+            banner.style.borderColor = 'var(--color-success, #22c55e)';
+            banner.style.background = 'rgba(34, 197, 94, 0.1)';
+            banner.textContent = appT('models.bulkDoneAll', 'All {count} model(s) downloaded successfully.', { count: total });
+            setTimeout(() => { if (banner.parentNode) banner.remove(); }, 10000);
+        } else {
+            banner.style.borderColor = 'var(--color-danger, #ef4444)';
+            banner.textContent = appT('models.bulkDoneMixed', 'Downloaded {ok}/{total}. Failed: {failed}.', { ok: total - failures.length, total, failed: failures.map(f => f.id).join(', ') });
+        }
+    }
+
+    if (failures.length === 0 && !needsRestart) {
+        showToast(appT('models.bulkDoneAll', 'All {count} model(s) downloaded successfully.', { count: total }), 'success');
+    } else if (needsRestart) {
+        showToast(appT('models.bulkNeedsRestart', '⚠️ Restart required — close and reopen the app, then click Download again.'), 'warning');
     } else {
         const okCount = total - failures.length;
         const failedIds = failures.map(f => f.id).join(', ');
