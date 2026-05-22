@@ -339,7 +339,12 @@ async def get_images(
     ),
     offset: Optional[int] = Query(
         default=None,
-        description="Offset for fallback pagination when the selected sort does not support cursor pagination",
+        ge=0,
+        le=100_000_000,
+        description=(
+            "Offset for fallback pagination when the selected sort does not support cursor pagination. "
+            "Must be non-negative; large offsets are slow at library scale (prefer cursor pagination)."
+        ),
         examples=[200],
     ),
     min_width: Optional[int] = Query(

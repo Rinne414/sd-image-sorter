@@ -790,6 +790,14 @@ def test_e2e_fake_tagger_completes_without_downloading_real_model(test_db, monke
     Image.new("RGB", (16, 16), color=(120, 80, 40)).save(image_path)
     image_id = db.add_image(str(image_path), image_path.name, metadata_json="{}")
 
+    # Defensively confirm the test_db fixture is what's actually being written.
+    # If patching ever regresses we want pytest to fail loudly here, not
+    # silently leak rows into the user's production data/images.db.
+    assert "test_" in db.DATABASE_PATH or "tmp" in db.DATABASE_PATH, (
+        f"test_db fixture did not patch DATABASE_PATH; got {db.DATABASE_PATH!r}. "
+        "Refusing to run the tagging worker against a possibly-real DB."
+    )
+
     monkeypatch.setenv("SD_IMAGE_SORTER_E2E_FAKE_TAGGER", "1")
     monkeypatch.setattr(tagging_service, "verify_image_readable", lambda path: (True, None))
 

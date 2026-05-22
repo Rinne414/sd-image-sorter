@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **自动分类 inline chip 编辑**：左栏每行可直接清除或添加筛选
 
 ### Fixed / 修复
+- **VLM tag parser rejects markdown / prose / LaTeX noise**: real Gemma / Qwen / GPT responses leak chain-of-thought into the danbooru-tags output (markdown headers `### 1. Address...`, bullet items `*   **Character Design:**`, LaTeX `$$x = ...$$`, sentence fragments). The previous parser only checked length 2 ≤ len ≤ 100 so all of those became searchable tags and silently polluted the user's library, top tags stats, and prompt-lab seeds. New shape-based filter rejects them at the parsing layer; migration 012 retroactively cleans existing pollution from the tags table.
+  - **VLM 标签解析过滤 markdown / 散文 / LaTeX 噪声**：真实 Gemma / Qwen / GPT 输出会把 chain-of-thought 漏进 danbooru-tags 输出（markdown 标题 `### 1. Address...`、bullet 列表 `*   **Character Design:**`、LaTeX `$$x = ...$$`、半截句子）。旧解析器只检查长度 2 ≤ len ≤ 100，这些通通变成可搜索标签，污染图库、`/api/stats` 顶部标签和 prompt-lab。新基于形状的过滤器在解析阶段就拒掉它们；迁移 012 一次性清理已经写入的脏数据。
+- **System-info endpoint cached, ~1000× faster on repeat calls**: the tagger setup modal hits `/api/system-info` repeatedly; previously each call re-spawned `nvidia-smi` + `Get-CimInstance` + torch.cuda init (~2-4 s). Now cached for 30 s with explicit `invalidate_system_info_cache()` for tests.
+  - **/api/system-info 加 30 秒缓存，重复调用快约 1000 倍**：标签器设置弹窗反复打这个接口，原本每次都重新跑 `nvidia-smi`、`Get-CimInstance`、torch.cuda 初始化（约 2-4 秒）。现在加缓存，测试通过 `invalidate_system_info_cache()` 显式清缓存。
+- **Purge leaked pytest fixture rows from images table**: older test runs sometimes leaked their fixture rows into `data/images.db` when test isolation was less robust on Windows / WSL or when `TMPDIR` redirected to `data/tmp/`. Migration 011 detects and removes rows whose paths combine a runtime tmp prefix with an obvious pytest fixture marker. The test now also asserts up-front that the test_db fixture actually patched DATABASE_PATH so any future regression fails loudly instead of silently leaking.
+  - **清理迁入图库的测试 fixture 行**：旧的测试运行有时会把 fixture 行漏进 `data/images.db`（Windows / WSL 隔离不稳，或 `TMPDIR` 指向 `data/tmp/`）。迁移 011 识别并清掉路径同时带有运行时 tmp 前缀和 pytest fixture 标记的行。测试本身现在会先检查 `test_db` fixture 真的改了 DATABASE_PATH，未来若隔离再出问题会立刻报错而非静默污染。
+- **`?offset=` parameter now rejects negative values and absurd offsets**: `/api/images?offset=-1` previously silently fell back to offset=0 returning real data; now responds 400 with a clear field-name error. Upper bound 100 M caps blatant abuse.
+  - **`?offset=` 拒绝负数和超大偏移量**：`/api/images?offset=-1` 原本静默当 offset=0 返回真实数据；现在响应 400 并指出是 offset 字段。上限 100M 防滥用。
 - Filter modal stat grid: all 9 chips fit one row at any width
   - 筛选弹窗 9 个 chip 全部在一行
 - Stale "up to 20 images" text removed from export preview
