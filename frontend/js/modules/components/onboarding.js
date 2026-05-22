@@ -151,8 +151,6 @@ const OnboardingTour = (function() {
         return window.I18n?.getLang?.() === 'zh-CN' ? TOUR_STEPS_ZH : TOUR_STEPS_EN;
     }
 
-    const TOUR_STEPS = _getSteps();
-
     // State
     let currentStepIndex = 0;
     let isActive = false;
@@ -248,6 +246,7 @@ const OnboardingTour = (function() {
         tooltip.innerHTML = `
             <div class="onboarding-header">
                 <h3 id="onboarding-title" class="onboarding-title"></h3>
+                <button class="onboarding-lang" aria-label="Switch language" title="${isZh ? 'Switch to English' : '切换到中文'}">🌐</button>
                 <button class="onboarding-skip" aria-label="${isZh ? '跳过引导' : 'Skip tour'}">
                     <span>${isZh ? '跳过' : 'Skip'}</span>
                 </button>
@@ -275,7 +274,7 @@ const OnboardingTour = (function() {
         const progressContainer = tooltipEl.querySelector('.onboarding-progress');
         progressContainer.innerHTML = '';
 
-        TOUR_STEPS.forEach((step, index) => {
+        _getSteps().forEach((step, index) => {
             const dot = document.createElement('span');
             dot.className = 'onboarding-progress-dot';
             if (index < currentStepIndex) {
@@ -372,10 +371,10 @@ const OnboardingTour = (function() {
      * @param {number} index - Step index
      */
     function showStep(index) {
-        if (index < 0 || index >= TOUR_STEPS.length) return;
+        if (index < 0 || index >= _getSteps().length) return;
 
         currentStepIndex = index;
-        const step = TOUR_STEPS[index];
+        const step = _getSteps()[index];
 
         // Update tooltip content
         const titleEl = tooltipEl.querySelector('.onboarding-title');
@@ -390,7 +389,7 @@ const OnboardingTour = (function() {
 
         backBtn.disabled = index === 0;
         const isZh = window.I18n?.getLang?.() === 'zh-CN';
-        nextBtn.querySelector('span').textContent = index === TOUR_STEPS.length - 1 ? (isZh ? '完成' : 'Finish') : (isZh ? '下一步' : 'Next');
+        nextBtn.querySelector('span').textContent = index === _getSteps().length - 1 ? (isZh ? '完成' : 'Finish') : (isZh ? '下一步' : 'Next');
 
         // Update progress
         updateProgress();
@@ -411,7 +410,7 @@ const OnboardingTour = (function() {
      * Go to next step
      */
     function nextStep() {
-        if (currentStepIndex < TOUR_STEPS.length - 1) {
+        if (currentStepIndex < _getSteps().length - 1) {
             showStep(currentStepIndex + 1);
         } else {
             complete();
@@ -454,6 +453,18 @@ const OnboardingTour = (function() {
         skipBtn.addEventListener('click', skip);
         backBtn.addEventListener('click', prevStep);
         nextBtn.addEventListener('click', nextStep);
+
+        // Language toggle: switch language and restart tour with new language
+        const langBtn = tooltipEl.querySelector('.onboarding-lang');
+        if (langBtn) {
+            langBtn.addEventListener('click', () => {
+                const newLang = window.I18n?.getLang?.() === 'zh-CN' ? 'en' : 'zh-CN';
+                if (window.I18n?.setLang) window.I18n.setLang(newLang);
+                end();
+                // Restart with new language
+                setTimeout(() => start(), 100);
+            });
+        }
 
         // Allow clicking the overlay backdrop to dismiss the tour
         overlayEl.addEventListener('click', (e) => {
