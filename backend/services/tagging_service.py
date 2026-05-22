@@ -803,6 +803,7 @@ class ExportPreviewRequest(BaseModel):
     # actually write. None = follow preset default.
     underscore_to_space_override: Optional[bool] = None
     preserve_underscore_prefixes_override: Optional[List[str]] = None
+    content_mode: Optional[str] = None
 
 
 class TaggingService:

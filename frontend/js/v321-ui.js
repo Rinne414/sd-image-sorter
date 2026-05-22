@@ -2340,7 +2340,7 @@ const V321Integration = {
                 const r = await fetch('/api/tags/export-preview', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image_ids: slice, ...opts }),
+                    body: JSON.stringify({ image_ids: slice, content_mode: contentMode, ...opts }),
                 });
                 if (!r.ok) throw new Error('preview HTTP ' + r.status);
                 const data = await r.json();

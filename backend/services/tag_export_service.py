@@ -679,6 +679,10 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
 
     from services.export_template_engine import build_export_caption
 
+    # Modes that cannot be represented as templates — use build_sidecar_content directly
+    content_mode = getattr(request, "content_mode", None)
+    use_native_mode = content_mode in ("json", "a1111", "prompt_negative")
+
     images_map = db.get_images_by_ids(image_ids)
     tags_map = db.get_image_tags_map(image_ids)
     results: List[Dict[str, Any]] = []
@@ -690,7 +694,15 @@ def render_export_preview(request: Any) -> Dict[str, Any]:
             continue
 
         try:
-            rendered = build_export_caption(
+            if use_native_mode:
+                rendered = build_sidecar_content(
+                    image,
+                    tags_map.get(image_id, []) or [],
+                    content_mode=content_mode,
+                    blacklist=set(getattr(request, "blacklist", []) or []),
+                )
+            else:
+                rendered = build_export_caption(
                 image,
                 tags_map.get(image_id, []) or [],
                 preset_id=getattr(request, "preset_id", "custom"),
