@@ -14,13 +14,12 @@ const OnboardingTour = (function() {
     // Current tour version - increment when adding new features
     const TOUR_VERSION = 1;
 
-    // Tour step definitions
-    const TOUR_STEPS = [
+    // Tour step definitions (bilingual)
+    const TOUR_STEPS_EN = [
         {
             id: 'welcome',
             title: 'Welcome to SD Image Sorter',
             content: `<p>This tool helps you organize, tag, and manage your Stable Diffusion generated images.</p>
-                <p>Features include:</p>
                 <ul>
                     <li>Scan folders for images with metadata</li>
                     <li>AI-powered tagging with WD14</li>
@@ -28,7 +27,7 @@ const OnboardingTour = (function() {
                     <li>Manual keyboard sorting (WASD)</li>
                     <li>Canvas-based censor editing</li>
                 </ul>`,
-            target: null, // Center modal, no target element
+            target: null,
             position: 'center'
         },
         {
@@ -51,7 +50,6 @@ const OnboardingTour = (function() {
             id: 'scan-folder',
             title: 'Scan Your Images',
             content: `<p>Click <strong>Scan Folder</strong> to load images from a directory.</p>
-                <p>The app will:</p>
                 <ul>
                     <li>Detect the generator (ComfyUI, NAI, WebUI, Forge)</li>
                     <li>Extract prompts, checkpoints, and LoRAs</li>
@@ -61,79 +59,99 @@ const OnboardingTour = (function() {
             position: 'bottom'
         },
         {
-            id: 'tag-images',
-            title: 'AI Tagging',
-            content: `<p>Click <strong>Tag Images</strong> to run WD14 AI tagger on your images.</p>
-                <p>Tags include:</p>
+            id: 'setup',
+            title: 'Feature Setup',
+            content: `<p>Click the <strong>wrench icon</strong> to download AI models.</p>
                 <ul>
-                    <li>General content tags</li>
-                    <li>Character tags</li>
-                    <li>Rating tags (general, sensitive, questionable, explicit)</li>
+                    <li>WD14 tagger for auto-tagging</li>
+                    <li>CLIP for similar image search</li>
+                    <li>NudeNet / YOLO for censor detection</li>
                 </ul>
-                <p>Use tags to filter and organize your collection.</p>`,
-            target: '#btn-tag',
-            position: 'bottom'
-        },
-        {
-            id: 'filters',
-            title: 'Filter Sidebar',
-            content: `<p>Use the filter sidebar to narrow down your gallery:</p>
-                <ul>
-                    <li><strong>Generators</strong> - Filter by source</li>
-                    <li><strong>Tags</strong> - Filter by AI tags</li>
-                    <li><strong>Checkpoints</strong> - Filter by model</li>
-                    <li><strong>LoRAs</strong> - Filter by LoRA used</li>
-                    <li><strong>Prompts</strong> - Search prompt text</li>
-                </ul>
-                <p>Click <strong>Edit Filters</strong> for advanced options.</p>`,
-            target: '.filter-sidebar',
-            position: 'right'
-        },
-        {
-            id: 'manual-sort',
-            title: 'Manual Sort (WASD)',
-            content: `<p>Use keyboard controls to quickly sort images:</p>
-                <ul>
-                    <li><strong>W</strong> - Move to top folder</li>
-                    <li><strong>A</strong> - Move to left folder</li>
-                    <li><strong>S</strong> - Move to bottom folder</li>
-                    <li><strong>D</strong> - Move to right folder</li>
-                    <li><strong>Space</strong> - Skip image</li>
-                    <li><strong>Z</strong> - Undo last action</li>
-                </ul>
-                <p>Configure your folder destinations in the Manual Sort tab.</p>`,
-            target: '[data-view="sorting"]',
-            position: 'bottom'
-        },
-        {
-            id: 'censor-edit',
-            title: 'Censor Editor',
-            content: `<p>The Censored Edit tab provides canvas-based editing tools:</p>
-                <ul>
-                    <li><strong>Brush/Pen</strong> - Draw censor masks</li>
-                    <li><strong>Eraser</strong> - Remove mask areas</li>
-                    <li><strong>Clone Stamp</strong> - Copy textures</li>
-                    <li><strong>AI Detection</strong> - Auto-detect regions</li>
-                </ul>
-                <p>Process single images or batch censor multiple images.</p>`,
-            target: '[data-view="censor"]',
+                <p>Models download on first use. Some need a restart after install.</p>`,
+            target: '#btn-open-model-manager',
             position: 'bottom'
         },
         {
             id: 'complete',
             title: 'You\'re All Set!',
-            content: `<p>You're ready to start organizing your images!</p>
-                <p>Tips:</p>
-                <ul>
-                    <li>Hover over images to see details</li>
-                    <li>Use the Library button to browse all tags</li>
-                    <li>Press <kbd>?</kbd> anytime to restart this tour</li>
-                </ul>
-                <p>Happy sorting!</p>`,
+            content: `<p>Start by scanning a folder, then explore the features.</p>
+                <p>Click anywhere outside this dialog to close it.</p>`,
             target: null,
             position: 'center'
         }
     ];
+
+    const TOUR_STEPS_ZH = [
+        {
+            id: 'welcome',
+            title: '欢迎使用 SD Image Sorter',
+            content: `<p>这个工具帮你整理、打标、管理 Stable Diffusion 生成的图片。</p>
+                <ul>
+                    <li>扫描文件夹，自动读取 SD 元数据</li>
+                    <li>WD14 AI 自动打标</li>
+                    <li>按筛选条件自动分类</li>
+                    <li>WASD 键盘快速手动分拣</li>
+                    <li>画布式打码编辑</li>
+                </ul>`,
+            target: null,
+            position: 'center'
+        },
+        {
+            id: 'navigation-tabs',
+            title: '导航标签',
+            content: `<p>切换不同功能：</p>
+                <ul>
+                    <li><strong>Gallery</strong> - 浏览和筛选图库</li>
+                    <li><strong>Auto-Separate</strong> - 按筛选批量移动</li>
+                    <li><strong>Manual Sort</strong> - WASD 键盘分拣</li>
+                    <li><strong>Edit</strong> - 打码编辑</li>
+                    <li><strong>Similar</strong> - 相似图搜索</li>
+                    <li><strong>Prompt Lab</strong> - 提示词工坊</li>
+                    <li><strong>Artist ID</strong> - 画师风格识别</li>
+                </ul>`,
+            target: '.nav-tabs',
+            position: 'bottom'
+        },
+        {
+            id: 'scan-folder',
+            title: '扫描图片',
+            content: `<p>点击 <strong>Scan Folder</strong> 导入图片文件夹。</p>
+                <ul>
+                    <li>自动识别生成器（ComfyUI、NAI、WebUI、Forge）</li>
+                    <li>提取 prompt、checkpoint、LoRA 信息</li>
+                    <li>元数据存入本地数据库</li>
+                </ul>`,
+            target: '#btn-scan',
+            position: 'bottom'
+        },
+        {
+            id: 'setup',
+            title: '功能准备',
+            content: `<p>点击右上角 <strong>🧰 扳手图标</strong> 下载 AI 模型。</p>
+                <ul>
+                    <li>WD14 打标模型</li>
+                    <li>CLIP 相似图搜索模型</li>
+                    <li>NudeNet / YOLO 打码检测模型</li>
+                </ul>
+                <p>模型首次使用时下载。部分功能安装后需要重启。</p>`,
+            target: '#btn-open-model-manager',
+            position: 'bottom'
+        },
+        {
+            id: 'complete',
+            title: '准备就绪！',
+            content: `<p>先扫描一个文件夹，然后探索各项功能吧。</p>
+                <p>点击对话框外任意位置可关闭本引导。</p>`,
+            target: null,
+            position: 'center'
+        }
+    ];
+
+    function _getSteps() {
+        return window.I18n?.getLang?.() === 'zh-CN' ? TOUR_STEPS_ZH : TOUR_STEPS_EN;
+    }
+
+    const TOUR_STEPS = _getSteps();
 
     // State
     let currentStepIndex = 0;
@@ -222,6 +240,7 @@ const OnboardingTour = (function() {
      * @returns {HTMLElement}
      */
     function createTooltip() {
+        const isZh = window.I18n?.getLang?.() === 'zh-CN';
         const tooltip = document.createElement('div');
         tooltip.className = 'onboarding-tooltip';
         tooltip.setAttribute('role', 'dialog');
@@ -229,8 +248,8 @@ const OnboardingTour = (function() {
         tooltip.innerHTML = `
             <div class="onboarding-header">
                 <h3 id="onboarding-title" class="onboarding-title"></h3>
-                <button class="onboarding-skip" aria-label="Skip tour">
-                    <span>Skip</span>
+                <button class="onboarding-skip" aria-label="${isZh ? '跳过引导' : 'Skip tour'}">
+                    <span>${isZh ? '跳过' : 'Skip'}</span>
                 </button>
             </div>
             <div class="onboarding-content"></div>
@@ -238,10 +257,10 @@ const OnboardingTour = (function() {
                 <div class="onboarding-progress"></div>
                 <div class="onboarding-actions">
                     <button class="btn btn-ghost onboarding-back" disabled>
-                        <span>Back</span>
+                        <span>${isZh ? '上一步' : 'Back'}</span>
                     </button>
                     <button class="btn btn-primary onboarding-next">
-                        <span>Next</span>
+                        <span>${isZh ? '下一步' : 'Next'}</span>
                     </button>
                 </div>
             </div>
@@ -370,7 +389,8 @@ const OnboardingTour = (function() {
         const nextBtn = tooltipEl.querySelector('.onboarding-next');
 
         backBtn.disabled = index === 0;
-        nextBtn.querySelector('span').textContent = index === TOUR_STEPS.length - 1 ? 'Finish' : 'Next';
+        const isZh = window.I18n?.getLang?.() === 'zh-CN';
+        nextBtn.querySelector('span').textContent = index === TOUR_STEPS.length - 1 ? (isZh ? '完成' : 'Finish') : (isZh ? '下一步' : 'Next');
 
         // Update progress
         updateProgress();
