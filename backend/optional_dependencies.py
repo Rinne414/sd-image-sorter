@@ -233,6 +233,17 @@ def install_packages(packages: Sequence[str]) -> bool:
                 check=True,
                 text=True,
             )
+            # --no-deps skips transitive dependencies. Install them in a second
+            # pass (without --no-deps) so packages like fastembed get 'requests'.
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *packages],
+                    check=False,
+                    text=True,
+                    capture_output=True,
+                )
+            except Exception:
+                pass  # best effort; the main package is already installed
             importlib.invalidate_caches()
             return True
         else:
