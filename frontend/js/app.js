@@ -8970,6 +8970,10 @@ async function runBulkDownload(items) {
     const failures = [];
     let needsRestart = false;
 
+    // Pulse the Setup button so user knows something is running even if modal is closed
+    const setupBtn = $('#btn-open-model-manager');
+    if (setupBtn) setupBtn.classList.add('setup-pulse');
+
     // Show a persistent progress banner inside the model manager modal
     const gridEl = $('#model-manager-grid');
     let banner = document.getElementById('bulk-download-progress-banner');
@@ -9036,7 +9040,14 @@ async function runBulkDownload(items) {
             }
         }
         completed += 1;
+        // Notify per-model completion so user knows progress even if modal is closed
+        if (failures.length === 0 || failures[failures.length - 1]?.id !== item.id) {
+            showToast(appT('models.bulkItemDone', '✓ {name} ({index}/{total})', { name: item.name || item.id, index: completed, total }), 'success');
+        }
     }
+
+    // Stop the pulse indicator
+    if (setupBtn) setupBtn.classList.remove('setup-pulse');
 
     // Refresh model status to reflect the new "ready" rows.
     try {
