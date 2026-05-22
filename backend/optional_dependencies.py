@@ -231,9 +231,22 @@ def install_packages(packages: Sequence[str]) -> bool:
     if not packages:
         return False
     _assert_safe_install_target(packages)
+
+    # Use the fastest PyPI mirror (cached 30 min) so runtime installs
+    # don't crawl on slow paths to pypi.org's Fastly CDN.
+    index_args: list[str] = []
+    try:
+        from config import get_data_dir
+        import mirror_selector
+        selection = mirror_selector.select_pypi_index(data_dir=get_data_dir())
+        if selection and selection.url:
+            index_args = ["--index-url", selection.url, "--extra-index-url", "https://pypi.org/simple"]
+    except Exception:
+        pass  # fall back to default PyPI
+
     try:
         subprocess.run(
-            [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *packages],
+            [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *index_args, *packages],
             check=True,
             text=True,
             capture_output=True,
@@ -246,7 +259,7 @@ def install_packages(packages: Sequence[str]) -> bool:
                 "Retrying with --no-deps to install the pure-Python portion..."
             )
             subprocess.run(
-                [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--no-deps", *packages],
+                [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", "--no-deps", *index_args, *packages],
                 check=True,
                 text=True,
             )
@@ -267,7 +280,7 @@ def install_packages(packages: Sequence[str]) -> bool:
                         missing_deps.append(dep)
                 if missing_deps:
                     subprocess.run(
-                        [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *missing_deps],
+                        [sys.executable, "-m", "pip", "--disable-pip-version-check", "install", *index_args, *missing_deps],
                         check=False,
                         text=True,
                         capture_output=True,
