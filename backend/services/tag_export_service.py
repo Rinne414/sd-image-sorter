@@ -471,7 +471,10 @@ def _allocate_output_path(
 ) -> Optional[str]:
     extension = _sidecar_extension(content_mode)
     filename = sanitize_filename(str(image.get("filename") or f"image_{image.get('id') or 'unknown'}"))
-    basename = os.path.splitext(filename)[0]
+    # In beside_image mode, use the actual file stem from the path to ensure
+    # the sidecar name always matches the image file (critical for LoRA training).
+    stem_override = image.pop("_sidecar_stem_override", None)
+    basename = stem_override if stem_override else os.path.splitext(filename)[0]
     if not basename:
         basename = f"image_{image.get('id') or 'unknown'}"
     # The sidecar filename is always `{basename}{extension}` (e.g. `image_001.txt`).
@@ -630,6 +633,11 @@ def export_tags_batch_request(
                         )
                         continue
                     target_folder = image_dir
+                    # Use the actual file's stem for the sidecar name so it
+                    # always matches the image (critical for LoRA training).
+                    actual_stem = os.path.splitext(os.path.basename(image_path))[0]
+                    if actual_stem:
+                        image["_sidecar_stem_override"] = actual_stem
                 else:
                     target_folder = output_folder
 
