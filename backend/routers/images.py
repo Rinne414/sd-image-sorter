@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Any, List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path as FastAPIPath, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -616,7 +616,7 @@ async def cancel_reconnect_missing_files(
     }
 )
 async def get_image(
-    image_id: int,
+    image_id: int = FastAPIPath(..., ge=1, le=2_147_483_647, description="Image ID (must fit in signed 32-bit int)"),
     service: ImageService = Depends(get_image_service),
 ):
     """Get a single image with its associated tags."""

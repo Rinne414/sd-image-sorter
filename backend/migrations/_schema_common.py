@@ -230,6 +230,23 @@ LEGACY_IMAGE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("content_fingerprint", "TEXT"),
     ("library_order_time", "DATETIME"),
     ("source_file_mtime", "DATETIME"),
+    # v3.2.2: timestamp columns that exist in FULL_SCHEMA but were
+    # missing from the legacy upgrade list. Without these, init_db()
+    # on a sufficiently-old DB (e.g. one created before tagged_at /
+    # indexed_at were introduced) failed with
+    # ``sqlite3.OperationalError: no such column: tagged_at`` while
+    # creating the partial-index ``idx_images_tagged_at``. Adding
+    # them to the legacy backfill list keeps upgrades from very old
+    # installations working.
+    #
+    # Note: ALTER TABLE ADD COLUMN cannot use non-constant defaults
+    # (e.g. ``DEFAULT CURRENT_TIMESTAMP``), so we add ``indexed_at``
+    # without a default. New rows from CREATE TABLE in FULL_SCHEMA get
+    # CURRENT_TIMESTAMP; rows backfilled by this legacy path stay NULL
+    # until the user re-scans.
+    ("created_at", "DATETIME"),
+    ("indexed_at", "DATETIME"),
+    ("tagged_at", "DATETIME"),
     # v3.2.1 color analysis columns
     ("dominant_colors", "TEXT"),
     ("avg_brightness", "REAL"),
