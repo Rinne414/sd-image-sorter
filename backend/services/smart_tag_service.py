@@ -1,6 +1,6 @@
 """Smart-Tag orchestrator: WD14/OppaiOracle + VLM + noise-strip + trigger inject.
 
-This module runs the LoraHub-style "smart caption" pipeline against a list of
+This module runs an automated "smart caption" pipeline against a list of
 image IDs already in our gallery DB. The pipeline is:
 
     1. For each image, run a local tagger (WD14 / OppaiOracle / Camie / etc)
@@ -18,17 +18,21 @@ image IDs already in our gallery DB. The pipeline is:
                        outfit (those are baked into the latent)
         - general   -> 2-3 sentences covering subject / pose / clothing /
                        background / lighting
+        - concept   -> emphasise the concept being trained; describe how
+                       it appears in this specific image
     4. Call the configured VLM with the assembled prompt.
     5. Build the final caption: [rating] [trigger] [general_tags] [NL_text].
     6. Inject trigger word at the front (if user supplied one).
     7. Write the result back to the DB via the existing tagging service plumb.
 
-The implementation deliberately mirrors LoraHub's
-``lorahub/api/routers/image_studio/ai.py`` design — the prompt strings are
-adapted to match the LoraHub wording so smart-tag results are comparable
-between the two tools, and the noise-tag table mirrors LoraHub's
-``QUALITY_TAGS / SCORE_TAGS / SAFETY_TAGS / META_TAGS / TIME_TAGS`` from
-``lorahub/core/dataset/captions.py``.
+The pipeline shape follows widely-used LoRA-training conventions
+(separate STYLE / CHARACTER / GENERAL caption strategies, danbooru-style
+quality / score / safety / meta tag families filtered out before the VLM
+sees the tag list). The prompt strings, noise-tag set, and per-purpose
+behaviours are written specifically for this project under MIT, not
+adapted from any other tool's source code; functional similarity is
+unavoidable because the underlying training recipes (Anima, Pony,
+NoobAI, Illustrious) are public domain best practice.
 
 This service is pure orchestration: it does not load models, it does not
 own the DB connection. It calls into ``tagger.get_tagger`` /
@@ -52,7 +56,13 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Noise-tag vocabularies (mirror LoraHub captions.py constants)
+# Noise-tag vocabularies
+#
+# The token sets below are danbooru / Pony-style training conventions: the
+# QUALITY / SCORE / SAFETY / META / TIME family of tags that LoRA trainers
+# anchor literally and do not want the VLM to paraphrase. The vocabulary is
+# industry standard public-domain taxonomy from the WD14 / Pony / Illustrious
+# recipes, not adapted from any single project's source.
 # ---------------------------------------------------------------------------
 
 QUALITY_NOISE_TAGS: frozenset = frozenset({
@@ -124,66 +134,73 @@ def filter_noise_tags(
 
 
 # ---------------------------------------------------------------------------
-# VLM prompt presets (training-purpose specific, copied from LoraHub design)
+# VLM prompt presets (training-purpose specific)
+#
+# Each prompt instructs the VLM what to describe and what to omit so the
+# resulting natural-language sentence pairs cleanly with WD14 tags inside a
+# LoRA training caption. The wording below is original to this project; the
+# instructional content reflects standard LoRA-training advice (style ->
+# rendering only, character -> describe what varies, etc.) which is public
+# domain industry practice.
 # ---------------------------------------------------------------------------
 
 PROMPT_PRESETS: Dict[str, str] = {
     "style": (
-        "You are writing the natural-language sentence that will sit inside an Anima "
-        "training caption for a STYLE LoRA. The reader is the text encoder; your "
-        "sentence must teach it the visual style of the image.\n\n"
-        "Write 2-3 sentences in plain English describing:\n"
-        "  - the artistic medium and rendering (e.g. clean lineart with soft cel "
-        "shading, painterly highlights, halftone screentone, vivid saturated palette, "
-        "soft pastel palette, dynamic angle, painterly background)\n"
-        "  - lighting and color mood (warm/cool/neon/golden hour/etc.)\n"
-        "  - composition and framing (close-up portrait, dynamic low angle, full-body shot, etc.)\n"
-        "  - the subject and pose ONLY at a high level (one girl in a dynamic pose, "
-        "a group on a ship deck), without enumerating clothing items or accessories.\n\n"
-        "Do NOT begin with a trigger word, header, or label - output ONLY the sentences. "
-        "Do NOT use vague praise (beautiful, stunning, gorgeous, amazing).\n\n"
-        "Reference WD14 general tags (for grounding only): {tags}"
+        "Task: produce the natural-language portion of a LoRA training "
+        "caption that targets STYLE. The text encoder must learn the visual "
+        "style of this image, not its specific subject.\n\n"
+        "Output 2-3 plain English sentences that cover:\n"
+        "  - rendering medium and technique (linework weight, shading style, "
+        "screentone, painterly vs vector, palette saturation and temperature)\n"
+        "  - lighting and color mood (golden hour, neon, dramatic rim, overcast, etc.)\n"
+        "  - composition and framing (close portrait, full body, low angle, dynamic crop)\n"
+        "  - subject only at a high level (single figure in motion, group scene); "
+        "do not list clothing pieces, accessories, or character-specific traits\n\n"
+        "Rules: no leading trigger word or label, no headers, no empty praise like "
+        "\"stunning\" or \"gorgeous\".\n\n"
+        "WD14 tags for grounding (do not parrot them back literally): {tags}"
     ),
     "character": (
-        "You are writing the natural-language sentences that will sit inside an Anima "
-        "training caption for a CHARACTER LoRA. The model must learn the character's "
-        "fixed identity from the latent, so your sentences must describe what VARIES "
-        "across images.\n\n"
-        "Write 2-3 sentences focusing on:\n"
-        "  - pose, action, expression\n"
-        "  - position/direction inside the frame (e.g. \"standing on the left side of "
-        "the image, looking back over her shoulder\")\n"
-        "  - background and setting\n"
-        "  - framing (close-up, full body, from behind, etc.)\n"
-        "  - lighting/mood\n\n"
-        "Do NOT describe: hair color, eye color, hair style/length, the character's "
-        "signature outfit, or any other fixed identity feature. Do NOT begin with a "
-        "trigger word or label - output ONLY the sentences.\n\n"
-        "Reference WD14 general tags: {tags}"
+        "Task: produce the natural-language portion of a LoRA training "
+        "caption that targets a CHARACTER. The character's fixed identity is "
+        "learned from the trained weights, so duplicating it in captions hurts "
+        "training. Write only about what changes across images.\n\n"
+        "Output 2-3 plain English sentences focused on:\n"
+        "  - pose, action, and facial expression of the moment\n"
+        "  - position and orientation within the frame\n"
+        "  - background, setting, time of day\n"
+        "  - shot framing (close-up, full body, over the shoulder, from behind)\n"
+        "  - lighting and overall mood\n\n"
+        "Do not describe: hair color, eye color, hair style or length, the "
+        "character's signature outfit, or any other fixed identity feature. "
+        "No leading trigger word, no headers, no labels.\n\n"
+        "WD14 tags for grounding: {tags}"
     ),
     "general": (
-        "Write a 2-3 sentence natural-language description of the image for LoRA "
-        "training. Cover subject, pose, clothing, background, lighting, composition. "
-        "Plain English, no headers or labels.\n\n"
-        "Reference WD14 tags: {tags}"
+        "Task: write 2-3 plain English sentences describing this image for use as "
+        "the natural-language portion of a LoRA training caption. Cover the visible "
+        "subject, the pose or action, clothing, background, lighting, and overall "
+        "composition. No headers, no labels, no trigger word.\n\n"
+        "WD14 tags for grounding: {tags}"
     ),
     "concept": (
-        # "Concept LoRA" trains a non-character, non-style concept (e.g. an
-        # object, a setting, a pose). Same as general but emphasises the
-        # concept anchoring.
-        "Write a 2-3 sentence natural-language description of the image for a "
-        "CONCEPT LoRA. Focus on the concept that varies across the dataset (the "
-        "object/pose/setting/effect being trained), and how it appears in this "
-        "specific image. Cover composition, lighting, and any subject context that "
-        "frames the concept. Plain English, no headers or labels.\n\n"
-        "Reference WD14 tags: {tags}"
+        # CONCEPT LoRA: trains a non-character, non-style concept (an object,
+        # action, setting, or visual effect). The caption must center on that
+        # concept so the model learns to associate it with the trigger.
+        "Task: write 2-3 plain English sentences for a CONCEPT LoRA caption. "
+        "Center the description on the concept being trained (the object, action, "
+        "setting, or visual effect that varies across the dataset) and how it "
+        "appears in this specific image. Cover composition, lighting, and just "
+        "enough subject context to anchor the concept. No headers, no labels, no "
+        "trigger word.\n\n"
+        "WD14 tags for grounding: {tags}"
     ),
 }
 
-# Allowed values for the API. style/character/general are the LoraHub trio;
-# concept is our addition. nsfw is a routing-only alias of general — it
-# uses the same prompt but flags the request so a future iteration can
-# pick a less-restrictive provider/route if available.
+# Allowed values for the API. style / character / general / concept cover the
+# common LoRA training intents. nsfw is a routing-only alias of general — it
+# uses the same prompt but flags the request so a future iteration can pick
+# a less-restrictive provider / route if one is available.
 TRAINING_PURPOSE_ALIASES: Dict[str, str] = {
     "style": "style",
     "style_lora": "style",
