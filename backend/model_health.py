@@ -497,6 +497,16 @@ def get_sam3_checkpoint_path() -> Optional[str]:
 
 
 def _resolve_artist_runtime_path() -> Optional[str]:
+    """Locate an LSNet runtime checkout on disk.
+
+    Mirrors ``artist_identifier._resolve_lsnet_runtime_path`` so the
+    ``/api/artists/diagnostics`` endpoint and the actual identifier agree
+    on whether the runtime is available. Older installs commonly have the
+    runtime under ``<repo>/models/artist/comfyui-lsnet-runtime/`` (legacy
+    path); that location must be probed here too, otherwise the
+    diagnostics permanently reports ``available: false`` even though the
+    identifier loads and runs successfully.
+    """
     candidates: List[Path] = []
     if ARTIST_LSNET_CODE_PATH:
         candidates.append(Path(ARTIST_LSNET_CODE_PATH).expanduser())
@@ -508,6 +518,12 @@ def _resolve_artist_runtime_path() -> Optional[str]:
             artist_root / "comfyui-lsnet-runtime",
             artist_root / "comfyui-lsnet",
             artist_root / "lsnet-test",
+            # Legacy paths (pre-data/models/ migration). Keep parity with
+            # artist_identifier._resolve_lsnet_runtime_path so diagnostics
+            # don't drift from runtime behaviour.
+            project_root / "models" / "artist" / "comfyui-lsnet",
+            project_root / "models" / "artist" / "lsnet-test",
+            project_root / "models" / "artist" / "comfyui-lsnet-runtime",
             project_root / "third_party" / "comfyui-lsnet",
             project_root / "third_party" / "lsnet-test",
         ]
