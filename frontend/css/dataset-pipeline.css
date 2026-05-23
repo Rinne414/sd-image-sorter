@@ -350,3 +350,24 @@
     font-size: 0.76rem;
     flex-basis: 100%;
 }
+
+
+
+/* ============== Tag-all retag toggle (v3.2.2 follow-up) ============== */
+
+.dataset-tag-retag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    padding: 6px 4px;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dataset-tag-retag-row input[type="checkbox"] {
+    flex-shrink: 0;
+    cursor: pointer;
+}
