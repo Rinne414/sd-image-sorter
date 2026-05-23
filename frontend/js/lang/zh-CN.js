@@ -2875,6 +2875,8 @@ window.I18nLang_zhCN = {
     'dataset.statusTagged': '已打标',
     'dataset.statusEdited': '已编辑',
     'dataset.confirmSummaryUntagged': '⚠️ 有 <strong>{count} 张</strong> caption 是空的，对应的 .txt 也会是空文件。建议先点「给所有图打标」，或回 Step B 手填。',
+    'dataset.confirmSummaryFewImages': '⚠️ 只有 <strong>{count} 张</strong>。大部分 LoRA 训练器希望 15-50 张图才能稳定学到一个角色 / 风格，少于 10 张容易学不会。',
+    'dataset.confirmSummarySmallImages': '⚠️ 有 <strong>{count} 张</strong>图片最短边小于 512 px — 训练器会自动放大它们，画质会下降。建议换成更高解析度的来源。',
     'dataset.quickfillQuality': '✨ 加上常用质量标签',
     'dataset.quickfillQualityDone': '已把常用质量标签加进「通用标签」。',
     'dataset.quickfillTrigger': '🏷️ 把触发词也加进 caption',

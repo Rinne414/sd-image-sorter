@@ -373,7 +373,41 @@ def render_template(template: str, context: TemplateContext) -> str:
         return resolved.get(var, "")
 
     rendered = _TEMPLATE_VAR_PATTERN.sub(substitute, template)
-    return _cleanup_separators(rendered, context.separator)
+    cleaned = _cleanup_separators(rendered, context.separator)
+    return _dedup_tokens(cleaned, context.separator)
+
+
+def _dedup_tokens(text: str, separator: str) -> str:
+    """Drop duplicate tokens while preserving first-occurrence order.
+
+    Two tokens are duplicates when their normalised forms match — case
+    is ignored, leading/trailing whitespace is stripped, and
+    underscores are folded with spaces. This is the same equivalence
+    the rest of the engine uses (``_normalize_blacklist_item``).
+
+    Concretely it fixes the LoRA-training regression where ``{trigger}``
+    and an item in ``{append}`` could both produce the trigger word
+    once with an underscore (``my_oc``) and once after underscore
+    normalisation (``my oc``); a real trainer would treat those as
+    two distinct BPE tokens.
+    """
+    if not text:
+        return ""
+    sep = separator if separator else ", "
+    parts = [p.strip() for p in text.split(sep)]
+    seen: set = set()
+    kept: list = []
+    for p in parts:
+        if not p:
+            continue
+        # Treat ``_`` and `` `` as equivalent so ``my_oc`` and ``my oc``
+        # collapse to one entry. Case-insensitive.
+        norm = " ".join(p.replace("_", " ").lower().split())
+        if norm in seen:
+            continue
+        seen.add(norm)
+        kept.append(p)
+    return sep.join(kept)
 
 
 def _cleanup_separators(text: str, separator: str) -> str:

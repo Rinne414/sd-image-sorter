@@ -2874,6 +2874,8 @@ window.I18nLang_en = {
     'dataset.statusTagged': 'tagged',
     'dataset.statusEdited': 'edited',
     'dataset.confirmSummaryUntagged': '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Step B.',
+    'dataset.confirmSummaryFewImages': '⚠️ Only <strong>{count}</strong> images. Most LoRA trainers want 15-50 images for a stable character/style; below 10 the model may not generalize.',
+    'dataset.confirmSummarySmallImages': '⚠️ <strong>{count}</strong> images have a side under 512 px — most trainers will upscale them, which hurts quality. Replace with higher-resolution sources if possible.',
     'dataset.quickfillQuality': '✨ Add recommended quality tags',
     'dataset.quickfillQualityDone': 'Added recommended quality tags to "Common tags".',
     'dataset.quickfillTrigger': '🏷️ Add my trigger word here',

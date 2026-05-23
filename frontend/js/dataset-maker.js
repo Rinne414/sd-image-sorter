@@ -239,6 +239,32 @@
                     seen.add(n);
                 }
             }
+
+            // LoRA-trainer audit: capture width/height NOW from the gallery's
+            // already-loaded image records so the pre-flight modal can warn
+            // about images below 512 px without making per-image API calls.
+            // The AppState array has the full image metadata; we just need
+            // to copy the dimensions into our meta map.
+            try {
+                const galleryRecords = (window.AppState && window.AppState.images) || [];
+                const byId = new Map();
+                for (const rec of galleryRecords) {
+                    if (rec && rec.id != null) byId.set(Number(rec.id), rec);
+                }
+                for (const id of this.imageIds) {
+                    const rec = byId.get(Number(id));
+                    if (!rec) continue;
+                    const existing = this.meta.get(Number(id)) || {};
+                    this.meta.set(Number(id), {
+                        ...existing,
+                        filename: existing.filename || rec.filename || '',
+                        thumbnail_path: existing.thumbnail_path || rec.thumbnail_path || '',
+                        width: Number(rec.width || 0),
+                        height: Number(rec.height || 0),
+                    });
+                }
+            } catch { /* gallery state shape might shift; non-fatal */ }
+
             const added = this.imageIds.length - before;
             await this._fetchMissingMeta();
             await this._fetchMissingCaptions();

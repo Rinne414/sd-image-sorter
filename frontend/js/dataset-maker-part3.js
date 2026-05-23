@@ -257,6 +257,32 @@
                 { count: untaggedCount })}</span>`);
         }
 
+        // LoRA-trainer guidance: warn when the dataset is below the
+        // size most trainers consider workable (~15-50 images for a
+        // character LoRA). Empty / tiny datasets are the most common
+        // reason a noob's first LoRA comes out broken.
+        if (this.imageIds.length > 0 && this.imageIds.length < 10) {
+            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryFewImages',
+                '⚠️ Only <strong>{count}</strong> images. Most LoRA trainers want 15-50 images for a stable character/style; below 10 the model may not generalize.',
+                { count: this.imageIds.length })}</span>`);
+        }
+
+        // Dimension warning - count images with a side under 512 px,
+        // which is the floor below which any base model has to upscale
+        // (and that quality loss tends to bleed into the trained LoRA).
+        let smallCount = 0;
+        for (const id of this.imageIds) {
+            const meta = this.meta.get(id);
+            const w = Number((meta && meta.width) || 0);
+            const h = Number((meta && meta.height) || 0);
+            if (w > 0 && h > 0 && Math.min(w, h) < 512) smallCount++;
+        }
+        if (smallCount > 0) {
+            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummarySmallImages',
+                '⚠️ <strong>{count}</strong> images have a side under 512 px — most trainers will upscale them, which hurts quality. Replace with higher-resolution sources if possible.',
+                { count: smallCount })}</span>`);
+        }
+
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
         modal.hidden = false;
     };

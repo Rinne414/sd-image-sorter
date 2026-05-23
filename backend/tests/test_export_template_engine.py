@@ -55,3 +55,78 @@ def test_template_blacklist_filters_prompt_and_caption_variables():
     )
 
     assert rendered == "close-up portrait, soft light, bad anatomy, blue_eyes"
+
+
+
+
+def test_template_dedups_trigger_and_append_underscore_variants():
+    """LoRA-trainer regression: when the trigger word is also added to
+    common_tags via the "🏷️ Add my trigger word here" quick-fill, the
+    rendered caption used to contain it twice — once at position #1 with
+    underscore (from {trigger}) and once after underscore normalisation
+    (e.g. ``my_oc, ..., my oc, ...``). A real trainer would then treat
+    those as two different BPE tokens. Dedup must catch this even when
+    the two variants differ only by ``_`` vs space + case.
+    """
+    image = {"id": 1, "rating": "general", "ai_caption": "", "prompt": ""}
+    tags = [
+        {"tag": "1girl", "confidence": 0.9},
+        {"tag": "looking_at_viewer", "confidence": 0.85},
+        {"tag": "school_uniform", "confidence": 0.85},
+    ]
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{trigger}, {tags:filtered}, {append}",
+        trigger="my_oc",
+        append=["my_oc", "masterpiece", "best_quality"],
+        underscore_to_space_override=True,
+        preserve_underscore_prefixes_override=["score_"],
+    )
+    tokens = [t.strip() for t in rendered.split(",")]
+    # Trigger present, exactly once, at position #1
+    assert tokens[0] == "my_oc", f"trigger should be at position #1, got {tokens!r}"
+    # No second copy of the trigger anywhere else (underscore or space form)
+    norm = lambda s: s.replace("_", " ").lower()
+    duplicates = [t for t in tokens[1:] if norm(t) == "my oc"]
+    assert duplicates == [], f"trigger appeared twice: {tokens!r}"
+    # Sanity: the other tags still landed
+    assert "1girl" in tokens
+    assert "looking at viewer" in tokens or "looking_at_viewer" in tokens
+
+
+def test_template_dedups_case_insensitive():
+    """``Masterpiece`` and ``masterpiece`` should collapse to one token."""
+    image = {"id": 1}
+    tags = [{"tag": "Masterpiece", "confidence": 0.9}]
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{tags:filtered}, {append}",
+        trigger="",
+        append=["masterpiece", "best_quality"],
+        underscore_to_space_override=False,
+    )
+    tokens = [t.strip().lower() for t in rendered.split(",")]
+    assert tokens.count("masterpiece") == 1, f"masterpiece appeared {tokens.count('masterpiece')} times in {rendered!r}"
+
+
+def test_template_preserves_distinct_tags():
+    """Dedup must not eat distinct tags that just share a substring."""
+    image = {"id": 1}
+    tags = [
+        {"tag": "long_hair", "confidence": 0.9},
+        {"tag": "short_hair", "confidence": 0.9},  # different tag
+        {"tag": "blue_hair", "confidence": 0.85},
+    ]
+    rendered = build_export_caption(
+        image, tags,
+        preset_id="custom",
+        template_override="{tags:filtered}",
+        trigger="",
+        underscore_to_space_override=True,
+    )
+    tokens = [t.strip() for t in rendered.split(",")]
+    assert "long hair" in tokens
+    assert "short hair" in tokens
+    assert "blue hair" in tokens
