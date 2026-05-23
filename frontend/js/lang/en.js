@@ -1256,6 +1256,11 @@ window.I18nLang_en = {
     'selection.copyVerb': 'Copy',
     'selection.exportTagsToFiles': 'Same-name .txt...',
     'selection.censorEdit': 'Censor',
+    // v3.2.2 task #5: Tag Images modal Smart Tag hint banner.
+    'tagModal.smartTagHintTitle': 'Building a LoRA training set?',
+    'tagModal.smartTagHintBody': 'Dataset Maker → Smart Tag bundles WD14 / OppaiOracle tagging, VLM descriptions, trigger word injection, and same-name caption export into one flow.',
+    'tagModal.smartTagHintGo': 'Open Dataset Maker',
+    'tagModal.smartTagHintDismiss': "Don't show again",
     // v3.2.2 task #4: new "Send to Dataset Maker" gallery-toolbar action.
     // Replaces the old "Analyze Colors" button — color analysis still
     // runs from the Tag Images modal's Color tab.

@@ -1,0 +1,74 @@
+/* SD Image Sorter — Smart Tag hint banner inside the Tag Images modal (v3.2.2 T5)
+ * Encourages batch-LoRA users to switch to Dataset Maker → Smart Tag.
+ * Visually parallels color-backfill-banner so existing users recognise it
+ * as a "background hint" element rather than a destructive warning. */
+
+.smart-tag-hint-banner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 14px;
+    margin: 10px 0 14px;
+    padding: 11px 14px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(
+        135deg,
+        rgba(168, 85, 247, 0.10),
+        rgba(var(--accent-primary-rgb, 255, 138, 61), 0.08)
+    );
+    border: 1px solid rgba(168, 85, 247, 0.28);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
+    animation: smart-tag-hint-in 220ms ease-out;
+}
+
+.smart-tag-hint-banner[hidden] { display: none; }
+
+@keyframes smart-tag-hint-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.smart-tag-hint-banner-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(168, 85, 247, 0.18);
+    font-size: 1.05rem;
+}
+
+.smart-tag-hint-banner-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.smart-tag-hint-banner-copy strong {
+    color: var(--text-primary);
+    font-size: 0.92rem;
+}
+
+.smart-tag-hint-banner-copy span {
+    color: var(--text-secondary);
+    font-size: 0.81rem;
+    line-height: 1.45;
+}
+
+.smart-tag-hint-banner-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+    .smart-tag-hint-banner {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+    .smart-tag-hint-banner-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-end;
+    }
+}

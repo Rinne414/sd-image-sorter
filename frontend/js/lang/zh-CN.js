@@ -1430,6 +1430,11 @@ window.I18nLang_zhCN = {
     'selection.copyVerb': '复制',
     'selection.exportTagsToFiles': '同名 .txt...',
     'selection.censorEdit': '马赛克编辑',
+    // v3.2.2 任务 #5: 打标弹窗里的 Smart Tag 引导横幅。
+    'tagModal.smartTagHintTitle': '在做 LoRA 训练集？',
+    'tagModal.smartTagHintBody': 'Dataset Maker → Smart Tag 把 WD14 / OppaiOracle 标注、VLM 描述、触发词注入、同名 caption 导出全部串成一条流程。',
+    'tagModal.smartTagHintGo': '前往 Dataset Maker',
+    'tagModal.smartTagHintDismiss': '不再提示',
     // v3.2.2 任务 #4: 新增「送至 Dataset Maker」常用动作。
     // 取代原本的「色彩分析」按钮（色彩分析改在打标弹窗的「色彩分析」分页里跑）。
     'selection.sendToDatasetMaker': '送至 Dataset Maker',

@@ -295,6 +295,61 @@
             const backdrop = modal.querySelector('.modal-backdrop');
             if (backdrop) backdrop.addEventListener('click', closeModal);
         }
+
+        // -------- v3.2.2 task #5: Tag Images modal hint banner --------
+        // The banner inside #tag-modal points returning users at the
+        // Smart Tag wizard. localStorage flag persists dismissal.
+        const HINT_DISMISSED_KEY = 'sd-image-sorter-tag-modal-smart-tag-hint-dismissed';
+
+        const tagModal = document.getElementById('tag-modal');
+        const hintBanner = document.getElementById('tag-modal-smart-tag-hint');
+        if (tagModal && hintBanner) {
+            const isDismissed = () => {
+                try { return localStorage.getItem(HINT_DISMISSED_KEY) === '1'; }
+                catch { return false; }
+            };
+            const refreshHintVisibility = () => {
+                hintBanner.hidden = isDismissed();
+            };
+            // Initial state.
+            refreshHintVisibility();
+
+            // Re-evaluate every time the Tag modal becomes visible (because
+            // the canonical project class for "open" is .visible, applied
+            // via window.showModal). We use a MutationObserver instead of
+            // forking showModal to keep this self-contained.
+            const obs = new MutationObserver(() => {
+                if (tagModal.classList.contains('visible')) {
+                    refreshHintVisibility();
+                }
+            });
+            obs.observe(tagModal, { attributes: true, attributeFilter: ['class'] });
+
+            const goBtn = document.getElementById('btn-tag-modal-smart-tag-go');
+            if (goBtn) {
+                goBtn.addEventListener('click', () => {
+                    // Close Tag modal, switch to Dataset Maker view, open
+                    // the Smart Tag modal so the user lands in the right
+                    // workflow without extra clicks.
+                    if (typeof window.hideModal === 'function') {
+                        try { window.hideModal('tag-modal'); } catch (_e) {}
+                    }
+                    if (typeof window.switchView === 'function') {
+                        try { window.switchView('dataset'); } catch (_e) {}
+                    }
+                    setTimeout(() => {
+                        try { openModal(); } catch (_e) {}
+                    }, 220);
+                });
+            }
+            const dismissBtn = document.getElementById('btn-tag-modal-smart-tag-dismiss');
+            if (dismissBtn) {
+                dismissBtn.addEventListener('click', () => {
+                    try { localStorage.setItem(HINT_DISMISSED_KEY, '1'); } catch {}
+                    hintBanner.hidden = true;
+                });
+            }
+        }
     }
 
     // Defer binding until the DOM is ready (this script may load
