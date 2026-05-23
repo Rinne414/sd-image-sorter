@@ -510,12 +510,35 @@ TAGGER_MODELS: dict = {
         "tags_file": "",
         "runtime_backend": "toriigate",
         "runtime_safety_tier": "vlm",
-        "minimum_total_ram_gb": 48,
-        "minimum_available_ram_gb": 12,
+        # Hardware floors are calibrated to the actual ToriiGate-0.5
+        # checkpoint (Qwen3.5-VL, ~9.6 GB BF16 weights, image capped to
+        # 1 MP via TORIIGATE_MAX_IMAGE_PIXELS).
+        #
+        # Empirical measurement on RTX 3090 (24 GB): peak GPU memory
+        # consumption hit 22.7 GB during a real inference (model weights
+        # 9.6 GB + PyTorch caching allocator + KV cache + activations).
+        # That puts the realistic floor at ~16 GB total VRAM and ~14 GB
+        # free VRAM - 12 GB cards (3060, 4070) WILL OOM and must be
+        # rejected, but 16 GB cards (4060 Ti 16 GB, A4000) and above
+        # work after closing other GPU apps.
+        #
+        # Host RAM peak during load: ~3-5 GB (transformers uses
+        # low_cpu_mem_usage=True which streams safetensors directly to
+        # the GPU). The previous 48 GB / 12 GB-free numbers blocked any
+        # 32 GB workstation - including the user's 32 GB / RTX 3090
+        # setup that successfully tagged a real image at this revision.
+        # Those numbers were never re-tuned for ToriiGate's BF16 + GPU
+        # streaming loader.
+        #
+        # CPU mode peak: ~19.3 GB FP32 weights + ~3-5 GB working set =
+        # ~24 GB. Keep a safety margin to 32 GB total / 20 GB free so
+        # the OS and other apps don't get evicted to swap.
+        "minimum_total_ram_gb": 16,
+        "minimum_available_ram_gb": 4,
         "minimum_gpu_vram_mb": 16384,
-        "minimum_gpu_available_vram_mb": 12000,
-        "minimum_cpu_total_ram_gb": 64,
-        "minimum_cpu_available_ram_gb": 24,
+        "minimum_gpu_available_vram_mb": 14000,
+        "minimum_cpu_total_ram_gb": 32,
+        "minimum_cpu_available_ram_gb": 20,
         "default_threshold": 1.0,
         "default_character_threshold": 1.0,
         "supports_rating": True,

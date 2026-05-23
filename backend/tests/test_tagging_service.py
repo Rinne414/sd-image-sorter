@@ -105,13 +105,22 @@ def test_runtime_plan_uses_small_gpu_chunks_for_toriigate():
 
 
 def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
+    """Verify the GPU hardware floor still rejects clearly-undersized hosts.
+
+    v3.2.2: thresholds were retuned to the actual ToriiGate-0.5 BF16 footprint
+    (16 GB total RAM / 4 GB free / 12 GB VRAM / 10.5 GB free VRAM). The
+    previous 48 GB / 12 GB / 16 GB / 12 GB numbers blocked any 32 GB
+    workstation - including the user's 32 GB / RTX 3090 setup that can
+    actually run the model fine - so this test now uses an 8 GB RAM box to
+    exercise the same code path with a value that's still below the floor.
+    """
     service = TaggingService()
 
     with patch(
         "hardware_monitor.get_system_info",
         return_value={
-            "total_ram_gb": 32,
-            "available_ram_gb": 20,
+            "total_ram_gb": 8,
+            "available_ram_gb": 2,
             "gpu_vram_total_mb": 24576,
             "gpu_vram_available_mb": 20000,
             "torch_cuda_available": True,
@@ -128,9 +137,35 @@ def test_toriigate_validation_blocks_gpu_when_system_ram_is_below_minimum():
         except HTTPException as exc:
             assert exc.status_code == 409
             assert "ToriiGate GPU mode is blocked" in exc.detail
-            assert "48 GB RAM" in exc.detail
+            assert "16 GB RAM" in exc.detail
         else:
-            raise AssertionError("Expected ToriiGate hardware validation to reject 32 GB RAM")
+            raise AssertionError("Expected ToriiGate hardware validation to reject 8 GB RAM")
+
+
+def test_toriigate_validation_allows_32gb_ram_24gb_vram_box():
+    """User-facing scenario: 32 GB RAM + RTX 3090 (24 GB VRAM, ~14 GB free
+    after closing other apps) should now run ToriiGate. This test pins that
+    promise so any future regression is caught immediately."""
+    service = TaggingService()
+
+    with patch(
+        "hardware_monitor.get_system_info",
+        return_value={
+            "total_ram_gb": 32,
+            "available_ram_gb": 8,
+            "gpu_vram_total_mb": 24576,
+            "gpu_vram_available_mb": 14000,
+            "torch_cuda_available": True,
+            "onnx_providers": ["CPUExecutionProvider"],
+        },
+    ):
+        # Should not raise
+        service._validate_tag_request(
+            TagRequest(
+                model_name="toriigate-0.5",
+                use_gpu=True,
+            )
+        )
 
 
 def test_toriigate_validation_allows_gpu_when_minimums_are_met():

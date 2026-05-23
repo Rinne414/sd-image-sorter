@@ -656,10 +656,12 @@ class TestTaggingPipeline:
         assert data["status"] == "started"
 
     def test_start_tagging_rejects_toriigate_when_hardware_is_below_minimum(self, test_client):
+        """8 GB RAM is clearly below ToriiGate's 16 GB minimum (v3.2.2 retuned
+        floors), so this should still get a clean 409 with the field names."""
         response = None
         with patch("hardware_monitor.get_system_info", return_value={
-            "total_ram_gb": 32,
-            "available_ram_gb": 20,
+            "total_ram_gb": 8,
+            "available_ram_gb": 2,
             "gpu_vram_total_mb": 24576,
             "gpu_vram_available_mb": 20000,
             "torch_cuda_available": True,
