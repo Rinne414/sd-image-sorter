@@ -1780,11 +1780,17 @@ class TestEdgeCases:
         assert response.status_code in [400, 422]
 
     def test_negative_offset(self, test_client, test_db_with_images):
-        """Negative offset should be handled."""
+        """Negative offset should now be rejected (v3.2.2: API contract tightened)."""
         response = test_client.get("/api/images?offset=-1")
 
-        # Should either error or handle gracefully
-        assert response.status_code in [200, 422]
+        # The API now enforces offset >= 0 (was silently treated as 0 before).
+        # Either FastAPI 422 or the project's translated 400 is acceptable.
+        assert response.status_code in [400, 422]
+        body = response.json()
+        # Confirm the error names the offset field for clear UX.
+        if isinstance(body, dict):
+            payload = body.get("details") or body.get("detail") or body
+            assert "offset" in str(payload).lower()
 
     def test_special_characters_in_search(self, test_client, test_db_with_images):
         """Special characters in search should be handled."""

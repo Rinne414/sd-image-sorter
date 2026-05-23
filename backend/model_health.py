@@ -33,6 +33,7 @@ from config import (
     get_clip_model_dir,
     get_nudenet_model_dir,
     get_toriigate_model_dir,
+    get_oppai_oracle_model_dir,
     get_sam3_model_dir,
     get_wd14_model_dir,
     get_yolo_model_dir,
@@ -497,6 +498,16 @@ def get_sam3_checkpoint_path() -> Optional[str]:
 
 
 def _resolve_artist_runtime_path() -> Optional[str]:
+    """Locate an LSNet runtime checkout on disk.
+
+    Mirrors ``artist_identifier._resolve_lsnet_runtime_path`` so the
+    ``/api/artists/diagnostics`` endpoint and the actual identifier agree
+    on whether the runtime is available. Older installs commonly have the
+    runtime under ``<repo>/models/artist/comfyui-lsnet-runtime/`` (legacy
+    path); that location must be probed here too, otherwise the
+    diagnostics permanently reports ``available: false`` even though the
+    identifier loads and runs successfully.
+    """
     candidates: List[Path] = []
     if ARTIST_LSNET_CODE_PATH:
         candidates.append(Path(ARTIST_LSNET_CODE_PATH).expanduser())
@@ -508,6 +519,12 @@ def _resolve_artist_runtime_path() -> Optional[str]:
             artist_root / "comfyui-lsnet-runtime",
             artist_root / "comfyui-lsnet",
             artist_root / "lsnet-test",
+            # Legacy paths (pre-data/models/ migration). Keep parity with
+            # artist_identifier._resolve_lsnet_runtime_path so diagnostics
+            # don't drift from runtime behaviour.
+            project_root / "models" / "artist" / "comfyui-lsnet",
+            project_root / "models" / "artist" / "lsnet-test",
+            project_root / "models" / "artist" / "comfyui-lsnet-runtime",
             project_root / "third_party" / "comfyui-lsnet",
             project_root / "third_party" / "lsnet-test",
         ]
@@ -545,6 +562,9 @@ def get_model_health() -> Dict[str, Any]:
     default_tagger_model = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["model_file"]
     default_tagger_tags = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["tags_file"]
     toriigate_dir = Path(get_toriigate_model_dir()) / "toriigate-0.5"
+    oppai_oracle_root = Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1" / "V1.1_onnx"
+    oppai_oracle_model = oppai_oracle_root / "model.onnx"
+    oppai_oracle_tags = oppai_oracle_root / "selected_tags.csv"
     legacy_model_path = get_default_legacy_model_path()
     nudenet_model = Path(get_nudenet_model_dir()) / "320n.onnx"
     sam3_checkpoint = get_sam3_checkpoint_path()
@@ -624,6 +644,20 @@ def get_model_health() -> Dict[str, Any]:
                 "ToriiGate runtime files are ready."
                 if (toriigate_dir / "config.json").exists() and (toriigate_dir / "model.safetensors").exists()
                 else "ToriiGate files are not downloaded yet. The first run will need a large model download."
+            ),
+        },
+        "oppai_oracle": {
+            "available": oppai_oracle_model.exists() and oppai_oracle_tags.exists(),
+            "model_name": "oppai-oracle-v1.1",
+            "model_dir": str((Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1").resolve()),
+            "model_path": str(oppai_oracle_model.resolve()) if oppai_oracle_model.exists() else None,
+            "tags_path": str(oppai_oracle_tags.resolve()) if oppai_oracle_tags.exists() else None,
+            "requires_gpu": False,
+            "expected_size_mb": 947,
+            "message": (
+                "OppaiOracle V1.1 ONNX bundle is ready."
+                if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
+                else "OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet."
             ),
         },
         "clip": {

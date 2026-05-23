@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Any, List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path as FastAPIPath, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 
@@ -199,9 +199,9 @@ class RemoveSelectedImagesResponse(BaseModel):
 
 
 class SaveEditedMetadataRequest(BaseModel):
-    source_path: str
-    output_path: str
-    format: str = "png"
+    source_path: str = Field(..., min_length=1, description="Source image path (must be non-empty)")
+    output_path: str = Field(..., min_length=1, description="Output image path (must be non-empty)")
+    format: str = Field(default="png", min_length=1, description="Output format. Empty strings are rejected to avoid silent fallthrough to whatever default the writer picks; the caller must explicitly choose png/webp/jpg.")
     quality: Optional[int] = Field(default=None, ge=1, le=100)
     metadata: dict[str, Any] = Field(default_factory=dict)
     allow_overwrite: bool = False
@@ -288,25 +288,60 @@ async def get_images(
         description="Comma-separated list of generators to filter. Options: comfyui, nai, webui, forge",
         examples=["comfyui,nai"],
     ),
+    generator: Optional[str] = Query(
+        default=None,
+        description=(
+            "Singular alias for ``generators``. v3.2.2+ accepts both because users "
+            "(and the OpenAPI examples) reach for the natural singular form first; "
+            "previously ``?generator=nai`` was silently ignored and returned the "
+            "entire unfiltered library."
+        ),
+        examples=["nai"],
+        deprecated=True,
+    ),
     tags: Optional[str] = Query(
         default=None,
         description="Comma-separated list of tags (AND logic - all tags must be present)",
         examples=["1girl,solo,long_hair"],
+    ),
+    tag: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``tags`` (v3.2.2+).",
+        examples=["1girl"],
+        deprecated=True,
     ),
     ratings: Optional[str] = Query(
         default=None,
         description="Comma-separated content ratings. Options: general, sensitive, questionable, explicit",
         examples=["general,sensitive"],
     ),
+    rating: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``ratings`` (v3.2.2+).",
+        examples=["general"],
+        deprecated=True,
+    ),
     checkpoints: Optional[str] = Query(
         default=None,
         description="Comma-separated checkpoint/model names",
         examples=["sd_xl_base_1.0,animagine_xl"],
     ),
+    checkpoint: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``checkpoints`` (v3.2.2+).",
+        examples=["animagine_xl"],
+        deprecated=True,
+    ),
     loras: Optional[str] = Query(
         default=None,
         description="Comma-separated LoRA names",
         examples=["detail_tweaker,add_detail"],
+    ),
+    lora: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``loras`` (v3.2.2+).",
+        examples=["detail_tweaker"],
+        deprecated=True,
     ),
     search: Optional[str] = Query(
         default=None,
@@ -339,7 +374,12 @@ async def get_images(
     ),
     offset: Optional[int] = Query(
         default=None,
-        description="Offset for fallback pagination when the selected sort does not support cursor pagination",
+        ge=0,
+        le=100_000_000,
+        description=(
+            "Offset for fallback pagination when the selected sort does not support cursor pagination. "
+            "Must be non-negative; large offsets are slow at library scale (prefer cursor pagination)."
+        ),
         examples=[200],
     ),
     min_width: Optional[int] = Query(
@@ -444,6 +484,28 @@ async def get_images(
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
+    # v3.2.2: accept singular forms (``generator``, ``tag``, ``rating``,
+    # ``checkpoint``, ``lora``) as aliases for the plural query params so
+    # ``?generator=nai`` etc. no longer silently return the entire library.
+    # Combine plural + singular, dedupe, comma-join.
+    def _merge(plural: Optional[str], singular: Optional[str]) -> Optional[str]:
+        if not singular:
+            return plural
+        combined = (plural + "," + singular) if plural else singular
+        seen, parts = set(), []
+        for tok in combined.split(","):
+            t = tok.strip()
+            if t and t not in seen:
+                seen.add(t)
+                parts.append(t)
+        return ",".join(parts) if parts else None
+
+    generators = _merge(generators, generator)
+    tags = _merge(tags, tag)
+    ratings = _merge(ratings, rating)
+    checkpoints = _merge(checkpoints, checkpoint)
+    loras = _merge(loras, lora)
+
     return service.get_images(
         generators=generators,
         tags=tags,
@@ -611,7 +673,7 @@ async def cancel_reconnect_missing_files(
     }
 )
 async def get_image(
-    image_id: int,
+    image_id: int = FastAPIPath(..., ge=1, le=2_147_483_647, description="Image ID (must fit in signed 32-bit int)"),
     service: ImageService = Depends(get_image_service),
 ):
     """Get a single image with its associated tags."""
@@ -808,6 +870,23 @@ async def save_edited_image_metadata(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (PathValidationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        # v3.2.2: previously bubbled up as 500 "UnhandledException" when
+        # users tried to save into a system-protected directory like
+        # C:\Windows\System32\. That looks like a server crash; return a
+        # 403 with the OS-provided reason instead.
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied writing to output path: {exc}",
+        ) from exc
+    except OSError as exc:
+        # Catch the OS-level errors (read-only path, ENOSPC, ENOENT on
+        # the parent directory, network drive timeout) and surface them
+        # as 400 with the underlying message rather than a generic 500.
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot write to output path: {exc}",
+        ) from exc
 
 
 @router.get(

@@ -13,6 +13,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from PIL import UnidentifiedImageError
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -266,5 +267,20 @@ async def preview_process(
         raise HTTPException(status_code=413, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except UnidentifiedImageError:
+        # Caller uploaded something that isn't a recognizable image (zip, HTML,
+        # empty file). v3.2.2: previously surfaced as 500 with the BytesIO
+        # object's address leaked into the response body. Treat as a client
+        # error with a sanitized message.
+        raise HTTPException(status_code=400, detail="Upload is not a recognizable image file (PNG / JPEG / WebP).")
+    except (OSError, IOError) as exc:
+        # Truncated PNG, corrupt header, or otherwise unreadable bytes.
+        # PIL raises OSError / Image.DecompressionBombError for these. The
+        # caller's input is at fault, not the server, so 400 is correct.
+        logger.warning("Obfuscate preview rejected unreadable upload: %s", exc)
+        raise HTTPException(status_code=400, detail="Image file is corrupt or truncated.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Preview processing failed: {str(e)}")
+        # Genuine server-side failure - log it but keep the wire response
+        # generic so we don't leak Python repr / object addresses.
+        logger.exception("Obfuscate preview failed: %s", e)
+        raise HTTPException(status_code=500, detail="Preview processing failed.")

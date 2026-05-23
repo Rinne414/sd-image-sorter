@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -202,6 +202,54 @@ class BatchMoveRequest(SortFilterRequest):
             raise ValueError(f"operation must be one of: {', '.join(VALID_FILE_OPERATIONS)}")
         return v
 
+    @model_validator(mode='after')
+    def require_at_least_one_filter(self) -> 'BatchMoveRequest':
+        """Catastrophic-foot-gun guard: empty filter set used to mean "match
+        everything in the library". A user with 71k images who fired this
+        endpoint with no filters (e.g. via a 3rd-party script, or via a
+        frontend bug that forgot to forward selected filters) would have
+        their entire library moved into a single folder. Refuse the call
+        unless the caller explicitly opts into "move everything" by passing
+        ``operation='move'`` with the special wildcard search ``"*"``.
+        """
+        # SortFilterRequest fields that, if any of them is set, indicate the
+        # caller actually intended a filter-scoped move.
+        filter_fields = (
+            self.generators, self.tags, self.ratings,
+            self.checkpoints, self.loras, self.prompts,
+            self.exclude_tags, self.exclude_generators,
+            self.exclude_ratings, self.exclude_checkpoints,
+            self.exclude_loras,
+            self.artist, self.search,
+            self.min_width, self.max_width,
+            self.min_height, self.max_height,
+            self.aspect_ratio,
+            self.min_aesthetic, self.max_aesthetic,
+        )
+        # ``self.aspect_ratio`` is acceptable as a filter even though it has
+        # only 3 valid values (square / landscape / portrait); ``ratings``
+        # similarly. A list with at least one entry is the signal.
+        any_set = False
+        for value in filter_fields:
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple, set)) and len(value) == 0:
+                continue
+            if isinstance(value, str) and value.strip() == "":
+                continue
+            any_set = True
+            break
+        if not any_set:
+            raise ValueError(
+                "batch-move requires at least one filter (generators, tags, "
+                "ratings, checkpoints, loras, prompts, artist, search, "
+                "min/max dimensions, aspect_ratio, or aesthetic range). "
+                "Refusing to move every image in the library by default. "
+                "If you really want to move every image, use /api/move with "
+                "an explicit selection_token covering the whole library."
+            )
+        return self
+
 
 class ManualSortStartRequest(SortFilterRequest):
     """Request model for starting manual sort without query-string size limits."""
@@ -228,6 +276,51 @@ class FolderConfig(BaseModel):
 class BrowseFolderRequest(BaseModel):
     """Request model for folder browsing."""
     path: str = Field(default="", max_length=PATH_MAX_LENGTH)
+
+
+# v3.2.2: TTL cache for /api/library-health.
+#
+# The underlying SQL aggregates across the whole ``images`` table (~10
+# SUM/COUNT operations + duplicate-filename grouping + folder grouping
+# + largest-images sort + issue samples). On a 71k-row library the
+# cold-cache call takes ~12 seconds. Without caching, the home page,
+# gallery, and diagnostics panel all hit the same endpoint and cause
+# concurrent reads to time out.
+#
+# 60s freshness is the right granularity for a "library health" report
+# — none of the inputs (image count, embedding completeness, missing
+# metadata) change within seconds. Tagging or scanning a batch will
+# refresh once the TTL expires; the user can also force a refresh by
+# reloading after they trigger a long operation.
+#
+# Cache keyed by sample_limit so callers asking for different sample
+# sizes get the right payload.
+_LIBRARY_HEALTH_CACHE_TTL_SECONDS = 60.0
+_LIBRARY_HEALTH_CACHE_LOCK = threading.Lock()
+_LIBRARY_HEALTH_CACHE: Dict[int, Tuple[float, Dict[str, Any]]] = {}
+
+
+def invalidate_library_health_cache() -> None:
+    """Force the next /api/library-health call to recompute (used by tests)."""
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        _LIBRARY_HEALTH_CACHE.clear()
+
+
+def _get_library_health_cached(sample_limit: int) -> Dict[str, Any]:
+    sample_limit = max(1, min(int(sample_limit), 25))
+    now = time.time()
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        cached = _LIBRARY_HEALTH_CACHE.get(sample_limit)
+        if cached is not None and (now - cached[0]) < _LIBRARY_HEALTH_CACHE_TTL_SECONDS:
+            return cached[1]
+
+    # Compute outside the lock: SQL is slow, holding the lock would
+    # serialize concurrent callers. Multiple parallel cache misses are
+    # acceptable; whichever finishes last wins the cache slot.
+    payload = db.get_library_health_report(sample_limit=sample_limit)
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        _LIBRARY_HEALTH_CACHE[sample_limit] = (time.time(), payload)
+    return payload
 
 
 class SortingService:
@@ -673,6 +766,14 @@ class SortingService:
                 return False
             self._scan_cancel_event = cancel_event
             self._scan_worker_thread = worker_thread
+            # v3.2.2: transition from "starting" to "running" once the
+            # worker thread is actually live. start_scan sets the initial
+            # status to "starting" so concurrent /api/scan POSTs see the
+            # in-flight slot before the background task picks up the
+            # work; run_scan immediately calls this method to flip it
+            # to "running".
+            if self._scan_progress.get("status") == "starting":
+                self._scan_progress = {**self._scan_progress, "status": "running"}
             return True
 
     def _set_scan_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
@@ -890,9 +991,30 @@ class SortingService:
             raise HTTPException(status_code=400, detail=error or "Invalid folder path")
 
         with self._scan_lock:
+            current_status = self._scan_progress["status"]
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
-            if self._scan_progress["status"] in {"running", "cancelling"} and worker_alive:
-                raise HTTPException(status_code=400, detail="Scan already in progress")
+            # v3.2.2: previously this only rejected when ``status == 'running'``
+            # AND ``worker_alive``. Three concurrent POSTs to /api/scan all
+            # squeezed through the gate because the worker thread isn't
+            # created until later (background_tasks schedules it after the
+            # lock is released), so the second/third callers all observed
+            # worker_alive=False and incorrectly believed nothing was
+            # running. Result: three "Scan started" 200 responses but only
+            # one real scan with the others left in an inconsistent
+            # progress state.
+            #
+            # Fix: any non-terminal status counts as "in progress". Stale
+            # state (status=running but worker died) is recovered through
+            # /api/scan/reset which the UI's "Reset stuck scan" button
+            # already calls; we should not silently overwrite it here.
+            ACTIVE_STATUSES = {"running", "cancelling", "starting"}
+            if current_status in ACTIVE_STATUSES:
+                if worker_alive or current_status in {"starting", "cancelling"}:
+                    raise HTTPException(status_code=409, detail="Scan already in progress")
+                raise HTTPException(
+                    status_code=409,
+                    detail="Previous scan is in a stale state. Call /api/scan/reset first.",
+                )
 
             self._scan_run_id += 1
             run_id = self._scan_run_id
@@ -901,7 +1023,7 @@ class SortingService:
             self._scan_cancel_event = cancel_event
             self._scan_worker_thread = None
             self._scan_progress = {
-                "status": "running",
+                "status": "starting",
                 "step": "starting",
                 "current": 0,
                 "processed": 0,
@@ -2228,8 +2350,22 @@ class SortingService:
         }
 
     def get_library_health(self, sample_limit: int = 8) -> Dict[str, Any]:
-        """Get a read-only library quality and archive-readiness report."""
-        return db.get_library_health_report(sample_limit=sample_limit)
+        """Get a read-only library quality and archive-readiness report.
+
+        v3.2.2: cached with a 60s TTL because the underlying SQL does
+        ~10 SUM/COUNT aggregations and a duplicate-filename grouping
+        across the whole ``images`` table. On a 71k-row library the
+        first call takes ~12s of cold cache time. Without this cache,
+        50 concurrent clients (the gallery view, the home page, the
+        diagnostics panel, etc.) cause read timeouts because each
+        request re-runs the same expensive scan.
+
+        Cache keyed by ``sample_limit`` because that controls the
+        number of sample rows returned in each section, and a request
+        for sample_limit=25 should not be served a cached payload
+        built with sample_limit=8.
+        """
+        return _get_library_health_cached(int(sample_limit))
 
     def resolve_drop(self, folder_name: str, filenames: List[str], dropped_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Resolve browser-dropped folder name or filenames to a real filesystem path."""

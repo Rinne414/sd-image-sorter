@@ -3,12 +3,30 @@ import json
 import logging
 import platform
 import subprocess
+import threading
+import time
 from importlib import metadata
 from typing import Any, Dict, List, Optional
 
 from config import TAGGER_MODELS
 
 logger = logging.getLogger(__name__)
+
+# Cache hardware probe results for a short window so repeated calls (e.g.
+# 12 ``recommend_tagger_config`` lookups inside ``get_system_info_payload``)
+# don't each re-spawn ``nvidia-smi``, ``Get-CimInstance``, and torch.cuda.
+# Hardware capabilities don't change every second; freshness within ~30s
+# is fine for the tagger setup UI. ``invalidate_system_info_cache`` lets
+# tests force a re-probe.
+_SYSTEM_INFO_CACHE_TTL_SECONDS = 30.0
+_SYSTEM_INFO_CACHE_LOCK = threading.Lock()
+_SYSTEM_INFO_CACHE: Dict[str, Any] = {"value": None, "timestamp": 0.0}
+
+
+def invalidate_system_info_cache() -> None:
+    with _SYSTEM_INFO_CACHE_LOCK:
+        _SYSTEM_INFO_CACHE["value"] = None
+        _SYSTEM_INFO_CACHE["timestamp"] = 0.0
 
 
 def _nvidia_smi_probe() -> List[Dict[str, Any]]:
@@ -157,7 +175,24 @@ def _detect_windows_gpu_devices() -> List[Dict[str, Any]]:
         return []
 
 
-def get_system_info() -> Dict[str, Any]:
+def get_system_info(*, refresh: bool = False) -> Dict[str, Any]:
+    """Return cached hardware probe data (TTL ~30s) unless ``refresh`` is true."""
+    if not refresh:
+        with _SYSTEM_INFO_CACHE_LOCK:
+            cached = _SYSTEM_INFO_CACHE["value"]
+            ts = _SYSTEM_INFO_CACHE["timestamp"]
+            if cached is not None and (time.time() - ts) < _SYSTEM_INFO_CACHE_TTL_SECONDS:
+                # Return a copy so callers can't mutate the cached dict.
+                return dict(cached)
+
+    info = _collect_system_info()
+    with _SYSTEM_INFO_CACHE_LOCK:
+        _SYSTEM_INFO_CACHE["value"] = dict(info)
+        _SYSTEM_INFO_CACHE["timestamp"] = time.time()
+    return info
+
+
+def _collect_system_info() -> Dict[str, Any]:
     """
     Detect system hardware capabilities for AI model inference.
 

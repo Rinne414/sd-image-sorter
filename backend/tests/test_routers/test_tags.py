@@ -656,10 +656,12 @@ class TestTaggingPipeline:
         assert data["status"] == "started"
 
     def test_start_tagging_rejects_toriigate_when_hardware_is_below_minimum(self, test_client):
+        """8 GB RAM is clearly below ToriiGate's 16 GB minimum (v3.2.2 retuned
+        floors), so this should still get a clean 409 with the field names."""
         response = None
         with patch("hardware_monitor.get_system_info", return_value={
-            "total_ram_gb": 32,
-            "available_ram_gb": 20,
+            "total_ram_gb": 8,
+            "available_ram_gb": 2,
             "gpu_vram_total_mb": 24576,
             "gpu_vram_available_mb": 20000,
             "torch_cuda_available": True,
@@ -1104,7 +1106,18 @@ class TestExportTagsBatch:
         assert len(produced) == 3
 
     def test_export_batch_sanitizes_sidecar_filename_from_bad_indexed_data(self, test_client, test_db, tmp_path: Path):
-        """Sidecar export must never let a stored filename escape the chosen output folder."""
+        """Sidecar export must never let a stored filename escape the chosen output folder.
+
+        v3.2.2: the export pipeline now derives the sidecar stem from the
+        actual on-disk image path rather than ``sanitize_filename(image["filename"])``
+        (this fixes the LoRA-pairing bug where parens / apostrophes /
+        commas in legitimate filenames were silently turned into
+        underscores). So in this test the produced sidecar is
+        ``unsafe_source.txt`` (matching the on-disk image
+        ``unsafe_source.png``), not ``evil_name.txt``. The malicious
+        ``..\\evil:name.png`` value in the DB ``filename`` field is
+        ignored, which is strictly safer than relying on sanitization.
+        """
         import database as db
         from PIL import Image
 
@@ -1123,11 +1136,19 @@ class TestExportTagsBatch:
 
         assert response.status_code == 200
         assert response.json()["exported"] == 1
-        # 'safe_tag' becomes 'safe tag' because of the v3.2.1 LoRA-friendly
-        # underscore normalization. The point of this test is the FILENAME
-        # (must not escape the output folder), not the tag content.
-        assert (output_dir / "evil_name.txt").read_text(encoding="utf-8") == "safe tag"
+
+        # SECURITY: the malicious filename must not be reflected in the
+        # output anywhere — the sidecar stays inside ``output_dir``.
         assert not (tmp_path / "evil:name.txt").exists()
+        assert not (tmp_path / "evil_name.txt").exists()
+        # No sidecars escaped to ``tmp_path`` itself
+        produced_outside = list(tmp_path.glob("*.txt"))
+        assert produced_outside == [], f"Sidecar escaped output_dir: {produced_outside}"
+
+        # CORRECTNESS: the sidecar matches the on-disk image stem so LoRA
+        # training tools can pair them.
+        assert (output_dir / "unsafe_source.txt").exists()
+        assert (output_dir / "unsafe_source.txt").read_text(encoding="utf-8") == "safe tag"
 
 
     def test_export_batch_normalizes_lora_tag_underscores_by_default(self, test_client, test_db, tmp_path: Path):

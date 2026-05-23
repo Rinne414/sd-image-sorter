@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="/static/css/vlm.css">
     <link rel="stylesheet" href="/static/css/color-backfill.css">
     <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
+    <link rel="stylesheet" href="/static/css/dataset-maker.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -115,33 +116,46 @@
             </button>
 
                 <div class="nav-tabs" role="tablist" aria-label="Application views">
-                    <button class="nav-tab active" id="nav-tab-gallery" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery">
+                    <button class="nav-tab active" id="nav-tab-gallery" data-view="gallery" role="tab" aria-selected="true" aria-controls="view-gallery"
+                            data-i18n-title="nav.gallery" title="Gallery">
                         <span class="tab-icon" aria-hidden="true">🖼️</span>
                         <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                     </button>
-                    <button class="nav-tab" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
+                    <button class="nav-tab" id="nav-tab-reader" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader"
+                            data-i18n-title="nav.reader" title="Reader">
+                        <span class="tab-icon" aria-hidden="true">📖</span>
                         <span class="tab-text" data-i18n="nav.reader">Reader</span>
                     </button>
-                    <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
+                    <button class="nav-tab" id="nav-tab-censor" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor"
+                            data-i18n-title="nav.censor" title="Edit">
                         <span class="tab-icon" aria-hidden="true">🔳</span>
                         <span class="tab-text" data-i18n="nav.censor">Edit</span>
                     </button>
-                    <button class="nav-tab" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
+                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting"
+                            data-i18n-title="nav.sorting" title="Sorting">
                         <span class="tab-icon" aria-hidden="true">📁</span>
                         <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                     </button>
                     <span class="nav-divider" aria-hidden="true"></span>
-                    <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
+                    <button class="nav-tab" id="nav-tab-similar" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar"
+                            data-i18n-title="nav.similar" title="Similar">
                         <span class="tab-icon" aria-hidden="true">🔍</span>
                         <span class="tab-text" data-i18n="nav.similar">Similar</span>
                     </button>
-                    <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
+                    <button class="nav-tab" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist"
+                            data-i18n-title="nav.artist" title="Artist ID">
                         <span class="tab-icon" aria-hidden="true">🎨</span>
                         <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
                     </button>
-                    <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
+                    <button class="nav-tab" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab"
+                            data-i18n-title="nav.promptlab" title="Prompt Lab">
                         <span class="tab-icon" aria-hidden="true">🧪</span>
                         <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
+                    </button>
+                    <button class="nav-tab" id="nav-tab-dataset" data-view="dataset" role="tab" aria-selected="false" aria-controls="view-dataset"
+                            data-i18n-title="nav.dataset" title="Dataset">
+                        <span class="tab-icon" aria-hidden="true">📦</span>
+                        <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
                     </button>
                 </div>
 
@@ -160,7 +174,7 @@
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
                         <button class="mobile-nav-item" data-view="reader" aria-label="Reader view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📋</span>
+                            <span class="mobile-nav-icon" aria-hidden="true">📖</span>
                             <span class="mobile-nav-text" data-i18n="nav.reader">Reader</span>
                         </button>
                         <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
@@ -183,6 +197,10 @@
                         <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📦</span>
+                            <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
@@ -2483,6 +2501,413 @@
                 </div>
             </section>
 
+            <!-- v3.2.2 + issue #5 points 5/6: Dataset Maker view.
+                 Focused workflow for LoRA training dataset preparation:
+                 import from gallery -> tag -> caption edit -> rename -> export.
+                 Reuses gallery selection token, caption-editor logic,
+                 export-preview API, and the new combined export endpoint.
+                 Trimmed compared to Caption Editor: no rearrange queue, no
+                 mode-switching content tabs, single focused workflow. -->
+            <section id="view-dataset" class="view" role="tabpanel" aria-labelledby="nav-tab-dataset">
+                <div class="dataset-maker">
+                    <!-- Welcome / quick-start banner. Dismissable via localStorage. -->
+                    <aside class="dataset-welcome" id="dataset-welcome" role="region" aria-labelledby="dataset-welcome-title">
+                        <button class="dataset-welcome-close" id="btn-dataset-dismiss-welcome"
+                                aria-label="Hide quick start guide" title="Hide this guide">✕</button>
+                        <h2 class="dataset-welcome-title" id="dataset-welcome-title">
+                            <span aria-hidden="true">👋</span>
+                            <span data-i18n="dataset.welcomeTitle">Welcome to Dataset Maker</span>
+                        </h2>
+                        <p class="dataset-welcome-lead" data-i18n="dataset.welcomeLead">
+                            Make a folder full of images + matching <code>.txt</code> caption files, ready to drop into any LoRA trainer. Four short steps:
+                        </p>
+                        <ol class="dataset-steps">
+                            <li class="dataset-step">
+                                <span class="dataset-step-num">1</span>
+                                <div>
+                                    <strong data-i18n="dataset.step1Title">Pick images in Gallery</strong>
+                                    <span data-i18n="dataset.step1Hint">Switch to the 🖼️ Gallery tab, click the images you want, then come back here.</span>
+                                </div>
+                            </li>
+                            <li class="dataset-step">
+                                <span class="dataset-step-num">2</span>
+                                <div>
+                                    <strong data-i18n="dataset.step2Title">Add them to your dataset</strong>
+                                    <span data-i18n="dataset.step2Hint">Click <em>Add from Gallery</em>. Add more anytime — the dataset is just a working tray.</span>
+                                </div>
+                            </li>
+                            <li class="dataset-step">
+                                <span class="dataset-step-num">3</span>
+                                <div>
+                                    <strong data-i18n="dataset.step3Title">Tag &amp; tweak captions</strong>
+                                    <span data-i18n="dataset.step3Hint">(Optional) Click <em>🏷️ Tag all</em>, then click any image to fine-tune its caption.</span>
+                                </div>
+                            </li>
+                            <li class="dataset-step">
+                                <span class="dataset-step-num">4</span>
+                                <div>
+                                    <strong data-i18n="dataset.step4Title">Export</strong>
+                                    <span data-i18n="dataset.step4Hint">Pick an output folder, click <em>📤 Export</em>. Done — point your trainer at that folder.</span>
+                                </div>
+                            </li>
+                        </ol>
+                    </aside>
+
+                    <header class="dataset-header">
+                        <h2 class="dataset-title">
+                            <span aria-hidden="true">📦</span>
+                            <span data-i18n="dataset.title">Dataset Maker</span>
+                        </h2>
+                        <div class="dataset-toolbar">
+                            <button class="btn btn-primary" id="btn-dataset-import-gallery">
+                                <span aria-hidden="true">⬅️</span>
+                                <span data-i18n="dataset.importFromGallery">Add from Gallery</span>
+                            </button>
+                            <button class="btn btn-ghost btn-icon-only" id="btn-dataset-show-help"
+                                    aria-label="Show quick start guide" title="Show quick start guide"
+                                    hidden>
+                                <span aria-hidden="true">❓</span>
+                            </button>
+                            <span class="dataset-count-pill" id="dataset-count">
+                                <strong id="dataset-count-num">0</strong>
+                                <span data-i18n="dataset.imagesInDataset">images</span>
+                            </span>
+                            <button class="btn btn-ghost btn-small" id="btn-dataset-clear" hidden
+                                    data-i18n="dataset.clearAll">Clear all</button>
+                        </div>
+                    </header>
+
+                    <div class="dataset-workbench">
+                        <!-- Left: image queue with thumbnails + edit indicator -->
+                        <aside class="dataset-queue-pane" aria-label="Dataset image queue">
+                            <div class="dataset-pane-head">
+                                <strong data-i18n="dataset.queueTitle">Images in dataset</strong>
+                                <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit caption</span>
+                            </div>
+                            <div class="dataset-queue-list" id="dataset-queue-list">
+                                <!-- Empty state injected by JS so localized strings stay in sync -->
+                            </div>
+                        </aside>
+
+                        <!-- Center: selected image + caption editor -->
+                        <section class="dataset-editor-pane" aria-label="Caption editor for selected image">
+                            <div class="dataset-pane-head">
+                                <strong data-i18n="dataset.editorTitle">Caption editor</strong>
+                                <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
+                                <details class="dataset-editor-help">
+                                    <summary aria-label="What makes a good caption?"
+                                             title="What makes a good caption?">❓</summary>
+                                    <div class="dataset-editor-help-body">
+                                        <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
+                                        <p data-i18n="dataset.helpIntro">
+                                            For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.
+                                        </p>
+                                        <ul>
+                                            <li data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
+                                            <li data-i18n="dataset.helpRule2">DO include your trigger word once (use Step B's "Common tags" so it lands in every caption).</li>
+                                            <li data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
+                                            <li data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
+                                        </ul>
+                                        <p class="dataset-help-shortcut" data-i18n="dataset.helpShortcut">
+                                            Shortcut: click "Tag all images" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.
+                                        </p>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
+                                <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
+                                <div class="dataset-editor-empty" id="dataset-editor-empty">
+                                    <span class="dataset-editor-empty-icon" aria-hidden="true">👈</span>
+                                    <p class="dataset-editor-empty-text" data-i18n="dataset.editorEmpty">
+                                        Pick an image from the queue on the left to edit its caption.
+                                    </p>
+                                </div>
+                            </div>
+                            <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
+                                      placeholder="caption text..."
+                                      data-i18n-placeholder="dataset.captionPlaceholder"
+                                      hidden></textarea>
+                            <div class="dataset-editor-actions" id="dataset-editor-actions" hidden>
+                                <button class="btn btn-secondary btn-small" id="btn-dataset-prev-image" data-i18n="dataset.prevImage">⬅ Prev</button>
+                                <button class="btn btn-secondary btn-small" id="btn-dataset-next-image" data-i18n="dataset.nextImage">Next ➡</button>
+                                <button class="btn btn-ghost btn-small" id="btn-dataset-revert-caption" data-i18n="dataset.revertCaption">Revert</button>
+                                <button class="btn btn-danger btn-small" id="btn-dataset-remove-image" data-i18n="dataset.removeFromDataset">Remove</button>
+                            </div>
+                        </section>
+
+                        <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
+                        <aside class="dataset-export-pane" aria-label="Dataset export settings">
+                            <!-- Section A: Tagging shortcut -->
+                            <section class="dataset-card">
+                                <h3 class="dataset-card-title">
+                                    <span aria-hidden="true">🏷️</span>
+                                    <span data-i18n="dataset.cardTagTitle">Step A. Auto-tag (optional)</span>
+                                </h3>
+                                <p class="dataset-card-help" data-i18n="dataset.cardTagHelp">
+                                    Run AI tagging on every image in the queue. Skips images that are already tagged.
+                                </p>
+                                <button class="btn btn-secondary full-width" id="btn-dataset-tag-all">
+                                    <span aria-hidden="true">🏷️</span>
+                                    <span data-i18n="dataset.tagAll">Tag all images now</span>
+                                </button>
+                            </section>
+
+                            <!-- Section B: Captions polish (collapsed by default - novice users don't need this) -->
+                            <details class="dataset-card dataset-card-details">
+                                <summary class="dataset-card-title">
+                                    <span aria-hidden="true">✏️</span>
+                                    <span data-i18n="dataset.cardCaptionTitle">Step B. Caption polish (optional)</span>
+                                </summary>
+                                <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
+                                    Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
+                                </p>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
+                                    <textarea id="dataset-common-tags" class="form-input" rows="2"
+                                              placeholder="masterpiece, best_quality"
+                                              data-i18n-placeholder="dataset.commonTagsPlaceholder"></textarea>
+                                </label>
+                                <!-- Quality-tags quick-fill: one click, common LoRA training quality tags -->
+                                <div class="dataset-quickfill-row">
+                                    <button type="button" class="btn btn-ghost btn-small"
+                                            id="btn-dataset-quickfill-quality"
+                                            data-i18n="dataset.quickfillQuality">
+                                        ✨ Add recommended quality tags
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-small"
+                                            id="btn-dataset-quickfill-trigger"
+                                            disabled
+                                            data-i18n="dataset.quickfillTrigger"
+                                            data-i18n-title="dataset.quickfillTriggerTooltip"
+                                            title="Type your trigger word in the Renumber preset (Step C) first, then click here to also have it written into every caption .txt.">
+                                        🏷️ Add my trigger word here
+                                    </button>
+                                </div>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
+                                    <textarea id="dataset-blacklist" class="form-input" rows="2"
+                                              placeholder="bad_anatomy, watermark"
+                                              data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
+                                </label>
+
+                                <!-- Pro LoRA-trainer convenience: 5 category-cleanup
+                                     buttons that batch-append common tag classes to
+                                     the blacklist. Each button is non-destructive
+                                     (it just appends to the textarea, the user can
+                                     still trim afterwards). Curated lists; intent
+                                     is "the 30-50 most common danbooru tags in
+                                     each category" not "every possible tag". -->
+                                <div class="dataset-cleanup-row">
+                                    <small class="dataset-cleanup-label" data-i18n="dataset.cleanupLabel">Quick remove a category:</small>
+                                    <div class="dataset-cleanup-buttons">
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-quality"
+                                                data-i18n="dataset.cleanupQuality"
+                                                data-i18n-title="dataset.cleanupQualityTooltip"
+                                                title="Add common quality / score tags to the blacklist (masterpiece, best_quality, score_*, etc).">
+                                            🛡️ Quality
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-identity"
+                                                data-i18n="dataset.cleanupIdentity"
+                                                data-i18n-title="dataset.cleanupIdentityTooltip"
+                                                title="Add hair/eye/face identity tags to the blacklist. Recommended when training a character LoRA so the model learns the identity from your trigger word, not from explicit tags.">
+                                            👤 Identity
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-appearance"
+                                                data-i18n="dataset.cleanupAppearance"
+                                                data-i18n-title="dataset.cleanupAppearanceTooltip"
+                                                title="Add body / clothing appearance tags to the blacklist (e.g. school_uniform, long_sleeves, skirt). Recommended when those are constant across all your images.">
+                                            👁 Appearance
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-poses"
+                                                data-i18n="dataset.cleanupPoses"
+                                                data-i18n-title="dataset.cleanupPosesTooltip"
+                                                title="Add common pose / action tags to the blacklist (standing, sitting, looking_at_viewer, etc). Use only if you want the model to learn poses freely.">
+                                            🤸 Poses
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-copyright"
+                                                data-i18n="dataset.cleanupCopyright"
+                                                data-i18n-title="dataset.cleanupCopyrightTooltip"
+                                                title="Add common copyright / franchise / character-name tags to the blacklist (touhou, original, pokemon, hatsune_miku, etc). Recommended for any LoRA you intend to share.">
+                                            📚 Copyright
+                                        </button>
+                                    </div>
+                                </div>
+                                <label class="form-checkbox">
+                                    <input type="checkbox" id="dataset-underscore-to-space" checked>
+                                    <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (recommended for most LoRA trainers)</span>
+                                </label>
+                            </details>
+
+                            <!-- Section C: Output (the only required section) -->
+                            <section class="dataset-card dataset-card-required">
+                                <h3 class="dataset-card-title">
+                                    <span aria-hidden="true">📤</span>
+                                    <span data-i18n="dataset.cardExportTitle">Step C. Export to folder</span>
+                                </h3>
+
+                                <!-- Naming preset radio (replaces the cryptic pattern field) -->
+                                <fieldset class="dataset-fieldset">
+                                    <legend data-i18n="dataset.namingLegend">How should files be named?</legend>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="keep" checked>
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetKeepTitle">🛡️ Keep original filenames</strong>
+                                            <small data-i18n="dataset.presetKeepHint">Safest. Caption .txt matches each image exactly.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="renumber">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetRenumberTitle">🔢 Renumber: subject_001, subject_002, …</strong>
+                                            <small data-i18n="dataset.presetRenumberHint">Clean sequential names. Type your subject below.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row dataset-preset-trigger" id="dataset-trigger-row" hidden>
+                                        <span class="dataset-preset-label dataset-preset-indent">
+                                            <input type="text" id="dataset-trigger" class="form-input"
+                                                   placeholder="subject"
+                                                   data-i18n-placeholder="dataset.triggerPlaceholderShort"
+                                                   aria-label="Trigger word">
+                                            <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
+                                            <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
+                                                ℹ️ This only sets the filename prefix. To put a trigger word INSIDE every caption .txt, type it into "Common tags" in Step B instead.
+                                            </small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-naming-preset" value="custom">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.presetCustomTitle">⚙️ Custom pattern (advanced)</strong>
+                                            <small data-i18n="dataset.presetCustomHint">Full control with variables.</small>
+                                        </span>
+                                    </label>
+                                    <div class="dataset-custom-row" id="dataset-custom-row" hidden>
+                                        <input type="text" id="dataset-naming-pattern" class="form-input"
+                                               value="{trigger}_{index:03d}"
+                                               placeholder="{trigger}_{index:03d}">
+                                        <p class="dataset-help">
+                                            <span data-i18n="dataset.namingHelp">Variables:</span>
+                                            <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code>
+                                            · <code>{trigger}</code> · <code>{generator}</code> · <code>{date}</code>
+                                        </p>
+                                    </div>
+                                </fieldset>
+
+                                <!-- Output folder (required) -->
+                                <label class="form-label dataset-required-label">
+                                    <span>
+                                        <span data-i18n="dataset.outputFolderLabel">Output folder</span>
+                                        <span class="dataset-required-asterisk" aria-hidden="true">*</span>
+                                    </span>
+                                    <div class="folder-input-row">
+                                        <input type="text" id="dataset-output-folder" class="form-input"
+                                               placeholder="C:/training-data/my-lora"
+                                               data-i18n-placeholder="dataset.outputPlaceholder">
+                                        <button class="btn btn-ghost btn-small" id="btn-dataset-browse-output"
+                                                data-i18n="common.browse">Browse</button>
+                                    </div>
+                                    <small class="dataset-help" data-i18n="dataset.outputFolderHint">
+                                        Will be created if it doesn't exist.
+                                    </small>
+                                </label>
+
+                                <!-- P2 fix: Copy vs Move out of Advanced. New users care most about
+                                     "will my originals be safe?" so this needs to be visible. -->
+                                <fieldset class="dataset-fieldset dataset-image-op-fieldset">
+                                    <legend data-i18n="dataset.imageOpLegend">What about the original images?</legend>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-image-op-radio" value="copy" checked>
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.imageOpCopySafe">🛡️ Copy (recommended) — originals stay safe</strong>
+                                            <small data-i18n="dataset.imageOpCopyHint">A duplicate of each image is written to the output folder.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-image-op-radio" value="move">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.imageOpMoveTitle">⚠️ Move — original images leave their current location</strong>
+                                            <small data-i18n="dataset.imageOpMoveHint">The image file is removed from its source folder and re-indexed at the new path. Use only when you're sure.</small>
+                                        </span>
+                                    </label>
+                                </fieldset>
+
+                                <!-- Advanced options behind a collapsed accordion -->
+                                <details class="dataset-advanced">
+                                    <summary data-i18n="dataset.advancedToggle">Advanced options</summary>
+                                    <label class="form-label">
+                                        <span data-i18n="dataset.overwriteLabel">If filename already exists in output folder</span>
+                                        <select id="dataset-overwrite" class="form-input">
+                                            <option value="unique" selected data-i18n="dataset.overwriteUnique">Add numeric suffix (recommended)</option>
+                                            <option value="overwrite" data-i18n="dataset.overwriteReplace">Replace</option>
+                                            <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
+                                        </select>
+                                    </label>
+                                    <!-- Hidden mirror element to keep the existing JS that reads
+                                         #dataset-image-op working without changes. The radio
+                                         above is the visible source of truth. -->
+                                    <input type="hidden" id="dataset-image-op" value="copy">
+                                </details>
+
+                                <!-- Big primary CTA -->
+                                <button class="btn btn-primary btn-large full-width dataset-export-cta"
+                                        id="btn-dataset-export" disabled
+                                        data-i18n-aria="dataset.exportCta">
+                                    <span aria-hidden="true">📤</span>
+                                    <span data-i18n="dataset.exportCta">Export dataset</span>
+                                </button>
+                                <p class="dataset-export-disabled-hint" id="dataset-export-disabled-hint"
+                                   data-i18n="dataset.exportDisabledHint">
+                                    Add at least one image and pick an output folder to enable.
+                                </p>
+                            </section>
+                        </aside>
+                    </div>
+
+                    <!-- Pre-flight confirm overlay -->
+                    <div class="dataset-modal" id="dataset-confirm-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="dataset-confirm-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card">
+                            <h3 id="dataset-confirm-title" class="dataset-modal-title">
+                                <span aria-hidden="true">📤</span>
+                                <span data-i18n="dataset.confirmTitle">Ready to export</span>
+                            </h3>
+                            <ul class="dataset-confirm-summary" id="dataset-confirm-summary"></ul>
+                            <div class="dataset-modal-actions">
+                                <button class="btn btn-ghost" id="btn-dataset-confirm-cancel" data-i18n="common.cancel">Cancel</button>
+                                <button class="btn btn-primary" id="btn-dataset-confirm-go" data-i18n="dataset.confirmGo">Yes, export now</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Post-flight result overlay -->
+                    <div class="dataset-modal" id="dataset-result-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="dataset-result-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card dataset-result-card">
+                            <div class="dataset-result-status" id="dataset-result-status"></div>
+                            <h3 id="dataset-result-title" class="dataset-modal-title"></h3>
+                            <p class="dataset-result-detail" id="dataset-result-detail"></p>
+                            <details class="dataset-result-errors" id="dataset-result-errors" hidden>
+                                <summary data-i18n="dataset.resultShowErrors">Show error details</summary>
+                                <ul id="dataset-result-error-list"></ul>
+                            </details>
+                            <div class="dataset-modal-actions">
+                                <button class="btn btn-secondary" id="btn-dataset-open-folder"
+                                        data-i18n="dataset.openOutputFolder">📂 Open output folder</button>
+                                <button class="btn btn-primary" id="btn-dataset-result-close"
+                                        data-i18n="common.close">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
 
         <div class="modal" id="model-manager-modal" role="dialog" aria-modal="true" aria-labelledby="model-manager-title">
@@ -4139,6 +4564,7 @@
     <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
+    <script src="/static/js/dataset-maker.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
@@ -4394,11 +4820,11 @@
     </div>
 
     <!-- Mass Tag Editor Modal (v3.2.1+) -->
-    <div class="modal" id="mass-tag-modal">
+    <div class="modal" id="mass-tag-modal" role="dialog" aria-modal="true" aria-labelledby="mass-tag-modal-title">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-large mass-tag-shell">
             <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor">✕</button>
-            <h3 data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
+            <h3 id="mass-tag-modal-title" data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
             <p class="modal-description" data-i18n="massTag.description">
                 Bulk operations on stored tags. Always run "Dry-run preview" before "Apply" — these changes can't be undone.
             </p>

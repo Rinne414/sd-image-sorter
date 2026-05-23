@@ -493,6 +493,11 @@ class ModelService:
         toriigate_available = bool(toriigate.get("available"))
         toriigate_dir = toriigate.get("model_dir") or str(Path(get_toriigate_model_dir()) / "toriigate-0.5")
 
+        # -- OppaiOracle --
+        oppai_oracle = health.get("oppai_oracle", {})
+        oppai_oracle_available = bool(oppai_oracle.get("available"))
+        oppai_oracle_dir = oppai_oracle.get("model_dir") or ""
+
         # -- CLIP --
         clip_health = health["clip"]
         clip_runtime_loaded = clip_health.get("runtime_loaded", False)
@@ -608,6 +613,26 @@ class ModelService:
                     "Click Prepare / Download to install the PyTorch/Transformers runtime if missing.",
                     "Restart SD Image Sorter if the Prepare result says Python packages were installed.",
                     "Click Prepare / Download again to download the ToriiGate model files (~5 GB) if they are not present.",
+                ],
+            },
+            {
+                "id": "oppai-oracle",
+                "name": "OppaiOracle V1.1",
+                "group": "Tagging",
+                "group_key": "models.group.tagging",
+                "available": oppai_oracle_available,
+                **with_status(
+                    is_ready=oppai_oracle_available,
+                    is_downloaded=oppai_oracle_available,
+                ),
+                "message": oppai_oracle.get("message") or "OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet.",
+                "message_key": "models.oppaiOracle.ready" if oppai_oracle_available else "models.oppaiOracle.missing",
+                "path": oppai_oracle_dir,
+                "download_supported": True,
+                "setup_steps": [
+                    "Click Prepare / Download to fetch the OppaiOracle V1.1 ONNX bundle (~947 MB) from HuggingFace.",
+                    "No additional Python packages are required; ONNX Runtime is already installed.",
+                    "Once ready, OppaiOracle V1.1 will appear in the tagger model dropdown.",
                 ],
             },
             {
@@ -923,6 +948,29 @@ class ModelService:
                 "message": "ToriiGate runtime and model files are ready.",
                 "paths": {"model_dir": resolved_dir},
             }, dependency_result)
+
+        if normalized_model_id == "oppai-oracle":
+            # OppaiOracle V1.1 ONNX (~947 MB) is downloaded by the dedicated
+            # OppaiOracleTagger class. No extra Python dependencies are needed
+            # beyond what WD14 / ONNX Runtime already require, so we do not
+            # ensure_group() here — the tagger uses huggingface_hub which is
+            # already part of the lightweight core.
+            from oppai_oracle_tagger import OppaiOracleTagger, DEFAULT_MODEL as OPPAI_DEFAULT
+            from config import get_oppai_oracle_model_dir
+
+            target_variant = (variant or OPPAI_DEFAULT).strip() or OPPAI_DEFAULT
+            tagger = OppaiOracleTagger(
+                model_name=target_variant,
+                model_dir=get_oppai_oracle_model_dir(),
+                use_gpu=False,
+            )
+            model_path, tags_path = tagger._get_model_paths()
+            return {
+                "status": "ok",
+                "model_id": normalized_model_id,
+                "message": f"OppaiOracle '{target_variant}' is ready.",
+                "paths": {"model_path": model_path, "tags_path": tags_path},
+            }
 
         if normalized_model_id == "clip":
             dependency_result = ensure_group("clip")

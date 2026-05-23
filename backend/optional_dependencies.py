@@ -187,6 +187,24 @@ def _needs_install(module_name: str, package_spec: str) -> bool:
             __import__(module_name)
         except ImportError:
             return True
+        except OSError as exc:
+            # torch's cudnn / cuda DLL chain raises OSError (Windows
+            # error 127 / 126) when a runtime DLL fails to load. The
+            # previous narrow ``except ImportError`` let those bubble
+            # up as raw "[WinError 127] cudnn_cnn64_9.dll" errors in
+            # the prepare flow. Treat them as "needs reinstall" so the
+            # downstream pipeline at least attempts a repair, and log
+            # the underlying OS error so the user can find it. If the
+            # reinstall doesn't fix it, the problem is system-level
+            # (CUDA toolkit / VC++ runtime) and the user should run
+            # the dedicated torch-runtime repair tool.
+            logging.getLogger(__name__).warning(
+                "Optional package %s could not be imported even though it is "
+                "installed - DLL load failed with %s. Triggering reinstall.",
+                module_name,
+                exc,
+            )
+            return True
     return False
 
 

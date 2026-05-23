@@ -205,16 +205,25 @@ def predict_score(image_path: str) -> Optional[float]:
 
 
 def is_available() -> bool:
-    """Check if the required dependencies are installed."""
+    """Check if the required dependencies are installed.
+
+    Catches both ImportError (missing package) AND OSError (DLL load failure
+    on Windows when torch's cudnn / cuda chain is broken). Without the
+    OSError catch, ``/api/aesthetic/status`` returned 500 to the user any
+    time a system had a broken torch runtime - even though the rest of the
+    app still works. The frontend's "aesthetic unavailable" toast is far
+    more useful than an unhandled 500.
+    """
     try:
-        import torch
+        import torch  # noqa: F401
         try:
-            import open_clip
-        except ImportError:
+            import open_clip  # noqa: F401
+        except (ImportError, OSError):
             try:
-                import clip
-            except ImportError:
+                import clip  # noqa: F401
+            except (ImportError, OSError):
                 return False
         return True
-    except ImportError:
+    except (ImportError, OSError) as exc:
+        logger.warning("Aesthetic predictor torch import failed: %s", exc)
         return False

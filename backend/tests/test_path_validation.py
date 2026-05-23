@@ -354,6 +354,33 @@ class TestSanitizeFilename:
         result = sanitize_filename(".png")
         assert ".png" in result
 
+    def test_safe_special_chars_preserved(self):
+        """v3.2.2: parens, apostrophes, commas, brackets, ampersands etc.
+        must be preserved so caption sidecars keep their basename match
+        with the source image (critical for LoRA training)."""
+        assert sanitize_filename("my (lora char).png") == "my (lora char).png"
+        assert sanitize_filename("apostrophe's.png") == "apostrophe's.png"
+        assert sanitize_filename("with.commas, sort.png") == "with.commas, sort.png"
+        assert sanitize_filename("[bracket] - tag.png") == "[bracket] - tag.png"
+        assert sanitize_filename("food&drink.png") == "food&drink.png"
+        assert sanitize_filename("price=$5.png") == "price=$5.png"
+        assert sanitize_filename("cool!#1.png") == "cool!#1.png"
+        # Mixed case the user originally reported
+        assert sanitize_filename("mixed (test_001).png") == "mixed (test_001).png"
+
+    def test_os_illegal_chars_still_replaced(self):
+        """v3.2.2: even with the relaxed allow-list, the OS-illegal
+        characters that Windows / NTFS reject must still be sanitized."""
+        # Windows-illegal: < > : " / \\ | ? *
+        for ch in ['<', '>', ':', '"', '|', '?', '*']:
+            sanitized = sanitize_filename(f"foo{ch}bar.png")
+            assert ch not in sanitized, f"{ch!r} should be removed but got {sanitized!r}"
+        # Path separators
+        assert "/" not in sanitize_filename("a/b.png")
+        assert "\\" not in sanitize_filename("a\\b.png")
+        # Null byte
+        assert "\x00" not in sanitize_filename("foo\x00bar.png")
+
 
 class TestValidateOutputPath:
     """Tests for output path validation."""

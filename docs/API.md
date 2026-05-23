@@ -1033,6 +1033,33 @@ Delete an installed Ollama model. Body: `{model_id}`. Returns the updated instal
 #### POST /api/vlm/local-models/start-ollama
 Auto-start the local Ollama server when it is installed but not running. Useful first-launch helper; returns `{started, already_running, error}`.
 
+### Dataset Maker
+
+The Dataset tab (📦) drives a focused LoRA dataset preparation workflow.
+
+#### POST /api/dataset/export
+Combined image-and-caption export for LoRA training datasets. Renames every image according to the supplied pattern, copies (or moves) it to the output folder, and writes the matching `.txt` caption sidecar with the same stem.
+
+Pattern variables: `{filename}`, `{index}`, `{index:03d}` (0-padded counter), `{trigger}`, `{generator}`, `{ext}`, `{date}`.
+
+Body:
+```json
+{
+  "image_ids": [1, 2, 3],
+  "output_folder": "C:/training/my-lora",
+  "naming_pattern": "{trigger}_{index:03d}",
+  "trigger": "my_subject",
+  "image_op": "copy",
+  "overwrite_policy": "unique",
+  "blacklist": ["watermark"],
+  "common_tags": ["masterpiece", "best_quality"],
+  "normalize_tag_underscores": true,
+  "image_overrides": {"42": "user-edited caption for this image"}
+}
+```
+
+Returns `{status, exported, skipped, error_count, output_folder, items[], error_messages[]}` where `status` is one of `ok` / `partial` / `failed`. Per-image results in `items[]` show the source path, destination paths, and any error or skip reason.
+
 ---
 
 Use `/docs` for interactive exploration. Contract drift is checked by `backend/tests/test_api_docs_contract.py`, and `scripts/export_openapi.py` exports a stable sorted OpenAPI JSON schema without starting the server.

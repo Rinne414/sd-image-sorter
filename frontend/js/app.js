@@ -621,6 +621,111 @@ function clearSelectedIds(options = {}) {
     }, options);
 }
 
+// v3.2.2: detect whether the user has applied any non-default filter so
+// the empty-state can show a contextual message ("no matches, try clearing
+// your filter") instead of the onboarding card ("no images yet, import a
+// folder") which is misleading when the user has a populated library.
+function _galleryHasActiveFilter() {
+    const f = AppState.filters || {};
+    if (f.tags && f.tags.length > 0) return true;
+    if (f.checkpoints && f.checkpoints.length > 0) return true;
+    if (f.loras && f.loras.length > 0) return true;
+    if (f.prompts && f.prompts.length > 0) return true;
+    if (f.search && String(f.search).trim().length > 0) return true;
+    if (f.artist) return true;
+    if (f.minWidth != null || f.maxWidth != null) return true;
+    if (f.minHeight != null || f.maxHeight != null) return true;
+    if (f.aspectRatio) return true;
+    if (f.minAesthetic != null || f.maxAesthetic != null) return true;
+    if (f.brightnessMin != null || f.brightnessMax != null) return true;
+    if (f.colorTemperature) return true;
+    if (f.brightnessDistribution) return true;
+    // generators/ratings start as "all selected" - flag only when a strict
+    // subset is selected
+    if (Array.isArray(f.generators) && Array.isArray(ALL_GENERATORS) &&
+        f.generators.length > 0 && f.generators.length < ALL_GENERATORS.length) return true;
+    if (Array.isArray(f.ratings) && f.ratings.length > 0 && f.ratings.length < 4) return true;
+    return false;
+}
+
+function _applyGalleryEmptyStateVariant(emptyState) {
+    if (!emptyState) return;
+    const filterActive = _galleryHasActiveFilter();
+    emptyState.classList.toggle('empty-state-no-matches', filterActive);
+    emptyState.classList.toggle('empty-state-no-library', !filterActive);
+
+    // Look up the title/hint strings; fall back to English if i18n
+    // hasn't loaded yet.
+    const t = (key, fallback) => (typeof appT === 'function' ? appT(key, fallback) : fallback);
+
+    const titleEl = emptyState.querySelector('h3');
+    const hintEl = emptyState.querySelector('p');
+    const importBtn = emptyState.querySelector('#empty-state-scan-btn');
+    const onboardingSteps = emptyState.querySelector('.onboarding-steps');
+    const clearFiltersBtn = emptyState.querySelector('#empty-state-clear-filters-btn');
+
+    if (filterActive) {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'gallery.noMatchesTitle');
+            titleEl.textContent = t('gallery.noMatchesTitle', 'No images match your filters');
+        }
+        if (hintEl) {
+            hintEl.setAttribute('data-i18n', 'gallery.noMatchesHint');
+            hintEl.textContent = t('gallery.noMatchesHint',
+                'Try removing some filter criteria, clearing your search, or adjusting the prompt/tag conditions.');
+        }
+        if (importBtn) importBtn.style.display = 'none';
+        if (onboardingSteps) onboardingSteps.style.display = 'none';
+        // Inject a "Clear filters" CTA if not already present
+        let cta = clearFiltersBtn;
+        if (!cta) {
+            const actions = emptyState.querySelector('.empty-actions');
+            if (actions) {
+                cta = document.createElement('button');
+                cta.id = 'empty-state-clear-filters-btn';
+                cta.className = 'btn btn-primary';
+                const labelSpan = document.createElement('span');
+                labelSpan.setAttribute('data-i18n', 'gallery.clearFilters');
+                labelSpan.textContent = t('gallery.clearFilters', 'Clear all filters');
+                cta.append(document.createTextNode('🧹 '));
+                cta.appendChild(labelSpan);
+                cta.addEventListener('click', () => {
+                    if (typeof window.resetFilters === 'function') {
+                        window.resetFilters();
+                    } else if (window.FilterStore?.resetFilters) {
+                        window.FilterStore.resetFilters();
+                    } else {
+                        // Last-ditch fallback: full reload
+                        location.reload();
+                    }
+                });
+                actions.appendChild(cta);
+            }
+        } else {
+            cta.style.display = '';
+        }
+    } else {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'gallery.noImages');
+            titleEl.textContent = t('gallery.noImages', 'No images yet');
+        }
+        if (hintEl) {
+            hintEl.setAttribute('data-i18n', 'gallery.scanPrompt');
+            hintEl.textContent = t('gallery.scanPrompt',
+                'Import an image folder to start browsing, filtering, and organizing your images');
+        }
+        if (importBtn) importBtn.style.display = '';
+        if (onboardingSteps) onboardingSteps.style.display = '';
+        if (clearFiltersBtn) clearFiltersBtn.style.display = 'none';
+    }
+    // v3.2.2: re-apply i18n to the empty state subtree so the new
+    // data-i18n attributes resolve correctly even if applyToDOM has
+    // already cached their previous value.
+    if (window.I18n && typeof window.I18n.applyToDOM === 'function') {
+        try { window.I18n.applyToDOM(emptyState); } catch (_e) {}
+    }
+}
+
 function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
     if (AppState.selectionScope !== 'filtered') return false;
     if (!AppState.selectionToken && (!AppState?.selectedIds || AppState.selectedIds.size === 0)) return false;
@@ -3920,20 +4025,22 @@ function updateNavigationOverflowState() {
     if (!navBar || !navTabs) return window.innerWidth <= 768;
 
     const forceMobileLayout = window.innerWidth <= 768;
-    navBar.classList.remove('nav-tabs-overflow', 'nav-actions-compact');
+    navBar.classList.remove('nav-tabs-overflow', 'nav-actions-compact', 'nav-tabs-icon-only');
     if (forceMobileLayout) {
         navBar.classList.add('nav-tabs-overflow');
         return true;
     }
 
-    const navActions = $('.nav-actions');
-    const navBrand = $('.nav-brand');
     const needsOverflow = () => {
-        const availableWidth = Math.max(
-            0,
-            navBar.clientWidth - (navBrand?.offsetWidth || 0) - (navActions?.offsetWidth || 0) - 72
-        );
-        return availableWidth > 0 && navTabs.scrollWidth > availableWidth + 24;
+        // v3.2.2: simplest possible overflow detection — does the
+        // ``navTabs`` flex container's scrollWidth (its natural,
+        // un-clipped width) exceed its clientWidth (what the layout
+        // gave it)? If yes, content is being clipped, regardless of
+        // what nav-actions-compact / brand width / etc. compute to.
+        // The previous formula tried to predict the available width
+        // from sibling sizes; on 1440 px laptops it under-counted the
+        // gap and let the last tab silently clip.
+        return navTabs.scrollWidth > navTabs.clientWidth + 1;
     };
 
     if (!needsOverflow()) {
@@ -3941,15 +4048,28 @@ function updateNavigationOverflowState() {
         return false;
     }
 
-    // Compact the utility buttons first. Only collapse the primary tabs when
-    // the compact desktop header still cannot fit the navigation.
+    // v3.2.2: with the new 📦 Dataset tab the count of primary tabs went
+    // from 7 to 8, which pushes 1366-1440 px laptops past the cliff.
+    // Try a 3-step graceful degradation before falling back to the
+    // hamburger overlay:
+    //   1. Compact the nav-actions buttons (smaller padding)
+    //   2. Hide the text labels on the nav tabs (icon-only) - tabs
+    //      keep their aria-label so screen readers and tooltips still
+    //      announce the destination
+    //   3. Full mobile-menu fallback
     navBar.classList.add('nav-actions-compact');
     if (!needsOverflow()) {
         closeMobileMenu();
         return false;
     }
 
-    navBar.classList.remove('nav-actions-compact');
+    navBar.classList.add('nav-tabs-icon-only');
+    if (!needsOverflow()) {
+        closeMobileMenu();
+        return false;
+    }
+
+    navBar.classList.remove('nav-actions-compact', 'nav-tabs-icon-only');
     navBar.classList.add('nav-tabs-overflow');
     return true;
 }
@@ -7054,7 +7174,17 @@ async function loadImages(appendMode = false, options = {}) {
 
         const emptyState = $('#gallery-empty-state');
         if (emptyState) {
-            emptyState.style.display = AppState.images.length === 0 ? 'flex' : 'none';
+            const shouldShow = AppState.images.length === 0;
+            emptyState.style.display = shouldShow ? 'flex' : 'none';
+            if (shouldShow) {
+                // v3.2.2: differentiate "library is empty" from "filter
+                // returned 0 results". The original empty state was the
+                // onboarding card ("No images yet, import a folder") which
+                // was misleading when the user had a 71k-image library and
+                // had just tried a tag filter that returned nothing - they
+                // would think their entire library disappeared.
+                _applyGalleryEmptyStateVariant(emptyState);
+            }
         }
         if (AppState.images.length > 0 && window.OnboardingTour) {
             OnboardingTour.markHasSeenImages();

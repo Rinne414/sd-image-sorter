@@ -449,9 +449,18 @@ async def get_stats(
 
 
 @router.get("/library-health")
-async def get_library_health(
+def get_library_health(
     sample_limit: int = Query(default=8, ge=1, le=25, description="Maximum number of sample rows per library-health section"),
     service: SortingService = Depends(get_sorting_service),
 ):
-    """Get read-only library quality, metadata, duplicate-name, and archive-readiness signals."""
+    """Get read-only library quality, metadata, duplicate-name, and archive-readiness signals.
+
+    v3.2.2: this route is intentionally synchronous (``def`` not
+    ``async def``) so FastAPI offloads it to the thread pool. The
+    underlying report does heavy SQL aggregations and was blocking
+    the event loop when called from the home page + diagnostics
+    panel + gallery simultaneously. The service layer also now
+    caches the report for 60 seconds via
+    ``invalidate_library_health_cache``.
+    """
     return service.get_library_health(sample_limit=sample_limit)

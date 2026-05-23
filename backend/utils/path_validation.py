@@ -468,6 +468,25 @@ def sanitize_filename(filename: str) -> str:
     """
     Sanitize a filename to remove potentially dangerous characters.
 
+    v3.2.2: switched from an allow-list (``[\\w\\s\\.\\-]``) to a
+    block-list of OS-illegal characters. The old allow-list mangled
+    legitimate characters like parentheses, apostrophes, commas, and
+    brackets — turning ``my (lora char).png`` into ``my _lora char_.png``.
+    For LoRA training that pairs caption sidecars with images by exact
+    basename match, that mangling broke pairing silently.
+
+    The block list is the union of:
+      - Path separators: ``/``, ``\\``, ``\\x00`` (null byte)
+      - Windows-illegal characters: ``< > : " | ? *``
+      - Control characters ``\\x00-\\x1f`` and ``\\x7f-\\x9f``
+
+    Everything else — letters (any Unicode), digits, spaces, parens,
+    apostrophes, commas, brackets, ampersands, hashtags, etc. — is
+    preserved. The function is still safe against directory traversal
+    because path separators are explicitly stripped, and the caller
+    (e.g. ``validate_output_path``) does an additional resolve-and-
+    compare check.
+
     Args:
         filename: The filename to sanitize
 
@@ -477,18 +496,27 @@ def sanitize_filename(filename: str) -> str:
     if not filename:
         return "unnamed"
 
-    # Remove path separators (handles both forward and backslash)
+    # Remove path separators (handles both forward and backslash) and pull
+    # out the last segment so a value like ``../foo/bar.png`` becomes
+    # ``bar.png`` before we even start the per-character pass.
     filename = _extract_path_leaf(filename)
 
-    # Check for suspicious patterns in the filename itself
-    if _contains_suspicious_patterns(filename):
-        # Remove the suspicious characters
-        filename = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', filename)  # Remove control chars
-        filename = re.sub(r'\.\.', '.', filename)  # Collapse double dots
+    # Strip control characters first (always unsafe)
+    filename = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', filename)
 
-    # Remove or replace dangerous characters
-    # Keep alphanumeric, spaces, dots, underscores, hyphens, and unicode letters
-    sanitized = re.sub(r'[^\w\s\.\-]', '_', filename, flags=re.UNICODE)
+    # Collapse path-traversal dotdots so they cannot survive into the
+    # final filename even after the regex pass below.
+    filename = re.sub(r'\.\.', '.', filename)
+
+    # Block list: replace OS-illegal characters with ``_`` so the
+    # filename remains writable on Windows / macOS / Linux.
+    #   /  \  - path separators
+    #   <  >  - Windows redirect / illegal
+    #   :     - Windows drive separator / NTFS stream
+    #   "     - Windows illegal in filename
+    #   |     - Windows pipe / illegal
+    #   ?  *  - Windows wildcard / illegal
+    sanitized = re.sub(r'[\x00<>:"/\\|?*]', '_', filename)
 
     # Remove leading/trailing spaces only (keep dots for extensions like .png)
     sanitized = sanitized.strip(' ')
