@@ -972,3 +972,19 @@
     font-size: 11px;
     line-height: 1.2;
 }
+
+
+/* Final-pass polish (Phase 2F): keep the right pane reasonably scrollable
+   on viewports where it overflows (1366-1500 px laptops). The Export
+   button stays at the bottom of the scrolling content rather than being
+   pinned, because pinning it visually overlapped the last radio choice
+   in testing. The bottom padding gives the user a clear stopping point
+   when they scroll past the export button. */
+@media (max-width: 1500px) {
+    #view-dataset .dataset-export-pane {
+        padding-bottom: 24px;
+    }
+    #view-dataset .dataset-export-cta {
+        scroll-margin-bottom: 24px;
+    }
+}
