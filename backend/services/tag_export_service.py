@@ -462,6 +462,18 @@ def _sidecar_extension(content_mode: str) -> str:
     return ".json" if str(content_mode or "").lower() == "json" else ".txt"
 
 
+def _sanitized_fallback_stem(image: Dict[str, Any]) -> str:
+    """Last-resort sidecar stem when the image has no on-disk path.
+
+    Used only for orphaned DB rows (missing-file records, broken paths).
+    The normal export path uses the actual on-disk filename so the
+    sidecar can pair with the image by exact basename match.
+    """
+    raw = str(image.get("filename") or f"image_{image.get('id') or 'unknown'}")
+    sanitized = sanitize_filename(raw)
+    return os.path.splitext(sanitized)[0] or "unnamed"
+
+
 def _allocate_output_path(
     output_folder: str,
     image: Dict[str, Any],
@@ -470,11 +482,34 @@ def _allocate_output_path(
     used_output_paths: set[str],
 ) -> Optional[str]:
     extension = _sidecar_extension(content_mode)
-    filename = sanitize_filename(str(image.get("filename") or f"image_{image.get('id') or 'unknown'}"))
-    # In beside_image mode, use the actual file stem from the path to ensure
-    # the sidecar name always matches the image file (critical for LoRA training).
+    # v3.2.2: derive the sidecar stem from the actual on-disk image
+    # filename rather than ``sanitize_filename(image["filename"])``.
+    #
+    # The DB-stored ``filename`` field gets routed through
+    # ``sanitize_filename`` here, which replaces apostrophes, parentheses,
+    # commas, brackets, and other "non-word" characters with underscores
+    # ("my (test).png" -> "my _test_.png"). For LoRA training that pairs
+    # captions with images by exact basename match, this is fatal: the
+    # caption file ends up named ``my _test_.txt`` while the image keeps
+    # its original "my (test).png", and the trainer skips both.
+    #
+    # The image already exists on disk, so its filename is by definition
+    # OS-legal; we don't need to sanitize. The ``beside_image`` branch
+    # already does this via ``_sidecar_stem_override``; this aligns the
+    # ``folder`` branch with that pattern. ``sanitize_filename`` remains
+    # the fallback when the DB has no on-disk path (orphaned records,
+    # missing-file rows, etc).
     stem_override = image.pop("_sidecar_stem_override", None)
-    basename = stem_override if stem_override else os.path.splitext(filename)[0]
+    if stem_override:
+        basename = stem_override
+    else:
+        on_disk_path = str(image.get("path") or "").strip()
+        if on_disk_path:
+            on_disk_basename = os.path.basename(on_disk_path)
+            on_disk_stem = os.path.splitext(on_disk_basename)[0]
+            basename = on_disk_stem if on_disk_stem else _sanitized_fallback_stem(image)
+        else:
+            basename = _sanitized_fallback_stem(image)
     if not basename:
         basename = f"image_{image.get('id') or 'unknown'}"
     # The sidecar filename is always `{basename}{extension}` (e.g. `image_001.txt`).
