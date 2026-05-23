@@ -54,6 +54,30 @@
             const helpBtn = document.getElementById('btn-dataset-show-help');
             if (banner) banner.hidden = dismissed;
             if (helpBtn) helpBtn.hidden = !dismissed;
+
+            // Pass-3 review fix: the ❓ "what makes a good caption" popover
+            // was a passive feature -- new users wouldn't notice the small
+            // icon. Auto-open it once on the first visit so the knowledge
+            // hits them at the right moment, then remember the dismissal.
+            const helpSeenKey = 'sd-image-sorter-dataset-caption-help-seen';
+            const seenHelp = (() => {
+                try { return localStorage.getItem(helpSeenKey) === '1'; }
+                catch { return false; }
+            })();
+            if (!seenHelp) {
+                const det = document.querySelector('.dataset-editor-help');
+                if (det) {
+                    det.open = true;
+                    // Mark seen the moment they close it. Don't burn the
+                    // flag here; if they don't even glance at it the next
+                    // visit should still try once.
+                    det.addEventListener('toggle', () => {
+                        if (!det.open) {
+                            try { localStorage.setItem(helpSeenKey, '1'); } catch {}
+                        }
+                    }, { once: true });
+                }
+            }
         },
 
         _bindEvents() {
@@ -151,6 +175,14 @@
             for (const id of ['dataset-trigger', 'dataset-naming-pattern']) {
                 document.getElementById(id)?.addEventListener('input', () => this._updateNamingPreview());
             }
+            // Pass-3 review fix: keep the trigger-quickfill button in sync
+            // with the trigger field so it's visibly disabled when empty.
+            // Without this the user would click and only learn via toast
+            // that the field was empty.
+            document.getElementById('dataset-trigger')?.addEventListener('input', () => {
+                const btn = document.getElementById('btn-dataset-quickfill-trigger');
+                if (btn) btn.disabled = !((document.getElementById('dataset-trigger')?.value || '').trim());
+            });
 
             // Bulk caption ops -> recompute captions on the fly (debounced)
             for (const id of ['dataset-common-tags', 'dataset-blacklist', 'dataset-underscore-to-space']) {

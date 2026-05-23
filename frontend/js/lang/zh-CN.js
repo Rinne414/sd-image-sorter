@@ -2879,6 +2879,7 @@ window.I18nLang_zhCN = {
     'dataset.quickfillQualityDone': '已把常用质量标签加进「通用标签」。',
     'dataset.quickfillTrigger': '🏷️ 把触发词也加进 caption',
     'dataset.quickfillTriggerEmpty': '先在上面的「重新编号」preset 里填触发词。',
+    'dataset.quickfillTriggerTooltip': '先在 Step C 的「重新编号」preset 里填触发词。填好之后回来点这颗，触发词就会同时被写进每张 caption .txt 里。',
     'dataset.quickfillTriggerDone': '已把「{trigger}」加进「通用标签」，它会出现在每张 .txt caption 里。',
     'dataset.helpTitle': '怎样的 caption 才算好？',
     'dataset.helpIntro': 'LoRA 训练时每个 .txt 要用几个短标签描述图里有什么。模型会学会把你的触发词跟这些标签在不同图里共有的特征联系起来。',

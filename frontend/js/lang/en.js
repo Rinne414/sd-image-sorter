@@ -2878,6 +2878,7 @@ window.I18nLang_en = {
     'dataset.quickfillQualityDone': 'Added recommended quality tags to "Common tags".',
     'dataset.quickfillTrigger': '🏷️ Add my trigger word here',
     'dataset.quickfillTriggerEmpty': 'Type a trigger word in the "Renumber" preset above first.',
+    'dataset.quickfillTriggerTooltip': 'Type your trigger word in the Renumber preset (Step C) first. Once you do, click here to also have it written into every caption .txt.',
     'dataset.quickfillTriggerDone': 'Added "{trigger}" to "Common tags". It will appear in every caption .txt.',
     'dataset.helpTitle': 'What makes a good caption?',
     'dataset.helpIntro': "For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.",
