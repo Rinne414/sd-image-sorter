@@ -12,7 +12,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
@@ -276,6 +276,51 @@ class FolderConfig(BaseModel):
 class BrowseFolderRequest(BaseModel):
     """Request model for folder browsing."""
     path: str = Field(default="", max_length=PATH_MAX_LENGTH)
+
+
+# v3.2.2: TTL cache for /api/library-health.
+#
+# The underlying SQL aggregates across the whole ``images`` table (~10
+# SUM/COUNT operations + duplicate-filename grouping + folder grouping
+# + largest-images sort + issue samples). On a 71k-row library the
+# cold-cache call takes ~12 seconds. Without caching, the home page,
+# gallery, and diagnostics panel all hit the same endpoint and cause
+# concurrent reads to time out.
+#
+# 60s freshness is the right granularity for a "library health" report
+# — none of the inputs (image count, embedding completeness, missing
+# metadata) change within seconds. Tagging or scanning a batch will
+# refresh once the TTL expires; the user can also force a refresh by
+# reloading after they trigger a long operation.
+#
+# Cache keyed by sample_limit so callers asking for different sample
+# sizes get the right payload.
+_LIBRARY_HEALTH_CACHE_TTL_SECONDS = 60.0
+_LIBRARY_HEALTH_CACHE_LOCK = threading.Lock()
+_LIBRARY_HEALTH_CACHE: Dict[int, Tuple[float, Dict[str, Any]]] = {}
+
+
+def invalidate_library_health_cache() -> None:
+    """Force the next /api/library-health call to recompute (used by tests)."""
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        _LIBRARY_HEALTH_CACHE.clear()
+
+
+def _get_library_health_cached(sample_limit: int) -> Dict[str, Any]:
+    sample_limit = max(1, min(int(sample_limit), 25))
+    now = time.time()
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        cached = _LIBRARY_HEALTH_CACHE.get(sample_limit)
+        if cached is not None and (now - cached[0]) < _LIBRARY_HEALTH_CACHE_TTL_SECONDS:
+            return cached[1]
+
+    # Compute outside the lock: SQL is slow, holding the lock would
+    # serialize concurrent callers. Multiple parallel cache misses are
+    # acceptable; whichever finishes last wins the cache slot.
+    payload = db.get_library_health_report(sample_limit=sample_limit)
+    with _LIBRARY_HEALTH_CACHE_LOCK:
+        _LIBRARY_HEALTH_CACHE[sample_limit] = (time.time(), payload)
+    return payload
 
 
 class SortingService:
@@ -2305,8 +2350,22 @@ class SortingService:
         }
 
     def get_library_health(self, sample_limit: int = 8) -> Dict[str, Any]:
-        """Get a read-only library quality and archive-readiness report."""
-        return db.get_library_health_report(sample_limit=sample_limit)
+        """Get a read-only library quality and archive-readiness report.
+
+        v3.2.2: cached with a 60s TTL because the underlying SQL does
+        ~10 SUM/COUNT aggregations and a duplicate-filename grouping
+        across the whole ``images`` table. On a 71k-row library the
+        first call takes ~12s of cold cache time. Without this cache,
+        50 concurrent clients (the gallery view, the home page, the
+        diagnostics panel, etc.) cause read timeouts because each
+        request re-runs the same expensive scan.
+
+        Cache keyed by ``sample_limit`` because that controls the
+        number of sample rows returned in each section, and a request
+        for sample_limit=25 should not be served a cached payload
+        built with sample_limit=8.
+        """
+        return _get_library_health_cached(int(sample_limit))
 
     def resolve_drop(self, folder_name: str, filenames: List[str], dropped_files: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """Resolve browser-dropped folder name or filenames to a real filesystem path."""
