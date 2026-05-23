@@ -1256,6 +1256,12 @@ window.I18nLang_en = {
     'selection.copyVerb': 'Copy',
     'selection.exportTagsToFiles': 'Same-name .txt...',
     'selection.censorEdit': 'Censor',
+    // v3.2.2 task #4: new "Send to Dataset Maker" gallery-toolbar action.
+    // Replaces the old "Analyze Colors" button — color analysis still
+    // runs from the Tag Images modal's Color tab.
+    'selection.sendToDatasetMaker': 'To Dataset Maker',
+    'selection.sendToDatasetMakerUnavailable': 'Dataset Maker module not loaded yet — try again in a moment.',
+    'selection.sendToDatasetMakerFailed': 'Failed to send selection to Dataset Maker: {error}',
     // v3.2.1 task #34: new "Analyze Colors" common action
     'selection.analyzeColors': 'Analyze Colors',
     'selection.analyzeColorsConfirmTitle': 'Run color analysis on selection?',
@@ -2833,6 +2839,7 @@ window.I18nLang_en = {
     'dataset.exportError': 'Export failed: {message}',
     'dataset.gallerySelectionEmpty': '👈 Open the Gallery tab and select images first, then come back here and click this button again.',
     'dataset.gallerySelectionAdded': 'Added {count} images from Gallery selection',
+    'dataset.gallerySelectionAlreadyAdded': 'Those images are already in the Dataset Maker queue.',
     'dataset.confirmClear': 'Remove all {count} images from the dataset? (Original files in your library are not affected.)',
     'dataset.confirmRemove': 'Remove this image from the dataset?',
     'dataset.tagAllStarted': 'Tagging started in the background. The progress bar at the top of the screen tracks it.',

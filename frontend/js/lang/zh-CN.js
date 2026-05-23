@@ -1430,6 +1430,11 @@ window.I18nLang_zhCN = {
     'selection.copyVerb': '复制',
     'selection.exportTagsToFiles': '同名 .txt...',
     'selection.censorEdit': '马赛克编辑',
+    // v3.2.2 任务 #4: 新增「送至 Dataset Maker」常用动作。
+    // 取代原本的「色彩分析」按钮（色彩分析改在打标弹窗的「色彩分析」分页里跑）。
+    'selection.sendToDatasetMaker': '送至 Dataset Maker',
+    'selection.sendToDatasetMakerUnavailable': 'Dataset Maker 模块还在加载中，请稍后再试。',
+    'selection.sendToDatasetMakerFailed': '送往 Dataset Maker 失败：{error}',
     // v3.2.1 task #34: 新「色彩分析」常用动作
     'selection.analyzeColors': '色彩分析',
     'selection.analyzeColorsConfirmTitle': '对所选图片运行色彩分析？',
@@ -2834,6 +2839,7 @@ window.I18nLang_zhCN = {
     'dataset.exportError': '导出失败：{message}',
     'dataset.gallerySelectionEmpty': '👈 先打开图库分页选好图，再回到这里点这个按钮。',
     'dataset.gallerySelectionAdded': '已从图库选择中加入 {count} 张图',
+    'dataset.gallerySelectionAlreadyAdded': '这些图已经在 Dataset Maker 队列里了。',
     'dataset.confirmClear': '把数据集里的 {count} 张图全清掉？（不会动图库里的原文件。）',
     'dataset.confirmRemove': '从数据集里移除这张图？',
     'dataset.tagAllStarted': '打标已在后台开始，顶部进度条会跟踪进度。',
