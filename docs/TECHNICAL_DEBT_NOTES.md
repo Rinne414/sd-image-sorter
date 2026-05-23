@@ -1070,3 +1070,28 @@ These are deferred from the v3.2.1 stability sweep and tracked for the next rele
 - **Roadmap-B second** — pure performance win, only matters once libraries cross ~100k images. Needs a real schema migration.
 - **Roadmap-C last** — narrowest user impact (only triggers on folder-move with duplicate filenames), purely additive UI work.
 
+
+
+## Debt-DM-7: Smart Tag wizard is gallery-only; path-mode deferred to v3.2.3
+
+**Status:** Confirmed; deferred. Documented in v3.2.2 release notes.
+
+**Where:** `backend/services/smart_tag_service.py::_run_pipeline`, `_persist_result`, `_resolve_image_paths`.
+
+**What:** v3.2.2 ships the Dataset Maker small-gallery workspace (folder-direct import without DB pollution) for audit + export, but Smart Tag still requires gallery-source items because:
+
+1. `_resolve_image_paths` looks up `{image_id: path}` from `db.get_images_by_ids` — local items have id=0 sentinel.
+2. `_persist_result` writes back via `db.add_tags_batch` keyed by image_id — there's no path-keyed write target.
+3. The progress snapshot is keyed by image_id; a path-mode would need a parallel `path_results` accumulator the frontend reads instead.
+
+**Why deferred:** the safe fix is moderate (~150-300 lines + tests) but touches the DB write contract and the existing 38-test invariant set. Bundling it into v3.2.2 would have forced a single big commit; better to ship the small-gallery import + audit + export now and add Smart Tag path-mode in v3.2.3 as a focused commit with its own tests.
+
+**Suggested approach for v3.2.3:**
+
+1. Refactor `SmartTagRequest` to accept `image_paths: Optional[List[str]] = None` alongside `image_ids`.
+2. Synthesize negative pseudo-IDs for path entries in `_resolve_image_paths` (mirror the frontend's negative-id convention).
+3. In `_persist_result`, branch on `image_id <= 0`: skip DB write, append the result to `job.path_results[abs_path] = caption`.
+4. Frontend pulls `path_results` from the snapshot and writes them into the localStorage caption store.
+5. Tests: lifecycle test asserting Smart Tag in path-mode produces captions but never adds a row to the main DB.
+
+**Workaround for v3.2.2 users:** local items can be manually captioned in the editor or run the regular WD14 / Tag-Images flow after first scanning the folder into the main library.

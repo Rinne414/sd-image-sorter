@@ -1,0 +1,352 @@
+/* SD Image Sorter — Dataset Maker pipeline (5-step stepper + Audit panel) v3.2.2
+ * Scoped strictly to the Dataset Maker tab so it never affects other views.
+ * Uses the project's accent tokens (no hardcoded purples — release safety
+ * test forbids those). */
+
+/* ============== 5-step stepper ============== */
+
+.dataset-stepper {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    margin: 8px 0 14px;
+    padding: 8px 6px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.dataset-step-pill {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px 6px 6px;
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.06);
+    border: 1px solid rgba(var(--accent-primary-rgb, 255, 138, 61), 0.20);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.dataset-step-pill:hover {
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.14);
+    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.45);
+    color: var(--text-primary);
+}
+
+.dataset-step-pill-num {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.78rem;
+    font-weight: 600;
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.20);
+    color: var(--accent-primary);
+}
+
+.dataset-step-anchor {
+    height: 0;
+    margin-top: -8px;
+    visibility: hidden;
+}
+
+/* ============== Audit panel ============== */
+
+.dataset-audit-section {
+    margin: 0 0 14px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.dataset-audit-section[open] {
+    border-color: rgba(var(--accent-secondary-rgb), 0.32);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10);
+}
+
+.dataset-audit-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.dataset-audit-summary::-webkit-details-marker { display: none; }
+
+.dataset-audit-num {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.82rem;
+    font-weight: 600;
+    background: rgba(var(--accent-secondary-rgb), 0.20);
+    color: var(--accent-secondary);
+}
+.dataset-audit-title {
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.dataset-audit-summary-hint {
+    flex: 1 1 auto;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.82rem;
+}
+
+.dataset-audit-body {
+    padding: 0 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dataset-audit-help {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.dataset-audit-thresholds {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dataset-audit-threshold {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.dataset-audit-threshold > span {
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.dataset-audit-threshold > input {
+    background: var(--surface-2, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    color: var(--text-primary);
+    border-radius: var(--radius-sm, 6px);
+    padding: 6px 10px;
+    font-size: 0.92rem;
+}
+.dataset-audit-threshold > small {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.76rem;
+}
+
+.dataset-audit-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.dataset-audit-status {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.82rem;
+}
+
+.dataset-audit-results { display: flex; flex-direction: column; gap: 8px; }
+.dataset-audit-results[hidden] { display: none; }
+
+.dataset-audit-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dataset-audit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(var(--accent-secondary-rgb), 0.12);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.30);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 120ms ease;
+}
+.dataset-audit-badge:hover { background: rgba(var(--accent-secondary-rgb), 0.22); }
+.dataset-audit-badge.active {
+    background: rgba(var(--accent-secondary-rgb), 0.34);
+    border-color: rgba(var(--accent-secondary-rgb), 0.55);
+}
+.dataset-audit-badge .dataset-audit-badge-count {
+    font-weight: 600;
+}
+
+.dataset-audit-hint {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+    margin: 0;
+}
+
+/* Highlight queue items selected by an audit badge filter. */
+.dataset-queue-item.audit-flagged {
+    outline: 2px solid rgba(var(--accent-secondary-rgb), 0.7);
+    outline-offset: -2px;
+}
+
+@media (max-width: 1100px) {
+    .dataset-audit-thresholds { grid-template-columns: 1fr; }
+}
+
+
+
+/* ============== Tag Vocabulary panel (T10) ============== */
+
+.dataset-vocab-panel {
+    margin-top: 10px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.dataset-vocab-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.dataset-vocab-summary::-webkit-details-marker { display: none; }
+.dataset-vocab-summary > :first-child { font-size: 1.05rem; }
+.dataset-vocab-count {
+    margin-left: auto;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+}
+
+.dataset-vocab-body {
+    padding: 0 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dataset-vocab-help {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.dataset-vocab-controls {
+    display: flex;
+    gap: 8px;
+}
+.dataset-vocab-search {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dataset-vocab-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.dataset-vocab-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    background: var(--surface-2, rgba(255, 255, 255, 0.05));
+    border-radius: 999px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.dataset-vocab-tag:hover { border-color: rgba(var(--accent-primary-rgb), 0.45); }
+
+.dataset-vocab-tag .dataset-vocab-tag-count {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.74rem;
+}
+
+.dataset-vocab-tag.state-common {
+    background: rgba(45, 212, 191, 0.18);
+    border-color: rgba(45, 212, 191, 0.45);
+    color: var(--text-primary);
+}
+.dataset-vocab-tag.state-blacklist {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: var(--text-primary);
+    text-decoration: line-through;
+}
+
+
+
+/* ============== Renamed-pair example chip (T12) ============== */
+
+.dataset-pair-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(var(--accent-secondary-rgb), 0.10);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.30);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+}
+
+.dataset-pair-chip-icon {
+    color: var(--accent-secondary);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-label {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-png,
+.dataset-pair-chip-txt {
+    background: rgba(0, 0, 0, 0.20);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.80rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.dataset-pair-chip-plus {
+    color: var(--text-muted, #9ca3af);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-suffix {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.76rem;
+    flex-basis: 100%;
+}

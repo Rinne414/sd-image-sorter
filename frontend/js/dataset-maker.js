@@ -230,28 +230,47 @@
                 }
                 return;
             }
+            await this.addImageIds(ids, { showToast: true });
+        },
+
+        /**
+         * Public helper for external modules (gallery selection toolbar,
+         * Tag modal, color analysis, future bridges) to push image IDs
+         * into the Dataset Maker queue. Handles dedup, lazy meta fetch,
+         * caption fetch, queue render, optional toast.
+         *
+         * Returns the number of NEW images actually added (after dedup).
+         *
+         * @param {Array<number|string>} ids
+         * @param {{showToast?: boolean, switchView?: boolean}} options
+         */
+        async addImageIds(ids, options = {}) {
+            const showToast = options.showToast !== false;
+            const switchView = options.switchView !== false;
+
             const before = this.imageIds.length;
             const seen = new Set(this.imageIds);
-            for (const id of ids) {
+            const newOnes = [];
+            for (const id of (ids || [])) {
                 const n = Number(id);
+                if (!Number.isFinite(n) || n <= 0) continue;
                 if (!seen.has(n)) {
                     this.imageIds.push(n);
                     seen.add(n);
+                    newOnes.push(n);
                 }
             }
 
-            // LoRA-trainer audit: capture width/height NOW from the gallery's
-            // already-loaded image records so the pre-flight modal can warn
-            // about images below 512 px without making per-image API calls.
-            // The AppState array has the full image metadata; we just need
-            // to copy the dimensions into our meta map.
+            // Pull width/height from the gallery's already-loaded records
+            // when possible to avoid per-image API calls. Same shape as
+            // _importFromGallery's pre-flight enrichment.
             try {
                 const galleryRecords = (window.AppState && window.AppState.images) || [];
                 const byId = new Map();
                 for (const rec of galleryRecords) {
                     if (rec && rec.id != null) byId.set(Number(rec.id), rec);
                 }
-                for (const id of this.imageIds) {
+                for (const id of newOnes) {
                     const rec = byId.get(Number(id));
                     if (!rec) continue;
                     const existing = this.meta.get(Number(id)) || {};
@@ -265,16 +284,33 @@
                 }
             } catch { /* gallery state shape might shift; non-fatal */ }
 
-            const added = this.imageIds.length - before;
             await this._fetchMissingMeta();
             await this._fetchMissingCaptions();
             this._renderQueue();
             this._updateCount();
             this._updateExportEnabled();
-            if (this.activeId == null && this.imageIds.length) this._setActive(this.imageIds[0]);
-            this._toast(this._t('dataset.gallerySelectionAdded',
-                'Added {count} images from Gallery selection',
-                { count: added }), 'success');
+            if (this.activeId == null && this.imageIds.length) {
+                this._setActive(this.imageIds[0]);
+            }
+
+            const added = this.imageIds.length - before;
+
+            if (switchView && added > 0 && typeof window.switchView === 'function') {
+                try { window.switchView('dataset'); } catch (_e) { /* ignore */ }
+            }
+
+            if (showToast) {
+                if (added > 0) {
+                    this._toast(this._t('dataset.gallerySelectionAdded',
+                        'Added {count} images from Gallery selection',
+                        { count: added }), 'success');
+                } else {
+                    this._toast(this._t('dataset.gallerySelectionAlreadyAdded',
+                        'Those images are already in the Dataset Maker queue.'),
+                        'info');
+                }
+            }
+            return added;
         },
 
         _getGallerySelectedIds() {
@@ -306,17 +342,27 @@
 
     window.DatasetMaker = DM;
 
-    // Wire up later parts (active image, caption fetch, export, modals) via
-    // a separate file load to keep this module compact and verifiable.
-    const part2 = document.createElement('script');
-    part2.src = '/static/js/dataset-maker-part2.js';
-    document.head.appendChild(part2);
-    const part3 = document.createElement('script');
-    part3.src = '/static/js/dataset-maker-part3.js';
-    document.head.appendChild(part3);
-    const cleanups = document.createElement('script');
-    cleanups.src = '/static/js/dataset-maker-cleanups.js';
-    document.head.appendChild(cleanups);
+    // Load the rest of the module in deterministic order. Browsers honor
+    // ``async = false`` for dynamically-inserted scripts as a way to
+    // request "execute these in DOM-insertion order, not parallel race"
+    // (see HTML spec §"prepare a script", classic-script branch). This
+    // matters because dataset-maker-local-import.js patches functions
+    // defined in part2.js (e.g. _buildQueueItem) — without ordering, the
+    // patch can land BEFORE the function exists and get overwritten.
+    function _appendOrderedScript(src) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = false;
+        document.head.appendChild(s);
+        return s;
+    }
+    _appendOrderedScript('/static/js/dataset-maker-part2.js');
+    _appendOrderedScript('/static/js/dataset-maker-part3.js');
+    _appendOrderedScript('/static/js/dataset-maker-cleanups.js');
+    // v3.2.2 task #7b: dual-source queue + folder-import (small gallery).
+    _appendOrderedScript('/static/js/dataset-maker-local-import.js');
+    // v3.2.2 task #8 + #9: 5-step stepper + Audit panel.
+    _appendOrderedScript('/static/js/dataset-maker-pipeline.js');
 
     // Hook into view activation
     function initWhenViewActivates() {

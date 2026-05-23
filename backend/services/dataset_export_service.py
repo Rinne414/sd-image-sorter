@@ -42,6 +42,10 @@ from pydantic import BaseModel, Field
 
 import database as db
 from services.dataset_naming import plan_renames
+from services.dataset_session_service import (
+    resolve_paths_for_dataset,
+    virtual_image_record_for_path,
+)
 from services.tag_export_service import build_sidecar_content
 from utils.path_validation import normalize_user_path, validate_folder_path
 
@@ -59,8 +63,21 @@ class DatasetExportRequest(BaseModel):
     Bounds are deliberately tight: the Dataset Maker UI only ships a
     user's curated selection (typically a few hundred images for a LoRA),
     not the whole library. The 10k cap is a generous safety bound.
+
+    Two import sources are supported in one request:
+
+    * ``image_ids`` — IDs from the main library DB, resolved via
+      ``database.get_images_by_ids`` (legacy + 'send selection' flow).
+    * ``image_paths`` — absolute file paths supplied by the Dataset
+      Maker session for items the user imported directly from a folder
+      (issue #5 point 5: "small gallery" without DB pollution). The
+      export pipeline builds virtual records for these paths so the
+      same rename + caption + sidecar logic applies.
+
+    At least one of the two must be non-empty.
     """
-    image_ids: List[int] = Field(min_length=1, max_length=10_000)
+    image_ids: List[int] = Field(default_factory=list, max_length=10_000)
+    image_paths: List[str] = Field(default_factory=list, max_length=10_000)
     output_folder: str = Field(min_length=1, max_length=4096)
 
     naming_pattern: str = Field(default="{filename}", min_length=1, max_length=200)
@@ -74,9 +91,9 @@ class DatasetExportRequest(BaseModel):
     common_tags: List[str] = Field(default_factory=list, max_length=200)
     normalize_tag_underscores: bool = True
 
-    # User-edited captions, keyed by image_id (string keys because JSON
-    # objects can't have integer keys). Empty string == "use whatever the
-    # template engine renders" (no override).
+    # User-edited captions, keyed by either ``str(image_id)`` (for
+    # gallery-source items) or absolute path (for local-source items).
+    # Empty string means "use whatever the template engine renders".
     image_overrides: Dict[str, str] = Field(default_factory=dict)
 
 
@@ -107,6 +124,8 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
         raise HTTPException(status_code=400, detail=f"Invalid image_op: {request.image_op!r}")
     if request.overwrite_policy not in VALID_OVERWRITE_POLICIES:
         raise HTTPException(status_code=400, detail=f"Invalid overwrite_policy: {request.overwrite_policy!r}")
+    if not request.image_ids and not request.image_paths:
+        raise HTTPException(status_code=400, detail="Must supply image_ids or image_paths (or both).")
 
     # ---- Validate output folder ----
     output_folder_norm = normalize_user_path(request.output_folder)
@@ -116,10 +135,10 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
     output_path = Path(output_folder_norm)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # ---- Load image records + tags ----
+    # ---- Load image records + tags for DB-source items ----
     image_ids = list(dict.fromkeys(int(i) for i in request.image_ids))  # de-dup, preserve order
-    images_map = db.get_images_by_ids(image_ids)
-    tags_map = db.get_image_tags_map(image_ids)
+    images_map = db.get_images_by_ids(image_ids) if image_ids else {}
+    tags_map = db.get_image_tags_map(image_ids) if image_ids else {}
 
     image_records: list[Dict[str, Any]] = []
     missing_ids: list[int] = []
@@ -129,6 +148,25 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
             missing_ids.append(image_id)
             continue
         image_records.append(dict(record))  # copy so we can mutate safely
+
+    # ---- Build virtual records for path-source items ----
+    # These are images the user imported directly from a folder via the
+    # Dataset Maker session — they have no DB row, so we synthesise a
+    # record shaped like a DB row (path, filename, no tags, no metadata).
+    # The naming + caption pipeline then handles them identically.
+    invalid_paths: list[str] = []
+    for raw_path in request.image_paths:
+        resolved_list = resolve_paths_for_dataset([raw_path])
+        if not resolved_list:
+            invalid_paths.append(raw_path)
+            continue
+        abs_path = resolved_list[0]
+        record = virtual_image_record_for_path(abs_path)
+        # Tag map for this synthetic record is empty by default; the
+        # caller is expected to supply a full caption override via
+        # image_overrides[abs_path]. This matches the small-gallery
+        # design (local captions live in localStorage, NOT in the DB).
+        image_records.append(record)
 
     # ---- Plan the rename ----
     plan = plan_renames(
@@ -141,12 +179,25 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
 
     # ---- Pre-build common state for caption rendering ----
     blacklist_set = {str(t).strip().lower() for t in request.blacklist if str(t).strip()}
+
+    # image_overrides accepts either ``str(image_id)`` keys (legacy DB
+    # source) or absolute path keys (small-gallery local source). We
+    # normalise both into a single lookup ``record_to_override`` keyed
+    # by (image_id, abs_path) so the per-row loop can fetch in O(1).
     image_overrides_int: Dict[int, str] = {}
+    image_overrides_path: Dict[str, str] = {}
     for k, v in request.image_overrides.items():
+        text = str(v or "")
         try:
-            image_overrides_int[int(k)] = str(v or "")
+            image_overrides_int[int(k)] = text
         except (TypeError, ValueError):
-            continue
+            # Treat as a path key. Normalise to absolute path so it
+            # matches whatever resolve_paths_for_dataset produced.
+            try:
+                normalized = str(Path(normalize_user_path(str(k))).resolve())
+            except (OSError, ValueError):
+                continue
+            image_overrides_path[normalized] = text
 
     # Use the template engine via the same content_mode the UI sends.
     # We hard-code the LoRA workflow: tags + common-tags appended,
@@ -192,8 +243,15 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
         # Render caption
         try:
             tags = tags_map.get(image_id, [])
-            if image_id in image_overrides_int and image_overrides_int[image_id] != "":
-                caption_text = image_overrides_int[image_id]
+            # Resolve override: int-key for DB-backed records, path-key
+            # for small-gallery synthetic records (image_id=0 sentinel).
+            override_text = ""
+            if image_id and image_id in image_overrides_int:
+                override_text = image_overrides_int[image_id]
+            elif src_image_path and src_image_path in image_overrides_path:
+                override_text = image_overrides_path[src_image_path]
+            if override_text:
+                caption_text = override_text
             else:
                 caption_text = build_sidecar_content(
                     record,
@@ -285,6 +343,17 @@ def export_dataset(request: DatasetExportRequest) -> DatasetExportResponse:
         msg = f"image {missing_id} not found in library"
         error_messages.append(msg)
         items.append(DatasetExportItemResult(image_id=missing_id, error=msg))
+
+    # Surface the invalid path-source rows so the frontend can show them.
+    for invalid_path in invalid_paths:
+        error_count += 1
+        msg = f"path not a readable image: {invalid_path}"
+        error_messages.append(msg)
+        items.append(DatasetExportItemResult(
+            image_id=0,
+            src_image_path=invalid_path,
+            error=msg,
+        ))
 
     if error_count == 0:
         status = "ok"

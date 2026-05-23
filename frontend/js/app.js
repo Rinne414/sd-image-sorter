@@ -3954,6 +3954,42 @@ async function moveOrCopySelectedGalleryImages(operation = 'move') {
     return moveOrCopyGalleryImages(getSelectedGalleryIds(), operation, { source: 'selection' });
 }
 
+// v3.2.2 task #4: push the gallery selection into the Dataset Maker
+// queue and switch the user to that view. Replaces the older standalone
+// "Analyze Colors" gallery-toolbar button (color analysis still runs
+// from the Tag Images modal's Color tab).
+async function sendSelectionToDatasetMaker() {
+    const ids = getSelectedGalleryIds();
+    if (!ids || ids.length === 0) {
+        showToast(
+            appT('selection.emptyHint',
+                 'Select images, or choose all current filter matches.'),
+            'info'
+        );
+        return;
+    }
+    if (!window.DatasetMaker || typeof window.DatasetMaker.addImageIds !== 'function') {
+        showToast(
+            appT('selection.sendToDatasetMakerUnavailable',
+                 'Dataset Maker module not loaded yet — try again in a moment.'),
+            'error'
+        );
+        return;
+    }
+    try {
+        // addImageIds switches to the dataset view and shows its own toast
+        // when items were added, so we don't double-toast on success.
+        await window.DatasetMaker.addImageIds(ids, { switchView: true, showToast: true });
+    } catch (exc) {
+        showToast(
+            appT('selection.sendToDatasetMakerFailed',
+                 'Failed to send selection to Dataset Maker: {error}',
+                 { error: exc?.message || String(exc) }),
+            'error'
+        );
+    }
+}
+
 // v3.2.1 task #34: new common action — analyze colors on currently selected images only.
 async function analyzeColorsOnSelectedImages() {
     const selectionToken = getActiveSelectionTokenForActions();
@@ -4435,8 +4471,11 @@ function initEventListeners() {
 
     $('#btn-move-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('move'));
     $('#btn-copy-selected')?.addEventListener('click', () => moveOrCopySelectedGalleryImages('copy'));
-    // v3.2.1 task #34: new "Analyze Colors" common action — runs color analysis on selected only.
-    $('#btn-analyze-colors-selected')?.addEventListener('click', analyzeColorsOnSelectedImages);
+    // v3.2.2 task #4: gallery selection now offers "send to Dataset Maker"
+    // (the training-set workspace) instead of standalone color analysis.
+    // Color analysis is still available via the Tag Images modal's Color
+    // tab, where most users actually trigger it.
+    $('#btn-send-selection-to-dataset-maker')?.addEventListener('click', sendSelectionToDatasetMaker);
     $('#btn-remove-selected-gallery')?.addEventListener('click', removeSelectedGalleryImages);
     $('#btn-delete-selected-files')?.addEventListener('click', deleteSelectedGalleryImages);
 

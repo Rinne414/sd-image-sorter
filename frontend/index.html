@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="/static/css/color-backfill.css">
     <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
     <link rel="stylesheet" href="/static/css/dataset-maker.css">
+    <link rel="stylesheet" href="/static/css/dataset-pipeline.css">
+    <link rel="stylesheet" href="/static/css/smart-tag-hint.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -399,8 +401,8 @@
                                 <button id="btn-move-selected" class="btn btn-primary full-width" title="Move selected images to another folder"><span>📁</span> <span data-i18n="selection.moveSelected">Move...</span></button>
                                 <button id="btn-copy-selected" class="btn btn-secondary full-width" title="Copy selected images to another folder"><span>📄</span> <span data-i18n="selection.copySelected">Copy...</span></button>
                                 <button id="btn-send-to-censor" class="btn btn-primary full-width" title="Send selected images to censor editor"><span>🔳</span> <span data-i18n="selection.censorEdit">Censor</span></button>
-                                <!-- v3.2.1 task #34: new common action — analyze colors on selected only -->
-                                <button id="btn-analyze-colors-selected" class="btn btn-secondary full-width" title="Run color analysis on selected images only"><span>🎨</span> <span data-i18n="selection.analyzeColors">Analyze Colors</span></button>
+                                <!-- v3.2.2 task #4: replaced Analyze Colors button with Send to Dataset Maker; color analysis still runs from the Tag Images modal -->
+                                <button id="btn-send-selection-to-dataset-maker" class="btn btn-secondary full-width" title="Push the selected images into the Dataset Maker queue (training set workspace)"><span>📦</span> <span data-i18n="selection.sendToDatasetMaker">To Dataset Maker</span></button>
                             </div>
                         </div>
                         <div class="selection-panel-section">
@@ -2563,6 +2565,14 @@
                                 <span aria-hidden="true">⬅️</span>
                                 <span data-i18n="dataset.importFromGallery">Add from Gallery</span>
                             </button>
+                            <!-- v3.2.2 task #7b: direct folder import (small-gallery workspace).
+                                 Items added this way live entirely in the Dataset Maker session
+                                 — they are NOT registered in the main library DB. -->
+                            <button class="btn btn-secondary" id="btn-dataset-import-folder"
+                                    title="Import images directly from a folder without scanning into the main gallery">
+                                <span aria-hidden="true">📁</span>
+                                <span data-i18n="dataset.importFromFolder">Add from Folder</span>
+                            </button>
                             <button class="btn btn-ghost btn-icon-only" id="btn-dataset-show-help"
                                     aria-label="Show quick start guide" title="Show quick start guide"
                                     hidden>
@@ -2577,9 +2587,81 @@
                         </div>
                     </header>
 
+                    <!-- v3.2.2 task #8: 5-step pipeline header. Numbered circles + labels.
+                         Click jumps to the section anchor below. Scoped to this tab only. -->
+                    <nav class="dataset-stepper" aria-label="Dataset Maker pipeline">
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-import">
+                            <span class="dataset-step-pill-num">1</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepImport">Import</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-audit">
+                            <span class="dataset-step-pill-num">2</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepAudit">Audit</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-organize">
+                            <span class="dataset-step-pill-num">3</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepOrganize">Organize</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-caption">
+                            <span class="dataset-step-pill-num">4</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepCaption">Caption</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-export">
+                            <span class="dataset-step-pill-num">5</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepExport">Export</span>
+                        </button>
+                    </nav>
+
+                    <!-- v3.2.2 task #9: optional Audit step (LoRA-trainer readiness check).
+                         Default OFF. User opens it, picks the thresholds they care about,
+                         clicks "Run audit". Threshold inputs are unbounded (no UI hard limits). -->
+                    <details class="dataset-audit-section" id="dataset-step-audit">
+                        <summary class="dataset-audit-summary">
+                            <span class="dataset-audit-num" aria-hidden="true">2</span>
+                            <span class="dataset-audit-title" data-i18n="dataset.auditTitle">Audit (optional)</span>
+                            <span class="dataset-audit-summary-hint" data-i18n="dataset.auditSummaryHint">Open to enable LoRA-readiness checks.</span>
+                        </summary>
+                        <div class="dataset-audit-body">
+                            <p class="dataset-audit-help" data-i18n="dataset.auditHelp">
+                                Optional safety net for batch-LoRA workflows. Each check is independent and only runs when its threshold is filled in. None of these flags delete files or DB rows — they just highlight items in the queue so you can decide what to remove.
+                            </p>
+                            <div class="dataset-audit-thresholds">
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditAestheticLabel">Min aesthetic score</span>
+                                    <input type="number" id="dataset-audit-aesthetic-max" step="0.1" placeholder="e.g. 4.5">
+                                    <small data-i18n="dataset.auditAestheticHint">Leave blank to skip. Suggested: 4.5 for character LoRAs.</small>
+                                </label>
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditPhashLabel">Max phash distance</span>
+                                    <input type="number" id="dataset-audit-phash-max" step="1" placeholder="e.g. 5">
+                                    <small data-i18n="dataset.auditPhashHint">Leave blank to skip. Lower = stricter duplicate detection.</small>
+                                </label>
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditDimLabel">Min image side (px)</span>
+                                    <input type="number" id="dataset-audit-dim-min" step="1" placeholder="e.g. 512">
+                                    <small data-i18n="dataset.auditDimHint">Leave blank to skip. Most trainers prefer 512 px or more.</small>
+                                </label>
+                            </div>
+                            <div class="dataset-audit-actions">
+                                <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
+                                        data-i18n="dataset.auditRun">Run audit</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download" hidden
+                                        data-i18n="dataset.auditDownload">Download report (.json)</button>
+                                <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
+                            </div>
+                            <div class="dataset-audit-results" id="dataset-audit-results" hidden>
+                                <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
+                                <p class="dataset-audit-hint" data-i18n="dataset.auditClickToFilter">Click a badge to highlight matching items in the queue. Click "Remove from queue" inside the editor to drop the active item.</p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Anchor for step 1 (Import) — toolbar above is the import step itself. -->
+                    <div id="dataset-step-import" class="dataset-step-anchor" aria-hidden="true"></div>
+
                     <div class="dataset-workbench">
                         <!-- Left: image queue with thumbnails + edit indicator -->
-                        <aside class="dataset-queue-pane" aria-label="Dataset image queue">
+                        <aside class="dataset-queue-pane" aria-label="Dataset image queue" id="dataset-step-organize">
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.queueTitle">Images in dataset</strong>
                                 <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit caption</span>
@@ -2587,6 +2669,29 @@
                             <div class="dataset-queue-list" id="dataset-queue-list">
                                 <!-- Empty state injected by JS so localized strings stay in sync -->
                             </div>
+
+                            <!-- v3.2.2 task #10: Tag Vocabulary side panel.
+                                 Click a tag once to add to common tags (green).
+                                 Click again to flip to blacklist (red). Third click clears. -->
+                            <details class="dataset-vocab-panel" id="dataset-vocab-panel">
+                                <summary class="dataset-vocab-summary">
+                                    <span aria-hidden="true">🏷️</span>
+                                    <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
+                                    <span class="dataset-vocab-count" id="dataset-vocab-count" aria-live="polite"></span>
+                                </summary>
+                                <div class="dataset-vocab-body">
+                                    <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
+                                        Click a tag to add it to <strong>Common tags</strong>. Click again to move it to <strong>Blacklist</strong>. Third click clears.
+                                    </p>
+                                    <div class="dataset-vocab-controls">
+                                        <input type="search" id="dataset-vocab-search" class="form-input dataset-vocab-search"
+                                               placeholder="Filter tags…" data-i18n-placeholder="dataset.vocabSearchPlaceholder">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
+                                                data-i18n="dataset.vocabRefresh">Refresh</button>
+                                    </div>
+                                    <div class="dataset-vocab-list" id="dataset-vocab-list" role="list"></div>
+                                </div>
+                            </details>
                         </aside>
 
                         <!-- Center: selected image + caption editor -->
@@ -2638,7 +2743,7 @@
                         <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
                         <aside class="dataset-export-pane" aria-label="Dataset export settings">
                             <!-- Section A: Tagging shortcut -->
-                            <section class="dataset-card">
+                            <section class="dataset-card" id="dataset-step-caption">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">🏷️</span>
                                     <span data-i18n="dataset.cardTagTitle">Step A. Auto-tag (optional)</span>
@@ -2650,6 +2755,13 @@
                                     <span aria-hidden="true">🏷️</span>
                                     <span data-i18n="dataset.tagAll">Tag all images now</span>
                                 </button>
+                                <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
+                                    <span aria-hidden="true">✨</span>
+                                    <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
+                                </button>
+                                <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
+                                    LoraHub-style: WD14 tags + a VLM-written natural-language sentence, with auto-cleanup of "masterpiece / score_9 / anime" noise tags and trigger-word injection. Pick a training purpose and run.
+                                </p>
                             </section>
 
                             <!-- Section B: Captions polish (collapsed by default - novice users don't need this) -->
@@ -2661,6 +2773,12 @@
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
                                 </p>
+                                <!-- v3.2.2 task #11: Anime LoRA defaults reset. -->
+                                <div class="dataset-anime-defaults-row">
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
+                                            title="Reset common tags, underscore handling, and naming preset to anime-LoRA recommended values"
+                                            data-i18n="dataset.animeDefaultsButton">🎌 Apply Anime LoRA defaults</button>
+                                </div>
                                 <label class="form-label">
                                     <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
                                     <textarea id="dataset-common-tags" class="form-input" rows="2"
@@ -2744,7 +2862,7 @@
                             </details>
 
                             <!-- Section C: Output (the only required section) -->
-                            <section class="dataset-card dataset-card-required">
+                            <section class="dataset-card dataset-card-required" id="dataset-step-export">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">📤</span>
                                     <span data-i18n="dataset.cardExportTitle">Step C. Export to folder</span>
@@ -2814,6 +2932,17 @@
                                     <small class="dataset-help" data-i18n="dataset.outputFolderHint">
                                         Will be created if it doesn't exist.
                                     </small>
+                                    <!-- v3.2.2 task #12: renamed-pair preview chip. Updates live
+                                         from the trigger / naming preset so the user sees exactly
+                                         what file name pair will land in the output folder. -->
+                                    <div class="dataset-pair-chip" id="dataset-pair-chip" aria-live="polite">
+                                        <span class="dataset-pair-chip-icon" aria-hidden="true">✓</span>
+                                        <span class="dataset-pair-chip-label" data-i18n="dataset.pairChipPrefix">Output files will be:</span>
+                                        <code class="dataset-pair-chip-png" id="dataset-pair-chip-png">your_lora_001.png</code>
+                                        <span class="dataset-pair-chip-plus" aria-hidden="true">+</span>
+                                        <code class="dataset-pair-chip-txt" id="dataset-pair-chip-txt">your_lora_001.txt</code>
+                                        <span class="dataset-pair-chip-suffix" data-i18n="dataset.pairChipSuffix">(LoRA trainers pair them by exact stem match)</span>
+                                    </div>
                                 </label>
 
                                 <!-- P2 fix: Copy vs Move out of Advanced. New users care most about
@@ -2866,6 +2995,48 @@
                                 </p>
                             </section>
                         </aside>
+                    </div>
+
+                    <!-- v3.2.2 task #7b: direct folder import (small-gallery workspace) -->
+                    <div class="dataset-modal" id="dataset-folder-import-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="dataset-folder-import-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card">
+                            <h3 id="dataset-folder-import-title" class="dataset-modal-title">
+                                <span aria-hidden="true">📁</span>
+                                <span data-i18n="dataset.folderImportTitle">Add images from a folder</span>
+                            </h3>
+                            <p class="dataset-modal-help" data-i18n="dataset.folderImportHelp">
+                                Pick a folder of images. They will be added to this Dataset Maker session
+                                directly — they will NOT be scanned into the main library.
+                            </p>
+                            <label class="dataset-required-label" for="dataset-folder-import-path">
+                                <span>
+                                    <span data-i18n="dataset.folderImportPathLabel">Folder path</span>
+                                    <span class="dataset-required-asterisk" aria-hidden="true">*</span>
+                                </span>
+                                <div class="folder-input-row">
+                                    <input type="text" id="dataset-folder-import-path" class="form-input"
+                                           placeholder="C:/training-data/source-folder"
+                                           data-folder-browser-container="dataset-folder-import-browser-container">
+                                    <button class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
+                                            data-i18n="common.browse">Browse</button>
+                                </div>
+                                <div id="dataset-folder-import-browser-container"></div>
+                            </label>
+                            <label class="dataset-preset-row">
+                                <input type="checkbox" id="dataset-folder-import-recursive">
+                                <span class="dataset-preset-label">
+                                    <strong data-i18n="dataset.folderImportRecursive">Include subfolders</strong>
+                                </span>
+                            </label>
+                            <p class="dataset-modal-status" id="dataset-folder-import-status" aria-live="polite"></p>
+                            <div class="dataset-modal-actions">
+                                <button class="btn btn-ghost" id="btn-dataset-folder-import-cancel" data-i18n="common.cancel">Cancel</button>
+                                <button class="btn btn-primary" id="btn-dataset-folder-import-go"
+                                        data-i18n="dataset.folderImportGo">Scan and add</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Pre-flight confirm overlay -->
@@ -3338,6 +3509,20 @@
                 <button class="modal-close" id="btn-close-tag-modal" aria-label="Close">✕</button>
                 <h3 id="tag-modal-title" data-i18n="modal.tagTitle">AI Auto Tagging</h3>
                 <p class="modal-description" data-i18n="modal.tagDescription">Use supported tagger models to generate tags for images.</p>
+
+                <!-- v3.2.2 task #5: Smart Tag wizard discoverability hint.
+                     Returning users dismiss it once and never see it again. -->
+                <div class="smart-tag-hint-banner" id="tag-modal-smart-tag-hint" role="region" aria-labelledby="tag-modal-smart-tag-hint-title" hidden>
+                    <div class="smart-tag-hint-banner-icon" aria-hidden="true">✨</div>
+                    <div class="smart-tag-hint-banner-copy">
+                        <strong id="tag-modal-smart-tag-hint-title" data-i18n="tagModal.smartTagHintTitle">Building a LoRA training set?</strong>
+                        <span data-i18n="tagModal.smartTagHintBody">Dataset Maker → Smart Tag bundles WD14 / OppaiOracle tagging, VLM descriptions, trigger word injection, and same-name caption export into one flow.</span>
+                    </div>
+                    <div class="smart-tag-hint-banner-actions">
+                        <button type="button" class="btn btn-primary btn-small" id="btn-tag-modal-smart-tag-go" data-i18n="tagModal.smartTagHintGo">Open Dataset Maker</button>
+                        <button type="button" class="btn btn-ghost btn-small" id="btn-tag-modal-smart-tag-dismiss" aria-label="Don't show again" data-i18n="tagModal.smartTagHintDismiss">Don't show again</button>
+                    </div>
+                </div>
 
                 <!-- v3.2.1: 3-tab redesign — Local / Natural Language / Aesthetic -->
                 <div class="tagger-tabs" role="tablist" aria-label="Tagger mode">
@@ -4565,6 +4750,7 @@
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset-maker.js"></script>
+    <script src="/static/js/smart-tag.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
@@ -4622,6 +4808,102 @@
         <div class="color-progress-toast-actions">
             <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-pause" data-i18n="color.pause">Pause</button>
             <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-hide" data-i18n="color.runHidden">Run hidden</button>
+        </div>
+    </div>
+
+    <!-- Smart Tag Modal (LoraHub-style WD14 + VLM combined wizard) -->
+    <div class="modal" id="smart-tag-modal" role="dialog" aria-modal="true" aria-labelledby="smart-tag-modal-title">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="btn-smart-tag-close" aria-label="Close">✕</button>
+            <h3 id="smart-tag-modal-title">
+                <span aria-hidden="true">✨</span>
+                <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
+            </h3>
+            <p class="modal-description" data-i18n="smartTag.description">
+                Runs a local tagger (WD14 / OppaiOracle) and a VLM in one pass, then writes a clean LoRA-ready caption per image. Mirrors LoraHub's smart-caption recipe.
+            </p>
+
+            <!-- Form -->
+            <div class="smart-tag-form" style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+                <!-- Training purpose -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
+                    <select id="smart-tag-purpose" class="form-input">
+                        <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe medium / lighting / composition (no clothing detail)</option>
+                        <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe pose / framing only (no hair, eye, outfit)</option>
+                        <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
+                        <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — focus on the concept being trained</option>
+                    </select>
+                </label>
+
+                <!-- Trigger word -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.triggerWord">Trigger word (optional)</span>
+                    <input type="text" id="smart-tag-trigger" class="form-input"
+                           placeholder="e.g. myloratrigger"
+                           data-i18n-placeholder="smartTag.triggerPlaceholder"
+                           autocomplete="off">
+                    <span class="form-help" data-i18n="smartTag.triggerHelp" style="font-size: 12px; opacity: 0.75; margin-top: 4px;">
+                        Inserted at the front of every caption (skipped if already in WD14 tags).
+                    </span>
+                </label>
+
+                <!-- Merge strategy -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.mergeStrategy">Existing captions</span>
+                    <select id="smart-tag-merge" class="form-input">
+                        <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace (recommended) — discard previous caption</option>
+                        <option value="append" data-i18n="smartTag.mergeAppend">Append — glue new caption onto previous</option>
+                    </select>
+                </label>
+
+                <!-- Toggles -->
+                <div class="smart-tag-toggles" style="display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--border-color, #333); border-radius: 8px;">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-strip-noise" checked>
+                        <span data-i18n="smartTag.stripNoise">Auto-strip noise tags (masterpiece / score_9 / anime / monochrome / ...)</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-enable-wd14" checked>
+                        <span data-i18n="smartTag.enableWd14">Run local tagger (WD14 / OppaiOracle) for booru-style tags</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-enable-vlm" checked>
+                        <span data-i18n="smartTag.enableVlm">Run VLM for natural-language sentence (uses the provider in Settings)</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-use-gpu" checked>
+                        <span data-i18n="smartTag.useGpu">Use GPU for the local tagger if available</span>
+                    </label>
+                </div>
+
+                <!-- Image count summary -->
+                <div class="smart-tag-summary" id="smart-tag-summary" style="padding: 10px; background: var(--surface-2, #1a1a1a); border-radius: 8px; font-size: 14px;">
+                    <span data-i18n="smartTag.imageCountLabel">Will run on:</span>
+                    <strong id="smart-tag-image-count">0</strong>
+                    <span data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
+                </div>
+
+                <!-- Progress (hidden until job starts) -->
+                <div class="smart-tag-progress" id="smart-tag-progress" hidden>
+                    <div class="progress-bar" style="height: 8px; border-radius: 4px; background: var(--surface-2, #1a1a1a); overflow: hidden;">
+                        <div class="progress-bar-fill" id="smart-tag-progress-fill" style="height: 100%; width: 0%; background: var(--accent-color, #ff8a00); transition: width 0.3s;"></div>
+                    </div>
+                    <p class="smart-tag-progress-text" id="smart-tag-progress-text" style="margin-top: 8px; font-size: 13px;">Initialising...</p>
+                    <p class="smart-tag-progress-preview" id="smart-tag-progress-preview" style="margin-top: 4px; font-size: 12px; opacity: 0.7; font-style: italic;"></p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="modal-actions" style="margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
+                <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
+                <button class="btn btn-primary" id="btn-smart-tag-run">
+                    <span aria-hidden="true">✨</span>
+                    <span data-i18n="smartTag.run">Run Smart Tag</span>
+                </button>
+            </div>
         </div>
     </div>
 
