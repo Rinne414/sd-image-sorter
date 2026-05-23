@@ -1,0 +1,44 @@
+/* SD Image Sorter — Tag modal pre-tag filters card (v3.2.2 T-power-PR1). */
+
+.tag-power-card {
+    margin-top: 12px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.tag-power-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.tag-power-summary::-webkit-details-marker { display: none; }
+
+.tag-power-summary-hint {
+    margin-left: auto;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+}
+
+.tag-power-card[open] {
+    border-color: rgba(var(--accent-secondary-rgb), 0.32);
+}
+
+.tag-power-body {
+    padding: 0 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tag-power-quickfills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}

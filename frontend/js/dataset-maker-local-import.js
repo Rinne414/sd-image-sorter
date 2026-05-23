@@ -416,6 +416,61 @@
 
     function $(id) { return document.getElementById(id); }
 
+    /**
+     * v3.2.2 T-power-PR1 (J): derive a trigger word from a folder path.
+     *
+     * Rules (verified against kohya-ss/sd-scripts and sorryhyun/anima_lora):
+     *
+     *   1. Take the LEAF folder name only. ``C:/data/8_my_oc_style`` → ``8_my_oc_style``.
+     *   2. Strip leading ``^(\d+)_`` if present — that is kohya's "repeats per
+     *      epoch" subfolder convention (kohya-ss/sd-scripts maintainer
+     *      response, discussion #182). Only the ANCHOR position counts:
+     *      ``8_my_oc`` → ``my_oc`` but ``candy8_oc`` is left alone.
+     *   3. If the result contains any non-ASCII character (e.g. Chinese,
+     *      Japanese, Korean), return EMPTY trigger and a friendly warning —
+     *      the user almost certainly wants a clean ASCII trigger token, but
+     *      we can't reliably transliterate.
+     *   4. If baseModel === 'anima_style', prepend ``@`` to mark this as an
+     *      Anima style/artist trigger (verified against
+     *      I:\Lora trainer\anima_lora\TRAINING.md line 53: "Prepend
+     *      `@<trigger>, ` to every `.txt`. The `@` prefix is required by
+     *      Anima for artist/style tags."). Anima character LoRAs and all
+     *      other base models leave the trigger plain.
+     *
+     * Returns ``{trigger: string, warning?: string}``.
+     */
+    DM._deriveTriggerFromFolder = function (folderPath, baseModel) {
+        if (!folderPath) return { trigger: '', warning: '' };
+        // Take leaf only — both forward and backslash separators welcome.
+        const leaf = String(folderPath).split(/[\\/]/).filter(Boolean).pop() || '';
+        if (!leaf) return { trigger: '' };
+
+        // Strip leading ``^(\d+)_`` (kohya repeats prefix). Only at the
+        // very start, never in the middle of the name.
+        let stem = leaf;
+        const kohyaMatch = stem.match(/^(\d+)_(.+)$/);
+        if (kohyaMatch && kohyaMatch[2]) {
+            stem = kohyaMatch[2];
+        }
+
+        // Reject non-ASCII so we never produce a half-mangled trigger.
+        // CJK + emoji + accented letters all fall in here.
+        // eslint-disable-next-line no-control-regex
+        if (/[^\x00-\x7f]/.test(stem)) {
+            return {
+                trigger: '',
+                warning: 'non_ascii',
+            };
+        }
+
+        // Anima style LoRAs require an ``@`` prefix on the artist/style
+        // token (TRAINING.md line 53). All other base models keep it plain.
+        if (baseModel === 'anima_style' && !stem.startsWith('@')) {
+            stem = '@' + stem;
+        }
+        return { trigger: stem };
+    };
+
     DM._openFolderImport = function () {
         const modal = $('dataset-folder-import-modal');
         if (modal) modal.hidden = false;
@@ -467,6 +522,35 @@
                     'Skipped {count} unreadable files in that folder.',
                     { count: data.skipped_unreadable }), 'warning', 5000);
             }
+            // v3.2.2 T-power-PR1 (J): apply trigger detection now that
+            // the queue has the folder's images.
+            try {
+                const mode = $('dataset-folder-trigger-mode')?.value || 'suggest';
+                const baseModel = $('dataset-folder-base-model')?.value || 'sdxl';
+                if (mode !== 'off') {
+                    const { trigger, warning } = this._deriveTriggerFromFolder(path, baseModel);
+                    const triggerInput = document.getElementById('dataset-trigger');
+                    if (triggerInput) {
+                        if (warning === 'non_ascii') {
+                            this._toast(this._t('dataset.folderTriggerNonAscii',
+                                'The folder name has non-ASCII characters; please type a trigger manually.'),
+                                'warning', 6000);
+                        } else if (trigger) {
+                            if (mode === 'autofill') {
+                                triggerInput.value = trigger;
+                                triggerInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                this._toast(this._t('dataset.folderTriggerAutofilled',
+                                    'Auto-filled trigger: {trigger}', { trigger }), 'success', 4000);
+                            } else { // suggest
+                                triggerInput.placeholder = trigger;
+                                this._toast(this._t('dataset.folderTriggerSuggested',
+                                    'Suggested trigger (in placeholder): {trigger}',
+                                    { trigger }), 'info', 4000);
+                            }
+                        }
+                    }
+                }
+            } catch (_e) { /* non-fatal */ }
         } catch (e) {
             if (status) status.textContent = e.message || String(e);
         } finally {

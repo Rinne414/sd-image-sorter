@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="/static/css/dataset-maker.css">
     <link rel="stylesheet" href="/static/css/dataset-pipeline.css">
     <link rel="stylesheet" href="/static/css/smart-tag-hint.css">
+    <link rel="stylesheet" href="/static/css/tag-power.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -3038,6 +3039,28 @@
                                     <strong data-i18n="dataset.folderImportRecursive">Include subfolders</strong>
                                 </span>
                             </label>
+
+                            <!-- v3.2.2 T-power-PR1 (J): folder→trigger detection.
+                                 Default mode = suggest (placeholder only, doesn't auto-fill).
+                                 Base model controls the @ prefix rule for Anima style LoRAs. -->
+                            <label class="form-label">
+                                <span data-i18n="dataset.folderTriggerModeLabel">Auto-detect trigger from folder name</span>
+                                <select id="dataset-folder-trigger-mode" class="form-input">
+                                    <option value="suggest" data-i18n="dataset.folderTriggerModeSuggest">Suggest only (placeholder hint)</option>
+                                    <option value="autofill" data-i18n="dataset.folderTriggerModeAutofill">Auto-fill the trigger field</option>
+                                    <option value="off" data-i18n="dataset.folderTriggerModeOff">Don't detect</option>
+                                </select>
+                            </label>
+                            <label class="form-label">
+                                <span data-i18n="dataset.folderBaseModelLabel">Base model preset (controls @-prefix rule)</span>
+                                <select id="dataset-folder-base-model" class="form-input">
+                                    <option value="sdxl" selected>SD 1.5 / SDXL / Pony / Illustrious / NoobAI</option>
+                                    <option value="flux">FLUX / SD3</option>
+                                    <option value="anima_style">Anima — STYLE LoRA (@-prefix)</option>
+                                    <option value="anima_character">Anima — CHARACTER LoRA</option>
+                                </select>
+                            </label>
+
                             <p class="dataset-modal-status" id="dataset-folder-import-status" aria-live="polite"></p>
                             <div class="dataset-modal-actions">
                                 <button class="btn btn-ghost" id="btn-dataset-folder-import-cancel" data-i18n="common.cancel">Cancel</button>
@@ -3765,6 +3788,52 @@
                                 <span class="checkbox-text" data-i18n="modal.tagRetagAll">Re-tag already tagged images?</span>
                             </label>
                         </div>
+
+                        <!-- v3.2.2 T-power-PR1: pre-tag blacklist + max-tags + base model preset -->
+                        <details class="form-group tag-power-card" id="tag-power-card">
+                            <summary class="tag-power-summary">
+                                <span aria-hidden="true">⚙️</span>
+                                <span data-i18n="modal.tagPowerTitle">Pre-tag filters (optional)</span>
+                                <span class="tag-power-summary-hint" data-i18n="modal.tagPowerHint">Drop unwanted tags before they enter the DB.</span>
+                            </summary>
+                            <div class="tag-power-body">
+                                <label class="form-label">
+                                    <span data-i18n="modal.tagBaseModelLabel">Base model preset</span>
+                                    <select id="tag-base-model" class="input-field">
+                                        <option value="" data-i18n="modal.tagBaseModelNone">— Pick to get tag-count suggestion —</option>
+                                        <option value="sdxl">SD 1.5 / SDXL / Pony / Illustrious / NoobAI (≈ 50 tags)</option>
+                                        <option value="flux">FLUX / SD3 (≈ 120 tags)</option>
+                                        <option value="anima_style">Anima — STYLE LoRA (@-prefixed trigger, ≈ 200 tags)</option>
+                                        <option value="anima_character">Anima — CHARACTER LoRA (≈ 200 tags)</option>
+                                    </select>
+                                </label>
+
+                                <label class="form-label">
+                                    <span data-i18n="modal.tagMaxTagsLabel">Max tags per image</span>
+                                    <input type="number" id="tag-max-tags-per-image" class="input-field" min="0" step="1" placeholder="0 = unlimited">
+                                    <small class="form-hint" id="tag-max-tags-hint" data-i18n="modal.tagMaxTagsHint">0 = unlimited. The base-model preset above suggests a value when you change it.</small>
+                                </label>
+
+                                <label class="form-label">
+                                    <span data-i18n="modal.tagPreBlacklistLabel">Pre-tag blacklist (one per line, comma-separated also OK)</span>
+                                    <textarea id="tag-pre-blacklist" class="input-field" rows="3"
+                                              placeholder="masterpiece&#10;score_9_up&#10;monochrome"
+                                              data-i18n-placeholder="modal.tagPreBlacklistPlaceholder"></textarea>
+                                </label>
+
+                                <div class="tag-power-quickfills">
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-tag-prebl-quality"
+                                            data-i18n="modal.tagPreBlacklistQuality">+ quality (masterpiece, score_*, ...)</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-tag-prebl-meta"
+                                            data-i18n="modal.tagPreBlacklistMeta">+ meta (signature, watermark, jpeg_artifacts)</button>
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-tag-prebl-clear"
+                                            data-i18n="common.clear">Clear</button>
+                                </div>
+                                <p class="form-hint" data-i18n="modal.tagPreBlacklistAlsoExport">
+                                    💡 You can also blacklist at export time inside Dataset Maker → Step B.
+                                </p>
+                            </div>
+                        </details>
 
                         <div class="form-group">
                             <div class="tag-runtime-card" role="status" aria-live="polite">
@@ -4759,6 +4828,7 @@
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset-maker.js"></script>
     <script src="/static/js/smart-tag.js"></script>
+    <script src="/static/js/tag-power.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>

@@ -1311,7 +1311,10 @@ const API = {
             retag_all: options.retagAll || false,
             use_gpu: options.useGpu ?? true,
             allow_unsafe_acceleration: options.allowUnsafeAcceleration ?? false,
-            batch_size: options.batchSize || null
+            batch_size: options.batchSize || null,
+            // v3.2.2 T-power-PR1: pre-tag filters applied inside the worker.
+            pre_tag_blacklist: Array.isArray(options.preTagBlacklist) ? options.preTagBlacklist : [],
+            max_tags_per_image: Number.isFinite(options.maxTagsPerImage) ? Math.max(0, options.maxTagsPerImage) : 0,
         });
     },
 
@@ -6516,6 +6519,28 @@ async function startTagging() {
 
     options.retagAll = $('#tag-retag-all').checked;
     options.useGpu = useGpuCheckbox?.checked ?? true;
+
+    // v3.2.2 T-power-PR1: pre-tag filters from the optional <details>.
+    // Blacklist is split on commas + newlines, trimmed, deduped.
+    const blacklistRaw = (document.getElementById('tag-pre-blacklist')?.value || '').trim();
+    if (blacklistRaw) {
+        const seen = new Set();
+        const blacklist = [];
+        for (const token of blacklistRaw.split(/[,\n]+/)) {
+            const t = token.trim();
+            if (!t) continue;
+            const k = t.toLowerCase();
+            if (seen.has(k)) continue;
+            seen.add(k);
+            blacklist.push(t);
+        }
+        if (blacklist.length) options.preTagBlacklist = blacklist;
+    }
+    const maxTagsRaw = (document.getElementById('tag-max-tags-per-image')?.value || '').trim();
+    if (maxTagsRaw) {
+        const n = parseInt(maxTagsRaw, 10);
+        if (Number.isFinite(n) && n > 0) options.maxTagsPerImage = n;
+    }
 
     // Advanced runtime chunk size now maps to the backend's true WD14 batch size
     // where the selected model supports dynamic batching.
