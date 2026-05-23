@@ -721,6 +721,14 @@ class SortingService:
                 return False
             self._scan_cancel_event = cancel_event
             self._scan_worker_thread = worker_thread
+            # v3.2.2: transition from "starting" to "running" once the
+            # worker thread is actually live. start_scan sets the initial
+            # status to "starting" so concurrent /api/scan POSTs see the
+            # in-flight slot before the background task picks up the
+            # work; run_scan immediately calls this method to flip it
+            # to "running".
+            if self._scan_progress.get("status") == "starting":
+                self._scan_progress = {**self._scan_progress, "status": "running"}
             return True
 
     def _set_scan_progress_if_current(self, run_id: int, state: Dict[str, Any]) -> bool:
@@ -938,9 +946,30 @@ class SortingService:
             raise HTTPException(status_code=400, detail=error or "Invalid folder path")
 
         with self._scan_lock:
+            current_status = self._scan_progress["status"]
             worker_alive = bool(self._scan_worker_thread and self._scan_worker_thread.is_alive())
-            if self._scan_progress["status"] in {"running", "cancelling"} and worker_alive:
-                raise HTTPException(status_code=400, detail="Scan already in progress")
+            # v3.2.2: previously this only rejected when ``status == 'running'``
+            # AND ``worker_alive``. Three concurrent POSTs to /api/scan all
+            # squeezed through the gate because the worker thread isn't
+            # created until later (background_tasks schedules it after the
+            # lock is released), so the second/third callers all observed
+            # worker_alive=False and incorrectly believed nothing was
+            # running. Result: three "Scan started" 200 responses but only
+            # one real scan with the others left in an inconsistent
+            # progress state.
+            #
+            # Fix: any non-terminal status counts as "in progress". Stale
+            # state (status=running but worker died) is recovered through
+            # /api/scan/reset which the UI's "Reset stuck scan" button
+            # already calls; we should not silently overwrite it here.
+            ACTIVE_STATUSES = {"running", "cancelling", "starting"}
+            if current_status in ACTIVE_STATUSES:
+                if worker_alive or current_status in {"starting", "cancelling"}:
+                    raise HTTPException(status_code=409, detail="Scan already in progress")
+                raise HTTPException(
+                    status_code=409,
+                    detail="Previous scan is in a stale state. Call /api/scan/reset first.",
+                )
 
             self._scan_run_id += 1
             run_id = self._scan_run_id
@@ -949,7 +978,7 @@ class SortingService:
             self._scan_cancel_event = cancel_event
             self._scan_worker_thread = None
             self._scan_progress = {
-                "status": "running",
+                "status": "starting",
                 "step": "starting",
                 "current": 0,
                 "processed": 0,
