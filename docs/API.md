@@ -1062,4 +1062,40 @@ Returns `{status, exported, skipped, error_count, output_folder, items[], error_
 
 ---
 
+#### POST /api/smart-tag/start
+
+LoraHub-style "Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.
+
+Body:
+```json
+{
+  "image_ids": [1, 2, 3],
+  "training_purpose": "style",
+  "trigger_word": "myloratrigger",
+  "merge_strategy": "replace",
+  "auto_strip_noise": true,
+  "skip_existing": true,
+  "enable_wd14": true,
+  "enable_vlm": true,
+  "tagger_model": "",
+  "use_gpu": true,
+  "general_threshold": 0.35,
+  "character_threshold": 0.85
+}
+```
+
+`training_purpose` accepts `style` / `character` / `general` / `concept` (plus aliases `style_lora` / `character_lora` / `concept_lora` / `nsfw` / `nsfw_lora`). Each picks a different VLM prompt: STYLE describes medium / lighting / composition only, CHARACTER describes pose / framing / mood and explicitly avoids hair / eye / signature outfit, GENERAL covers full subject / pose / clothing / scene.
+
+Returns 409 if another Smart Tag job is already running on the same backend.
+
+#### GET /api/smart-tag/progress
+
+Poll the active or named Smart Tag job. With no `job_id` query param, returns the active job (or `{"status": "idle", "active": false}` if none is running). Snapshot contains `total`, `processed`, `succeeded`, `failed`, `message`, `last_caption_preview`, and a tail-capped `errors[]` list.
+
+#### POST /api/smart-tag/cancel
+
+Request cancellation of the active Smart Tag job. The worker stops at the next image boundary. Returns 404 when no job is active.
+
+---
+
 Use `/docs` for interactive exploration. Contract drift is checked by `backend/tests/test_api_docs_contract.py`, and `scripts/export_openapi.py` exports a stable sorted OpenAPI JSON schema without starting the server.

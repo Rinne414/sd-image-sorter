@@ -2650,6 +2650,13 @@
                                     <span aria-hidden="true">🏷️</span>
                                     <span data-i18n="dataset.tagAll">Tag all images now</span>
                                 </button>
+                                <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
+                                    <span aria-hidden="true">✨</span>
+                                    <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>
+                                </button>
+                                <p class="dataset-card-help" data-i18n="dataset.smartTagHelp" style="margin-top: 6px; font-size: 12px; opacity: 0.75;">
+                                    LoraHub-style: WD14 tags + a VLM-written natural-language sentence, with auto-cleanup of "masterpiece / score_9 / anime" noise tags and trigger-word injection. Pick a training purpose and run.
+                                </p>
                             </section>
 
                             <!-- Section B: Captions polish (collapsed by default - novice users don't need this) -->
@@ -4565,6 +4572,7 @@
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
     <script src="/static/js/dataset-maker.js"></script>
+    <script src="/static/js/smart-tag.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
@@ -4622,6 +4630,102 @@
         <div class="color-progress-toast-actions">
             <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-pause" data-i18n="color.pause">Pause</button>
             <button type="button" class="btn btn-ghost btn-small" id="btn-color-progress-hide" data-i18n="color.runHidden">Run hidden</button>
+        </div>
+    </div>
+
+    <!-- Smart Tag Modal (LoraHub-style WD14 + VLM combined wizard) -->
+    <div class="modal" id="smart-tag-modal" role="dialog" aria-modal="true" aria-labelledby="smart-tag-modal-title">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <button class="modal-close" id="btn-smart-tag-close" aria-label="Close">✕</button>
+            <h3 id="smart-tag-modal-title">
+                <span aria-hidden="true">✨</span>
+                <span data-i18n="smartTag.title">Smart Tag (WD14 + VLM)</span>
+            </h3>
+            <p class="modal-description" data-i18n="smartTag.description">
+                Runs a local tagger (WD14 / OppaiOracle) and a VLM in one pass, then writes a clean LoRA-ready caption per image. Mirrors LoraHub's smart-caption recipe.
+            </p>
+
+            <!-- Form -->
+            <div class="smart-tag-form" style="display: flex; flex-direction: column; gap: 16px; margin-top: 16px;">
+                <!-- Training purpose -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.trainingPurpose">Training purpose</span>
+                    <select id="smart-tag-purpose" class="form-input">
+                        <option value="style" data-i18n="smartTag.purposeStyle">Style LoRA — describe medium / lighting / composition (no clothing detail)</option>
+                        <option value="character" data-i18n="smartTag.purposeCharacter">Character LoRA — describe pose / framing only (no hair, eye, outfit)</option>
+                        <option value="general" selected data-i18n="smartTag.purposeGeneral">General — full description: subject / pose / clothing / scene</option>
+                        <option value="concept" data-i18n="smartTag.purposeConcept">Concept LoRA — focus on the concept being trained</option>
+                    </select>
+                </label>
+
+                <!-- Trigger word -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.triggerWord">Trigger word (optional)</span>
+                    <input type="text" id="smart-tag-trigger" class="form-input"
+                           placeholder="e.g. myloratrigger"
+                           data-i18n-placeholder="smartTag.triggerPlaceholder"
+                           autocomplete="off">
+                    <span class="form-help" data-i18n="smartTag.triggerHelp" style="font-size: 12px; opacity: 0.75; margin-top: 4px;">
+                        Inserted at the front of every caption (skipped if already in WD14 tags).
+                    </span>
+                </label>
+
+                <!-- Merge strategy -->
+                <label class="form-label">
+                    <span data-i18n="smartTag.mergeStrategy">Existing captions</span>
+                    <select id="smart-tag-merge" class="form-input">
+                        <option value="replace" selected data-i18n="smartTag.mergeReplace">Replace (recommended) — discard previous caption</option>
+                        <option value="append" data-i18n="smartTag.mergeAppend">Append — glue new caption onto previous</option>
+                    </select>
+                </label>
+
+                <!-- Toggles -->
+                <div class="smart-tag-toggles" style="display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--border-color, #333); border-radius: 8px;">
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-strip-noise" checked>
+                        <span data-i18n="smartTag.stripNoise">Auto-strip noise tags (masterpiece / score_9 / anime / monochrome / ...)</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-enable-wd14" checked>
+                        <span data-i18n="smartTag.enableWd14">Run local tagger (WD14 / OppaiOracle) for booru-style tags</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-enable-vlm" checked>
+                        <span data-i18n="smartTag.enableVlm">Run VLM for natural-language sentence (uses the provider in Settings)</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="smart-tag-use-gpu" checked>
+                        <span data-i18n="smartTag.useGpu">Use GPU for the local tagger if available</span>
+                    </label>
+                </div>
+
+                <!-- Image count summary -->
+                <div class="smart-tag-summary" id="smart-tag-summary" style="padding: 10px; background: var(--surface-2, #1a1a1a); border-radius: 8px; font-size: 14px;">
+                    <span data-i18n="smartTag.imageCountLabel">Will run on:</span>
+                    <strong id="smart-tag-image-count">0</strong>
+                    <span data-i18n="smartTag.imageCountSuffix">images currently in Dataset Maker.</span>
+                </div>
+
+                <!-- Progress (hidden until job starts) -->
+                <div class="smart-tag-progress" id="smart-tag-progress" hidden>
+                    <div class="progress-bar" style="height: 8px; border-radius: 4px; background: var(--surface-2, #1a1a1a); overflow: hidden;">
+                        <div class="progress-bar-fill" id="smart-tag-progress-fill" style="height: 100%; width: 0%; background: var(--accent-color, #ff8a00); transition: width 0.3s;"></div>
+                    </div>
+                    <p class="smart-tag-progress-text" id="smart-tag-progress-text" style="margin-top: 8px; font-size: 13px;">Initialising...</p>
+                    <p class="smart-tag-progress-preview" id="smart-tag-progress-preview" style="margin-top: 4px; font-size: 12px; opacity: 0.7; font-style: italic;"></p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="modal-actions" style="margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end;">
+                <button class="btn btn-ghost" id="btn-smart-tag-cancel-modal" data-i18n="smartTag.cancel">Cancel</button>
+                <button class="btn btn-danger" id="btn-smart-tag-cancel-job" hidden data-i18n="smartTag.cancelJob">Stop</button>
+                <button class="btn btn-primary" id="btn-smart-tag-run">
+                    <span aria-hidden="true">✨</span>
+                    <span data-i18n="smartTag.run">Run Smart Tag</span>
+                </button>
+            </div>
         </div>
     </div>
 
