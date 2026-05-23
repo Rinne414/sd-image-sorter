@@ -199,9 +199,9 @@ class RemoveSelectedImagesResponse(BaseModel):
 
 
 class SaveEditedMetadataRequest(BaseModel):
-    source_path: str
-    output_path: str
-    format: str = "png"
+    source_path: str = Field(..., min_length=1, description="Source image path (must be non-empty)")
+    output_path: str = Field(..., min_length=1, description="Output image path (must be non-empty)")
+    format: str = Field(default="png", min_length=1, description="Output format. Empty strings are rejected to avoid silent fallthrough to whatever default the writer picks; the caller must explicitly choose png/webp/jpg.")
     quality: Optional[int] = Field(default=None, ge=1, le=100)
     metadata: dict[str, Any] = Field(default_factory=dict)
     allow_overwrite: bool = False
@@ -813,6 +813,23 @@ async def save_edited_image_metadata(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (PathValidationError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except PermissionError as exc:
+        # v3.2.2: previously bubbled up as 500 "UnhandledException" when
+        # users tried to save into a system-protected directory like
+        # C:\Windows\System32\. That looks like a server crash; return a
+        # 403 with the OS-provided reason instead.
+        raise HTTPException(
+            status_code=403,
+            detail=f"Permission denied writing to output path: {exc}",
+        ) from exc
+    except OSError as exc:
+        # Catch the OS-level errors (read-only path, ENOSPC, ENOENT on
+        # the parent directory, network drive timeout) and surface them
+        # as 400 with the underlying message rather than a generic 500.
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot write to output path: {exc}",
+        ) from exc
 
 
 @router.get(

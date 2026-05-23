@@ -102,7 +102,11 @@ class BulkRemoveRequest(BaseModel):
 
 class CleanupRequest(BaseModel):
     image_ids: List[int] = Field(min_length=1, max_length=500000)
-    min_confidence: float = 0.20
+    # v3.2.2: confidence is normalized to [0.0, 1.0]. Out-of-range
+    # values (e.g. 1.5) used to silently mean "remove all tags",
+    # which is destructive when dry_run=False. Negative values were
+    # silent no-ops. Bound them so the caller has to be explicit.
+    min_confidence: float = Field(default=0.20, ge=0.0, le=1.0)
     dedupe: bool = True
     dry_run: bool = False
 
