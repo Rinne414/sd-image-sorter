@@ -950,3 +950,25 @@
     border-radius: 4px;
     color: var(--text-primary, #f1f5f9);
 }
+
+
+/* Pro-LoRA-trainer cleanup buttons row (Phase 2E) */
+#view-dataset .dataset-cleanup-row {
+    margin: 4px 0 8px 0;
+}
+#view-dataset .dataset-cleanup-label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted, rgba(255,255,255,0.55));
+    margin-bottom: 4px;
+}
+#view-dataset .dataset-cleanup-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+#view-dataset .dataset-cleanup-buttons > .btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    line-height: 1.2;
+}

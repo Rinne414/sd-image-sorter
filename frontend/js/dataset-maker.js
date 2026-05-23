@@ -314,6 +314,9 @@
     const part3 = document.createElement('script');
     part3.src = '/static/js/dataset-maker-part3.js';
     document.head.appendChild(part3);
+    const cleanups = document.createElement('script');
+    cleanups.src = '/static/js/dataset-maker-cleanups.js';
+    document.head.appendChild(cleanups);
 
     // Hook into view activation
     function initWhenViewActivates() {

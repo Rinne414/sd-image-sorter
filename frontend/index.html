@@ -2681,6 +2681,54 @@
                                               placeholder="bad_anatomy, watermark"
                                               data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
                                 </label>
+
+                                <!-- Pro LoRA-trainer convenience: 5 category-cleanup
+                                     buttons that batch-append common tag classes to
+                                     the blacklist. Each button is non-destructive
+                                     (it just appends to the textarea, the user can
+                                     still trim afterwards). Curated lists; intent
+                                     is "the 30-50 most common danbooru tags in
+                                     each category" not "every possible tag". -->
+                                <div class="dataset-cleanup-row">
+                                    <small class="dataset-cleanup-label" data-i18n="dataset.cleanupLabel">Quick remove a category:</small>
+                                    <div class="dataset-cleanup-buttons">
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-quality"
+                                                data-i18n="dataset.cleanupQuality"
+                                                data-i18n-title="dataset.cleanupQualityTooltip"
+                                                title="Add common quality / score tags to the blacklist (masterpiece, best_quality, score_*, etc).">
+                                            🛡️ Quality
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-identity"
+                                                data-i18n="dataset.cleanupIdentity"
+                                                data-i18n-title="dataset.cleanupIdentityTooltip"
+                                                title="Add hair/eye/face identity tags to the blacklist. Recommended when training a character LoRA so the model learns the identity from your trigger word, not from explicit tags.">
+                                            👤 Identity
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-appearance"
+                                                data-i18n="dataset.cleanupAppearance"
+                                                data-i18n-title="dataset.cleanupAppearanceTooltip"
+                                                title="Add body / clothing appearance tags to the blacklist (e.g. school_uniform, long_sleeves, skirt). Recommended when those are constant across all your images.">
+                                            👁 Appearance
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-poses"
+                                                data-i18n="dataset.cleanupPoses"
+                                                data-i18n-title="dataset.cleanupPosesTooltip"
+                                                title="Add common pose / action tags to the blacklist (standing, sitting, looking_at_viewer, etc). Use only if you want the model to learn poses freely.">
+                                            🤸 Poses
+                                        </button>
+                                        <button type="button" class="btn btn-ghost btn-small"
+                                                id="btn-dataset-cleanup-copyright"
+                                                data-i18n="dataset.cleanupCopyright"
+                                                data-i18n-title="dataset.cleanupCopyrightTooltip"
+                                                title="Add common copyright / franchise / character-name tags to the blacklist (touhou, original, pokemon, hatsune_miku, etc). Recommended for any LoRA you intend to share.">
+                                            📚 Copyright
+                                        </button>
+                                    </div>
+                                </div>
                                 <label class="form-checkbox">
                                     <input type="checkbox" id="dataset-underscore-to-space" checked>
                                     <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (recommended for most LoRA trainers)</span>
