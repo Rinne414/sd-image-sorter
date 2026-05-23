@@ -1,0 +1,50 @@
+/* SD Image Sorter — Caption autocomplete dropdown (v3.2.2 T-power-PR3 / I). */
+
+.caption-autocomplete-dropdown {
+    position: absolute;
+    z-index: 10000;
+    background: var(--surface-1, #1a1a1a);
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    border-radius: var(--radius-md, 10px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
+    padding: 4px;
+    max-height: 280px;
+    overflow-y: auto;
+    min-width: 180px;
+}
+
+.caption-autocomplete-dropdown[hidden] { display: none; }
+
+.caption-autocomplete-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.caption-autocomplete-item:hover,
+.caption-autocomplete-item.active {
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.20);
+}
+
+.caption-autocomplete-name {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.84rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.caption-autocomplete-count {
+    font-size: 0.74rem;
+    color: var(--text-muted, #9ca3af);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}

@@ -661,6 +661,40 @@ def _resolve_tagger(req: SmartTagRequest):
     )
 
 
+def _resolve_tagger_by_model(
+    model_name: str,
+    *,
+    general_threshold: float,
+    character_threshold: float,
+    use_gpu: bool,
+):
+    """v3.2.2 T-power-PR3 (D wire-up): factory that returns a tagger for
+    a specific model name. Used by the multi-tagger consensus path so
+    each tagger entry in ``SmartTagRequest.taggers`` gets its own
+    instance (and its own threshold) without mutating the caller's
+    SmartTagRequest. OppaiOracle vs WD14 dispatch mirrors
+    ``_resolve_tagger``.
+    """
+    name = (model_name or "").strip().lower()
+    if name.startswith("oppai-oracle"):
+        from oppai_oracle_tagger import get_oppai_oracle_tagger
+        return get_oppai_oracle_tagger(
+            model_name=model_name,
+            threshold=general_threshold,
+            character_threshold=character_threshold,
+            use_gpu=use_gpu,
+            force_reload=False,
+        )
+    from tagger import get_tagger
+    return get_tagger(
+        model_name=model_name or None,
+        threshold=general_threshold,
+        character_threshold=character_threshold,
+        use_gpu=use_gpu,
+        force_reload=False,
+    )
+
+
 def _flatten_tag_names(items: List[Any]) -> List[str]:
     out: List[str] = []
     for item in items or []:
@@ -688,14 +722,63 @@ def _process_one_image(
     rating: Optional[str] = None
 
     if req.enable_wd14 and tagger is not None:
-        result = tagger.tag(
-            image_path,
-            threshold=req.general_threshold,
-            character_threshold=req.character_threshold,
-        )
-        general_names = _flatten_tag_names(result.get("general_tags"))
-        character_names = _flatten_tag_names(result.get("character_tags"))
-        rating = result.get("rating") or None
+        # T-power-PR3 (D wire-up): when SmartTagRequest.taggers is
+        # populated, run each tagger sequentially on this image and
+        # fuse via compute_consensus_tags. The single-tagger object
+        # passed in (from _resolve_tagger) is ignored here.
+        if req.taggers:
+            per_tagger_outputs: List[Dict[str, Any]] = []
+            for entry in req.taggers:
+                model_name = str(entry.get("model") or "").strip()
+                if not model_name:
+                    continue
+                weight = float(entry.get("weight") or 1.0)
+                gen_th = float(entry.get("general_threshold") or req.general_threshold)
+                char_th = float(entry.get("character_threshold") or req.character_threshold)
+                try:
+                    one_tagger = _resolve_tagger_by_model(
+                        model_name,
+                        general_threshold=gen_th,
+                        character_threshold=char_th,
+                        use_gpu=req.use_gpu,
+                    )
+                    if hasattr(one_tagger, "load"):
+                        one_tagger.load()
+                    out = one_tagger.tag(
+                        image_path,
+                        threshold=gen_th,
+                        character_threshold=char_th,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "smart-tag consensus: tagger %s failed on %s: %s",
+                        model_name, image_path, exc,
+                    )
+                    continue
+                per_tagger_outputs.append({
+                    "model": model_name,
+                    "weight": weight,
+                    "general_tags": out.get("general_tags") or [],
+                    "character_tags": out.get("character_tags") or [],
+                    "rating": out.get("rating"),
+                })
+            fused = compute_consensus_tags(
+                per_tagger_outputs,
+                consensus_min=req.consensus_min,
+                skip_categories=req.consensus_skip_categories,
+            )
+            general_names = _flatten_tag_names(fused.get("general_tags"))
+            character_names = _flatten_tag_names(fused.get("character_tags"))
+            rating = fused.get("rating") or None
+        else:
+            result = tagger.tag(
+                image_path,
+                threshold=req.general_threshold,
+                character_threshold=req.character_threshold,
+            )
+            general_names = _flatten_tag_names(result.get("general_tags"))
+            character_names = _flatten_tag_names(result.get("character_tags"))
+            rating = result.get("rating") or None
 
     # ------- Stage 2: VLM caption --------------------------------------
     nl_text = ""

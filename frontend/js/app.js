@@ -6669,6 +6669,17 @@ async function pollTagProgress() {
                 && typeof window.TagStatsModal.show === 'function') {
                 try { window.TagStatsModal.show(progress.last_run_stats); } catch (_e) { /* */ }
             }
+            // v3.2.2 T-power-PR3 (G): two-layer completion notification
+            // (favicon+title blink always; Notification API if user opted in).
+            if (typeof window.TagCompleteNotify === 'object'
+                && typeof window.TagCompleteNotify.fireOnDone === 'function') {
+                try {
+                    window.TagCompleteNotify.fireOnDone(
+                        progress.message || 'Tagging complete',
+                        errors > 0 ? 'warning' : 'success',
+                    );
+                } catch (_e) { /* */ }
+            }
             // v3.2.1: dispatch a hookable event so other modules (gallery
             // sub-views, prompt-lab, etc.) can react to fresh tags without
             // needing to know about the polling internals here.
