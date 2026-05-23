@@ -1377,6 +1377,18 @@ const V321Integration = {
         const targetId = editorOpen ? 'caption-editor-list' : 'export-preview-list';
         const list = document.getElementById(targetId);
         if (!list) return;
+
+        // v3.2.2 (issue #5 point 2): preserve the queue list's scroll position
+        // across re-renders. Each click on a queue item used to call
+        // _renderPreviewWorkbench, which destroyed the .export-preview-queue-list
+        // div via list.innerHTML='' and rebuilt it from scratch with
+        // scrollTop=0, so the user lost their scroll position every click.
+        // Save the scroll position from the previous render before the wipe.
+        let savedScrollTop = 0;
+        if (this._queueScrollContainer && document.body.contains(this._queueScrollContainer)) {
+            savedScrollTop = this._queueScrollContainer.scrollTop || 0;
+        }
+
         list.innerHTML = '';
 
         // Also clear the OTHER container so we don't end up with duplicate stale workbenches.
@@ -1414,6 +1426,19 @@ const V321Integration = {
             'Temporary edits: nothing is auto-saved to images or the database. Export / Copy / Download uses these edits.'
         );
         list.append(note, workbench);
+
+        // v3.2.2 (issue #5 point 2): restore the queue scroll position now
+        // that the new ``.export-preview-queue-list`` body exists in the DOM.
+        // The new body was created by ``_buildPreviewQueue`` and stored on
+        // ``this._queueScrollContainer``; setting its scrollTop also triggers
+        // the virtual-scroll renderVisible() so the right slice of items
+        // appears immediately at the restored position.
+        if (savedScrollTop > 0 && this._queueScrollContainer) {
+            this._queueScrollContainer.scrollTop = savedScrollTop;
+            if (typeof this._queueRenderVisible === 'function') {
+                requestAnimationFrame(() => this._queueRenderVisible());
+            }
+        }
     },
 
     _getPreviewItem(imageId = this.activePreviewImageId) {
