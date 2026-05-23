@@ -621,6 +621,111 @@ function clearSelectedIds(options = {}) {
     }, options);
 }
 
+// v3.2.2: detect whether the user has applied any non-default filter so
+// the empty-state can show a contextual message ("no matches, try clearing
+// your filter") instead of the onboarding card ("no images yet, import a
+// folder") which is misleading when the user has a populated library.
+function _galleryHasActiveFilter() {
+    const f = AppState.filters || {};
+    if (f.tags && f.tags.length > 0) return true;
+    if (f.checkpoints && f.checkpoints.length > 0) return true;
+    if (f.loras && f.loras.length > 0) return true;
+    if (f.prompts && f.prompts.length > 0) return true;
+    if (f.search && String(f.search).trim().length > 0) return true;
+    if (f.artist) return true;
+    if (f.minWidth != null || f.maxWidth != null) return true;
+    if (f.minHeight != null || f.maxHeight != null) return true;
+    if (f.aspectRatio) return true;
+    if (f.minAesthetic != null || f.maxAesthetic != null) return true;
+    if (f.brightnessMin != null || f.brightnessMax != null) return true;
+    if (f.colorTemperature) return true;
+    if (f.brightnessDistribution) return true;
+    // generators/ratings start as "all selected" - flag only when a strict
+    // subset is selected
+    if (Array.isArray(f.generators) && Array.isArray(ALL_GENERATORS) &&
+        f.generators.length > 0 && f.generators.length < ALL_GENERATORS.length) return true;
+    if (Array.isArray(f.ratings) && f.ratings.length > 0 && f.ratings.length < 4) return true;
+    return false;
+}
+
+function _applyGalleryEmptyStateVariant(emptyState) {
+    if (!emptyState) return;
+    const filterActive = _galleryHasActiveFilter();
+    emptyState.classList.toggle('empty-state-no-matches', filterActive);
+    emptyState.classList.toggle('empty-state-no-library', !filterActive);
+
+    // Look up the title/hint strings; fall back to English if i18n
+    // hasn't loaded yet.
+    const t = (key, fallback) => (typeof appT === 'function' ? appT(key, fallback) : fallback);
+
+    const titleEl = emptyState.querySelector('h3');
+    const hintEl = emptyState.querySelector('p');
+    const importBtn = emptyState.querySelector('#empty-state-scan-btn');
+    const onboardingSteps = emptyState.querySelector('.onboarding-steps');
+    const clearFiltersBtn = emptyState.querySelector('#empty-state-clear-filters-btn');
+
+    if (filterActive) {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'gallery.noMatchesTitle');
+            titleEl.textContent = t('gallery.noMatchesTitle', 'No images match your filters');
+        }
+        if (hintEl) {
+            hintEl.setAttribute('data-i18n', 'gallery.noMatchesHint');
+            hintEl.textContent = t('gallery.noMatchesHint',
+                'Try removing some filter criteria, clearing your search, or adjusting the prompt/tag conditions.');
+        }
+        if (importBtn) importBtn.style.display = 'none';
+        if (onboardingSteps) onboardingSteps.style.display = 'none';
+        // Inject a "Clear filters" CTA if not already present
+        let cta = clearFiltersBtn;
+        if (!cta) {
+            const actions = emptyState.querySelector('.empty-actions');
+            if (actions) {
+                cta = document.createElement('button');
+                cta.id = 'empty-state-clear-filters-btn';
+                cta.className = 'btn btn-primary';
+                const labelSpan = document.createElement('span');
+                labelSpan.setAttribute('data-i18n', 'gallery.clearFilters');
+                labelSpan.textContent = t('gallery.clearFilters', 'Clear all filters');
+                cta.append(document.createTextNode('🧹 '));
+                cta.appendChild(labelSpan);
+                cta.addEventListener('click', () => {
+                    if (typeof window.resetFilters === 'function') {
+                        window.resetFilters();
+                    } else if (window.FilterStore?.resetFilters) {
+                        window.FilterStore.resetFilters();
+                    } else {
+                        // Last-ditch fallback: full reload
+                        location.reload();
+                    }
+                });
+                actions.appendChild(cta);
+            }
+        } else {
+            cta.style.display = '';
+        }
+    } else {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'gallery.noImages');
+            titleEl.textContent = t('gallery.noImages', 'No images yet');
+        }
+        if (hintEl) {
+            hintEl.setAttribute('data-i18n', 'gallery.scanPrompt');
+            hintEl.textContent = t('gallery.scanPrompt',
+                'Import an image folder to start browsing, filtering, and organizing your images');
+        }
+        if (importBtn) importBtn.style.display = '';
+        if (onboardingSteps) onboardingSteps.style.display = '';
+        if (clearFiltersBtn) clearFiltersBtn.style.display = 'none';
+    }
+    // v3.2.2: re-apply i18n to the empty state subtree so the new
+    // data-i18n attributes resolve correctly even if applyToDOM has
+    // already cached their previous value.
+    if (window.I18n && typeof window.I18n.applyToDOM === 'function') {
+        try { window.I18n.applyToDOM(emptyState); } catch (_e) {}
+    }
+}
+
 function clearFilteredSelectionIfFilterChanged(filters = AppState.filters) {
     if (AppState.selectionScope !== 'filtered') return false;
     if (!AppState.selectionToken && (!AppState?.selectedIds || AppState.selectedIds.size === 0)) return false;
@@ -7054,7 +7159,17 @@ async function loadImages(appendMode = false, options = {}) {
 
         const emptyState = $('#gallery-empty-state');
         if (emptyState) {
-            emptyState.style.display = AppState.images.length === 0 ? 'flex' : 'none';
+            const shouldShow = AppState.images.length === 0;
+            emptyState.style.display = shouldShow ? 'flex' : 'none';
+            if (shouldShow) {
+                // v3.2.2: differentiate "library is empty" from "filter
+                // returned 0 results". The original empty state was the
+                // onboarding card ("No images yet, import a folder") which
+                // was misleading when the user had a 71k-image library and
+                // had just tried a tag filter that returned nothing - they
+                // would think their entire library disappeared.
+                _applyGalleryEmptyStateVariant(emptyState);
+            }
         }
         if (AppState.images.length > 0 && window.OnboardingTour) {
             OnboardingTour.markHasSeenImages();

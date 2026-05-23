@@ -53,6 +53,9 @@ window.I18nLang_zhCN = {
     'gallery.imageCount': '{count} 张图片',
     'gallery.noImages': '还没有图片',
     'gallery.scanPrompt': '先导入一个图片文件夹，就可以开始看图、筛图和整理图片',
+    'gallery.noMatchesTitle': '没有符合条件的图片',
+    'gallery.noMatchesHint': '试试去掉一些筛选条件、清空搜索关键字，或调整提示词/标签条件。',
+    'gallery.clearFilters': '清除所有筛选',
     // v3.2.1 task #30: 空图库引导
     'onboarding.step1Title': '导入文件夹',
     'onboarding.step1Hint': '点击右上角「导入图片」扫描包含 SD 图的文件夹。提示词、模型、LoRA 等元数据会自动提取。',

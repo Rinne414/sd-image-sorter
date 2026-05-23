@@ -51,6 +51,9 @@ window.I18nLang_en = {
     'gallery.imageCount': '{count} images',
     'gallery.noImages': 'No images yet',
     'gallery.scanPrompt': 'Import an image folder to start browsing, filtering, and organizing your images',
+    'gallery.noMatchesTitle': 'No images match your filters',
+    'gallery.noMatchesHint': 'Try removing some filter criteria, clearing your search, or adjusting the prompt/tag conditions.',
+    'gallery.clearFilters': 'Clear all filters',
     // v3.2.1 task #30: empty-gallery onboarding
     'onboarding.step1Title': 'Import a folder',
     'onboarding.step1Hint': 'Click Import Images in the top-right to scan a folder of SD images. Metadata, prompts, models, and LoRAs are extracted automatically.',

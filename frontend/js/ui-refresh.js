@@ -162,9 +162,23 @@
                 random: 'sort.random'
             });
 
-            this._setText('#gallery-empty-state h3', 'gallery.noImages');
-            this._setText('#gallery-empty-state p', 'gallery.scanPrompt');
+            // v3.2.2: ``_applyGalleryEmptyStateVariant`` (in app.js) flips the
+            // empty state between two variants — the original "no images
+            // yet" onboarding card, and a new "no images match your
+            // filter" message. Respect the variant class instead of
+            // hard-coding the no-images keys, otherwise this method
+            // overwrites the variant-specific copy on every refresh.
+            var emptyState = document.getElementById('gallery-empty-state');
+            if (emptyState && emptyState.classList.contains('empty-state-no-matches')) {
+                this._setText('#gallery-empty-state h3', 'gallery.noMatchesTitle');
+                this._setText('#gallery-empty-state p', 'gallery.noMatchesHint');
+            } else {
+                this._setText('#gallery-empty-state h3', 'gallery.noImages');
+                this._setText('#gallery-empty-state p', 'gallery.scanPrompt');
+            }
             this._setButton('#empty-state-scan-btn', 'action.scan', '📂', 'action.scan');
+            // v3.2.2: also localize the new "Clear all filters" button
+            this._setButton('#empty-state-clear-filters-btn', 'gallery.clearFilters', '🧹', 'gallery.clearFilters');
             this._setText('#load-more-btn', 'gallery.loadMore');
             this._setText('#gallery-loading span', 'gallery.loading');
             this._setSummaryStrongs('#autosep-filter-summary', [
