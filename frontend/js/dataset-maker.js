@@ -361,6 +361,8 @@
     _appendOrderedScript('/static/js/dataset-maker-cleanups.js');
     // v3.2.2 task #7b: dual-source queue + folder-import (small gallery).
     _appendOrderedScript('/static/js/dataset-maker-local-import.js');
+    // v3.2.2 task #8 + #9: 5-step stepper + Audit panel.
+    _appendOrderedScript('/static/js/dataset-maker-pipeline.js');
 
     // Hook into view activation
     function initWhenViewActivates() {

@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="/static/css/color-backfill.css">
     <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
     <link rel="stylesheet" href="/static/css/dataset-maker.css">
+    <link rel="stylesheet" href="/static/css/dataset-pipeline.css">
     <link rel="stylesheet" href="/static/css/smart-tag-hint.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -2586,9 +2587,81 @@
                         </div>
                     </header>
 
+                    <!-- v3.2.2 task #8: 5-step pipeline header. Numbered circles + labels.
+                         Click jumps to the section anchor below. Scoped to this tab only. -->
+                    <nav class="dataset-stepper" aria-label="Dataset Maker pipeline">
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-import">
+                            <span class="dataset-step-pill-num">1</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepImport">Import</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-audit">
+                            <span class="dataset-step-pill-num">2</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepAudit">Audit</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-organize">
+                            <span class="dataset-step-pill-num">3</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepOrganize">Organize</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-caption">
+                            <span class="dataset-step-pill-num">4</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepCaption">Caption</span>
+                        </button>
+                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-export">
+                            <span class="dataset-step-pill-num">5</span>
+                            <span class="dataset-step-pill-label" data-i18n="dataset.stepExport">Export</span>
+                        </button>
+                    </nav>
+
+                    <!-- v3.2.2 task #9: optional Audit step (LoRA-trainer readiness check).
+                         Default OFF. User opens it, picks the thresholds they care about,
+                         clicks "Run audit". Threshold inputs are unbounded (no UI hard limits). -->
+                    <details class="dataset-audit-section" id="dataset-step-audit">
+                        <summary class="dataset-audit-summary">
+                            <span class="dataset-audit-num" aria-hidden="true">2</span>
+                            <span class="dataset-audit-title" data-i18n="dataset.auditTitle">Audit (optional)</span>
+                            <span class="dataset-audit-summary-hint" data-i18n="dataset.auditSummaryHint">Open to enable LoRA-readiness checks.</span>
+                        </summary>
+                        <div class="dataset-audit-body">
+                            <p class="dataset-audit-help" data-i18n="dataset.auditHelp">
+                                Optional safety net for batch-LoRA workflows. Each check is independent and only runs when its threshold is filled in. None of these flags delete files or DB rows — they just highlight items in the queue so you can decide what to remove.
+                            </p>
+                            <div class="dataset-audit-thresholds">
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditAestheticLabel">Min aesthetic score</span>
+                                    <input type="number" id="dataset-audit-aesthetic-max" step="0.1" placeholder="e.g. 4.5">
+                                    <small data-i18n="dataset.auditAestheticHint">Leave blank to skip. Suggested: 4.5 for character LoRAs.</small>
+                                </label>
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditPhashLabel">Max phash distance</span>
+                                    <input type="number" id="dataset-audit-phash-max" step="1" placeholder="e.g. 5">
+                                    <small data-i18n="dataset.auditPhashHint">Leave blank to skip. Lower = stricter duplicate detection.</small>
+                                </label>
+                                <label class="dataset-audit-threshold">
+                                    <span data-i18n="dataset.auditDimLabel">Min image side (px)</span>
+                                    <input type="number" id="dataset-audit-dim-min" step="1" placeholder="e.g. 512">
+                                    <small data-i18n="dataset.auditDimHint">Leave blank to skip. Most trainers prefer 512 px or more.</small>
+                                </label>
+                            </div>
+                            <div class="dataset-audit-actions">
+                                <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
+                                        data-i18n="dataset.auditRun">Run audit</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download" hidden
+                                        data-i18n="dataset.auditDownload">Download report (.json)</button>
+                                <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
+                            </div>
+                            <div class="dataset-audit-results" id="dataset-audit-results" hidden>
+                                <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
+                                <p class="dataset-audit-hint" data-i18n="dataset.auditClickToFilter">Click a badge to highlight matching items in the queue. Click "Remove from queue" inside the editor to drop the active item.</p>
+                            </div>
+                        </div>
+                    </details>
+
+                    <!-- Anchor for step 1 (Import) — toolbar above is the import step itself. -->
+                    <div id="dataset-step-import" class="dataset-step-anchor" aria-hidden="true"></div>
+
                     <div class="dataset-workbench">
                         <!-- Left: image queue with thumbnails + edit indicator -->
-                        <aside class="dataset-queue-pane" aria-label="Dataset image queue">
+                        <aside class="dataset-queue-pane" aria-label="Dataset image queue" id="dataset-step-organize">
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.queueTitle">Images in dataset</strong>
                                 <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit caption</span>
@@ -2647,7 +2720,7 @@
                         <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
                         <aside class="dataset-export-pane" aria-label="Dataset export settings">
                             <!-- Section A: Tagging shortcut -->
-                            <section class="dataset-card">
+                            <section class="dataset-card" id="dataset-step-caption">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">🏷️</span>
                                     <span data-i18n="dataset.cardTagTitle">Step A. Auto-tag (optional)</span>
@@ -2760,7 +2833,7 @@
                             </details>
 
                             <!-- Section C: Output (the only required section) -->
-                            <section class="dataset-card dataset-card-required">
+                            <section class="dataset-card dataset-card-required" id="dataset-step-export">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">📤</span>
                                     <span data-i18n="dataset.cardExportTitle">Step C. Export to folder</span>
