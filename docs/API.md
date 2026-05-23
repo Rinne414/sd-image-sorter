@@ -1104,6 +1104,23 @@ Returns `{summary, items[], duplicate_groups[]}`. `summary` aggregates `{total, 
 
 ---
 
+#### POST /api/dataset/vocab
+
+Returns the union of tags across the supplied Dataset Maker session, sorted by descending frequency. Combines DB-source tags (read from `image_ids`) and local-source caption text (`path_caption_overrides`, split by comma). Backs the LoraHub-style "Tag Vocabulary" side panel that lets the user click a tag to add it to common tags or blacklist.
+
+Body:
+```json
+{
+  "image_ids": [1, 2, 3],
+  "path_caption_overrides": {"C:/dataset/local_001.png": "my_oc, masterpiece, blue_hair"},
+  "top_n": 300
+}
+```
+
+Returns `{vocab: [{tag, count, sample_image_id}], total_unique_tags}` ordered by descending count then alphabetical.
+
+---
+
 #### POST /api/smart-tag/start
 
 LoraHub-style "Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.

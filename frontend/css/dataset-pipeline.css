@@ -205,3 +205,96 @@
 @media (max-width: 1100px) {
     .dataset-audit-thresholds { grid-template-columns: 1fr; }
 }
+
+
+
+/* ============== Tag Vocabulary panel (T10) ============== */
+
+.dataset-vocab-panel {
+    margin-top: 10px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.dataset-vocab-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.dataset-vocab-summary::-webkit-details-marker { display: none; }
+.dataset-vocab-summary > :first-child { font-size: 1.05rem; }
+.dataset-vocab-count {
+    margin-left: auto;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+}
+
+.dataset-vocab-body {
+    padding: 0 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.dataset-vocab-help {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.dataset-vocab-controls {
+    display: flex;
+    gap: 8px;
+}
+.dataset-vocab-search {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dataset-vocab-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+}
+
+.dataset-vocab-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.10));
+    background: var(--surface-2, rgba(255, 255, 255, 0.05));
+    border-radius: 999px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.dataset-vocab-tag:hover { border-color: rgba(var(--accent-primary-rgb), 0.45); }
+
+.dataset-vocab-tag .dataset-vocab-tag-count {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.74rem;
+}
+
+.dataset-vocab-tag.state-common {
+    background: rgba(45, 212, 191, 0.18);
+    border-color: rgba(45, 212, 191, 0.45);
+    color: var(--text-primary);
+}
+.dataset-vocab-tag.state-blacklist {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: var(--text-primary);
+    text-decoration: line-through;
+}

@@ -2872,6 +2872,11 @@ window.I18nLang_en = {
     'dataset.auditNoImages': 'Add some images first.',
     'dataset.auditRunning': 'Running audit...',
     'dataset.auditDoneStatus': 'Audit complete: {low} low-quality, {dupes} duplicate groups, {untagged} untagged, {small} small.',
+    // v3.2.2 task #10: Tag Vocabulary panel.
+    'dataset.vocabTitle': 'Tag Vocabulary',
+    'dataset.vocabHelp': 'Click a tag to add it to <strong>Common tags</strong>. Click again to move it to <strong>Blacklist</strong>. Third click clears.',
+    'dataset.vocabSearchPlaceholder': 'Filter tags...',
+    'dataset.vocabRefresh': 'Refresh',
     // v3.2.2 task #7b: direct folder import to small-gallery workspace.
     'dataset.importFromFolder': 'Add from Folder',
     'dataset.folderImportTitle': 'Add images from a folder',

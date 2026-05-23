@@ -242,6 +242,154 @@
         $('btn-dataset-audit-download')?.addEventListener('click', downloadReport);
     }
 
+    // ============== Tag Vocabulary panel (T10) ==============
+
+    const VOCAB_STATE = {
+        items: [],            // [{tag, count, sample_image_id}, ...]
+        filter: '',
+        states: new Map(),    // tag -> 'common' | 'blacklist' | undefined
+    };
+
+    function readTextareaList(id) {
+        return new Set(
+            String(document.getElementById(id)?.value || '')
+                .split(',').map((s) => s.trim()).filter(Boolean)
+        );
+    }
+
+    function writeTextareaList(id, set) {
+        const ta = document.getElementById(id);
+        if (!ta) return;
+        ta.value = Array.from(set).join(', ');
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function syncVocabStateFromTextareas() {
+        VOCAB_STATE.states.clear();
+        const common = readTextareaList('dataset-common-tags');
+        const blacklist = readTextareaList('dataset-blacklist');
+        for (const t of common) VOCAB_STATE.states.set(t, 'common');
+        for (const t of blacklist) VOCAB_STATE.states.set(t, 'blacklist');
+    }
+
+    function cycleTag(tag) {
+        const common = readTextareaList('dataset-common-tags');
+        const blacklist = readTextareaList('dataset-blacklist');
+        if (common.has(tag)) {
+            // common -> blacklist
+            common.delete(tag);
+            blacklist.add(tag);
+        } else if (blacklist.has(tag)) {
+            // blacklist -> neutral
+            blacklist.delete(tag);
+        } else {
+            // neutral -> common
+            common.add(tag);
+        }
+        writeTextareaList('dataset-common-tags', common);
+        writeTextareaList('dataset-blacklist', blacklist);
+        syncVocabStateFromTextareas();
+        renderVocab();
+    }
+
+    function renderVocab() {
+        const list = $('dataset-vocab-list');
+        const count = $('dataset-vocab-count');
+        if (!list) return;
+        list.innerHTML = '';
+        const filter = (VOCAB_STATE.filter || '').toLowerCase();
+        const items = VOCAB_STATE.items.filter((it) => !filter || String(it.tag).toLowerCase().includes(filter));
+        for (const it of items) {
+            const node = document.createElement('button');
+            node.type = 'button';
+            node.className = 'dataset-vocab-tag';
+            const state = VOCAB_STATE.states.get(it.tag);
+            if (state) node.classList.add(`state-${state}`);
+            const lbl = document.createElement('span');
+            lbl.textContent = it.tag;
+            const c = document.createElement('span');
+            c.className = 'dataset-vocab-tag-count';
+            c.textContent = String(it.count);
+            node.append(lbl, c);
+            node.addEventListener('click', () => cycleTag(it.tag));
+            list.appendChild(node);
+        }
+        if (count) {
+            count.textContent = `${items.length} / ${VOCAB_STATE.items.length}`;
+        }
+    }
+
+    async function refreshVocab() {
+        if (!DM.imageIds || DM.imageIds.length === 0) {
+            VOCAB_STATE.items = [];
+            renderVocab();
+            return;
+        }
+        const galleryIds = [];
+        const localCaptions = {};
+        for (const id of DM.imageIds) {
+            if (DM.isLocalId && DM.isLocalId(id)) {
+                const p = DM.localItemPaths?.get?.(id);
+                const cap = DM.captionEdits?.get?.(id);
+                if (p && cap) localCaptions[p] = cap;
+            } else {
+                galleryIds.push(Number(id));
+            }
+        }
+        try {
+            const r = await fetch('/api/dataset/vocab', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_ids: galleryIds,
+                    path_caption_overrides: localCaptions,
+                    top_n: 300,
+                }),
+            });
+            if (!r.ok) return;
+            const data = await r.json();
+            VOCAB_STATE.items = data.vocab || [];
+            syncVocabStateFromTextareas();
+            renderVocab();
+        } catch { /* swallow */ }
+    }
+
+    function bindVocab() {
+        $('btn-dataset-vocab-refresh')?.addEventListener('click', refreshVocab);
+        const search = $('dataset-vocab-search');
+        if (search) {
+            let timer = null;
+            search.addEventListener('input', () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(() => {
+                    VOCAB_STATE.filter = search.value || '';
+                    renderVocab();
+                }, 120);
+            });
+        }
+        // Auto-refresh on first open
+        const panel = $('dataset-vocab-panel');
+        if (panel) {
+            panel.addEventListener('toggle', () => {
+                if (panel.open && VOCAB_STATE.items.length === 0) {
+                    refreshVocab();
+                }
+            });
+        }
+        // When the user types in common/blacklist directly, keep the
+        // visual state in sync.
+        for (const id of ['dataset-common-tags', 'dataset-blacklist']) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.addEventListener('input', () => {
+                syncVocabStateFromTextareas();
+                renderVocab();
+            });
+        }
+    }
+
+    DM._refreshVocab = refreshVocab;
+
     // ---- public hooks ----
     DM._runAudit = runAudit;
     DM._auditState = AUDIT_STATE;
@@ -249,6 +397,7 @@
     function init() {
         bindStepper();
         bindAudit();
+        bindVocab();
     }
 
     if (document.readyState === 'loading') {

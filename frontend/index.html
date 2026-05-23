@@ -2669,6 +2669,29 @@
                             <div class="dataset-queue-list" id="dataset-queue-list">
                                 <!-- Empty state injected by JS so localized strings stay in sync -->
                             </div>
+
+                            <!-- v3.2.2 task #10: Tag Vocabulary side panel.
+                                 Click a tag once to add to common tags (green).
+                                 Click again to flip to blacklist (red). Third click clears. -->
+                            <details class="dataset-vocab-panel" id="dataset-vocab-panel">
+                                <summary class="dataset-vocab-summary">
+                                    <span aria-hidden="true">🏷️</span>
+                                    <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
+                                    <span class="dataset-vocab-count" id="dataset-vocab-count" aria-live="polite"></span>
+                                </summary>
+                                <div class="dataset-vocab-body">
+                                    <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
+                                        Click a tag to add it to <strong>Common tags</strong>. Click again to move it to <strong>Blacklist</strong>. Third click clears.
+                                    </p>
+                                    <div class="dataset-vocab-controls">
+                                        <input type="search" id="dataset-vocab-search" class="form-input dataset-vocab-search"
+                                               placeholder="Filter tags…" data-i18n-placeholder="dataset.vocabSearchPlaceholder">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
+                                                data-i18n="dataset.vocabRefresh">Refresh</button>
+                                    </div>
+                                    <div class="dataset-vocab-list" id="dataset-vocab-list" role="list"></div>
+                                </div>
+                            </details>
                         </aside>
 
                         <!-- Center: selected image + caption editor -->

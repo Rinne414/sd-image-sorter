@@ -2872,6 +2872,11 @@ window.I18nLang_zhCN = {
     'dataset.auditNoImages': '请先加入一些图片。',
     'dataset.auditRunning': '审计中...',
     'dataset.auditDoneStatus': '审计完成：{low} 张低分、{dupes} 组重复、{untagged} 张未标注、{small} 张过小。',
+    // v3.2.2 任务 #10: 标签词汇面板。
+    'dataset.vocabTitle': '标签词汇',
+    'dataset.vocabHelp': '点一次把标签加进<strong>共用标签</strong>。再点一次会移到<strong>黑名单</strong>。第三次点取消。',
+    'dataset.vocabSearchPlaceholder': '筛选标签...',
+    'dataset.vocabRefresh': '重新整理',
     // v3.2.2 任务 #7b: 直接从资料夹导入到小图库工作区。
     'dataset.importFromFolder': '从资料夹加入',
     'dataset.folderImportTitle': '从资料夹加入图片',
