@@ -316,6 +316,42 @@ def _apply_pre_tag_filters(
     return out
 
 
+def _build_last_run_stats(
+    start_time: float,
+    total_processed: int,
+    total_tagged: int,
+    total_errors: int,
+    top_tags_counter: Any,
+) -> Dict[str, Any]:
+    """Snapshot of the just-finished tagging run for the post-completion
+    stats modal (v3.2.2 T-power-PR2 / H).
+
+    Only ever populated on terminal progress states (done / cancelled /
+    error). The frontend uses the presence of this key to know it's
+    safe to pop the modal exactly once.
+    """
+    import time as _time
+    elapsed = max(0.0, _time.time() - float(start_time)) if start_time else 0.0
+    avg = (total_tagged / total_processed) if total_processed else 0.0
+    top = []
+    try:
+        # ``top_tags_counter`` is a collections.Counter from the worker.
+        for tag, count in top_tags_counter.most_common(10):
+            if tag and count:
+                top.append({"tag": str(tag), "count": int(count)})
+    except Exception:
+        # Defensive: never break the terminal send because of stats math.
+        top = []
+    return {
+        "elapsed_seconds": round(elapsed, 1),
+        "total_processed": int(total_processed),
+        "total_tagged": int(total_tagged),
+        "total_errors": int(total_errors),
+        "avg_tags_per_image": round(avg, 2),
+        "top_tags": top,
+    }
+
+
 def _build_tag_progress_state(
     status: str,
     current: int = 0,
@@ -328,9 +364,10 @@ def _build_tag_progress_state(
     runtime_backend_reason: str = "",
     memory_pressure_warning: str = "",
     run_id: int = 0,
+    last_run_stats: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build a normalized tag progress payload."""
-    return {
+    payload: Dict[str, Any] = {
         "status": status,
         "current": current,
         "processed": current,
@@ -344,6 +381,12 @@ def _build_tag_progress_state(
         "memory_pressure_warning": memory_pressure_warning,
         "run_id": run_id,
     }
+    if last_run_stats:
+        # Only present on terminal states (done / cancelled / error). The
+        # frontend uses the presence of this key to know it's safe to pop
+        # the post-tag stats modal exactly once per run.
+        payload["last_run_stats"] = last_run_stats
+    return payload
 
 
 class _E2ETaggingStub:
@@ -455,6 +498,7 @@ def _tagging_worker_main(
         message: str,
         current: Optional[int] = None,
         total_override: Optional[int] = None,
+        last_run_stats: Optional[Dict[str, Any]] = None,
     ) -> None:
         progress_queue.put(
             _build_tag_progress_state(
@@ -468,6 +512,7 @@ def _tagging_worker_main(
                 runtime_backend_actual=runtime_backend_actual,
                 runtime_backend_reason=runtime_backend_reason,
                 memory_pressure_warning=memory_pressure_warning,
+                last_run_stats=last_run_stats,
             )
         )
 
@@ -615,6 +660,11 @@ def _tagging_worker_main(
         send("running", f"Model loaded. Tagging {total} images...", current=0, total_override=total)
         tagging_start_time = time.time()
         tags_batch: List[Dict[str, Any]] = []
+        # v3.2.2 T-power-PR2 (H): accumulate top-tag frequency for the
+        # post-completion stats modal. Counter is process-local; no IPC
+        # cost — flushed once into the terminal progress send.
+        from collections import Counter as _Counter
+        top_tags_counter: _Counter = _Counter()
 
         # Use _iter_rescaling_batches so memory-pressure reductions to batch_size
         # take effect on the very next iteration. A plain range(0, total, batch_size)
@@ -771,6 +821,14 @@ def _tagging_worker_main(
                                 blacklist=request.pre_tag_blacklist,
                                 max_tags=request.max_tags_per_image,
                             )
+                            # H: feed counter for post-run stats modal.
+                            for t in filtered_tags or []:
+                                if isinstance(t, dict):
+                                    name = str(t.get("tag") or "").strip()
+                                else:
+                                    name = str(t or "").strip()
+                                if name:
+                                    top_tags_counter[name] += 1
                             entry = {
                                 "image_id": img["id"],
                                 "tags": filtered_tags,
@@ -819,12 +877,20 @@ def _tagging_worker_main(
             send(
                 "cancelled",
                 f"Tagging cancelled. Processed {total_processed}/{total} images.",
+                last_run_stats=_build_last_run_stats(
+                    tagging_start_time, total_processed, total_tagged,
+                    total_errors, top_tags_counter,
+                ),
             )
             return
 
         send(
             "done",
             f"Completed! Processed {total_processed} images: {total_tagged} tagged" + (f", {total_errors} failed." if total_errors else "."),
+            last_run_stats=_build_last_run_stats(
+                tagging_start_time, total_processed, total_tagged,
+                total_errors, top_tags_counter,
+            ),
         )
     except Exception as error:
         send("error", f"Error: {error}")

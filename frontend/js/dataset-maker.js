@@ -363,6 +363,8 @@
     _appendOrderedScript('/static/js/dataset-maker-local-import.js');
     // v3.2.2 task #8 + #9: 5-step stepper + Audit panel.
     _appendOrderedScript('/static/js/dataset-maker-pipeline.js');
+    // v3.2.2 T-power-PR2 (C): tag confidence pills inside the caption editor.
+    _appendOrderedScript('/static/js/dataset-confidence-pills.js');
 
     // Hook into view activation
     function initWhenViewActivates() {

@@ -371,3 +371,104 @@
     flex-shrink: 0;
     cursor: pointer;
 }
+
+
+/* ============== Tag confidence pills (T-power-PR2 C) ============== */
+
+.dataset-confidence-panel {
+    margin-top: 8px;
+    border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+}
+
+.dataset-confidence-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+}
+.dataset-confidence-summary::-webkit-details-marker { display: none; }
+
+.dataset-confidence-summary-hint {
+    margin-left: auto;
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.78rem;
+}
+
+.dataset-confidence-body {
+    padding: 0 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.dataset-confidence-help {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    margin: 0;
+}
+
+.dataset-confidence-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Confidence buckets:
+ *   high   >= 0.80  green
+ *   mid    >= 0.50  amber
+ *   low    <  0.50  red (likely false positive)
+ * Tag name + numeric confidence + a small ✕ button. */
+.dataset-confidence-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px 3px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    font-size: 0.78rem;
+    background: var(--surface-2, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary);
+}
+.dataset-confidence-pill.conf-high {
+    border-color: rgba(45, 212, 191, 0.45);
+    background: rgba(45, 212, 191, 0.10);
+}
+.dataset-confidence-pill.conf-mid {
+    border-color: rgba(245, 158, 11, 0.45);
+    background: rgba(245, 158, 11, 0.10);
+}
+.dataset-confidence-pill.conf-low {
+    border-color: rgba(239, 68, 68, 0.55);
+    background: rgba(239, 68, 68, 0.12);
+}
+.dataset-confidence-pill-conf {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+}
+.dataset-confidence-pill-x {
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text-secondary);
+    border-radius: 50%;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+    font-size: 0.68rem;
+}
+.dataset-confidence-pill-x:hover {
+    background: rgba(239, 68, 68, 0.30);
+    color: #fff;
+}

@@ -1,0 +1,91 @@
+/* SD Image Sorter — Post-tag stats modal (v3.2.2 T-power-PR2 / H). */
+
+#tag-stats-modal .tag-stats-content {
+    max-width: 540px;
+    padding: 24px 28px;
+}
+
+.tag-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin: 16px 0 18px;
+}
+
+.tag-stats-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 4px;
+    border-radius: var(--radius-md, 10px);
+    background: var(--surface-2, rgba(255, 255, 255, 0.05));
+}
+
+.tag-stats-num {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.tag-stats-label {
+    font-size: 0.72rem;
+    color: var(--text-muted, #9ca3af);
+    text-align: center;
+    line-height: 1.2;
+}
+
+.tag-stats-section-title {
+    margin: 8px 0 6px;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+}
+
+.tag-stats-top-list {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.tag-stats-top-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: var(--surface-1, rgba(255, 255, 255, 0.03));
+    border-radius: 6px;
+}
+
+.tag-stats-top-tag {
+    color: var(--text-primary);
+    font-size: 0.86rem;
+}
+
+.tag-stats-top-count {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.84rem;
+}
+
+.tag-stats-empty {
+    text-align: center;
+    color: var(--text-muted, #9ca3af);
+    font-style: italic;
+}
+
+.tag-stats-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+@media (max-width: 720px) {
+    .tag-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
