@@ -97,3 +97,26 @@ def test_dedup_when_singular_equals_plural(test_client, test_db_with_images):
     assert r_dup.json()["total"] == r_single.json()["total"], (
         "Dup of same generator value should not inflate the result count."
     )
+
+
+@pytest.mark.parametrize("singular,plural", [
+    ("tag", "tags"),
+    ("rating", "ratings"),
+    ("checkpoint", "checkpoints"),
+    ("lora", "loras"),
+])
+def test_singular_aliases_for_other_filters(test_client, test_db_with_images, singular, plural):
+    """All plural list filters on /api/images should accept their singular form
+    as an alias. Originally ``?tag=X``, ``?rating=X``, ``?checkpoint=X``,
+    ``?lora=X`` were silently dropped, returning the unfiltered library."""
+    # Pick an arbitrary value - it doesn't have to match real data, both
+    # forms just need to behave the same.
+    test_value = "test_filter_value_zzz"
+    r_singular = test_client.get(f"/api/images?{singular}={test_value}&limit=1")
+    r_plural = test_client.get(f"/api/images?{plural}={test_value}&limit=1")
+    assert r_singular.status_code == 200, r_singular.text
+    assert r_plural.status_code == 200, r_plural.text
+    assert r_singular.json()["total"] == r_plural.json()["total"], (
+        f"?{singular}={test_value} (singular) must produce the same result count as "
+        f"?{plural}={test_value} (plural). They are aliases."
+    )

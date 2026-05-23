@@ -304,20 +304,44 @@ async def get_images(
         description="Comma-separated list of tags (AND logic - all tags must be present)",
         examples=["1girl,solo,long_hair"],
     ),
+    tag: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``tags`` (v3.2.2+).",
+        examples=["1girl"],
+        deprecated=True,
+    ),
     ratings: Optional[str] = Query(
         default=None,
         description="Comma-separated content ratings. Options: general, sensitive, questionable, explicit",
         examples=["general,sensitive"],
+    ),
+    rating: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``ratings`` (v3.2.2+).",
+        examples=["general"],
+        deprecated=True,
     ),
     checkpoints: Optional[str] = Query(
         default=None,
         description="Comma-separated checkpoint/model names",
         examples=["sd_xl_base_1.0,animagine_xl"],
     ),
+    checkpoint: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``checkpoints`` (v3.2.2+).",
+        examples=["animagine_xl"],
+        deprecated=True,
+    ),
     loras: Optional[str] = Query(
         default=None,
         description="Comma-separated LoRA names",
         examples=["detail_tweaker,add_detail"],
+    ),
+    lora: Optional[str] = Query(
+        default=None,
+        description="Singular alias for ``loras`` (v3.2.2+).",
+        examples=["detail_tweaker"],
+        deprecated=True,
     ),
     search: Optional[str] = Query(
         default=None,
@@ -460,22 +484,27 @@ async def get_images(
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
-    # v3.2.2: accept the singular ``generator`` query param as an alias for
-    # ``generators`` so ``?generator=nai`` no longer silently returns the
-    # entire unfiltered library. Combine both, dedupe, comma-join.
-    if generator and generators:
-        merged = generators + "," + generator
-        # Dedupe while preserving order
-        seen = set()
-        parts = []
-        for tok in merged.split(","):
+    # v3.2.2: accept singular forms (``generator``, ``tag``, ``rating``,
+    # ``checkpoint``, ``lora``) as aliases for the plural query params so
+    # ``?generator=nai`` etc. no longer silently return the entire library.
+    # Combine plural + singular, dedupe, comma-join.
+    def _merge(plural: Optional[str], singular: Optional[str]) -> Optional[str]:
+        if not singular:
+            return plural
+        combined = (plural + "," + singular) if plural else singular
+        seen, parts = set(), []
+        for tok in combined.split(","):
             t = tok.strip()
             if t and t not in seen:
                 seen.add(t)
                 parts.append(t)
-        generators = ",".join(parts)
-    elif generator and not generators:
-        generators = generator
+        return ",".join(parts) if parts else None
+
+    generators = _merge(generators, generator)
+    tags = _merge(tags, tag)
+    ratings = _merge(ratings, rating)
+    checkpoints = _merge(checkpoints, checkpoint)
+    loras = _merge(loras, lora)
 
     return service.get_images(
         generators=generators,
