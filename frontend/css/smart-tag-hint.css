@@ -1,7 +1,10 @@
 /* SD Image Sorter — Smart Tag hint banner inside the Tag Images modal (v3.2.2 T5)
  * Encourages batch-LoRA users to switch to Dataset Maker → Smart Tag.
  * Visually parallels color-backfill-banner so existing users recognise it
- * as a "background hint" element rather than a destructive warning. */
+ * as a "background hint" element rather than a destructive warning.
+ * Uses --accent-secondary (teal) so it reads visually distinct from the
+ * orange color-backfill banner without introducing a new hard-coded
+ * accent color — the release-build safety contract enforces this. */
 
 .smart-tag-hint-banner {
     display: grid;
@@ -13,10 +16,10 @@
     border-radius: var(--radius-md);
     background: linear-gradient(
         135deg,
-        rgba(168, 85, 247, 0.10),
+        rgba(var(--accent-secondary-rgb), 0.12),
         rgba(var(--accent-primary-rgb, 255, 138, 61), 0.08)
     );
-    border: 1px solid rgba(168, 85, 247, 0.28);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.32);
     box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
     animation: smart-tag-hint-in 220ms ease-out;
 }
@@ -35,7 +38,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(168, 85, 247, 0.18);
+    background: rgba(var(--accent-secondary-rgb), 0.20);
     font-size: 1.05rem;
 }
 
