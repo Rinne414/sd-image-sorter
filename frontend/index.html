@@ -119,27 +119,28 @@
                         <span class="tab-icon" aria-hidden="true">🖼️</span>
                         <span class="tab-text" data-i18n="nav.gallery">Gallery</span>
                     </button>
-                    <button class="nav-tab" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
+                    <button class="nav-tab" id="nav-tab-reader" data-view="reader" role="tab" aria-selected="false" aria-controls="view-reader">
+                        <span class="tab-icon" aria-hidden="true">📖</span>
                         <span class="tab-text" data-i18n="nav.reader">Reader</span>
                     </button>
-                    <button class="nav-tab" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
+                    <button class="nav-tab" id="nav-tab-censor" data-view="censor" role="tab" aria-selected="false" aria-controls="view-censor">
                         <span class="tab-icon" aria-hidden="true">🔳</span>
                         <span class="tab-text" data-i18n="nav.censor">Edit</span>
                     </button>
-                    <button class="nav-tab" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
+                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting">
                         <span class="tab-icon" aria-hidden="true">📁</span>
                         <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                     </button>
                     <span class="nav-divider" aria-hidden="true"></span>
-                    <button class="nav-tab" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
+                    <button class="nav-tab" id="nav-tab-similar" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar">
                         <span class="tab-icon" aria-hidden="true">🔍</span>
                         <span class="tab-text" data-i18n="nav.similar">Similar</span>
                     </button>
-                    <button class="nav-tab" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
+                    <button class="nav-tab" id="nav-tab-artist" data-view="artist" role="tab" aria-selected="false" aria-controls="view-artist">
                         <span class="tab-icon" aria-hidden="true">🎨</span>
                         <span class="tab-text" data-i18n="nav.artist">Artist ID</span>
                     </button>
-                    <button class="nav-tab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
+                    <button class="nav-tab" id="nav-tab-promptlab" data-view="promptlab" role="tab" aria-selected="false" aria-controls="view-promptlab">
                         <span class="tab-icon" aria-hidden="true">🧪</span>
                         <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
                     </button>
@@ -160,7 +161,7 @@
                             <span class="mobile-nav-text" data-i18n="nav.gallery">Gallery</span>
                         </button>
                         <button class="mobile-nav-item" data-view="reader" aria-label="Reader view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📋</span>
+                            <span class="mobile-nav-icon" aria-hidden="true">📖</span>
                             <span class="mobile-nav-text" data-i18n="nav.reader">Reader</span>
                         </button>
                         <button class="mobile-nav-item" data-view="censor" aria-label="Censored Edit view">
@@ -4394,11 +4395,11 @@
     </div>
 
     <!-- Mass Tag Editor Modal (v3.2.1+) -->
-    <div class="modal" id="mass-tag-modal">
+    <div class="modal" id="mass-tag-modal" role="dialog" aria-modal="true" aria-labelledby="mass-tag-modal-title">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-large mass-tag-shell">
             <button class="modal-close" id="btn-mass-tag-close" aria-label="Close mass tag editor">✕</button>
-            <h3 data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
+            <h3 id="mass-tag-modal-title" data-i18n="massTag.title">🧹 Mass Tag Editor</h3>
             <p class="modal-description" data-i18n="massTag.description">
                 Bulk operations on stored tags. Always run "Dry-run preview" before "Apply" — these changes can't be undone.
             </p>

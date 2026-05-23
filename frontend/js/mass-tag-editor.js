@@ -84,11 +84,25 @@
             this._resetResult();
             this._setStatus("");
             await this.refreshScopeLabels();
-            document.getElementById("mass-tag-modal")?.classList.add("visible");
+            // v3.2.2: prefer the global showModal so this modal gets the
+            // same Escape-key handler, focus trap, and focus restore as
+            // every other modal in the app. Falls back to the manual
+            // class toggle if the helper isn't loaded yet (defensive).
+            if (typeof window.showModal === "function") {
+                window.showModal("mass-tag-modal");
+            } else {
+                document.getElementById("mass-tag-modal")?.classList.add("visible");
+            }
         },
 
         closeModal() {
-            document.getElementById("mass-tag-modal")?.classList.remove("visible");
+            // v3.2.2: use the global hideModal so the focus-trap and
+            // Escape-listener cleanup matches every other modal.
+            if (typeof window.hideModal === "function") {
+                window.hideModal("mass-tag-modal");
+            } else {
+                document.getElementById("mass-tag-modal")?.classList.remove("visible");
+            }
             // Reset any leftover "Resolving scope…" status from a prior open
             // so the next open starts clean.
             this._setStatus("");
