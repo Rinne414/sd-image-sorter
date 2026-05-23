@@ -5121,6 +5121,35 @@ kbd {
     display: block;
 }
 
+/* v3.2.2: icon-only intermediate mode for the nav tabs.
+   Activated by ``updateNavigationOverflowState`` between the regular
+   text-tab layout and the full hamburger fallback when there are
+   too many tabs to fit but enough room to keep the icons visible
+   (typically 1300-1500 px laptops with the new 📦 Dataset tab).
+   The ``aria-label`` already on each tab keeps screen readers + the
+   ``title`` tooltip working when the label is collapsed. */
+.nav-bar.nav-tabs-icon-only .nav-tab {
+    padding-left: 10px;
+    padding-right: 10px;
+    gap: 0;
+}
+.nav-bar.nav-tabs-icon-only .nav-tab .tab-text {
+    /* Visually hide the label but keep it for screen readers */
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+.nav-bar.nav-tabs-icon-only .nav-tab .tab-icon {
+    margin: 0;
+    font-size: 18px;
+}
+
 @media (min-width: 769px) {
     .nav-bar:not(.nav-tabs-overflow) .mobile-menu-toggle,
     .nav-bar:not(.nav-tabs-overflow) .mobile-nav-overlay {
