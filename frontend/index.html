@@ -2755,6 +2755,14 @@
                                     <span aria-hidden="true">🏷️</span>
                                     <span data-i18n="dataset.tagAll">Tag all images now</span>
                                 </button>
+                                <!-- v3.2.2 follow-up: let the user opt-in to re-tagging already-tagged
+                                     images. Default is OFF (matches the help text + the backend's
+                                     retag_all=False default), so a second click of Tag all only
+                                     processes images that don't have tags yet. -->
+                                <label class="dataset-tag-retag-row">
+                                    <input type="checkbox" id="dataset-tag-retag-all">
+                                    <span data-i18n="dataset.tagRetagAll">Re-tag images that are already tagged</span>
+                                </label>
                                 <button class="btn btn-primary full-width" id="btn-dataset-smart-tag" style="margin-top: 8px;">
                                     <span aria-hidden="true">✨</span>
                                     <span data-i18n="dataset.smartTag">Smart Tag (WD14 + VLM)</span>

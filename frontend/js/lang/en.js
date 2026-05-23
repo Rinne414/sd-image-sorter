@@ -2883,6 +2883,12 @@ window.I18nLang_en = {
     // v3.2.2 task #12: renamed-pair preview chip.
     'dataset.pairChipPrefix': 'Output files will be:',
     'dataset.pairChipSuffix': '(LoRA trainers pair them by exact stem match)',
+    // v3.2.2 follow-up: opt-in re-tagging of already-tagged items.
+    'dataset.tagRetagAll': 'Re-tag images that are already tagged',
+    'dataset.tagAllStartedSkip': 'Tagging started (skipping already-tagged images). Progress is at the top of the screen.',
+    'dataset.tagAllStartedRetag': 'Tagging started (re-tagging EVERY image). Progress is at the top of the screen.',
+    'dataset.tagAllSkippedLocal': '{count} local-source images were skipped (use Smart Tag for those).',
+    'dataset.tagAllOnlyLocal': 'Tag all only works on gallery-source items. Use Smart Tag for folder-imported images, or scan the folder into the main library first.',
     // v3.2.2 task #7b: direct folder import to small-gallery workspace.
     'dataset.importFromFolder': 'Add from Folder',
     'dataset.folderImportTitle': 'Add images from a folder',

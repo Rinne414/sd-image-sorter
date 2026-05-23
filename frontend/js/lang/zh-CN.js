@@ -2883,6 +2883,12 @@ window.I18nLang_zhCN = {
     // v3.2.2 任务 #12: 重命名对预览。
     'dataset.pairChipPrefix': '输出会是：',
     'dataset.pairChipSuffix': '（LoRA 训练器靠完全相同的档名词干自动配对）',
+    // v3.2.2 后续：可选「重打已标注的图」。
+    'dataset.tagRetagAll': '重新打标已经标注过的图',
+    'dataset.tagAllStartedSkip': '打标已开始（跳过已标注的图）。进度看画面顶端。',
+    'dataset.tagAllStartedRetag': '打标已开始（每一张都重打）。进度看画面顶端。',
+    'dataset.tagAllSkippedLocal': '已跳过 {count} 张本地资料夹的图（这些请用 Smart Tag）。',
+    'dataset.tagAllOnlyLocal': '「Tag all」只能对图库里的图片运作。本地资料夹的图请用 Smart Tag，或先扫进主图库。',
     // v3.2.2 任务 #7b: 直接从资料夹导入到小图库工作区。
     'dataset.importFromFolder': '从资料夹加入',
     'dataset.folderImportTitle': '从资料夹加入图片',

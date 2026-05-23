@@ -98,20 +98,42 @@
             this._toast(this._t('dataset.queueEmptyHeadline', 'No images yet'), 'warning');
             return;
         }
+        // Honour the "re-tag already-tagged" checkbox. Default OFF so the
+        // first / repeat click only touches images that lack tags.
+        const retagAll = !!document.getElementById('dataset-tag-retag-all')?.checked;
+        // Local-source items (negative ids) cannot be sent to the legacy
+        // /api/tag/start path because they have no DB row. Filter them
+        // out and tell the user how many were skipped.
+        const galleryIds = this.imageIds.filter((id) => !(this.isLocalId && this.isLocalId(id)));
+        const localSkipped = this.imageIds.length - galleryIds.length;
+        if (galleryIds.length === 0) {
+            this._toast(this._t('dataset.tagAllOnlyLocal',
+                'Tag all only works on gallery-source items. Use Smart Tag for folder-imported images, or scan the folder into the main library first.'),
+                'warning', 6000);
+            return;
+        }
         try {
             const r = await fetch('/api/tag/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_ids: this.imageIds, retag_all: true }),
+                body: JSON.stringify({ image_ids: galleryIds, retag_all: retagAll }),
             });
             if (!r.ok) {
                 const body = await r.text();
                 this._toast(`Tagging failed: ${body.slice(0, 120)}`, 'error');
                 return;
             }
-            this._toast(this._t('dataset.tagAllStarted',
-                'Tagging started in the background. The progress bar at the top of the screen tracks it.'),
-                'success');
+            const startedKey = retagAll ? 'dataset.tagAllStartedRetag' : 'dataset.tagAllStartedSkip';
+            const startedFb = retagAll
+                ? 'Tagging started (retagging EVERY image). Progress is at the top of the screen.'
+                : 'Tagging started (skipping already-tagged images). Progress is at the top of the screen.';
+            let msg = this._t(startedKey, startedFb);
+            if (localSkipped > 0) {
+                msg += ' ' + this._t('dataset.tagAllSkippedLocal',
+                    '{count} local-source images were skipped (use Smart Tag for those).',
+                    { count: localSkipped });
+            }
+            this._toast(msg, 'success', 6000);
         } catch (e) {
             this._toast(`Tagging failed: ${e.message}`, 'error');
         }
