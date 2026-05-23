@@ -102,6 +102,16 @@
                 radio.addEventListener('change', () => this._onPresetChange());
             });
 
+            // P2 fix: Copy vs Move radios mirror to the (now hidden) select
+            // that backend code reads from. The new radios are the visible
+            // source of truth; the select acts as a compatibility shim.
+            document.querySelectorAll('input[name="dataset-image-op-radio"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    const hidden = document.getElementById('dataset-image-op');
+                    if (hidden) hidden.value = radio.value;
+                });
+            });
+
             // Trigger + custom pattern -> live preview
             for (const id of ['dataset-trigger', 'dataset-naming-pattern']) {
                 document.getElementById(id)?.addEventListener('input', () => this._updateNamingPreview());
@@ -139,8 +149,18 @@
         async _importFromGallery() {
             const ids = this._getGallerySelectedIds();
             if (!ids || ids.length === 0) {
+                // P0 fix from issue #5 follow-up noob review: silent failure
+                // here is the #1 confusion point. Take the user there
+                // explicitly + show a sticky toast that survives the nav.
                 this._toast(this._t('dataset.gallerySelectionEmpty',
-                    'Select images in Gallery first, then come back here.'), 'warning');
+                    '👈 Open the Gallery tab and select images first, then come back here and click this button again.'),
+                    'warning', 8000);
+                // Switch to the Gallery tab so the user sees the next step
+                // without having to figure out where to click.
+                const galleryTab = document.getElementById('nav-tab-gallery');
+                if (galleryTab) {
+                    setTimeout(() => galleryTab.click(), 600);
+                }
                 return;
             }
             const before = this.imageIds.length;

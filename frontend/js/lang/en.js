@@ -2807,7 +2807,7 @@ window.I18nLang_en = {
     'dataset.exportInProgress': 'Exporting…',
     'dataset.exportDone': 'Exported {count} image+caption pairs to {folder}',
     'dataset.exportError': 'Export failed: {message}',
-    'dataset.gallerySelectionEmpty': 'Select images in Gallery first, then come back here.',
+    'dataset.gallerySelectionEmpty': '👈 Open the Gallery tab and select images first, then come back here and click this button again.',
     'dataset.gallerySelectionAdded': 'Added {count} images from Gallery selection',
     'dataset.confirmClear': 'Remove all {count} images from the dataset? (Original files in your library are not affected.)',
     'dataset.confirmRemove': 'Remove this image from the dataset?',
@@ -2862,5 +2862,11 @@ window.I18nLang_en = {
     'dataset.openOutputFolder': '📂 Open output folder',
     'dataset.queueEmptyHeadline': 'No images yet',
     'dataset.queueEmptyBody': 'Open the 🖼️ Gallery tab, click some images, then click "Add from Gallery" above.',
+    'dataset.triggerClarify': 'ℹ️ This only sets the filename prefix. To put a trigger word INSIDE every caption .txt, type it into "Common tags" in Step B instead.',
+    'dataset.imageOpLegend': 'What about the original images?',
+    'dataset.imageOpCopySafe': '🛡️ Copy (recommended) — originals stay safe',
+    'dataset.imageOpCopyHint': 'A duplicate of each image is written to the output folder.',
+    'dataset.imageOpMoveTitle': '⚠️ Move — original images leave their current location',
+    'dataset.imageOpMoveHint': "The image file is removed from its source folder and re-indexed at the new path. Use only when you're sure.",
 
 };

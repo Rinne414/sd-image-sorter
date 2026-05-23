@@ -804,3 +804,26 @@
     margin-bottom: 4px;
     word-break: break-word;
 }
+
+/* P1 fix: clarify what trigger word affects (filename only, not caption content) */
+#view-dataset .dataset-trigger-clarify {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-muted, rgba(255,255,255,0.55));
+    line-height: 1.5;
+    background: rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.08);
+    border-left: 2px solid rgba(var(--accent-tertiary-rgb, 251, 191, 36), 0.5);
+    padding: 6px 8px;
+    border-radius: 4px;
+}
+
+
+/* P2 fix: Copy/Move radio block spacing */
+#view-dataset .dataset-image-op-fieldset {
+    margin-top: 12px;
+    margin-bottom: 4px;
+}
+#view-dataset .dataset-image-op-fieldset > legend {
+    margin-bottom: 6px;
+}

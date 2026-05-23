@@ -2683,6 +2683,9 @@
                                                    data-i18n-placeholder="dataset.triggerPlaceholderShort"
                                                    aria-label="Trigger word">
                                             <small class="dataset-preview-line" id="dataset-naming-preview" aria-live="polite"></small>
+                                            <small class="dataset-trigger-clarify" data-i18n="dataset.triggerClarify">
+                                                ℹ️ This only sets the filename prefix. To put a trigger word INSIDE every caption .txt, type it into "Common tags" in Step B instead.
+                                            </small>
                                         </span>
                                     </label>
                                     <label class="dataset-preset-row">
@@ -2722,16 +2725,29 @@
                                     </small>
                                 </label>
 
+                                <!-- P2 fix: Copy vs Move out of Advanced. New users care most about
+                                     "will my originals be safe?" so this needs to be visible. -->
+                                <fieldset class="dataset-fieldset dataset-image-op-fieldset">
+                                    <legend data-i18n="dataset.imageOpLegend">What about the original images?</legend>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-image-op-radio" value="copy" checked>
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.imageOpCopySafe">🛡️ Copy (recommended) — originals stay safe</strong>
+                                            <small data-i18n="dataset.imageOpCopyHint">A duplicate of each image is written to the output folder.</small>
+                                        </span>
+                                    </label>
+                                    <label class="dataset-preset-row">
+                                        <input type="radio" name="dataset-image-op-radio" value="move">
+                                        <span class="dataset-preset-label">
+                                            <strong data-i18n="dataset.imageOpMoveTitle">⚠️ Move — original images leave their current location</strong>
+                                            <small data-i18n="dataset.imageOpMoveHint">The image file is removed from its source folder and re-indexed at the new path. Use only when you're sure.</small>
+                                        </span>
+                                    </label>
+                                </fieldset>
+
                                 <!-- Advanced options behind a collapsed accordion -->
                                 <details class="dataset-advanced">
                                     <summary data-i18n="dataset.advancedToggle">Advanced options</summary>
-                                    <label class="form-label">
-                                        <span data-i18n="dataset.imageOpLabel">Image action</span>
-                                        <select id="dataset-image-op" class="form-input">
-                                            <option value="copy" selected data-i18n="dataset.imageOpCopy">Copy (recommended — keeps originals)</option>
-                                            <option value="move" data-i18n="dataset.imageOpMove">Move (removes from current location)</option>
-                                        </select>
-                                    </label>
                                     <label class="form-label">
                                         <span data-i18n="dataset.overwriteLabel">If filename already exists in output folder</span>
                                         <select id="dataset-overwrite" class="form-input">
@@ -2740,6 +2756,10 @@
                                             <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
                                         </select>
                                     </label>
+                                    <!-- Hidden mirror element to keep the existing JS that reads
+                                         #dataset-image-op working without changes. The radio
+                                         above is the visible source of truth. -->
+                                    <input type="hidden" id="dataset-image-op" value="copy">
                                 </details>
 
                                 <!-- Big primary CTA -->

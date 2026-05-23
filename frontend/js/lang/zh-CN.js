@@ -2808,7 +2808,7 @@ window.I18nLang_zhCN = {
     'dataset.exportInProgress': '正在导出…',
     'dataset.exportDone': '已导出 {count} 组图 + caption 配对到 {folder}',
     'dataset.exportError': '导出失败：{message}',
-    'dataset.gallerySelectionEmpty': '先在图库选好图，再回到这边。',
+    'dataset.gallerySelectionEmpty': '👈 先打开图库分页选好图，再回到这里点这个按钮。',
     'dataset.gallerySelectionAdded': '已从图库选择中加入 {count} 张图',
     'dataset.confirmClear': '把数据集里的 {count} 张图全清掉？（不会动图库里的原文件。）',
     'dataset.confirmRemove': '从数据集里移除这张图？',
@@ -2863,5 +2863,11 @@ window.I18nLang_zhCN = {
     'dataset.openOutputFolder': '📂 打开输出文件夹',
     'dataset.queueEmptyHeadline': '还没加图',
     'dataset.queueEmptyBody': '打开 🖼️ 图库分页，点选你想要的图，然后点上面的「从图库选择导入」。',
+    'dataset.triggerClarify': 'ℹ️ 这里只影响文件名前缀。如果你想让 trigger word 出现在每张 .txt caption 里，请到 Step B 的「通用标签」里填。',
+    'dataset.imageOpLegend': '原图怎么处理？',
+    'dataset.imageOpCopySafe': '🛡️ 复制（推荐）— 原图不会动',
+    'dataset.imageOpCopyHint': '在输出文件夹里多写一份图片副本，原文件保持原状。',
+    'dataset.imageOpMoveTitle': '⚠️ 移动 — 原图会从原位置消失',
+    'dataset.imageOpMoveHint': '原图被移动到新位置，图库的索引也会跟着更新。确定要这样再选。',
 
 };
