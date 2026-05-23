@@ -1,5 +1,30 @@
 # SD Image Sorter v3.2.2 Release Notes
 
+## Dataset Maker — Small-Gallery Workspace + 5-Step Pipeline + Audit
+
+The `📦 Dataset Maker` tab is now a noob-friendly LoRA training-set workbench with anime-LoRA-friendly defaults. Major additions:
+
+- **5-step pipeline header** at the top of the tab (`导入 / 审计 / 整理 / 标注 / 输出` / Import / Audit / Organize / Caption / Export). Each pill scrolls to the corresponding section. Scoped to Dataset Maker only — no other view's chrome is touched.
+- **`📁 Add from Folder` button** lets you import a folder of images directly into the Dataset Maker session WITHOUT scanning them into the main library DB. Local items live in the session, persist their captions to localStorage by absolute path (so re-imports restore your edits), and export through the same pipeline as gallery-source items.
+- **Optional Audit step** wraps existing aesthetic / perceptual-hash / dimension / tag-presence checks into a single LoRA-trainer-readiness report. Off by default. Every threshold is optional and unbounded — leave a field blank to skip that check entirely. Click a result badge to highlight matching items in the queue. `Download report (.json)` exports the raw report for offline analysis.
+- **Tag Vocabulary side panel** below the queue aggregates tags from your active session into a frequency-sorted list. Click each tag once to add to **Common tags** (green), again to move it to **Blacklist** (red strikethrough), third click clears. Live two-way sync with the Step B textareas.
+- **Anime LoRA defaults on first init** (ADR-2026-05-24): fresh sessions pre-fill `Common tags = masterpiece, best_quality`, `underscore_to_space = ON`, `naming preset = renumber`, trigger placeholder `your_lora_trigger`. As soon as you edit a field, the defaults stop self-applying. New `🎌 Apply Anime LoRA defaults` button in Step B re-applies in one click.
+- **Renamed-pair preview chip** below the output folder field shows the live filename pair (`your_lora_001.png + your_lora_001.txt`) so you see what trainers will pair before you click Export.
+
+### Smart Tag wizard
+Existing `✨ Smart Tag (WD14 + VLM)` flow is unchanged for v3.2.2 except prompt strings were rewritten in original prose to keep the file MIT-clean (the previous version was adapted from AGPL sources and has been reworded; functional intent preserved).
+
+> **Known limitation for v3.2.2:** Smart Tag's wizard currently only runs against gallery-source items (those imported from the main library). Folder-imported (path-source) items can be manually captioned + audited + exported, but Smart Tag for path-source items is queued for v3.2.3.
+
+## Issue #5 follow-ups
+
+- **Underscore filename invariant** (Point 1): regression-locked. `normalize_tag_underscores=True` only converts caption CONTENT — output filenames keep their underscores so LoRA-trainer pairing-by-basename keeps working. 5 new tests cover both `/api/tags/export-batch` and `/api/dataset/export`.
+- **Renamed-pair discoverability** (Point 6): the chip described above.
+- **Small-gallery workspace** (Point 5): the folder-direct import described above.
+
+## OppaiOracle V1.1 ONNX tagger
+Newly integrated alongside WD14 / Camie / PixAI. Auto-download (~947 MB), 19,294-tag general-only ViT, default threshold 0.7927, 35-50 tags per anime image. Bug found and fixed during real-click verification: the `oppai-oracle` family-level id (used by Model Manager + Smart Tag wizard) is now resolved to the registered `oppai-oracle-v1.1` so dispatch never trips on the cosmetic name mismatch.
+
 ## Caption Editor — Unlimited Images + Virtual Scroll
 
 The Caption Editor no longer has any artificial image cap. Select 100, 10000, or 100000+ images — the queue uses virtual scroll (only ~30 DOM nodes regardless of count) and fetches captions on-demand when you click an item.
