@@ -125,7 +125,7 @@ from exceptions import (
 )
 
 # Import routers
-from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates, disk, vlm, colors, tags_bulk
+from routers import images, tags, sorting, censor, prompts, similarity, artists, models, obfuscation, aesthetic, updates, disk, vlm, colors, tags_bulk, dataset
 
 # Import services
 from services import (
@@ -467,6 +467,7 @@ app.include_router(disk.router)
 app.include_router(vlm.router)
 app.include_router(colors.router)
 app.include_router(tags_bulk.router)
+app.include_router(dataset.router)
 
 
 def _read_tail_lines(path: Path, max_lines: int) -> tuple[list[str], int]:
