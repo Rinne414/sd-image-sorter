@@ -50,16 +50,22 @@ except ImportError as _exc:  # pragma: no cover - defensive fallback for direct 
 # bump this too. We keep it as a single named constant so it is easy to grep.
 _FALLBACK_TORCH_VERSION = "2.11.0"
 
-# requirements.txt locks numpy to 1.26.4, and most of the SD/ONNX wheels in
-# the install set (scipy, opencv, pillow, onnxruntime, sam3 …) ship binaries
-# built against the numpy 1.x C ABI. The CUDA torch reinstall uses
-# ``--no-deps`` to stop torch's resolver from cascading transitive deps
-# (sympy, jinja2, markupsafe, setuptools, …), which would otherwise be
-# uninstalled-and-reinstalled in place — pure noise during first launch.
-# ``numpy<2.0`` stays in the explicit install list as a tripwire so that if
-# ``--no-deps`` is ever dropped, pip still cannot upgrade numpy across the
-# 2.0 ABI break and silently break every numpy-1-ABI consumer.
-_NUMPY_SAM3_CONSTRAINT = "numpy<2.0"
+
+# requirements.txt locks numpy per Python: 1.26.4 for Python <3.13 (matches the
+# numpy-1 C ABI of the existing onnxruntime/SAM3/opencv/scipy wheels for that
+# Python), 2.x for Python >=3.13 (numpy 1.26.4 has no cp313 wheel). The CUDA
+# torch reinstall uses ``--no-deps`` to stop torch's resolver from cascading
+# transitive deps (sympy, jinja2, markupsafe, setuptools, …), which would
+# otherwise be uninstalled-and-reinstalled in place — pure noise during first
+# launch. The numpy constraint stays in the explicit install list as a
+# tripwire so that if ``--no-deps`` is ever dropped, pip still cannot upgrade
+# numpy across the 2.0 ABI break (on 3.12) and silently break every
+# numpy-1-ABI consumer.
+def _numpy_sam3_constraint() -> str:
+    """Return the Python-version-appropriate numpy floor/ceiling for SAM3."""
+    if sys.version_info >= (3, 13):
+        return "numpy>=2.1.0,<3.0"
+    return "numpy<2.0"
 
 
 TORCH_CUDA_INDEXES: Sequence[Tuple[str, str, Tuple[int, int]]] = (
@@ -371,6 +377,7 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
     # DNS failure, etc.). With +cuXXX local versions plus a single index, a
     # broken CUDA host now produces a clean "could not find" error instead of
     # leaving the user with CPU torch and no diagnostic.
+    numpy_constraint = _numpy_sam3_constraint()
     try:
         _run_pip(
             [
@@ -378,14 +385,14 @@ def _install_cuda_torch(actions: List[str], state: Dict[str, Any], *, stream_pip
                 "--no-warn-script-location",
                 "--index-url",
                 fallback_index,
-                _NUMPY_SAM3_CONSTRAINT,
+                numpy_constraint,
             ],
             stream=stream_pip,
         )
     except Exception as exc:
         _record_action(
             actions,
-            f"numpy<2.0 pre-install failed (continuing): {exc}",
+            f"{numpy_constraint} pre-install failed (continuing): {exc}",
             stream_pip=stream_pip,
         )
 

@@ -468,10 +468,16 @@ def test_download_file_rejects_sha256_mismatch(monkeypatch, tmp_path):
 
 
 def _assert_platform_specific_wheels_guarded(requirements_path: Path):
+    # Normalize quote style across the file. ``pip-compile`` writes
+    # ``sys_platform == "linux"`` (double quotes) while
+    # ``uv pip compile`` writes ``sys_platform == 'linux'`` (single
+    # quotes). The substring assertions below use double quotes; we
+    # canonicalize the file content so either tool's output passes.
     requirement_lines: dict[str, list[str]] = {}
-    for line in requirements_path.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith(("#", " ")) or "==" not in line:
+    for raw_line in requirements_path.read_text(encoding="utf-8").splitlines():
+        if not raw_line or raw_line.startswith(("#", " ")) or "==" not in raw_line:
             continue
+        line = raw_line.replace("'", '"')
         package_name = line.split("==", 1)[0].split("[", 1)[0]
         requirement_lines.setdefault(package_name, []).append(line)
 
@@ -497,25 +503,39 @@ def _assert_platform_specific_wheels_guarded(requirements_path: Path):
         "triton",
     }
     for package_name in linux_only_packages:
-        assert any('; sys_platform == "linux"' in line for line in requirement_lines[package_name])
+        assert any('sys_platform == "linux"' in line for line in requirement_lines[package_name])
 
-    assert any('; sys_platform != "win32"' in line for line in requirement_lines["uvloop"])
-    assert any('onnxruntime==1.25.0 ; sys_platform == "linux"' in line for line in requirement_lines["onnxruntime"])
-    assert any('; sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
+    assert any('sys_platform != "win32"' in line for line in requirement_lines["uvloop"])
+    # onnxruntime now has a Python-version split too: 1.25.0 for 3.12 + linux,
+    # 1.26.0 (or whatever uv resolves) for 3.13 across linux/win32. uv's
+    # universal resolver may collapse the marker into a compound expression
+    # like ``python_full_version >= "3.13" or sys_platform != "darwin"`` which
+    # still installs onnxruntime 1.25.0 on Linux. Verify by:
+    #   1. an onnxruntime line installs version 1.25.0 (the Linux 3.12 pin)
+    #   2. an onnxruntime line is gated on sys_platform somehow (linux,
+    #      != darwin, != win32, etc.)
+    assert any(line.startswith("onnxruntime==1.25.0") for line in requirement_lines["onnxruntime"]), (
+        f"Expected onnxruntime==1.25.0 (3.12 Linux pin) in requirements; got: "
+        f"{requirement_lines['onnxruntime']}"
+    )
+    assert any(
+        "sys_platform" in line for line in requirement_lines["onnxruntime"]
+    ), "onnxruntime needs at least one sys_platform marker (compound or otherwise)"
+    assert any('sys_platform == "win32"' in line for line in requirement_lines["onnxruntime-gpu"])
     assert any(line.startswith("triton-windows==3.6.0.post") for line in requirement_lines["triton-windows"])
-    assert any('; sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])
+    assert any('sys_platform == "win32"' in line for line in requirement_lines["triton-windows"])
     assert any(line.startswith("websocket-client==") for line in requirement_lines["websocket-client"])
     assert any(line.startswith("sniffio==") for line in requirement_lines["sniffio"])
     assert any(line.startswith("sortedcontainers==") for line in requirement_lines["sortedcontainers"])
     assert any(
         line.startswith("cffi==")
-        and '; sys_platform == "win32"' in line
+        and 'sys_platform == "win32"' in line
         and 'platform_python_implementation != "PyPy"' in line
         for line in requirement_lines["cffi"]
     )
     assert any(
         line.startswith("pycparser==")
-        and '; sys_platform == "win32"' in line
+        and 'sys_platform == "win32"' in line
         and 'platform_python_implementation != "PyPy"' in line
         for line in requirement_lines["pycparser"]
     )
@@ -559,11 +579,36 @@ def test_core_requirements_exclude_heavy_ai_packages():
         "triton==",
     ):
         assert package_name not in requirements_text
-    assert 'onnxruntime==1.25.0 ; sys_platform == "linux"' in requirements_text
-    assert 'onnxruntime==1.19.2 ; sys_platform == "darwin"' in requirements_text
-    assert 'onnxruntime==1.20.1 ; sys_platform == "win32"' in requirements_text
-    assert 'uvloop==0.22.1 ; sys_platform != "win32"' in requirements_text
-    assert 'cffi==2.0.0 ; sys_platform == "win32"' in requirements_text
+    # Normalize quote style: pip-compile uses double quotes in markers, uv pip
+    # compile uses single quotes. Canonicalize so the assertions below pass
+    # regardless of which tool generated the lockfile.
+    normalized_text = requirements_text.replace("'", '"')
+    # Each onnxruntime line is checked for both the package version AND the
+    # platform marker, but allowing other markers (python_full_version) to
+    # appear between them, since uv emits compound markers.
+    onnxruntime_lines = [
+        line for line in normalized_text.splitlines() if line.startswith("onnxruntime==")
+    ]
+    assert any(
+        line.startswith("onnxruntime==1.25.0") and 'sys_platform == "linux"' in line
+        for line in onnxruntime_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.19.2") and 'sys_platform == "darwin"' in line
+        for line in onnxruntime_lines
+    )
+    assert any(
+        line.startswith("onnxruntime==1.20.1") and 'sys_platform == "win32"' in line
+        for line in onnxruntime_lines
+    )
+    assert any(
+        line.startswith("uvloop==0.22.1") and 'sys_platform != "win32"' in line
+        for line in normalized_text.splitlines()
+    )
+    assert any(
+        line.startswith("cffi==2.0.0") and 'sys_platform == "win32"' in line
+        for line in normalized_text.splitlines()
+    )
     assert "fastapi==" in requirements_text
 
 
@@ -600,11 +645,25 @@ def test_linux_release_package_uses_linux_only_name():
 def test_portable_python_version_matches_runtime_lock_header():
     release_builder = load_release_builder()
     requirements_text = (ROOT / "backend" / "requirements.txt").read_text(encoding="utf-8")
-    compiled_with = re.search(r"pip-compile with Python (\d+\.\d+)", requirements_text)
 
-    assert compiled_with is not None
+    # The lockfile is now compiled by ``uv pip compile --universal``, which
+    # resolves a single requirements.txt that works for both Python 3.12 and
+    # Python 3.13. Verify both:
+    #   1. the file uses the uv universal header (so ``check_lockfiles.py``
+    #      can re-stamp on bump)
+    #   2. the file contains explicit branches for both Python versions
+    #      (so a 3.13 user does not get a numpy 1.26.4 source-build trap)
+    assert "uv pip compile" in requirements_text
+    assert "--universal" in requirements_text
+    assert "python_full_version < '3.13'" in requirements_text
+    assert "python_full_version >= '3.13'" in requirements_text
+
+    # Embed bundle is still 3.12 for the Windows portable. The 3.13 path is
+    # source-install only (run.sh / run.bat detect 3.13 and use the same
+    # universal lockfile, but Windows portable bundles 3.12 to keep the
+    # download size constant).
     embed_minor = ".".join(release_builder.PYTHON_EMBED_VERSION.split(".")[:2])
-    assert embed_minor == compiled_with.group(1)
+    assert embed_minor == "3.12"
 
 
 def test_launchers_reject_python_older_than_runtime_lock():
@@ -660,9 +719,14 @@ def test_current_install_docs_match_python_312_floor():
     release_packs = (ROOT / "docs" / "RELEASE_PACKS.md").read_text(encoding="utf-8")
     current_docs = "\n".join([readme, release_packs])
 
-    assert "python-3.12%2B" in readme
+    # README badge and prose now advertise both 3.12 and 3.13 since the
+    # universal lockfile resolves on either Python (numpy 1.26.4 on 3.12
+    # for SAM3/onnxruntime ABI compat, numpy 2.x on 3.13 because no cp313
+    # wheel exists for numpy 1.26.4). The Windows portable still bundles
+    # 3.12 specifically.
+    assert "python-3.12" in readme or "python-3.13" in readme
     assert "Windows 便携版自带 Python 3.12" in readme
-    assert "Python 3.12+" in release_packs
+    assert "Python 3.12" in release_packs or "Python 3.13" in release_packs
     assert "python-3.9%2B" not in current_docs
     assert "Python 3.9+" not in current_docs
     assert "Python 3.11" not in current_docs

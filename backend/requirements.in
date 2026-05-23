@@ -8,10 +8,20 @@ uvicorn[standard]>=0.27.0
 # NVIDIA GPU is detected as primary, so Intel/AMD users do not pay the cost
 # and get swapped to onnxruntime-directml. Older cards (RTX 40/30/20/GTX)
 # still work via CUDA 12.x compatibility.
-onnxruntime>=1.17.0; sys_platform != "win32"
+# onnxruntime by platform: matches core requirements.in. Linux 1.25.0 has
+# cp313 wheels; darwin 1.19.2 only has cp312 so 3.13 darwin needs a newer
+# build; win32 uses onnxruntime-gpu (separate package).
+onnxruntime==1.25.0; sys_platform == "linux" and python_version < "3.13"
+onnxruntime>=1.20.0; sys_platform == "linux" and python_version >= "3.13"
+onnxruntime==1.19.2; sys_platform == "darwin" and python_version < "3.13"
+onnxruntime>=1.20.0; sys_platform == "darwin" and python_version >= "3.13"
 onnxruntime-gpu>=1.21.0; sys_platform == "win32"
 Pillow>=10.0.0
-numpy>=1.24.0,<2.0.0
+# numpy: see comment in requirements-core.in. Python 3.12 stays on 1.x ABI for
+# binary compat with the locked SAM3/torch/scipy/opencv wheels; Python 3.13
+# users get numpy 2.x because no cp313 wheel exists for numpy 1.26.4.
+numpy>=1.24.0,<2.0.0; python_version < "3.13"
+numpy>=2.1.0,<3.0.0; python_version >= "3.13"
 huggingface-hub>=0.20.0
 aiofiles>=23.0.0
 python-multipart>=0.0.27
