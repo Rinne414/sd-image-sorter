@@ -2869,4 +2869,22 @@ window.I18nLang_en = {
     'dataset.imageOpMoveTitle': '⚠️ Move — original images leave their current location',
     'dataset.imageOpMoveHint': "The image file is removed from its source folder and re-indexed at the new path. Use only when you're sure.",
 
+    // Phase 2D — caption-quality knowledge gap fixes
+    'dataset.statusUntagged': 'no caption',
+    'dataset.statusTagged': 'tagged',
+    'dataset.statusEdited': 'edited',
+    'dataset.confirmSummaryUntagged': '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Step B.',
+    'dataset.quickfillQuality': '✨ Add recommended quality tags',
+    'dataset.quickfillQualityDone': 'Added recommended quality tags to "Common tags".',
+    'dataset.quickfillTrigger': '🏷️ Add my trigger word here',
+    'dataset.quickfillTriggerEmpty': 'Type a trigger word in the "Renumber" preset above first.',
+    'dataset.quickfillTriggerDone': 'Added "{trigger}" to "Common tags". It will appear in every caption .txt.',
+    'dataset.helpTitle': 'What makes a good caption?',
+    'dataset.helpIntro': "For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.",
+    'dataset.helpRule1': 'DO include character / subject features (hair color, clothes, pose, scene).',
+    'dataset.helpRule2': 'DO include your trigger word once (use Step B\'s "Common tags" so it lands in every caption).',
+    'dataset.helpRule3': "DON'T describe things that are constant across all images — that's what your trigger word is for.",
+    'dataset.helpRule4': "DON'T leave .txt files empty — empty captions teach the model nothing.",
+    'dataset.helpShortcut': "Shortcut: click \"Tag all images\" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.",
+
 };

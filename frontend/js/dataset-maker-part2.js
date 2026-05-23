@@ -126,7 +126,20 @@
         item.type = 'button';
         item.className = 'dataset-queue-item';
         item.dataset.imageId = String(id);
-        if (this.captionEdits.has(id)) item.classList.add('edited');
+
+        // v3.2.2 (issue #5 follow-up): caption status badge so the user
+        // can see at a glance which images need work.
+        //   edited   -> user manually edited the caption (sticky)
+        //   tagged   -> backend produced a non-empty caption
+        //   untagged -> empty rendered caption + no override; user
+        //               should run "Tag all images" or write one
+        const cap = this.captionEdits.has(id)
+            ? this.captionEdits.get(id)
+            : (this.captions.get(id) || '');
+        let status = 'untagged';
+        if (this.captionEdits.has(id)) status = 'edited';
+        else if (String(cap).trim().length > 0) status = 'tagged';
+        item.classList.add(`status-${status}`);
 
         const img = document.createElement('img');
         img.className = 'dataset-queue-thumb';
@@ -142,10 +155,20 @@
         filename.textContent = meta.filename || `image_${id}`;
         const idLabel = document.createElement('small');
         idLabel.className = 'dataset-queue-id';
-        idLabel.textContent = `#${id}` + (this.captionEdits.has(id) ? ' · edited' : '');
+        idLabel.textContent = `#${id}`;
         metaWrap.append(filename, idLabel);
 
-        item.append(img, metaWrap);
+        const badge = document.createElement('span');
+        badge.className = `dataset-queue-badge dataset-queue-badge-${status}`;
+        const badgeMap = {
+            untagged: { icon: '⚠️', key: 'dataset.statusUntagged', fallback: 'no caption' },
+            tagged:   { icon: '✓',  key: 'dataset.statusTagged',   fallback: 'tagged' },
+            edited:   { icon: '✏️', key: 'dataset.statusEdited',   fallback: 'edited' },
+        };
+        const b = badgeMap[status];
+        badge.innerHTML = `<span aria-hidden="true">${b.icon}</span><span>${this._t(b.key, b.fallback)}</span>`;
+
+        item.append(img, metaWrap, badge);
         item.addEventListener('click', () => this._setActive(id));
         return item;
     };

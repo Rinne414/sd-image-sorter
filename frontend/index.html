@@ -2586,6 +2586,25 @@
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.editorTitle">Caption editor</strong>
                                 <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
+                                <details class="dataset-editor-help">
+                                    <summary aria-label="What makes a good caption?"
+                                             title="What makes a good caption?">❓</summary>
+                                    <div class="dataset-editor-help-body">
+                                        <strong data-i18n="dataset.helpTitle">What makes a good caption?</strong>
+                                        <p data-i18n="dataset.helpIntro">
+                                            For LoRA training each .txt should describe what's in the image with a few short tags. The trainer learns to associate your trigger word with everything those tags share across images.
+                                        </p>
+                                        <ul>
+                                            <li data-i18n="dataset.helpRule1">DO include character / subject features (hair color, clothes, pose, scene).</li>
+                                            <li data-i18n="dataset.helpRule2">DO include your trigger word once (use Step B's "Common tags" so it lands in every caption).</li>
+                                            <li data-i18n="dataset.helpRule3">DON'T describe things that are constant across all images — that's what your trigger word is for.</li>
+                                            <li data-i18n="dataset.helpRule4">DON'T leave .txt files empty — empty captions teach the model nothing.</li>
+                                        </ul>
+                                        <p class="dataset-help-shortcut" data-i18n="dataset.helpShortcut">
+                                            Shortcut: click "Tag all images" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.
+                                        </p>
+                                    </div>
+                                </details>
                             </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
@@ -2640,6 +2659,19 @@
                                               placeholder="masterpiece, best_quality"
                                               data-i18n-placeholder="dataset.commonTagsPlaceholder"></textarea>
                                 </label>
+                                <!-- Quality-tags quick-fill: one click, common LoRA training quality tags -->
+                                <div class="dataset-quickfill-row">
+                                    <button type="button" class="btn btn-ghost btn-small"
+                                            id="btn-dataset-quickfill-quality"
+                                            data-i18n="dataset.quickfillQuality">
+                                        ✨ Add recommended quality tags
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-small"
+                                            id="btn-dataset-quickfill-trigger"
+                                            data-i18n="dataset.quickfillTrigger">
+                                        🏷️ Add my trigger word here
+                                    </button>
+                                </div>
                                 <label class="form-label">
                                     <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
                                     <textarea id="dataset-blacklist" class="form-input" rows="2"

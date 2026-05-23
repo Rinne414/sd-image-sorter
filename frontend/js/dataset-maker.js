@@ -76,6 +76,41 @@
             // Tag all
             document.getElementById('btn-dataset-tag-all')?.addEventListener('click', () => this._tagAll());
 
+            // Quality-tags quick-fill: one click adds common LoRA quality
+            // tags to the "Common tags" field. Also exposes a "use my
+            // trigger word here" shortcut so users don't have to figure
+            // out the filename-vs-caption distinction on their own.
+            document.getElementById('btn-dataset-quickfill-quality')?.addEventListener('click', () => {
+                const ta = document.getElementById('dataset-common-tags');
+                if (!ta) return;
+                const recommended = 'masterpiece, best_quality';
+                const current = (ta.value || '').trim();
+                const tokens = new Set(current.split(',').map(s => s.trim()).filter(Boolean));
+                for (const tok of recommended.split(',').map(s => s.trim())) tokens.add(tok);
+                ta.value = Array.from(tokens).join(', ');
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                this._toast(this._t('dataset.quickfillQualityDone',
+                    'Added recommended quality tags to "Common tags".'), 'success', 3000);
+            });
+            document.getElementById('btn-dataset-quickfill-trigger')?.addEventListener('click', () => {
+                const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
+                if (!trigger) {
+                    this._toast(this._t('dataset.quickfillTriggerEmpty',
+                        'Type a trigger word in the "Renumber" preset above first.'), 'warning', 4000);
+                    return;
+                }
+                const ta = document.getElementById('dataset-common-tags');
+                if (!ta) return;
+                const current = (ta.value || '').trim();
+                const tokens = new Set(current.split(',').map(s => s.trim()).filter(Boolean));
+                tokens.add(trigger);
+                ta.value = Array.from(tokens).join(', ');
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+                this._toast(this._t('dataset.quickfillTriggerDone',
+                    'Added "{trigger}" to "Common tags". It will appear in every caption .txt.',
+                    { trigger }), 'success', 4000);
+            });
+
             // Caption editor actions
             document.getElementById('btn-dataset-prev-image')?.addEventListener('click', () => this._stepActive(-1));
             document.getElementById('btn-dataset-next-image')?.addEventListener('click', () => this._stepActive(1));

@@ -2870,4 +2870,22 @@ window.I18nLang_zhCN = {
     'dataset.imageOpMoveTitle': '⚠️ 移动 — 原图会从原位置消失',
     'dataset.imageOpMoveHint': '原图被移动到新位置，图库的索引也会跟着更新。确定要这样再选。',
 
+    // Phase 2D — 解决 caption 知识盲点
+    'dataset.statusUntagged': '没 caption',
+    'dataset.statusTagged': '已打标',
+    'dataset.statusEdited': '已编辑',
+    'dataset.confirmSummaryUntagged': '⚠️ 有 <strong>{count} 张</strong> caption 是空的，对应的 .txt 也会是空文件。建议先点「给所有图打标」，或回 Step B 手填。',
+    'dataset.quickfillQuality': '✨ 加上常用质量标签',
+    'dataset.quickfillQualityDone': '已把常用质量标签加进「通用标签」。',
+    'dataset.quickfillTrigger': '🏷️ 把触发词也加进 caption',
+    'dataset.quickfillTriggerEmpty': '先在上面的「重新编号」preset 里填触发词。',
+    'dataset.quickfillTriggerDone': '已把「{trigger}」加进「通用标签」，它会出现在每张 .txt caption 里。',
+    'dataset.helpTitle': '怎样的 caption 才算好？',
+    'dataset.helpIntro': 'LoRA 训练时每个 .txt 要用几个短标签描述图里有什么。模型会学会把你的触发词跟这些标签在不同图里共有的特征联系起来。',
+    'dataset.helpRule1': '✓ 要 — 写出角色 / 主体的可变特征（发色、衣服、姿势、场景）。',
+    'dataset.helpRule2': '✓ 要 — 让触发词出现一次（在 Step B 的「通用标签」里填一次就会写进每张 caption）。',
+    'dataset.helpRule3': "✕ 不要 — 把所有图都共有的恒定特征写出来，那是触发词的工作。",
+    'dataset.helpRule4': "✕ 不要 — 留空的 .txt，空 caption 等于啥都没教会模型。",
+    'dataset.helpShortcut': '捷径：直接在 Step A 点「给所有图打标」就够了 — WD14 tagger 会自动给每张图写一份合格的起手 caption。',
+
 };

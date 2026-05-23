@@ -221,6 +221,17 @@
         }[c]));
 
         const editedCount = this.captionEdits.size;
+
+        // v3.2.2 (issue #5 follow-up): warn the user if they're about to
+        // export images with empty captions. Common knowledge-gap mistake:
+        // user adds 50 images, forgets to click "Tag all", exports a folder
+        // full of .png + empty .txt that train-on-nothing.
+        const untaggedCount = this.imageIds.filter(id => {
+            if (this.captionEdits.has(id)) return false;
+            const cap = this.captions.get(id);
+            return !cap || String(cap).trim().length === 0;
+        }).length;
+
         const items = [
             this._t('dataset.confirmSummaryImages',
                 '<strong>{count}</strong> images will be {action}',
@@ -239,6 +250,11 @@
             items.push(this._t('dataset.confirmSummaryEdited',
                 '<strong>{count}</strong> have your manually-edited captions',
                 { count: editedCount }));
+        }
+        if (untaggedCount > 0) {
+            items.push(`<span class="dataset-confirm-warn">${this._t('dataset.confirmSummaryUntagged',
+                '⚠️ <strong>{count}</strong> have empty captions — their .txt files will be blank. Run "Tag all" first or write captions in Step B.',
+                { count: untaggedCount })}</span>`);
         }
 
         list.innerHTML = items.map(s => `<li>${s}</li>`).join('');
