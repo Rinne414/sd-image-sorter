@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="/static/css/vlm.css">
     <link rel="stylesheet" href="/static/css/color-backfill.css">
     <link rel="stylesheet" href="/static/css/mass-tag-editor.css">
+    <link rel="stylesheet" href="/static/css/dataset-maker.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -144,6 +145,10 @@
                         <span class="tab-icon" aria-hidden="true">🧪</span>
                         <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
                     </button>
+                    <button class="nav-tab" id="nav-tab-dataset" data-view="dataset" role="tab" aria-selected="false" aria-controls="view-dataset">
+                        <span class="tab-icon" aria-hidden="true">📦</span>
+                        <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
+                    </button>
                 </div>
 
             <!-- Mobile Navigation Menu (Overlay) -->
@@ -184,6 +189,10 @@
                         <button class="mobile-nav-item" data-view="promptlab" aria-label="Prompt Lab view">
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
+                        </button>
+                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📦</span>
+                            <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
@@ -2484,6 +2493,179 @@
                 </div>
             </section>
 
+            <!-- v3.2.2 + issue #5 points 5/6: Dataset Maker view.
+                 Focused workflow for LoRA training dataset preparation:
+                 import from gallery -> tag -> caption edit -> rename -> export.
+                 Reuses gallery selection token, caption-editor logic,
+                 export-preview API, and the new combined export endpoint.
+                 Trimmed compared to Caption Editor: no rearrange queue, no
+                 mode-switching content tabs, single focused workflow. -->
+            <section id="view-dataset" class="view" role="tabpanel" aria-labelledby="nav-tab-dataset">
+                <div class="dataset-maker">
+                    <header class="dataset-header">
+                        <h2 class="dataset-title">
+                            <span aria-hidden="true">📦</span>
+                            <span data-i18n="dataset.title">Dataset Maker</span>
+                        </h2>
+                        <p class="dataset-subtitle" data-i18n="dataset.subtitle">
+                            Build a LoRA-training-ready dataset: import from gallery, tag, edit captions, rename, and export images + .txt pairs to one folder.
+                        </p>
+                        <div class="dataset-toolbar">
+                            <button class="btn btn-primary" id="btn-dataset-import-gallery" data-i18n="dataset.importFromGallery">
+                                <span aria-hidden="true">⬅️</span>
+                                <span>Add from Gallery selection</span>
+                            </button>
+                            <button class="btn btn-secondary" id="btn-dataset-import-folder" data-i18n="dataset.importFromFolder">
+                                <span aria-hidden="true">📂</span>
+                                <span>Add from folder</span>
+                            </button>
+                            <span class="dataset-count" id="dataset-count">
+                                <strong id="dataset-count-num">0</strong>
+                                <span data-i18n="dataset.imagesInDataset">images in dataset</span>
+                            </span>
+                            <button class="btn btn-ghost btn-small" id="btn-dataset-clear" data-i18n="dataset.clearAll">Clear all</button>
+                        </div>
+                    </header>
+
+                    <div class="dataset-workbench">
+                        <!-- Left: image queue with thumbnails + edit indicator -->
+                        <aside class="dataset-queue-pane" aria-label="Dataset image queue">
+                            <div class="dataset-pane-head">
+                                <strong data-i18n="dataset.queueTitle">Images</strong>
+                                <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit caption</span>
+                            </div>
+                            <div class="dataset-queue-list" id="dataset-queue-list">
+                                <p class="dataset-empty-hint" data-i18n="dataset.emptyHint">
+                                    Select images in Gallery, then click "Add from Gallery selection" above.
+                                </p>
+                            </div>
+                        </aside>
+
+                        <!-- Center: selected image + caption editor -->
+                        <section class="dataset-editor-pane" aria-label="Caption editor for selected image">
+                            <div class="dataset-pane-head">
+                                <strong data-i18n="dataset.editorTitle">Caption editor</strong>
+                                <span class="dataset-editor-filename" id="dataset-editor-filename"></span>
+                            </div>
+                            <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
+                                <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
+                                <p class="dataset-editor-empty" id="dataset-editor-empty" data-i18n="dataset.editorEmpty">
+                                    Pick an image from the queue on the left.
+                                </p>
+                            </div>
+                            <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
+                                      placeholder="caption text..."
+                                      data-i18n-placeholder="dataset.captionPlaceholder"
+                                      hidden></textarea>
+                            <div class="dataset-editor-actions" id="dataset-editor-actions" hidden>
+                                <button class="btn btn-ghost btn-small" id="btn-dataset-revert-caption" data-i18n="dataset.revertCaption">Revert to original</button>
+                                <button class="btn btn-secondary btn-small" id="btn-dataset-prev-image" data-i18n="dataset.prevImage">⬅ Prev</button>
+                                <button class="btn btn-secondary btn-small" id="btn-dataset-next-image" data-i18n="dataset.nextImage">Next ➡</button>
+                                <button class="btn btn-danger btn-small" id="btn-dataset-remove-image" data-i18n="dataset.removeFromDataset">Remove from dataset</button>
+                            </div>
+                        </section>
+
+                        <!-- Right: export settings + naming pattern -->
+                        <aside class="dataset-export-pane" aria-label="Dataset export settings">
+                            <div class="dataset-pane-head">
+                                <strong data-i18n="dataset.exportTitle">Export</strong>
+                            </div>
+
+                            <details class="dataset-section" open>
+                                <summary data-i18n="dataset.tagSection">Tag images</summary>
+                                <p class="dataset-help" data-i18n="dataset.tagHelp">
+                                    Run AI tagging on every image in the dataset. Reuses the same tagger configured in the main Tag Images modal.
+                                </p>
+                                <button class="btn btn-secondary full-width" id="btn-dataset-tag-all" data-i18n="dataset.tagAll">
+                                    🏷️ Tag all images
+                                </button>
+                            </details>
+
+                            <details class="dataset-section">
+                                <summary data-i18n="dataset.bulkSection">Bulk caption operations</summary>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
+                                    <textarea id="dataset-common-tags" class="form-input" rows="2"
+                                              placeholder="masterpiece, best_quality"
+                                              data-i18n-placeholder="dataset.commonTagsPlaceholder"></textarea>
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.blacklistLabel">Blacklist tags (removed from every caption)</span>
+                                    <textarea id="dataset-blacklist" class="form-input" rows="2"
+                                              placeholder="bad_anatomy, watermark"
+                                              data-i18n-placeholder="dataset.blacklistPlaceholder"></textarea>
+                                </label>
+                                <label class="form-checkbox">
+                                    <input type="checkbox" id="dataset-underscore-to-space" checked>
+                                    <span data-i18n="dataset.underscoreToSpace">Convert tag underscores to spaces (preserves <code>score_*</code>)</span>
+                                </label>
+                            </details>
+
+                            <details class="dataset-section" open>
+                                <summary data-i18n="dataset.namingSection">Output filenames</summary>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.namingPatternLabel">Naming pattern</span>
+                                    <input type="text" id="dataset-naming-pattern" class="form-input"
+                                           value="{filename}"
+                                           placeholder="{filename} or {trigger}_{index:03d}"
+                                           data-i18n-placeholder="dataset.namingPlaceholder">
+                                </label>
+                                <p class="dataset-help">
+                                    <span data-i18n="dataset.namingHelp">Variables:</span>
+                                    <code>{filename}</code> · <code>{index}</code> · <code>{index:03d}</code> · <code>{trigger}</code> · <code>{generator}</code>
+                                </p>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.triggerLabel">Trigger word (used when pattern contains <code>{trigger}</code>)</span>
+                                    <input type="text" id="dataset-trigger" class="form-input"
+                                           placeholder="my_subject"
+                                           data-i18n-placeholder="dataset.triggerPlaceholder">
+                                </label>
+                                <p class="dataset-naming-preview" id="dataset-naming-preview"
+                                   aria-live="polite"></p>
+                            </details>
+
+                            <details class="dataset-section">
+                                <summary data-i18n="dataset.outputSection">Output destination</summary>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.outputFolderLabel">Output folder</span>
+                                    <div class="folder-input-row">
+                                        <input type="text" id="dataset-output-folder" class="form-input"
+                                               placeholder="C:/training-data/my-lora"
+                                               data-i18n-placeholder="dataset.outputPlaceholder">
+                                        <button class="btn btn-ghost btn-small" id="btn-dataset-browse-output"
+                                                data-i18n="common.browse">Browse</button>
+                                    </div>
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.imageOpLabel">Image action</span>
+                                    <select id="dataset-image-op" class="form-input">
+                                        <option value="copy" selected data-i18n="dataset.imageOpCopy">Copy (keep originals)</option>
+                                        <option value="move" data-i18n="dataset.imageOpMove">Move (remove from source)</option>
+                                    </select>
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.overwriteLabel">If filename exists</span>
+                                    <select id="dataset-overwrite" class="form-input">
+                                        <option value="unique" selected data-i18n="dataset.overwriteUnique">Add numeric suffix</option>
+                                        <option value="overwrite" data-i18n="dataset.overwriteReplace">Replace</option>
+                                        <option value="skip" data-i18n="dataset.overwriteSkip">Skip</option>
+                                    </select>
+                                </label>
+                            </details>
+
+                            <button class="btn btn-primary btn-large full-width" id="btn-dataset-export"
+                                    data-i18n="dataset.exportCta">
+                                📤 Export dataset
+                            </button>
+                            <div class="dataset-export-progress" id="dataset-export-progress" hidden role="status">
+                                <div class="dataset-progress-bar"><div class="dataset-progress-fill" id="dataset-progress-fill"></div></div>
+                                <span class="dataset-progress-text" id="dataset-progress-text"></span>
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            </section>
+
         </main>
 
         <div class="modal" id="model-manager-modal" role="dialog" aria-modal="true" aria-labelledby="model-manager-title">
@@ -4140,6 +4322,7 @@
     <script src="/static/js/queue-solitaire.js"></script>
     <script src="/static/js/similar.js"></script>
     <script src="/static/js/prompt-lab.js"></script>
+    <script src="/static/js/dataset-maker.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>
