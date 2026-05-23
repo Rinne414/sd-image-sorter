@@ -2932,6 +2932,17 @@
                                     <small class="dataset-help" data-i18n="dataset.outputFolderHint">
                                         Will be created if it doesn't exist.
                                     </small>
+                                    <!-- v3.2.2 task #12: renamed-pair preview chip. Updates live
+                                         from the trigger / naming preset so the user sees exactly
+                                         what file name pair will land in the output folder. -->
+                                    <div class="dataset-pair-chip" id="dataset-pair-chip" aria-live="polite">
+                                        <span class="dataset-pair-chip-icon" aria-hidden="true">✓</span>
+                                        <span class="dataset-pair-chip-label" data-i18n="dataset.pairChipPrefix">Output files will be:</span>
+                                        <code class="dataset-pair-chip-png" id="dataset-pair-chip-png">your_lora_001.png</code>
+                                        <span class="dataset-pair-chip-plus" aria-hidden="true">+</span>
+                                        <code class="dataset-pair-chip-txt" id="dataset-pair-chip-txt">your_lora_001.txt</code>
+                                        <span class="dataset-pair-chip-suffix" data-i18n="dataset.pairChipSuffix">(LoRA trainers pair them by exact stem match)</span>
+                                    </div>
                                 </label>
 
                                 <!-- P2 fix: Copy vs Move out of Advanced. New users care most about

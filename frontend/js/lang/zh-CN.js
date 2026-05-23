@@ -2880,6 +2880,9 @@ window.I18nLang_zhCN = {
     // v3.2.2 任务 #11: Anime LoRA 推荐预设。
     'dataset.animeDefaultsButton': '🎌 套用 Anime LoRA 预设',
     'dataset.animeDefaultsApplied': '已套用 Anime LoRA 推荐预设。',
+    // v3.2.2 任务 #12: 重命名对预览。
+    'dataset.pairChipPrefix': '输出会是：',
+    'dataset.pairChipSuffix': '（LoRA 训练器靠完全相同的档名词干自动配对）',
     // v3.2.2 任务 #7b: 直接从资料夹导入到小图库工作区。
     'dataset.importFromFolder': '从资料夹加入',
     'dataset.folderImportTitle': '从资料夹加入图片',

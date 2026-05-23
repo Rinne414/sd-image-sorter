@@ -2880,6 +2880,9 @@ window.I18nLang_en = {
     // v3.2.2 task #11: Anime LoRA recommended defaults.
     'dataset.animeDefaultsButton': '🎌 Apply Anime LoRA defaults',
     'dataset.animeDefaultsApplied': 'Applied Anime LoRA recommended defaults.',
+    // v3.2.2 task #12: renamed-pair preview chip.
+    'dataset.pairChipPrefix': 'Output files will be:',
+    'dataset.pairChipSuffix': '(LoRA trainers pair them by exact stem match)',
     // v3.2.2 task #7b: direct folder import to small-gallery workspace.
     'dataset.importFromFolder': 'Add from Folder',
     'dataset.folderImportTitle': 'Add images from a folder',

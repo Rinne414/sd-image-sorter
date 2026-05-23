@@ -298,3 +298,55 @@
     color: var(--text-primary);
     text-decoration: line-through;
 }
+
+
+
+/* ============== Renamed-pair example chip (T12) ============== */
+
+.dataset-pair-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(var(--accent-secondary-rgb), 0.10);
+    border: 1px solid rgba(var(--accent-secondary-rgb), 0.30);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+}
+
+.dataset-pair-chip-icon {
+    color: var(--accent-secondary);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-label {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-png,
+.dataset-pair-chip-txt {
+    background: rgba(0, 0, 0, 0.20);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.80rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.dataset-pair-chip-plus {
+    color: var(--text-muted, #9ca3af);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.dataset-pair-chip-suffix {
+    color: var(--text-muted, #9ca3af);
+    font-size: 0.76rem;
+    flex-basis: 100%;
+}

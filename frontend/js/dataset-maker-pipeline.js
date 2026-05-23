@@ -475,6 +475,46 @@
 
     DM._applyAnimeDefaults = applyAnimeDefaults;
 
+    // ============== Renamed-pair preview chip (T12) ==============
+
+    function refreshPairChip() {
+        const png = document.getElementById('dataset-pair-chip-png');
+        const txt = document.getElementById('dataset-pair-chip-txt');
+        if (!png || !txt) return;
+        const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
+        const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
+        let stem;
+        if (preset === 'keep') {
+            stem = 'your_image_name';
+        } else if (preset === 'renumber') {
+            stem = `${(trigger || 'your_lora_trigger')}_001`;
+        } else {
+            const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
+            stem = pattern
+                .replace(/\{trigger\}/g, trigger || 'your_lora_trigger')
+                .replace(/\{index:0*(\d+)d\}/g, (_m, w) => '1'.padStart(parseInt(w, 10) || 1, '0'))
+                .replace(/\{index\}/g, '1')
+                .replace(/\{filename\}/g, 'your_image_name')
+                .replace(/\{generator\}/g, 'webui')
+                .replace(/\{ext\}/g, 'png')
+                .replace(/\{date\}/g, new Date().toISOString().slice(0, 10));
+        }
+        png.textContent = `${stem}.png`;
+        txt.textContent = `${stem}.txt`;
+    }
+
+    function bindPairChip() {
+        for (const id of ['dataset-trigger', 'dataset-naming-pattern']) {
+            document.getElementById(id)?.addEventListener('input', refreshPairChip);
+        }
+        document.querySelectorAll('input[name="dataset-naming-preset"]').forEach((r) => {
+            r.addEventListener('change', refreshPairChip);
+        });
+        refreshPairChip();
+    }
+
+    DM._refreshPairChip = refreshPairChip;
+
     // ---- public hooks ----
     DM._runAudit = runAudit;
     DM._auditState = AUDIT_STATE;
@@ -484,6 +524,7 @@
         bindAudit();
         bindVocab();
         bindAnimeDefaults();
+        bindPairChip();
     }
 
     if (document.readyState === 'loading') {
