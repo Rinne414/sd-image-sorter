@@ -1042,10 +1042,13 @@ Combined image-and-caption export for LoRA training datasets. Renames every imag
 
 Pattern variables: `{filename}`, `{index}`, `{index:03d}` (0-padded counter), `{trigger}`, `{generator}`, `{ext}`, `{date}`.
 
+Accepts either gallery-source items (`image_ids`), small-gallery local items (`image_paths`), or both. `image_overrides` keys may be either `str(image_id)` or absolute paths; both forms map to per-image caption overrides.
+
 Body:
 ```json
 {
   "image_ids": [1, 2, 3],
+  "image_paths": ["C:/dataset/local_001.png"],
   "output_folder": "C:/training/my-lora",
   "naming_pattern": "{trigger}_{index:03d}",
   "trigger": "my_subject",
@@ -1054,11 +1057,50 @@ Body:
   "blacklist": ["watermark"],
   "common_tags": ["masterpiece", "best_quality"],
   "normalize_tag_underscores": true,
-  "image_overrides": {"42": "user-edited caption for this image"}
+  "image_overrides": {"42": "user-edited caption for this image", "C:/dataset/local_001.png": "caption for the local item"}
 }
 ```
 
 Returns `{status, exported, skipped, error_count, output_folder, items[], error_messages[]}` where `status` is one of `ok` / `partial` / `failed`. Per-image results in `items[]` show the source path, destination paths, and any error or skip reason.
+
+---
+
+#### POST /api/dataset/folder-scan
+
+Scan a folder for images and return per-image metadata for the Dataset Maker session WITHOUT registering the images in the main library DB. This is the "small gallery" entry point: a user can curate a LoRA training set straight from a folder, run audit and export against it, and the gallery's main image index stays untouched.
+
+Body:
+```json
+{
+  "folder_path": "C:/source-photos/character-shoot",
+  "recursive": false,
+  "limit": 5000
+}
+```
+
+Returns `{folder_path, items[], total_files_seen, skipped_unreadable, truncated}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64}` where `thumb_b64` is a JPEG-encoded base64 string for direct rendering and `ds_id` is a stable session id derived from `sha1(abs_path)`.
+
+---
+
+#### POST /api/dataset/audit
+
+LoRA-trainer readiness audit. Wraps existing aesthetic + perceptual-hash + tag-presence + dimension checks into a single per-image report. Every threshold is optional — leaving it `null` skips that axis entirely so the user can ask for a fast "what's untagged?" pass without paying the AI inference cost.
+
+Body:
+```json
+{
+  "image_ids": [1, 2, 3],
+  "image_paths": ["C:/dataset/local_001.png"],
+  "aesthetic_max": 4.5,
+  "phash_max": 5,
+  "dim_min": 512,
+  "enable_aesthetic": true,
+  "enable_phash": true,
+  "extra_tag_counts": {"C:/dataset/local_001.png": 5}
+}
+```
+
+Returns `{summary, items[], duplicate_groups[]}`. `summary` aggregates `{total, low_quality_count, duplicate_pairs, untagged_count, small_count, missing_count, avg_aesthetic}`. Each `items[]` row carries the image's flags (`low_quality`, `untagged`, `small`, `missing`) plus the raw measurements that produced them. `duplicate_groups[]` clusters images whose perceptual-hash hamming distance is `<= phash_max`.
 
 ---
 
