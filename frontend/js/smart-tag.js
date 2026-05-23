@@ -83,15 +83,31 @@
         const runBtn = $('#btn-smart-tag-run');
         if (runBtn) runBtn.disabled = ids.length === 0;
 
-        modal.classList.add('show');
-        modal.setAttribute('aria-hidden', 'false');
+        // Use the project-wide showModal helper so Escape, focus-trap,
+        // focus-restore, and aria semantics all work the same way as
+        // every other modal in the app. The helper applies the
+        // ``visible`` class (the canonical project convention) which
+        // matches the modal stylesheet — the older ``show`` class this
+        // file used to write was a no-op CSS selector.
+        if (typeof window.showModal === 'function') {
+            window.showModal('smart-tag-modal');
+        } else {
+            // Fallback for very early bootstrapping where app.js
+            // hasn't registered the helper yet.
+            modal.classList.add('visible');
+            modal.setAttribute('aria-hidden', 'false');
+        }
     }
 
     function closeModal() {
         const modal = $('#smart-tag-modal');
         if (!modal) return;
-        modal.classList.remove('show');
-        modal.setAttribute('aria-hidden', 'true');
+        if (typeof window.hideModal === 'function') {
+            window.hideModal('smart-tag-modal');
+        } else {
+            modal.classList.remove('visible');
+            modal.setAttribute('aria-hidden', 'true');
+        }
         stopProgressPolling();
         showProgress(false);
         setProgressUI({ percent: 0, text: '', preview: '' });

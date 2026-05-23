@@ -47,6 +47,39 @@ from utils.path_validation import normalize_user_path
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "oppai-oracle-v1.1"
+
+
+def _normalize_oppai_model_alias(model_name: Optional[str]) -> str:
+    """Map a caller-supplied OppaiOracle model name to a registered key.
+
+    The Model Manager card and the Smart Tag wizard both refer to this
+    tagger family by the unversioned id ``oppai-oracle`` (see
+    ``services/model_service.py`` and ``services/smart_tag_service.py``).
+    The tagger registry in ``config.py::TAGGER_MODELS`` keys the actual
+    weights under the version-specific ``oppai-oracle-v1.1`` so future
+    variants can sit side-by-side.
+
+    Without this resolver, real-click verification (v3.2.2 T2) failed
+    with::
+
+        Failed to initialise pipeline: Unknown OppaiOracle model:
+        oppai-oracle. Available: ['oppai-oracle-v1.1']
+
+    The resolver translates the family id to the latest registered
+    version. Unknown ids fall through unchanged so ``_model_config``
+    can still raise the explicit "Unknown OppaiOracle model" error.
+    """
+    if not model_name:
+        return DEFAULT_MODEL
+    name = str(model_name).strip().lower()
+    if not name:
+        return DEFAULT_MODEL
+    if name in TAGGER_MODELS:
+        return name
+    # Family-level alias used by the Model Manager UI and Smart Tag wizard.
+    if name == "oppai-oracle":
+        return DEFAULT_MODEL
+    return name
 DEFAULT_THRESHOLD = 0.7927  # P=R global from pr_thresholds.json (V1.1).
 PAD_TAG_INDEX = 0
 UNK_TAG_INDEX = 1
@@ -141,7 +174,7 @@ class OppaiOracleTagger:
         use_gpu: bool = True,
     ) -> None:
         _ensure_imports()
-        self.model_name = model_name or DEFAULT_MODEL
+        self.model_name = _normalize_oppai_model_alias(model_name)
         self.model_path: Optional[str] = normalize_user_path(model_path) if model_path else None
         self.tags_path: Optional[str] = normalize_user_path(tags_path) if tags_path else None
         self.model_dir: str = model_dir or get_oppai_oracle_model_dir()
@@ -682,15 +715,16 @@ def get_oppai_oracle_tagger(
     """Process-wide singleton, mirroring :func:`tagger.get_tagger`."""
     global _tagger_singleton, _singleton_settings
     with _tagger_lock:
+        canonical_name = _normalize_oppai_model_alias(model_name)
         new_settings = {
-            "model_name": model_name or DEFAULT_MODEL,
+            "model_name": canonical_name,
             "model_path": model_path,
             "tags_path": tags_path,
             "use_gpu": bool(use_gpu),
         }
         if force_reload or _tagger_singleton is None or new_settings != _singleton_settings:
             _tagger_singleton = OppaiOracleTagger(
-                model_name=new_settings["model_name"],
+                model_name=canonical_name,
                 model_path=model_path,
                 tags_path=tags_path,
                 threshold=threshold,
