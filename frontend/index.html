@@ -2773,6 +2773,12 @@
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.
                                 </p>
+                                <!-- v3.2.2 task #11: Anime LoRA defaults reset. -->
+                                <div class="dataset-anime-defaults-row">
+                                    <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-anime-defaults"
+                                            title="Reset common tags, underscore handling, and naming preset to anime-LoRA recommended values"
+                                            data-i18n="dataset.animeDefaultsButton">🎌 Apply Anime LoRA defaults</button>
+                                </div>
                                 <label class="form-label">
                                     <span data-i18n="dataset.commonTagsLabel">Common tags (added to every caption)</span>
                                     <textarea id="dataset-common-tags" class="form-input" rows="2"

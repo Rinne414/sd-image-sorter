@@ -390,6 +390,91 @@
 
     DM._refreshVocab = refreshVocab;
 
+    // ============== Anime LoRA-friendly defaults (T11) ==============
+
+    const ANIME_DEFAULTS_FLAG = 'sd-image-sorter-dataset-customized';
+
+    function applyAnimeDefaults({ silent = false } = {}) {
+        // Common tags pre-fill (only if empty so we don't clobber user input).
+        const ct = document.getElementById('dataset-common-tags');
+        if (ct && !String(ct.value || '').trim()) {
+            ct.value = 'masterpiece, best_quality';
+            ct.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        // Underscore-to-space ON (preserve user choice if already changed).
+        const us = document.getElementById('dataset-underscore-to-space');
+        if (us && !us.dataset.userTouched) {
+            us.checked = true;
+        }
+        // Naming preset = renumber (better LoRA workflow than 'keep' random filenames).
+        const renumberRadio = document.querySelector('input[name="dataset-naming-preset"][value="renumber"]');
+        const keepRadio = document.querySelector('input[name="dataset-naming-preset"][value="keep"]');
+        const presetUserTouched = (keepRadio && keepRadio.dataset.userTouched)
+            || (renumberRadio && renumberRadio.dataset.userTouched);
+        if (renumberRadio && !presetUserTouched) {
+            renumberRadio.checked = true;
+            renumberRadio.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        // Trigger placeholder hint if the user has typed nothing yet.
+        const trigger = document.getElementById('dataset-trigger');
+        if (trigger && !String(trigger.value || '').trim()) {
+            trigger.placeholder = 'your_lora_trigger';
+        }
+        if (!silent && typeof DM._toast === 'function') {
+            DM._toast(DM._t('dataset.animeDefaultsApplied',
+                'Applied Anime LoRA recommended defaults.'), 'success');
+        }
+    }
+
+    function bindAnimeDefaults() {
+        const btn = document.getElementById('btn-dataset-anime-defaults');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                // Force reset by clearing user-touched flags first.
+                document.querySelectorAll('[data-user-touched="1"]').forEach((el) => {
+                    delete el.dataset.userTouched;
+                });
+                // Clear fields so applyAnimeDefaults will repopulate them.
+                const ct = document.getElementById('dataset-common-tags');
+                if (ct) ct.value = '';
+                applyAnimeDefaults({ silent: false });
+                try { localStorage.removeItem(ANIME_DEFAULTS_FLAG); } catch {}
+            });
+        }
+        // Mark fields as user-touched once they edit them so the defaults
+        // never override their choices on subsequent inits.
+        const fields = [
+            'dataset-common-tags', 'dataset-underscore-to-space',
+            'dataset-blacklist', 'dataset-trigger',
+        ];
+        for (const id of fields) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            const evt = (el.tagName === 'INPUT' && el.type === 'checkbox') ? 'change' : 'input';
+            el.addEventListener(evt, () => {
+                el.dataset.userTouched = '1';
+                try { localStorage.setItem(ANIME_DEFAULTS_FLAG, '1'); } catch {}
+            }, { once: true });
+        }
+        document.querySelectorAll('input[name="dataset-naming-preset"]').forEach((radio) => {
+            radio.addEventListener('change', () => {
+                radio.dataset.userTouched = '1';
+                try { localStorage.setItem(ANIME_DEFAULTS_FLAG, '1'); } catch {}
+            }, { once: true });
+        });
+
+        // Apply defaults on the first init (no localStorage flag yet).
+        const customized = (() => {
+            try { return localStorage.getItem(ANIME_DEFAULTS_FLAG) === '1'; }
+            catch { return false; }
+        })();
+        if (!customized) {
+            applyAnimeDefaults({ silent: true });
+        }
+    }
+
+    DM._applyAnimeDefaults = applyAnimeDefaults;
+
     // ---- public hooks ----
     DM._runAudit = runAudit;
     DM._auditState = AUDIT_STATE;
@@ -398,6 +483,7 @@
         bindStepper();
         bindAudit();
         bindVocab();
+        bindAnimeDefaults();
     }
 
     if (document.readyState === 'loading') {

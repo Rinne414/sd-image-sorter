@@ -2877,6 +2877,9 @@ window.I18nLang_en = {
     'dataset.vocabHelp': 'Click a tag to add it to <strong>Common tags</strong>. Click again to move it to <strong>Blacklist</strong>. Third click clears.',
     'dataset.vocabSearchPlaceholder': 'Filter tags...',
     'dataset.vocabRefresh': 'Refresh',
+    // v3.2.2 task #11: Anime LoRA recommended defaults.
+    'dataset.animeDefaultsButton': '🎌 Apply Anime LoRA defaults',
+    'dataset.animeDefaultsApplied': 'Applied Anime LoRA recommended defaults.',
     // v3.2.2 task #7b: direct folder import to small-gallery workspace.
     'dataset.importFromFolder': 'Add from Folder',
     'dataset.folderImportTitle': 'Add images from a folder',

@@ -3254,3 +3254,33 @@ Use this structure for future entries:
   Do not add a new Gallery filter field without updating list retrieval, filtered selection token contracts, frontend saved state, summary formatting, and docs together. Do not expose full VLM endpoint URLs in debug events; treat query strings and fragments as secret-bearing.
 - Tests:
   Backend tests cover color filters through offset pagination and selection tokens, VLM debug endpoint redaction, corrupt VLM concurrency setting normalization, color-analysis path resolution, and the router/service boundary for export preview. Frontend validation must include a real browser click through the filter modal so the color params are observed on `/api/images`.
+
+
+## ADR-2026-05-24: Dataset Maker fresh sessions seed Anime LoRA defaults
+
+**Status:** Accepted (v3.2.2).
+
+**Context:** The Dataset Maker tab is the entry point for batch LoRA training-set work. Without any pre-fill, a first-time user sees three empty controls (common tags textarea, underscore-to-space checkbox, naming preset radios) and has to know what each one should be. The most common LoRA failure mode in real user reports is "I forgot to add masterpiece / best_quality" or "my filenames look like 4B2965D015FF06CF.png so the trainer can't sequence them". Setting opinionated defaults avoids that footgun while staying easy to change.
+
+**Decision:** On the very first init (no `sd-image-sorter-dataset-customized` flag in localStorage), the frontend pre-fills:
+
+- `dataset-common-tags` textarea = `masterpiece, best_quality`
+- `dataset-underscore-to-space` checkbox = ON (preserve `score_*` prefixes — already wired in the export-template engine)
+- naming preset radio = `renumber` (so output is `your_lora_001.png` etc, not random hex stems)
+- trigger field placeholder = `your_lora_trigger`
+
+A new "🎌 Apply Anime LoRA defaults" button in Step B re-applies these in one click and clears the customized flag.
+
+**Locked invariants** (per AI_PRINCIPLES.md §11 user-visible defaults):
+
+- The default ONLY applies on the very first init. As soon as the user types in any of the affected fields or picks a different preset, the localStorage flag is set and the defaults stop self-applying.
+- The defaults DO NOT touch `image_op` (still `copy`, locked by ADR-2026-05-16-copy-default) or `overwrite_policy`. Those have their own ADRs.
+- "🎌 Apply Anime LoRA defaults" is destructive of user-typed values. The button is in the Step B card next to the help text, NOT next to the export confirm so it cannot be misclicked into a destructive overwrite during the actual export click path.
+
+**Regression test:** `backend/tests/test_dataset_anime_defaults.py::test_anime_defaults_button_present_in_dataset_maker_html` asserts the markup carries the button id + i18n key. The localStorage gating is exercised by the frontend e2e in `.tmp/v322-folder-import.js` and friends, which clear the flag before each run; the defaults applying without overriding existing input is a property the regression test pins at the HTML/i18n level.
+
+**What future AI must not do:**
+
+- Do NOT silently change the default common-tags string. If `masterpiece, best_quality` is wrong for a future base model, add a SECOND preset button rather than flipping the default.
+- Do NOT make the defaults survive a user's explicit edit. The localStorage flag is the only correct gating signal.
+- Do NOT bundle the Anime defaults flip with a "release prep" or "stability hardening" commit; per AI_PRINCIPLES §11 a default flip needs its own commit, this ADR, and a regression test in the same patch.
