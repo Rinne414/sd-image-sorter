@@ -2564,6 +2564,14 @@
                                 <span aria-hidden="true">⬅️</span>
                                 <span data-i18n="dataset.importFromGallery">Add from Gallery</span>
                             </button>
+                            <!-- v3.2.2 task #7b: direct folder import (small-gallery workspace).
+                                 Items added this way live entirely in the Dataset Maker session
+                                 — they are NOT registered in the main library DB. -->
+                            <button class="btn btn-secondary" id="btn-dataset-import-folder"
+                                    title="Import images directly from a folder without scanning into the main gallery">
+                                <span aria-hidden="true">📁</span>
+                                <span data-i18n="dataset.importFromFolder">Add from Folder</span>
+                            </button>
                             <button class="btn btn-ghost btn-icon-only" id="btn-dataset-show-help"
                                     aria-label="Show quick start guide" title="Show quick start guide"
                                     hidden>
@@ -2874,6 +2882,48 @@
                                 </p>
                             </section>
                         </aside>
+                    </div>
+
+                    <!-- v3.2.2 task #7b: direct folder import (small-gallery workspace) -->
+                    <div class="dataset-modal" id="dataset-folder-import-modal" role="dialog" aria-modal="true"
+                         aria-labelledby="dataset-folder-import-title" hidden>
+                        <div class="dataset-modal-backdrop"></div>
+                        <div class="dataset-modal-card">
+                            <h3 id="dataset-folder-import-title" class="dataset-modal-title">
+                                <span aria-hidden="true">📁</span>
+                                <span data-i18n="dataset.folderImportTitle">Add images from a folder</span>
+                            </h3>
+                            <p class="dataset-modal-help" data-i18n="dataset.folderImportHelp">
+                                Pick a folder of images. They will be added to this Dataset Maker session
+                                directly — they will NOT be scanned into the main library.
+                            </p>
+                            <label class="dataset-required-label" for="dataset-folder-import-path">
+                                <span>
+                                    <span data-i18n="dataset.folderImportPathLabel">Folder path</span>
+                                    <span class="dataset-required-asterisk" aria-hidden="true">*</span>
+                                </span>
+                                <div class="folder-input-row">
+                                    <input type="text" id="dataset-folder-import-path" class="form-input"
+                                           placeholder="C:/training-data/source-folder"
+                                           data-folder-browser-container="dataset-folder-import-browser-container">
+                                    <button class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
+                                            data-i18n="common.browse">Browse</button>
+                                </div>
+                                <div id="dataset-folder-import-browser-container"></div>
+                            </label>
+                            <label class="dataset-preset-row">
+                                <input type="checkbox" id="dataset-folder-import-recursive">
+                                <span class="dataset-preset-label">
+                                    <strong data-i18n="dataset.folderImportRecursive">Include subfolders</strong>
+                                </span>
+                            </label>
+                            <p class="dataset-modal-status" id="dataset-folder-import-status" aria-live="polite"></p>
+                            <div class="dataset-modal-actions">
+                                <button class="btn btn-ghost" id="btn-dataset-folder-import-cancel" data-i18n="common.cancel">Cancel</button>
+                                <button class="btn btn-primary" id="btn-dataset-folder-import-go"
+                                        data-i18n="dataset.folderImportGo">Scan and add</button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Pre-flight confirm overlay -->

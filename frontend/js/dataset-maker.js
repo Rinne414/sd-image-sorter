@@ -342,17 +342,25 @@
 
     window.DatasetMaker = DM;
 
-    // Wire up later parts (active image, caption fetch, export, modals) via
-    // a separate file load to keep this module compact and verifiable.
-    const part2 = document.createElement('script');
-    part2.src = '/static/js/dataset-maker-part2.js';
-    document.head.appendChild(part2);
-    const part3 = document.createElement('script');
-    part3.src = '/static/js/dataset-maker-part3.js';
-    document.head.appendChild(part3);
-    const cleanups = document.createElement('script');
-    cleanups.src = '/static/js/dataset-maker-cleanups.js';
-    document.head.appendChild(cleanups);
+    // Load the rest of the module in deterministic order. Browsers honor
+    // ``async = false`` for dynamically-inserted scripts as a way to
+    // request "execute these in DOM-insertion order, not parallel race"
+    // (see HTML spec §"prepare a script", classic-script branch). This
+    // matters because dataset-maker-local-import.js patches functions
+    // defined in part2.js (e.g. _buildQueueItem) — without ordering, the
+    // patch can land BEFORE the function exists and get overwritten.
+    function _appendOrderedScript(src) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = false;
+        document.head.appendChild(s);
+        return s;
+    }
+    _appendOrderedScript('/static/js/dataset-maker-part2.js');
+    _appendOrderedScript('/static/js/dataset-maker-part3.js');
+    _appendOrderedScript('/static/js/dataset-maker-cleanups.js');
+    // v3.2.2 task #7b: dual-source queue + folder-import (small gallery).
+    _appendOrderedScript('/static/js/dataset-maker-local-import.js');
 
     // Hook into view activation
     function initWhenViewActivates() {
