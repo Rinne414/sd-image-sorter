@@ -22,6 +22,7 @@
     <link rel="stylesheet" href="/static/css/dataset-pipeline.css">
     <link rel="stylesheet" href="/static/css/smart-tag-hint.css">
     <link rel="stylesheet" href="/static/css/tag-power.css">
+    <link rel="stylesheet" href="/static/css/tag-stats-modal.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         /* Folder Browser Widget */
@@ -2733,6 +2734,24 @@
                                       placeholder="caption text..."
                                       data-i18n-placeholder="dataset.captionPlaceholder"
                                       hidden></textarea>
+
+                            <!-- v3.2.2 T-power-PR2 (C): tag confidence pill panel.
+                                 Lets the user spot low-confidence false positives at
+                                 a glance and one-click delete them from the caption. -->
+                            <details class="dataset-confidence-panel" id="dataset-confidence-panel" hidden>
+                                <summary class="dataset-confidence-summary">
+                                    <span aria-hidden="true">📊</span>
+                                    <span data-i18n="dataset.confidenceTitle">Tag confidence</span>
+                                    <span class="dataset-confidence-summary-hint" id="dataset-confidence-summary-hint"></span>
+                                </summary>
+                                <div class="dataset-confidence-body">
+                                    <p class="dataset-confidence-help" data-i18n="dataset.confidenceHelp">
+                                        Each pill shows the local tagger's confidence. Click ✕ to drop a tag from the active caption.
+                                    </p>
+                                    <div class="dataset-confidence-pills" id="dataset-confidence-pills"></div>
+                                </div>
+                            </details>
+
                             <div class="dataset-editor-actions" id="dataset-editor-actions" hidden>
                                 <button class="btn btn-secondary btn-small" id="btn-dataset-prev-image" data-i18n="dataset.prevImage">⬅ Prev</button>
                                 <button class="btn btn-secondary btn-small" id="btn-dataset-next-image" data-i18n="dataset.nextImage">Next ➡</button>
@@ -4829,6 +4848,7 @@
     <script src="/static/js/dataset-maker.js"></script>
     <script src="/static/js/smart-tag.js"></script>
     <script src="/static/js/tag-power.js"></script>
+    <script src="/static/js/tag-stats-modal.js"></script>
     <script src="/static/js/artist-ident.js"></script>
     <script src="/static/js/image-reader.js"></script>
     <script src="/static/js/obfuscate-engine.js"></script>

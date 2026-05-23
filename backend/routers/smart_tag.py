@@ -49,6 +49,12 @@ class SmartTagStartRequest(BaseModel):
     use_gpu: bool = True
     general_threshold: float = 0.35
     character_threshold: float = 0.85
+    # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
+    taggers: List[Dict[str, Any]] = Field(default_factory=list)
+    consensus_min: int = Field(default=2, ge=1, le=10)
+    consensus_skip_categories: List[str] = Field(
+        default_factory=lambda: ["character", "copyright"]
+    )
 
 
 @router.post("/start")

@@ -6663,6 +6663,12 @@ async function pollTagProgress() {
             syncTaggerModelUi();
             loadImages();
             loadStats();
+            // v3.2.2 T-power-PR2 (H): pop the post-tag stats modal once
+            // when the worker emits last_run_stats on the terminal send.
+            if (progress.last_run_stats && typeof window.TagStatsModal === 'object'
+                && typeof window.TagStatsModal.show === 'function') {
+                try { window.TagStatsModal.show(progress.last_run_stats); } catch (_e) { /* */ }
+            }
             // v3.2.1: dispatch a hookable event so other modules (gallery
             // sub-views, prompt-lab, etc.) can react to fresh tags without
             // needing to know about the polling internals here.

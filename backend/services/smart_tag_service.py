@@ -133,6 +133,126 @@ def filter_noise_tags(
     return [t for t in tags if not is_noise_tag(t, noise_lower)]
 
 
+def compute_consensus_tags(
+    per_tagger_outputs: List[Dict[str, Any]],
+    *,
+    consensus_min: int = 2,
+    skip_categories: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    """v3.2.2 T-power-PR2 (D): fuse the outputs of N taggers via weighted
+    voting + per-category bypass.
+
+    Each ``per_tagger_outputs`` entry is::
+
+        {
+            "model": str,
+            "weight": float,            # 0.0-1.0, defaults to 1.0
+            "general_tags":   [{tag, confidence, category}, ...],
+            "character_tags": [...],
+            "rating": {label, score} | str,
+        }
+
+    Voting rule per tag:
+
+      - sum of weights from taggers that produced it (above their own
+        threshold — that filtering already happened upstream) is >= ``consensus_min``
+      - OR the tag's category is in ``skip_categories`` (default
+        ``{'character', 'copyright'}``) — most taggers can't recognize
+        characters reliably, so we use OR semantics there: any single
+        tagger detecting it keeps it.
+
+    Returns ``{"general_tags": [...], "character_tags": [...], "rating": str}``
+    where each output tag carries:
+
+      - ``tag``: name (verbatim from the first tagger that produced it)
+      - ``confidence``: max confidence across the taggers that voted yes
+      - ``category``: 'general' | 'character'
+      - ``votes``: int — count of taggers that produced this tag (for diagnostics)
+    """
+    skip = set(
+        s.lower() for s in (
+            skip_categories
+            if skip_categories is not None
+            else {"character", "copyright"}
+        )
+    )
+    consensus_min = max(1, int(consensus_min or 1))
+
+    # Per-tag accumulator: {tag_lc: {tag, category, votes_count, weight_sum, max_conf}}
+    accum: Dict[str, Dict[str, Any]] = {}
+
+    for output in per_tagger_outputs or []:
+        weight = float(output.get("weight") or 1.0)
+        for category_key, category_label in (("general_tags", "general"), ("character_tags", "character")):
+            for tag_row in (output.get(category_key) or []):
+                if isinstance(tag_row, dict):
+                    name = str(tag_row.get("tag") or "").strip()
+                    conf = float(tag_row.get("confidence") or 0.0)
+                    cat = str(tag_row.get("category") or category_label).lower()
+                else:
+                    name = str(tag_row or "").strip()
+                    conf = 1.0
+                    cat = category_label
+                if not name:
+                    continue
+                key = name.lower()
+                slot = accum.setdefault(key, {
+                    "tag": name,
+                    "category": cat,
+                    "votes": 0,
+                    "weight_sum": 0.0,
+                    "max_conf": 0.0,
+                    "first_category": category_label,
+                })
+                slot["votes"] += 1
+                slot["weight_sum"] += weight
+                if conf > slot["max_conf"]:
+                    slot["max_conf"] = conf
+
+    general: List[Dict[str, Any]] = []
+    character: List[Dict[str, Any]] = []
+
+    for slot in accum.values():
+        category = slot["first_category"]
+        bypass = category in skip
+        if not bypass and slot["weight_sum"] < float(consensus_min):
+            continue
+        rendered = {
+            "tag": slot["tag"],
+            "confidence": round(slot["max_conf"], 4) if slot["max_conf"] else 1.0,
+            "category": category,
+            "votes": slot["votes"],
+        }
+        if category == "character":
+            character.append(rendered)
+        else:
+            general.append(rendered)
+
+    # Rating: pick the rating from the tagger with the highest score across
+    # all taggers that returned one. Plain-string ratings get score=1.0.
+    best_rating = ""
+    best_rating_score = -1.0
+    for output in per_tagger_outputs or []:
+        rating = output.get("rating")
+        if not rating:
+            continue
+        if isinstance(rating, dict):
+            label = str(rating.get("label") or "").strip()
+            score = float(rating.get("score") or 0.0)
+        else:
+            label = str(rating).strip()
+            score = 1.0
+        if label and score > best_rating_score:
+            best_rating = label
+            best_rating_score = score
+
+    return {
+        "general_tags": general,
+        "character_tags": character,
+        "rating": best_rating,
+    }
+
+
 # ---------------------------------------------------------------------------
 # VLM prompt presets (training-purpose specific)
 #
@@ -442,6 +562,20 @@ class SmartTagRequest:
     use_gpu: bool = True
     general_threshold: float = 0.35
     character_threshold: float = 0.85
+    # v3.2.2 T-power-PR2 (D): multi-tagger consensus.
+    # When ``taggers`` is non-empty, the orchestrator runs each one
+    # sequentially against the image and fuses the per-tag votes via
+    # ``compute_consensus_tags``. ``tagger_model`` is ignored in this mode.
+    # Default: empty list = legacy single-tagger path. ``consensus_min``
+    # is the minimum sum of weights for a tag to survive the vote;
+    # ``consensus_skip_categories`` lists category names that bypass the
+    # vote with OR semantics (default: 'character' + 'copyright', because
+    # most taggers can't recognize specific characters reliably).
+    taggers: List[Dict[str, Any]] = field(default_factory=list)
+    consensus_min: int = 2
+    consensus_skip_categories: List[str] = field(
+        default_factory=lambda: ["character", "copyright"]
+    )
 
 
 def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
@@ -457,6 +591,31 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
     if not cleaned_ids:
         raise ValueError("image_ids is required and must be non-empty")
 
+    # T-power-PR2 (D): coerce taggers list to a stable shape.
+    raw_taggers = payload.get("taggers") or []
+    cleaned_taggers: List[Dict[str, Any]] = []
+    if isinstance(raw_taggers, list):
+        for entry in raw_taggers:
+            if not isinstance(entry, dict):
+                continue
+            model = str(entry.get("model") or "").strip()
+            if not model:
+                continue
+            cleaned_taggers.append({
+                "model": model,
+                "weight": float(entry.get("weight") or 1.0),
+                "general_threshold": float(entry.get("general_threshold") or 0.35),
+                "character_threshold": float(entry.get("character_threshold") or 0.85),
+            })
+
+    raw_skip = payload.get("consensus_skip_categories")
+    if raw_skip is None:
+        skip_categories = ["character", "copyright"]
+    elif isinstance(raw_skip, list):
+        skip_categories = [str(s).strip().lower() for s in raw_skip if str(s).strip()]
+    else:
+        skip_categories = ["character", "copyright"]
+
     return SmartTagRequest(
         image_ids=cleaned_ids,
         training_purpose=normalize_training_purpose(payload.get("training_purpose")),
@@ -470,6 +629,9 @@ def _coerce_request(payload: Dict[str, Any]) -> SmartTagRequest:
         use_gpu=bool(payload.get("use_gpu", True)),
         general_threshold=float(payload.get("general_threshold", 0.35)),
         character_threshold=float(payload.get("character_threshold", 0.85)),
+        taggers=cleaned_taggers,
+        consensus_min=max(1, int(payload.get("consensus_min", 2) or 2)),
+        consensus_skip_categories=skip_categories,
     )
 
 
