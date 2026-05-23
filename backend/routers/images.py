@@ -288,6 +288,17 @@ async def get_images(
         description="Comma-separated list of generators to filter. Options: comfyui, nai, webui, forge",
         examples=["comfyui,nai"],
     ),
+    generator: Optional[str] = Query(
+        default=None,
+        description=(
+            "Singular alias for ``generators``. v3.2.2+ accepts both because users "
+            "(and the OpenAPI examples) reach for the natural singular form first; "
+            "previously ``?generator=nai`` was silently ignored and returned the "
+            "entire unfiltered library."
+        ),
+        examples=["nai"],
+        deprecated=True,
+    ),
     tags: Optional[str] = Query(
         default=None,
         description="Comma-separated list of tags (AND logic - all tags must be present)",
@@ -449,6 +460,23 @@ async def get_images(
     service: ImageService = Depends(get_image_service),
 ):
     """Retrieve images with optional filtering using cursor-based pagination."""
+    # v3.2.2: accept the singular ``generator`` query param as an alias for
+    # ``generators`` so ``?generator=nai`` no longer silently returns the
+    # entire unfiltered library. Combine both, dedupe, comma-join.
+    if generator and generators:
+        merged = generators + "," + generator
+        # Dedupe while preserving order
+        seen = set()
+        parts = []
+        for tok in merged.split(","):
+            t = tok.strip()
+            if t and t not in seen:
+                seen.add(t)
+                parts.append(t)
+        generators = ",".join(parts)
+    elif generator and not generators:
+        generators = generator
+
     return service.get_images(
         generators=generators,
         tags=tags,
