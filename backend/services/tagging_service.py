@@ -269,6 +269,53 @@ def _iter_rescaling_chunk_source(id_chunks, get_batch_size):
         batch_start += len(batch_ids)
 
 
+def _apply_pre_tag_filters(
+    tags: List[Dict[str, Any]],
+    *,
+    blacklist: List[str],
+    max_tags: int,
+) -> List[Dict[str, Any]]:
+    """Apply v3.2.2 T-power-PR1 pre-tag filters before DB write.
+
+    Filters in order:
+
+    1. **Blacklist** — drop any tag whose name matches one of
+       ``blacklist`` after normalisation (lowercase, underscores
+       collapsed to spaces, leading/trailing whitespace stripped).
+       Score-style prefixes such as ``score_9_up`` are kept verbatim
+       on the tag side because Pony / NoobAI recipes need them, but
+       blacklist entries are also normalised so the user can write
+       either ``score_9_up`` or ``score 9 up`` in their list.
+    2. **max_tags** — keep the top N tags by confidence, descending.
+       0 = unlimited (legacy behaviour).
+
+    Returns a new list; the caller's tag list is not mutated.
+    """
+    if not tags:
+        return []
+
+    def _norm(s: str) -> str:
+        return " ".join(str(s or "").strip().lower().replace("_", " ").split())
+
+    blocked = {_norm(b) for b in (blacklist or []) if str(b or "").strip()}
+    out: List[Dict[str, Any]] = []
+    for tag in tags:
+        name = tag.get("tag") if isinstance(tag, dict) else str(tag)
+        if not name:
+            continue
+        if blocked and _norm(name) in blocked:
+            continue
+        out.append(tag if isinstance(tag, dict) else {"tag": str(tag), "confidence": 1.0})
+
+    if max_tags and max_tags > 0 and len(out) > max_tags:
+        out = sorted(
+            out,
+            key=lambda t: -float(t.get("confidence") or 0.0)
+            if isinstance(t, dict) else 0.0,
+        )[: int(max_tags)]
+    return out
+
+
 def _build_tag_progress_state(
     status: str,
     current: int = 0,
@@ -711,9 +758,22 @@ def _tagging_worker_main(
                                 content_fingerprint = compute_image_content_fingerprint(resolved_path)
                             except Exception as exc:
                                 logger.warning("Could not compute content fingerprint for %s: %s", resolved_path, exc)
+
+                            # Apply pre-tag filters (T-power-PR1):
+                            # 1. pre_tag_blacklist: drop any tag whose name (case-insensitive,
+                            #    underscores normalized) matches one of the blacklist entries.
+                            # 2. max_tags_per_image: keep top N tags by confidence (0 = unlimited).
+                            #
+                            # We touch the result dict in place so existing callers that read
+                            # `general_tags` / `character_tags` / `all_tags` see the same view.
+                            filtered_tags = _apply_pre_tag_filters(
+                                result["all_tags"],
+                                blacklist=request.pre_tag_blacklist,
+                                max_tags=request.max_tags_per_image,
+                            )
                             entry = {
                                 "image_id": img["id"],
-                                "tags": result["all_tags"],
+                                "tags": filtered_tags,
                                 "content_fingerprint": content_fingerprint,
                             }
                             if result.get("raw_text"):
@@ -783,6 +843,18 @@ class TagRequest(BaseModel):
     use_gpu: bool = True
     allow_unsafe_acceleration: bool = False
     batch_size: Optional[int] = Field(default=None, ge=1, le=128)
+    # v3.2.2 follow-up (T-power-PR1):
+    # pre-tag blacklist applied at write time so unwanted tags
+    # (masterpiece / monochrome / signature / watermark / ...) NEVER
+    # enter the DB instead of being stripped at export time. Saves
+    # repeated cleanup work for users who always reject the same set.
+    pre_tag_blacklist: List[str] = Field(default_factory=list, max_length=500)
+    # Max tags per image written to DB after the blacklist filter. 0 =
+    # unlimited (current default behaviour). Suggested values vary by
+    # base-model architecture (CLIP/SDXL ~50, T5/FLUX ~120, Anima/Qwen3 ~200);
+    # see backend/services/dataset_audit_service.py and the frontend
+    # base-model preset for the live recommendation.
+    max_tags_per_image: int = Field(default=0, ge=0, le=2000)
 
 
 class TagImportRequest(BaseModel):
