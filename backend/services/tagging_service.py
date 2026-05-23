@@ -45,6 +45,7 @@ CUSTOM_PROFILE_ALIASES = {
     "camie-tagger-v2": "camie-tagger-v2",
     "pixai-tagger-v0.9": "pixai-tagger-v0.9",
     "toriigate-0.5": "toriigate-0.5",
+    "oppai-oracle-v1.1": "oppai-oracle-v1.1",
 }
 CUSTOM_ONNX_PROFILE_NAMES = {
     "wd14",
@@ -183,6 +184,20 @@ TAGGER_MODEL_HINTS = {
         "quality_score": 5,
         "speed_score": 1,
         "stability_score": 2,
+    },
+    "oppai-oracle-v1.1": {
+        "summary": "Grio43 OppaiOracle V1.1: 448x448 ViT (~247M params, 19,294 general tags) trained on a cleaned anime corpus. Highest reported macro-F1 in the open anime tagger comparison.",
+        "speed": "Slow",
+        "memory": "High",
+        "best_for": "Highest-quality general tagging on anime / illustration images",
+        "safe_mode_note": "Two-input ONNX (pixel_values + padding_mask). General-only vocabulary; rating tags exposed via the rating:* head.",
+        "gpu_default": True,
+        "gpu_confirmation_required": False,
+        "gpu_locked": False,
+        "runtime_note": "Runs through the dedicated OppaiOracleTagger backend. CPU inference is ~1s/image; a GPU is strongly recommended for batch jobs.",
+        "quality_score": 5,
+        "speed_score": 2,
+        "stability_score": 4,
     },
 }
 
@@ -341,6 +356,7 @@ def _tagging_worker_main(
     import database as worker_db
     from tagger import get_tagger
     from toriigate_tagger import get_toriigate_tagger
+    from oppai_oracle_tagger import get_oppai_oracle_tagger
 
     request = TagRequest.model_validate(runtime_plan_payload.get("request", {}))
     effective_model_name = runtime_plan_payload.get("model_name") or (request.model_name or DEFAULT_TAGGER_MODEL).strip()
@@ -449,6 +465,27 @@ def _tagging_worker_main(
                     "running",
                     f"Loading ToriiGate on {'GPU' if effective_use_gpu else 'CPU'}...",
                 )
+        elif runtime_backend == "oppai-oracle":
+            # OppaiOracle V1.1 ONNX is ~947 MB. Surface a clear size warning
+            # BEFORE the download starts so users on slow / metered links
+            # know what is about to happen.
+            try:
+                from config import get_oppai_oracle_model_dir
+                cache_root = Path(get_oppai_oracle_model_dir()) / effective_model_name
+                already_cached = any(cache_root.rglob("model.onnx")) if cache_root.exists() else False
+            except Exception:
+                already_cached = False
+            if not already_cached:
+                send(
+                    "running",
+                    "First-time OppaiOracle download: ~947 MB from HuggingFace. "
+                    "This runs once; keep the app open until it completes.",
+                )
+            else:
+                send(
+                    "running",
+                    f"Loading OppaiOracle on {'GPU' if effective_use_gpu else 'CPU'}...",
+                )
         elif effective_use_gpu:
             send("running", "Loading model on GPU...")
         else:
@@ -457,7 +494,12 @@ def _tagging_worker_main(
         if os.environ.get("SD_IMAGE_SORTER_E2E_FAKE_TAGGER") == "1" and runtime_backend != "toriigate":
             tagger_getter = _e2e_tagger_getter
         else:
-            tagger_getter = get_toriigate_tagger if runtime_backend == "toriigate" else get_tagger
+            if runtime_backend == "toriigate":
+                tagger_getter = get_toriigate_tagger
+            elif runtime_backend == "oppai-oracle":
+                tagger_getter = get_oppai_oracle_tagger
+            else:
+                tagger_getter = get_tagger
         tagger = tagger_getter(
             model_name=effective_model_name,
             model_path=request.model_path,
@@ -987,7 +1029,7 @@ class TaggingService:
                 "minimum_gpu_available_vram_mb": config.get("minimum_gpu_available_vram_mb"),
                 "minimum_cpu_total_ram_gb": config.get("minimum_cpu_total_ram_gb"),
                 "minimum_cpu_available_ram_gb": config.get("minimum_cpu_available_ram_gb"),
-                "custom_profile_supported": str(config.get("runtime_backend", "wd14")).lower() != "toriigate",
+                "custom_profile_supported": str(config.get("runtime_backend", "wd14")).lower() not in {"toriigate", "oppai-oracle"},
                 "custom_metadata_format": config.get("metadata_format", "wd14_csv"),
                 "custom_tags_file_hint": ".json metadata" if config.get("metadata_format") == "camie_v2" else "selected_tags.csv",
             }

@@ -416,6 +416,10 @@ TORIIGATE_MODEL_DIR: str = os.environ.get(
     "SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR",
     str(DATA_DIR / "models" / "toriigate")
 )
+OPPAI_ORACLE_MODEL_DIR: str = os.environ.get(
+    "SD_IMAGE_SORTER_OPPAI_ORACLE_MODEL_DIR",
+    str(DATA_DIR / "models" / "oppai-oracle")
+)
 
 
 # =============================================================================
@@ -542,7 +546,42 @@ TAGGER_MODELS: dict = {
         "default_threshold": 1.0,
         "default_character_threshold": 1.0,
         "supports_rating": True,
-    }
+    },
+    "oppai-oracle-v1.1": {
+        # OppaiOracle is a from-scratch ViT (~247M params) anime tagger by
+        # Grio43 with a 19,294-tag general-only vocabulary. The V1.1 ONNX
+        # bundle lives in the V1.1_onnx/ subfolder of the HF repo and ships
+        # two ONNX inputs (pixel_values + padding_mask) instead of the
+        # WD14-style single input, so we route it through a dedicated
+        # OppaiOracleTagger class via runtime_backend = "oppai-oracle".
+        "repo_id": "Grio43/OppaiOracle",
+        "repo_subfolder": "V1.1_onnx",
+        "model_file": "model.onnx",
+        "tags_file": "selected_tags.csv",
+        "extra_files": ["preprocessing.json", "pr_thresholds.json", "config.json"],
+        "runtime_backend": "oppai-oracle",
+        "runtime_safety_tier": "heavy",
+        "input_layout": "nchw",
+        "input_normalization": "minus_one_to_one",
+        "resize_mode": "letterbox",
+        "pad_color": [114, 114, 114],
+        "image_size": 448,
+        # Output is already sigmoid'd inside the graph, so we read it as a
+        # probability vector. Indices 0/1 are <PAD>/<UNK> and the last 4
+        # entries are the rating:* tags. The tagger handles both quirks.
+        "output_activation": "identity",
+        "supports_rating": True,
+        # 0.7927 is the model's published P=R global threshold (precision ==
+        # recall == 0.699 on the held-out 296k val split). At this operating
+        # point the model emits ~35-50 tags per image which matches our
+        # smoke-test density on real anime images.
+        "default_threshold": 0.7927,
+        # OppaiOracle's vocabulary is general-only — there is no dedicated
+        # character category. Setting the character threshold to 1.0 keeps
+        # the existing tagging service shape working without forcing
+        # character-tag splits that the model cannot supply.
+        "default_character_threshold": 1.0,
+    },
 }
 
 # Rating categories
@@ -828,6 +867,13 @@ def get_nudenet_model_dir() -> str:
 def get_toriigate_model_dir() -> str:
     """Get the ToriiGate model directory, creating it if necessary."""
     model_dir = Path(TORIIGATE_MODEL_DIR)
+    model_dir.mkdir(parents=True, exist_ok=True)
+    return str(model_dir)
+
+
+def get_oppai_oracle_model_dir() -> str:
+    """Get the OppaiOracle model directory, creating it if necessary."""
+    model_dir = Path(OPPAI_ORACLE_MODEL_DIR)
     model_dir.mkdir(parents=True, exist_ok=True)
     return str(model_dir)
 

@@ -33,6 +33,7 @@ from config import (
     get_clip_model_dir,
     get_nudenet_model_dir,
     get_toriigate_model_dir,
+    get_oppai_oracle_model_dir,
     get_sam3_model_dir,
     get_wd14_model_dir,
     get_yolo_model_dir,
@@ -561,6 +562,9 @@ def get_model_health() -> Dict[str, Any]:
     default_tagger_model = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["model_file"]
     default_tagger_tags = default_tagger_dir / TAGGER_MODELS[DEFAULT_TAGGER_MODEL]["tags_file"]
     toriigate_dir = Path(get_toriigate_model_dir()) / "toriigate-0.5"
+    oppai_oracle_root = Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1" / "V1.1_onnx"
+    oppai_oracle_model = oppai_oracle_root / "model.onnx"
+    oppai_oracle_tags = oppai_oracle_root / "selected_tags.csv"
     legacy_model_path = get_default_legacy_model_path()
     nudenet_model = Path(get_nudenet_model_dir()) / "320n.onnx"
     sam3_checkpoint = get_sam3_checkpoint_path()
@@ -640,6 +644,20 @@ def get_model_health() -> Dict[str, Any]:
                 "ToriiGate runtime files are ready."
                 if (toriigate_dir / "config.json").exists() and (toriigate_dir / "model.safetensors").exists()
                 else "ToriiGate files are not downloaded yet. The first run will need a large model download."
+            ),
+        },
+        "oppai_oracle": {
+            "available": oppai_oracle_model.exists() and oppai_oracle_tags.exists(),
+            "model_name": "oppai-oracle-v1.1",
+            "model_dir": str((Path(get_oppai_oracle_model_dir()) / "oppai-oracle-v1.1").resolve()),
+            "model_path": str(oppai_oracle_model.resolve()) if oppai_oracle_model.exists() else None,
+            "tags_path": str(oppai_oracle_tags.resolve()) if oppai_oracle_tags.exists() else None,
+            "requires_gpu": False,
+            "expected_size_mb": 947,
+            "message": (
+                "OppaiOracle V1.1 ONNX bundle is ready."
+                if oppai_oracle_model.exists() and oppai_oracle_tags.exists()
+                else "OppaiOracle V1.1 (~947 MB ONNX) is not downloaded yet."
             ),
         },
         "clip": {

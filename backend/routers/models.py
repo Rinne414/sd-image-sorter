@@ -100,6 +100,8 @@ async def get_models_status(service: ModelService = Depends(get_model_service)):
 # Intentionally excludes:
 #   - censor-legacy (Wenaka2004 Privacy YOLO) — user opt-in only
 #   - toriigate (~5 GB heavy alternative tagger; default WD14 covers tagging)
+#   - oppai-oracle (~947 MB alternative tagger; default WD14 covers tagging,
+#     and Model Manager surfaces a dedicated card for users who want it)
 # WD14 is downloaded with the default variant only (`wd-swinv2-tagger-v3`),
 # not the full tagger family.
 # Sizes are best-effort estimates (compressed download size) sourced from
@@ -153,6 +155,7 @@ async def get_bulk_bundle(service: ModelService = Depends(get_model_service)):
         "excluded": [
             {"id": "censor-legacy", "reason": "Privacy YOLO (Wenaka2004) is opt-in for content-safety reasons."},
             {"id": "toriigate", "reason": "ToriiGate VLM is a ~5 GB alternative tagger; the default WD14 already covers tagging."},
+            {"id": "oppai-oracle", "reason": "OppaiOracle V1.1 is a ~947 MB alternative tagger; the default WD14 already covers tagging."},
         ],
     }
 
