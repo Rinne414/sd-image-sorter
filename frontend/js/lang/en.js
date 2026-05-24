@@ -3051,5 +3051,9 @@ window.I18nLang_en = {
     'dataset.replaceAllBtn': 'Replace in all captions',
     'dataset.replaceResult': '{count} captions updated',
     'dataset.duplicateWarning': 'Found {count} images with similar filenames. You may want to review for duplicates.',
+    'dataset.multiRemove': 'Remove {count} selected',
+    'dataset.multiAddTag': 'Add tag to {count} selected',
+    'dataset.multiAddTagPrompt': 'Tag to add:',
+    'dataset.multiAddTagDone': 'Added tag to {count} images',
 
 };

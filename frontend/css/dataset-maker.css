@@ -1149,3 +1149,19 @@
 #view-dataset .dataset-custom-dropdown-option.selected {
     color: var(--accent-primary, #ff8a3d);
 }
+
+
+/* ---------------- Queue multi-select ---------------- */
+#view-dataset .dataset-queue-item.multi-selected {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+}
+#view-dataset .dataset-multiselect-bar {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(15, 23, 42, 0.9);
+    border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 0 0 12px 12px;
+}

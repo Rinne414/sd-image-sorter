@@ -16,6 +16,8 @@
         captions: new Map(),
         captionEdits: new Map(),
         _undoStacks: new Map(),
+        _queueSelection: new Set(),
+        _lastClickedId: null,
         activeId: null,
         boundOnce: false,
 

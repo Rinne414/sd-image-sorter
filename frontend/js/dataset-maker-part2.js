@@ -178,7 +178,15 @@
         badge.innerHTML = `<span aria-hidden="true">${b.icon}</span><span>${this._t(b.key, b.fallback)}</span>`;
 
         item.append(img, metaWrap, badge);
-        item.addEventListener('click', () => this._setActive(id));
+        item.addEventListener('click', (e) => {
+            if (e.shiftKey || e.ctrlKey || e.metaKey) {
+                this._handleMultiSelectClick(id, e);
+            } else {
+                this._queueSelection.clear();
+                this._updateMultiSelectUI();
+                this._setActive(id);
+            }
+        });
         return item;
     };
 
@@ -197,6 +205,100 @@
         for (const el of list.querySelectorAll('.dataset-queue-item')) {
             el.classList.toggle('active', Number(el.dataset.imageId) === Number(this.activeId));
         }
+    };
+
+    // ---------- Queue multi-select ----------
+    DM._handleMultiSelectClick = function (id, e) {
+        if (e.shiftKey && this._lastClickedId != null) {
+            const startIdx = this.imageIds.indexOf(Number(this._lastClickedId));
+            const endIdx = this.imageIds.indexOf(Number(id));
+            if (startIdx >= 0 && endIdx >= 0) {
+                const lo = Math.min(startIdx, endIdx);
+                const hi = Math.max(startIdx, endIdx);
+                for (let i = lo; i <= hi; i++) {
+                    this._queueSelection.add(this.imageIds[i]);
+                }
+            }
+        } else {
+            // Ctrl/Cmd+click toggles individual
+            if (this._queueSelection.has(id)) {
+                this._queueSelection.delete(id);
+            } else {
+                this._queueSelection.add(id);
+            }
+        }
+        this._lastClickedId = id;
+        this._updateMultiSelectUI();
+    };
+
+    DM._updateMultiSelectUI = function () {
+        const list = document.getElementById('dataset-queue-list');
+        if (list) {
+            for (const el of list.querySelectorAll('.dataset-queue-item')) {
+                el.classList.toggle('multi-selected',
+                    this._queueSelection.has(Number(el.dataset.imageId)));
+            }
+        }
+        let bar = document.getElementById('dataset-multiselect-bar');
+        if (this._queueSelection.size === 0) {
+            if (bar) bar.hidden = true;
+            return;
+        }
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'dataset-multiselect-bar';
+            bar.className = 'dataset-multiselect-bar';
+            const queuePane = document.querySelector('#view-dataset .dataset-queue-pane');
+            if (queuePane) queuePane.appendChild(bar);
+        }
+        bar.hidden = false;
+        const n = this._queueSelection.size;
+        bar.innerHTML = `
+            <button type="button" class="btn btn-small btn-secondary" id="btn-multisel-remove">
+                ${this._t('dataset.multiRemove', 'Remove {count} selected', { count: n })}
+            </button>
+            <button type="button" class="btn btn-small btn-ghost" id="btn-multisel-addtag">
+                ${this._t('dataset.multiAddTag', 'Add tag to {count} selected', { count: n })}
+            </button>
+        `;
+        bar.querySelector('#btn-multisel-remove').addEventListener('click', () => {
+            for (const sid of this._queueSelection) {
+                const idx = this.imageIds.indexOf(Number(sid));
+                if (idx >= 0) {
+                    this.imageIds.splice(idx, 1);
+                    this.captions.delete(sid);
+                    this.captionEdits.delete(sid);
+                }
+            }
+            this._queueSelection.clear();
+            this._renderQueue();
+            this._updateCount();
+            this._updateExportEnabled();
+            this._updateMultiSelectUI();
+            if (this.activeId != null && !this.imageIds.includes(Number(this.activeId))) {
+                this.activeId = null;
+                if (this.imageIds.length) this._setActive(this.imageIds[0]);
+                else this._renderEmptyEditor();
+            }
+        });
+        bar.querySelector('#btn-multisel-addtag').addEventListener('click', () => {
+            const tag = prompt(this._t('dataset.multiAddTagPrompt', 'Tag to add:'));
+            if (!tag || !tag.trim()) return;
+            const t = tag.trim();
+            for (const sid of this._queueSelection) {
+                const current = this.captionEdits.has(sid)
+                    ? this.captionEdits.get(sid)
+                    : (this.captions.get(sid) || '');
+                const updated = current ? current + ', ' + t : t;
+                this.captionEdits.set(sid, updated);
+            }
+            this._queueSelection.clear();
+            this._updateMultiSelectUI();
+            this._renderQueue();
+            if (this.activeId != null) this._setActive(this.activeId);
+            this._toast(this._t('dataset.multiAddTagDone',
+                'Added tag to {count} images', { count: n }), 'success');
+        });
     };
 
     DM._updateCount = function () {
