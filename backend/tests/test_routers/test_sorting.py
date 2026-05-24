@@ -318,8 +318,32 @@ class TestScan:
 
 
     def test_scan_logs_heartbeat_when_worker_makes_no_progress(self, tmp_path: Path, isolated_sorting_service, monkeypatch, caplog):
-        """If a scan stalls inside a blocking function, the console should still show low-frequency state."""
+        """If a scan stalls inside a blocking function, the console should still show low-frequency state.
+
+        This test used to rely on a ``time.sleep(0.05)`` inside the mocked
+        ``scan_folder`` and bet that the heartbeat thread (waiting on a
+        10 ms interval) would fire at least once during that window. On
+        macOS CI runners the OS scheduler routinely exceeds 50 ms of
+        latency for short ``threading.Event.wait`` calls, so the bet
+        lost about 1 in 30 runs and produced a flaky CI failure even
+        though the production heartbeat code was fine.
+
+        The replacement is deterministic: we attach a logging handler
+        that flips a ``threading.Event`` the moment a real
+        "Scan heartbeat:" message is emitted, then have the mocked
+        ``scan_folder`` block on that event with a generous 5 s
+        timeout. Two outcomes are possible:
+
+        * The heartbeat thread fires (production behaviour): the event
+          flips, ``scan_folder`` returns, and the assertion confirms a
+          heartbeat record landed in caplog. **No timing race.**
+        * The heartbeat never fires (real regression): the wait times
+          out, ``scan_folder`` returns anyway, and the assertion fails
+          loudly — surfacing the actual bug instead of hiding it
+          behind an unrelated sleep budget.
+        """
         import logging
+        import threading
         import time
         from fastapi import BackgroundTasks
         from services import sorting_service as sorting_service_module
@@ -327,8 +351,27 @@ class TestScan:
 
         monkeypatch.setattr(sorting_service_module, "SCAN_LOG_HEARTBEAT_SECONDS", 0.01)
 
+        heartbeat_seen = threading.Event()
+
+        class _HeartbeatDetector(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                try:
+                    if "Scan heartbeat:" in record.getMessage():
+                        heartbeat_seen.set()
+                except Exception:  # noqa: BLE001 — defensive; never fail in a logging handler
+                    pass
+
+        detector = _HeartbeatDetector(level=logging.INFO)
+        hb_logger = logging.getLogger("services.sorting_service")
+        hb_logger.addHandler(detector)
+
         def slow_scan_folder(*_args, **_kwargs):
-            time.sleep(0.05)
+            # Block until the heartbeat thread actually emits at least
+            # one log line, OR the safety budget expires. The 5 s budget
+            # is ~500x the configured heartbeat interval, so any normal
+            # scheduler will let the heartbeat through long before we
+            # time out.
+            heartbeat_seen.wait(timeout=5.0)
             return {
                 "total": 0,
                 "counted": 0,
@@ -348,14 +391,28 @@ class TestScan:
         monkeypatch.setattr(sorting_service_module, "scan_folder", slow_scan_folder)
         background_tasks = BackgroundTasks()
 
-        with caplog.at_level(logging.INFO, logger="services.sorting_service"):
-            isolated_sorting_service.start_scan(
-                ScanRequest(folder_path=str(tmp_path), recursive=False),
-                background_tasks,
-            )
-            background_tasks.tasks[0].func()
+        try:
+            with caplog.at_level(logging.INFO, logger="services.sorting_service"):
+                isolated_sorting_service.start_scan(
+                    ScanRequest(folder_path=str(tmp_path), recursive=False),
+                    background_tasks,
+                )
+                background_tasks.tasks[0].func()
+        finally:
+            hb_logger.removeHandler(detector)
 
-        assert any("Scan heartbeat:" in record.getMessage() for record in caplog.records)
+        assert heartbeat_seen.is_set(), (
+            "Scan heartbeat thread never logged within the 5 s safety budget. "
+            "If this fails consistently, the production heartbeat loop in "
+            "sorting_service.run_scan is broken; check that "
+            "SCAN_LOG_HEARTBEAT_SECONDS is honoured and that the status "
+            "publish-to-running flip happens before heartbeat_thread.start()."
+        )
+        assert any("Scan heartbeat:" in record.getMessage() for record in caplog.records), (
+            "Heartbeat detector saw a message but caplog did not. This usually "
+            "means caplog.set_level dropped the propagation; double-check the "
+            "logger name and handler configuration."
+        )
 
     def test_scan_logs_start_summary_and_bad_file_samples(self, test_client, tmp_path: Path, caplog):
         """Console logs should be sparse but useful for debugging large scans."""

@@ -2939,16 +2939,6 @@ window.I18nLang_en = {
     'dataset.tagAllStarted': 'Tagging started in the background. The progress bar at the top of the screen tracks it.',
 
     // Phase 2C — noob-friendly redesign
-    'dataset.welcomeTitle': 'Welcome to Dataset Maker',
-    'dataset.welcomeLead': 'Make a folder full of images + matching .txt caption files, ready to drop into any LoRA trainer. Four short steps:',
-    'dataset.step1Title': 'Pick images in Gallery',
-    'dataset.step1Hint': 'Switch to the 🖼️ Gallery tab, click the images you want, then come back here.',
-    'dataset.step2Title': 'Add them to your dataset',
-    'dataset.step2Hint': 'Click Add from Gallery. Add more anytime — the dataset is just a working tray.',
-    'dataset.step3Title': 'Tag & tweak captions',
-    'dataset.step3Hint': '(Optional) Click 🏷️ Tag all, then click any image to fine-tune its caption.',
-    'dataset.step4Title': 'Export',
-    'dataset.step4Hint': 'Pick an output folder, click 📤 Export. Done — point your trainer at that folder.',
     'dataset.cardTagTitle': 'Step A. Auto-tag (optional)',
     'dataset.cardTagHelp': 'Run AI tagging on every image in the queue. Skips images that are already tagged.',
     'dataset.cardCaptionTitle': 'Step B. Caption polish (optional)',
