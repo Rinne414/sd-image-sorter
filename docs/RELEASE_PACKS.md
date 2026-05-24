@@ -31,15 +31,16 @@ That package is meant to cover the common workflows:
 | Package | Python Included | Models Included | Best For |
 |:--------|:---------------:|:---------------:|:---------|
 | `sd-image-sorter-vX.X.X-windows-portable.zip` | Yes | None (auto-download) | **Most Windows users** — no system Python install |
-| `sd-image-sorter-vX.X.X-linux-portable.tar.gz` | Yes (cpython 3.13, x86_64) | None (auto-download) | **Most Linux users** — works on any distro, including ones whose system Python is 3.14 (where heavy AI wheels are not yet available) |
+| `sd-image-sorter-vX.X.X-linux-portable-x86_64.tar.gz` | Yes (cpython 3.13, x86_64) | None (auto-download) | **Most Linux users on PCs / laptops / x86 servers** — works on any distro, including ones whose system Python is 3.14 (where heavy AI wheels are not yet available) |
+| `sd-image-sorter-vX.X.X-linux-portable-aarch64.tar.gz` | Yes (cpython 3.13, aarch64) | None (auto-download) | **Linux users on ARM** — Raspberry Pi 4 / 5, ARM Linux servers, AWS Graviton, Apple Silicon running Linux |
 | `sd-image-sorter-vX.X.X-linux.tar.gz` | No | None (auto-download) | Advanced Linux users with Python 3.12+ already installed and managed |
 | `sd-image-sorter-vX.X.X-app-patch.zip` | No | None | In-app updater payload; not the recommended manual first install |
 | `sd-image-sorter-vX.X.X-release-manifest.json` | No | No | SHA256/size manifest used by the updater and release checks |
 
 ### Linux Portable Notes
 
-- The bundled Python is `cpython-3.13.13` from [astral-sh/python-build-standalone](https://github.com/astral-sh/python-build-standalone), built against an old enough glibc (2.17) to run on every modern x86_64 Linux distro.
-- Phase 1 ships **x86_64 only**. ARM64 / aarch64 (Raspberry Pi 5, ARM Linux servers, etc.) is planned for Phase 2; ARM users should use the source `linux.tar.gz` with system Python for now.
+- The bundled Python is `cpython-3.13.13` from [astral-sh/python-build-standalone](https://github.com/astral-sh/python-build-standalone), built against an old enough glibc (2.17 on x86_64, 2.28 on aarch64) to run on every modern Linux distro on either architecture.
+- Both `x86_64` and `aarch64` ship in this release line. Pick the tarball that matches your CPU; the runtime experience is identical (same Python, same first-run install flow, same `Setup Now` UX for heavy AI features).
 - The `python/` directory inside the archive is the bundled interpreter. `run.sh` automatically detects it and forwards to `run-portable.sh`, so users only need to chmod once and double-click.
 - First launch installs the lightweight core dependencies (~120 MB extra after install). Heavy AI features (CLIP, SAM3, NudeNet, Aesthetic Score, Artist ID, ToriiGate) install on demand via **Setup Now → Prepare**.
 

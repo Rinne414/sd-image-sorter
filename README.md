@@ -24,9 +24,11 @@
 <p align="center">
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable.tar.gz"><b>Download for Linux (portable, bundled Python)</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable-x86_64.tar.gz"><b>Linux x86_64 (portable)</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz">Linux (source, BYO Python)</a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable-aarch64.tar.gz"><b>Linux aarch64 (portable)</b></a>
+  ·
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz">Linux (source)</a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -206,17 +208,24 @@
 
 **便携版（推荐，无需系统 Python）：**
 
-1. 下载 [sd-image-sorter-v3.2.2-linux-portable.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable.tar.gz)（含内置 Python 3.13，约 80 MB）
-2. 解压并执行：
+按 CPU 架构挑一个：
+
+- **x86_64**（一般 PC、Intel/AMD 桌面/笔电、Steam Deck、传统 x86 服务器）
+  下载 [sd-image-sorter-v3.2.2-linux-portable-x86_64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable-x86_64.tar.gz)（约 80 MB）
+- **aarch64 / arm64**（Raspberry Pi 4 / 5、ARM Linux 服务器、AWS Graviton、Apple Silicon 在 Linux 下）
+  下载 [sd-image-sorter-v3.2.2-linux-portable-aarch64.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable-aarch64.tar.gz)（约 75 MB）
+
+解压并执行（指令一样，看你下哪个 tarball）：
 
 ```bash
-tar xzf sd-image-sorter-v3.2.2-linux-portable.tar.gz
+# 例如 x86_64
+tar xzf sd-image-sorter-v3.2.2-linux-portable-x86_64.tar.gz
 cd sd-image-sorter
 chmod +x run-portable.sh
 ./run-portable.sh
 ```
 
-适用于任何 Linux 发行版（包括系统 Python 是 3.14、或没装 Python 的情况）。目前只支持 x86_64；ARM64 / aarch64 用户请用下面的源码版。
+适用于任何 Linux 发行版（包括系统 Python 是 3.14、或没装 Python 的情况）。两个架构都内置 cpython 3.13.13。
 
 **源码版（需要自己装 Python 3.12+）：**
 
@@ -574,14 +583,20 @@ On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX 
 
 **Portable (recommended, no system Python needed):**
 
+Pick the right tarball for your CPU:
+
+- **x86_64** — typical PCs, Intel/AMD laptops, Steam Deck, traditional x86 servers. ~80 MB.
+- **aarch64 / arm64** — Raspberry Pi 4 / 5, ARM Linux servers, AWS Graviton, Apple Silicon under Linux. ~75 MB.
+
 ```bash
-tar xzf sd-image-sorter-v3.2.2-linux-portable.tar.gz   # ~80 MB, bundles cpython 3.13
+# x86_64 example (commands identical for aarch64; just download the matching tarball)
+tar xzf sd-image-sorter-v3.2.2-linux-portable-x86_64.tar.gz
 cd sd-image-sorter
 chmod +x run-portable.sh
 ./run-portable.sh
 ```
 
-Works on every modern x86_64 Linux distro, including ones whose system Python is 3.14 or where Python is missing entirely. ARM64 / aarch64 (Raspberry Pi 5, ARM servers) is planned for Phase 2; ARM users should use the source build below.
+Works on every modern Linux distro on either architecture, including ones whose system Python is 3.14 or where Python is missing entirely. Both bundles ship cpython 3.13.13.
 
 **Source (bring your own Python 3.12 / 3.13):**
 

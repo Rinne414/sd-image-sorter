@@ -14,10 +14,16 @@ GITHUB_REPOSITORY_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 PATCH_ASSET_TEMPLATE = "sd-image-sorter-v{version}-app-patch.zip"
 WINDOWS_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-windows-portable.zip"
 LINUX_FULL_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux.tar.gz"
-# Linux portable bundle (Phase 1, x86_64 only): app + python-build-standalone
-# cpython-3.13. Source-install Linux users keep using LINUX_FULL_ASSET_TEMPLATE;
-# this asset is for users on distros without Python 3.12+ in the package
-# manager, or on Python 3.14 systems where heavy AI wheels are not yet ready.
-LINUX_PORTABLE_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux-portable.tar.gz"
+# Linux portable bundle: app + python-build-standalone cpython-3.13. Source
+# Linux users keep using LINUX_FULL_ASSET_TEMPLATE; this asset family is for
+# users on distros without Python 3.12+ in the package manager, or on
+# Python 3.14 systems where heavy AI wheels are not yet ready.
+#
+# Phase 2 ships both x86_64 (Phase 1 default) and aarch64 (Raspberry Pi 5,
+# AWS Graviton, ARM Linux servers). The ``{arch}`` slot is filled with the
+# values in ``LINUX_PORTABLE_ASSET_ARCHES`` so the in-app updater can pick
+# the right tarball for the running machine.
+LINUX_PORTABLE_ASSET_TEMPLATE = "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz"
+LINUX_PORTABLE_ASSET_ARCHES = ("x86_64", "aarch64")
 PACKAGE_MANIFEST_RELATIVE_PATH = "update/package-manifest.json"
 INSTALLED_MANIFEST_RELATIVE_PATH = "update/installed-manifest.json"
