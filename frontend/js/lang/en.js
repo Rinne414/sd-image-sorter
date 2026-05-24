@@ -2869,9 +2869,9 @@ window.I18nLang_en = {
     // v3.2.2 task #8: 5-step pipeline header.
     'dataset.stepImport': 'Import',
     'dataset.stepAudit': 'Audit',
-    'dataset.stepOrganize': 'Organize',
-    'dataset.stepCaption': 'Caption',
+    'dataset.stepWorkbench': 'Workbench',
     'dataset.stepExport': 'Export',
+    'dataset.tabImportEmptyHint': '▲ Use the buttons above to add images. Then continue: 「Audit」 → 「Workbench」 → 「Export」.',
     // v3.2.2 task #9: optional Audit panel.
     'dataset.auditTitle': 'Audit (optional)',
     'dataset.auditSummaryHint': 'Open to enable LoRA-readiness checks.',

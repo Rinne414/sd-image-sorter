@@ -14,17 +14,25 @@
     if (!window.DatasetMaker) return;
     const DM = window.DatasetMaker;
 
-    // ============== 5-step stepper ==============
+    // ============== 4-tab nav ==============
 
-    function bindStepper() {
-        const pills = document.querySelectorAll('.dataset-stepper .dataset-step-pill');
-        for (const pill of pills) {
-            pill.addEventListener('click', () => {
-                const target = pill.getAttribute('data-step-target');
+    function bindTabs() {
+        const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
+        const datasetMaker = document.querySelector('.dataset-maker');
+        if (!datasetMaker || tabs.length === 0) return;
+
+        for (const tab of tabs) {
+            tab.addEventListener('click', () => {
+                const target = tab.getAttribute('data-tab-target');
                 if (!target) return;
-                const anchor = document.getElementById(target);
-                if (anchor) {
-                    anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                datasetMaker.setAttribute('data-active-tab', target);
+                for (const t of tabs) {
+                    t.setAttribute('aria-selected',
+                        t.getAttribute('data-tab-target') === target ? 'true' : 'false');
+                }
+                if (target === 'audit') {
+                    const det = document.getElementById('dataset-step-audit');
+                    if (det && 'open' in det) det.open = true;
                 }
             });
         }
@@ -520,7 +528,7 @@
     DM._auditState = AUDIT_STATE;
 
     function init() {
-        bindStepper();
+        bindTabs();
         bindAudit();
         bindVocab();
         bindAnimeDefaults();

@@ -3,9 +3,9 @@
  * Uses the project's accent tokens (no hardcoded purples — release safety
  * test forbids those). */
 
-/* ============== 5-step stepper ============== */
+/* ============== 4-tab nav (replaces v3.2.2 5-step pipeline) ============== */
 
-.dataset-stepper {
+.dataset-tabs {
     display: flex;
     flex-wrap: nowrap;
     gap: 6px;
@@ -16,7 +16,7 @@
     scrollbar-width: thin;
 }
 
-.dataset-step-pill {
+.dataset-tab {
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
@@ -31,13 +31,20 @@
     transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.dataset-step-pill:hover {
+.dataset-tab:hover {
     background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.14);
     border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.45);
     color: var(--text-primary);
 }
 
-.dataset-step-pill-num {
+.dataset-tab[aria-selected="true"] {
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.22);
+    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.70);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.dataset-tab-num {
     width: 22px;
     height: 22px;
     flex-shrink: 0;
@@ -51,10 +58,66 @@
     color: var(--accent-primary);
 }
 
-.dataset-step-anchor {
-    height: 0;
-    margin-top: -8px;
-    visibility: hidden;
+.dataset-tab[aria-selected="true"] .dataset-tab-num {
+    background: var(--accent-primary, #ff8a3d);
+    color: white;
+}
+
+/* ============== Tab-visibility (data-active-tab on .dataset-maker) ============== */
+
+.dataset-tab-import-empty {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    margin: 0 0 14px;
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.04);
+    border: 1px dashed rgba(var(--accent-primary-rgb, 255, 138, 61), 0.25);
+    border-radius: 12px;
+    text-align: center;
+}
+.dataset-tab-import-empty-hint {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-tab-import-empty {
+    display: flex;
+}
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-audit-section,
+#view-dataset .dataset-maker[data-active-tab="import"] .dataset-workbench {
+    display: none;
+}
+
+#view-dataset .dataset-maker[data-active-tab="audit"] .dataset-workbench {
+    display: none;
+}
+#view-dataset .dataset-maker[data-active-tab="audit"] .dataset-audit-summary {
+    display: none;
+}
+
+#view-dataset .dataset-maker[data-active-tab="workbench"] .dataset-audit-section,
+#view-dataset .dataset-maker[data-active-tab="workbench"] #dataset-step-export {
+    display: none;
+}
+
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-audit-section,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-queue-pane,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-editor-pane,
+#view-dataset .dataset-maker[data-active-tab="export"] #dataset-step-caption,
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-card-details {
+    display: none;
+}
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
+    justify-content: center;
+}
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-pane {
+    flex: 0 1 800px;
+    max-width: 800px;
+    width: 100%;
 }
 
 /* ============== Audit panel ============== */

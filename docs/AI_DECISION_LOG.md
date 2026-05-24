@@ -3284,3 +3284,30 @@ A new "🎌 Apply Anime LoRA defaults" button in Step B re-applies these in one 
 - Do NOT silently change the default common-tags string. If `masterpiece, best_quality` is wrong for a future base model, add a SECOND preset button rather than flipping the default.
 - Do NOT make the defaults survive a user's explicit edit. The localStorage flag is the only correct gating signal.
 - Do NOT bundle the Anime defaults flip with a "release prep" or "stability hardening" commit; per AI_PRINCIPLES §11 a default flip needs its own commit, this ADR, and a regression test in the same patch.
+
+
+### ADR-AI-20260524-114: macOS portable bundle deferred
+
+- Status: accepted
+- Area: Release packaging / macOS distribution / public download UX
+- Context:
+  PR #14 (Phase 1) and PR #15 (Phase 2) shipped a Linux portable bundle for x86_64 and aarch64 that bundles `cpython-3.13.13` from `astral-sh/python-build-standalone`. The natural follow-up question is whether to ship a matching `macos-portable-arm64.tar.gz` and `macos-portable-x86_64.tar.gz` so macOS users get the same "extract and run" experience. PBS publishes both Darwin variants (~30-40 MB each) so the build wiring would be cheap; the question is whether the user-facing experience is good enough to justify shipping it.
+- Decision:
+  Skip macOS portable bundles for v3.2.x. Keep `linux.tar.gz` (source) plus `./run.sh` as the supported macOS path. Document the deferral in `docs/RELEASE_PACKS.md` so users searching for a macOS portable see it as a deliberate "not yet" and not an oversight, and so future contributors do not silently ship an unsigned macOS bundle without revisiting the trade-offs below.
+- Why not now:
+  1. **Gatekeeper friction without notarization.** Apple's Gatekeeper rejects unsigned downloaded binaries with a `"developer cannot be verified"` warning on first launch. Notarization requires an active [Apple Developer Program](https://developer.apple.com/programs/) subscription (\$99/yr) and per-release signing/upload to Apple's notary service. Without that, every user has to right-click → Open or `xattr -dr com.apple.quarantine sd-image-sorter/` before launching — a much worse first-run experience than the Windows / Linux portable double-click flow. Shipping an unsigned bundle would deliver a worse UX than the existing source-install path for most users, defeating the purpose of "portable means easy".
+  2. **macOS users almost always already have Python.** Homebrew, `pyenv`, `asdf`, and `uv` are standard on macOS dev machines. The "no system Python" pain point that drove the Linux portable basically does not exist on macOS — meaning the marginal user benefit of a macOS portable is much smaller than for Linux.
+  3. **macOS Intel is fading upstream.** PyTorch dropped macOS Intel (`x86_64-apple-darwin`) wheels after `2.2.2`; PR #12 already pins that legacy version explicitly because the resolver cannot find anything newer. Shipping an Intel macOS portable today freezes users to an upstream-deprecated stack — worse than `./run.sh` against `brew install python@3.13`, which lets the user manage upgrades on their own schedule.
+  4. **Apple Silicon already works fine via source.** M1 / M2 / M3 / M4 users get full functionality through `./run.sh`; ONNX Runtime auto-selects the optimal provider. No CUDA on macOS means the heavy GPU paths are not the value-add anyway.
+- When to revisit:
+  Re-open this decision if any of these becomes true:
+  - An Apple Developer Program account becomes available for notarization, removing Gatekeeper friction.
+  - A real macOS user reports that `./run.sh` is broken in a way the source path cannot fix.
+  - PyTorch ships a renewed macOS Intel wheel line that justifies revisiting the legacy pin.
+  - The macOS user share grows enough that the current source-install flow becomes a measurable adoption blocker.
+- Do not regress:
+  Do not silently add a `macos-portable-*.tar.gz` build target without a fresh ADR re-opening this one. Do not ship an unsigned macOS bundle as the recommended download path in README — if a future PR ships one for advanced users, label it explicitly "unsigned, Gatekeeper bypass required" and keep `./run.sh` as the recommended default. Do not remove the source `./run.sh` macOS-detection path (PR #12) on the assumption that "we have a macOS portable now"; that path stays the supported macOS install for the foreseeable future.
+- Evidence:
+  Current files: `docs/RELEASE_PACKS.md` (macOS section explaining the deferral + workarounds), `run.sh` (Darwin detection from PR #12), `backend/requirements.in` / `backend/requirements.txt` (per-platform pins for darwin x86_64 from PR #12 / #11), `scripts/build_release_packages.py` (linux-portable wiring that deliberately does not have a Darwin counterpart).
+- Validation:
+  Doc-level only — no test pins this decision because it is a "do not silently ship X" rule. Future contributors should grep for `macos-portable` in the build script and the workflow YAML before adding any Darwin asset and re-read this ADR.
