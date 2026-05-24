@@ -592,3 +592,75 @@
         init();
     }
 })();
+
+/* ============== Custom dark dropdown for native selects ============== */
+(function () {
+    'use strict';
+
+    function wrapSelect(sel) {
+        if (sel.dataset.customDropdown) return;
+        sel.dataset.customDropdown = '1';
+        sel.style.display = 'none';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'dataset-custom-dropdown';
+
+        const display = document.createElement('button');
+        display.type = 'button';
+        display.className = 'dataset-custom-dropdown-display';
+        display.textContent = sel.options[sel.selectedIndex]?.textContent || '';
+
+        const list = document.createElement('div');
+        list.className = 'dataset-custom-dropdown-list';
+        list.hidden = true;
+
+        function buildOptions() {
+            list.innerHTML = '';
+            for (const opt of sel.options) {
+                const item = document.createElement('div');
+                item.className = 'dataset-custom-dropdown-option';
+                if (opt.selected) item.classList.add('selected');
+                item.textContent = opt.textContent;
+                item.dataset.value = opt.value;
+                item.addEventListener('click', () => {
+                    sel.value = opt.value;
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    display.textContent = opt.textContent;
+                    list.hidden = true;
+                    for (const o of list.children) o.classList.remove('selected');
+                    item.classList.add('selected');
+                });
+                list.appendChild(item);
+            }
+        }
+        buildOptions();
+
+        display.addEventListener('click', (e) => {
+            e.stopPropagation();
+            list.hidden = !list.hidden;
+        });
+
+        document.addEventListener('click', () => { list.hidden = true; });
+
+        sel.addEventListener('change', () => {
+            display.textContent = sel.options[sel.selectedIndex]?.textContent || '';
+            buildOptions();
+        });
+
+        wrapper.append(display, list);
+        sel.parentNode.insertBefore(wrapper, sel.nextSibling);
+    }
+
+    function initCustomDropdowns() {
+        const container = document.getElementById('view-dataset');
+        if (!container) return;
+        const selects = container.querySelectorAll('.dataset-export-pane select, .dataset-card select');
+        for (const sel of selects) wrapSelect(sel);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCustomDropdowns, { once: true });
+    } else {
+        initCustomDropdowns();
+    }
+})();

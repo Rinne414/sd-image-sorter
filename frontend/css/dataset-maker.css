@@ -1098,3 +1098,54 @@
     background: rgba(255, 138, 61, 0.2);
     color: #fff;
 }
+
+/* ---------------- Custom dark dropdown ---------------- */
+#view-dataset .dataset-custom-dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+#view-dataset .dataset-custom-dropdown-display {
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    border-radius: 6px;
+    color: var(--text-primary, #f1f5f9);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#view-dataset .dataset-custom-dropdown-display:hover {
+    border-color: var(--accent-primary, #ff8a3d);
+}
+#view-dataset .dataset-custom-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    border-radius: 6px;
+    margin-top: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+#view-dataset .dataset-custom-dropdown-option {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+}
+#view-dataset .dataset-custom-dropdown-option:hover {
+    background: rgba(255, 138, 61, 0.15);
+    color: var(--text-primary, #f1f5f9);
+}
+#view-dataset .dataset-custom-dropdown-option.selected {
+    color: var(--accent-primary, #ff8a3d);
+}
