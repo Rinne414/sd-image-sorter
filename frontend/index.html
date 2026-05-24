@@ -2680,6 +2680,7 @@
                                     </p>
                                 </div>
                             </div>
+                            <div id="dataset-caption-diff" class="dataset-caption-diff" hidden></div>
                             <textarea class="dataset-editor-textarea" id="dataset-editor-textarea"
                                       placeholder="caption text..."
                                       data-i18n-placeholder="dataset.captionPlaceholder"
@@ -2844,6 +2845,27 @@
                                 </label>
                             </details>
 
+                            <!-- Section B2: Batch Find/Replace -->
+                            <section class="dataset-card" id="dataset-step-findreplace">
+                                <h3 class="dataset-card-title">
+                                    <span data-i18n="dataset.findReplaceTitle">Find / Replace</span>
+                                </h3>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.findLabel">Find</span>
+                                    <input type="text" id="dataset-find-input" class="form-input"
+                                           placeholder="text to find"
+                                           data-i18n-placeholder="dataset.findPlaceholder">
+                                </label>
+                                <label class="form-label">
+                                    <span data-i18n="dataset.replaceLabel">Replace with</span>
+                                    <input type="text" id="dataset-replace-input" class="form-input"
+                                           placeholder="replacement text"
+                                           data-i18n-placeholder="dataset.replacePlaceholder">
+                                </label>
+                                <button class="btn btn-secondary full-width" id="btn-dataset-find-replace"
+                                        data-i18n="dataset.replaceAllBtn">Replace in all captions</button>
+                            </section>
+
                             <!-- Section C: Output (the only required section) -->
                             <section class="dataset-card dataset-card-required" id="dataset-step-export">
                                 <h3 class="dataset-card-title">
@@ -2972,6 +2994,9 @@
                                     <span aria-hidden="true">📤</span>
                                     <span data-i18n="dataset.exportCta">Export dataset</span>
                                 </button>
+                                <div class="dataset-export-progress" id="dataset-export-progress" hidden>
+                                    <div class="dataset-export-progress-fill"></div>
+                                </div>
                                 <p class="dataset-export-disabled-hint" id="dataset-export-disabled-hint"
                                    data-i18n="dataset.exportDisabledHint">
                                     Add at least one image and pick an output folder to enable.

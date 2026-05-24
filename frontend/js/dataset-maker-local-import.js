@@ -375,10 +375,12 @@
         }
 
         const btn = document.getElementById('btn-dataset-export');
+        const progressEl = document.getElementById('dataset-export-progress');
         if (btn) {
             btn.disabled = true;
             btn.dataset.busy = '1';
         }
+        if (progressEl) progressEl.hidden = false;
 
         try {
             const r = await fetch('/api/dataset/export', {
@@ -408,6 +410,7 @@
         } catch (e) {
             this._showResultModal('failed', { errorMessages: [e.message], output_folder: folder });
         } finally {
+            if (progressEl) progressEl.hidden = true;
             if (btn) {
                 btn.dataset.busy = '';
                 this._updateExportEnabled();
