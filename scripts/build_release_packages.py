@@ -60,18 +60,46 @@ GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353
 # CPU. The build links against an old enough glibc (2.17) that the same
 # tarball works on RHEL 7 / Ubuntu 18.04 / Debian 9 and newer, which covers
 # every distro we have ever shipped to. We pin to a specific PBS release
-# date for reproducibility; bump these three constants together when
-# rolling forward.
+# date for reproducibility; bump these constants together when rolling
+# forward.
+#
+# Phase 2 adds aarch64 alongside x86_64. Both architectures share the
+# same PBS tag + cpython version so the bundle behaves identically across
+# Raspberry Pi 5, ARM Linux servers, AWS Graviton, Apple Silicon under
+# Linux, and traditional desktops/laptops.
 LINUX_PORTABLE_PYTHON_PBS_TAG = "20260510"
 LINUX_PORTABLE_PYTHON_VERSION = "3.13.13"
-LINUX_PORTABLE_PYTHON_URL = (
-    f"https://github.com/astral-sh/python-build-standalone/releases/download/"
-    f"{LINUX_PORTABLE_PYTHON_PBS_TAG}/cpython-{LINUX_PORTABLE_PYTHON_VERSION}+"
-    f"{LINUX_PORTABLE_PYTHON_PBS_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
-)
-LINUX_PORTABLE_PYTHON_SHA256 = (
-    "bbe27549e475fe5f22d42a8e0d553dc79d80d8a00e05712599637857d287360e"
-)
+
+# Per-architecture bundle specs. Each entry is keyed by the asset name
+# suffix (matches the `linux-portable-{arch}.tar.gz` artifact name) and
+# carries the PBS triple, the public download URL, and the SHA256 we
+# verify against before unpacking.
+LINUX_PORTABLE_PYTHON_BUNDLES: dict[str, dict[str, str]] = {
+    "x86_64": {
+        "pbs_triple": "x86_64-unknown-linux-gnu",
+        "url": (
+            f"https://github.com/astral-sh/python-build-standalone/releases/download/"
+            f"{LINUX_PORTABLE_PYTHON_PBS_TAG}/cpython-{LINUX_PORTABLE_PYTHON_VERSION}+"
+            f"{LINUX_PORTABLE_PYTHON_PBS_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+        ),
+        "sha256": "bbe27549e475fe5f22d42a8e0d553dc79d80d8a00e05712599637857d287360e",
+    },
+    "aarch64": {
+        "pbs_triple": "aarch64-unknown-linux-gnu",
+        "url": (
+            f"https://github.com/astral-sh/python-build-standalone/releases/download/"
+            f"{LINUX_PORTABLE_PYTHON_PBS_TAG}/cpython-{LINUX_PORTABLE_PYTHON_VERSION}+"
+            f"{LINUX_PORTABLE_PYTHON_PBS_TAG}-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+        ),
+        "sha256": "67c837838c56a7d16187d1be9fad326a617e0b1ee2687e1a0dda0c85053dac33",
+    },
+}
+
+# Backwards-compat aliases. These are kept so older imports (and the v3.2.2
+# release-build tests) keep working until the fields above are referenced
+# directly everywhere. New code should use ``LINUX_PORTABLE_PYTHON_BUNDLES``.
+LINUX_PORTABLE_PYTHON_URL = LINUX_PORTABLE_PYTHON_BUNDLES["x86_64"]["url"]
+LINUX_PORTABLE_PYTHON_SHA256 = LINUX_PORTABLE_PYTHON_BUNDLES["x86_64"]["sha256"]
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 120
 DOWNLOAD_HEADERS = {
@@ -1046,25 +1074,38 @@ exec "$PYTHON_CMD" main.py --port "$APP_PORT"
     return portable_sh
 
 
-def prepare_bundled_linux_python(stage_dir: Path) -> None:
+def prepare_bundled_linux_python(stage_dir: Path, arch: str = "x86_64") -> None:
     """Download and extract python-build-standalone into ``<stage_dir>/python``.
 
     The ``install_only_stripped`` archive expands to a top-level ``python/``
     directory, so unpacking it in ``stage_dir`` yields ``stage_dir/python/
     bin/python3`` as expected by ``run-portable.sh``.
+
+    ``arch`` selects the PBS triple to download. Currently supported:
+    ``"x86_64"`` (Phase 1 default) and ``"aarch64"`` (Phase 2 — Raspberry
+    Pi 5, AWS Graviton, ARM Linux servers). Both archs share the same
+    cpython source so users get the same Python on both platforms.
     """
+    bundle = LINUX_PORTABLE_PYTHON_BUNDLES.get(arch)
+    if bundle is None:
+        raise ValueError(
+            f"Unsupported linux-portable arch: {arch!r}. "
+            f"Known: {sorted(LINUX_PORTABLE_PYTHON_BUNDLES)}"
+        )
+
     python_dir = stage_dir / "python"
     if python_dir.exists():
         shutil.rmtree(python_dir)
 
+    pbs_triple = bundle["pbs_triple"]
     pbs_archive = (
         BOOTSTRAP_DOWNLOAD_ROOT
-        / f"cpython-{LINUX_PORTABLE_PYTHON_VERSION}+{LINUX_PORTABLE_PYTHON_PBS_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+        / f"cpython-{LINUX_PORTABLE_PYTHON_VERSION}+{LINUX_PORTABLE_PYTHON_PBS_TAG}-{pbs_triple}-install_only_stripped.tar.gz"
     )
     download_file(
-        LINUX_PORTABLE_PYTHON_URL,
+        bundle["url"],
         pbs_archive,
-        expected_sha256=LINUX_PORTABLE_PYTHON_SHA256,
+        expected_sha256=bundle["sha256"],
     )
 
     import tarfile
@@ -1158,21 +1199,19 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     # Lets users on distros without Python 3.12+ in the package manager
     # (or with Python 3.14 as system default before our wheels catch up)
     # run the app without any extra setup.
-    def populate_linux_portable(stage_dir: Path) -> None:
+    #
+    # Phase 2 ships TWO architectures: x86_64 (Phase 1 baseline) and
+    # aarch64 (Raspberry Pi 5, AWS Graviton, ARM Linux servers, Apple
+    # Silicon under Linux). Same cpython 3.13.13 on both, same first-run
+    # flow, same lightweight default — only the bundled interpreter
+    # binaries differ. Asset naming embeds the arch suffix so the in-app
+    # updater can pick the right tarball for the running machine.
+    def populate_linux_portable_for_arch(stage_dir: Path, arch: str) -> None:
         copy_project(stage_dir)
         write_release_notes(stage_dir, version)
-        prepare_bundled_linux_python(stage_dir)
+        prepare_bundled_linux_python(stage_dir, arch=arch)
         write_linux_portable_launcher(stage_dir)
         write_package_manifest(stage_dir, version)
-
-    linux_portable_stage = STAGING_ROOT / "linux-portable"
-    if linux_portable_stage.exists():
-        shutil.rmtree(linux_portable_stage)
-    linux_portable_stage.mkdir(parents=True, exist_ok=True)
-    populate_linux_portable(linux_portable_stage)
-
-    linux_portable_tar_name = f"sd-image-sorter-v{version}-linux-portable.tar.gz"
-    linux_portable_tar_path = ARTIFACT_ROOT / linux_portable_tar_name
 
     def _portable_tar_filter(info):
         """Force Unix mode bits inside the tarball.
@@ -1215,11 +1254,20 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
         info.gname = ""
         return info
 
-    with tarfile.open(linux_portable_tar_path, "w:gz") as tar:
-        # Preserve mode bits so python/bin/python3 and run-portable.sh stay
-        # executable after the user extracts the tarball.
-        tar.add(linux_portable_stage, arcname="sd-image-sorter", filter=_portable_tar_filter)
-    assets.append(linux_portable_tar_path)
+    for arch in ("x86_64", "aarch64"):
+        linux_portable_stage = STAGING_ROOT / f"linux-portable-{arch}"
+        if linux_portable_stage.exists():
+            shutil.rmtree(linux_portable_stage)
+        linux_portable_stage.mkdir(parents=True, exist_ok=True)
+        populate_linux_portable_for_arch(linux_portable_stage, arch)
+
+        linux_portable_tar_name = f"sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz"
+        linux_portable_tar_path = ARTIFACT_ROOT / linux_portable_tar_name
+        with tarfile.open(linux_portable_tar_path, "w:gz") as tar:
+            # Preserve mode bits so python/bin/python3 and run-portable.sh stay
+            # executable after the user extracts the tarball.
+            tar.add(linux_portable_stage, arcname="sd-image-sorter", filter=_portable_tar_filter)
+        assets.append(linux_portable_tar_path)
 
     manifest_entries = []
     for asset in assets:

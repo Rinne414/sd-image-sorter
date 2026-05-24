@@ -7,6 +7,8 @@ import hashlib
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD_SCRIPT = ROOT / "scripts" / "build_release_packages.py"
@@ -248,9 +250,12 @@ def test_release_public_docs_versions_follow_app_info():
     assert f"sd-image-sorter-v{app_version}-windows-portable.zip" in readme_text
     assert f"sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
     # The Linux portable bundle is the recommended path for non-Windows
-    # users on distros without a working Python 3.12+ — README must keep
-    # the download link alive in lockstep with app_info.py.
-    assert f"sd-image-sorter-v{app_version}-linux-portable.tar.gz" in readme_text
+    # users on distros without a working Python 3.12+. Phase 2 ships both
+    # x86_64 (PCs / laptops / x86 servers) and aarch64 (Raspberry Pi 5,
+    # AWS Graviton, ARM Linux servers); README must keep BOTH download
+    # links alive in lockstep with app_info.py.
+    assert f"sd-image-sorter-v{app_version}-linux-portable-x86_64.tar.gz" in readme_text
+    assert f"sd-image-sorter-v{app_version}-linux-portable-aarch64.tar.gz" in readme_text
     assert re.search(
         rf"^## \[{re.escape(app_version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
         changelog_text,
@@ -260,7 +265,7 @@ def test_release_public_docs_versions_follow_app_info():
     assert f"tar xzf sd-image-sorter-v{app_version}-linux.tar.gz" in readme_text
     # Mirrors the bash example for the portable variant so the doc test
     # catches a stale ``tar xzf`` name on the next version bump.
-    assert f"tar xzf sd-image-sorter-v{app_version}-linux-portable.tar.gz" in readme_text
+    assert f"tar xzf sd-image-sorter-v{app_version}-linux-portable-x86_64.tar.gz" in readme_text
 
 
 def test_release_packages_use_version_specific_release_notes(tmp_path):
@@ -658,37 +663,70 @@ def test_linux_portable_release_constants_are_pinned_and_consistent():
     install_only_stripped wheel name) silently breaks the in-app updater
     and the README download link, so we pin them in the test instead of
     relying on review to catch a one-side bump.
+
+    Phase 2 introduced ``LINUX_PORTABLE_PYTHON_BUNDLES`` which keys per
+    architecture; each entry must satisfy the same drift contract.
     """
     release_builder = load_release_builder()
 
-    # build script side: the three constants must match the URL exactly
+    # build script side: the PBS tag + cpython version are still single
+    # constants because both arches must use the same Python version.
     assert release_builder.LINUX_PORTABLE_PYTHON_PBS_TAG, "PBS tag must be pinned"
     assert release_builder.LINUX_PORTABLE_PYTHON_VERSION.startswith("3."), (
         "python-build-standalone version must look like 3.x.y"
     )
-    assert len(release_builder.LINUX_PORTABLE_PYTHON_SHA256) == 64, (
-        "SHA256 must be 64 hex chars; this gates a network download so a typo "
-        "would let a tampered tarball into the public bundle."
-    )
-    assert release_builder.LINUX_PORTABLE_PYTHON_PBS_TAG in release_builder.LINUX_PORTABLE_PYTHON_URL
-    assert release_builder.LINUX_PORTABLE_PYTHON_VERSION in release_builder.LINUX_PORTABLE_PYTHON_URL
-    assert "x86_64-unknown-linux-gnu-install_only_stripped.tar.gz" in release_builder.LINUX_PORTABLE_PYTHON_URL, (
-        "The bundle must use the baseline x86_64 variant so it runs on every "
-        "x86_64 CPU, not the v2/v3/v4 micro-arch builds."
+
+    # The per-arch bundles dict must cover x86_64 and aarch64.
+    bundles = release_builder.LINUX_PORTABLE_PYTHON_BUNDLES
+    assert set(bundles) == {"x86_64", "aarch64"}, (
+        "Phase 2 contract: x86_64 + aarch64 are both first-class portable "
+        "targets. If a third arch is added, update this test."
     )
 
+    for arch, spec in bundles.items():
+        assert len(spec["sha256"]) == 64, (
+            f"SHA256 for {arch} must be 64 hex chars; this gates a network "
+            "download so a typo would let a tampered tarball into the public bundle."
+        )
+        assert release_builder.LINUX_PORTABLE_PYTHON_PBS_TAG in spec["url"]
+        assert release_builder.LINUX_PORTABLE_PYTHON_VERSION in spec["url"]
+        # PBS triple naming: the URL must contain the standard cpython
+        # triple, NOT the v2/v3/v4 micro-arch builds (those require
+        # newer CPU features and would silently break older hardware).
+        assert spec["pbs_triple"] in spec["url"]
+        assert spec["pbs_triple"].endswith("-unknown-linux-gnu")
+        assert "install_only_stripped.tar.gz" in spec["url"], (
+            f"{arch} bundle must use the install_only_stripped variant — "
+            "the regular install_only build is bigger and ships test files."
+        )
+
+    # x86_64 bundle must use the baseline triple (NOT v2/v3/v4 variants).
+    assert "x86_64-unknown-linux-gnu" in bundles["x86_64"]["url"]
+    assert "x86_64_v2" not in bundles["x86_64"]["url"]
+    assert "x86_64_v3" not in bundles["x86_64"]["url"]
+    assert "x86_64_v4" not in bundles["x86_64"]["url"]
+
+    # aarch64 bundle must NOT also embed an x86_64 wheel name.
+    assert "x86_64" not in bundles["aarch64"]["url"]
+
+    # Backwards-compat aliases (kept so the v3.2.2 release-build tests in
+    # downstream forks keep working).
+    assert release_builder.LINUX_PORTABLE_PYTHON_URL == bundles["x86_64"]["url"]
+    assert release_builder.LINUX_PORTABLE_PYTHON_SHA256 == bundles["x86_64"]["sha256"]
+
     # app_info side: the template that the in-app updater reads must exist
-    # AND match the build-script asset name format.
+    # AND match the build-script asset name format. Phase 2 templates the
+    # arch via {arch} so the updater can pick the right tarball at runtime.
     app_info = (ROOT / "backend" / "app_info.py").read_text(encoding="utf-8")
     assert "LINUX_PORTABLE_ASSET_TEMPLATE" in app_info
-    assert "sd-image-sorter-v{version}-linux-portable.tar.gz" in app_info
+    assert "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz" in app_info
+    assert "LINUX_PORTABLE_ASSET_ARCHES" in app_info
+    assert '"x86_64"' in app_info
+    assert '"aarch64"' in app_info
 
     # build-script side: the filename must contain the matching suffix.
     build_script = (ROOT / "scripts" / "build_release_packages.py").read_text(encoding="utf-8")
-    assert "sd-image-sorter-v{version}-linux-portable.tar.gz" in build_script.replace(
-        "f\"sd-image-sorter-v{version}-linux-portable.tar.gz\"",
-        "sd-image-sorter-v{version}-linux-portable.tar.gz",
-    ) or "linux-portable.tar.gz" in build_script
+    assert "sd-image-sorter-v{version}-linux-portable-{arch}.tar.gz" in build_script
 
     # The build script must call its three new pieces — the helper, the
     # launcher writer, and the build step — so a future cleanup that
@@ -696,6 +734,22 @@ def test_linux_portable_release_constants_are_pinned_and_consistent():
     # producing an empty / launcher-less archive.
     assert hasattr(release_builder, "prepare_bundled_linux_python")
     assert hasattr(release_builder, "write_linux_portable_launcher")
+
+
+def test_prepare_bundled_linux_python_rejects_unknown_arch(tmp_path):
+    """``prepare_bundled_linux_python`` must reject an arch that is not in
+    ``LINUX_PORTABLE_PYTHON_BUNDLES`` rather than silently downloading
+    nothing or, worse, attempting to download a bad URL. This protects
+    against a future caller passing ``"arm64"`` (the Apple naming) when
+    we expect ``"aarch64"`` (the Linux/PBS naming)."""
+    release_builder = load_release_builder()
+
+    with pytest.raises(ValueError) as excinfo:
+        release_builder.prepare_bundled_linux_python(tmp_path, arch="arm64")
+    msg = str(excinfo.value)
+    assert "arm64" in msg
+    assert "aarch64" in msg, "Error must point the caller at the supported arches"
+    assert "x86_64" in msg
 
 
 def test_linux_portable_launcher_script_has_lf_endings_and_exec_bit(tmp_path):

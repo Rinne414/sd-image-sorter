@@ -114,17 +114,31 @@ jobs:
           exit 1
 
   linux-portable-smoke:
-    # Builds the linux-portable.tar.gz on a clean GitHub-runner Ubuntu, then
-    # extracts it into a fresh directory and runs ./run-portable.sh end-to-end.
-    # This catches regressions where:
-    #   - python-build-standalone URL/SHA256 drifts
+    # Builds the linux-portable-{x86_64,aarch64}.tar.gz on a clean
+    # GitHub-runner Ubuntu, then extracts it into a fresh directory and
+    # runs ./run-portable.sh end-to-end. This catches regressions where:
+    #   - python-build-standalone URL/SHA256 drifts on either arch
     #   - run-portable.sh contains shell syntax that fails on /bin/sh
-    #   - the bundled cpython-3.13 cannot import core lockfile deps on the
-    #     baseline GitHub runner glibc (currently 2.35 on ubuntu-22.04)
+    #   - the bundled cpython-3.13 cannot import core lockfile deps on
+    #     the baseline GitHub runner glibc (currently 2.35 on
+    #     ubuntu-22.04 x86_64 / ubuntu-24.04-arm aarch64)
     #   - the in-app updater asset name diverges from app_info.py
-    # The bundled launcher must come up on http://127.0.0.1:8499/ and serve
-    # the index page within ~120 s (cold install of requirements-core.txt).
-    runs-on: ubuntu-22.04
+    # The bundled launcher must come up on http://127.0.0.1:8499/ and
+    # serve the index page within ~120 s (cold install of
+    # requirements-core.txt).
+    #
+    # We run BOTH arches in CI so a regression that only affects one
+    # CPU family (e.g., a numpy wheel that is missing on aarch64 only)
+    # cannot ship silently.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -132,7 +146,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build linux-portable archive
+      - name: Build linux-portable archive (both arches)
         env:
           # Use the runner's pip cache so repeat runs don't re-download
           # python-build-standalone every time.
@@ -140,20 +154,35 @@ jobs:
         run: |
           python scripts/build_release_packages.py
 
-      - name: Verify the asset landed in artifacts/release/
+      - name: Verify both arch assets landed in artifacts/release/
         run: |
           ls -lh artifacts/release/
-          test -f artifacts/release/sd-image-sorter-v*-linux-portable.tar.gz
+          test -f artifacts/release/sd-image-sorter-v*-linux-portable-x86_64.tar.gz
+          test -f artifacts/release/sd-image-sorter-v*-linux-portable-aarch64.tar.gz
 
-      - name: Extract into a fresh directory
+      - name: Extract the matching arch into a fresh directory
         run: |
           mkdir -p ${{ runner.temp }}/portable-extract
-          tar -xzf artifacts/release/sd-image-sorter-v*-linux-portable.tar.gz -C ${{ runner.temp }}/portable-extract
+          tar -xzf artifacts/release/sd-image-sorter-v*-linux-portable-${{ matrix.arch }}.tar.gz \
+            -C ${{ runner.temp }}/portable-extract
           ls -la ${{ runner.temp }}/portable-extract/sd-image-sorter/
           # Sanity-check the executables came through the tar with their
           # exec bits intact.
           test -x ${{ runner.temp }}/portable-extract/sd-image-sorter/run-portable.sh
           test -x ${{ runner.temp }}/portable-extract/sd-image-sorter/python/bin/python3
+          # Confirm the bundled interpreter actually matches the running
+          # CPU arch (catch a swap that would only fail at runtime).
+          # python-build-standalone uses ``python3 → python3.13`` symlinks,
+          # so we have to pass ``-L`` to tell ``file`` to follow them and
+          # describe the underlying ELF binary instead of just printing
+          # "symbolic link to python3.13".
+          file -L ${{ runner.temp }}/portable-extract/sd-image-sorter/python/bin/python3 \
+            | tee ${{ runner.temp }}/python-arch.txt
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            grep -q "x86-64" ${{ runner.temp }}/python-arch.txt
+          else
+            grep -q -E "ARM aarch64|aarch64" ${{ runner.temp }}/python-arch.txt
+          fi
 
       - name: Boot via run-portable.sh and probe the API
         env:
@@ -167,8 +196,10 @@ jobs:
           LAUNCHER_PID=$!
           echo "Launcher PID: $LAUNCHER_PID"
 
-          # Wait up to 180 s for the server (first run installs core deps).
-          for i in $(seq 1 180); do
+          # Wait up to 240 s for the server (first run installs core deps;
+          # the aarch64 runner is a bit slower than x86_64 so we give a
+          # wider budget).
+          for i in $(seq 1 240); do
             if curl -fsS --max-time 3 http://127.0.0.1:8499/ > /dev/null; then
               echo "[smoke] Server responded after ${i}s"
               # Also probe the API health to ensure routes are live, not
@@ -184,7 +215,7 @@ jobs:
             sleep 1
           done
 
-          echo "[smoke] Server did not come up within 180s"
+          echo "[smoke] Server did not come up within 240s"
           echo "[smoke] --- launcher log ---"
           cat ${{ runner.temp }}/portable-launcher.log || true
           kill $LAUNCHER_PID 2>/dev/null || true
@@ -194,5 +225,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: linux-portable-smoke-log
+          name: linux-portable-smoke-log-${{ matrix.arch }}
           path: ${{ runner.temp }}/portable-launcher.log
