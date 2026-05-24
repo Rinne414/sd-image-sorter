@@ -1235,6 +1235,7 @@ class ImageService:
         self,
         generators: Optional[str] = None,
         tags: Optional[str] = None,
+        tag_mode: str = "and",
         ratings: Optional[str] = None,
         checkpoints: Optional[str] = None,
         loras: Optional[str] = None,
@@ -1346,6 +1347,7 @@ class ImageService:
                 result = db.get_images_paginated(
                     generators=gen_list,
                     tags=tag_list,
+                    tag_mode=tag_mode,
                     ratings=rating_list,
                     checkpoints=cp_list,
                     loras=lr_list,
@@ -1413,6 +1415,7 @@ class ImageService:
             batch = db.get_images(
                 generators=gen_list,
                 tags=tag_list,
+                tag_mode=tag_mode,
                 ratings=rating_list,
                 checkpoints=cp_list,
                 loras=lr_list,
@@ -1458,6 +1461,7 @@ class ImageService:
         total = db.get_filtered_image_count(
             generators=gen_list,
             tags=tag_list,
+            tag_mode=tag_mode,
             ratings=rating_list,
             checkpoints=cp_list,
             loras=lr_list,

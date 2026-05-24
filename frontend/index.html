@@ -4467,6 +4467,19 @@
                                     <div class="tag-suggestions" id="modal-tag-suggestions"></div>
                                 </div>
                                 <div class="active-tags" id="modal-active-tags"></div>
+                                <div class="filter-match-row">
+                                    <span class="filter-match-label" data-i18n="filter.tagMode">Match</span>
+                                    <div class="segmented-control tag-mode-control" role="radiogroup" aria-label="Tag match mode" data-i18n-aria="filter.tagMode">
+                                        <label class="segmented-option">
+                                            <input type="radio" name="tag-match-mode" value="and" checked>
+                                            <span data-i18n="filter.tagModeAnd">AND (all)</span>
+                                        </label>
+                                        <label class="segmented-option">
+                                            <input type="radio" name="tag-match-mode" value="or">
+                                            <span data-i18n="filter.tagModeOr">OR (any)</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="filter-section">
@@ -4936,6 +4949,13 @@
                     <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                         <input type="checkbox" id="smart-tag-use-gpu" checked>
                         <span data-i18n="smartTag.useGpu">Use GPU for the local tagger if available</span>
+                    </label>
+                    <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <span data-i18n="smartTag.tagMergeMode">Tag merge mode (general tags)</span>
+                        <select id="smart-tag-consensus-mode" style="margin-left: auto; width: auto; padding: 2px 8px; font-size: 13px;">
+                            <option value="or" data-i18n="smartTag.tagMergeOr">OR (keep all)</option>
+                            <option value="and" data-i18n="smartTag.tagMergeAnd">AND (consensus only)</option>
+                        </select>
                     </label>
                 </div>
 

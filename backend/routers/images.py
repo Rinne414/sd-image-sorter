@@ -301,7 +301,7 @@ async def get_images(
     ),
     tags: Optional[str] = Query(
         default=None,
-        description="Comma-separated list of tags (AND logic - all tags must be present)",
+        description="Comma-separated list of tags (AND logic by default - all tags must be present)",
         examples=["1girl,solo,long_hair"],
     ),
     tag: Optional[str] = Query(
@@ -309,6 +309,12 @@ async def get_images(
         description="Singular alias for ``tags`` (v3.2.2+).",
         examples=["1girl"],
         deprecated=True,
+    ),
+    tag_mode: str = Query(
+        default="and",
+        description="Tag matching mode: 'and' (image must have ALL tags) or 'or' (image must have ANY tag)",
+        pattern="^(and|or)$",
+        examples=["and"],
     ),
     ratings: Optional[str] = Query(
         default=None,
@@ -509,6 +515,7 @@ async def get_images(
     return service.get_images(
         generators=generators,
         tags=tags,
+        tag_mode=tag_mode,
         ratings=ratings,
         checkpoints=checkpoints,
         loras=loras,

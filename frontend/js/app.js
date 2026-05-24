@@ -200,6 +200,7 @@ function createDefaultFilterState() {
         generators: [...ALL_GENERATORS],
         ratings: ['general', 'sensitive', 'questionable', 'explicit'],
         tags: [],
+        tagMode: 'and',
         checkpoints: [],
         loras: [],
         prompts: [],
@@ -218,7 +219,12 @@ function createDefaultFilterState() {
         brightnessMin: null,
         brightnessMax: null,
         colorTemperature: '',
-        brightnessDistribution: ''
+        brightnessDistribution: '',
+        excludeTags: [],
+        excludeGenerators: [],
+        excludeRatings: [],
+        excludeCheckpoints: [],
+        excludeLoras: [],
     };
 }
 
@@ -231,6 +237,7 @@ function cloneFilterState(filters) {
         generators: [...(source.generators || [])],
         ratings: [...(source.ratings || [])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode || 'and',
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
@@ -253,7 +260,12 @@ function cloneFilterState(filters) {
             : '',
         brightnessDistribution: ['left_heavy', 'right_heavy', 'middle_heavy', 'edge_heavy', 'balanced'].includes(String(source.brightnessDistribution || '').trim())
             ? String(source.brightnessDistribution || '').trim()
-            : ''
+            : '',
+        excludeTags: [...(source.excludeTags || [])],
+        excludeGenerators: [...(source.excludeGenerators || [])],
+        excludeRatings: [...(source.excludeRatings || [])],
+        excludeCheckpoints: [...(source.excludeCheckpoints || [])],
+        excludeLoras: [...(source.excludeLoras || [])],
     };
 }
 
@@ -302,6 +314,7 @@ function buildSelectionFilterRequest(filters = AppState?.filters || createDefaul
         generators: [...(source.generators || [])],
         ratings: [...(source.ratings || [])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode || 'and',
         checkpoints: [...(source.checkpoints || [])]
             .map(normalizeCheckpointFilterValue)
             .filter(Boolean),
@@ -447,6 +460,7 @@ window.AppFilterAccess = {
         if (filters.generators?.length) params.set('generators', filters.generators.join(','));
         if (filters.ratings?.length) params.set('ratings', filters.ratings.join(','));
         if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.tagMode && filters.tagMode !== 'and') params.set('tag_mode', filters.tagMode);
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
@@ -989,6 +1003,7 @@ const API = {
         }
 
         if (filters.tags?.length) params.set('tags', filters.tags.join(','));
+        if (filters.tagMode && filters.tagMode !== 'and') params.set('tag_mode', filters.tagMode);
         if (filters.checkpoints?.length) params.set('checkpoints', filters.checkpoints.join(','));
         if (filters.loras?.length) params.set('loras', filters.loras.join(','));
         if (filters.prompts?.length) params.set('prompts', filters.prompts.join(','));
@@ -8734,6 +8749,9 @@ async function openFilterModal(options = {}) {
     $$('input[name="prompt-match-mode"]').forEach(radio => {
         radio.checked = radio.value === normalizePromptMatchMode(filterState.promptMatchMode);
     });
+    $$('input[name="tag-match-mode"]').forEach(radio => {
+        radio.checked = radio.value === (filterState.tagMode || 'and');
+    });
     // Don't prefill prompt search bar with AppState.filters.search —
     // the prompt search is for adding prompt filters, not for text search
     $('#modal-prompt-search').value = '';
@@ -10260,6 +10278,8 @@ function applyModalFilters() {
     if (promptSearch) promptSearch.value = '';
     const promptMatchRadio = $('input[name="prompt-match-mode"]:checked');
     filterState.promptMatchMode = normalizePromptMatchMode(promptMatchRadio?.value);
+    const tagModeRadio = $('input[name="tag-match-mode"]:checked');
+    filterState.tagMode = tagModeRadio?.value || 'and';
 
     // Get dimension filters
     const minWidth = parseInt($('#filter-min-width')?.value, 10) || null;

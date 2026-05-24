@@ -114,6 +114,7 @@
     }
 
     function readForm() {
+        const consensusMode = $('#smart-tag-consensus-mode')?.value || 'or';
         return {
             image_ids: getDatasetImageIds(),
             training_purpose: $('#smart-tag-purpose')?.value || 'general',
@@ -126,6 +127,7 @@
             // tagger_model is left empty so the backend uses its configured default
             // (which respects the current Tag Images modal selection).
             tagger_model: '',
+            consensus_min: consensusMode === 'and' ? 2 : 1,
         };
     }
 
