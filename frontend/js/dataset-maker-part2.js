@@ -572,9 +572,9 @@
     };
 
     // Patch _setActive to also update diff
-    const _origSetActive = DM._setActive;
+    const _origSetActiveDiff = DM._setActive;
     DM._setActive = function (imageId) {
-        _origSetActive.call(this, imageId);
+        _origSetActiveDiff.call(this, imageId);
         if (this.activeId != null) this._updateCaptionDiff(Number(this.activeId));
     };
 
