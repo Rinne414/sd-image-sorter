@@ -270,3 +270,75 @@ def virtual_image_record_for_path(abs_path: str) -> Dict[str, Any]:
     except Exception:  # noqa: BLE001 - non-fatal here; export will still work
         pass
     return record
+
+
+# ------------------------------ upload-files ------------------------------
+
+# Persistent upload directory so files survive the request lifecycle.
+_UPLOAD_DIR: Optional[Path] = None
+
+
+def _get_upload_dir() -> Path:
+    """Return (and lazily create) a persistent temp directory for uploads."""
+    global _UPLOAD_DIR
+    if _UPLOAD_DIR is None or not _UPLOAD_DIR.exists():
+        # Use data/dataset-uploads so it lives alongside other runtime data
+        from pathlib import Path as _P
+        data_dir = _P(__file__).resolve().parent.parent / "data" / "dataset-uploads"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        _UPLOAD_DIR = data_dir
+    return _UPLOAD_DIR
+
+
+async def upload_files_for_dataset(files) -> Dict[str, Any]:
+    """Save uploaded files to a temp directory and return scan-like items.
+
+    Accepts a list of FastAPI UploadFile objects. Returns the same shape
+    as scan_folder_for_dataset so the frontend can use addLocalItems().
+    """
+    upload_dir = _get_upload_dir()
+    items: List[Dict[str, Any]] = []
+    skipped = 0
+
+    for upload_file in files:
+        filename = upload_file.filename or "unknown.png"
+        ext = Path(filename).suffix.lower()
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            skipped += 1
+            continue
+
+        # Write to disk with a unique name to avoid collisions
+        dest = upload_dir / filename
+        counter = 1
+        while dest.exists():
+            stem = Path(filename).stem
+            dest = upload_dir / f"{stem}_{counter}{ext}"
+            counter += 1
+
+        content = await upload_file.read()
+        dest.write_bytes(content)
+
+        abs_path = str(dest.resolve())
+        meta = _read_image_metadata(dest)
+        if meta is None:
+            skipped += 1
+            dest.unlink(missing_ok=True)
+            continue
+
+        width, height, thumb_b64 = meta
+        stat = dest.stat()
+        items.append({
+            "ds_id": _ds_id_for_path(abs_path),
+            "abs_path": abs_path,
+            "filename": dest.name,
+            "width": width,
+            "height": height,
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+            "thumb_b64": thumb_b64,
+        })
+
+    if not items:
+        raise ValueError("No valid image files in the upload.")
+
+    return {"items": items, "skipped_unreadable": skipped}

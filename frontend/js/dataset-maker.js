@@ -270,6 +270,18 @@
                 try { window.switchView('dataset'); } catch (_e) { /* ignore */ }
             }
 
+            // Ensure we stay on the import tab so the user sees the result
+            if (added > 0) {
+                const dm = document.querySelector('.dataset-maker');
+                if (dm) dm.setAttribute('data-active-tab', 'import');
+                const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
+                for (const t of tabs) {
+                    t.setAttribute('aria-selected',
+                        t.getAttribute('data-tab-target') === 'import' ? 'true' : 'false');
+                }
+                this._renderImportGallery();
+            }
+
             if (showToast) {
                 if (added > 0) {
                     this._toast(this._t('dataset.gallerySelectionAdded',

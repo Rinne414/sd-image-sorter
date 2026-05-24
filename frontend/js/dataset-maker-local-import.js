@@ -144,6 +144,9 @@
         this._renderQueue();
         this._updateCount();
         this._updateExportEnabled();
+        if (typeof this._renderImportGallery === 'function') {
+            this._renderImportGallery();
+        }
         if (this.activeId == null && this.imageIds.length) {
             this._setActive(this.imageIds[0]);
         }
@@ -558,6 +561,110 @@
         }
     };
 
+    // -------- Drag-drop zone --------
+
+    const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif']);
+
+    function bindDropzone() {
+        const dropzone = $('dataset-dropzone');
+        if (!dropzone) return;
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('drag-over');
+        });
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('drag-over');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('drag-over');
+            handleDrop(e.dataTransfer);
+        });
+
+        // Click to open file picker
+        dropzone.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = 'image/*';
+            input.addEventListener('change', () => {
+                if (input.files && input.files.length > 0) {
+                    handleFileList(input.files);
+                }
+            });
+            input.click();
+        });
+    }
+
+    function handleDrop(dataTransfer) {
+        if (!dataTransfer) return;
+        const items = dataTransfer.items;
+        if (items && items.length > 0) {
+            // Check if any item is a directory (via webkitGetAsEntry)
+            for (let i = 0; i < items.length; i++) {
+                const entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+                if (entry && entry.isDirectory) {
+                    // For folder drops, fill the path input and trigger scan.
+                    // Browser security prevents reading the full path from
+                    // dataTransfer, so we use the folder name as a hint and
+                    // prompt the user to confirm the path.
+                    const pathInput = $('dataset-folder-import-path');
+                    if (pathInput) {
+                        pathInput.value = entry.name;
+                        pathInput.focus();
+                        DM._toast(DM._t('dataset.dropFolderHint',
+                            'Folder detected. Please confirm or edit the full path, then click Scan.'),
+                            'info', 5000);
+                    }
+                    return;
+                }
+            }
+        }
+        // Otherwise treat as image files
+        if (dataTransfer.files && dataTransfer.files.length > 0) {
+            handleFileList(dataTransfer.files);
+        }
+    }
+
+    async function handleFileList(files) {
+        const imageFiles = [];
+        for (const f of files) {
+            const ext = (f.name.split('.').pop() || '').toLowerCase();
+            if (IMAGE_EXTS.has(ext)) imageFiles.push(f);
+        }
+        if (imageFiles.length === 0) {
+            DM._toast(DM._t('dataset.dropNoImages',
+                'No supported image files found in the drop.'), 'warning', 3000);
+            return;
+        }
+        // Upload files to the backend for local-source import
+        const formData = new FormData();
+        for (const f of imageFiles) formData.append('files', f);
+        try {
+            const r = await fetch('/api/dataset/upload-files', {
+                method: 'POST',
+                body: formData,
+            });
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}));
+                DM._toast(body.detail || `Upload failed: ${r.status}`, 'error', 5000);
+                return;
+            }
+            const data = await r.json();
+            const items = data.items || [];
+            if (items.length > 0) {
+                DM.addLocalItems(items, { switchView: false, showToast: true });
+            }
+        } catch (e) {
+            DM._toast(e.message || 'Upload failed', 'error', 5000);
+        }
+    }
+
     function bindFolderImport() {
         $('btn-dataset-import-folder')?.addEventListener('click', () => DM._openFolderImport());
         $('btn-dataset-folder-import-cancel')?.addEventListener('click', () => DM._closeFolderImport());
@@ -568,6 +675,8 @@
         if (browseBtn && pathInput && typeof window.showFolderBrowser === 'function') {
             browseBtn.addEventListener('mousedown', () => window.showFolderBrowser(pathInput));
         }
+
+        bindDropzone();
     }
 
     if (document.readyState === 'loading') {

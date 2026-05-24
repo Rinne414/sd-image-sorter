@@ -1121,6 +1121,16 @@ Returns `{vocab: [{tag, count, sample_image_id}], total_unique_tags}` ordered by
 
 ---
 
+#### POST /api/dataset/upload-files
+
+Upload image files directly into the Dataset Maker session via multipart form data. Files are saved to a persistent temp directory (`data/dataset-uploads/`) and the response returns the same item shape as `/api/dataset/folder-scan` so the frontend can feed them into `addLocalItems()`.
+
+Form data: `files` — one or more image files (PNG, JPG, WebP, etc.)
+
+Returns `{items[], skipped_unreadable}`. Each item carries `{ds_id, abs_path, filename, width, height, mtime, size, thumb_b64}`.
+
+---
+
 #### POST /api/smart-tag/start
 
 LoraHub-style "Smart Tag" wizard: runs a local tagger (WD14 / OppaiOracle / Camie / PixAI) and a VLM in one pipeline, strips noise tags (`masterpiece` / `score_9` / `anime` / ...), and writes a clean LoRA-ready caption per image. Returns immediately with the job snapshot; progress is polled via `/api/smart-tag/progress`.

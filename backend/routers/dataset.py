@@ -12,9 +12,11 @@ points 5/6 follow-up). Endpoints:
 from __future__ import annotations
 
 import logging
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.dataset_audit_service import audit_dataset
@@ -26,6 +28,7 @@ from services.dataset_export_service import (
 from services.dataset_session_service import (
     MAX_SCAN_RESULTS,
     scan_folder_for_dataset,
+    upload_files_for_dataset,
 )
 
 
@@ -257,3 +260,33 @@ def post_dataset_vocab(payload: DatasetVocabRequest) -> Dict[str, Any]:
         ],
         "total_unique_tags": len(counts),
     }
+
+
+# ------------------------------ upload-files ------------------------------
+
+
+@router.post(
+    "/dataset/upload-files",
+    summary="Upload image files directly into the Dataset Maker session",
+    description=(
+        "Accepts multipart file uploads, saves them to a temp directory, "
+        "and returns the same item shape as folder-scan so the frontend "
+        "can add them to the local-source queue."
+    ),
+    responses={
+        200: {"description": "Upload succeeded — returns items[]"},
+        400: {"description": "No valid image files uploaded"},
+    },
+)
+async def post_dataset_upload_files(
+    files: List[UploadFile] = File(...),
+) -> Dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded.")
+    try:
+        return await upload_files_for_dataset(files)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Dataset upload-files failed")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}") from exc
