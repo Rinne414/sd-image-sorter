@@ -16,7 +16,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-3.2.2-ff8a00" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.12%2B-3776AB" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.12%20%7C%203.13-3776AB" alt="Python">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4B5563" alt="Platform">
   <img src="https://img.shields.io/badge/license-MIT-22C55E" alt="License">
 </p>
@@ -230,7 +230,7 @@ run.bat
 > macOS 用户直接用 `./run.sh` 即可。脚本会自动创建 Python venv 并安装依赖。Apple Silicon (M1/M2/M3/M4) 和 Intel Mac 均支持，AI 推理走 CPU（ONNX Runtime 自动选择最优 provider）。
 
 > [!TIP]
-> Windows 便携版自带 Python 3.12。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
+> Windows 便携版自带 Python 3.12。源码 / Linux 用户只要装 Python 3.12 或 3.13 都可以——v3.2.2 起 lockfile 同时锁了两个版本（3.12 走 numpy 1.x，3.13 走 numpy 2.x）。默认只安装轻量核心依赖；CLIP / NudeNet / YOLO / SAM3 / 美学评分 / 画师识别等重型 AI 运行库会在你点击 Feature Setup 的 Prepare / Download 后按需安装。若界面提示已安装 Python 包，请重启应用后再使用该功能。
 
 ## 下载与运行说明
 

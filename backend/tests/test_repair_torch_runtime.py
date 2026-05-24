@@ -112,10 +112,11 @@ def test_nvidia_cpu_torch_installs_cuda_torch_and_sam3_runtime(monkeypatch):
 
     assert result["repaired"] is True
     # pip_calls layout after the pinned-CUDA fix:
-    #   [0] numpy<2.0 from PyPI (pre-install, kept outside the cu-index call)
+    #   [0] numpy<2.0 (3.12) or numpy>=2.1 (3.13) from PyPI pre-install,
+    #       kept outside the cu-index call so the cu-index step stays single-source
     #   [1] torch==X.Y.Z+cuXXX from the cu-specific index (no extra-index-url)
     #   [2] SAM3 runtime (transformers, safetensors, …) from PyPI
-    assert "numpy<2.0" in pip_calls[0]
+    assert repair_torch_runtime._numpy_sam3_constraint() in pip_calls[0]
     assert pip_calls[1] is not pip_calls[0]
     assert any("torch==2.11.0+cu128" in call for call in pip_calls[1]), (
         "CUDA torch must be pinned with the +cuXXX local-version label so "
@@ -182,8 +183,9 @@ def test_cuda_install_uses_fresh_subprocess_probe_after_pip_reinstall(monkeypatc
     )
 
     assert installed is True
-    # pip_calls[0] is the numpy<2.0 pre-install from PyPI (kept outside
-    # the CUDA-index loop so the cu-index call stays single-source).
+    # pip_calls[0] is the numpy ABI pre-install from PyPI (numpy<2.0 on
+    # Python 3.12, numpy>=2.1 on Python 3.13). Kept outside the CUDA-index
+    # loop so the cu-index call stays single-source.
     # pip_calls[1] is the cu128 torch install. The fallback loop should
     # stop after that first successful CUDA install — never advancing to
     # cu126/cu124/cu121.
@@ -238,7 +240,8 @@ def test_cuda_install_pins_local_version_label_so_pypi_cannot_satisfy(monkeypatc
         stream_pip=False,
     )
 
-    # pip_calls[0] == numpy<2.0 from PyPI (pre-install)
+    # pip_calls[0] == numpy ABI pre-install from PyPI
+    # (numpy<2.0 on 3.12, numpy>=2.1 on 3.13)
     # pip_calls[1] == cu128 torch install
     assert len(pip_calls) >= 2, f"Expected numpy + torch install, got: {pip_calls}"
     torch_call = pip_calls[1]
@@ -310,7 +313,8 @@ def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
         stream_pip=False,
     )
 
-    # pip_calls[0] == numpy<2.0 from PyPI (pre-install)
+    # pip_calls[0] == numpy ABI pre-install from PyPI
+    # (numpy<2.0 on 3.12, numpy>=2.1 on 3.13)
     # pip_calls[1] == cu128 torch install
     assert len(pip_calls) >= 2, f"Expected numpy + torch install, got: {pip_calls}"
     torch_call = pip_calls[1]
@@ -364,7 +368,7 @@ def test_repair_reports_fresh_cuda_state_after_reinstall(monkeypatch):
     assert result["torch_version"] == "2.11.0+cu128"
     assert result["torch_cuda_build"] == "12.8"
     assert result["torch_cuda_available"] is True
-    # numpy<2.0 pre-install + cu128 torch install = 2 pip calls.
+    # numpy ABI pre-install + cu128 torch install = 2 pip calls.
     assert len(pip_calls) == 2
 
 
