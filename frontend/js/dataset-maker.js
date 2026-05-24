@@ -332,7 +332,28 @@
                         'info');
                 }
             }
+            this._checkDuplicateFilenames();
             return added;
+        },
+
+        _checkDuplicateFilenames() {
+            const stems = new Map();
+            for (const id of this.imageIds) {
+                const meta = this.meta.get(id) || {};
+                const fn = (meta.filename || '').replace(/\.[^.]+$/, '').toLowerCase();
+                if (!fn) continue;
+                if (!stems.has(fn)) stems.set(fn, 0);
+                stems.set(fn, stems.get(fn) + 1);
+            }
+            let dupCount = 0;
+            for (const count of stems.values()) {
+                if (count > 1) dupCount += count;
+            }
+            if (dupCount > 0) {
+                this._toast(this._t('dataset.duplicateWarning',
+                    'Found {count} images with similar filenames. You may want to review for duplicates.',
+                    { count: dupCount }), 'warning', 6000);
+            }
         },
 
         _getGallerySelectedIds() {

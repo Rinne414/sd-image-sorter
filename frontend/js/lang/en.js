@@ -3050,5 +3050,6 @@ window.I18nLang_en = {
     'dataset.replacePlaceholder': 'replacement text',
     'dataset.replaceAllBtn': 'Replace in all captions',
     'dataset.replaceResult': '{count} captions updated',
+    'dataset.duplicateWarning': 'Found {count} images with similar filenames. You may want to review for duplicates.',
 
 };

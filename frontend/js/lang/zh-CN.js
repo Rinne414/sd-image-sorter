@@ -3050,5 +3050,6 @@ window.I18nLang_zhCN = {
     'dataset.replacePlaceholder': '替换文本',
     'dataset.replaceAllBtn': '替换所有 caption',
     'dataset.replaceResult': '已更新 {count} 条 caption',
+    'dataset.duplicateWarning': '发现 {count} 张文件名相似的图片，建议检查是否有重复。',
 
 };

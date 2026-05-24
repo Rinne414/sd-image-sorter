@@ -164,6 +164,7 @@
                     'No new images found in that folder.'), 'info');
             }
         }
+        this._checkDuplicateFilenames();
         return added;
     };
 
