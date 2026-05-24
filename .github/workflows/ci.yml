@@ -112,3 +112,87 @@ jobs:
           echo "Server failed to boot within 20s"
           kill $PID 2>/dev/null
           exit 1
+
+  linux-portable-smoke:
+    # Builds the linux-portable.tar.gz on a clean GitHub-runner Ubuntu, then
+    # extracts it into a fresh directory and runs ./run-portable.sh end-to-end.
+    # This catches regressions where:
+    #   - python-build-standalone URL/SHA256 drifts
+    #   - run-portable.sh contains shell syntax that fails on /bin/sh
+    #   - the bundled cpython-3.13 cannot import core lockfile deps on the
+    #     baseline GitHub runner glibc (currently 2.35 on ubuntu-22.04)
+    #   - the in-app updater asset name diverges from app_info.py
+    # The bundled launcher must come up on http://127.0.0.1:8499/ and serve
+    # the index page within ~120 s (cold install of requirements-core.txt).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build linux-portable archive
+        env:
+          # Use the runner's pip cache so repeat runs don't re-download
+          # python-build-standalone every time.
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+        run: |
+          python scripts/build_release_packages.py
+
+      - name: Verify the asset landed in artifacts/release/
+        run: |
+          ls -lh artifacts/release/
+          test -f artifacts/release/sd-image-sorter-v*-linux-portable.tar.gz
+
+      - name: Extract into a fresh directory
+        run: |
+          mkdir -p ${{ runner.temp }}/portable-extract
+          tar -xzf artifacts/release/sd-image-sorter-v*-linux-portable.tar.gz -C ${{ runner.temp }}/portable-extract
+          ls -la ${{ runner.temp }}/portable-extract/sd-image-sorter/
+          # Sanity-check the executables came through the tar with their
+          # exec bits intact.
+          test -x ${{ runner.temp }}/portable-extract/sd-image-sorter/run-portable.sh
+          test -x ${{ runner.temp }}/portable-extract/sd-image-sorter/python/bin/python3
+
+      - name: Boot via run-portable.sh and probe the API
+        env:
+          SD_IMAGE_SORTER_PORT: "8499"
+        run: |
+          cd ${{ runner.temp }}/portable-extract/sd-image-sorter
+          # Run the launcher in the background so we can probe it. The
+          # launcher itself execs the Python server at the end, so killing
+          # this PID kills the server too.
+          ./run-portable.sh > ${{ runner.temp }}/portable-launcher.log 2>&1 &
+          LAUNCHER_PID=$!
+          echo "Launcher PID: $LAUNCHER_PID"
+
+          # Wait up to 180 s for the server (first run installs core deps).
+          for i in $(seq 1 180); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8499/ > /dev/null; then
+              echo "[smoke] Server responded after ${i}s"
+              # Also probe the API health to ensure routes are live, not
+              # just the static frontend.
+              curl -fsS --max-time 5 http://127.0.0.1:8499/api/aesthetic/status \
+                | head -c 200
+              echo
+              kill $LAUNCHER_PID 2>/dev/null || true
+              # Give the launcher a moment to clean up, then fall through to success.
+              sleep 2
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "[smoke] Server did not come up within 180s"
+          echo "[smoke] --- launcher log ---"
+          cat ${{ runner.temp }}/portable-launcher.log || true
+          kill $LAUNCHER_PID 2>/dev/null || true
+          exit 1
+
+      - name: Upload launcher log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-portable-smoke-log
+          path: ${{ runner.temp }}/portable-launcher.log

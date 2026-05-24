@@ -53,6 +53,25 @@ PYTHON_EMBED_SHA256 = "8d3f33be9eb810f23c102f08475af2854e50484b8e4e06275e937be61
 GET_PIP_COMMIT = "1c1d362758a70f85b9c9b12417c0c6f0ca3da4aa"
 GET_PIP_URL = f"https://raw.githubusercontent.com/pypa/get-pip/{GET_PIP_COMMIT}/public/get-pip.py"
 GET_PIP_SHA256 = "106ae019e371c7d8cb3699c75607a9b7a4d31e2b95c575362c8bcfe3d41353fd"
+
+# python-build-standalone (Astral) for Linux portable bundle.
+# We pick the baseline ``x86_64-unknown-linux-gnu`` variant (33 MB) instead
+# of the v2/v3/v4 micro-arch variants so the bundle runs on every x86_64
+# CPU. The build links against an old enough glibc (2.17) that the same
+# tarball works on RHEL 7 / Ubuntu 18.04 / Debian 9 and newer, which covers
+# every distro we have ever shipped to. We pin to a specific PBS release
+# date for reproducibility; bump these three constants together when
+# rolling forward.
+LINUX_PORTABLE_PYTHON_PBS_TAG = "20260510"
+LINUX_PORTABLE_PYTHON_VERSION = "3.13.13"
+LINUX_PORTABLE_PYTHON_URL = (
+    f"https://github.com/astral-sh/python-build-standalone/releases/download/"
+    f"{LINUX_PORTABLE_PYTHON_PBS_TAG}/cpython-{LINUX_PORTABLE_PYTHON_VERSION}+"
+    f"{LINUX_PORTABLE_PYTHON_PBS_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+)
+LINUX_PORTABLE_PYTHON_SHA256 = (
+    "bbe27549e475fe5f22d42a8e0d553dc79d80d8a00e05712599637857d287360e"
+)
 DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 120
 DOWNLOAD_HEADERS = {
@@ -806,6 +825,274 @@ def prepare_embedded_python(stage_dir: Path) -> None:
     write_portable_launcher(stage_dir)
 
 
+def write_linux_portable_launcher(stage_dir: Path) -> Path:
+    """Write run-portable.sh with deterministic LF endings + executable bits.
+
+    Mirrors run-portable.bat semantics for Linux:
+    - Uses bundled Python from <root>/python/bin/python3
+    - Same data layout (data/, update/, ...)
+    - Same hash-based reinstall flow + lightweight rebuild marker
+    - Same lightweight default + optional SD_IMAGE_SORTER_INSTALL_FULL_AI=1
+    - Hands the running terminal off to ``main.py`` (no daemonization;
+      Ctrl+C stays the natural stop signal, matching run.sh).
+
+    The script is written with LF line endings only because /bin/sh on
+    Linux refuses to parse CRLF heredocs — a CRLF here would surface as
+    "$'\\r': command not found" on the user's terminal.
+    """
+    portable_sh = stage_dir / "run-portable.sh"
+    body = """#!/usr/bin/env bash
+# SD Image Sorter - Linux portable launcher.
+# Uses the bundled Python under ./python/bin/python3, so the host distro's
+# system Python (or its absence) does not matter. To run from source on a
+# developer machine, use run.sh instead.
+set -u
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+cd "$ROOT_DIR"
+
+DATA_DIR="$ROOT_DIR/data"
+UPDATE_DIR="$ROOT_DIR/update"
+TMP_DIR="$DATA_DIR/tmp"
+CACHE_DIR="$DATA_DIR/cache"
+MODELS_DIR="$DATA_DIR/models"
+FAVORITES_DIR="$DATA_DIR/favorites"
+CONFIG_DIR="$DATA_DIR/config"
+STATE_DIR="$DATA_DIR/state"
+THUMBNAIL_DIR="$DATA_DIR/thumbnails"
+mkdir -p "$DATA_DIR" "$UPDATE_DIR" "$TMP_DIR" "$CACHE_DIR" \\
+    "$MODELS_DIR" "$FAVORITES_DIR" "$CONFIG_DIR" "$STATE_DIR" "$THUMBNAIL_DIR"
+
+export SD_IMAGE_SORTER_LAUNCHER="run-portable.sh"
+export SD_IMAGE_SORTER_DATA_DIR="$DATA_DIR"
+export SD_IMAGE_SORTER_CONFIG_DIR="$CONFIG_DIR"
+export SD_IMAGE_SORTER_STATE_DIR="$STATE_DIR"
+export SD_IMAGE_SORTER_TMP_DIR="$TMP_DIR"
+export SD_IMAGE_SORTER_UPDATE_DIR="$UPDATE_DIR"
+export SD_IMAGE_SORTER_THUMBNAIL_DIR="$THUMBNAIL_DIR"
+export SD_IMAGE_SORTER_DB_PATH="$DATA_DIR/images.db"
+export SD_IMAGE_SORTER_FAVORITES_PATH="$FAVORITES_DIR"
+export SD_IMAGE_SORTER_WD14_MODEL_DIR="$MODELS_DIR/wd14-tagger"
+export SD_IMAGE_SORTER_YOLO_MODEL_DIR="$MODELS_DIR/yolo"
+export SD_IMAGE_SORTER_CLIP_MODEL_DIR="$MODELS_DIR/clip"
+export SD_IMAGE_SORTER_ARTIST_MODEL_DIR="$MODELS_DIR/artist"
+export SD_IMAGE_SORTER_SAM3_MODEL_DIR="$MODELS_DIR/sam3"
+export SD_IMAGE_SORTER_NUDENET_MODEL_DIR="$MODELS_DIR/nudenet"
+export SD_IMAGE_SORTER_TORIIGATE_MODEL_DIR="$MODELS_DIR/toriigate"
+export SD_IMAGE_SORTER_CACHE_DIR="$CACHE_DIR"
+export HF_HOME="$DATA_DIR/hf"
+export TRANSFORMERS_CACHE="$DATA_DIR/hf/transformers"
+export XDG_CACHE_HOME="$CACHE_DIR"
+export TORCH_HOME="$DATA_DIR/torch"
+export PIP_CACHE_DIR="$DATA_DIR/pip-cache"
+export TMPDIR="$TMP_DIR"
+
+echo "=========================================="
+echo "   SD Image Sorter - Portable Launch (Linux)"
+echo "=========================================="
+echo
+
+PYTHON_DIR="$ROOT_DIR/python"
+PYTHON_CMD="$PYTHON_DIR/bin/python3"
+if [ ! -x "$PYTHON_CMD" ]; then
+    echo "[ERROR] Bundled Python not found or not executable at $PYTHON_CMD" >&2
+    echo "        Re-extract the linux-portable archive (preserve permissions)." >&2
+    exit 1
+fi
+
+# Make pip-installed entry points runnable without LD_LIBRARY_PATH dance.
+# python-build-standalone uses RPATH so the interpreter finds its own libs.
+export PATH="$PYTHON_DIR/bin:$PATH"
+
+echo "[OK] Using bundled Python: $PYTHON_CMD"
+"$PYTHON_CMD" --version
+
+# Lightweight runtime rebuild marker (Setup Now -> Rebuild lightweight runtime).
+# Mirrors run-portable.bat: only clears installed Python packages, never
+# deletes data/, models, settings, or images.db.
+RUNTIME_REBUILD_MARKER="$STATE_DIR/rebuild-core-venv.json"
+if [ -f "$RUNTIME_REBUILD_MARKER" ]; then
+    echo "[INFO] Lightweight runtime rebuild requested."
+    echo "       Clearing bundled Python packages only; data, images.db, models, and caches stay untouched."
+    SITE_PACKAGES="$PYTHON_DIR/lib/python3.13/site-packages"
+    if [ -d "$SITE_PACKAGES" ]; then
+        # Keep the standard library shims pip needs (pip, setuptools, wheel
+        # land here on first install). Wiping the directory is fine: first
+        # run will reinstall pip via ensurepip.
+        rm -rf "$SITE_PACKAGES"
+        mkdir -p "$SITE_PACKAGES"
+    fi
+    rm -f "$ROOT_DIR/backend/.requirements_hash" "$RUNTIME_REBUILD_MARKER"
+    echo "       Core runtime packages will be reinstalled now."
+    echo
+fi
+
+# Install pip if missing (python-build-standalone ships ensurepip).
+if ! "$PYTHON_CMD" -c "import pip" >/dev/null 2>&1; then
+    echo "[INFO] Bootstrapping pip via ensurepip..."
+    "$PYTHON_CMD" -m ensurepip --upgrade --default-pip || {
+        echo "[ERROR] ensurepip failed." >&2
+        exit 1
+    }
+fi
+
+INSTALL_REQUIREMENTS="backend/requirements-core.txt"
+if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-0}" = "1" ]; then
+    INSTALL_REQUIREMENTS="backend/requirements.txt"
+fi
+
+NEED_INSTALL=0
+NEW_HASH=""
+OLD_HASH=""
+
+if [ ! -f "backend/.requirements_hash" ]; then
+    NEED_INSTALL=1
+elif command -v sha256sum >/dev/null 2>&1; then
+    NEW_HASH="$(sha256sum "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
+    OLD_HASH="$(cat backend/.requirements_hash 2>/dev/null || true)"
+    if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+        echo "[INFO] $INSTALL_REQUIREMENTS changed. Updating bundled dependencies..."
+        NEED_INSTALL=1
+    fi
+elif command -v shasum >/dev/null 2>&1; then
+    NEW_HASH="$(shasum -a 256 "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
+    OLD_HASH="$(cat backend/.requirements_hash 2>/dev/null || true)"
+    if [ "$NEW_HASH" != "$OLD_HASH" ]; then
+        echo "[INFO] $INSTALL_REQUIREMENTS changed. Updating bundled dependencies..."
+        NEED_INSTALL=1
+    fi
+else
+    echo "[INFO] sha256sum/shasum not found. Refreshing dependencies to stay in sync."
+    NEED_INSTALL=1
+fi
+
+if [ "$NEED_INSTALL" = "0" ]; then
+    if ! "$PYTHON_CMD" -c "import fastapi, PIL, numpy, onnxruntime" >/dev/null 2>&1; then
+        echo "[INFO] Bundled packages look incomplete or inconsistent. Reinstalling..."
+        NEED_INSTALL=1
+    fi
+fi
+
+if [ "$NEED_INSTALL" = "1" ]; then
+    echo "[INFO] Preparing Python build tools for source-only packages..."
+    "$PYTHON_CMD" -m pip install --upgrade --no-warn-script-location pip setuptools wheel || {
+        echo "[ERROR] Failed to install Python build tools." >&2
+        exit 1
+    }
+    if [ "${SD_IMAGE_SORTER_INSTALL_FULL_AI:-0}" = "1" ]; then
+        echo "[INFO] Installing full AI runtime dependencies - first run may take a while..."
+    else
+        echo "[INFO] Installing lightweight core dependencies. Heavy AI packages install on Prepare."
+    fi
+    "$PYTHON_CMD" -m pip install --no-build-isolation --no-warn-script-location \\
+        -r "$INSTALL_REQUIREMENTS" || {
+        echo "[ERROR] Failed to install dependencies." >&2
+        exit 1
+    }
+    if [ -z "$NEW_HASH" ] && command -v sha256sum >/dev/null 2>&1; then
+        NEW_HASH="$(sha256sum "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
+    elif [ -z "$NEW_HASH" ] && command -v shasum >/dev/null 2>&1; then
+        NEW_HASH="$(shasum -a 256 "$INSTALL_REQUIREMENTS" | awk '{print $1}')"
+    fi
+    if [ -n "$NEW_HASH" ]; then
+        printf '%s\\n' "$NEW_HASH" > backend/.requirements_hash
+    else
+        printf 'installed\\n' > backend/.requirements_hash
+    fi
+    echo "[OK] Dependencies installed."
+fi
+
+# Skip Windows-only repair scripts (repair_onnxruntime.py / repair_torch_runtime.py)
+# on Linux: the bundled python-build-standalone interpreter has its CUDA
+# runtime selection done at the pip layer, and the Windows-specific
+# DirectML / cudnn DLL fixups are not relevant.
+
+echo "[Info] Checking startup readiness..."
+( cd backend && "$PYTHON_CMD" model_health.py --startup ) || true
+echo
+
+APP_PORT="${SD_IMAGE_SORTER_PORT:-8487}"
+APP_URL_HOST="${SD_IMAGE_SORTER_URL_HOST:-127.0.0.1}"
+APP_URL="http://${APP_URL_HOST}:${APP_PORT}"
+
+cat <<EOF
+==========================================
+  SD Image Sorter is starting!
+
+  Open browser: $APP_URL
+  Press Ctrl+C to stop the server.
+==========================================
+EOF
+
+# Best-effort browser open: try xdg-open in the background once the server
+# is reachable. Failures here are silent (headless / SSH / no display).
+(
+    for _ in $(seq 1 30); do
+        if curl -fsS --max-time 2 "$APP_URL" >/dev/null 2>&1; then
+            command -v xdg-open >/dev/null 2>&1 && xdg-open "$APP_URL" >/dev/null 2>&1
+            exit 0
+        fi
+        sleep 0.5
+    done
+) &
+
+cd backend
+exec "$PYTHON_CMD" main.py --port "$APP_PORT"
+"""
+    portable_sh.write_bytes(body.encode("utf-8"))
+    # rwxr-xr-x — script must be executable inside the tarball or users see
+    # "permission denied" after extracting.
+    portable_sh.chmod(0o755)
+    return portable_sh
+
+
+def prepare_bundled_linux_python(stage_dir: Path) -> None:
+    """Download and extract python-build-standalone into ``<stage_dir>/python``.
+
+    The ``install_only_stripped`` archive expands to a top-level ``python/``
+    directory, so unpacking it in ``stage_dir`` yields ``stage_dir/python/
+    bin/python3`` as expected by ``run-portable.sh``.
+    """
+    python_dir = stage_dir / "python"
+    if python_dir.exists():
+        shutil.rmtree(python_dir)
+
+    pbs_archive = (
+        BOOTSTRAP_DOWNLOAD_ROOT
+        / f"cpython-{LINUX_PORTABLE_PYTHON_VERSION}+{LINUX_PORTABLE_PYTHON_PBS_TAG}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+    )
+    download_file(
+        LINUX_PORTABLE_PYTHON_URL,
+        pbs_archive,
+        expected_sha256=LINUX_PORTABLE_PYTHON_SHA256,
+    )
+
+    import tarfile
+    with tarfile.open(pbs_archive, "r:gz") as tar:
+        # python-build-standalone tarballs only contain a single top-level
+        # ``python/`` entry; defensive validation keeps an arbitrarily-named
+        # mirror archive from leaking files outside of stage_dir/python/.
+        for member in tar.getmembers():
+            top = member.name.split("/", 1)[0]
+            if top != "python":
+                raise RuntimeError(
+                    f"Unexpected top-level entry in python-build-standalone tarball: {member.name!r}"
+                )
+            target = (stage_dir / member.name).resolve()
+            try:
+                target.relative_to(stage_dir.resolve())
+            except ValueError:
+                raise RuntimeError(
+                    f"Tarball member escapes stage directory: {member.name!r}"
+                )
+        tar.extractall(stage_dir)
+
+    if not (python_dir / "bin" / "python3").exists():
+        raise RuntimeError(
+            f"Expected python-build-standalone to drop python/bin/python3 inside {python_dir}"
+        )
+
+
 def stage_archive(name: str, version: str, seven_zip: Path | None, *, populate) -> Path:
     stage_dir = STAGING_ROOT / name
     if stage_dir.exists():
@@ -864,6 +1151,75 @@ def build_release_assets(version: str, split_size_mb: int) -> list[Path]:
     with tarfile.open(tar_path, "w:gz") as tar:
         tar.add(linux_stage, arcname="sd-image-sorter")
     assets.append(tar_path)
+
+    # === Linux portable: app + bundled python-build-standalone, no models ===
+    # Same first-run flow as Windows portable (lightweight install on first
+    # launch; full AI gated behind SD_IMAGE_SORTER_INSTALL_FULL_AI=1).
+    # Lets users on distros without Python 3.12+ in the package manager
+    # (or with Python 3.14 as system default before our wheels catch up)
+    # run the app without any extra setup.
+    def populate_linux_portable(stage_dir: Path) -> None:
+        copy_project(stage_dir)
+        write_release_notes(stage_dir, version)
+        prepare_bundled_linux_python(stage_dir)
+        write_linux_portable_launcher(stage_dir)
+        write_package_manifest(stage_dir, version)
+
+    linux_portable_stage = STAGING_ROOT / "linux-portable"
+    if linux_portable_stage.exists():
+        shutil.rmtree(linux_portable_stage)
+    linux_portable_stage.mkdir(parents=True, exist_ok=True)
+    populate_linux_portable(linux_portable_stage)
+
+    linux_portable_tar_name = f"sd-image-sorter-v{version}-linux-portable.tar.gz"
+    linux_portable_tar_path = ARTIFACT_ROOT / linux_portable_tar_name
+
+    def _portable_tar_filter(info):
+        """Force Unix mode bits inside the tarball.
+
+        The release build can run on Linux (CI / maintainer Linux box)
+        OR on Windows (maintainer dev box). On Windows, file system mode
+        bits are effectively 0o666 (no execute), and ``Path.chmod(0o755)``
+        is a no-op, so the resulting tarball would land on the user's
+        Linux machine with ``run-portable.sh`` and ``python/bin/python3``
+        un-runnable. Re-stamping mode bits in the tarball itself is the
+        only way to make this build reproducible across host OSes.
+
+        Rules (relative paths inside the tarball):
+        - ``sd-image-sorter/run-portable.sh`` → 0o755
+        - everything under ``sd-image-sorter/python/bin/`` → 0o755
+          (interpreters, pip, pip3, pip3.13, idle, etc.)
+        - ``*.so`` / ``*.so.*`` / ``*.dylib`` → 0o755
+          (CPython extensions; some loaders refuse non-executable .so)
+        - directories → 0o755
+        - everything else → 0o644
+        """
+        name = info.name
+        if info.isdir():
+            info.mode = 0o755
+            return info
+        if name.endswith("/run-portable.sh") or name == "sd-image-sorter/run-portable.sh":
+            info.mode = 0o755
+        elif "/python/bin/" in name:
+            info.mode = 0o755
+        elif name.endswith(".so") or ".so." in name or name.endswith(".dylib"):
+            info.mode = 0o755
+        else:
+            info.mode = 0o644
+        # uid/gid/uname/gname normalization keeps the archive deterministic
+        # (every tar.add() on a developer machine would otherwise embed
+        # whoever ran the build).
+        info.uid = 0
+        info.gid = 0
+        info.uname = ""
+        info.gname = ""
+        return info
+
+    with tarfile.open(linux_portable_tar_path, "w:gz") as tar:
+        # Preserve mode bits so python/bin/python3 and run-portable.sh stay
+        # executable after the user extracts the tarball.
+        tar.add(linux_portable_stage, arcname="sd-image-sorter", filter=_portable_tar_filter)
+    assets.append(linux_portable_tar_path)
 
     manifest_entries = []
     for asset in assets:
