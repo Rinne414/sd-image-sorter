@@ -2869,9 +2869,9 @@ window.I18nLang_zhCN = {
     // v3.2.2 任务 #8: 5 步骤管线表头。
     'dataset.stepImport': '导入',
     'dataset.stepAudit': '审计',
-    'dataset.stepOrganize': '整理',
-    'dataset.stepCaption': '标注',
+    'dataset.stepWorkbench': '工作台',
     'dataset.stepExport': '导出',
+    'dataset.tabImportEmptyHint': '▲ 用上方的按钮加图片。然后依序：「审计」→「工作台」→「导出」。',
     // v3.2.2 任务 #9: 可选审计面板。
     'dataset.auditTitle': '审计（可选）',
     'dataset.auditSummaryHint': '展开以启用 LoRA 训练就绪度检查。',

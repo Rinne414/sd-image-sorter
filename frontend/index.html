@@ -2514,7 +2514,7 @@
                  Trimmed compared to Caption Editor: no rearrange queue, no
                  mode-switching content tabs, single focused workflow. -->
             <section id="view-dataset" class="view" role="tabpanel" aria-labelledby="nav-tab-dataset">
-                <div class="dataset-maker">
+                <div class="dataset-maker" data-active-tab="import">
                     <header class="dataset-header">
                         <h2 class="dataset-title">
                             <span aria-hidden="true">📦</span>
@@ -2542,30 +2542,39 @@
                         </div>
                     </header>
 
-                    <!-- v3.2.2 task #8: 5-step pipeline header. Numbered circles + labels.
-                         Click jumps to the section anchor below. Scoped to this tab only. -->
-                    <nav class="dataset-stepper" aria-label="Dataset Maker pipeline">
-                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-import">
-                            <span class="dataset-step-pill-num">1</span>
-                            <span class="dataset-step-pill-label" data-i18n="dataset.stepImport">Import</span>
+                    <!-- v3.2.2-ui: 4-tab nav (replaces 5-step scroll-pipeline).
+                         Workbench combines original "organize" + "caption" because
+                         they share screen state. Tab visibility driven by data-active-tab. -->
+                    <nav class="dataset-tabs" role="tablist" aria-label="Dataset Maker pipeline">
+                        <button type="button" role="tab" id="dataset-tab-import" aria-selected="true"
+                                class="dataset-tab" data-tab-target="import">
+                            <span class="dataset-tab-num">1</span>
+                            <span class="dataset-tab-label" data-i18n="dataset.stepImport">Import</span>
                         </button>
-                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-audit">
-                            <span class="dataset-step-pill-num">2</span>
-                            <span class="dataset-step-pill-label" data-i18n="dataset.stepAudit">Audit</span>
+                        <button type="button" role="tab" id="dataset-tab-audit" aria-selected="false"
+                                class="dataset-tab" data-tab-target="audit">
+                            <span class="dataset-tab-num">2</span>
+                            <span class="dataset-tab-label" data-i18n="dataset.stepAudit">Audit</span>
                         </button>
-                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-organize">
-                            <span class="dataset-step-pill-num">3</span>
-                            <span class="dataset-step-pill-label" data-i18n="dataset.stepOrganize">Organize</span>
+                        <button type="button" role="tab" id="dataset-tab-workbench" aria-selected="false"
+                                class="dataset-tab" data-tab-target="workbench">
+                            <span class="dataset-tab-num">3</span>
+                            <span class="dataset-tab-label" data-i18n="dataset.stepWorkbench">Workbench</span>
                         </button>
-                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-caption">
-                            <span class="dataset-step-pill-num">4</span>
-                            <span class="dataset-step-pill-label" data-i18n="dataset.stepCaption">Caption</span>
-                        </button>
-                        <button type="button" class="dataset-step-pill" data-step-target="dataset-step-export">
-                            <span class="dataset-step-pill-num">5</span>
-                            <span class="dataset-step-pill-label" data-i18n="dataset.stepExport">Export</span>
+                        <button type="button" role="tab" id="dataset-tab-export" aria-selected="false"
+                                class="dataset-tab" data-tab-target="export">
+                            <span class="dataset-tab-num">4</span>
+                            <span class="dataset-tab-label" data-i18n="dataset.stepExport">Export</span>
                         </button>
                     </nav>
+
+                    <!-- Tab 1 (Import) — empty hint shown only on Import tab.
+                         Toolbar above is the actual import UI. -->
+                    <div class="dataset-tab-import-empty">
+                        <p class="dataset-tab-import-empty-hint" data-i18n="dataset.tabImportEmptyHint">
+                            ▲ Use the buttons above to add images. Then continue: 「Audit」 → 「Workbench」 → 「Export」.
+                        </p>
+                    </div>
 
                     <!-- v3.2.2 task #9: optional Audit step (LoRA-trainer readiness check).
                          Default OFF. User opens it, picks the thresholds they care about,
