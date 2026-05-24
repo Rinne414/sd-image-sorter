@@ -123,6 +123,7 @@
                     timer = setTimeout(() => {
                         this.captionEdits.set(id, ta.value);
                         this._refreshQueueItem(id);
+                        this._renderTagPills();
                     }, 200);
                 });
             }

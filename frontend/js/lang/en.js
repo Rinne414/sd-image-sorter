@@ -2948,9 +2948,10 @@ window.I18nLang_en = {
     'dataset.tagAllStarted': 'Tagging started in the background. The progress bar at the top of the screen tracks it.',
 
     // Phase 2C — noob-friendly redesign
-    'dataset.cardTagTitle': 'Step A. Auto-tag (optional)',
+    'dataset.cardTagTitle': 'Auto-tag (optional)',
+    'dataset.tagPillsTitle': 'Tags',
     'dataset.cardTagHelp': 'Run AI tagging on every image in the queue. Skips images that are already tagged.',
-    'dataset.cardCaptionTitle': 'Step B. Caption polish (optional)',
+    'dataset.cardCaptionTitle': 'Caption polish (optional)',
     'dataset.cardCaptionHelp': "Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.",
     'dataset.cardExportTitle': 'Step C. Export to folder',
     'dataset.namingLegend': 'How should files be named?',

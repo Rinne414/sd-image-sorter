@@ -2948,9 +2948,10 @@ window.I18nLang_zhCN = {
     'dataset.tagAllStarted': '打标已在后台开始，顶部进度条会跟踪进度。',
 
     // Phase 2C — 新手友好重设计
-    'dataset.cardTagTitle': '步骤 A · 自动打标（可选）',
+    'dataset.cardTagTitle': '自动打标（可选）',
+    'dataset.tagPillsTitle': '标签',
     'dataset.cardTagHelp': '对队列里所有图运行 AI 打标，已经有标签的会跳过。',
-    'dataset.cardCaptionTitle': '步骤 B · Caption 微调（可选）',
+    'dataset.cardCaptionTitle': 'Caption 微调（可选）',
     'dataset.cardCaptionHelp': '批量改 caption：加通用标签、移除不要的标签、决定下划线怎么处理。',
     'dataset.cardExportTitle': '步骤 C · 导出到文件夹',
     'dataset.namingLegend': '文件应该怎么命名？',

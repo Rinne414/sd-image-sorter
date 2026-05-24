@@ -2665,6 +2665,12 @@
                                     </div>
                                 </details>
                             </div>
+                            <div class="dataset-zoom-toolbar" id="dataset-zoom-toolbar" hidden>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-out" title="Zoom out">−</button>
+                                <span class="dataset-zoom-label" id="dataset-zoom-label">100%</span>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-in" title="Zoom in">+</button>
+                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-zoom-reset" title="Reset zoom">1:1</button>
+                            </div>
                             <div class="dataset-editor-image-wrap" id="dataset-editor-image-wrap">
                                 <img class="dataset-editor-image" id="dataset-editor-image" alt="" hidden>
                                 <div class="dataset-editor-empty" id="dataset-editor-empty">
@@ -2706,11 +2712,16 @@
 
                         <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
                         <aside class="dataset-export-pane" aria-label="Dataset export settings">
+                            <!-- Tag pills for active image -->
+                            <div class="dataset-tag-pills-section" id="dataset-tag-pills-section" hidden>
+                                <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
+                                <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
+                            </div>
                             <!-- Section A: Tagging shortcut -->
                             <section class="dataset-card" id="dataset-step-caption">
                                 <h3 class="dataset-card-title">
                                     <span aria-hidden="true">🏷️</span>
-                                    <span data-i18n="dataset.cardTagTitle">Step A. Auto-tag (optional)</span>
+                                    <span data-i18n="dataset.cardTagTitle">Auto-tag (optional)</span>
                                 </h3>
                                 <p class="dataset-card-help" data-i18n="dataset.cardTagHelp">
                                     Run AI tagging on every image in the queue. Skips images that are already tagged.
@@ -2740,7 +2751,7 @@
                             <details class="dataset-card dataset-card-details">
                                 <summary class="dataset-card-title">
                                     <span aria-hidden="true">✏️</span>
-                                    <span data-i18n="dataset.cardCaptionTitle">Step B. Caption polish (optional)</span>
+                                    <span data-i18n="dataset.cardCaptionTitle">Caption polish (optional)</span>
                                 </summary>
                                 <p class="dataset-card-help" data-i18n="dataset.cardCaptionHelp">
                                     Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.

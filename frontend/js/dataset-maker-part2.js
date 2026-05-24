@@ -11,6 +11,8 @@
     const DM = window.DatasetMaker;
 
     // ---------- Active image + caption editor ----------
+    DM._zoomLevel = 1;
+
     DM._setActive = function (imageId) {
         const id = Number(imageId);
         if (!this.imageIds.includes(id)) return;
@@ -23,6 +25,7 @@
         const ta = document.getElementById('dataset-editor-textarea');
         const actions = document.getElementById('dataset-editor-actions');
         const filenameEl = document.getElementById('dataset-editor-filename');
+        const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
             img.src = `/api/image-thumbnail/${id}?size=512`;
@@ -31,6 +34,11 @@
         }
         if (empty) empty.hidden = true;
         if (filenameEl) filenameEl.textContent = filename;
+        if (zoomBar) zoomBar.hidden = false;
+
+        // Reset zoom on image change
+        this._zoomLevel = 1;
+        this._applyZoom();
 
         const caption = this.captionEdits.has(id)
             ? this.captionEdits.get(id)
@@ -42,6 +50,7 @@
         if (actions) actions.hidden = false;
 
         this._highlightActiveQueueItem();
+        this._renderTagPills();
     };
 
     DM._stepActive = function (delta) {
@@ -242,4 +251,92 @@
             grid.appendChild(thumb);
         }
     };
+
+    // ---------- Zoom controls ----------
+    DM._applyZoom = function () {
+        const img = document.getElementById('dataset-editor-image');
+        const label = document.getElementById('dataset-zoom-label');
+        if (img) img.style.transform = `scale(${this._zoomLevel})`;
+        if (label) label.textContent = Math.round(this._zoomLevel * 100) + '%';
+    };
+
+    DM._zoomIn = function () {
+        this._zoomLevel = Math.min(this._zoomLevel + 0.25, 5);
+        this._applyZoom();
+    };
+
+    DM._zoomOut = function () {
+        this._zoomLevel = Math.max(this._zoomLevel - 0.25, 0.25);
+        this._applyZoom();
+    };
+
+    DM._zoomReset = function () {
+        this._zoomLevel = 1;
+        this._applyZoom();
+    };
+
+    // ---------- Tag pills ----------
+    DM._renderTagPills = function () {
+        const section = document.getElementById('dataset-tag-pills-section');
+        const wrap = document.getElementById('dataset-tag-pills-wrap');
+        if (!section || !wrap) return;
+
+        if (this.activeId == null) {
+            section.hidden = true;
+            return;
+        }
+
+        const caption = this.captionEdits.has(this.activeId)
+            ? this.captionEdits.get(this.activeId)
+            : (this.captions.get(this.activeId) || '');
+        const tags = caption.split(',').map(t => t.trim()).filter(Boolean);
+
+        if (tags.length === 0) {
+            wrap.innerHTML = '<span class="dataset-tag-pills-empty">No tags</span>';
+            section.hidden = false;
+            return;
+        }
+
+        wrap.innerHTML = '';
+        for (const tag of tags) {
+            const pill = document.createElement('span');
+            pill.className = 'dataset-tag-pill';
+            pill.innerHTML = `${tag} <span class="dataset-tag-pill-x">x</span>`;
+            pill.title = `Remove "${tag}"`;
+            pill.addEventListener('click', () => this._removeTag(tag));
+            wrap.appendChild(pill);
+        }
+        section.hidden = false;
+    };
+
+    DM._removeTag = function (tag) {
+        if (this.activeId == null) return;
+        const ta = document.getElementById('dataset-editor-textarea');
+        if (!ta) return;
+        const tags = ta.value.split(',').map(t => t.trim()).filter(Boolean);
+        const filtered = tags.filter(t => t !== tag);
+        ta.value = filtered.join(', ');
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        this._renderTagPills();
+    };
+
+    // ---------- Zoom event bindings ----------
+    (function initZoomBindings() {
+        document.getElementById('btn-dataset-zoom-in')
+            ?.addEventListener('click', () => DM._zoomIn());
+        document.getElementById('btn-dataset-zoom-out')
+            ?.addEventListener('click', () => DM._zoomOut());
+        document.getElementById('btn-dataset-zoom-reset')
+            ?.addEventListener('click', () => DM._zoomReset());
+
+        const wrap = document.getElementById('dataset-editor-image-wrap');
+        if (wrap) {
+            wrap.addEventListener('wheel', (e) => {
+                if (!e.ctrlKey) return;
+                e.preventDefault();
+                if (e.deltaY < 0) DM._zoomIn();
+                else DM._zoomOut();
+            }, { passive: false });
+        }
+    })();
 })();
