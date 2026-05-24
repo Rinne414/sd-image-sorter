@@ -13,6 +13,7 @@
 #view-dataset .dataset-maker {
     display: flex;
     flex-direction: column;
+    width: 100%;
     height: calc(100vh - var(--header-height, 60px));
     min-height: 480px;
     gap: 12px;
@@ -26,9 +27,8 @@
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     padding: 8px 0;
-    border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
     border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
 }
 #view-dataset .dataset-title {
@@ -39,13 +39,6 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
-}
-#view-dataset .dataset-toolbar {
-    flex: 1 1 auto;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
 }
 #view-dataset .dataset-count-pill {
     margin-left: auto;
@@ -69,8 +62,8 @@
 #view-dataset .dataset-workbench {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) minmax(420px, 2.4fr) minmax(320px, 1.4fr);
-    gap: 12px;
+    grid-template-columns: 220px minmax(0, 1fr) 280px;
+    gap: 10px;
     overflow: hidden;
     min-height: 0;
 }
@@ -232,8 +225,8 @@
     position: relative;
 }
 #view-dataset .dataset-editor-image {
-    max-width: 100%;
-    max-height: 100%;
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     display: block;
 }
@@ -773,6 +766,10 @@
 #view-dataset .dataset-editor-help {
     position: relative;
     margin-left: auto;
+    z-index: 10;
+}
+#view-dataset .dataset-editor-help:not([open]) .dataset-editor-help-body {
+    display: none;
 }
 #view-dataset .dataset-editor-help > summary {
     list-style: none;
@@ -798,13 +795,15 @@
     position: absolute;
     top: 30px;
     right: 0;
-    width: min(380px, 80vw);
+    width: min(320px, 60vw);
+    max-height: 280px;
+    overflow-y: auto;
     background: var(--surface-1, #0f172a);
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     box-shadow: 0 14px 40px rgba(0,0,0,0.55);
-    z-index: 5;
+    z-index: 50;
     font-size: 12px;
     line-height: 1.55;
     color: var(--text-secondary, #cbd5e1);

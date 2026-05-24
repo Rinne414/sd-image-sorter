@@ -2520,105 +2520,112 @@
                             <span aria-hidden="true">📦</span>
                             <span data-i18n="dataset.title">Dataset Maker</span>
                         </h2>
-                        <div class="dataset-toolbar">
-                            <button class="btn btn-primary" id="btn-dataset-import-gallery">
-                                <span aria-hidden="true">⬅️</span>
-                                <span data-i18n="dataset.importFromGallery">Add from Gallery</span>
+                        <!-- Workflow tabs inline with title -->
+                        <nav class="dataset-tabs" role="tablist" aria-label="Dataset Maker pipeline">
+                            <button type="button" role="tab" id="dataset-tab-import" aria-selected="true"
+                                    class="dataset-tab" data-tab-target="import">
+                                <span class="dataset-tab-num">1</span>
+                                <span class="dataset-tab-label" data-i18n="dataset.stepImport">Import</span>
                             </button>
-                            <!-- v3.2.2 task #7b: direct folder import (small-gallery workspace).
-                                 Items added this way live entirely in the Dataset Maker session
-                                 — they are NOT registered in the main library DB. -->
-                            <button class="btn btn-secondary" id="btn-dataset-import-folder"
-                                    title="Import images directly from a folder without scanning into the main gallery">
-                                <span aria-hidden="true">📁</span>
-                                <span data-i18n="dataset.importFromFolder">Add from Folder</span>
+                            <button type="button" role="tab" id="dataset-tab-workbench" aria-selected="false"
+                                    class="dataset-tab" data-tab-target="workbench">
+                                <span class="dataset-tab-num">2</span>
+                                <span class="dataset-tab-label" data-i18n="dataset.stepWorkbench">Workbench</span>
                             </button>
-                            <span class="dataset-count-pill" id="dataset-count">
-                                <strong id="dataset-count-num">0</strong>
-                                <span data-i18n="dataset.imagesInDataset">images</span>
-                            </span>
-                            <button class="btn btn-ghost btn-small" id="btn-dataset-clear" hidden
-                                    data-i18n="dataset.clearAll">Clear all</button>
-                        </div>
+                            <button type="button" role="tab" id="dataset-tab-export" aria-selected="false"
+                                    class="dataset-tab" data-tab-target="export">
+                                <span class="dataset-tab-num">3</span>
+                                <span class="dataset-tab-label" data-i18n="dataset.stepExport">Export</span>
+                            </button>
+                        </nav>
+                        <span class="dataset-count-pill" id="dataset-count">
+                            <strong id="dataset-count-num">0</strong>
+                            <span data-i18n="dataset.imagesInDataset">images</span>
+                        </span>
+                        <button class="btn btn-ghost btn-small" id="btn-dataset-clear" hidden
+                                data-i18n="dataset.clearAll">Clear all</button>
                     </header>
 
-                    <!-- v3.2.2-ui: 4-tab nav (replaces 5-step scroll-pipeline).
-                         Workbench combines original "organize" + "caption" because
-                         they share screen state. Tab visibility driven by data-active-tab. -->
-                    <nav class="dataset-tabs" role="tablist" aria-label="Dataset Maker pipeline">
-                        <button type="button" role="tab" id="dataset-tab-import" aria-selected="true"
-                                class="dataset-tab" data-tab-target="import">
-                            <span class="dataset-tab-num">1</span>
-                            <span class="dataset-tab-label" data-i18n="dataset.stepImport">Import</span>
-                        </button>
-                        <button type="button" role="tab" id="dataset-tab-audit" aria-selected="false"
-                                class="dataset-tab" data-tab-target="audit">
-                            <span class="dataset-tab-num">2</span>
-                            <span class="dataset-tab-label" data-i18n="dataset.stepAudit">Audit</span>
-                        </button>
-                        <button type="button" role="tab" id="dataset-tab-workbench" aria-selected="false"
-                                class="dataset-tab" data-tab-target="workbench">
-                            <span class="dataset-tab-num">3</span>
-                            <span class="dataset-tab-label" data-i18n="dataset.stepWorkbench">Workbench</span>
-                        </button>
-                        <button type="button" role="tab" id="dataset-tab-export" aria-selected="false"
-                                class="dataset-tab" data-tab-target="export">
-                            <span class="dataset-tab-num">4</span>
-                            <span class="dataset-tab-label" data-i18n="dataset.stepExport">Export</span>
-                        </button>
-                    </nav>
-
-                    <!-- Tab 1 (Import) — empty hint shown only on Import tab.
-                         Toolbar above is the actual import UI. -->
-                    <div class="dataset-tab-import-empty">
-                        <p class="dataset-tab-import-empty-hint" data-i18n="dataset.tabImportEmptyHint">
-                            ▲ Use the buttons above to add images. Then continue: 「Audit」 → 「Workbench」 → 「Export」.
-                        </p>
-                    </div>
-
-                    <!-- v3.2.2 task #9: optional Audit step (LoRA-trainer readiness check).
-                         Default OFF. User opens it, picks the thresholds they care about,
-                         clicks "Run audit". Threshold inputs are unbounded (no UI hard limits). -->
-                    <details class="dataset-audit-section" id="dataset-step-audit">
-                        <summary class="dataset-audit-summary">
-                            <span class="dataset-audit-num" aria-hidden="true">2</span>
-                            <span class="dataset-audit-title" data-i18n="dataset.auditTitle">Audit (optional)</span>
-                            <span class="dataset-audit-summary-hint" data-i18n="dataset.auditSummaryHint">Open to enable LoRA-readiness checks.</span>
-                        </summary>
-                        <div class="dataset-audit-body">
-                            <p class="dataset-audit-help" data-i18n="dataset.auditHelp">
-                                Optional safety net for batch-LoRA workflows. Each check is independent and only runs when its threshold is filled in. None of these flags delete files or DB rows — they just highlight items in the queue so you can decide what to remove.
-                            </p>
-                            <div class="dataset-audit-thresholds">
-                                <label class="dataset-audit-threshold">
-                                    <span data-i18n="dataset.auditAestheticLabel">Min aesthetic score</span>
-                                    <input type="number" id="dataset-audit-aesthetic-max" step="0.1" placeholder="e.g. 4.5">
-                                    <small data-i18n="dataset.auditAestheticHint">Leave blank to skip. Suggested: 4.5 for character LoRAs.</small>
+                    <!-- Tab 1: Import + Audit (merged) -->
+                    <div class="dataset-tab-import-content" id="dataset-tab-import-content">
+                        <!-- Import actions: big buttons + inline folder path -->
+                        <div class="dataset-import-actions">
+                            <button class="btn btn-primary btn-large" id="btn-dataset-import-gallery">
+                                <span aria-hidden="true">🖼️</span>
+                                <span data-i18n="dataset.importFromGallery">Add from Gallery Selection</span>
+                            </button>
+                            <div class="dataset-folder-bar">
+                                <span class="dataset-folder-bar-icon" aria-hidden="true">📁</span>
+                                <input type="text" id="dataset-folder-import-path" class="form-input"
+                                       placeholder="Drag folder here or type path..."
+                                       data-i18n-placeholder="dataset.folderBarPlaceholder">
+                                <label class="dataset-folder-bar-subfolder">
+                                    <input type="checkbox" id="dataset-folder-import-recursive" checked>
+                                    <span data-i18n="dataset.includeSubfolders">Subfolders</span>
                                 </label>
-                                <label class="dataset-audit-threshold">
-                                    <span data-i18n="dataset.auditPhashLabel">Max phash distance</span>
-                                    <input type="number" id="dataset-audit-phash-max" step="1" placeholder="e.g. 5">
-                                    <small data-i18n="dataset.auditPhashHint">Leave blank to skip. Lower = stricter duplicate detection.</small>
-                                </label>
-                                <label class="dataset-audit-threshold">
-                                    <span data-i18n="dataset.auditDimLabel">Min image side (px)</span>
-                                    <input type="number" id="dataset-audit-dim-min" step="1" placeholder="e.g. 512">
-                                    <small data-i18n="dataset.auditDimHint">Leave blank to skip. Most trainers prefer 512 px or more.</small>
-                                </label>
-                            </div>
-                            <div class="dataset-audit-actions">
-                                <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
-                                        data-i18n="dataset.auditRun">Run audit</button>
-                                <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-audit-download" hidden
-                                        data-i18n="dataset.auditDownload">Download report (.json)</button>
-                                <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
-                            </div>
-                            <div class="dataset-audit-results" id="dataset-audit-results" hidden>
-                                <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
-                                <p class="dataset-audit-hint" data-i18n="dataset.auditClickToFilter">Click a badge to highlight matching items in the queue. Click "Remove from queue" inside the editor to drop the active item.</p>
+                                <button class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
+                                        data-i18n="common.browse">Browse</button>
+                                <button class="btn btn-primary btn-small" id="btn-dataset-folder-import-go"
+                                        data-i18n="dataset.folderImportGo">Scan</button>
                             </div>
                         </div>
-                    </details>
+
+                        <!-- Drag-drop zone (accepts images, zip, folders) -->
+                        <div class="dataset-dropzone" id="dataset-dropzone">
+                            <div class="dataset-dropzone-content">
+                                <span class="dataset-dropzone-icon" aria-hidden="true">📂</span>
+                                <p class="dataset-dropzone-text" data-i18n="dataset.dropzoneText">
+                                    Drag and drop images, ZIP files, or folders here
+                                </p>
+                                <small class="dataset-dropzone-hint" data-i18n="dataset.dropzoneHint">
+                                    Subfolders included by default. Images appear below after import.
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Imported image thumbnail grid -->
+                        <div class="dataset-import-gallery" id="dataset-import-gallery" hidden>
+                            <div class="dataset-import-gallery-header">
+                                <strong id="dataset-import-gallery-count">0 images imported</strong>
+                                <button class="btn btn-ghost btn-small" id="btn-dataset-import-audit"
+                                        data-i18n="dataset.runAudit">Run Audit</button>
+                            </div>
+                            <div class="dataset-import-gallery-grid" id="dataset-import-gallery-grid"></div>
+                        </div>
+
+                        <!-- Audit section (inline, below imported images) -->
+                        <details class="dataset-audit-inline" id="dataset-audit-inline">
+                            <summary class="dataset-audit-inline-summary">
+                                <span aria-hidden="true">🔍</span>
+                                <span data-i18n="dataset.auditTitle">Quality Audit (optional)</span>
+                            </summary>
+                            <div class="dataset-audit-body">
+                                <div class="dataset-audit-thresholds">
+                                    <label class="dataset-audit-threshold">
+                                        <span data-i18n="dataset.auditDimLabel">Min image side (px)</span>
+                                        <input type="number" id="dataset-audit-dim-min" step="1" placeholder="e.g. 512" style="width:80px">
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <span data-i18n="dataset.auditPhashLabel">Max phash distance</span>
+                                        <input type="number" id="dataset-audit-phash-max" step="1" placeholder="e.g. 5" style="width:80px">
+                                    </label>
+                                    <label class="dataset-audit-threshold">
+                                        <span data-i18n="dataset.auditAestheticLabel">Min aesthetic</span>
+                                        <input type="number" id="dataset-audit-aesthetic-max" step="0.1" placeholder="4.5" style="width:80px">
+                                    </label>
+                                </div>
+                                <div class="dataset-audit-actions">
+                                    <button type="button" class="btn btn-primary btn-small" id="btn-dataset-audit-run"
+                                            data-i18n="dataset.auditRun">Run audit</button>
+                                    <span class="dataset-audit-status" id="dataset-audit-status" aria-live="polite"></span>
+                                </div>
+                                <div class="dataset-audit-results" id="dataset-audit-results" hidden>
+                                    <div class="dataset-audit-badges" id="dataset-audit-badges"></div>
+                                </div>
+                            </div>
+                        </details>
+                        <span class="dataset-folder-import-status" id="dataset-folder-import-status"></span>
+                    </div>
 
                     <!-- Anchor for step 1 (Import) — toolbar above is the import step itself. -->
                     <div id="dataset-step-import" class="dataset-step-anchor" aria-hidden="true"></div>
@@ -2627,35 +2634,10 @@
                         <!-- Left: image queue with thumbnails + edit indicator -->
                         <aside class="dataset-queue-pane" aria-label="Dataset image queue" id="dataset-step-organize">
                             <div class="dataset-pane-head">
-                                <strong data-i18n="dataset.queueTitle">Images in dataset</strong>
-                                <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit caption</span>
+                                <strong data-i18n="dataset.queueTitle">Images</strong>
+                                <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit</span>
                             </div>
-                            <div class="dataset-queue-list" id="dataset-queue-list">
-                                <!-- Empty state injected by JS so localized strings stay in sync -->
-                            </div>
-
-                            <!-- v3.2.2 task #10: Tag Vocabulary side panel.
-                                 Click a tag once to add to common tags (green).
-                                 Click again to flip to blacklist (red). Third click clears. -->
-                            <details class="dataset-vocab-panel" id="dataset-vocab-panel">
-                                <summary class="dataset-vocab-summary">
-                                    <span aria-hidden="true">🏷️</span>
-                                    <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
-                                    <span class="dataset-vocab-count" id="dataset-vocab-count" aria-live="polite"></span>
-                                </summary>
-                                <div class="dataset-vocab-body">
-                                    <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
-                                        Click a tag to add it to <strong>Common tags</strong>. Click again to move it to <strong>Blacklist</strong>. Third click clears.
-                                    </p>
-                                    <div class="dataset-vocab-controls">
-                                        <input type="search" id="dataset-vocab-search" class="form-input dataset-vocab-search"
-                                               placeholder="Filter tags…" data-i18n-placeholder="dataset.vocabSearchPlaceholder">
-                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
-                                                data-i18n="dataset.vocabRefresh">Refresh</button>
-                                    </div>
-                                    <div class="dataset-vocab-list" id="dataset-vocab-list" role="list"></div>
-                                </div>
-                            </details>
+                            <div class="dataset-queue-list" id="dataset-queue-list"></div>
                         </aside>
 
                         <!-- Center: selected image + caption editor -->

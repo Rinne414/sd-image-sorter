@@ -2872,7 +2872,13 @@ window.I18nLang_zhCN = {
     'dataset.stepWorkbench': '工作台',
     'dataset.stepExport': '导出',
     'dataset.tabImportEmptyHint': '▲ 用上方的按钮加图片。然后依序：「审计」→「工作台」→「导出」。',
-    // v3.2.2 任务 #9: 可选审计面板。
+    // v3.2.2 redesign: import tab
+    'dataset.folderBarPlaceholder': '拖入文件夹或输入路径...',
+    'dataset.includeSubfolders': '含子文件夹',
+    'dataset.folderImportGo': '扫描并加入',
+    'dataset.dropzoneText': '拖放图片、ZIP 或文件夹到此处',
+    'dataset.dropzoneHint': '默认包含子文件夹。导入后缩略图显示在下方。',
+    'dataset.runAudit': '运行审计',
     'dataset.auditTitle': '审计（可选）',
     'dataset.auditSummaryHint': '展开以启用 LoRA 训练就绪度检查。',
     'dataset.auditHelp': '批量 LoRA 工作流的可选安全网。每项检查互相独立，只在你填入阈值时才生效。这些标记不会删除任何档案或资料库纪录——只是高亮列表中需要你裁夺的项目。',

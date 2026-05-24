@@ -2872,8 +2872,14 @@ window.I18nLang_en = {
     'dataset.stepWorkbench': 'Workbench',
     'dataset.stepExport': 'Export',
     'dataset.tabImportEmptyHint': '▲ Use the buttons above to add images. Then continue: 「Audit」 → 「Workbench」 → 「Export」.',
-    // v3.2.2 task #9: optional Audit panel.
-    'dataset.auditTitle': 'Audit (optional)',
+    // v3.2.2 redesign: import tab
+    'dataset.folderBarPlaceholder': 'Drag folder here or type path...',
+    'dataset.includeSubfolders': 'Subfolders',
+    'dataset.folderImportGo': 'Scan',
+    'dataset.dropzoneText': 'Drag and drop images, ZIP files, or folders here',
+    'dataset.dropzoneHint': 'Subfolders included by default. Images appear below after import.',
+    'dataset.runAudit': 'Run Audit',
+    'dataset.auditTitle': 'Quality Audit (optional)',
     'dataset.auditSummaryHint': 'Open to enable LoRA-readiness checks.',
     'dataset.auditHelp': 'Optional safety net for batch-LoRA workflows. Each check is independent and only runs when its threshold is filled in. None of these flags delete files or DB rows — they just highlight items in the queue so you can decide what to remove.',
     'dataset.auditAestheticLabel': 'Min aesthetic score',
