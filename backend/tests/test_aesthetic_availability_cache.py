@@ -101,35 +101,50 @@ def test_is_available_logs_torch_failure_only_once(monkeypatch, caplog):
 def test_reset_availability_cache_re_runs_import_check(monkeypatch):
     """After Prepare for Aesthetic Score installs torch + open_clip, the
     model service calls reset_availability_cache() so the next status poll
-    discovers the freshly-installed runtime."""
+    discovers the freshly-installed runtime.
+
+    The test routes ``import torch`` / ``import open_clip`` through fake
+    ``ModuleType`` instances instead of deleting the real torch from
+    ``sys.modules``. CI environments install torch via requirements-dev.txt;
+    deleting it and letting the real import run a second time would trigger
+    a ``RuntimeError: Only a single TORCH_LIBRARY can be used to register
+    the namespace triton`` because torch's C++ globals are already
+    registered in this interpreter.
+    """
+    import types
+
     real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
     fail_torch = {"on": True}
+    fake_torch = types.ModuleType("torch")
+    fake_open_clip = types.ModuleType("open_clip")
 
-    def maybe_failing_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if (name == "torch" or name.startswith("torch.")) and fail_torch["on"]:
-            raise ImportError("No module named 'torch'")
+    def routed_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "torch" or name.startswith("torch."):
+            if fail_torch["on"]:
+                raise ImportError("No module named 'torch'")
+            return fake_torch
+        if name == "open_clip" or name.startswith("open_clip."):
+            return fake_open_clip
         return real_import(name, globals, locals, fromlist, level)
 
-    monkeypatch.delitem(sys.modules, "torch", raising=False)
-    monkeypatch.setattr("builtins.__import__", maybe_failing_import)
+    monkeypatch.setattr("builtins.__import__", routed_import)
 
-    # First poll: torch missing → False
+    # First poll: torch missing → False, cache populated with False.
     assert aesthetic.is_available() is False
+    assert aesthetic._availability_cache is False
 
     # Simulate Prepare succeeding: torch is now importable. Without the
     # reset, the cached False would stick for the rest of this process.
     fail_torch["on"] = False
     aesthetic.reset_availability_cache()
-
-    # Second poll: torch present → True
-    # (open_clip / clip imports may still fail in the test environment, so
-    # we are not asserting on the return value here, only on the fact that
-    # the cache was actually invalidated and re-evaluated.)
-    aesthetic.is_available()
-    assert aesthetic._availability_cache is not None, (
-        "After reset_availability_cache() the next is_available() call must "
-        "populate the cache with a real result, not stay None."
+    assert aesthetic._availability_cache is None, (
+        "reset_availability_cache() must clear the cached value back to None "
+        "so the next is_available() call actually re-runs the import check."
     )
+
+    # Second poll: torch present → True, cache populated with True.
+    assert aesthetic.is_available() is True
+    assert aesthetic._availability_cache is True
 
 
 def test_reset_availability_cache_re_arms_warning(monkeypatch, caplog):
