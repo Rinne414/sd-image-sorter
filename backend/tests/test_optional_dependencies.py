@@ -11,14 +11,23 @@ def test_requirement_lock_map_uses_release_pins():
 
     lock_map = optional_dependencies._load_requirement_version_map()
 
-    # The universal lockfile (uv pip compile --universal) resolves a single
-    # opencv-python and torch version for all platforms — opencv 4.11.0.86 has
-    # wheels for macOS arm64, macOS x86_64, Linux, and Windows; torch 2.11.0
-    # has wheels for cp310-cp313 across all of those. The previous test asserted
-    # platform-specific pins that only existed because pip-compile was run
-    # per-platform; now both pins are platform-agnostic.
-    expected_torch = "torch==2.11.0"
-    expected_opencv = "opencv-python==4.11.0.86"
+    # The universal lockfile (uv pip compile --universal) keeps per-platform
+    # pins for torch / torchvision / opencv-python because:
+    #   - PyTorch dropped macOS Intel (x86_64) wheels after 2.2.2, so darwin
+    #     x86_64 stays on torch 2.2.2 / torchvision 0.17.2 (numpy 1 only).
+    #   - opencv-python 4.11.0.86 ships only macOS 13+ wheels; older macOS
+    #     point releases (Big Sur / Monterey) need 4.10.0.84 (arm64) or
+    #     4.9.0.80 (x86_64), so darwin keeps the older pins.
+    #   - Linux / Windows / macOS arm64 on Python 3.10+ all get the latest
+    #     torch (2.11.0) and opencv (4.11.0.86).
+    expected_torch = "torch==2.2.2" if sys.platform == "darwin" and platform.machine() == "x86_64" else "torch==2.11.0"
+    expected_opencv = (
+        "opencv-python==4.10.0.84"
+        if sys.platform == "darwin" and platform.machine() == "arm64"
+        else "opencv-python==4.9.0.80"
+        if sys.platform == "darwin"
+        else "opencv-python==4.11.0.86"
+    )
 
     assert lock_map["transformers"] == "transformers==5.6.2"
     assert lock_map["fastembed"] == "fastembed==0.8.0"
