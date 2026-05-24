@@ -3055,5 +3055,7 @@ window.I18nLang_zhCN = {
     'dataset.multiAddTag': '为 {count} 张添加标签',
     'dataset.multiAddTagPrompt': '要添加的标签：',
     'dataset.multiAddTagDone': '已为 {count} 张图片添加标签',
+    'dataset.splitBtn': '分屏',
+    'dataset.splitNoNext': '没有下一张图片可供对比。',
 
 };

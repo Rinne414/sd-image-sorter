@@ -3055,5 +3055,7 @@ window.I18nLang_en = {
     'dataset.multiAddTag': 'Add tag to {count} selected',
     'dataset.multiAddTagPrompt': 'Tag to add:',
     'dataset.multiAddTagDone': 'Added tag to {count} images',
+    'dataset.splitBtn': 'Split',
+    'dataset.splitNoNext': 'No next image to compare with.',
 
 };

@@ -301,6 +301,80 @@
         });
     };
 
+    // ---------- Split view ----------
+    DM._splitActive = false;
+
+    DM._initSplitView = function () {
+        const btn = document.getElementById('btn-dataset-split-view');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            this._splitActive = !this._splitActive;
+            btn.classList.toggle('active', this._splitActive);
+            this._applySplitView();
+        });
+    };
+
+    DM._applySplitView = function () {
+        const wrap = document.getElementById('dataset-editor-image-wrap');
+        if (!wrap) return;
+        // Remove existing split panel
+        const existing = document.getElementById('dataset-split-panel');
+        if (existing) existing.remove();
+
+        if (!this._splitActive || this.activeId == null) {
+            wrap.classList.remove('split-active');
+            return;
+        }
+        const idx = this.imageIds.indexOf(Number(this.activeId));
+        const nextIdx = idx + 1;
+        if (nextIdx >= this.imageIds.length) {
+            this._toast(this._t('dataset.splitNoNext',
+                'No next image to compare with.'), 'info');
+            this._splitActive = false;
+            const btn = document.getElementById('btn-dataset-split-view');
+            if (btn) btn.classList.remove('active');
+            wrap.classList.remove('split-active');
+            return;
+        }
+        wrap.classList.add('split-active');
+        const nextId = this.imageIds[nextIdx];
+        const nextMeta = this.meta.get(nextId) || {};
+        const nextCaption = this.captionEdits.has(nextId)
+            ? this.captionEdits.get(nextId)
+            : (this.captions.get(nextId) || '');
+
+        const panel = document.createElement('div');
+        panel.id = 'dataset-split-panel';
+        panel.className = 'dataset-split-panel';
+        panel.innerHTML = `
+            <img class="dataset-split-image" src="/api/image-thumbnail/${nextId}?size=512"
+                 alt="${nextMeta.filename || ''}" />
+            <textarea class="dataset-split-textarea"
+                      placeholder="caption...">${nextCaption}</textarea>
+        `;
+        wrap.after(panel);
+
+        const ta = panel.querySelector('.dataset-split-textarea');
+        ta.addEventListener('input', () => {
+            this.captionEdits.set(nextId, ta.value);
+            this._refreshQueueItem(nextId);
+        });
+    };
+
+    // Patch _setActive to refresh split view
+    const _origSetActive = DM._setActive;
+    DM._setActive = function (imageId) {
+        _origSetActive.call(this, imageId);
+        if (this._splitActive) this._applySplitView();
+    };
+
+    // Init split view button binding
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => DM._initSplitView(), { once: true });
+    } else {
+        DM._initSplitView();
+    }
+
     DM._updateCount = function () {
         const num = document.getElementById('dataset-count-num');
         if (num) num.textContent = String(this.imageIds.length);
