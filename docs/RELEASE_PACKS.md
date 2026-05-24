@@ -44,6 +44,33 @@ That package is meant to cover the common workflows:
 - The `python/` directory inside the archive is the bundled interpreter. `run.sh` automatically detects it and forwards to `run-portable.sh`, so users only need to chmod once and double-click.
 - First launch installs the lightweight core dependencies (~120 MB extra after install). Heavy AI features (CLIP, SAM3, NudeNet, Aesthetic Score, Artist ID, ToriiGate) install on demand via **Setup Now → Prepare**.
 
+### macOS: Source-Install Only (No Portable Bundle Yet)
+
+There is **no `macos-portable-*.tar.gz` asset** by design. macOS users should clone the repo (or download `linux.tar.gz` — its `run.sh` works on macOS too) and run `./run.sh` against system Python (Homebrew / pyenv / asdf / `uv` all work; the app's lockfile supports Python 3.12 and 3.13).
+
+The reasons are documented in [`docs/AI_DECISION_LOG.md`](AI_DECISION_LOG.md) under **ADR-2026-05-24: macOS portable bundle deferred**, summarised here:
+
+1. **Gatekeeper friction without notarization.** A macOS portable would need [Apple Developer notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution) (\$99 / yr Apple Developer Program) to launch without `"developer cannot be verified"` warnings on every fresh download. Without notarization, every user has to right-click → Open or `xattr -dr com.apple.quarantine sd-image-sorter/` before launching — a much worse first-run experience than the Windows / Linux portable double-click flow.
+2. **macOS users almost always already have Python.** Homebrew, `pyenv`, `asdf`, and `uv` are standard on macOS dev machines, so the "no system Python" pain point that drove the Linux portable basically does not exist on macOS. The existing `./run.sh` source path already creates a venv and installs deps; PR #12 fixed Darwin-clone detection so this works on the source bundle.
+3. **macOS Intel is fading upstream.** PyTorch dropped macOS Intel (`x86_64-apple-darwin`) wheels after `2.2.2`; the lockfile pins that legacy version explicitly. Shipping an Intel macOS portable today would freeze users to an upstream-deprecated stack — a worse outcome than `run.sh` against `brew install python@3.13`, which lets the user manage upgrades on their own schedule.
+4. **Apple Silicon under macOS works fine via source.** M1 / M2 / M3 / M4 users get full functionality through `./run.sh`; ONNX Runtime auto-selects the optimal provider (CoreML or CPU). No CUDA on macOS means heavy GPU paths are not the value-add anyway.
+
+This decision will be revisited if any of the following becomes true:
+
+- An Apple Developer account becomes available for notarization, removing the Gatekeeper friction.
+- A real macOS user reports the source path is broken in a way `./run.sh` cannot fix.
+- PyTorch ships a renewed macOS Intel wheel line that justifies a fresh look at the legacy pin.
+
+Until then, macOS users should:
+
+```bash
+git clone https://github.com/peter119lee/sd-image-sorter.git
+cd sd-image-sorter
+./run.sh
+```
+
+…OR download `sd-image-sorter-vX.X.X-linux.tar.gz` and run `./run.sh` from the extracted directory (the script detects Darwin and behaves correctly).
+
 ## Model Download Sources
 
 Models not bundled in the package will be downloaded automatically on first use.
