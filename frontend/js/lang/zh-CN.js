@@ -2939,16 +2939,6 @@ window.I18nLang_zhCN = {
     'dataset.tagAllStarted': '打标已在后台开始，顶部进度条会跟踪进度。',
 
     // Phase 2C — 新手友好重设计
-    'dataset.welcomeTitle': '欢迎使用数据集制作',
-    'dataset.welcomeLead': '一次性导出一个文件夹，里面是图 + 配对好的 .txt 描述文件，直接丢给任意 LoRA 训练器都能用。四个简单步骤：',
-    'dataset.step1Title': '在图库选好图',
-    'dataset.step1Hint': '切到 🖼️ 图库分页，点选你想要的图，然后回到这里。',
-    'dataset.step2Title': '加进数据集',
-    'dataset.step2Hint': '点「从图库选择导入」。随时还能再加，数据集就是一个工作托盘。',
-    'dataset.step3Title': '打标 + 调整 caption',
-    'dataset.step3Hint': '（可选）点「🏷️ 给所有图打标」，然后点任意一张图微调 caption。',
-    'dataset.step4Title': '导出',
-    'dataset.step4Hint': '选好输出文件夹，点「📤 导出数据集」。完事 — 训练器指向那个文件夹就行。',
     'dataset.cardTagTitle': '步骤 A · 自动打标（可选）',
     'dataset.cardTagHelp': '对队列里所有图运行 AI 打标，已经有标签的会跳过。',
     'dataset.cardCaptionTitle': '步骤 B · Caption 微调（可选）',
