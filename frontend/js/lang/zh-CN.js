@@ -2808,6 +2808,7 @@ window.I18nLang_zhCN = {
     'dataset.editorEmpty': '从左边队列里选一张图。',
     'dataset.captionPlaceholder': 'caption 内容...',
     'dataset.revertCaption': '还原原始 caption',
+    'dataset.undoCaption': '撤销',
     'dataset.prevImage': '⬅ 上一张',
     'dataset.nextImage': '下一张 ➡',
     'dataset.removeFromDataset': '从数据集移除',
@@ -3040,5 +3041,13 @@ window.I18nLang_zhCN = {
     'dataset.helpRule3': "✕ 不要 — 把所有图都共有的恒定特征写出来，那是触发词的工作。",
     'dataset.helpRule4': "✕ 不要 — 留空的 .txt，空 caption 等于啥都没教会模型。",
     'dataset.helpShortcut': '捷径：直接在 Step A 点「给所有图打标」就够了 — WD14 tagger 会自动给每张图写一份合格的起手 caption。',
+
+    'dataset.findReplaceTitle': '查找 / 替换',
+    'dataset.findLabel': '查找',
+    'dataset.replaceLabel': '替换为',
+    'dataset.findPlaceholder': '要查找的文本',
+    'dataset.replacePlaceholder': '替换文本',
+    'dataset.replaceAllBtn': '替换所有 caption',
+    'dataset.replaceResult': '已更新 {count} 条 caption',
 
 };

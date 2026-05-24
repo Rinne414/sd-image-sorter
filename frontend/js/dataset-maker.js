@@ -15,6 +15,7 @@
         meta: new Map(),
         captions: new Map(),
         captionEdits: new Map(),
+        _undoStacks: new Map(),
         activeId: null,
         boundOnce: false,
 
@@ -110,21 +111,58 @@
             document.getElementById('btn-dataset-prev-image')?.addEventListener('click', () => this._stepActive(-1));
             document.getElementById('btn-dataset-next-image')?.addEventListener('click', () => this._stepActive(1));
             document.getElementById('btn-dataset-revert-caption')?.addEventListener('click', () => this._revertActiveCaption());
+            document.getElementById('btn-dataset-undo-caption')?.addEventListener('click', () => {
+                const ta = document.getElementById('dataset-editor-textarea');
+                if (!ta || this.activeId == null) return;
+                const stack = this._undoStacks.get(this.activeId);
+                if (!stack || stack.length === 0) return;
+                const prev = stack.pop();
+                ta.value = prev;
+                this.captionEdits.set(this.activeId, prev);
+                this._refreshQueueItem(this.activeId);
+                this._renderTagPills();
+            });
             document.getElementById('btn-dataset-remove-image')?.addEventListener('click', () => this._removeActive());
 
             // Caption textarea
             const ta = document.getElementById('dataset-editor-textarea');
             if (ta) {
                 let timer = null;
+                let lastSaved = null;
                 ta.addEventListener('input', () => {
                     if (this.activeId == null) return;
                     if (timer) clearTimeout(timer);
                     const id = this.activeId;
                     timer = setTimeout(() => {
+                        const prev = this.captionEdits.has(id)
+                            ? this.captionEdits.get(id)
+                            : (this.captions.get(id) || '');
+                        if (prev !== ta.value && prev !== lastSaved) {
+                            const stack = this._undoStacks.get(id) || [];
+                            stack.push(prev);
+                            if (stack.length > 20) stack.shift();
+                            this._undoStacks.set(id, stack);
+                        }
+                        lastSaved = ta.value;
                         this.captionEdits.set(id, ta.value);
                         this._refreshQueueItem(id);
                         this._renderTagPills();
                     }, 200);
+                });
+                ta.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+                        const id = this.activeId;
+                        if (id == null) return;
+                        const stack = this._undoStacks.get(id);
+                        if (!stack || stack.length === 0) return;
+                        e.preventDefault();
+                        const prev = stack.pop();
+                        ta.value = prev;
+                        lastSaved = prev;
+                        this.captionEdits.set(id, prev);
+                        this._refreshQueueItem(id);
+                        this._renderTagPills();
+                    }
                 });
             }
 

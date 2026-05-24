@@ -255,6 +255,15 @@
     max-width: 320px;
 }
 
+#view-dataset .dataset-caption-diff {
+    font-size: 12px;
+    padding: 2px 8px;
+    margin-bottom: 4px;
+}
+#view-dataset .dataset-caption-diff[hidden] { display: none; }
+#view-dataset .dataset-diff-added { color: var(--success, #22c55e); }
+#view-dataset .dataset-diff-removed { color: var(--error, #ef4444); }
+
 #view-dataset .dataset-editor-textarea {
     flex: 0 0 auto;
     min-height: 110px;

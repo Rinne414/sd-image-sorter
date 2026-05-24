@@ -340,4 +340,94 @@
             }, { passive: false });
         }
     })();
+
+    // ---------- Batch Find/Replace ----------
+    DM._batchFindReplace = function () {
+        const findEl = document.getElementById('dataset-find-input');
+        const replaceEl = document.getElementById('dataset-replace-input');
+        if (!findEl || !replaceEl) return;
+        const find = findEl.value;
+        if (!find) return;
+        const replace = replaceEl.value;
+        let count = 0;
+        for (const id of this.imageIds) {
+            const caption = this.captionEdits.has(id)
+                ? this.captionEdits.get(id)
+                : (this.captions.get(id) || '');
+            if (!caption.includes(find)) continue;
+            const updated = caption.split(find).join(replace);
+            this.captionEdits.set(id, updated);
+            count++;
+        }
+        if (count > 0 && this.activeId != null) {
+            this._setActive(this.activeId);
+        }
+        const msg = this._t('dataset.replaceResult', '{count} captions updated')
+            .replace('{count}', count);
+        if (window.showToast) window.showToast(msg, count > 0 ? 'success' : 'info');
+    };
+
+    document.getElementById('btn-dataset-find-replace')
+        ?.addEventListener('click', () => DM._batchFindReplace());
+
+    // ---------- Caption diff indicator ----------
+    DM._updateCaptionDiff = function (id) {
+        const el = document.getElementById('dataset-caption-diff');
+        if (!el) return;
+        if (!this.captionEdits.has(id)) {
+            el.hidden = true;
+            return;
+        }
+        const original = (this.captions.get(id) || '').split(', ').filter(Boolean);
+        const edited = (this.captionEdits.get(id) || '').split(', ').filter(Boolean);
+        const origSet = new Set(original);
+        const editSet = new Set(edited);
+        const added = edited.filter(t => !origSet.has(t)).length;
+        const removed = original.filter(t => !editSet.has(t)).length;
+        if (added === 0 && removed === 0) {
+            el.hidden = true;
+            return;
+        }
+        const parts = [];
+        if (added > 0) parts.push(`<span class="dataset-diff-added">+${added} tag${added > 1 ? 's' : ''}</span>`);
+        if (removed > 0) parts.push(`<span class="dataset-diff-removed">-${removed} tag${removed > 1 ? 's' : ''}</span>`);
+        el.innerHTML = parts.join(', ');
+        el.hidden = false;
+    };
+
+    // Patch _setActive to also update diff
+    const _origSetActive = DM._setActive;
+    DM._setActive = function (imageId) {
+        _origSetActive.call(this, imageId);
+        if (this.activeId != null) this._updateCaptionDiff(Number(this.activeId));
+    };
+
+    // ---------- Keyboard shortcuts for workbench ----------
+    document.addEventListener('keydown', function (e) {
+        const view = document.getElementById('view-dataset');
+        if (!view || view.hidden) return;
+        const maker = view.querySelector('.dataset-maker');
+        if (!maker || maker.dataset.activeTab !== 'workbench') return;
+        const tag = document.activeElement?.tagName?.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+        switch (e.key) {
+            case 'a':
+            case 'A':
+            case 'ArrowLeft':
+                e.preventDefault();
+                DM._stepActive(-1);
+                break;
+            case 'd':
+            case 'D':
+            case 'ArrowRight':
+                e.preventDefault();
+                DM._stepActive(1);
+                break;
+            case 'Delete':
+                e.preventDefault();
+                DM._removeActive();
+                break;
+        }
+    });
 })();

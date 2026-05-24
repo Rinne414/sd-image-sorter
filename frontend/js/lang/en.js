@@ -2808,6 +2808,7 @@ window.I18nLang_en = {
     'dataset.editorEmpty': 'Pick an image from the queue on the left.',
     'dataset.captionPlaceholder': 'caption text...',
     'dataset.revertCaption': 'Revert to original',
+    'dataset.undoCaption': 'Undo',
     'dataset.prevImage': '⬅ Prev',
     'dataset.nextImage': 'Next ➡',
     'dataset.removeFromDataset': 'Remove from dataset',
@@ -3040,5 +3041,13 @@ window.I18nLang_en = {
     'dataset.helpRule3': "DON'T describe things that are constant across all images — that's what your trigger word is for.",
     'dataset.helpRule4': "DON'T leave .txt files empty — empty captions teach the model nothing.",
     'dataset.helpShortcut': "Shortcut: click \"Tag all images\" in Step A and you're done — the WD14 tagger writes a perfectly serviceable starter caption per image.",
+
+    'dataset.findReplaceTitle': 'Find / Replace',
+    'dataset.findLabel': 'Find',
+    'dataset.replaceLabel': 'Replace with',
+    'dataset.findPlaceholder': 'text to find',
+    'dataset.replacePlaceholder': 'replacement text',
+    'dataset.replaceAllBtn': 'Replace in all captions',
+    'dataset.replaceResult': '{count} captions updated',
 
 };
