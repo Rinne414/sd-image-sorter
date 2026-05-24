@@ -2515,49 +2515,6 @@
                  mode-switching content tabs, single focused workflow. -->
             <section id="view-dataset" class="view" role="tabpanel" aria-labelledby="nav-tab-dataset">
                 <div class="dataset-maker">
-                    <!-- Welcome / quick-start banner. Dismissable via localStorage. -->
-                    <aside class="dataset-welcome" id="dataset-welcome" role="region" aria-labelledby="dataset-welcome-title">
-                        <button class="dataset-welcome-close" id="btn-dataset-dismiss-welcome"
-                                aria-label="Hide quick start guide" title="Hide this guide">✕</button>
-                        <h2 class="dataset-welcome-title" id="dataset-welcome-title">
-                            <span aria-hidden="true">👋</span>
-                            <span data-i18n="dataset.welcomeTitle">Welcome to Dataset Maker</span>
-                        </h2>
-                        <p class="dataset-welcome-lead" data-i18n="dataset.welcomeLead">
-                            Make a folder full of images + matching <code>.txt</code> caption files, ready to drop into any LoRA trainer. Four short steps:
-                        </p>
-                        <ol class="dataset-steps">
-                            <li class="dataset-step">
-                                <span class="dataset-step-num">1</span>
-                                <div>
-                                    <strong data-i18n="dataset.step1Title">Pick images in Gallery</strong>
-                                    <span data-i18n="dataset.step1Hint">Switch to the 🖼️ Gallery tab, click the images you want, then come back here.</span>
-                                </div>
-                            </li>
-                            <li class="dataset-step">
-                                <span class="dataset-step-num">2</span>
-                                <div>
-                                    <strong data-i18n="dataset.step2Title">Add them to your dataset</strong>
-                                    <span data-i18n="dataset.step2Hint">Click <em>Add from Gallery</em>. Add more anytime — the dataset is just a working tray.</span>
-                                </div>
-                            </li>
-                            <li class="dataset-step">
-                                <span class="dataset-step-num">3</span>
-                                <div>
-                                    <strong data-i18n="dataset.step3Title">Tag &amp; tweak captions</strong>
-                                    <span data-i18n="dataset.step3Hint">(Optional) Click <em>🏷️ Tag all</em>, then click any image to fine-tune its caption.</span>
-                                </div>
-                            </li>
-                            <li class="dataset-step">
-                                <span class="dataset-step-num">4</span>
-                                <div>
-                                    <strong data-i18n="dataset.step4Title">Export</strong>
-                                    <span data-i18n="dataset.step4Hint">Pick an output folder, click <em>📤 Export</em>. Done — point your trainer at that folder.</span>
-                                </div>
-                            </li>
-                        </ol>
-                    </aside>
-
                     <header class="dataset-header">
                         <h2 class="dataset-title">
                             <span aria-hidden="true">📦</span>
@@ -2575,11 +2532,6 @@
                                     title="Import images directly from a folder without scanning into the main gallery">
                                 <span aria-hidden="true">📁</span>
                                 <span data-i18n="dataset.importFromFolder">Add from Folder</span>
-                            </button>
-                            <button class="btn btn-ghost btn-icon-only" id="btn-dataset-show-help"
-                                    aria-label="Show quick start guide" title="Show quick start guide"
-                                    hidden>
-                                <span aria-hidden="true">❓</span>
                             </button>
                             <span class="dataset-count-pill" id="dataset-count">
                                 <strong id="dataset-count-num">0</strong>

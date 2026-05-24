@@ -9,8 +9,6 @@
 (function () {
     'use strict';
 
-    const WELCOME_DISMISSED_KEY = 'sd-image-sorter-dataset-welcome-dismissed';
-
     const DM = {
         // ---- State ----
         imageIds: [],
@@ -42,57 +40,30 @@
             this._renderEmptyEditor();
             this._updateNamingPreview();
             this._updateExportEnabled();
-            this._restoreWelcomeVisibility();
+            this._initCaptionHelpAutoOpen();
         },
 
-        _restoreWelcomeVisibility() {
-            const dismissed = (() => {
-                try { return localStorage.getItem(WELCOME_DISMISSED_KEY) === '1'; }
-                catch { return false; }
-            })();
-            const banner = document.getElementById('dataset-welcome');
-            const helpBtn = document.getElementById('btn-dataset-show-help');
-            if (banner) banner.hidden = dismissed;
-            if (helpBtn) helpBtn.hidden = !dismissed;
-
-            // Pass-3 review fix: the ❓ "what makes a good caption" popover
-            // was a passive feature -- new users wouldn't notice the small
-            // icon. Auto-open it once on the first visit so the knowledge
-            // hits them at the right moment, then remember the dismissal.
+        _initCaptionHelpAutoOpen() {
+            // Auto-open the "what makes a good caption" popover once on
+            // first visit so the knowledge hits new users at the right
+            // moment, then remember the dismissal.
             const helpSeenKey = 'sd-image-sorter-dataset-caption-help-seen';
             const seenHelp = (() => {
                 try { return localStorage.getItem(helpSeenKey) === '1'; }
                 catch { return false; }
             })();
-            if (!seenHelp) {
-                const det = document.querySelector('.dataset-editor-help');
-                if (det) {
-                    det.open = true;
-                    // Mark seen the moment they close it. Don't burn the
-                    // flag here; if they don't even glance at it the next
-                    // visit should still try once.
-                    det.addEventListener('toggle', () => {
-                        if (!det.open) {
-                            try { localStorage.setItem(helpSeenKey, '1'); } catch {}
-                        }
-                    }, { once: true });
+            if (seenHelp) return;
+            const det = document.querySelector('.dataset-editor-help');
+            if (!det) return;
+            det.open = true;
+            det.addEventListener('toggle', () => {
+                if (!det.open) {
+                    try { localStorage.setItem(helpSeenKey, '1'); } catch {}
                 }
-            }
+            }, { once: true });
         },
 
         _bindEvents() {
-            // Welcome banner show/hide
-            document.getElementById('btn-dataset-dismiss-welcome')?.addEventListener('click', () => {
-                document.getElementById('dataset-welcome')?.setAttribute('hidden', '');
-                document.getElementById('btn-dataset-show-help')?.removeAttribute('hidden');
-                try { localStorage.setItem(WELCOME_DISMISSED_KEY, '1'); } catch {}
-            });
-            document.getElementById('btn-dataset-show-help')?.addEventListener('click', () => {
-                document.getElementById('dataset-welcome')?.removeAttribute('hidden');
-                document.getElementById('btn-dataset-show-help')?.setAttribute('hidden', '');
-                try { localStorage.removeItem(WELCOME_DISMISSED_KEY); } catch {}
-            });
-
             // Toolbar
             document.getElementById('btn-dataset-import-gallery')?.addEventListener('click', () => this._importFromGallery());
             document.getElementById('btn-dataset-clear')?.addEventListener('click', () => this._clearAll());
