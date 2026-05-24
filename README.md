@@ -24,7 +24,9 @@
 <p align="center">
   <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-windows-portable.zip"><b>Download for Windows</b></a>
   ·
-  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz"><b>Download for Linux</b></a>
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable.tar.gz"><b>Download for Linux (portable, bundled Python)</b></a>
+  ·
+  <a href="https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz">Linux (source, BYO Python)</a>
   ·
   <a href="#quick-start">Quick Start</a>
 </p>
@@ -201,6 +203,22 @@
 5. 首次使用请点击右上角 **Setup Now** 下载所需的 AI 模型
 
 ### Linux
+
+**便携版（推荐，无需系统 Python）：**
+
+1. 下载 [sd-image-sorter-v3.2.2-linux-portable.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux-portable.tar.gz)（含内置 Python 3.13，约 80 MB）
+2. 解压并执行：
+
+```bash
+tar xzf sd-image-sorter-v3.2.2-linux-portable.tar.gz
+cd sd-image-sorter
+chmod +x run-portable.sh
+./run-portable.sh
+```
+
+适用于任何 Linux 发行版（包括系统 Python 是 3.14、或没装 Python 的情况）。目前只支持 x86_64；ARM64 / aarch64 用户请用下面的源码版。
+
+**源码版（需要自己装 Python 3.12+）：**
 
 1. 下载 [sd-image-sorter-v3.2.2-linux.tar.gz](https://github.com/peter119lee/sd-image-sorter/releases/latest/download/sd-image-sorter-v3.2.2-linux.tar.gz)
 2. 解压并执行：
@@ -553,6 +571,19 @@ It scans folders, reads SD metadata, tags images with WD14 models, finds similar
 On NVIDIA machines, first launch may spend extra time at `Checking Windows ONNX Runtime package state...` while installing CUDA / cuDNN runtime wheels. The launcher now shows real pip progress there; it is not frozen.
 
 #### Linux
+
+**Portable (recommended, no system Python needed):**
+
+```bash
+tar xzf sd-image-sorter-v3.2.2-linux-portable.tar.gz   # ~80 MB, bundles cpython 3.13
+cd sd-image-sorter
+chmod +x run-portable.sh
+./run-portable.sh
+```
+
+Works on every modern x86_64 Linux distro, including ones whose system Python is 3.14 or where Python is missing entirely. ARM64 / aarch64 (Raspberry Pi 5, ARM servers) is planned for Phase 2; ARM users should use the source build below.
+
+**Source (bring your own Python 3.12 / 3.13):**
 
 ```bash
 tar xzf sd-image-sorter-v3.2.2-linux.tar.gz

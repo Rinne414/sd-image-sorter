@@ -75,6 +75,16 @@ if [ -f "${VENV_REBUILD_MARKER}" ]; then
 fi
 
 # ── Check if Python is available ─────────────────────────────────
+# When the linux-portable bundle is extracted, ./python/bin/python3 exists
+# and ./run-portable.sh handles the bundled-Python startup. Defer to that
+# launcher so users who double-click run.sh from the portable archive
+# still get the bundled-Python path instead of being asked to install
+# distro Python 3.12+.
+if [ -x "./python/bin/python3" ] && [ -x "./run-portable.sh" ]; then
+    echo "[INFO] Detected bundled Python under ./python/. Forwarding to run-portable.sh."
+    exec ./run-portable.sh "$@"
+fi
+
 PYTHON_CMD=""
 if command -v python3 &> /dev/null; then
     PYTHON_CMD="python3"
@@ -83,6 +93,7 @@ elif command -v python &> /dev/null; then
 else
     echo "[ERROR] Python is not installed or not in PATH."
     echo "        Please install Python 3.12+ from https://python.org"
+    echo "        (Or download the linux-portable bundle, which ships its own Python.)"
     exit 1
 fi
 
