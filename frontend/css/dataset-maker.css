@@ -995,3 +995,37 @@
     font-size: 12px;
     font-style: italic;
 }
+
+
+/* ---------------- Dark select/option + scrollbar (Phase 5) ---------------- */
+#view-dataset select,
+#view-dataset select option {
+    background: var(--surface-1, rgba(15, 23, 42, 0.95));
+    color: var(--text-primary, #f1f5f9);
+}
+#view-dataset .btn {
+    background-color: var(--surface-1, rgba(15, 23, 42, 0.95));
+    color: var(--text-primary, #f1f5f9);
+}
+#view-dataset .btn.btn-primary {
+    background: var(--accent-primary, #ff8a3d);
+    color: #fff;
+}
+#view-dataset .btn.btn-ghost {
+    background: transparent;
+}
+#view-dataset ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+#view-dataset ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+#view-dataset ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+}
+#view-dataset ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
