@@ -40,7 +40,22 @@ cffi>=1.14; sys_platform == "win32" and platform_python_implementation != "PyPy"
 sniffio>=1.3.0
 sortedcontainers>=2.4.0
 transformers>=5.6.0
-torch>=2.0.0
+# torch / torchvision: PyTorch dropped macOS Intel (x86_64) wheels after 2.2.2.
+# Anyone still on a pre-Apple-Silicon Mac is pinned to that legacy version on
+# macOS Intel; everywhere else the resolver picks the latest matching torch
+# (currently 2.11.0 with cp310-cp313 wheels for Linux/Windows/macOS arm64).
+torch==2.2.2; sys_platform == "darwin" and platform_machine == "x86_64"
+torchvision==0.17.2; sys_platform == "darwin" and platform_machine == "x86_64"
+torch>=2.0.0; sys_platform != "darwin" or platform_machine != "x86_64"
+torchvision>=0.17.0; sys_platform != "darwin" or platform_machine != "x86_64"
+# opencv-python: 4.11.0.86 ships only macOS 13+ wheels. Pin older versions
+# for macOS so users on Big Sur (11) / Monterey (12) / Ventura (13) older
+# point releases still get a wheel instead of falling through to a slow
+# source build. ``ultralytics`` and ``nudenet`` pull these transitively.
+opencv-python==4.10.0.84; sys_platform == "darwin" and platform_machine == "arm64"
+opencv-python==4.9.0.80; sys_platform == "darwin" and platform_machine == "x86_64"
+opencv-python-headless==4.10.0.84; sys_platform == "darwin" and platform_machine == "arm64"
+opencv-python-headless==4.9.0.80; sys_platform == "darwin" and platform_machine == "x86_64"
 timm>=0.9.0
 open-clip-torch>=2.24.0
 triton-windows>=3.6.0; sys_platform == "win32"
