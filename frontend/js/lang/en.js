@@ -2957,6 +2957,7 @@ window.I18nLang_en = {
     // Phase 2C — noob-friendly redesign
     'dataset.cardTagTitle': 'Auto-tag (optional)',
     'dataset.tagPillsTitle': 'Tags',
+    'dataset.addTagPlaceholder': 'Add tag...',
     'dataset.cardTagHelp': 'Run AI tagging on every image in the queue. Skips images that are already tagged.',
     'dataset.cardCaptionTitle': 'Caption polish (optional)',
     'dataset.cardCaptionHelp': "Bulk-edit every caption: add common tags, remove tags you don't want, control underscore behavior.",

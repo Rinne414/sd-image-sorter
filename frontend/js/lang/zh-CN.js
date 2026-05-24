@@ -2957,6 +2957,7 @@ window.I18nLang_zhCN = {
     // Phase 2C — 新手友好重设计
     'dataset.cardTagTitle': '自动打标（可选）',
     'dataset.tagPillsTitle': '标签',
+    'dataset.addTagPlaceholder': '添加标签...',
     'dataset.cardTagHelp': '对队列里所有图运行 AI 打标，已经有标签的会跳过。',
     'dataset.cardCaptionTitle': 'Caption 微调（可选）',
     'dataset.cardCaptionHelp': '批量改 caption：加通用标签、移除不要的标签、决定下划线怎么处理。',

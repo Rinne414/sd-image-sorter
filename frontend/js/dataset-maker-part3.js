@@ -460,4 +460,113 @@
             this._toast(`Folder: ${folder}`, 'info', 6000);
         }
     };
+
+    // ---------- Tag autocomplete in right pane ----------
+    (function initTagAutocomplete() {
+        const input = document.getElementById('dataset-tag-add-input');
+        const dropdown = document.getElementById('dataset-tag-add-dropdown');
+        if (!input || !dropdown) return;
+
+        let cachedVocab = null;
+        let fetchTimer = null;
+        let activeIdx = -1;
+
+        async function getVocab() {
+            if (cachedVocab) return cachedVocab;
+            try {
+                const ids = (DM.imageIds || []).filter(id => id > 0).slice(0, 500);
+                const r = await fetch('/api/dataset/vocab', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_ids: ids, top_n: 500 }),
+                });
+                if (r.ok) {
+                    const data = await r.json();
+                    cachedVocab = (data.tags || []).map(t => t.tag || t);
+                }
+            } catch { /* ignore */ }
+            if (!cachedVocab || cachedVocab.length === 0) {
+                cachedVocab = ['1girl', '1boy', 'solo', 'long_hair', 'short_hair',
+                    'looking_at_viewer', 'smile', 'simple_background', 'highres'];
+            }
+            return cachedVocab;
+        }
+
+        function showSuggestions(matches) {
+            dropdown.innerHTML = '';
+            activeIdx = -1;
+            if (matches.length === 0) { dropdown.hidden = true; return; }
+            for (const tag of matches.slice(0, 8)) {
+                const div = document.createElement('div');
+                div.className = 'tag-suggestion';
+                div.textContent = tag;
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    acceptTag(tag);
+                });
+                dropdown.appendChild(div);
+            }
+            dropdown.hidden = false;
+        }
+
+        function acceptTag(tag) {
+            const ta = document.getElementById('dataset-editor-textarea');
+            if (!ta || DM.activeId == null) return;
+            const current = ta.value.trim();
+            const tags = current ? current.split(',').map(s => s.trim()).filter(Boolean) : [];
+            if (!tags.includes(tag)) tags.push(tag);
+            ta.value = tags.join(', ');
+            DM.captionEdits.set(DM.activeId, ta.value);
+            DM._refreshQueueItem(DM.activeId);
+            DM._renderTagPills();
+            input.value = '';
+            dropdown.hidden = true;
+        }
+
+        input.addEventListener('input', () => {
+            const q = input.value.trim().toLowerCase();
+            if (q.length < 1) { dropdown.hidden = true; return; }
+            if (fetchTimer) clearTimeout(fetchTimer);
+            fetchTimer = setTimeout(async () => {
+                const vocab = await getVocab();
+                const matches = vocab.filter(t => t.toLowerCase().includes(q));
+                showSuggestions(matches);
+            }, 150);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            const items = dropdown.querySelectorAll('.tag-suggestion');
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIdx = Math.min(activeIdx + 1, items.length - 1);
+                items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIdx = Math.max(activeIdx - 1, 0);
+                items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (activeIdx >= 0 && items[activeIdx]) {
+                    acceptTag(items[activeIdx].textContent);
+                } else if (input.value.trim()) {
+                    acceptTag(input.value.trim());
+                }
+            } else if (e.key === 'Escape') {
+                dropdown.hidden = true;
+            }
+        });
+
+        input.addEventListener('blur', () => {
+            setTimeout(() => { dropdown.hidden = true; }, 150);
+        });
+
+        // Invalidate cache when image set changes
+        const origAddImages = DM._addImages;
+        if (origAddImages) {
+            DM._addImages = function (...args) {
+                cachedVocab = null;
+                return origAddImages.apply(this, args);
+            };
+        }
+    })();
 })();

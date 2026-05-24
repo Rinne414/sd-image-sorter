@@ -1060,3 +1060,41 @@
         rgba(255, 255, 255, 0) 100%);
     animation: indeterminateSlide 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
+
+/* Tag add autocomplete input */
+.dataset-tag-add-wrap {
+    position: relative;
+    margin-bottom: 6px;
+}
+.dataset-tag-add-input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+}
+.dataset-tag-add-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: rgba(30, 30, 40, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.dataset-tag-add-dropdown .tag-suggestion {
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #ddd;
+}
+.dataset-tag-add-dropdown .tag-suggestion:hover,
+.dataset-tag-add-dropdown .tag-suggestion.active {
+    background: rgba(255, 138, 61, 0.2);
+    color: #fff;
+}
