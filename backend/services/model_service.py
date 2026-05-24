@@ -1106,6 +1106,21 @@ class ModelService:
 
         if normalized_model_id == "aesthetic":
             dependency_result = ensure_group("aesthetic")
+            # If ensure_group() actually installed torch / open_clip, the
+            # cached "torch is missing" answer in aesthetic.is_available
+            # would otherwise stick for the rest of this process. Reset
+            # the cache before the next is_available() call below so the
+            # post-install flow correctly reports "ready" instead of
+            # echoing the pre-install state, and the frontend's next
+            # /api/aesthetic/status poll re-runs the import check.
+            try:
+                from aesthetic import reset_availability_cache
+                reset_availability_cache()
+            except ImportError:
+                # aesthetic.py imports torch lazily inside is_available, so
+                # this import should never fail; defend against an aborted
+                # partial install just in case.
+                pass
             restart_result = _dependency_restart_result(normalized_model_id, dependency_result)
             if restart_result:
                 return restart_result

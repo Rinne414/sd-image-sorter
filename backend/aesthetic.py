@@ -28,6 +28,18 @@ _load_lock = threading.Lock()
 _inference_lock = threading.Lock()
 _force_cpu_after_gpu_failure = False
 
+# Cache for is_available() so the frontend's /api/aesthetic/status poll does
+# not run a fresh ``import torch`` on every call. When torch is absent (the
+# default lightweight-mode state until Setup Now → Prepare for Aesthetic Score
+# is clicked), the previous code logged the same WARNING line on every poll,
+# producing repeated "Aesthetic predictor torch import failed: No module
+# named 'torch'" entries in the launcher console. The cache is invalidated
+# by reset_availability_cache(), which the model-service prepare flow calls
+# after installing the aesthetic dependency group.
+_availability_cache: Optional[bool] = None
+_availability_cache_lock = threading.Lock()
+_availability_warning_logged: bool = False
+
 _MIN_AESTHETIC_CUDA_FREE_MB = 3800
 
 
@@ -213,17 +225,65 @@ def is_available() -> bool:
     time a system had a broken torch runtime - even though the rest of the
     app still works. The frontend's "aesthetic unavailable" toast is far
     more useful than an unhandled 500.
+
+    Result is cached at module scope so the frontend's repeated
+    ``/api/aesthetic/status`` poll does not retry ``import torch`` (and
+    re-log the same WARNING) on every call. Call
+    :func:`reset_availability_cache` after installing the aesthetic
+    dependency group so the next status check picks up the new state.
     """
-    try:
-        import torch  # noqa: F401
+    global _availability_cache, _availability_warning_logged
+
+    cached = _availability_cache
+    if cached is not None:
+        return cached
+
+    with _availability_cache_lock:
+        if _availability_cache is not None:
+            return _availability_cache
+
         try:
-            import open_clip  # noqa: F401
-        except (ImportError, OSError):
+            import torch  # noqa: F401
             try:
-                import clip  # noqa: F401
+                import open_clip  # noqa: F401
             except (ImportError, OSError):
-                return False
-        return True
-    except (ImportError, OSError) as exc:
-        logger.warning("Aesthetic predictor torch import failed: %s", exc)
-        return False
+                try:
+                    import clip  # noqa: F401
+                except (ImportError, OSError):
+                    _availability_cache = False
+                    return False
+            _availability_cache = True
+            return True
+        except (ImportError, OSError) as exc:
+            if not _availability_warning_logged:
+                # First failure in this process: WARNING so the launcher
+                # console flags the missing runtime once. Subsequent polls
+                # of /api/aesthetic/status hit the cache above and stay
+                # silent, so the previous "log spam every 5 seconds"
+                # behaviour is gone.
+                logger.warning(
+                    "Aesthetic predictor torch import failed: %s. "
+                    "Aesthetic Score is part of the optional AI runtime; "
+                    "click Setup Now → Prepare for Aesthetic Score (or set "
+                    "SD_IMAGE_SORTER_INSTALL_FULL_AI=1 before launch) to install "
+                    "torch + open_clip.",
+                    exc,
+                )
+                _availability_warning_logged = True
+            _availability_cache = False
+            return False
+
+
+def reset_availability_cache() -> None:
+    """Invalidate the cached :func:`is_available` result.
+
+    Called by the model-service prepare flow after installing the aesthetic
+    dependency group so the frontend's next ``/api/aesthetic/status`` poll
+    re-runs the import check and discovers the freshly-installed runtime.
+    Also resets the "warning already logged" flag so a subsequent failure
+    is reported once.
+    """
+    global _availability_cache, _availability_warning_logged
+    with _availability_cache_lock:
+        _availability_cache = None
+        _availability_warning_logged = False
