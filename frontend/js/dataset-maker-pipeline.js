@@ -527,12 +527,63 @@
     DM._runAudit = runAudit;
     DM._auditState = AUDIT_STATE;
 
+    // ---- Export preview (Phase 4) ----
+    function refreshExportPreview() {
+        const list = document.getElementById('dataset-export-preview-list');
+        if (!list) return;
+        const trigger = (document.getElementById('dataset-trigger')?.value || '').trim();
+        const preset = (document.querySelector('input[name="dataset-naming-preset"]:checked')?.value) || 'keep';
+        const items = DM.imageIds || [];
+        if (items.length === 0) {
+            list.innerHTML = '<span class="dataset-export-preview-empty">Add images and set naming to see preview</span>';
+            return;
+        }
+        const maxShow = Math.min(items.length, 8);
+        let html = '';
+        for (let i = 0; i < maxShow; i++) {
+            let stem;
+            if (preset === 'keep') {
+                const meta = DM.meta?.get?.(items[i]) || {};
+                const base = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${i + 1}`;
+                stem = base;
+            } else if (preset === 'renumber') {
+                stem = `${trigger || 'subject'}_${String(i + 1).padStart(3, '0')}`;
+            } else {
+                const pattern = (document.getElementById('dataset-naming-pattern')?.value || '{trigger}_{index:03d}');
+                stem = pattern
+                    .replace(/\{trigger\}/g, trigger || 'subject')
+                    .replace(/\{index:0*(\d+)d\}/g, (_m, w) => String(i + 1).padStart(parseInt(w, 10) || 1, '0'))
+                    .replace(/\{index\}/g, String(i + 1))
+                    .replace(/\{filename\}/g, `image_${i + 1}`)
+                    .replace(/\{generator\}/g, 'webui')
+                    .replace(/\{date\}/g, new Date().toISOString().slice(0, 10));
+            }
+            html += `<div class="dataset-export-preview-pair"><span class="file-img">${stem}.png</span><span class="file-plus">+</span><span class="file-txt">${stem}.txt</span></div>`;
+        }
+        if (items.length > maxShow) {
+            html += `<span class="dataset-export-preview-empty">... and ${items.length - maxShow} more pairs</span>`;
+        }
+        list.innerHTML = html;
+    }
+
+    function bindExportPreview() {
+        for (const id of ['dataset-trigger', 'dataset-naming-pattern']) {
+            document.getElementById(id)?.addEventListener('input', refreshExportPreview);
+        }
+        document.querySelectorAll('input[name="dataset-naming-preset"]').forEach((r) => {
+            r.addEventListener('change', refreshExportPreview);
+        });
+    }
+
+    DM._refreshExportPreview = refreshExportPreview;
+
     function init() {
         bindTabs();
         bindAudit();
         bindVocab();
         bindAnimeDefaults();
         bindPairChip();
+        bindExportPreview();
     }
 
     if (document.readyState === 'loading') {

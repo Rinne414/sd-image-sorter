@@ -2965,6 +2965,8 @@ window.I18nLang_en = {
     'dataset.advancedToggle': 'Advanced options',
     'dataset.outputFolderHint': "Will be created if it doesn't exist.",
     'dataset.exportDisabledHint': 'Add at least one image and pick an output folder to enable.',
+    'dataset.exportPreviewTitle': 'Output folder preview',
+    'dataset.exportPreviewEmpty': 'Add images and set naming to see preview',
     'dataset.confirmTitle': 'Ready to export',
     'dataset.confirmGo': 'Yes, export now',
     'dataset.confirmSummaryImages': '<strong>{count}</strong> images will be {action}',

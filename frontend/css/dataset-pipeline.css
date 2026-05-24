@@ -102,13 +102,25 @@
     display: none;
 }
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+    width: 100%;
 }
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-pane {
-    flex: 0 1 800px;
-    max-width: 800px;
+    flex: unset;
+    max-width: unset;
     width: 100%;
+}
+#view-dataset .dataset-maker[data-active-tab="export"] .dataset-export-preview {
+    display: flex;
+}
+@media (max-width: 900px) {
+    #view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* ============== Import tab: actions + dropzone + gallery ============== */

@@ -945,3 +945,53 @@
     font-size: 11px;
     color: var(--text-muted, rgba(255,255,255,0.55));
 }
+
+/* ---------------- Export preview pane (Phase 4) ---------------- */
+#view-dataset .dataset-export-preview {
+    display: none;
+    flex-direction: column;
+    background: var(--surface-1, rgba(15, 23, 42, 0.5));
+    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 0;
+    overflow: hidden;
+}
+#view-dataset .dataset-export-preview-title {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary, #f1f5f9);
+}
+#view-dataset .dataset-export-preview-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    font-family: monospace;
+}
+#view-dataset .dataset-export-preview-pair {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+#view-dataset .dataset-export-preview-pair .file-img {
+    color: var(--accent-primary, #ff8a3d);
+}
+#view-dataset .dataset-export-preview-pair .file-txt {
+    color: var(--accent-secondary, #2dd4bf);
+}
+#view-dataset .dataset-export-preview-pair .file-plus {
+    opacity: 0.4;
+}
+#view-dataset .dataset-export-preview-empty {
+    color: var(--text-muted, rgba(255,255,255,0.55));
+    font-size: 12px;
+    font-style: italic;
+}

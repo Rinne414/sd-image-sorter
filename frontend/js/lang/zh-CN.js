@@ -2965,6 +2965,8 @@ window.I18nLang_zhCN = {
     'dataset.advancedToggle': '进阶设置',
     'dataset.outputFolderHint': '不存在的话会自动建。',
     'dataset.exportDisabledHint': '至少加一张图、并选好输出文件夹之后就能点了。',
+    'dataset.exportPreviewTitle': '输出文件夹预览',
+    'dataset.exportPreviewEmpty': '添加图片并设置命名后可预览',
     'dataset.confirmTitle': '准备好导出了吗？',
     'dataset.confirmGo': '好，开始导出',
     'dataset.confirmSummaryImages': '将<strong>{action} {count} 张</strong>图',
