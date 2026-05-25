@@ -2716,6 +2716,7 @@ def iter_filtered_image_id_chunks(
     chunk_size: int = 2000,
     generators: Optional[List[str]] = None,
     tags: Optional[List[str]] = None,
+    tag_mode: str = "and",
     ratings: Optional[List[str]] = None,
     checkpoints: Optional[List[str]] = None,
     loras: Optional[List[str]] = None,
@@ -2753,6 +2754,7 @@ def iter_filtered_image_id_chunks(
         chunk = get_filtered_image_ids(
             generators=generators,
             tags=tags,
+            tag_mode=tag_mode,
             ratings=ratings,
             checkpoints=checkpoints,
             loras=loras,

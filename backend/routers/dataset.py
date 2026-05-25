@@ -16,14 +16,19 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.dataset_audit_service import audit_dataset
 from services.dataset_export_service import (
+    DATASET_EXPORT_MAX_ITEMS,
     DatasetExportRequest,
     DatasetExportResponse,
+    DatasetExportStartResponse,
+    cancel_dataset_export,
     export_dataset,
+    get_dataset_export_progress,
+    start_dataset_export,
 )
 from services.dataset_session_service import (
     MAX_SCAN_RESULTS,
@@ -64,6 +69,62 @@ def post_dataset_export(payload: DatasetExportRequest) -> DatasetExportResponse:
         raise HTTPException(status_code=500, detail=f"Dataset export failed: {exc}") from exc
 
 
+class DatasetExportJobRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    job_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+@router.post(
+    "/dataset/export/start",
+    response_model=DatasetExportStartResponse,
+    summary="Start a background dataset export job",
+    responses={
+        200: {"description": "Export job started"},
+        400: {"description": "Invalid request payload"},
+        409: {"description": "Another dataset export is already running"},
+    },
+)
+def post_dataset_export_start(payload: DatasetExportRequest) -> DatasetExportStartResponse:
+    try:
+        return start_dataset_export(payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Dataset export start failed")
+        raise HTTPException(status_code=500, detail=f"Dataset export start failed: {exc}") from exc
+
+
+@router.get(
+    "/dataset/export/progress",
+    summary="Get background dataset export progress",
+)
+def get_dataset_export_job_progress(job_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        return get_dataset_export_progress(job_id=job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Dataset export progress failed")
+        raise HTTPException(status_code=500, detail=f"Dataset export progress failed: {exc}") from exc
+
+
+@router.post(
+    "/dataset/export/cancel",
+    summary="Cancel the active background dataset export job",
+)
+def post_dataset_export_cancel(
+    payload: Optional[DatasetExportJobRequest] = None,
+) -> Dict[str, Any]:
+    try:
+        return cancel_dataset_export(job_id=payload.job_id if payload else None)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Dataset export cancel failed")
+        raise HTTPException(status_code=500, detail=f"Dataset export cancel failed: {exc}") from exc
+
+
 # ------------------------------ folder-scan ------------------------------
 
 class DatasetFolderScanRequest(BaseModel):
@@ -76,9 +137,11 @@ class DatasetFolderScanRequest(BaseModel):
     """
     model_config = ConfigDict(extra="ignore")
 
-    folder_path: str = Field(..., min_length=1, max_length=4096)
+    folder_path: Optional[str] = Field(default=None, min_length=1, max_length=4096)
     recursive: bool = False
     limit: int = Field(default=MAX_SCAN_RESULTS, ge=1, le=MAX_SCAN_RESULTS)
+    offset: int = Field(default=0, ge=0)
+    scan_token: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
 @router.post(
@@ -102,9 +165,11 @@ class DatasetFolderScanRequest(BaseModel):
 def post_dataset_folder_scan(payload: DatasetFolderScanRequest) -> Dict[str, Any]:
     try:
         return scan_folder_for_dataset(
-            payload.folder_path,
+            payload.folder_path or "",
             recursive=bool(payload.recursive),
             limit=int(payload.limit),
+            offset=int(payload.offset),
+            scan_token=payload.scan_token,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -126,8 +191,8 @@ class DatasetAuditRequest(BaseModel):
     """
     model_config = ConfigDict(extra="ignore")
 
-    image_ids: List[int] = Field(default_factory=list, max_length=10_000)
-    image_paths: List[str] = Field(default_factory=list, max_length=10_000)
+    image_ids: List[int] = Field(default_factory=list, max_length=DATASET_EXPORT_MAX_ITEMS)
+    image_paths: List[str] = Field(default_factory=list, max_length=DATASET_EXPORT_MAX_ITEMS)
     aesthetic_max: Optional[float] = Field(default=None)
     phash_max: Optional[int] = Field(default=None, ge=0, le=64)
     dim_min: Optional[int] = Field(default=None, ge=0, le=8192)
@@ -195,7 +260,7 @@ class DatasetVocabRequest(BaseModel):
     """
     model_config = ConfigDict(extra="ignore")
 
-    image_ids: List[int] = Field(default_factory=list, max_length=10_000)
+    image_ids: List[int] = Field(default_factory=list, max_length=DATASET_EXPORT_MAX_ITEMS)
     path_caption_overrides: Dict[str, str] = Field(default_factory=dict)
     top_n: int = Field(default=300, ge=1, le=2000)
 
@@ -280,11 +345,12 @@ def post_dataset_vocab(payload: DatasetVocabRequest) -> Dict[str, Any]:
 )
 async def post_dataset_upload_files(
     files: List[UploadFile] = File(...),
+    recursive: bool = Form(True),
 ) -> Dict[str, Any]:
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded.")
     try:
-        return await upload_files_for_dataset(files)
+        return await upload_files_for_dataset(files, recursive=recursive)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

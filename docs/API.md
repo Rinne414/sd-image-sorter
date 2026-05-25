@@ -1061,7 +1061,31 @@ Body:
 }
 ```
 
-Returns `{status, exported, skipped, error_count, output_folder, items[], error_messages[]}` where `status` is one of `ok` / `partial` / `failed`. Per-image results in `items[]` show the source path, destination paths, and any error or skip reason.
+Returns `{status, exported, skipped, error_count, output_folder, items[], total_items, items_truncated, error_messages[]}` where `status` is one of `ok` / `partial` / `failed` / `cancelled`. Per-image results in `items[]` show the source path, destination paths, and any error or skip reason; large responses cap `items[]` and expose the full count through `total_items`.
+
+---
+
+#### POST /api/dataset/export/start
+
+Start the same dataset export as a background job so large queues can show progress and be cancelled without blocking the browser request. Body is the same as `/api/dataset/export`.
+
+Returns `{status: "started", job_id, total, output_folder, message}`. If another dataset export is already running, returns `409`.
+
+---
+
+#### GET /api/dataset/export/progress
+
+Live progress for the active dataset export job. Optional query: `job_id`.
+
+Returns `{status, job_id, step, current, total, exported, skipped, errors, current_item, recent_errors, output_folder, items_truncated, result, message}`. Terminal progress uses `status: "done"`, `"cancelled"`, or `"failed"`; when available, `result` is the same summary shape returned by `/api/dataset/export`.
+
+---
+
+#### POST /api/dataset/export/cancel
+
+Request cooperative cancellation for the active dataset export job. Optional body: `{job_id}`.
+
+The worker finishes the current image pair, then stops before the next image and reports a `cancelled` result with the number already exported.
 
 ---
 

@@ -66,6 +66,89 @@
     flex-shrink: 0;
 }
 
+.smart-tag-vote-details {
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.14));
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface-2, rgba(255, 255, 255, 0.05));
+    color: var(--text-primary, #f3f4f6);
+    padding: 8px 10px;
+}
+
+.smart-tag-vote-details summary {
+    color: var(--text-primary, #f3f4f6);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.smart-tag-vote-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.smart-tag-vote-details .form-help {
+    margin: 8px 0 0;
+    color: var(--text-secondary, #cbd5e1);
+}
+
+.smart-tag-vote-details.is-single-tagger .form-help {
+    opacity: 0.78;
+}
+
+.smart-tag-vote-details select,
+#smart-tag-consensus-mode,
+#smart-tag-modal select,
+#smart-tag-modal input[type="text"],
+#smart-tag-modal .form-input {
+    background: var(--input-bg, var(--surface-1, #151922));
+    color: var(--text-primary, #f3f4f6);
+    border-color: var(--border-color, rgba(255, 255, 255, 0.16));
+}
+
+#smart-tag-modal [hidden] {
+    display: none !important;
+}
+
+#smart-tag-modal input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-grid;
+    place-content: center;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+    background: var(--input-bg, var(--surface-1, #151922));
+    color: var(--accent-primary, #ff8a3d);
+}
+
+#smart-tag-modal input[type="checkbox"]::before {
+    content: '';
+    width: 10px;
+    height: 10px;
+    transform: scale(0);
+    transition: transform 0.12s ease;
+    clip-path: polygon(14% 44%, 0 59%, 42% 100%, 100% 18%, 85% 5%, 40% 70%);
+    background: currentColor;
+}
+
+#smart-tag-modal input[type="checkbox"]:checked {
+    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.85);
+    background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.18);
+}
+
+#smart-tag-modal input[type="checkbox"]:checked::before {
+    transform: scale(1);
+}
+
+#smart-tag-consensus-mode:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+}
+
 @media (max-width: 720px) {
     .smart-tag-hint-banner {
         grid-template-columns: auto minmax(0, 1fr);
@@ -73,5 +156,9 @@
     .smart-tag-hint-banner-actions {
         grid-column: 1 / -1;
         justify-content: flex-end;
+    }
+
+    .smart-tag-vote-grid {
+        grid-template-columns: 1fr;
     }
 }

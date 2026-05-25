@@ -77,6 +77,8 @@ from PIL import Image, UnidentifiedImageError
 
 logger = logging.getLogger(__name__)
 
+PHASH_NEAR_DUPLICATE_LIMIT = 5_000
+
 
 def _safe_aesthetic_score(image_path: str) -> Optional[float]:
     """Run aesthetic prediction with all the defensive guards the rest
@@ -133,6 +135,24 @@ def _build_duplicate_groups(
     """
     if phash_max < 0:
         return []
+    if len(rows) > PHASH_NEAR_DUPLICATE_LIMIT:
+        # The near-duplicate algorithm below is O(N^2). For 100k-image
+        # datasets, report exact hash collisions only so audit cannot lock up
+        # the process. Smaller LoRA-sized sets still get the original behavior.
+        buckets: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            hash_value = row.get("phash_hex")
+            if hash_value:
+                buckets[str(hash_value)].append(row)
+        return [
+            {
+                "phash_hex": hash_value,
+                "image_ids": [int(row.get("image_id") or 0) for row in bucket],
+                "abs_paths": [str(row.get("abs_path") or "") for row in bucket],
+            }
+            for hash_value, bucket in buckets.items()
+            if len(bucket) > 1
+        ]
     groups: List[Dict[str, Any]] = []
     consumed: set = set()
     for i, row_i in enumerate(rows):
@@ -350,6 +370,9 @@ def audit_dataset(
             "small_count": small_count,
             "missing_count": missing_count,
             "avg_aesthetic": (round(avg_aesthetic, 3) if avg_aesthetic is not None else None),
+            "near_duplicate_check_limited": bool(
+                enable_phash and phash_max is not None and len(rows) > PHASH_NEAR_DUPLICATE_LIMIT
+            ),
         },
         "items": rows,
         "duplicate_groups": duplicate_groups,

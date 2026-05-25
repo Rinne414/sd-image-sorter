@@ -33,6 +33,15 @@
                 console.log(`[dataset] ${level}: ${msg}`);
             }
         },
+        _setPipelineTab(tabName = 'import') {
+            const dm = document.querySelector('.dataset-maker');
+            if (dm) dm.setAttribute('data-active-tab', tabName);
+            const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
+            for (const t of tabs) {
+                t.setAttribute('aria-selected',
+                    t.getAttribute('data-tab-target') === tabName ? 'true' : 'false');
+            }
+        },
 
         // ---- Lifecycle ----
         init() {
@@ -43,7 +52,7 @@
             this._renderEmptyEditor();
             this._updateNamingPreview();
             this._updateExportEnabled();
-            this._initCaptionHelpAutoOpen();
+            this._resumeExportProgress?.();
         },
 
         _initCaptionHelpAutoOpen() {
@@ -218,6 +227,7 @@
             document.getElementById('btn-dataset-export')?.addEventListener('click', () => this._showConfirmModal());
             document.getElementById('btn-dataset-confirm-cancel')?.addEventListener('click', () => this._hideConfirmModal());
             document.getElementById('btn-dataset-confirm-go')?.addEventListener('click', () => this._runExport());
+            document.getElementById('btn-dataset-export-cancel')?.addEventListener('click', () => this._cancelExportJob?.());
 
             // Result modal
             document.getElementById('btn-dataset-result-close')?.addEventListener('click', () => this._hideResultModal());
@@ -226,7 +236,7 @@
 
         // ---- Import from Gallery ----
         async _importFromGallery() {
-            const ids = this._getGallerySelectedIds();
+            const ids = await this._resolveGallerySelectionIds();
             if (!ids || ids.length === 0) {
                 // P0 fix from issue #5 follow-up noob review: silent failure
                 // here is the #1 confusion point. Take the user there
@@ -313,13 +323,7 @@
 
             // Ensure we stay on the import tab so the user sees the result
             if (added > 0) {
-                const dm = document.querySelector('.dataset-maker');
-                if (dm) dm.setAttribute('data-active-tab', 'import');
-                const tabs = document.querySelectorAll('.dataset-tabs [role="tab"]');
-                for (const t of tabs) {
-                    t.setAttribute('aria-selected',
-                        t.getAttribute('data-tab-target') === 'import' ? 'true' : 'false');
-                }
+                this._setPipelineTab('import');
                 this._renderImportGallery();
             }
 
@@ -368,6 +372,41 @@
             return [];
         },
 
+        async _resolveGallerySelectionIds() {
+            const explicit = this._getGallerySelectedIds();
+            if (explicit.length > 0) return explicit;
+
+            const app = window.App || {};
+            const state = app.AppState || window.AppState || {};
+            const token = state.selectionScope === 'filtered' ? state.selectionToken : null;
+            const api = app.API;
+            if (!token || !api || typeof api.getSelectionChunk !== 'function') {
+                return [];
+            }
+
+            const maxImport = 100000;
+            const out = [];
+            let offset = 0;
+            let hasMore = true;
+            while (hasMore && out.length < maxImport) {
+                const chunk = await api.getSelectionChunk(token, {
+                    offset,
+                    limit: Math.min(500, maxImport - out.length),
+                });
+                const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
+                out.push(...ids.map(Number).filter((id) => Number.isFinite(id) && id > 0));
+                hasMore = Boolean(chunk?.has_more);
+                offset = Number(chunk?.next_offset || 0);
+                if (!offset && hasMore) break;
+            }
+            if (hasMore) {
+                this._toast(this._t('dataset.gallerySelectionCapped',
+                    'Imported the first {count} filtered images. Narrow the Gallery filters before importing more.',
+                    { count: maxImport }), 'warning', 7000);
+            }
+            return out;
+        },
+
         _clearAll() {
             if (this.imageIds.length === 0) return;
             const msg = this._t('dataset.confirmClear',
@@ -377,8 +416,11 @@
             this.imageIds = [];
             this.captions.clear();
             this.captionEdits.clear();
+            this._undoStacks.clear();
+            this._queueSelection.clear();
             this.activeId = null;
             this._renderQueue();
+            this._renderImportGallery?.();
             this._renderEmptyEditor();
             this._updateCount();
             this._updateExportEnabled();

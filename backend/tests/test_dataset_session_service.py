@@ -8,6 +8,9 @@ DB — that's the whole reason this path exists.
 from __future__ import annotations
 
 import sys
+import zipfile
+import asyncio
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -21,8 +24,20 @@ from services.dataset_session_service import (  # noqa: E402
     _ds_id_for_path,
     resolve_paths_for_dataset,
     scan_folder_for_dataset,
+    upload_files_for_dataset,
     virtual_image_record_for_path,
 )
+from services import dataset_session_service as dataset_session_module  # noqa: E402
+
+
+class FakeUploadFile:
+    def __init__(self, filename: str, content: bytes):
+        self.filename = filename
+        self._content = content
+        self.file = BytesIO(content)
+
+    async def read(self) -> bytes:
+        return self._content
 
 
 # ============== _ds_id_for_path ==============
@@ -157,9 +172,81 @@ def test_scan_truncated_when_above_limit(tmp_path):
     result = scan_folder_for_dataset(str(tmp_path), limit=3)
     assert len(result["items"]) == 3
     assert result["truncated"] is True
-    # total_files_seen counts the file that tripped the cap before we
-    # broke out of the loop, so it's items+1 here.
-    assert result["total_files_seen"] >= 3
+    assert result["total_files_seen"] == 7
+    assert result["scan_token"]
+    assert result["has_more"] is True
+    assert result["next_offset"] == 3
+    assert len(result["manifest_items"]) == 7
+    assert all(item["thumb_b64"] == "" for item in result["manifest_items"])
+    assert {item["scan_index"] for item in result["manifest_items"]} == set(range(7))
+
+
+def test_scan_token_paginates_large_folder_without_rescanning_payload(tmp_path):
+    for i in range(7):
+        Image.new("RGB", (32, 32), color=(i * 25, 100, 100)).save(tmp_path / f"img{i}.png")
+
+    first = scan_folder_for_dataset(str(tmp_path), limit=3)
+    second = scan_folder_for_dataset(
+        str(tmp_path),
+        limit=3,
+        offset=first["next_offset"],
+        scan_token=first["scan_token"],
+    )
+
+    assert len(first["items"]) == 3
+    assert len(second["items"]) == 3
+    assert first["scan_token"] == second["scan_token"]
+    assert len(first["manifest_items"]) == 7
+    assert "manifest_items" not in second
+    assert second["offset"] == 3
+    assert second["next_offset"] == 6
+    assert second["has_more"] is True
+    assert {item["abs_path"] for item in first["items"]}.isdisjoint(
+        {item["abs_path"] for item in second["items"]}
+    )
+
+
+# ============== upload_files_for_dataset ==============
+
+def _image_bytes(fmt: str = "PNG") -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (40, 32), color=(120, 80, 40)).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, content in entries.items():
+            zf.writestr(name, content)
+    return buf.getvalue()
+
+
+def test_upload_files_accepts_zip_and_respects_recursive_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
+    payload = _zip_bytes({
+        "top.png": _image_bytes(),
+        "nested/deep.png": _image_bytes(),
+        "../escape.png": _image_bytes(),
+        "readme.txt": b"not an image",
+    })
+
+    flat = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=False))
+    assert {item["filename"] for item in flat["items"]} == {"top.png"}
+
+    deep = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=True))
+    assert {item["filename"] for item in deep["items"]} == {"top.png", "deep.png"}
+
+
+def test_upload_files_reports_truncated_zip_without_loading_unbounded_items(tmp_path, monkeypatch):
+    monkeypatch.setattr(dataset_session_module, "_UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(dataset_session_module, "MAX_SCAN_RESULTS", 2)
+    payload = _zip_bytes({f"img{i}.png": _image_bytes() for i in range(5)})
+
+    result = asyncio.run(upload_files_for_dataset([FakeUploadFile("dataset.zip", payload)], recursive=True))
+
+    assert len(result["items"]) == 2
+    assert result["truncated"] is True
 
 
 # ============== resolve_paths_for_dataset ==============

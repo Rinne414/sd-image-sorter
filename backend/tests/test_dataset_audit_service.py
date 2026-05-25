@@ -78,6 +78,21 @@ def test_duplicate_groups_skips_rows_without_phash():
     assert _build_duplicate_groups(rows, phash_max=5) == []
 
 
+def test_duplicate_groups_large_dataset_uses_exact_hash_fallback():
+    rows = [
+        {"image_id": i, "abs_path": f"/img{i}.png", "phash_hex": f"{i:016x}"}
+        for i in range(5001)
+    ]
+    rows[10]["phash_hex"] = "abc0000000000000"
+    rows[20]["phash_hex"] = "abc0000000000000"
+    rows[30]["phash_hex"] = "abc0000000000001"  # near, but not exact
+
+    groups = _build_duplicate_groups(rows, phash_max=4)
+
+    assert len(groups) == 1
+    assert sorted(groups[0]["image_ids"]) == [10, 20]
+
+
 # ============== audit_dataset (path-mode) ==============
 
 @pytest.fixture

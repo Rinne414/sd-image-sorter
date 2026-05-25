@@ -12,6 +12,31 @@
 
     // ---------- Active image + caption editor ----------
     DM._zoomLevel = 1;
+    DM._queueViewMode = (() => {
+        try { return localStorage.getItem('sd-image-sorter-dataset-queue-mode') || 'grid'; }
+        catch { return 'grid'; }
+    })();
+
+    DM._thumbSrc = function (id, size = 128) {
+        const numericId = Number(id);
+        const meta = this.meta.get(numericId) || {};
+        if (this.isLocalId && this.isLocalId(numericId)) {
+            return meta.thumb_b64 ? `data:image/jpeg;base64,${meta.thumb_b64}` : '';
+        }
+        return `/api/image-thumbnail/${numericId}?size=${size}`;
+    };
+
+    const DATASET_VIRTUAL_THRESHOLD = 800;
+    const DATASET_VIRTUAL_BUFFER_ROWS = 3;
+    const DATASET_QUEUE_GRID_MIN = 112;
+    const DATASET_QUEUE_LIST_HEIGHT = 92;
+    const DATASET_IMPORT_GRID_MIN = 124;
+
+    function cleanupVirtualRenderer(owner, key) {
+        const cleanup = owner[key];
+        if (typeof cleanup === 'function') cleanup();
+        owner[key] = null;
+    }
 
     DM._setActive = function (imageId) {
         const id = Number(imageId);
@@ -28,9 +53,14 @@
         const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            img.src = `/api/image-thumbnail/${id}?size=512`;
+            img.src = this._thumbSrc(id, 768);
             img.alt = filename;
             img.hidden = false;
+            img.onerror = () => {
+                img.removeAttribute('src');
+                img.hidden = true;
+                if (empty) empty.hidden = false;
+            };
         }
         if (empty) empty.hidden = true;
         if (filenameEl) filenameEl.textContent = filename;
@@ -62,6 +92,42 @@
     };
 
     DM._removeActive = function () {
+        if (this.activeId == null) return;
+        this._removeImageById(Number(this.activeId), { confirm: true });
+    };
+
+    DM._removeImageById = function (imageId, options = {}) {
+        const id = Number(imageId);
+        if (!this.imageIds.includes(id)) return;
+        if (options.confirm) {
+            const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
+            if (!window.confirm(msg)) return;
+        }
+        const idx = this.imageIds.indexOf(id);
+        this.imageIds.splice(idx, 1);
+        this.captions.delete(id);
+        this.captionEdits.delete(id);
+        this._undoStacks?.delete?.(id);
+        this._queueSelection.delete(id);
+        if (this.localItemPaths && this.isLocalId && this.isLocalId(id)) {
+            this.localItemPaths.delete(id);
+            this.localItemDsIds?.delete?.(id);
+        }
+        const wasActive = Number(this.activeId) === id;
+        if (wasActive) this.activeId = null;
+        this._renderQueue();
+        this._renderImportGallery();
+        this._updateCount();
+        this._updateExportEnabled();
+        this._updateMultiSelectUI();
+        if (this.imageIds.length === 0) {
+            this._renderEmptyEditor();
+        } else if (wasActive) {
+            this._setActive(this.imageIds[Math.min(idx, this.imageIds.length - 1)]);
+        }
+    };
+
+    DM._removeActiveLegacy = function () {
         if (this.activeId == null) return;
         const msg = this._t('dataset.confirmRemove', 'Remove this image from the dataset?');
         if (!window.confirm(msg)) return;
@@ -108,6 +174,16 @@
     DM._renderQueue = function () {
         const list = document.getElementById('dataset-queue-list');
         if (!list) return;
+        const mode = this._queueViewMode === 'list' ? 'list' : 'grid';
+        list.classList.toggle('dataset-queue-grid-mode', mode === 'grid');
+        list.classList.toggle('dataset-queue-list-mode', mode === 'list');
+        if (this.imageIds.length > DATASET_VIRTUAL_THRESHOLD) {
+            this._renderVirtualQueue(list, mode);
+            return;
+        }
+        cleanupVirtualRenderer(this, '_queueVirtualCleanup');
+        list.classList.remove('is-virtualized');
+        list.style.display = '';
         if (this.imageIds.length === 0) {
             list.innerHTML = `
                 <div class="dataset-empty-state">
@@ -127,6 +203,65 @@
             list.appendChild(this._buildQueueItem(id));
         }
         this._highlightActiveQueueItem();
+    };
+
+    DM._renderVirtualQueue = function (list, mode) {
+        cleanupVirtualRenderer(this, '_queueVirtualCleanup');
+        list.innerHTML = '';
+        list.classList.add('is-virtualized');
+        list.style.display = 'block';
+
+        const spacer = document.createElement('div');
+        spacer.className = 'dataset-virtual-spacer dataset-queue-virtual-spacer';
+        list.appendChild(spacer);
+
+        let frame = 0;
+        const renderVisible = () => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                frame = 0;
+                const width = Math.max(1, list.clientWidth - 8);
+                const isList = mode === 'list';
+                const columns = isList ? 1 : Math.max(1, Math.floor(width / DATASET_QUEUE_GRID_MIN));
+                const cellWidth = isList ? width : Math.floor(width / columns);
+                const itemHeight = isList ? DATASET_QUEUE_LIST_HEIGHT : cellWidth;
+                const rowCount = Math.ceil(this.imageIds.length / columns);
+                spacer.style.height = `${rowCount * itemHeight}px`;
+                spacer.style.position = 'relative';
+                spacer.innerHTML = '';
+
+                const startRow = Math.max(0, Math.floor(list.scrollTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
+                const visibleRows = Math.ceil((list.clientHeight || 420) / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
+                const endRow = Math.min(rowCount, startRow + visibleRows);
+
+                for (let row = startRow; row < endRow; row += 1) {
+                    for (let col = 0; col < columns; col += 1) {
+                        const index = row * columns + col;
+                        if (index >= this.imageIds.length) break;
+                        const node = this._buildQueueItem(this.imageIds[index]);
+                        node.style.position = 'absolute';
+                        node.style.top = `${row * itemHeight}px`;
+                        node.style.left = isList ? '0' : `${col * cellWidth}px`;
+                        node.style.width = isList ? 'calc(100% - 6px)' : `${Math.max(1, cellWidth - 8)}px`;
+                        node.style.height = isList ? `${DATASET_QUEUE_LIST_HEIGHT - 4}px` : `${Math.max(1, cellWidth - 8)}px`;
+                        spacer.appendChild(node);
+                    }
+                }
+                this._highlightActiveQueueItem();
+            });
+        };
+
+        list.addEventListener('scroll', renderVisible, { passive: true });
+        const resizeObserver = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(renderVisible)
+            : null;
+        if (resizeObserver) resizeObserver.observe(list);
+        this._queueVirtualCleanup = () => {
+            if (frame) cancelAnimationFrame(frame);
+            list.removeEventListener('scroll', renderVisible);
+            if (resizeObserver) resizeObserver.disconnect();
+        };
+        renderVisible();
     };
 
     DM._buildQueueItem = function (id) {
@@ -152,10 +287,14 @@
 
         const img = document.createElement('img');
         img.className = 'dataset-queue-thumb';
-        img.src = `/api/image-thumbnail/${id}?size=96`;
+        img.src = this._thumbSrc(id, 160);
         img.loading = 'lazy';
         img.decoding = 'async';
         img.alt = '';
+        img.onerror = () => {
+            img.classList.add('is-missing');
+            img.removeAttribute('src');
+        };
 
         const metaWrap = document.createElement('div');
         metaWrap.className = 'dataset-queue-meta';
@@ -205,6 +344,24 @@
         for (const el of list.querySelectorAll('.dataset-queue-item')) {
             el.classList.toggle('active', Number(el.dataset.imageId) === Number(this.activeId));
         }
+    };
+
+    DM._setQueueViewMode = function (mode) {
+        this._queueViewMode = mode === 'list' ? 'list' : 'grid';
+        try { localStorage.setItem('sd-image-sorter-dataset-queue-mode', this._queueViewMode); } catch {}
+        document.querySelectorAll('[data-dataset-queue-mode]').forEach((btn) => {
+            const active = btn.getAttribute('data-dataset-queue-mode') === this._queueViewMode;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        this._renderQueue();
+    };
+
+    DM._initQueueModeControls = function () {
+        document.querySelectorAll('[data-dataset-queue-mode]').forEach((btn) => {
+            btn.addEventListener('click', () => this._setQueueViewMode(btn.getAttribute('data-dataset-queue-mode')));
+        });
+        this._setQueueViewMode(this._queueViewMode || 'grid');
     };
 
     // ---------- Queue multi-select ----------
@@ -268,10 +425,15 @@
                     this.imageIds.splice(idx, 1);
                     this.captions.delete(sid);
                     this.captionEdits.delete(sid);
+                    if (this.localItemPaths && this.isLocalId && this.isLocalId(sid)) {
+                        this.localItemPaths.delete(Number(sid));
+                        this.localItemDsIds?.delete?.(Number(sid));
+                    }
                 }
             }
             this._queueSelection.clear();
             this._renderQueue();
+            this._renderImportGallery?.();
             this._updateCount();
             this._updateExportEnabled();
             this._updateMultiSelectUI();
@@ -371,8 +533,10 @@
     // Init split view button binding
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => DM._initSplitView(), { once: true });
+        document.addEventListener('DOMContentLoaded', () => DM._initQueueModeControls(), { once: true });
     } else {
         DM._initSplitView();
+        DM._initQueueModeControls();
     }
 
     DM._updateCount = function () {
@@ -392,6 +556,8 @@
         if (this.imageIds.length === 0) {
             container.hidden = true;
             grid.innerHTML = '';
+            grid.classList.remove('is-virtualized');
+            cleanupVirtualRenderer(this, '_importVirtualCleanup');
             return;
         }
 
@@ -401,32 +567,110 @@
                 '{count} images imported', { count: this.imageIds.length });
         }
 
+        if (this.imageIds.length > DATASET_VIRTUAL_THRESHOLD) {
+            this._renderVirtualImportGallery(grid);
+            return;
+        }
+
+        cleanupVirtualRenderer(this, '_importVirtualCleanup');
+        grid.classList.remove('is-virtualized');
         grid.innerHTML = '';
         for (const id of this.imageIds) {
-            const thumb = document.createElement('div');
-            thumb.className = 'import-thumb';
-            thumb.dataset.imageId = String(id);
-            const img = document.createElement('img');
-            img.loading = 'lazy';
-            img.decoding = 'async';
-            img.alt = '';
-
-            if (this.isLocalId && this.isLocalId(id)) {
-                const meta = this.meta.get(id) || {};
-                img.src = meta.thumb_b64
-                    ? `data:image/jpeg;base64,${meta.thumb_b64}`
-                    : '';
-            } else {
-                img.src = `/api/image-thumbnail/${id}?size=96`;
-            }
-
-            img.style.width = '100%';
-            img.style.height = '100%';
-            img.style.objectFit = 'cover';
-            thumb.appendChild(img);
-            thumb.addEventListener('click', () => this._setActive(id));
-            grid.appendChild(thumb);
+            grid.appendChild(this._buildImportThumb(id));
         }
+    };
+
+    DM._buildImportThumb = function (id) {
+        const thumb = document.createElement('div');
+        thumb.className = 'import-thumb';
+        thumb.dataset.imageId = String(id);
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.alt = '';
+
+        img.src = this._thumbSrc(id, 160);
+        img.onerror = () => {
+            img.removeAttribute('src');
+            thumb.classList.add('thumb-missing');
+        };
+
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        thumb.appendChild(img);
+        const keep = document.createElement('span');
+        keep.className = 'import-thumb-keep';
+        keep.textContent = this._t('dataset.keepBadge', 'Keep');
+        thumb.appendChild(keep);
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'import-thumb-remove';
+        remove.textContent = 'x';
+        remove.title = this._t('dataset.removeFromDataset', 'Remove');
+        remove.addEventListener('click', (event) => {
+            event.stopPropagation();
+            this._removeImageById(id);
+        });
+        thumb.appendChild(remove);
+        thumb.addEventListener('click', () => this._setActive(id));
+        return thumb;
+    };
+
+    DM._renderVirtualImportGallery = function (grid) {
+        cleanupVirtualRenderer(this, '_importVirtualCleanup');
+        grid.innerHTML = '';
+        grid.classList.add('is-virtualized');
+
+        const spacer = document.createElement('div');
+        spacer.className = 'dataset-virtual-spacer dataset-import-virtual-spacer';
+        grid.appendChild(spacer);
+
+        let frame = 0;
+        const renderVisible = () => {
+            if (frame) cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => {
+                frame = 0;
+                const width = Math.max(1, grid.clientWidth - 8);
+                const columns = Math.max(1, Math.floor(width / DATASET_IMPORT_GRID_MIN));
+                const cellWidth = Math.floor(width / columns);
+                const itemHeight = cellWidth;
+                const rowCount = Math.ceil(this.imageIds.length / columns);
+                spacer.style.height = `${rowCount * itemHeight}px`;
+                spacer.style.position = 'relative';
+                spacer.innerHTML = '';
+
+                const startRow = Math.max(0, Math.floor(grid.scrollTop / itemHeight) - DATASET_VIRTUAL_BUFFER_ROWS);
+                const visibleRows = Math.ceil((grid.clientHeight || 520) / itemHeight) + (DATASET_VIRTUAL_BUFFER_ROWS * 2);
+                const endRow = Math.min(rowCount, startRow + visibleRows);
+
+                for (let row = startRow; row < endRow; row += 1) {
+                    for (let col = 0; col < columns; col += 1) {
+                        const index = row * columns + col;
+                        if (index >= this.imageIds.length) break;
+                        const thumb = this._buildImportThumb(this.imageIds[index]);
+                        thumb.style.position = 'absolute';
+                        thumb.style.top = `${row * itemHeight}px`;
+                        thumb.style.left = `${col * cellWidth}px`;
+                        thumb.style.width = `${Math.max(1, cellWidth - 8)}px`;
+                        thumb.style.height = `${Math.max(1, cellWidth - 8)}px`;
+                        spacer.appendChild(thumb);
+                    }
+                }
+            });
+        };
+
+        grid.addEventListener('scroll', renderVisible, { passive: true });
+        const resizeObserver = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(renderVisible)
+            : null;
+        if (resizeObserver) resizeObserver.observe(grid);
+        this._importVirtualCleanup = () => {
+            if (frame) cancelAnimationFrame(frame);
+            grid.removeEventListener('scroll', renderVisible);
+            if (resizeObserver) resizeObserver.disconnect();
+        };
+        renderVisible();
     };
 
     // ---------- Zoom controls ----------

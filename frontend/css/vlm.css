@@ -253,7 +253,7 @@
 
 .export-preview-workbench {
     display: grid;
-    grid-template-columns: minmax(190px, 0.72fr) minmax(340px, 1.55fr) minmax(250px, 1fr);
+    grid-template-columns: minmax(240px, 0.8fr) minmax(460px, 1.55fr) minmax(280px, 0.95fr);
     gap: 10px;
     height: min(56vh, 630px);
     min-height: 430px;
@@ -264,7 +264,7 @@
 }
 
 .batch-export-grid[data-content-mode="template"] .export-preview-workbench {
-    grid-template-columns: minmax(172px, 0.58fr) minmax(0, 1.42fr);
+    grid-template-columns: minmax(240px, 0.7fr) minmax(460px, 1.3fr);
     height: auto;
     min-height: 0;
 }
@@ -355,6 +355,26 @@
     padding: 8px;
 }
 
+.batch-export-shell ::-webkit-scrollbar,
+.export-preview-workbench ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.batch-export-shell ::-webkit-scrollbar-track,
+.export-preview-workbench ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 4px;
+}
+.batch-export-shell ::-webkit-scrollbar-thumb,
+.export-preview-workbench ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+}
+.batch-export-shell ::-webkit-scrollbar-thumb:hover,
+.export-preview-workbench ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.28);
+}
+
 .export-preview-queue-list {
     display: block;
     overflow-y: auto;
@@ -365,10 +385,11 @@
 
 .export-preview-queue-item {
     display: grid;
-    grid-template-columns: 46px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
     gap: 8px;
     width: 100%;
-    height: 60px;
+    min-height: 76px;
+    height: auto;
     box-sizing: border-box;
     padding: 6px;
     border: 1px solid transparent;
@@ -396,8 +417,8 @@
 }
 
 .export-preview-queue-item .export-preview-thumb {
-    width: 46px;
-    height: 46px;
+    width: 64px;
+    height: 64px;
 }
 
 .export-preview-queue-copy {
@@ -592,7 +613,7 @@
 }
 
 .export-preview-stat-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
 }
 
 .export-preview-cleanup-grid {
@@ -632,7 +653,7 @@
 
 .export-preview-cleanup-row {
     display: grid;
-    grid-template-columns: minmax(74px, 1fr) minmax(58px, 0.72fr) minmax(48px, 0.56fr);
+    grid-template-columns: 1fr;
     gap: 6px;
     align-items: center;
 }
@@ -662,7 +683,7 @@
 
 .export-preview-tag-form {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     gap: 6px;
     padding: 9px 10px;
     border-top: 1px solid var(--border-color);
@@ -707,7 +728,7 @@
 
 @media (max-width: 1080px) {
     .export-preview-workbench {
-        grid-template-columns: minmax(160px, 0.9fr) minmax(280px, 1.4fr);
+        grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.4fr);
     }
 
     .export-preview-tools {

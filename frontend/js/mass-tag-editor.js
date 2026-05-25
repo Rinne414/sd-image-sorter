@@ -128,11 +128,17 @@
         // ---- Scope --------------------------------------------------------
 
         async refreshScopeLabels() {
+            const selectionToken = window.AppFilterAccess?.getActiveSelectionToken?.();
             const selectionIds = window.AppFilterAccess?.getSelectedImageIds?.() || [];
-            const selCount = selectionIds.length;
+            const selCount = selectionToken
+                ? Number(window.AppFilterAccess?.getSelectionTotal?.() || 0)
+                : selectionIds.length;
             const selEl = document.getElementById("mass-tag-scope-selection-count");
             if (selEl) {
-                selEl.textContent = this.t(`— ${selCount.toLocaleString()} images`, `— ${selCount.toLocaleString()} 张`);
+                const suffix = selectionToken
+                    ? this.t(" filtered-token selection", " 个筛选 token 选择")
+                    : this.t(" images", " 张");
+                selEl.textContent = `— ${selCount.toLocaleString()}${suffix}`;
             }
             const filterEl = document.getElementById("mass-tag-scope-filter-count");
             if (filterEl) {
@@ -150,7 +156,9 @@
         async resolveScopeIds() {
             const scope = this.getScopeValue();
             if (scope === "selection") {
-                const ids = window.AppFilterAccess?.getSelectedImageIds?.() || [];
+                const ids = window.AppFilterAccess?.resolveSelectedImageIds
+                    ? await window.AppFilterAccess.resolveSelectedImageIds(BACKEND_MAX_IDS)
+                    : (window.AppFilterAccess?.getSelectedImageIds?.() || []);
                 this.scopeLabel = this.t(
                     `${ids.length.toLocaleString()} selected images`,
                     `已选 ${ids.length.toLocaleString()} 张`,

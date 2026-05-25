@@ -103,9 +103,9 @@
 }
 #view-dataset .dataset-maker[data-active-tab="export"] .dataset-workbench {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(380px, 0.85fr) minmax(500px, 1.15fr);
     gap: 16px;
-    max-width: 1100px;
+    max-width: 1280px;
     margin: 0 auto;
     width: 100%;
 }
@@ -123,24 +123,76 @@
     }
 }
 
+@media (max-width: 980px) {
+    .dataset-import-actions {
+        grid-template-columns: 1fr;
+    }
+    .dataset-folder-bar {
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 640px) {
+    .dataset-import-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .dataset-import-actions .btn-large {
+        width: 100%;
+    }
+    .dataset-folder-bar {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        align-items: center;
+        width: 100%;
+    }
+    .dataset-folder-bar-icon {
+        grid-column: 1;
+    }
+    .dataset-folder-bar .form-input {
+        grid-column: 2;
+        width: 100%;
+    }
+    .dataset-folder-bar-subfolder {
+        grid-column: 2;
+    }
+    #btn-dataset-folder-import-browse {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+    }
+    #btn-dataset-folder-import-go {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+    }
+    .dataset-import-gallery-grid {
+        grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    }
+    .dataset-dropzone {
+        min-height: 190px;
+    }
+}
+
 /* ============== Import tab: actions + dropzone + gallery ============== */
 
 .dataset-import-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(420px, 1fr);
     align-items: center;
     gap: 12px;
-    flex-wrap: wrap;
 }
 .dataset-import-actions .btn-large {
-    padding: 10px 20px;
-    font-size: 14px;
+    min-height: 50px;
+    padding: 12px 20px;
+    font-size: 15px;
+    justify-content: center;
 }
 .dataset-folder-bar {
-    flex: 1 1 auto;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
+    padding: 8px 10px;
     background: var(--surface-1, rgba(15, 23, 42, 0.5));
     border: 1px solid var(--border-color, rgba(255,255,255,0.12));
     border-radius: 8px;
@@ -167,15 +219,34 @@
     cursor: pointer;
 }
 
+.dataset-folder-import-status-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 28px;
+    color: var(--text-secondary, #94a3b8);
+    font-size: 12px;
+}
+
+.dataset-folder-import-status-row .dataset-folder-import-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dataset-folder-import-status-row [hidden] {
+    display: none !important;
+}
+
 /* Dropzone */
 .dataset-dropzone {
     flex: 1 1 auto;
-    min-height: 200px;
+    min-height: 240px;
     display: flex;
     align-items: center;
     justify-content: center;
     border: 2px dashed rgba(var(--accent-primary-rgb, 255, 138, 61), 0.3);
-    border-radius: 12px;
+    border-radius: 8px;
     background: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.03);
     transition: border-color 0.15s, background 0.15s;
     cursor: pointer;
@@ -186,10 +257,10 @@
 }
 .dataset-dropzone-content {
     text-align: center;
-    padding: 24px;
+    padding: 28px;
 }
-.dataset-dropzone-icon { font-size: 36px; display: block; margin-bottom: 8px; }
-.dataset-dropzone-text { margin: 0 0 4px; font-size: 14px; color: var(--text-primary); }
+.dataset-dropzone-icon { font-size: 44px; display: block; margin-bottom: 10px; }
+.dataset-dropzone-text { margin: 0 0 6px; font-size: 16px; font-weight: 600; color: var(--text-primary); }
 .dataset-dropzone-hint { color: var(--text-secondary); font-size: 12px; }
 
 /* Import gallery grid */
@@ -206,9 +277,23 @@
     flex: 1 1 auto;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 6px;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
     padding: 4px;
+}
+.dataset-import-gallery-grid.is-virtualized {
+    display: block;
+    position: relative;
+    height: min(58vh, 640px);
+    min-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.dataset-queue-list.is-virtualized {
+    position: relative;
+}
+.dataset-virtual-spacer {
+    min-width: 100%;
 }
 .dataset-import-gallery-grid .import-thumb {
     aspect-ratio: 1;
@@ -217,11 +302,55 @@
     background: rgba(0,0,0,0.3);
     position: relative;
     cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.08);
 }
 .dataset-import-gallery-grid .import-thumb img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+}
+.dataset-import-gallery-grid .import-thumb:hover {
+    border-color: rgba(var(--accent-primary-rgb, 255, 138, 61), 0.55);
+}
+.dataset-import-gallery-grid .import-thumb-keep {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.82);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 5px 16px rgba(0,0,0,0.24);
+}
+.dataset-import-gallery-grid .import-thumb-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.82);
+    color: var(--text-primary);
+    cursor: pointer;
+    line-height: 1;
+}
+.dataset-import-gallery-grid .import-thumb-remove:hover {
+    background: rgba(239, 68, 68, 0.86);
+    color: white;
+}
+.dataset-import-gallery-grid .thumb-missing::after {
+    content: 'missing';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    background: linear-gradient(135deg, rgba(239,68,68,0.16), rgba(15,23,42,0.55));
 }
 .dataset-import-gallery-grid .import-thumb.flagged::after {
     content: '';
@@ -236,7 +365,7 @@
 .dataset-audit-inline {
     flex-shrink: 0;
     border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 10px 14px;
     background: rgba(255,255,255,0.02);
 }
@@ -254,7 +383,7 @@
 .dataset-audit-section {
     margin: 0 0 14px;
     border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
-    border-radius: var(--radius-md, 10px);
+    border-radius: 8px;
     background: var(--surface-1, rgba(255, 255, 255, 0.03));
 }
 
@@ -405,7 +534,7 @@
 .dataset-vocab-panel {
     margin-top: 10px;
     border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
-    border-radius: var(--radius-md, 10px);
+    border-radius: 8px;
     background: var(--surface-1, rgba(255, 255, 255, 0.03));
 }
 
@@ -570,7 +699,7 @@
 .dataset-confidence-panel {
     margin-top: 8px;
     border: 1px solid var(--surface-border, rgba(255, 255, 255, 0.08));
-    border-radius: var(--radius-md, 10px);
+    border-radius: 8px;
     background: var(--surface-1, rgba(255, 255, 255, 0.03));
 }
 
@@ -663,4 +792,38 @@
 .dataset-confidence-pill-x:hover {
     background: rgba(239, 68, 68, 0.30);
     color: #fff;
+}
+
+@media (max-width: 640px) {
+    #view-dataset .dataset-import-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    #view-dataset .dataset-import-actions .btn-large {
+        width: 100%;
+    }
+    #view-dataset .dataset-folder-bar {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr);
+        align-items: center;
+        width: 100%;
+        min-width: 0;
+    }
+    #view-dataset .dataset-folder-bar-icon {
+        grid-column: 1;
+    }
+    #view-dataset .dataset-folder-bar .form-input {
+        grid-column: 2;
+        width: 100%;
+    }
+    #view-dataset .dataset-folder-bar-subfolder {
+        grid-column: 2;
+    }
+    #view-dataset #btn-dataset-folder-import-browse,
+    #view-dataset #btn-dataset-folder-import-go {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+        width: 100%;
+    }
 }

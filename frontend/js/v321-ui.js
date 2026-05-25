@@ -1181,42 +1181,52 @@ const V321Integration = {
         return token;
     },
 
-    /** Load ALL selected image_ids for the queue (no cap). */
-    async _loadQueueImageIds() {
+    _getLoadedGalleryImageIds(cap = Infinity) {
+        const state = window.App?.AppState || window.AppState || {};
+        const rows = Array.isArray(state.images) ? state.images : [];
+        return rows
+            .map((item) => Number(item?.id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .slice(0, cap);
+    },
+
+    async _resolveSelectionImageIds({ cap = 500000, allowLoadedFallback = true } = {}) {
+        const normalizedCap = Math.max(1, Math.min(Number(cap) || 500000, 500000));
         const selectionToken = this._getActiveSelectionTokenForExport();
         if (selectionToken && window.App?.API?.getSelectionChunk) {
             try {
                 const allIds = [];
-                const pageSize = 5000;
                 let offset = 0;
-                let done = false;
-                while (!done) {
-                    const chunk = await window.App.API.getSelectionChunk(selectionToken, { offset, limit: pageSize });
+                let hasMore = true;
+                while (hasMore && allIds.length < normalizedCap) {
+                    const chunk = await window.App.API.getSelectionChunk(selectionToken, {
+                        offset,
+                        limit: Math.min(5000, normalizedCap - allIds.length),
+                    });
                     const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
                     for (const id of ids) {
                         const n = Number(id);
                         if (Number.isFinite(n) && n > 0) allIds.push(n);
                     }
-                    if (ids.length < pageSize) done = true;
-                    else offset += pageSize;
+                    hasMore = Boolean(chunk?.has_more);
+                    offset = Number(chunk?.next_offset || 0);
+                    if (!offset && hasMore) break;
                 }
-                if (allIds.length) {
-                    this.queueImageIds = allIds;
-                    return allIds;
-                }
+                if (allIds.length) return allIds;
             } catch (error) {
-                console.warn('Could not resolve filtered selection queue ids', error);
+                console.warn('Could not resolve filtered selection ids', error);
             }
         }
-        const selectedIds = this._getExplicitSelectedImageIds(Infinity);
-        if (selectedIds.length) {
-            this.queueImageIds = selectedIds;
-            return selectedIds;
-        }
-        const items = document.querySelectorAll('.gallery-item[data-id]');
-        const fallback = Array.from(items).map(el => parseInt(el.dataset.id)).filter(n => !isNaN(n));
-        this.queueImageIds = fallback;
-        return fallback;
+        const selectedIds = this._getExplicitSelectedImageIds(normalizedCap);
+        if (selectedIds.length) return selectedIds;
+        return allowLoadedFallback ? this._getLoadedGalleryImageIds(normalizedCap) : [];
+    },
+
+    /** Load ALL selected image_ids for the queue (no cap). */
+    async _loadQueueImageIds() {
+        const ids = await this._resolveSelectionImageIds({ cap: 500000, allowLoadedFallback: true });
+        this.queueImageIds = ids;
+        return ids;
     },
 
     async refreshPreview() {
@@ -1532,11 +1542,7 @@ const V321Integration = {
         this._setPreviewCaption(id, this._joinCaptionTokens(next));
     },
 
-    async _applyTokenToAll(token, mode, position = 'prepend') {
-        const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
-
-        // Ensure all captions are loaded before bulk-editing.
-        // Without this, unloaded images get overwritten with just the token.
+    async _ensurePreviewCaptionsLoaded(ids) {
         const unloaded = ids.filter(id => !this.previewCache.has(id) && !this.editedCaptions.has(id));
         if (unloaded.length > 0) {
             const batchSize = 200;
@@ -1561,6 +1567,14 @@ const V321Integration = {
                 } catch (_) { /* best effort */ }
             }
         }
+    },
+
+    async _applyTokenToAll(token, mode, position = 'prepend') {
+        const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
+
+        // Ensure all captions are loaded before bulk-editing.
+        // Without this, unloaded images get overwritten with just the token.
+        await this._ensurePreviewCaptionsLoaded(ids);
 
         for (const id of ids) {
             this._applyTokenToCaption(id, token, mode, position);
@@ -1586,8 +1600,9 @@ const V321Integration = {
         }
     },
 
-    _cleanupAllPreviewCaptions(options = {}) {
+    async _cleanupAllPreviewCaptions(options = {}) {
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
+        await this._ensurePreviewCaptionsLoaded(ids);
         for (const id of ids) {
             this._cleanupPreviewCaption(id, options);
         }
@@ -1596,6 +1611,7 @@ const V321Integration = {
 
     async _removeTagsByCategory(category) {
         const ids = this.queueImageIds.length ? this.queueImageIds : this.previewResults.map(item => Number(item.image_id));
+        await this._ensurePreviewCaptionsLoaded(ids);
         const allTokens = new Set();
         for (const id of ids) {
             for (const token of this._splitCaptionTokens(this._getRenderedCaption(id))) {
@@ -2103,22 +2119,22 @@ const V321Integration = {
             if (!id) return;
             this._cleanupPreviewCaption(id, { dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', () => {
+        }, 'batchExport.cleanupAllImages', 'All images', 'dedupe-all', async () => {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             if (!confirm(this._i18n('batchExport.confirmCleanupAll', `Remove duplicate tags from all ${count} images?`, { count }))) return;
-            this._cleanupAllPreviewCaptions({ dedupe: true });
+            await this._cleanupAllPreviewCaptions({ dedupe: true });
         });
         addRow('batchExport.cleanupBlacklistLabel', 'Blacklist', 'batchExport.cleanupCurrent', 'Current', 'blacklist-current', () => {
             const id = activeId();
             if (!id) return;
             this._cleanupPreviewCaption(id, { blacklist: true, dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAllImages', 'All images', 'blacklist-all', () => {
+        }, 'batchExport.cleanupAllImages', 'All images', 'blacklist-all', async () => {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             const blacklist = this._getBlacklistTokens();
             const preview = blacklist.length ? blacklist.slice(0, 10).join(', ') + (blacklist.length > 10 ? '...' : '') : '(empty)';
             if (!confirm(this._i18n('batchExport.confirmBlacklistAll', `Remove blacklisted tags [${preview}] from all ${count} images?`, { preview, count }))) return;
-            this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
+            await this._cleanupAllPreviewCaptions({ blacklist: true, dedupe: true });
         });
         // Pencil icon for editing blacklist inline, appended to the Blacklist row
         const blacklistRow = grid.lastElementChild;
@@ -2153,11 +2169,11 @@ const V321Integration = {
             if (!id) return;
             this._cleanupPreviewCaption(id, { boilerplate: true, dedupe: true });
             this._renderPreviewWorkbench();
-        }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', () => {
+        }, 'batchExport.cleanupAllImages', 'All images', 'boilerplate-all', async () => {
             const count = this.queueImageIds?.length || this.previewResults?.length || 0;
             const boilerplate = this._getLoraBoilerplateTokens().slice(0, 8).join(', ') + '...';
             if (!confirm(this._i18n('batchExport.confirmBoilerplateAll', `Remove quality/rating tags [${boilerplate}] from all ${count} images?`, { boilerplate, count }))) return;
-            this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
+            await this._cleanupAllPreviewCaptions({ boilerplate: true, dedupe: true });
         });
         // Category batch removal row
         const catRow = document.createElement('div');
@@ -2418,44 +2434,12 @@ const V321Integration = {
         }
     },
 
-    /** Fetch the full list of selected image ids for a combined export.
-     *  In normal use SelectionStore holds the live selection; we cap the
-     *  count defensively at 5000 to keep the preview server happy.
-     */
+    /** Fetch the full list of selected image ids for a combined export. */
     async _getAllSelectedImageIdsForExport() {
-        // Use already-loaded queue if available (virtual scroll path)
+        const resolved = await this._resolveSelectionImageIds({ cap: 500000, allowLoadedFallback: false });
+        if (resolved.length) return resolved;
         if (this.queueImageIds.length) return this.queueImageIds;
-        const cap = 500000;
-        const selectedIds = this._getExplicitSelectedImageIds(cap);
-        if (selectedIds.length) {
-            return selectedIds;
-        }
-        const selectionToken = this._getActiveSelectionTokenForExport();
-        if (selectionToken && window.App?.API?.getSelectionChunk) {
-            try {
-                const allIds = [];
-                const pageSize = 5000;
-                let offset = 0;
-                let done = false;
-                while (!done) {
-                    const chunk = await window.App.API.getSelectionChunk(selectionToken, { offset, limit: pageSize });
-                    const ids = Array.isArray(chunk?.image_ids) ? chunk.image_ids : [];
-                    for (const id of ids) {
-                        const n = Number(id);
-                        if (Number.isFinite(n) && n > 0) allIds.push(n);
-                    }
-                    if (ids.length < pageSize) done = true;
-                    else offset += pageSize;
-                }
-                if (allIds.length) return allIds;
-            } catch (error) {
-                console.warn('Could not resolve filtered selection for combined export', error);
-            }
-        }
-        const items = document.querySelectorAll('.gallery-item[data-id]');
-        return Array.from(items).slice(0, cap)
-            .map((el) => parseInt(el.dataset.id))
-            .filter((n) => !isNaN(n));
+        return this._getLoadedGalleryImageIds(500000);
     },
 };
 

@@ -136,10 +136,10 @@
                         <span class="tab-icon" aria-hidden="true">🔳</span>
                         <span class="tab-text" data-i18n="nav.censor">Edit</span>
                     </button>
-                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting"
-                            data-i18n-title="nav.sorting" title="Sorting">
-                        <span class="tab-icon" aria-hidden="true">📁</span>
-                        <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
+                    <button class="nav-tab" id="nav-tab-dataset" data-view="dataset" role="tab" aria-selected="false" aria-controls="view-dataset"
+                            data-i18n-title="nav.dataset" title="Dataset">
+                        <span class="tab-icon" aria-hidden="true">📦</span>
+                        <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
                     </button>
                     <span class="nav-divider" aria-hidden="true"></span>
                     <button class="nav-tab" id="nav-tab-similar" data-view="similar" role="tab" aria-selected="false" aria-controls="view-similar"
@@ -157,10 +157,10 @@
                         <span class="tab-icon" aria-hidden="true">🧪</span>
                         <span class="tab-text" data-i18n="nav.promptlab">Prompt Lab</span>
                     </button>
-                    <button class="nav-tab" id="nav-tab-dataset" data-view="dataset" role="tab" aria-selected="false" aria-controls="view-dataset"
-                            data-i18n-title="nav.dataset" title="Dataset">
-                        <span class="tab-icon" aria-hidden="true">📦</span>
-                        <span class="tab-text" data-i18n="nav.dataset">Dataset</span>
+                    <button class="nav-tab" id="nav-tab-sorting" data-view="sorting" role="tab" aria-selected="false" aria-controls="view-sorting"
+                            data-i18n-title="nav.sorting" title="Sorting">
+                        <span class="tab-icon" aria-hidden="true">📁</span>
+                        <span class="tab-text" data-i18n="nav.sorting">Sorting</span>
                     </button>
                 </div>
 
@@ -186,9 +186,9 @@
                             <span class="mobile-nav-icon" aria-hidden="true">🔳</span>
                             <span class="mobile-nav-text" data-i18n="nav.censor">Edit</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
-                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
+                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📦</span>
+                            <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
                         </button>
                         <div class="mobile-nav-group-label" data-i18n="nav.moreTools">More Tools</div>
                         <button class="mobile-nav-item" data-view="similar" aria-label="Similar Images view">
@@ -203,9 +203,9 @@
                             <span class="mobile-nav-icon" aria-hidden="true">🧪</span>
                             <span class="mobile-nav-text" data-i18n="nav.promptlab">Prompt Lab</span>
                         </button>
-                        <button class="mobile-nav-item" data-view="dataset" aria-label="Dataset Maker view">
-                            <span class="mobile-nav-icon" aria-hidden="true">📦</span>
-                            <span class="mobile-nav-text" data-i18n="nav.dataset">Dataset</span>
+                        <button class="mobile-nav-item" data-view="sorting" aria-label="Sorting view">
+                            <span class="mobile-nav-icon" aria-hidden="true">📁</span>
+                            <span class="mobile-nav-text" data-i18n="nav.sorting">Sorting</span>
                         </button>
                     </div>
                     <div class="mobile-nav-actions">
@@ -2624,7 +2624,11 @@
                                 </div>
                             </div>
                         </details>
-                        <span class="dataset-folder-import-status" id="dataset-folder-import-status"></span>
+                        <div class="dataset-folder-import-status-row">
+                            <span class="dataset-folder-import-status" id="dataset-folder-import-status"></span>
+                            <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-folder-import-more" hidden
+                                    data-i18n="dataset.folderImportLoadMore">Load next batch</button>
+                        </div>
                     </div>
 
                     <!-- Anchor for step 1 (Import) — toolbar above is the import step itself. -->
@@ -2635,7 +2639,12 @@
                         <aside class="dataset-queue-pane" aria-label="Dataset image queue" id="dataset-step-organize">
                             <div class="dataset-pane-head">
                                 <strong data-i18n="dataset.queueTitle">Images</strong>
-                                <span class="dataset-queue-hint" data-i18n="dataset.queueHint">Click to edit</span>
+                                <div class="dataset-queue-head-actions" role="group" aria-label="Dataset queue display mode">
+                                    <button type="button" class="dataset-queue-mode-btn active" id="btn-dataset-queue-grid"
+                                            data-dataset-queue-mode="grid" title="Grid thumbnails" aria-pressed="true">▦</button>
+                                    <button type="button" class="dataset-queue-mode-btn" id="btn-dataset-queue-list"
+                                            data-dataset-queue-mode="list" title="List with names" aria-pressed="false">☰</button>
+                                </div>
                             </div>
                             <div class="dataset-queue-list" id="dataset-queue-list"></div>
                         </aside>
@@ -2716,6 +2725,18 @@
 
                         <!-- Right: streamlined export settings (3 simple sections, no more buried options) -->
                         <aside class="dataset-export-pane" aria-label="Dataset export settings">
+                            <div class="dataset-export-progress" id="dataset-export-progress" hidden>
+                                <div class="dataset-export-progress-bar" aria-hidden="true">
+                                    <div class="dataset-export-progress-fill" id="dataset-export-progress-fill"></div>
+                                </div>
+                                <div class="dataset-export-progress-row">
+                                    <span class="dataset-export-progress-text" id="dataset-export-progress-text">
+                                        Preparing export...
+                                    </span>
+                                    <button class="btn btn-ghost btn-small" id="btn-dataset-export-cancel"
+                                            type="button" hidden data-i18n="common.cancel">Cancel</button>
+                                </div>
+                            </div>
                             <!-- Tag pills for active image -->
                             <div class="dataset-tag-pills-section" id="dataset-tag-pills-section" hidden>
                                 <h4 class="dataset-tag-pills-title" data-i18n="dataset.tagPillsTitle">Tags</h4>
@@ -2728,6 +2749,25 @@
                                 </div>
                                 <div class="dataset-tag-pills-wrap" id="dataset-tag-pills-wrap"></div>
                             </div>
+                            <details class="dataset-vocab-panel" id="dataset-vocab-panel">
+                                <summary class="dataset-vocab-summary">
+                                    <span aria-hidden="true">#</span>
+                                    <span data-i18n="dataset.vocabTitle">Tag Vocabulary</span>
+                                    <span class="dataset-vocab-count" id="dataset-vocab-count">0 / 0</span>
+                                </summary>
+                                <div class="dataset-vocab-body">
+                                    <p class="dataset-vocab-help" data-i18n="dataset.vocabHelp">
+                                        Click a tag to add it to Common tags. Click again to move it to Blacklist. Third click clears.
+                                    </p>
+                                    <div class="dataset-vocab-controls">
+                                        <input type="text" class="form-input dataset-vocab-search" id="dataset-vocab-search"
+                                               placeholder="Filter tags..." data-i18n-placeholder="dataset.vocabSearchPlaceholder">
+                                        <button type="button" class="btn btn-ghost btn-small" id="btn-dataset-vocab-refresh"
+                                                data-i18n="dataset.vocabRefresh">Refresh</button>
+                                    </div>
+                                    <div class="dataset-vocab-list" id="dataset-vocab-list"></div>
+                                </div>
+                            </details>
                             <!-- Section A: Tagging shortcut -->
                             <section class="dataset-card" id="dataset-step-caption">
                                 <h3 class="dataset-card-title">
@@ -3004,9 +3044,6 @@
                                     <span aria-hidden="true">📤</span>
                                     <span data-i18n="dataset.exportCta">Export dataset</span>
                                 </button>
-                                <div class="dataset-export-progress" id="dataset-export-progress" hidden>
-                                    <div class="dataset-export-progress-fill"></div>
-                                </div>
                                 <p class="dataset-export-disabled-hint" id="dataset-export-disabled-hint"
                                    data-i18n="dataset.exportDisabledHint">
                                     Add at least one image and pick an output folder to enable.
@@ -3022,69 +3059,6 @@
                             </div>
                         </div>
                     </div>
-                    <div class="dataset-modal" id="dataset-folder-import-modal" role="dialog" aria-modal="true"
-                         aria-labelledby="dataset-folder-import-title" hidden>
-                        <div class="dataset-modal-backdrop"></div>
-                        <div class="dataset-modal-card">
-                            <h3 id="dataset-folder-import-title" class="dataset-modal-title">
-                                <span aria-hidden="true">📁</span>
-                                <span data-i18n="dataset.folderImportTitle">Add images from a folder</span>
-                            </h3>
-                            <p class="dataset-modal-help" data-i18n="dataset.folderImportHelp">
-                                Pick a folder of images. They will be added to this Dataset Maker session
-                                directly — they will NOT be scanned into the main library.
-                            </p>
-                            <label class="dataset-required-label" for="dataset-folder-import-path">
-                                <span>
-                                    <span data-i18n="dataset.folderImportPathLabel">Folder path</span>
-                                    <span class="dataset-required-asterisk" aria-hidden="true">*</span>
-                                </span>
-                                <div class="folder-input-row">
-                                    <input type="text" id="dataset-folder-import-path" class="form-input"
-                                           placeholder="C:/training-data/source-folder"
-                                           data-folder-browser-container="dataset-folder-import-browser-container">
-                                    <button class="btn btn-ghost btn-small" id="btn-dataset-folder-import-browse"
-                                            data-i18n="common.browse">Browse</button>
-                                </div>
-                                <div id="dataset-folder-import-browser-container"></div>
-                            </label>
-                            <label class="dataset-preset-row">
-                                <input type="checkbox" id="dataset-folder-import-recursive">
-                                <span class="dataset-preset-label">
-                                    <strong data-i18n="dataset.folderImportRecursive">Include subfolders</strong>
-                                </span>
-                            </label>
-
-                            <!-- v3.2.2 T-power-PR1 (J): folder→trigger detection.
-                                 Default mode = suggest (placeholder only, doesn't auto-fill).
-                                 Base model controls the @ prefix rule for Anima style LoRAs. -->
-                            <label class="form-label">
-                                <span data-i18n="dataset.folderTriggerModeLabel">Auto-detect trigger from folder name</span>
-                                <select id="dataset-folder-trigger-mode" class="form-input">
-                                    <option value="suggest" data-i18n="dataset.folderTriggerModeSuggest">Suggest only (placeholder hint)</option>
-                                    <option value="autofill" data-i18n="dataset.folderTriggerModeAutofill">Auto-fill the trigger field</option>
-                                    <option value="off" data-i18n="dataset.folderTriggerModeOff">Don't detect</option>
-                                </select>
-                            </label>
-                            <label class="form-label">
-                                <span data-i18n="dataset.folderBaseModelLabel">Base model preset (controls @-prefix rule)</span>
-                                <select id="dataset-folder-base-model" class="form-input">
-                                    <option value="sdxl" selected>SD 1.5 / SDXL / Pony / Illustrious / NoobAI</option>
-                                    <option value="flux">FLUX / SD3</option>
-                                    <option value="anima_style">Anima — STYLE LoRA (@-prefix)</option>
-                                    <option value="anima_character">Anima — CHARACTER LoRA</option>
-                                </select>
-                            </label>
-
-                            <p class="dataset-modal-status" id="dataset-folder-import-status" aria-live="polite"></p>
-                            <div class="dataset-modal-actions">
-                                <button class="btn btn-ghost" id="btn-dataset-folder-import-cancel" data-i18n="common.cancel">Cancel</button>
-                                <button class="btn btn-primary" id="btn-dataset-folder-import-go"
-                                        data-i18n="dataset.folderImportGo">Scan and add</button>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Pre-flight confirm overlay -->
                     <div class="dataset-modal" id="dataset-confirm-modal" role="dialog" aria-modal="true"
                          aria-labelledby="dataset-confirm-title" hidden>
@@ -4992,6 +4966,24 @@
                             <option value="and" data-i18n="smartTag.tagMergeAnd">AND (consensus only)</option>
                         </select>
                     </label>
+                    <details class="smart-tag-vote-details">
+                        <summary data-i18n="smartTag.taggerVotesTitle">Tagger votes</summary>
+                        <div class="smart-tag-vote-grid">
+                            <label class="form-label">
+                                <span data-i18n="smartTag.taggerOne">Tagger 1</span>
+                                <select id="smart-tag-tagger-1" class="form-input"></select>
+                            </label>
+                            <label class="form-label">
+                                <span data-i18n="smartTag.taggerTwo">Tagger 2</span>
+                                <select id="smart-tag-tagger-2" class="form-input">
+                                    <option value="" data-i18n="smartTag.taggerDisabled">Off</option>
+                                </select>
+                            </label>
+                        </div>
+                        <p class="form-help" data-i18n="smartTag.taggerVotesHelp">
+                            OR keeps tags from either tagger. AND keeps only general tags both taggers agree on; character/copyright tags still use OR.
+                        </p>
+                    </details>
                 </div>
 
                 <!-- Image count summary -->

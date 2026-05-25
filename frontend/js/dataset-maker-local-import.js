@@ -41,6 +41,14 @@
     /** Local-only state (in addition to the shared ``imageIds`` / ``meta``). */
     DM.localItemPaths = DM.localItemPaths || new Map();   // negative id -> abs_path
     DM.localItemDsIds = DM.localItemDsIds || new Map();   // negative id -> ds_id (for completeness)
+    DM._folderScanToken = null;
+    DM._folderScanNextOffset = 0;
+    DM._folderScanHasMore = false;
+    DM._folderScanTotal = 0;
+    DM._folderScanPreviewed = 0;
+
+    const FOLDER_SCAN_PAGE_SIZE = 5000;
+    const MAX_BROWSER_DROP_FILES = 5000;
 
     /** Negative-id helper: true iff the supplied id refers to a local-source item. */
     DM.isLocalId = function (id) {
@@ -49,7 +57,10 @@
 
     /** Convert backend ``ds_id`` ("ds:abc123...") to a stable negative integer id. */
     DM._dsIdToNumericId = function (dsId) {
-        const hex = String(dsId || '').replace(/^ds:/, '').slice(0, 8);
+        // Use 52 bits, not the old 31-bit slice. At 100k local images a
+        // 31-bit birthday collision is realistic; 52 bits keeps it negligible
+        // while staying inside JavaScript's safe integer range.
+        const hex = String(dsId || '').replace(/^ds:/, '').slice(0, 13);
         let n = parseInt(hex, 16);
         if (!Number.isFinite(n) || n <= 0) {
             // Fallback: hash the ds_id string with a small djb2 so we
@@ -60,7 +71,7 @@
             }
             n = Math.abs(h) || 1;
         }
-        return -((n & 0x7fffffff) || 1);
+        return -Math.min(n || 1, Number.MAX_SAFE_INTEGER);
     };
 
     // -------- localStorage caption persistence (path-keyed) --------
@@ -104,38 +115,49 @@
         const showToast = options.showToast !== false;
 
         const before = this.imageIds.length;
+        const seen = new Set(this.imageIds.map(Number));
         const localCaptions = this._loadLocalCaptions();
+        let touchedActive = false;
 
         for (const item of (items || [])) {
             const dsId = String(item.ds_id || '');
             if (!dsId.startsWith('ds:')) continue;
-            const numericId = this._dsIdToNumericId(dsId);
+            let numericId = this._dsIdToNumericId(dsId);
             const absPath = String(item.abs_path || '');
             if (!absPath) continue;
-            if (this.imageIds.includes(numericId)) {
-                // Already in the queue (could happen on a re-scan); update
-                // meta in place but don't double-count.
-                continue;
+
+            // Extremely defensive collision handling for synthetic local IDs.
+            while (seen.has(numericId) && this.localItemPaths.get(numericId) !== absPath) {
+                numericId -= 1;
             }
-            this.imageIds.push(numericId);
+
+            if (!seen.has(numericId)) {
+                this.imageIds.push(numericId);
+                seen.add(numericId);
+            }
             this.localItemPaths.set(numericId, absPath);
             this.localItemDsIds.set(numericId, dsId);
+            const existing = this.meta.get(numericId) || {};
+            const scanIndex = Number(item.scan_index);
             this.meta.set(numericId, {
+                ...existing,
                 source: 'local',
                 ds_id: dsId,
                 abs_path: absPath,
-                filename: item.filename || '',
+                filename: item.filename || existing.filename || '',
                 thumbnail_path: '',
-                thumb_b64: item.thumb_b64 || '',
-                width: Number(item.width || 0),
-                height: Number(item.height || 0),
-                mtime: Number(item.mtime || 0),
-                size: Number(item.size || 0),
+                thumb_b64: item.thumb_b64 || existing.thumb_b64 || '',
+                width: Number(item.width || existing.width || 0),
+                height: Number(item.height || existing.height || 0),
+                mtime: Number(item.mtime || existing.mtime || 0),
+                size: Number(item.size || existing.size || 0),
+                scan_index: Number.isFinite(scanIndex) ? scanIndex : existing.scan_index,
             });
+            if (Number(this.activeId) === Number(numericId)) touchedActive = true;
             // Restore any saved caption for this path so re-imports
             // pick the user's previous edit back up.
             const saved = localCaptions[absPath];
-            if (saved) {
+            if (saved && !this.captionEdits.has(numericId)) {
                 this.captionEdits.set(numericId, saved);
             }
         }
@@ -147,8 +169,13 @@
         if (typeof this._renderImportGallery === 'function') {
             this._renderImportGallery();
         }
+        if (added > 0 && typeof this._setPipelineTab === 'function') {
+            this._setPipelineTab('import');
+        }
         if (this.activeId == null && this.imageIds.length) {
             this._setActive(this.imageIds[0]);
+        } else if (touchedActive && this.activeId != null) {
+            this._setActive(this.activeId);
         }
 
         if (switchView && added > 0 && typeof window.switchView === 'function') {
@@ -206,19 +233,27 @@
         const ta = document.getElementById('dataset-editor-textarea');
         const actions = document.getElementById('dataset-editor-actions');
         const filenameEl = document.getElementById('dataset-editor-filename');
+        const zoomBar = document.getElementById('dataset-zoom-toolbar');
 
         if (img) {
-            // Use the scan thumbnail at 256 px — good enough for the editor
-            // pane. We deliberately don't fetch the full image to avoid
-            // streaming 10+ MB raw files into the DOM for 100-image queues.
+            // Use the scan/upload preview so local files work without
+            // registering them in the main gallery first.
             img.src = meta.thumb_b64
                 ? `data:image/jpeg;base64,${meta.thumb_b64}`
                 : '';
             img.alt = filename;
             img.hidden = false;
+            img.onerror = () => {
+                img.removeAttribute('src');
+                img.hidden = true;
+                if (empty) empty.hidden = false;
+            };
         }
         if (empty) empty.hidden = true;
         if (filenameEl) filenameEl.textContent = `📁 ${filename}`;
+        if (zoomBar) zoomBar.hidden = false;
+        this._zoomLevel = 1;
+        this._applyZoom?.();
 
         const caption = this.captionEdits.has(id)
             ? this.captionEdits.get(id)
@@ -230,6 +265,7 @@
         if (actions) actions.hidden = false;
 
         this._highlightActiveQueueItem();
+        this._renderTagPills?.();
     };
 
     // -------- Skip backend fetches for local items --------
@@ -328,19 +364,7 @@
 
     // -------- Export: split into image_ids + image_paths + path overrides --------
 
-    const original_runExport = DM._runExport;
-    DM._runExport = async function () {
-        // If no local items present, the original path is fine.
-        const hasLocal = this.imageIds.some((id) => this.isLocalId(id));
-        if (!hasLocal) {
-            return original_runExport.call(this);
-        }
-
-        // Mirror original_runExport but split the queue into the two
-        // sources. We re-implement the request body so we don't have to
-        // monkey-patch fetch.
-        this._hideConfirmModal();
-
+    DM._buildExportPayload = function () {
         const folder = document.getElementById('dataset-output-folder')?.value?.trim();
         const pattern = this._effectivePattern();
         const trigger = document.getElementById('dataset-trigger')?.value || '';
@@ -375,138 +399,83 @@
             }
         }
 
-        const btn = document.getElementById('btn-dataset-export');
-        const progressEl = document.getElementById('dataset-export-progress');
-        if (btn) {
-            btn.disabled = true;
-            btn.dataset.busy = '1';
-        }
-        if (progressEl) progressEl.hidden = false;
-
-        try {
-            const r = await fetch('/api/dataset/export', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    image_ids: galleryIds,
-                    image_paths: localPaths,
-                    output_folder: folder,
-                    naming_pattern: pattern,
-                    trigger,
-                    image_op: imageOp,
-                    overwrite_policy: overwrite,
-                    normalize_tag_underscores: normalize,
-                    blacklist,
-                    common_tags: commonTags,
-                    image_overrides,
-                }),
-            });
-            if (!r.ok) {
-                const body = await r.text();
-                this._showResultModal('failed', { errorMessages: [body.slice(0, 400)], output_folder: folder });
-                return;
-            }
-            const data = await r.json();
-            this._showResultModal(data.status || 'ok', data);
-        } catch (e) {
-            this._showResultModal('failed', { errorMessages: [e.message], output_folder: folder });
-        } finally {
-            if (progressEl) progressEl.hidden = true;
-            if (btn) {
-                btn.dataset.busy = '';
-                this._updateExportEnabled();
-            }
-        }
+        return {
+            image_ids: galleryIds,
+            image_paths: localPaths,
+            output_folder: folder,
+            naming_pattern: pattern,
+            trigger,
+            image_op: imageOp,
+            overwrite_policy: overwrite,
+            normalize_tag_underscores: normalize,
+            blacklist,
+            common_tags: commonTags,
+            image_overrides,
+        };
     };
 
     // -------- Folder-import modal wiring --------
 
     function $(id) { return document.getElementById(id); }
 
-    /**
-     * v3.2.2 T-power-PR1 (J): derive a trigger word from a folder path.
-     *
-     * Rules (verified against kohya-ss/sd-scripts and sorryhyun/anima_lora):
-     *
-     *   1. Take the LEAF folder name only. ``C:/data/8_my_oc_style`` → ``8_my_oc_style``.
-     *   2. Strip leading ``^(\d+)_`` if present — that is kohya's "repeats per
-     *      epoch" subfolder convention (kohya-ss/sd-scripts maintainer
-     *      response, discussion #182). Only the ANCHOR position counts:
-     *      ``8_my_oc`` → ``my_oc`` but ``candy8_oc`` is left alone.
-     *   3. If the result contains any non-ASCII character (e.g. Chinese,
-     *      Japanese, Korean), return EMPTY trigger and a friendly warning —
-     *      the user almost certainly wants a clean ASCII trigger token, but
-     *      we can't reliably transliterate.
-     *   4. If baseModel === 'anima_style', prepend ``@`` to mark this as an
-     *      Anima style/artist trigger (verified against
-     *      I:\Lora trainer\anima_lora\TRAINING.md line 53: "Prepend
-     *      `@<trigger>, ` to every `.txt`. The `@` prefix is required by
-     *      Anima for artist/style tags."). Anima character LoRAs and all
-     *      other base models leave the trigger plain.
-     *
-     * Returns ``{trigger: string, warning?: string}``.
-     */
-    DM._deriveTriggerFromFolder = function (folderPath, baseModel) {
-        if (!folderPath) return { trigger: '', warning: '' };
-        // Take leaf only — both forward and backslash separators welcome.
-        const leaf = String(folderPath).split(/[\\/]/).filter(Boolean).pop() || '';
-        if (!leaf) return { trigger: '' };
-
-        // Strip leading ``^(\d+)_`` (kohya repeats prefix). Only at the
-        // very start, never in the middle of the name.
-        let stem = leaf;
-        const kohyaMatch = stem.match(/^(\d+)_(.+)$/);
-        if (kohyaMatch && kohyaMatch[2]) {
-            stem = kohyaMatch[2];
-        }
-
-        // Reject non-ASCII so we never produce a half-mangled trigger.
-        // CJK + emoji + accented letters all fall in here.
-        // eslint-disable-next-line no-control-regex
-        if (/[^\x00-\x7f]/.test(stem)) {
-            return {
-                trigger: '',
-                warning: 'non_ascii',
-            };
-        }
-
-        // Anima style LoRAs require an ``@`` prefix on the artist/style
-        // token (TRAINING.md line 53). All other base models keep it plain.
-        if (baseModel === 'anima_style' && !stem.startsWith('@')) {
-            stem = '@' + stem;
-        }
-        return { trigger: stem };
-    };
-
     DM._openFolderImport = function () {
-        const modal = $('dataset-folder-import-modal');
-        if (modal) modal.hidden = false;
         const status = $('dataset-folder-import-status');
         if (status) status.textContent = '';
+        this._setFolderLoadMoreState(false);
+        const input = $('dataset-folder-import-path');
+        if (input) input.focus();
     };
 
-    DM._closeFolderImport = function () {
-        const modal = $('dataset-folder-import-modal');
-        if (modal) modal.hidden = true;
+    DM._setFolderLoadMoreState = function (visible, label) {
+        const moreBtn = $('btn-dataset-folder-import-more');
+        if (!moreBtn) return;
+        moreBtn.hidden = !visible;
+        if (label) moreBtn.textContent = label;
     };
 
-    DM._runFolderImport = async function () {
+    DM._runFolderImport = async function (options = {}) {
+        const append = options.append === true;
         const status = $('dataset-folder-import-status');
         const goBtn = $('btn-dataset-folder-import-go');
+        const moreBtn = $('btn-dataset-folder-import-more');
         const path = ($('dataset-folder-import-path')?.value || '').trim();
         const recursive = !!$('dataset-folder-import-recursive')?.checked;
-        if (!path) {
+        if (!append && !path) {
             if (status) status.textContent = this._t('dataset.folderImportNeedPath',
                 'Pick a folder first.');
             return;
         }
+        if (append && !this._folderScanToken) return;
+
         if (goBtn) goBtn.disabled = true;
-        if (status) status.textContent = this._t('dataset.folderImportScanning', 'Scanning folder...');
+        if (moreBtn) moreBtn.disabled = true;
+        if (!append) {
+            this._folderScanToken = null;
+            this._folderScanNextOffset = 0;
+            this._folderScanHasMore = false;
+            this._folderScanTotal = 0;
+            this._folderScanPreviewed = 0;
+            this._setFolderLoadMoreState(false);
+        }
+        if (status) status.textContent = append
+            ? this._t('dataset.folderImportLoadingMore', 'Loading next batch...')
+            : this._t('dataset.folderImportScanning', 'Scanning folder...');
         try {
+            const body = append
+                ? {
+                    scan_token: this._folderScanToken,
+                    offset: this._folderScanNextOffset || 0,
+                    limit: FOLDER_SCAN_PAGE_SIZE,
+                }
+                : {
+                    folder_path: path,
+                    recursive,
+                    limit: FOLDER_SCAN_PAGE_SIZE,
+                };
             const r = await fetch('/api/dataset/folder-scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ folder_path: path, recursive }),
+                body: JSON.stringify(body),
             });
             if (!r.ok) {
                 const body = await r.json().catch(() => ({}));
@@ -517,57 +486,81 @@
             }
             const data = await r.json();
             const items = data.items || [];
-            if (items.length === 0) {
+            const manifestItems = Array.isArray(data.manifest_items) ? data.manifest_items : [];
+            this._folderScanToken = data.scan_token || this._folderScanToken || null;
+            this._folderScanNextOffset = Number(data.next_offset || 0) || 0;
+            this._folderScanHasMore = Boolean(data.has_more);
+            this._folderScanTotal = Number(data.total_files_seen || this._folderScanTotal || 0);
+            this._folderScanPreviewed = Math.max(
+                this._folderScanPreviewed || 0,
+                Number(data.next_offset || this._folderScanTotal || items.length || 0) || 0
+            );
+
+            if (manifestItems.length > 0) {
+                this.addLocalItems(manifestItems, { switchView: false, showToast: false });
+            }
+            if (items.length > 0) {
+                this.addLocalItems(items, { switchView: false, showToast: false });
+            }
+
+            if (items.length === 0 && manifestItems.length === 0 && !this._folderScanHasMore) {
                 if (status) status.textContent = this._t('dataset.folderImportEmpty',
                     'No new images found in that folder.');
+                this._setFolderLoadMoreState(false);
                 return;
             }
-            this.addLocalItems(items, { switchView: false, showToast: true });
-            this._closeFolderImport();
+            const total = Number(data.total_files_seen || 0);
+            const previewed = Math.min(this._folderScanPreviewed || 0, total || this._folderScanPreviewed || 0);
+            const addedToDataset = manifestItems.length || items.length;
+            if (status) {
+                if (!append && manifestItems.length > 0) {
+                    status.textContent = this._folderScanHasMore
+                        ? this._t('dataset.folderImportAddedManifest',
+                            'Added {count} images to the dataset. Previewed {loaded}/{total}; load more previews to continue.',
+                            { count: manifestItems.length, loaded: previewed, total })
+                        : this._t('dataset.folderImportAdded',
+                            'Added {count} local images (not added to main gallery)',
+                            { count: manifestItems.length });
+                } else {
+                    status.textContent = this._folderScanHasMore
+                        ? this._t('dataset.folderImportPreviewPage',
+                            'Loaded {count} more previews. {loaded}/{total} previews ready; all {total} images are already in the dataset.',
+                            { count: items.length, loaded: previewed, total })
+                        : this._t('dataset.folderImportPreviewComplete',
+                            'Loaded previews for all {total} dataset images.',
+                            { total: total || addedToDataset });
+                }
+            }
+            this._setFolderLoadMoreState(
+                this._folderScanHasMore,
+                this._t('dataset.folderImportLoadMore', 'Load more previews')
+            );
+            if (data.truncated || data.has_more) {
+                this._toast(this._t('dataset.folderImportMoreAvailable',
+                    'Large folder detected. All paths were added; previews load in batches so the UI stays responsive.'),
+                    'info', 6000);
+            } else if (!append && addedToDataset > 0) {
+                this._toast(this._t('dataset.folderImportAdded',
+                    'Added {count} local images (not added to main gallery)',
+                    { count: addedToDataset }), 'success');
+            }
             if (data.skipped_unreadable > 0) {
                 this._toast(this._t('dataset.folderImportSkipped',
                     'Skipped {count} unreadable files in that folder.',
                     { count: data.skipped_unreadable }), 'warning', 5000);
             }
-            // v3.2.2 T-power-PR1 (J): apply trigger detection now that
-            // the queue has the folder's images.
-            try {
-                const mode = $('dataset-folder-trigger-mode')?.value || 'suggest';
-                const baseModel = $('dataset-folder-base-model')?.value || 'sdxl';
-                if (mode !== 'off') {
-                    const { trigger, warning } = this._deriveTriggerFromFolder(path, baseModel);
-                    const triggerInput = document.getElementById('dataset-trigger');
-                    if (triggerInput) {
-                        if (warning === 'non_ascii') {
-                            this._toast(this._t('dataset.folderTriggerNonAscii',
-                                'The folder name has non-ASCII characters; please type a trigger manually.'),
-                                'warning', 6000);
-                        } else if (trigger) {
-                            if (mode === 'autofill') {
-                                triggerInput.value = trigger;
-                                triggerInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                this._toast(this._t('dataset.folderTriggerAutofilled',
-                                    'Auto-filled trigger: {trigger}', { trigger }), 'success', 4000);
-                            } else { // suggest
-                                triggerInput.placeholder = trigger;
-                                this._toast(this._t('dataset.folderTriggerSuggested',
-                                    'Suggested trigger (in placeholder): {trigger}',
-                                    { trigger }), 'info', 4000);
-                            }
-                        }
-                    }
-                }
-            } catch (_e) { /* non-fatal */ }
         } catch (e) {
             if (status) status.textContent = e.message || String(e);
         } finally {
             if (goBtn) goBtn.disabled = false;
+            if (moreBtn) moreBtn.disabled = false;
         }
     };
 
     // -------- Drag-drop zone --------
 
     const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tiff', 'tif']);
+    const ARCHIVE_EXTS = new Set(['zip']);
 
     function bindDropzone() {
         const dropzone = $('dataset-dropzone');
@@ -587,7 +580,9 @@
             e.preventDefault();
             e.stopPropagation();
             dropzone.classList.remove('drag-over');
-            handleDrop(e.dataTransfer);
+            handleDrop(e.dataTransfer).catch((err) => {
+                DM._toast(err?.message || 'Drop import failed', 'error', 5000);
+            });
         });
 
         // Click to open file picker
@@ -595,60 +590,110 @@
             const input = document.createElement('input');
             input.type = 'file';
             input.multiple = true;
-            input.accept = 'image/*';
+            input.accept = 'image/*,.zip';
             input.addEventListener('change', () => {
                 if (input.files && input.files.length > 0) {
-                    handleFileList(input.files);
+                    handleFileList(input.files).catch((err) => {
+                        DM._toast(err?.message || 'Upload failed', 'error', 5000);
+                    });
                 }
             });
             input.click();
         });
     }
 
-    function handleDrop(dataTransfer) {
+    async function handleDrop(dataTransfer) {
         if (!dataTransfer) return;
         const items = dataTransfer.items;
         if (items && items.length > 0) {
-            // Check if any item is a directory (via webkitGetAsEntry)
+            const entries = [];
             for (let i = 0; i < items.length; i++) {
                 const entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
-                if (entry && entry.isDirectory) {
-                    // For folder drops, fill the path input and trigger scan.
-                    // Browser security prevents reading the full path from
-                    // dataTransfer, so we use the folder name as a hint and
-                    // prompt the user to confirm the path.
-                    const pathInput = $('dataset-folder-import-path');
-                    if (pathInput) {
-                        pathInput.value = entry.name;
-                        pathInput.focus();
-                        DM._toast(DM._t('dataset.dropFolderHint',
-                            'Folder detected. Please confirm or edit the full path, then click Scan.'),
-                            'info', 5000);
-                    }
-                    return;
+                if (entry) entries.push(entry);
+            }
+            if (entries.some((entry) => entry.isDirectory)) {
+                const recursive = !!$('dataset-folder-import-recursive')?.checked;
+                const files = await collectFilesFromEntries(entries, { recursive });
+                if (files.length > 0) {
+                    await handleFileList(files);
+                } else {
+                    DM._toast(DM._t('dataset.dropNoImages',
+                        'No supported image files found in the drop.'), 'warning', 3000);
                 }
+                return;
             }
         }
         // Otherwise treat as image files
         if (dataTransfer.files && dataTransfer.files.length > 0) {
-            handleFileList(dataTransfer.files);
+            await handleFileList(dataTransfer.files);
         }
+    }
+
+    function readDirectoryEntries(reader) {
+        return new Promise((resolve, reject) => {
+            reader.readEntries(resolve, reject);
+        });
+    }
+
+    function entryFile(entry) {
+        return new Promise((resolve, reject) => {
+            entry.file(resolve, reject);
+        });
+    }
+
+    async function collectFilesFromEntries(entries, { recursive }) {
+        const out = [];
+        async function walk(entry, depth = 0) {
+            if (!entry) return;
+            if (out.length >= MAX_BROWSER_DROP_FILES) return;
+            if (entry.isFile) {
+                try { out.push(await entryFile(entry)); } catch { /* skip unreadable */ }
+                return;
+            }
+            if (!entry.isDirectory) return;
+            if (!recursive && depth > 0) return;
+            const reader = entry.createReader();
+            let batch = await readDirectoryEntries(reader);
+            while (batch.length > 0) {
+                for (const child of batch) {
+                    if (out.length >= MAX_BROWSER_DROP_FILES) return;
+                    if (child.isFile || recursive || depth === 0) {
+                        await walk(child, depth + 1);
+                    }
+                }
+                batch = await readDirectoryEntries(reader);
+            }
+        }
+        for (const entry of entries) {
+            await walk(entry, 0);
+        }
+        return out;
     }
 
     async function handleFileList(files) {
         const imageFiles = [];
+        const archiveFiles = [];
         for (const f of files) {
             const ext = (f.name.split('.').pop() || '').toLowerCase();
             if (IMAGE_EXTS.has(ext)) imageFiles.push(f);
+            else if (ARCHIVE_EXTS.has(ext)) archiveFiles.push(f);
         }
-        if (imageFiles.length === 0) {
+        let uploadFiles = [...imageFiles, ...archiveFiles];
+        if (uploadFiles.length === 0) {
             DM._toast(DM._t('dataset.dropNoImages',
-                'No supported image files found in the drop.'), 'warning', 3000);
+                'No supported image or ZIP files found in the drop.'), 'warning', 3000);
             return;
+        }
+        if (uploadFiles.length > MAX_BROWSER_DROP_FILES) {
+            uploadFiles = uploadFiles.slice(0, MAX_BROWSER_DROP_FILES);
+            DM._toast(DM._t('dataset.dropCapped',
+                'Large browser drop detected. Imported the first {count} files; use the folder path bar for larger folders.',
+                { count: MAX_BROWSER_DROP_FILES }), 'warning', 7000);
         }
         // Upload files to the backend for local-source import
         const formData = new FormData();
-        for (const f of imageFiles) formData.append('files', f);
+        for (const f of uploadFiles) formData.append('files', f);
+        formData.append('recursive', $('dataset-folder-import-recursive')?.checked ? 'true' : 'false');
         try {
             const r = await fetch('/api/dataset/upload-files', {
                 method: 'POST',
@@ -664,15 +709,19 @@
             if (items.length > 0) {
                 DM.addLocalItems(items, { switchView: false, showToast: true });
             }
+            if (data.truncated) {
+                DM._toast(DM._t('dataset.uploadTruncated',
+                    'Upload contained more than {count} supported images. Imported the first batch; use the folder path bar for very large folders.',
+                    { count: FOLDER_SCAN_PAGE_SIZE }), 'warning', 7000);
+            }
         } catch (e) {
             DM._toast(e.message || 'Upload failed', 'error', 5000);
         }
     }
 
     function bindFolderImport() {
-        $('btn-dataset-import-folder')?.addEventListener('click', () => DM._openFolderImport());
-        $('btn-dataset-folder-import-cancel')?.addEventListener('click', () => DM._closeFolderImport());
         $('btn-dataset-folder-import-go')?.addEventListener('click', () => DM._runFolderImport());
+        $('btn-dataset-folder-import-more')?.addEventListener('click', () => DM._runFolderImport({ append: true }));
 
         const browseBtn = $('btn-dataset-folder-import-browse');
         const pathInput = $('dataset-folder-import-path');

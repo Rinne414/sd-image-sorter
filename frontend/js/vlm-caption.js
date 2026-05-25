@@ -281,7 +281,7 @@ const VLMCaption = {
     // --- Batch Captioning ---
 
     async startBatchCaption(imageIdsOverride = null) {
-        const imageIds = Array.isArray(imageIdsOverride) ? imageIdsOverride : this._getTargetImageIds();
+        const imageIds = Array.isArray(imageIdsOverride) ? imageIdsOverride : await this._getTargetImageIds();
         if (!imageIds.length) {
             this._showBatchUI(false, { keepPanel: true });
             this._showStatus('vlm-batch-status', 'No images to caption. Select images or use current view.', 'error');
@@ -565,23 +565,17 @@ const VLMCaption = {
 
     // --- Helpers ---
 
-    _getTargetImageIds() {
-        // Use selected images if available, else all filtered images
-        const state = window.App?.SelectionStore?.getState?.() || window.App?.AppState || null;
-        const selectedIds = state?.selectedIds instanceof Set
-            ? Array.from(state.selectedIds)
-            : Array.isArray(state?.selectedIds)
-                ? state.selectedIds
-                : Array.from(state?.selectedIds || []);
-        const normalizedSelectedIds = selectedIds
-            .map((id) => Number(id))
-            .filter((id) => Number.isFinite(id) && id > 0);
-        if (normalizedSelectedIds.length) {
-            return normalizedSelectedIds;
+    async _getTargetImageIds() {
+        if (window.AppFilterAccess?.resolveSelectedImageIds) {
+            const resolved = await window.AppFilterAccess.resolveSelectedImageIds(100000);
+            if (resolved.length) return resolved;
         }
-        // Fall back to all images in current view
-        const imgs = document.querySelectorAll('.gallery-item[data-id]');
-        return Array.from(imgs).map(el => parseInt(el.dataset.id)).filter(n => !isNaN(n));
+        const state = window.App?.AppState || window.AppState || {};
+        const loaded = Array.isArray(state.images) ? state.images : [];
+        return loaded
+            .map((item) => Number(item?.id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+            .slice(0, 100000);
     },
 
     _extractFailedImageIds(data) {

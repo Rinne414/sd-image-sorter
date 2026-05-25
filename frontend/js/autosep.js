@@ -501,6 +501,7 @@ function serializeAutoSepFilters(filters) {
         generators: [...(source.generators || ['comfyui', 'nai', 'webui', 'forge', 'unknown'])],
         ratings: [...(source.ratings || ['general', 'sensitive', 'questionable', 'explicit'])],
         tags: [...(source.tags || [])],
+        tagMode: source.tagMode === 'or' || source.tag_mode === 'or' ? 'or' : 'and',
         checkpoints: [...(source.checkpoints || [])],
         loras: [...(source.loras || [])],
         prompts: [...(source.prompts || [])],
@@ -1012,6 +1013,7 @@ function getAutoSepFilterSignature(filters) {
     return JSON.stringify({
         generators: contract.generators || [],
         tags: contract.tags || [],
+        tagMode: contract.tagMode || 'and',
         ratings: contract.ratings || [],
         checkpoints: contract.checkpoints || [],
         loras: contract.loras || [],
@@ -1026,6 +1028,11 @@ function getAutoSepFilterSignature(filters) {
         aspectRatio: contract.aspectRatio || null,
         minAesthetic: contract.minAesthetic ?? null,
         maxAesthetic: contract.maxAesthetic ?? null,
+        excludeTags: contract.excludeTags || [],
+        excludeGenerators: contract.excludeGenerators || [],
+        excludeRatings: contract.excludeRatings || [],
+        excludeCheckpoints: contract.excludeCheckpoints || [],
+        excludeLoras: contract.excludeLoras || [],
     });
 }
 
@@ -1121,6 +1128,7 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
     return {
         generators: contract.generators?.length > 0 ? contract.generators : null,
         tags: contract.tags?.length > 0 ? contract.tags : null,
+        tagMode: contract.tagMode || 'and',
         ratings: contract.ratings?.length < 4 ? contract.ratings : null,
         checkpoints: contract.checkpoints?.length > 0 ? contract.checkpoints : null,
         loras: contract.loras?.length > 0 ? contract.loras : null,
@@ -1135,6 +1143,11 @@ function _buildAutoSepImageQuery(filters, cursor = null, limit = 500) {
         aspectRatio: contract.aspectRatio,
         minAesthetic: contract.minAesthetic,
         maxAesthetic: contract.maxAesthetic,
+        excludeTags: contract.excludeTags?.length > 0 ? contract.excludeTags : null,
+        excludeGenerators: contract.excludeGenerators?.length > 0 ? contract.excludeGenerators : null,
+        excludeRatings: contract.excludeRatings?.length > 0 ? contract.excludeRatings : null,
+        excludeCheckpoints: contract.excludeCheckpoints?.length > 0 ? contract.excludeCheckpoints : null,
+        excludeLoras: contract.excludeLoras?.length > 0 ? contract.excludeLoras : null,
         limit,
         cursor,
     };
@@ -1755,6 +1768,14 @@ async function executeAutoSeparateWithProgress() {
                     operationMode,
                     contract.artist,
                     contract.promptMatchMode,
+                    contract.tagMode,
+                    {
+                        tags: contract.excludeTags?.length > 0 ? contract.excludeTags : null,
+                        generators: contract.excludeGenerators?.length > 0 ? contract.excludeGenerators : null,
+                        ratings: contract.excludeRatings?.length > 0 ? contract.excludeRatings : null,
+                        checkpoints: contract.excludeCheckpoints?.length > 0 ? contract.excludeCheckpoints : null,
+                        loras: contract.excludeLoras?.length > 0 ? contract.excludeLoras : null,
+                    },
                 );
 
                 if (startResult?.error) {

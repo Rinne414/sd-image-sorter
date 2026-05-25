@@ -130,6 +130,7 @@ class SortFilterRequest(BaseModel):
     """Shared filter model for bulk sort-style operations."""
     generators: Optional[List[str]] = None
     tags: Optional[List[str]] = None
+    tag_mode: str = Field(default="and")
     ratings: Optional[List[str]] = None
     checkpoints: Optional[List[str]] = None
     loras: Optional[List[str]] = None
@@ -166,6 +167,14 @@ class SortFilterRequest(BaseModel):
         normalized = str(v or "exact").strip().lower()
         if normalized not in VALID_PROMPT_MATCH_MODES:
             raise ValueError("prompt_match_mode must be exact or contains")
+        return normalized
+
+    @field_validator('tag_mode')
+    @classmethod
+    def validate_tag_mode(cls, v: str) -> str:
+        normalized = str(v or "and").strip().lower()
+        if normalized not in {"and", "or"}:
+            raise ValueError("tag_mode must be and or or")
         return normalized
 
     @field_validator('max_width')
@@ -1493,6 +1502,7 @@ class SortingService:
 
         generators = request.generators if request.generators else None
         tags = request.tags if request.tags else None
+        tag_mode = request.tag_mode
         ratings = request.ratings if request.ratings else None
         checkpoints = request.checkpoints if request.checkpoints else None
         loras = request.loras if request.loras else None
@@ -1500,10 +1510,16 @@ class SortingService:
         prompt_match_mode = request.prompt_match_mode
         artist = request.artist.strip() if request.artist else None
         search_query = request.search.strip() if request.search else None
+        exclude_tags = request.exclude_tags if request.exclude_tags else None
+        exclude_generators = request.exclude_generators if request.exclude_generators else None
+        exclude_ratings = request.exclude_ratings if request.exclude_ratings else None
+        exclude_checkpoints = request.exclude_checkpoints if request.exclude_checkpoints else None
+        exclude_loras = request.exclude_loras if request.exclude_loras else None
 
         total_count = db.get_filtered_image_count(
             generators=generators,
             tags=tags,
+            tag_mode=tag_mode,
             ratings=ratings,
             checkpoints=checkpoints,
             loras=loras,
@@ -1518,6 +1534,11 @@ class SortingService:
             aspect_ratio=request.aspect_ratio,
             min_aesthetic=request.min_aesthetic,
             max_aesthetic=request.max_aesthetic,
+            exclude_tags=exclude_tags,
+            exclude_generators=exclude_generators,
+            exclude_ratings=exclude_ratings,
+            exclude_checkpoints=exclude_checkpoints,
+            exclude_loras=exclude_loras,
         )
 
         if total_count == 0:
@@ -1595,6 +1616,7 @@ class SortingService:
                     chunk_size=BATCH_MOVE_FETCH_CHUNK,
                     generators=generators,
                     tags=tags,
+                    tag_mode=tag_mode,
                     ratings=ratings,
                     checkpoints=checkpoints,
                     loras=loras,
@@ -1609,6 +1631,11 @@ class SortingService:
                     aspect_ratio=request.aspect_ratio,
                     min_aesthetic=request.min_aesthetic,
                     max_aesthetic=request.max_aesthetic,
+                    exclude_tags=exclude_tags,
+                    exclude_generators=exclude_generators,
+                    exclude_ratings=exclude_ratings,
+                    exclude_checkpoints=exclude_checkpoints,
+                    exclude_loras=exclude_loras,
                 ))
                 saw_any_ids = False
                 try:
@@ -1769,6 +1796,7 @@ class SortingService:
         self,
         generators: Optional[Any] = None,
         tags: Optional[Any] = None,
+        tag_mode: str = "and",
         ratings: Optional[Any] = None,
         checkpoints: Optional[Any] = None,
         loras: Optional[Any] = None,
@@ -1820,6 +1848,9 @@ class SortingService:
         normalized_prompt_match_mode = str(prompt_match_mode or "exact").strip().lower()
         if normalized_prompt_match_mode not in VALID_PROMPT_MATCH_MODES:
             raise HTTPException(status_code=400, detail="prompt_match_mode must be exact or contains")
+        normalized_tag_mode = str(tag_mode or "and").strip().lower()
+        if normalized_tag_mode not in {"and", "or"}:
+            raise HTTPException(status_code=400, detail="tag_mode must be and or or")
 
         gen_list = self._coerce_sort_filter_values(generators)
         tag_list = self._coerce_sort_filter_values(tags)
@@ -1833,6 +1864,7 @@ class SortingService:
         image_ids = db.get_filtered_image_ids(
             generators=gen_list,
             tags=tag_list,
+            tag_mode=normalized_tag_mode,
             ratings=rating_list,
             checkpoints=cp_list,
             loras=lr_list,

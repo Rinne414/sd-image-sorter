@@ -154,6 +154,90 @@ def test_v321_modules_read_runtime_selection_store_from_window_app():
     assert "const chunkSize = 20;" in v321_source
 
 
+def test_dataset_maker_large_queues_use_virtualized_rendering():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-part2.js").read_text(encoding="utf-8")
+
+    assert "DATASET_VIRTUAL_THRESHOLD" in source
+    assert "_renderVirtualQueue" in source
+    assert "_renderVirtualImportGallery" in source
+    assert "dataset-virtual-spacer" in source
+
+
+def test_dataset_folder_import_has_paged_large_folder_controls():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert 'id="btn-dataset-folder-import-more"' in html
+    assert "_folderScanToken" in source
+    assert "MAX_BROWSER_DROP_FILES" in source
+    assert "scan_token" in source
+    assert "manifest_items" in source
+    assert "folderImportAddedManifest" in source
+
+
+def test_dataset_local_ids_use_safe_52_bit_hash_slice():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert ".slice(0, 13)" in source
+    assert "Number.MAX_SAFE_INTEGER" in source
+
+
+def test_full_selection_workflows_do_not_fallback_to_gallery_dom():
+    repo_root = Path(__file__).resolve().parents[2]
+    checked = {
+        "frontend/js/v321-ui.js": (repo_root / "frontend" / "js" / "v321-ui.js").read_text(encoding="utf-8"),
+        "frontend/js/vlm-caption.js": (repo_root / "frontend" / "js" / "vlm-caption.js").read_text(encoding="utf-8"),
+        "frontend/js/mass-tag-editor.js": (repo_root / "frontend" / "js" / "mass-tag-editor.js").read_text(encoding="utf-8"),
+    }
+
+    violations = [
+        path for path, source in checked.items()
+        if ".gallery-item[data-id]" in source or "gallery-item[data-id]" in source
+    ]
+
+    assert not violations, (
+        "Full-selection workflows must use SelectionStore/selection-token resolvers, "
+        "not currently rendered gallery DOM nodes: " + ", ".join(violations)
+    )
+
+
+def test_app_filter_access_exposes_selection_token_resolver():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "app.js").read_text(encoding="utf-8")
+
+    assert "resolveSelectedImageIds" in source
+    assert "getActiveSelectionToken" in source
+    assert "getSelectionChunk(token" in source
+
+
+def test_dataset_caption_refresh_batches_without_silent_500_cap():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+
+    assert "const batchSize = 500;" in source
+    assert "targetIds.slice(i, i + batchSize)" in source
+    assert "image_ids: ids.slice(0, 500)" not in source
+
+
+def test_dataset_export_uses_background_progress_job():
+    repo_root = Path(__file__).resolve().parents[2]
+    html = (repo_root / "frontend" / "index.html").read_text(encoding="utf-8")
+    part3 = (repo_root / "frontend" / "js" / "dataset-maker-part3.js").read_text(encoding="utf-8")
+    local_import = (repo_root / "frontend" / "js" / "dataset-maker-local-import.js").read_text(encoding="utf-8")
+
+    assert "/api/dataset/export/start" in part3
+    assert "/api/dataset/export/progress" in part3
+    assert "/api/dataset/export/cancel" in part3
+    assert "id=\"dataset-export-progress-text\"" in html
+    assert "id=\"btn-dataset-export-cancel\"" in html
+    assert "DM._buildExportPayload" in local_import
+    assert "/api/dataset/export'" not in part3
+    assert "/api/dataset/export'" not in local_import
+
+
 def test_manual_sort_resume_failure_does_not_render_null_visible_banner():
     repo_root = Path(__file__).resolve().parents[2]
     source = (repo_root / "frontend" / "js" / "manual-sort.js").read_text(encoding="utf-8")

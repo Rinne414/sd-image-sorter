@@ -539,13 +539,14 @@
             return;
         }
         const maxShow = Math.min(items.length, 8);
-        let html = '';
+        list.innerHTML = '';
         for (let i = 0; i < maxShow; i++) {
+            const id = items[i];
+            const meta = DM.meta?.get?.(id) || {};
+            const sourceBase = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${i + 1}`;
             let stem;
             if (preset === 'keep') {
-                const meta = DM.meta?.get?.(items[i]) || {};
-                const base = meta.filename ? meta.filename.replace(/\.[^.]+$/, '') : `image_${i + 1}`;
-                stem = base;
+                stem = sourceBase;
             } else if (preset === 'renumber') {
                 stem = `${trigger || 'subject'}_${String(i + 1).padStart(3, '0')}`;
             } else {
@@ -554,16 +555,47 @@
                     .replace(/\{trigger\}/g, trigger || 'subject')
                     .replace(/\{index:0*(\d+)d\}/g, (_m, w) => String(i + 1).padStart(parseInt(w, 10) || 1, '0'))
                     .replace(/\{index\}/g, String(i + 1))
-                    .replace(/\{filename\}/g, `image_${i + 1}`)
+                    .replace(/\{filename\}/g, sourceBase)
                     .replace(/\{generator\}/g, 'webui')
                     .replace(/\{date\}/g, new Date().toISOString().slice(0, 10));
             }
-            html += `<div class="dataset-export-preview-pair"><span class="file-img">${stem}.png</span><span class="file-plus">+</span><span class="file-txt">${stem}.txt</span></div>`;
+
+            const row = document.createElement('div');
+            row.className = 'dataset-export-preview-pair';
+
+            const thumb = document.createElement('img');
+            thumb.className = 'dataset-export-preview-thumb';
+            thumb.alt = '';
+            thumb.loading = 'lazy';
+            thumb.decoding = 'async';
+            if (typeof DM._thumbSrc === 'function') thumb.src = DM._thumbSrc(id, 128);
+            thumb.onerror = () => {
+                thumb.removeAttribute('src');
+                thumb.classList.add('is-missing');
+            };
+
+            const copy = document.createElement('div');
+            copy.className = 'dataset-export-preview-copy';
+            const index = document.createElement('span');
+            index.className = 'dataset-export-preview-index';
+            index.textContent = `#${i + 1}`;
+            const imgName = document.createElement('span');
+            imgName.className = 'file-img';
+            imgName.textContent = `${stem}.png`;
+            const txtName = document.createElement('span');
+            txtName.className = 'file-txt';
+            txtName.textContent = `${stem}.txt`;
+            copy.append(index, imgName, txtName);
+
+            row.append(thumb, copy);
+            list.appendChild(row);
         }
         if (items.length > maxShow) {
-            html += `<span class="dataset-export-preview-empty">... and ${items.length - maxShow} more pairs</span>`;
+            const more = document.createElement('span');
+            more.className = 'dataset-export-preview-empty';
+            more.textContent = `... and ${items.length - maxShow} more pairs`;
+            list.appendChild(more);
         }
-        list.innerHTML = html;
     }
 
     function bindExportPreview() {

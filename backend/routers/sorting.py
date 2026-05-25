@@ -307,6 +307,7 @@ async def start_sort_session(
     request: Optional[ManualSortStartRequest] = Body(default=None),
     generators: Optional[str] = Query(default=None),
     tags: Optional[str] = Query(default=None),
+    tag_mode: str = Query(default="and", pattern="^(and|or)$"),
     ratings: Optional[str] = Query(default=None),
     checkpoints: Optional[str] = Query(default=None),
     loras: Optional[str] = Query(default=None),
@@ -321,6 +322,11 @@ async def start_sort_session(
     aspect_ratio: Optional[str] = Query(default=None),
     min_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
     max_aesthetic: Optional[float] = Query(default=None, ge=0, le=10),
+    exclude_tags: Optional[str] = Query(default=None),
+    exclude_generators: Optional[str] = Query(default=None),
+    exclude_ratings: Optional[str] = Query(default=None),
+    exclude_checkpoints: Optional[str] = Query(default=None),
+    exclude_loras: Optional[str] = Query(default=None),
     folders: Optional[str] = Query(default=None, max_length=4096),
     operation_mode: str = Query(default="move", max_length=16),
     replace_existing: bool = Query(default=False),
@@ -331,6 +337,7 @@ async def start_sort_session(
         return service.start_sort_session(
             generators=request.generators,
             tags=request.tags,
+            tag_mode=request.tag_mode,
             ratings=request.ratings,
             checkpoints=request.checkpoints,
             loras=request.loras,
@@ -358,6 +365,7 @@ async def start_sort_session(
     return service.start_sort_session(
         generators=generators,
         tags=tags,
+        tag_mode=tag_mode,
         ratings=ratings,
         checkpoints=checkpoints,
         loras=loras,
@@ -375,6 +383,11 @@ async def start_sort_session(
         folders=folders,
         operation_mode=operation_mode,
         replace_existing=replace_existing,
+        exclude_tags=exclude_tags,
+        exclude_generators=exclude_generators,
+        exclude_ratings=exclude_ratings,
+        exclude_checkpoints=exclude_checkpoints,
+        exclude_loras=exclude_loras,
     )
 
 

@@ -27,6 +27,18 @@
     /** Shared timer handle for the progress poll loop. */
     let progressTimer = null;
     let activeJobId = null;
+    let taggerModelCatalog = [];
+    let taggerModelDefault = '';
+
+    const t = (key, fallback) => {
+        const value = window.I18n?.t?.(key);
+        return value && value !== key ? value : fallback;
+    };
+
+    function toFiniteThreshold(value, fallback) {
+        const num = parseFloat(value);
+        return Number.isFinite(num) ? num : fallback;
+    }
 
     function getDatasetImageIds() {
         // Preferred: the dataset-maker module exposes an authoritative list.
@@ -70,7 +82,7 @@
         if (cancelBtn) cancelBtn.hidden = !show;
     }
 
-    function openModal() {
+    async function openModal() {
         const modal = $('#smart-tag-modal');
         if (!modal) return;
 
@@ -82,6 +94,8 @@
         // Disable run button if there are no images to process.
         const runBtn = $('#btn-smart-tag-run');
         if (runBtn) runBtn.disabled = ids.length === 0;
+
+        loadSmartTaggerModels();
 
         // Use the project-wide showModal helper so Escape, focus-trap,
         // focus-restore, and aria semantics all work the same way as
@@ -96,6 +110,137 @@
             // hasn't registered the helper yet.
             modal.classList.add('visible');
             modal.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function setSelectLoading(select, label) {
+        if (!select) return;
+        select.innerHTML = '';
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = label;
+        select.appendChild(option);
+    }
+
+    function appendTaggerOption(select, model, selectedValue) {
+        const option = document.createElement('option');
+        const name = String(model?.name || model?.path || '').trim();
+        option.value = name;
+        option.textContent = name + (model?.recommended ? ` (${t('smartTag.taggerRecommended', 'Recommended')})` : '');
+        if (model?.best_for) option.title = `${name} - ${model.best_for}`;
+        if (model?.disabled) {
+            option.disabled = true;
+            option.setAttribute('aria-disabled', 'true');
+            option.textContent += ` (${t('smartTag.taggerUnavailable', 'Unavailable')})`;
+            if (model?.disabled_reason) option.title = model.disabled_reason;
+        }
+        if (name === selectedValue) option.selected = true;
+        select.appendChild(option);
+    }
+
+    function getEnabledTaggerModels() {
+        return taggerModelCatalog.filter((model) => model?.name && !model.disabled);
+    }
+
+    function getModelDefaultThresholds(modelName) {
+        const model = taggerModelCatalog.find((item) => item?.name === modelName);
+        return {
+            general_threshold: toFiniteThreshold(
+                model?.default_threshold,
+                toFiniteThreshold($('#tag-threshold')?.value, 0.35)
+            ),
+            character_threshold: toFiniteThreshold(
+                model?.default_character_threshold,
+                toFiniteThreshold($('#tag-character-threshold')?.value, 0.85)
+            ),
+        };
+    }
+
+    function populateSmartTaggerSelects() {
+        const select1 = $('#smart-tag-tagger-1');
+        const select2 = $('#smart-tag-tagger-2');
+        if (!select1 || !select2) return;
+
+        const enabledModels = getEnabledTaggerModels();
+        const fallbackDefault = enabledModels[0]?.name || taggerModelDefault || '';
+        const previous1 = select1.value || taggerModelDefault || fallbackDefault;
+        const previous2 = select2.value || '';
+        const selected1 = enabledModels.some((model) => model.name === previous1) ? previous1 : fallbackDefault;
+        const selected2 = enabledModels.some((model) => model.name === previous2) && previous2 !== selected1
+            ? previous2
+            : '';
+
+        select1.innerHTML = '';
+        select2.innerHTML = '';
+
+        if (!taggerModelCatalog.length) {
+            setSelectLoading(select1, t('smartTag.taggerLoadFailed', 'Failed to load taggers'));
+            setSelectLoading(select2, t('smartTag.taggerDisabled', 'Off'));
+            return;
+        }
+
+        for (const model of taggerModelCatalog) {
+            appendTaggerOption(select1, model, selected1);
+        }
+
+        const offOption = document.createElement('option');
+        offOption.value = '';
+        offOption.textContent = t('smartTag.taggerDisabled', 'Off');
+        select2.appendChild(offOption);
+        for (const model of taggerModelCatalog) {
+            appendTaggerOption(select2, model, selected2);
+        }
+        select2.value = selected2;
+        syncSmartTagVoteUi();
+    }
+
+    function syncSmartTagVoteUi() {
+        const select1 = $('#smart-tag-tagger-1');
+        const select2 = $('#smart-tag-tagger-2');
+        const consensusMode = $('#smart-tag-consensus-mode');
+        const details = $('.smart-tag-vote-details');
+        if (!select1 || !select2) return;
+
+        for (const option of Array.from(select2.options)) {
+            option.disabled = option.value !== '' && option.value === select1.value;
+        }
+        if (select2.value && select2.value === select1.value) {
+            select2.value = '';
+        }
+
+        const dualTagger = Boolean(select1.value && select2.value);
+        if (consensusMode) {
+            consensusMode.disabled = !dualTagger;
+            consensusMode.setAttribute('aria-disabled', String(!dualTagger));
+        }
+        if (details) {
+            details.classList.toggle('is-dual-tagger', dualTagger);
+            details.classList.toggle('is-single-tagger', !dualTagger);
+        }
+    }
+
+    async function loadSmartTaggerModels() {
+        const select1 = $('#smart-tag-tagger-1');
+        const select2 = $('#smart-tag-tagger-2');
+        if (!select1 || !select2) return;
+
+        setSelectLoading(select1, t('smartTag.taggerLoading', 'Loading taggers...'));
+        setSelectLoading(select2, t('smartTag.taggerLoading', 'Loading taggers...'));
+        try {
+            const data = await getJson('/api/tagger/models');
+            taggerModelCatalog = Array.isArray(data.models) ? data.models : [];
+            taggerModelDefault = String(data.default || '').trim();
+            populateSmartTaggerSelects();
+        } catch (err) {
+            taggerModelCatalog = [];
+            taggerModelDefault = '';
+            populateSmartTaggerSelects();
+            if (typeof window.showToast === 'function') {
+                window.showToast(
+                    t('smartTag.taggerLoadFailedToast', 'Failed to load Smart Tag tagger list. The backend default will be used.'),
+                    'warning'
+                );
+            }
         }
     }
 
@@ -115,7 +260,13 @@
 
     function readForm() {
         const consensusMode = $('#smart-tag-consensus-mode')?.value || 'or';
-        return {
+        const generalThreshold = toFiniteThreshold($('#tag-threshold')?.value, 0.35);
+        const characterThreshold = toFiniteThreshold($('#tag-character-threshold')?.value, 0.85);
+        const tagger1 = ($('#smart-tag-tagger-1')?.value || '').trim();
+        const tagger2 = ($('#smart-tag-tagger-2')?.value || '').trim();
+        const selectedTaggers = [tagger1, tagger2].filter(Boolean);
+        const uniqueTaggers = Array.from(new Set(selectedTaggers));
+        const form = {
             image_ids: getDatasetImageIds(),
             training_purpose: $('#smart-tag-purpose')?.value || 'general',
             trigger_word: ($('#smart-tag-trigger')?.value || '').trim(),
@@ -124,11 +275,23 @@
             enable_wd14: !!$('#smart-tag-enable-wd14')?.checked,
             enable_vlm: !!$('#smart-tag-enable-vlm')?.checked,
             use_gpu: !!$('#smart-tag-use-gpu')?.checked,
-            // tagger_model is left empty so the backend uses its configured default
-            // (which respects the current Tag Images modal selection).
-            tagger_model: '',
+            general_threshold: generalThreshold,
+            character_threshold: characterThreshold,
+            // Empty tagger_model is still allowed as the backend default fallback.
+            tagger_model: uniqueTaggers[0] || '',
             consensus_min: consensusMode === 'and' ? 2 : 1,
         };
+        if (uniqueTaggers.length >= 2) {
+            form.tagger_model = '';
+            form.taggers = uniqueTaggers.slice(0, 2).map((model) => ({
+                model,
+                weight: 1,
+                ...getModelDefaultThresholds(model),
+            }));
+            form.consensus_min = consensusMode === 'and' ? 2 : 1;
+            form.consensus_skip_categories = ['character', 'copyright'];
+        }
+        return form;
     }
 
     async function postJson(url, body) {
@@ -290,6 +453,10 @@
 
         const cancelBtn = $('#btn-smart-tag-cancel-job');
         if (cancelBtn) cancelBtn.addEventListener('click', cancelSmartTag);
+
+        $('#smart-tag-tagger-1')?.addEventListener('change', syncSmartTagVoteUi);
+        $('#smart-tag-tagger-2')?.addEventListener('change', syncSmartTagVoteUi);
+        $('#smart-tag-consensus-mode')?.addEventListener('change', syncSmartTagVoteUi);
 
         // Click-outside on the backdrop closes the modal too.
         const modal = $('#smart-tag-modal');
