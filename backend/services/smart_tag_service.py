@@ -564,7 +564,13 @@ def get_active_job() -> Optional[SmartTagJobState]:
 
 
 def cancel_active_job() -> Optional[SmartTagJobState]:
-    """Mark the running job (if any) as cancel-requested. Returns the job."""
+    """Mark the running job (if any) as cancel-requested. Returns the job.
+
+    Cancel semantics: the pipeline loop checks ``cancel_requested`` before
+    processing each new image. Already-processed images have their tags
+    persisted via ``_persist_result`` (which commits per-image through
+    ``add_tags_batch``), so cancellation never rolls back completed work.
+    """
     with _jobs_lock:
         if _active_job_id is None:
             return None
